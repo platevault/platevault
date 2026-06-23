@@ -160,13 +160,19 @@ async fn inbox_file_metadata_table_exists_and_unique_constraint_enforced() {
     assert!(dup_result.is_err(), "duplicate (inbox_item_id, relative_file_path) must be rejected");
 }
 
-// ── inbox_classification_evidence has override columns ────────────────────────
+// ── inbox_classification_evidence has override_stale column ──────────────────
+//
+// Migration 0045 originally added four override columns to
+// inbox_classification_evidence. Migration 0048 migrated the three non-type
+// columns (override_filter, override_exposure_s, override_binning) to the new
+// inbox_file_overrides table and dropped them. Only override_stale remains on
+// the evidence row (it is a per-file staleness flag used by the UI).
 
 #[tokio::test]
 async fn inbox_classification_evidence_has_override_columns() {
     let db = setup().await;
 
-    // Verify the columns exist by querying the schema.
+    // Verify that override_stale is present and the three dropped columns are gone.
     let cols: Vec<(String,)> = sqlx::query_as(
         "SELECT name FROM pragma_table_info('inbox_classification_evidence') \
          WHERE name IN ('override_filter', 'override_exposure_s', 'override_binning', 'override_stale') \
@@ -177,11 +183,22 @@ async fn inbox_classification_evidence_has_override_columns() {
     .expect("pragma_table_info");
 
     let names: Vec<&str> = cols.iter().map(|(n,)| n.as_str()).collect();
-    assert!(names.contains(&"override_binning"), "override_binning column missing");
-    assert!(names.contains(&"override_exposure_s"), "override_exposure_s column missing");
-    assert!(names.contains(&"override_filter"), "override_filter column missing");
+    // override_stale is retained on the evidence row (staleness flag).
     assert!(names.contains(&"override_stale"), "override_stale column missing");
-    assert_eq!(names.len(), 4, "expected exactly 4 new override columns");
+    // The three non-type override columns were migrated to inbox_file_overrides by 0048.
+    assert!(
+        !names.contains(&"override_filter"),
+        "override_filter must have been dropped from evidence by migration 0048"
+    );
+    assert!(
+        !names.contains(&"override_exposure_s"),
+        "override_exposure_s must have been dropped from evidence by migration 0048"
+    );
+    assert!(
+        !names.contains(&"override_binning"),
+        "override_binning must have been dropped from evidence by migration 0048"
+    );
+    assert_eq!(names.len(), 1, "expected exactly 1 override column remaining on evidence");
 }
 
 // ── plan_items accepts 'catalogue' action ─────────────────────────────────────

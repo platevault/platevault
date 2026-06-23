@@ -154,10 +154,12 @@ pub async fn reclassify(
         }
     }
 
-    let (updated_type, single_frame_type) = match frame_types.len() {
-        0 => ("unclassified".to_owned(), None),
-        1 => ("single_type".to_owned(), frame_types.into_iter().next()),
-        _ => ("mixed".to_owned(), None),
+    // DB values (migration 0048 CHECK): 'classified' / 'unclassified'.
+    // API values (stable frontend vocabulary): 'single_type' / 'mixed' / 'unclassified'.
+    let (db_result, updated_type, single_frame_type) = match frame_types.len() {
+        0 => ("unclassified".to_owned(), "unclassified".to_owned(), None),
+        1 => ("classified".to_owned(), "single_type".to_owned(), frame_types.into_iter().next()),
+        _ => ("unclassified".to_owned(), "mixed".to_owned(), None),
     };
 
     // 6. Update persisted classification
@@ -165,7 +167,7 @@ pub async fn reclassify(
         pool,
         &persistence_db::repositories::inbox::UpsertClassification {
             inbox_item_id: &req.inbox_item_id,
-            result: &updated_type,
+            result: &db_result,
             frame_type: single_frame_type.as_deref(),
             content_signature: item.content_signature.as_deref().unwrap_or(""),
             unclassified_file_count: i64::try_from(remaining_unclassified).unwrap_or(i64::MAX),

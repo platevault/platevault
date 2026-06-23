@@ -42,7 +42,10 @@ pub struct BreakdownEntry {
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct ClassifyResponse {
     pub inbox_item_id: String,
-    /// "single_type" | "mixed" | "unclassified"
+    /// API vocabulary (stable for frontend): "single_type" | "mixed" | "unclassified".
+    /// Note: the DB stores "classified" / "unclassified" (migration 0048 CHECK);
+    /// the API vocabulary is mapped from the DB value so the frontend contract
+    /// stays unchanged until T071/T072 update the contracts.
     pub classification_type: String,
     /// Present when type == "single_type"
     pub frame_type: Option<String>,
@@ -265,20 +268,33 @@ pub async fn classify(
         }
     }
 
-    // 7. Determine folder-level classification result
+    // 7. Determine folder-level classification result.
+    //
+    // Two distinct string spaces are used:
+    //   db_result    — stored in inbox_classifications.result; must match the
+    //                  CHECK constraint introduced in migration 0048:
+    //                  ('classified', 'unclassified').  'single_type' and
+    //                  'mixed' no longer exist at the DB level. A folder with
+    //                  a single frame type → 'classified'; a folder with
+    //                  multiple frame types → 'unclassified' (the mixed case
+    //                  will be re-split into single-type sub-items in T066).
+    //   api_result   — returned in ClassifyResponse.classification_type; kept
+    //                  on the stable pre-0048 vocabulary ('single_type' /
+    //                  'mixed' / 'unclassified') so the frontend contract and
+    //                  confirm routing remain unchanged until T071/T072 land.
     let distinct_types: Vec<&str> = frame_type_files.keys().map(String::as_str).collect();
-    let (result, single_frame_type) = match distinct_types.len() {
-        0 => ("unclassified", None),
-        1 => ("single_type", Some(distinct_types[0].to_owned())),
-        _ => ("mixed", None),
+    let (db_result, api_result, single_frame_type) = match distinct_types.len() {
+        0 => ("unclassified", "unclassified", None),
+        1 => ("classified", "single_type", Some(distinct_types[0].to_owned())),
+        _ => ("unclassified", "mixed", None),
     };
 
     let unclassified_count = i64::try_from(unclassified_files.len()).unwrap_or(i64::MAX);
 
-    // 8. Persist classification
+    // 8. Persist classification (use db_result which satisfies migration 0048 CHECK).
     let classification = UpsertClassification {
         inbox_item_id: &req.inbox_item_id,
-        result,
+        result: db_result,
         frame_type: single_frame_type.as_deref(),
         content_signature: &content_signature,
         unclassified_file_count: unclassified_count,
@@ -311,7 +327,8 @@ pub async fn classify(
 
     Ok(ClassifyResponse {
         inbox_item_id: req.inbox_item_id,
-        classification_type: result.to_owned(),
+        // api_result retains the pre-0048 vocabulary for frontend stability.
+        classification_type: api_result.to_owned(),
         frame_type: single_frame_type,
         content_signature,
         breakdown,

@@ -131,10 +131,16 @@ pub async fn confirm(
         ));
     }
 
-    // 7. Validate action / classification match
+    // 7. Validate action / classification match.
+    //
+    // Migration 0048 renamed DB values: 'single_type' → 'classified',
+    // 'mixed' → 'unclassified'. Legacy arms kept until T071 removes them.
     let valid = matches!(
         (req.action.as_str(), classification.result.as_str()),
-        ("split", "mixed") | ("confirm", "single_type")
+        ("confirm", "classified")
+            | ("split", "unclassified")
+            | ("split", "mixed")
+            | ("confirm", "single_type")
     );
     if !valid {
         return Err(ContractError::new(
@@ -618,7 +624,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-c1",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-abc",
             &["light_001.fits", "light_002.fits", "light_003.fits"],
@@ -700,7 +706,7 @@ mod tests {
             db.pool(),
             &UpsertClassification {
                 inbox_item_id: item_id,
-                result: "mixed",
+                result: "unclassified",
                 frame_type: None,
                 content_signature: sig,
                 unclassified_file_count: 0,
@@ -798,7 +804,7 @@ mod tests {
             db.pool(),
             &UpsertClassification {
                 inbox_item_id: item_id,
-                result: "mixed",
+                result: "unclassified",
                 frame_type: None,
                 content_signature: sig,
                 unclassified_file_count: 0,
@@ -888,7 +894,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-stale",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-current",
             &["frame_000.fits"],
@@ -920,7 +926,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-ambig",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-x",
             &["frame_000.fits"],
@@ -967,7 +973,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-dup",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-dup",
             &["frame_000.fits", "frame_001.fits"],
@@ -1040,7 +1046,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-org",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-org",
             &["light_001.fits"],
@@ -1095,7 +1101,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-unorg",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-unorg",
             &["light_001.fits"],
@@ -1145,7 +1151,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-absent",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-absent",
             &["frame_000.fits"],

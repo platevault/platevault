@@ -19,7 +19,10 @@
 use std::io::{self, Read};
 use std::path::Path;
 
-use metadata_core::{MetadataExtractError, MetadataExtractor, RawFileMetadata};
+use metadata_core::{
+    parse_f64, parse_i64, sexagesimal_dec_to_deg, sexagesimal_ra_to_deg, MetadataExtractError,
+    MetadataExtractor, RawFileMetadata,
+};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -104,6 +107,11 @@ fn read_header_cards(mut reader: impl Read, _path: &Path) -> io::Result<Vec<[u8;
 // ── Card parsing ──────────────────────────────────────────────────────────────
 
 /// Parse a list of 80-byte FITS cards into [`RawFileMetadata`].
+///
+/// The observer-location fallback arms share bodies but are intentionally
+/// separate keyword patterns with per-field `is_none()` guards (fallback
+/// precedence); the keyword dispatch is necessarily long.
+#[allow(clippy::match_same_arms, clippy::too_many_lines)]
 fn parse_cards(cards: &[[u8; CARD_SIZE]]) -> RawFileMetadata {
     let mut meta = RawFileMetadata::default();
 
@@ -137,6 +145,100 @@ fn parse_cards(cards: &[[u8; CARD_SIZE]]) -> RawFileMetadata {
             "NCOMBINE" if meta.stack_count.is_none() => {
                 meta.stack_count =
                     extract_numeric_string(card).and_then(|s| s.trim().parse::<u32>().ok());
+            }
+
+            // ── Extended extracted metadata (spec 041 T062, R-9/R-18) ───────
+            // Offset / pedestal: OFFSET preferred, BLKLEVEL fallback.
+            "OFFSET" => {
+                meta.offset = extract_numeric_string(card).and_then(|s| parse_i64(&s));
+            }
+            "BLKLEVEL" if meta.offset.is_none() => {
+                meta.offset = extract_numeric_string(card).and_then(|s| parse_i64(&s));
+            }
+            // Temperatures.
+            "SET-TEMP" => {
+                meta.set_temp_c = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "CCD-TEMP" => {
+                meta.ccd_temp_c = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "DET-TEMP" if meta.ccd_temp_c.is_none() => {
+                // DWARF III non-standard fallback for actual sensor temp.
+                meta.ccd_temp_c = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            // Pointing: decimal RA/DEC preferred over sexagesimal OBJCTRA/OBJCTDEC.
+            "RA" => {
+                meta.ra_deg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "OBJCTRA" if meta.ra_deg.is_none() => {
+                meta.ra_deg = extract_string_value(card).and_then(|s| sexagesimal_ra_to_deg(&s));
+            }
+            "DEC" => {
+                meta.dec_deg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "OBJCTDEC" if meta.dec_deg.is_none() => {
+                meta.dec_deg = extract_string_value(card).and_then(|s| sexagesimal_dec_to_deg(&s));
+            }
+            // Rotation: ROTATANG (= ROTATOR, mechanical) is the flat-match key;
+            // OBJCTROT is the informational sky position angle. Never swap them.
+            "ROTATANG" => {
+                meta.rotator_angle_deg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "ROTATOR" if meta.rotator_angle_deg.is_none() => {
+                meta.rotator_angle_deg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "ROTNAME" => meta.rotator_name = extract_string_value(card),
+            "OBJCTROT" => {
+                meta.sky_rotation_deg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            // Readout mode (optional grouping dim).
+            "READOUTM" => meta.readout_mode = extract_string_value(card),
+            // Optic train inputs.
+            "FOCALLEN" => {
+                meta.focal_length_mm = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "XPIXSZ" => {
+                meta.pixel_size_um = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "PIXSIZE" if meta.pixel_size_um.is_none() => {
+                meta.pixel_size_um = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            // Observer location: SITE* preferred, OBSGEO-* then *-OBS fallbacks.
+            "SITELAT" => {
+                meta.observer_lat = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "OBSGEO-B" if meta.observer_lat.is_none() => {
+                meta.observer_lat = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "LAT-OBS" if meta.observer_lat.is_none() => {
+                meta.observer_lat = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "SITELONG" => {
+                meta.observer_long = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "OBSGEO-L" if meta.observer_long.is_none() => {
+                meta.observer_long = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "LONG-OBS" if meta.observer_long.is_none() => {
+                meta.observer_long = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "SITEELEV" => {
+                meta.observer_elev = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "OBSGEO-H" if meta.observer_elev.is_none() => {
+                meta.observer_elev = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "ALT-OBS" if meta.observer_elev.is_none() => {
+                meta.observer_elev = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            // Time keywords.
+            "DATE-LOC" => meta.date_loc = extract_string_value(card),
+            "DATE-END" => meta.date_end = extract_string_value(card),
+            "MJD-AVG" => {
+                meta.mjd_avg = extract_numeric_string(card).and_then(|s| parse_f64(&s));
+            }
+            "MJD-OBS" => {
+                meta.mjd_obs = extract_numeric_string(card).and_then(|s| parse_f64(&s));
             }
             _ => {}
         }
@@ -375,5 +477,166 @@ mod tests {
         let parsed = read_header_cards(block.as_slice(), Path::new("test.fits")).unwrap();
         let meta = parse_cards(&parsed);
         assert_eq!(meta.exposure, Some("120.0".to_owned()));
+    }
+
+    // ── Extended extracted metadata (spec 041 T062) ───────────────────────────
+
+    fn parse(cards: &[String]) -> RawFileMetadata {
+        let refs: Vec<&str> = cards.iter().map(String::as_str).collect();
+        let block = build_fits_header(&refs);
+        let parsed = read_header_cards(block.as_slice(), Path::new("t.fits")).unwrap();
+        parse_cards(&parsed)
+    }
+
+    fn approx(a: Option<f64>, b: f64) {
+        let v = a.expect("expected Some");
+        assert!((v - b).abs() < 1e-4, "expected {b}, got {v}");
+    }
+
+    #[test]
+    fn parses_offset_with_blklevel_fallback() {
+        // OFFSET preferred.
+        let meta = parse(&[pad80("OFFSET  =                   20 / sensor gain offset")]);
+        assert_eq!(meta.offset, Some(20));
+        // BLKLEVEL fallback when OFFSET absent.
+        let meta = parse(&[pad80("BLKLEVEL=                  512 / pedestal")]);
+        assert_eq!(meta.offset, Some(512));
+        // OFFSET wins over BLKLEVEL regardless of card order.
+        let meta = parse(&[
+            pad80("BLKLEVEL=                  512"),
+            pad80("OFFSET  =                   20"),
+        ]);
+        assert_eq!(meta.offset, Some(20));
+    }
+
+    #[test]
+    fn parses_set_and_ccd_temp_with_det_temp_fallback() {
+        let meta = parse(&[
+            pad80("SET-TEMP=                  0.0 / [degC] CCD temperature setpoint"),
+            pad80("CCD-TEMP=                  0.2 / [degC] CCD temperature"),
+        ]);
+        approx(meta.set_temp_c, 0.0);
+        approx(meta.ccd_temp_c, 0.2);
+        // DWARF III: no CCD-TEMP, DET-TEMP fallback feeds ccd_temp_c.
+        let meta = parse(&[pad80("DET-TEMP=                   44 / Detector temperature in C")]);
+        approx(meta.ccd_temp_c, 44.0);
+    }
+
+    #[test]
+    fn prefers_decimal_ra_dec() {
+        // Real Poseidon header values; decimal RA/DEC win over sexagesimal.
+        let meta = parse(&[
+            pad80("RA      =     272.682006826377 / [deg] RA of telescope"),
+            pad80("DEC     =    -15.0055460224596 / [deg] Declination of telescope"),
+            pad80("OBJCTRA = '18 10 38'           / [H M S] RA of imaged object"),
+            pad80("OBJCTDEC= '-15 01 11'          / [D M S] Dec of imaged object"),
+        ]);
+        approx(meta.ra_deg, 272.682_006_826);
+        approx(meta.dec_deg, -15.005_546_022);
+    }
+
+    #[test]
+    fn falls_back_to_sexagesimal_ra_dec() {
+        // No decimal RA/DEC → convert OBJCTRA/OBJCTDEC.
+        let meta = parse(&[
+            pad80("OBJCTRA = '18 10 38'           / [H M S] RA of imaged object"),
+            pad80("OBJCTDEC= '-15 01 11'          / [D M S] Dec of imaged object"),
+        ]);
+        approx(meta.ra_deg, 272.658_333_333);
+        approx(meta.dec_deg, -15.019_722_222);
+    }
+
+    #[test]
+    fn rotatang_is_match_key_objctrot_is_informational() {
+        // ROTATANG (mechanical) ≠ OBJCTROT (sky PA): must not be swapped.
+        let meta = parse(&[
+            pad80("ROTATANG=     12.4320640563965 / [deg] Mechanical rotator angle"),
+            pad80("OBJCTROT=                12.43 / [deg] planned rotation"),
+            pad80("ROTNAME = 'Manual Rotator + OAG' / Rotator equipment name"),
+        ]);
+        approx(meta.rotator_angle_deg, 12.432_064);
+        approx(meta.sky_rotation_deg, 12.43);
+        assert_eq!(meta.rotator_name.as_deref(), Some("Manual Rotator + OAG"));
+    }
+
+    #[test]
+    fn rotator_keyword_is_fallback_for_rotatang() {
+        let meta = parse(&[pad80("ROTATOR =     90.5 / [deg] Mechanical rotator angle")]);
+        approx(meta.rotator_angle_deg, 90.5);
+        // And ROTATANG wins if both present.
+        let meta = parse(&[pad80("ROTATOR =     90.5"), pad80("ROTATANG=     12.4")]);
+        approx(meta.rotator_angle_deg, 12.4);
+    }
+
+    #[test]
+    fn parses_readout_focallen_pixsize() {
+        let meta = parse(&[
+            pad80("READOUTM= 'Low Noise'          / Sensor readout mode"),
+            pad80("FOCALLEN=                525.0 / [mm] Focal length"),
+            pad80("XPIXSZ  =                 3.76 / [um] Pixel X axis size"),
+        ]);
+        assert_eq!(meta.readout_mode.as_deref(), Some("Low Noise"));
+        approx(meta.focal_length_mm, 525.0);
+        approx(meta.pixel_size_um, 3.76);
+    }
+
+    #[test]
+    fn pixsize_fallback_when_xpixsz_absent() {
+        let meta = parse(&[pad80("PIXSIZE =                 9.00 / pixel size")]);
+        approx(meta.pixel_size_um, 9.0);
+    }
+
+    #[test]
+    fn parses_observer_location_with_fallback_chain() {
+        // SITE* preferred.
+        let meta = parse(&[
+            pad80("SITELAT =               24.839 / [deg] site latitude"),
+            pad80("SITELONG=               55.383 / [deg] site longitude"),
+            pad80("SITEELEV=                101.0 / [m] site elevation"),
+        ]);
+        approx(meta.observer_lat, 24.839);
+        approx(meta.observer_long, 55.383);
+        approx(meta.observer_elev, 101.0);
+        // *-OBS fallback (real Jellyfish master uses LAT-OBS/LONG-OBS/ALT-OBS).
+        let meta = parse(&[
+            pad80("LAT-OBS =               24.839"),
+            pad80("LONG-OBS=               55.383"),
+            pad80("ALT-OBS =                101.0"),
+        ]);
+        approx(meta.observer_lat, 24.839);
+        approx(meta.observer_long, 55.383);
+        approx(meta.observer_elev, 101.0);
+    }
+
+    #[test]
+    fn parses_time_keywords() {
+        let meta = parse(&[
+            pad80("DATE-LOC= '2025-10-17T19:23:39.413' / Time of observation (local)"),
+            pad80("DATE-END= '2025-10-17T19:24:09.413' / end of observation"),
+            pad80("MJD-AVG =       60965.0 / exposure midpoint"),
+            pad80("MJD-OBS =       60965.5 / exposure start"),
+        ]);
+        assert_eq!(meta.date_loc.as_deref(), Some("2025-10-17T19:23:39.413"));
+        assert_eq!(meta.date_end.as_deref(), Some("2025-10-17T19:24:09.413"));
+        approx(meta.mjd_avg, 60965.0);
+        approx(meta.mjd_obs, 60965.5);
+    }
+
+    #[test]
+    fn extended_fields_absent_are_none() {
+        let meta = parse(&[pad80("IMAGETYP= 'Light Frame'")]);
+        assert!(meta.offset.is_none());
+        assert!(meta.set_temp_c.is_none());
+        assert!(meta.ccd_temp_c.is_none());
+        assert!(meta.ra_deg.is_none());
+        assert!(meta.dec_deg.is_none());
+        assert!(meta.rotator_angle_deg.is_none());
+        assert!(meta.sky_rotation_deg.is_none());
+        assert!(meta.readout_mode.is_none());
+        assert!(meta.focal_length_mm.is_none());
+        assert!(meta.pixel_size_um.is_none());
+        assert!(meta.observer_lat.is_none());
+        assert!(meta.date_loc.is_none());
+        assert!(meta.mjd_avg.is_none());
     }
 }

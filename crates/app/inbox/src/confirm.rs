@@ -159,10 +159,19 @@ pub async fn confirm(
         ));
     }
 
-    // 7. Validate action / classification match
+    // 7. Validate action / classification match.
+    //
+    // Migration 0048 renamed DB values: 'single_type' → 'classified',
+    // 'mixed' → 'unclassified'. The 'split' action path is kept for backward
+    // compat with the pre-0048 frontend until T071 removes it.
     let valid = matches!(
         (req.action.as_str(), classification.result.as_str()),
-        ("split", "mixed") | ("confirm", "single_type")
+        // Post-0048 DB values:
+        ("confirm", "classified")
+        // Pre-0048 DB values still present in legacy rows; kept until T071:
+        | ("split", "unclassified")
+        | ("split", "mixed")
+        | ("confirm", "single_type")
     );
     if !valid {
         return Err(ContractError::new(
@@ -940,7 +949,7 @@ mod tests {
             db.pool(),
             &UpsertClassification {
                 inbox_item_id: item_id,
-                result: "single_type",
+                result: "classified",
                 frame_type,
                 content_signature: sig,
                 unclassified_file_count: 0,
@@ -1001,7 +1010,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-c1",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-abc",
             &["light_001.fits", "light_002.fits", "light_003.fits"],
@@ -1063,7 +1072,7 @@ mod tests {
             setup_classified_item(
                 &db,
                 "item-dd",
-                "single_type",
+                "classified",
                 Some("light"),
                 "sig-dd",
                 &["light_001.fits"],
@@ -1159,7 +1168,7 @@ mod tests {
             db.pool(),
             &UpsertClassification {
                 inbox_item_id: item_id,
-                result: "mixed",
+                result: "unclassified",
                 frame_type: None,
                 content_signature: sig,
                 unclassified_file_count: 0,
@@ -1303,7 +1312,7 @@ mod tests {
             &db,
             "item-pertype",
             "sig-pertype",
-            "mixed",
+            "unclassified",
             &[
                 ("light", "light_001.fits", "Light Frame"),
                 ("light", "light_002.fits", "Light Frame"),
@@ -1378,7 +1387,7 @@ mod tests {
             &db,
             "item-single",
             "sig-single",
-            "single_type",
+            "classified",
             &[
                 ("light", "light_001.fits", "Light Frame"),
                 ("light", "light_002.fits", "Light Frame"),
@@ -1461,7 +1470,7 @@ mod tests {
             db.pool(),
             &UpsertClassification {
                 inbox_item_id: item_id,
-                result: "mixed",
+                result: "unclassified",
                 frame_type: None,
                 content_signature: sig,
                 unclassified_file_count: 0,
@@ -1552,7 +1561,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-stale",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-current",
             &["frame_000.fits"],
@@ -1585,7 +1594,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-ambig",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-x",
             &["frame_000.fits"],
@@ -1633,7 +1642,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-dup",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-dup",
             &["frame_000.fits", "frame_001.fits"],
@@ -1708,7 +1717,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-org",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-org",
             &["light_001.fits"],
@@ -1767,7 +1776,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-unorg",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-unorg",
             &["light_001.fits"],
@@ -1825,7 +1834,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-absent",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-absent",
             &["frame_000.fits"],
@@ -1894,7 +1903,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-np",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-np",
             &["light_001.fits"],
@@ -2108,7 +2117,7 @@ mod tests {
             db.pool(),
             &UpsertClassification {
                 inbox_item_id: "item-cal",
-                result: "mixed",
+                result: "unclassified",
                 frame_type: None,
                 content_signature: "sig-cal",
                 unclassified_file_count: 0,
@@ -2174,7 +2183,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-gate",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-gate",
             &["light_001.fits"],

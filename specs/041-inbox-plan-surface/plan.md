@@ -18,7 +18,7 @@ Technically this requires: a new `registered_sources.organization_state` column;
 
 **Language/Version**: Rust (workspace, edition 2021) for core/domain/persistence; TypeScript + React 19 (Vite) for `apps/desktop`; Tauri v2 desktop shell.
 **Primary Dependencies**: SQLite via `sqlx`; `tauri-specta` (generated TS bindings — authoritative); `crates/patterns` (`resolve_v1` naming-pattern resolver); `crates/fs/planner` + `crates/fs/executor` (reviewable plan/apply, CAS staleness); `crates/metadata/{core,fits,xisf}` (header extraction); `crates/audit`.
-**Storage**: SQLite (migrations under `crates/persistence/db/migrations/`). Migration `0045` (this feature, applied) + the destination-model iteration; the single-type ingest iteration adds **`0047`** (`0046` numbers are already taken by `0046_session_canonical_target.sql` + `0046_target_constellation_magnitude.sql`).
+**Storage**: SQLite (migrations under `crates/persistence/db/migrations/`). Migration `0045` (this feature, applied) + the destination-model iteration; the single-type ingest iteration adds **`0048`** (`0046` + `0047` are already taken by `0046_session_canonical_target.sql` + `0047_target_constellation_magnitude.sql`; PR #317 renamed target_constellation to 0047 to resolve the dual-0046).
 **Testing**: `just test` / `cargo test` per-crate (workspace test is red on `main` per known breakage — validate with `-p <crate>`); Vitest + RTL for frontend; real Windows app for E2E UI verification.
 **Target Platform**: Cross-platform desktop (Windows primary verify target; WSL dev).
 **Project Type**: Tauri desktop monorepo (Rust crates + React frontend + language-neutral contracts).
@@ -52,7 +52,7 @@ Technically this requires: a new `registered_sources.organization_state` column;
 | **IV. Research-Led** | Each pivot decision (R-9–R-18) compares options, picks a default, keeps config; coordinate NN reuses the existing target/SIMBAD DB with no heavy dependency. | ✅ PASS |
 | **V. Portable Contracts** | New ops (`inbox.property_registry`, `inbox.target_recommendations`) are language-neutral; SQLite stays the durable record; session lifecycle drop (FR-051) keeps the durable audit + reviewable plans. | ✅ PASS |
 
-Extended extraction stays **lazy** (classify-time header reads, no eager hashing — Product Constraint). New migration `0047` is additive.
+Extended extraction stays **lazy** (classify-time header reads, no eager hashing — Product Constraint). New migration `0048` is additive.
 
 **Result**: No violations. Initial, post-design, and both iteration re-check gates pass; no Complexity Tracking entries required.
 
@@ -134,9 +134,9 @@ Builds on the merged 041 apply path (root_id now resolves via `registered_source
 
 ## Iteration 2026-06-23: Single-type ingest (US10–US16, FR-034–FR-054)
 
-Structural pivot: the inbox unit of work becomes one **single-type sub-item per homogeneous group within a leaf folder** (item↔plan strictly 1:1), with source-group provenance, a field-agnostic reclassifier over a typed property registry, a generalized missing-mandatory gate + needs-review bucket, coordinate-based light target resolution, extended header extraction, and the session review lifecycle dropped in favour of derived sessions. Full decisions in research.md (R-9–R-18); schema in data-model.md (migration **0047**).
+Structural pivot: the inbox unit of work becomes one **single-type sub-item per homogeneous group within a leaf folder** (item↔plan strictly 1:1), with source-group provenance, a field-agnostic reclassifier over a typed property registry, a generalized missing-mandatory gate + needs-review bucket, coordinate-based light target resolution, extended header extraction, and the session review lifecycle dropped in favour of derived sessions. Full decisions in research.md (R-9–R-18); schema in data-model.md (migration **0048**).
 
-- **Foundational**: migration `0047_inbox_single_type.sql` (`inbox_source_groups`, sub-item identity `(root_id, relative_path, group_key)`, `inbox_file_overrides`, collapsed classification result, extended metadata incl. pixel size) — T061; extended FITS/XISF extraction — T062. (FR-034/FR-042/FR-046/FR-053/FR-054)
+- **Foundational**: migration `0048_inbox_single_type.sql` (`inbox_source_groups`, sub-item identity `(root_id, relative_path, group_key)`, `inbox_file_overrides`, collapsed classification result, extended metadata incl. pixel size) — T061; extended FITS/XISF extraction — T062. (FR-034/FR-042/FR-046/FR-053/FR-054)
 - **Grouping/classify/reclassify** (`crates/app/core/src/inbox/{scan,classify,reclassify,confirm}.rs` + a grouping engine + property-registry module): classify-then-split materialization, per-type recipes with bucketing/tolerances, flat↔light `ROTATANG` matching (T080), field-agnostic bulk reclassify, generalized gate + re-split loop, confirm simplification (delete split/mixed). (FR-035–FR-041/FR-044–FR-050)
 - **Target resolution** (`crates/targeting` + `inbox.target_recommendations`): FOV-aware coordinate NN over the gen-3/SIMBAD target DB with a fixed-radius fallback; project propagation. (FR-052)
 - **Sessions** (`crates/sessions` + spec 006/045 reconciliation): drop the review lifecycle; sessions are derived, already-confirmed inventory with an editable metadata view; migrate legacy `plan_open` items. (FR-051/FR-054) — cross-spec impact resolved via `/speckit.sync.conflicts` (T078), run early.
