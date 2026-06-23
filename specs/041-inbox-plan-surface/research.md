@@ -179,9 +179,11 @@ group_key = frame_type · ⟨ordered identity dimensions for that frame_type⟩
 | set-temp | `SET-TEMP` | — | dark grouping (default temp source) |
 | ccd-temp | `CCD-TEMP` | `DET-TEMP` (DWARF III) | deviation-warning source |
 | pointing RA/Dec | `RA`/`DEC` (decimal °) | `OBJCTRA`/`OBJCTDEC` (sexagesimal → convert) | light grouping + R-17 target resolution |
-| rotation | `OBJCTROT` | `ROTATANG` | light + flat grouping |
+| rotatorAngleDeg | `ROTATANG` (= `ROTATOR`, mechanical) | — | **flat-match key** + tolerant light grouping (R-18) |
+| skyRotationDeg | `OBJCTROT` (sky PA) | — | **informational only — NOT a flat key** (R-18) |
 | readout mode | `READOUTM` | — | proposed calibration grouping dim |
 | focal length | `FOCALLEN` | XISF `Instrument:Telescope:FocalLength`×1000 | optic-train composite |
+| pixel size | `XPIXSZ` / `PIXSIZE` | XISF `Image:PixelSize` | FOV-aware target radius (R-17), with `FOCALLEN` + `NAXIS1/2` |
 | observer lat/long/elev | `SITELAT`/`SITELONG`/`SITEELEV` | `OBSGEO-B/-L/-H`, `LAT-OBS`/`LONG-OBS`/`ALT-OBS` | extract for **future grouping** (user req) + needed for observing-night solar-noon binning |
 
 Until a dimension is extracted it behaves as **best-effort** (R-14): present → groups; absent → "(unknown)" bucket + warning, does not block. **Observer longitude is a prerequisite** for correct observing-night binning (solar-noon boundary), so SITELONG/LONG-OBS extraction gates the `observing-night` dimension. **Filename-encoded metadata is explicitly NOT a grouping/extraction source** (user req: varies per user setup) — stripped masters with empty headers carry unknown calibration metadata → resolved via user override, not filename parsing.
@@ -277,6 +279,7 @@ Until a dimension is extracted it behaves as **best-effort** (R-14): present →
 
 - Files missing a mandatory attribute (incl. unclassifiable frame type) cannot form a valid single-type destination and are collected into a per-source-group **"Needs review" sub-item** (sentinel group key). This sub-item **blocks plan creation** until resolved via reclassify (R-13). This generalizes today's `unclassified` result + confirm-time `InboxMissingPathAttributes` block.
 - `inbox.list` items and the per-file metadata DTO report the missing list (per file + per-item rollup) so the UI prompts before confirm.
+- **`target` (light) is a hard mandatory key** in the derived set: it is satisfiable by coordinate auto-resolution (R-17) **or** an explicit user pick. A light sub-group with no pointing and no user-set target therefore lands in the needs-review bucket (US15 scenario 3) — `target` is not a header/pattern token but is still enforced as mandatory for lights.
 
 **Pre-confirm completion & re-split loop.** A plan is created **only from a fully-resolved single-type sub-item**. The flow is strictly: **(1)** scan → classify materializes sub-items (incl. a needs-review bucket for files missing mandatory attrs); **(2)** the user supplies the missing values in the metadata editor (`inbox.reclassify`, field-agnostic, fill-missing-only, index-only); **(3)** the system **re-runs classification + grouping and re-materializes/re-splits the sub-items** (a needs-review bucket can split into several proper single-type sub-items as values arrive); **(4)** only once a sub-item has no missing mandatory attributes can it be confirmed into a plan. I.e. **splitting/recalculating the inbox happens before confirm**, never inside plan creation. `inbox.confirm` rejects any item still carrying missing mandatory attributes (broadened `inbox.missing_path_attributes`).
 
@@ -316,7 +319,7 @@ Until a dimension is extracted it behaves as **best-effort** (R-14): present →
 **Decision**: Resolve a light sub-group's **target by sky-coordinate proximity**, not by the `OBJECT` string.
 
 - At light ingestion (the Inbox metadata-completion step), each light sub-group has a pointing (`RA`/`DEC` decimal, fallback converted `OBJCTRA`/`OBJCTDEC`). Compute **angular (great-circle) distance** between that pointing and every entry in the target database (gen-3 targets + SIMBAD-resolved catalog — specs 013/014/023/035) via haversine on (RA, Dec).
-- Present a **ranked list of recommended targets** (nearest within a **FOV-aware radius** computed from `FOCALLEN` + pixel size by default), plus **free-text search** and **manual set**. The `OBJECT` header is used **only as the initial display name** for ingestion/sessions — **never for target search/matching** (search is coordinate-only).
+- Present a **ranked list of recommended targets** (nearest within a **FOV-aware radius** computed from `FOCALLEN` + pixel size (`XPIXSZ`/`PIXSIZE`) + sensor dimensions (`NAXIS1/2`) by default; when pixel size is unavailable, fall back to a **configurable fixed radius**), plus **free-text search** and **manual set**. The `OBJECT` header is used **only as the initial display name** for ingestion/sessions — **never for target search/matching** (search is coordinate-only).
 - The chosen `target_id` becomes the sub-group's canonical target: it drives the group **label** (canonical name, not the NINA string), unifies the group key (resolved `target_id` supersedes raw pointing buckets so dither jitter near a bucket edge can't fork one target), and **auto-propagates to any project** that consumes these lights (closes spec 035 project↔target gap #1).
 - `target` is a **mandatory** light attribute (R-14) satisfiable by auto-resolution OR user pick; unresolved + unset pointing ⇒ needs-review bucket.
 

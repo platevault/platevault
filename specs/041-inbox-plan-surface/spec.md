@@ -138,7 +138,7 @@ Whether confirming an item generates a **move plan** or **catalogues the files i
 
 ---
 
-### User Story 5 - Confirm auto-splits mixed folders (Priority: P3)
+### User Story 5 - Confirm auto-splits mixed folders (Priority: P3) — [SUPERSEDED by US10]
 
 RETIRED (superseded by US10 single-type items): with single-type sub-items materialized at ingest, a mixed folder yields N homogeneous items directly, so there is nothing left to auto-split at confirm — see US10. The original story is preserved below for history.
 
@@ -187,7 +187,7 @@ When a plan includes a **destructive action** (e.g. archiving or trashing reject
 - A folder is confirmed, then its files change on disk before the plan is applied → Apply must detect staleness and refuse rather than move the wrong/changed files (US1 scenario 5).
 - A file has no readable header / unreadable metadata → the detail panel shows it as unclassified and allows manual override rather than hanging or crashing.
 - A destination collision (target file already exists) at Apply time → the plan/apply must not overwrite silently; it surfaces the conflict for the user to resolve.
-- An item spans files of mixed source provenance (some already organized in place, some not) → the plan is split **per file by provenance**: files already under an organized root are catalogued in place, while the rest receive move actions (so one item's plan may contain both catalogue and move actions).
+- An item spans files of mixed source provenance (some already organized in place, some not) → the plan is split **per file by provenance**: files already under an organized root are catalogued in place, while the rest receive move actions (so one item's plan may contain both catalogue and move actions). **(Iteration 2026-06-23: no longer reachable at the sub-item level — a source group is one leaf folder under one source, so a single-type sub-item has uniform provenance; retained for the legacy folder-level path.)**
 - The active naming pattern is unset/incomplete on a fresh setup → destination preview must degrade gracefully (clear "destination unavailable until a pattern is configured" rather than a blank field).
 - Multi-level grouping where some items lack a grouping dimension (e.g. no target) → such items are gathered under a clear "unknown/none" group rather than dropped.
 - A multi-select override spans files across different source designations (inbox vs in-place) → the override applies to metadata uniformly, but the move-vs-catalogue decision still follows each item's source (US4).
@@ -364,7 +364,7 @@ As a user, I want the app to extract the additional header fields the new groupi
 
 **Move vs catalogue-in-place (US4)**
 
-- **FR-017**: The system MUST decide between generating a move plan and cataloguing in place based on the **organization state** of the file's source (organized → catalogue in place; unorganized → move plan), independent of the source's content `kind` and of the frame type. For an item spanning files of mixed provenance, the decision MUST be made per file (files from organized sources catalogued in place; files from unorganized sources moved), so a single item's plan MAY contain both catalogue and move actions.
+- **FR-017**: The system MUST decide between generating a move plan and cataloguing in place based on the **organization state** of the file's source (organized → catalogue in place; unorganized → move plan), independent of the source's content `kind` and of the frame type. For an item spanning files of mixed provenance, the decision MUST be made per file (files from organized sources catalogued in place; files from unorganized sources moved), so a single item's plan MAY contain both catalogue and move actions. **(Iteration 2026-06-23 note:** under the source-group model a single-type sub-item derives from one leaf folder = one source = one `organization_state`, so its provenance is uniform; the per-file mixed-provenance split no longer arises at the sub-item level, and each item's plan is wholly move **or** wholly catalogue.**)**
 - **FR-018**: Cataloguing in place MUST record the files in the database with no move plan and no file movement.
 - **FR-019**: Calibration masters and light frames MUST follow the same organization-state rule; a master from an unorganized source gets a reviewable move plan and is registered as a master, while a master from an organized source is registered without a move.
 - **FR-019a**: Each source MUST carry an explicit organization state (organized / unorganized) that is orthogonal to its content `kind`; the same kind MAY have both organized and unorganized sources simultaneously.
@@ -372,7 +372,7 @@ As a user, I want the app to extract the additional header fields the new groupi
 
 **Auto-split (US5)**
 
-- **FR-020**: Confirming a folder containing more than one frame type MUST automatically produce a distinct plan action per frame type, each routed to its own destination, without a separate manual split step.
+- **FR-020**: ~~Confirming a folder containing more than one frame type MUST automatically produce a distinct plan action per frame type, each routed to its own destination, without a separate manual split step.~~ **[SUPERSEDED by FR-034 / FR-050 / SC-012]** — under single-type sub-items a mixed folder materializes N single-type items at classify time, each confirmed into its own 1:1 plan; there is no mixed item to auto-split.
 
 **Statistics (US6)**
 
@@ -429,7 +429,7 @@ As a user, I want the app to extract the additional header fields the new groupi
 
 **Generalized gate (iteration 2026-06-23, US12)**
 
-- **FR-047**: The missing-mandatory gate MUST generalize to the union of mandatory grouping properties and destination-pattern tokens; the per-frame mandatory set MUST be derived from the active pattern ∪ enabled grouping dimensions ∪ hard calibration/session keys (not hardcoded).
+- **FR-047**: The missing-mandatory gate MUST generalize to the union of mandatory grouping properties and destination-pattern tokens; the per-frame mandatory set MUST be derived from the active pattern ∪ enabled grouping dimensions ∪ hard calibration/session keys (not hardcoded). For light frames, `target` MUST be enforced as a hard mandatory key (even though it is not a header or pattern token), satisfiable by coordinate auto-resolution (FR-052) OR an explicit user pick; a light with no pointing and no user-set target MUST route to needs-review.
 - **FR-048**: Files missing a mandatory attribute or with an unclassifiable frame type MUST be collected into a per-source-group "needs-review" sub-item that blocks plan creation until resolved.
 - **FR-049**: The system MUST follow a split-before-confirm loop: when the user supplies missing values it re-runs classification + grouping and re-splits the sub-items; only a fully-resolved single-type sub-item is confirmable, and confirm MUST reject any item still carrying missing mandatory attributes.
 
@@ -472,7 +472,7 @@ As a user, I want the app to extract the additional header fields the new groupi
 - **SC-005**: Applying an override to a selection of N files updates exactly those N files and the reported count equals N in 100% of cases.
 - **SC-006**: The review list can be grouped by at least two dimensions in a chosen order, and the resulting nesting matches the data in 100% of cases.
 - **SC-007**: Confirming an item from an already-organized library root results in zero file movements and a catalogue record, for both light and calibration items.
-- **SC-008**: Confirming a mixed-type folder yields one plan action per distinct frame type with no separate user action, in 100% of cases.
+- **SC-008**: ~~Confirming a mixed-type folder yields one plan action per distinct frame type with no separate user action, in 100% of cases.~~ **[SUPERSEDED by SC-012]** (a mixed folder produces N single-type items and zero "mixed" items; each item confirms into its own 1:1 plan).
 - **SC-009**: The Calibration page and the inbox detail panel render without runtime errors for freshly-confirmed masters (zero crash reports for the master/detail views).
 - **SC-010**: The inbox summary's per-type counts match the actual queue contents exactly.
 - **SC-011**: No status pills overflow the sidebar; the review list and detail panel follow the standard pinned-bar/scrolling-content layout at the supported window sizes.
