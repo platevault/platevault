@@ -30,8 +30,8 @@ Last reconciled: **2026-06-23** (after the 035 / 040 / 041 / 046 iteration waves
 | 003 first-run-source-setup | ✅ Implemented | 32/32 (via 027/029) |
 | 004 native-filesystem-controls | ✅ Implemented | 32/32 |
 | 005 inbox-mixed-folder-split | 🔴 Superseded by 041 | 0/51; reassigned to 041 single-type model — **not yet implemented** (PR #315 docs-only) |
-| 006 inventory-library-lifecycle | 🟡 Closeout-ready | 28/43; 14/15 open tasks DEFERRED |
-| 007 calibration-matching-rules | 🟡 Closeout-ready | 31/42; all 11 open tasks DEFERRED (JSON-schema test runner absent) |
+| 006 inventory-library-lifecycle | 🟠 NOT closeable (verify 2026-06-23) | phantom `session.mixed_state` guard (deprecated by 041 inbox split → drop); FR-002/SC-001 filter removed by 043; FR-007/FR-010 gaps. Needs /speckit.iterate |
+| 007 calibration-matching-rules | ✅ Implemented (closed 2026-06-23) | 31/42; 11 open all DEFERRED (JSON-schema runner); verified, gates green; SC-001 accepted (018 FR-009 split) |
 | 008 project-create-onboard-edit | 🟡 Partial | 28/38; ~6 real-open |
 | 009 project-lifecycle-model | ✅ Implemented | 21/21 |
 | 010 guided-first-project-flow | 🟡 Near-complete | 31/33 |
@@ -48,7 +48,7 @@ Last reconciled: **2026-06-23** (after the 035 / 040 / 041 / 046 iteration waves
 | 021 developer-contract-diagnostics | 🟡 Partial | 32/37 (behind `dev-tools` feature) |
 | 022 mantine-prototype-design-system | 🔴 Superseded by 027 | |
 | 023 target-identity-history-notes | ✅ Implemented on gen-3 | US1 identity/aliases + US2 linked sessions + US3 linked projects + US4 observing notes shipped (migration 0048 + `target.sessions.list`/`target.projects.list`/`target.note.*`). `target.primary.rename` dropped; gen-2 Foundations obsolete |
-| 024 project-manifests-and-notes | 🟡 Closeout-ready | 32/37; all 5 open tasks DEFERRED |
+| 024 project-manifests-and-notes | ✅ Implemented (closed 2026-06-23) | 32/37; 5 open all DEFERRED (FR-006/export/contract-tests); notes display-on-load fixed at close-out |
 | 025 filesystem-plan-application | 🟡 Partial (out-of-spec) | Real apply shipped via 041; rollback + progress UI open |
 | 026 generated-source-view-removal | 🟡 Likely obsolete | 12/23; removal happened |
 | 027 frontend-implementation | ✅ Implemented | 99/99 |
@@ -125,7 +125,7 @@ INFRA / CROSS-CUTTING (mostly independent)
 
 ## Closeout-ready (verify pass, not new work)
 
-**006, 007, 024** — open tasks are all DEFERRED, not unstarted. Run `speckit-verify`, then flip `Status:` to Implemented.
+**007, 024** — verified + CLOSED 2026-06-23 (Implemented). **006** — verify found a phantom `session.mixed_state` guard (deprecated by spec 041's inbox split) + unreconciled 043-redesign gaps → needs `/speckit.iterate`, not a verify-and-flip.
 
 ## Blocked / not-yet-actionable
 
