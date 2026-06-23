@@ -4,7 +4,9 @@
 
 **Created**: 2026-06-19
 
-**Status**: Draft
+**Updated**: 2026-06-23
+
+**Status**: Implemented — gen-2 target tables retired, Targets page rebuilt on gen-3 (PR #255); 28/29 tasks.
 
 **Input**: User description: "Retire the legacy target tables and consolidate all target storage and management on the spec-035 canonical_target model."
 

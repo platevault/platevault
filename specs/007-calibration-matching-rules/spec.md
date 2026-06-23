@@ -6,8 +6,8 @@
 
 **Feature Branch**: `007-calibration-matching-rules`
 **Created**: 2026-05-09
-**Last Updated**: 2026-05-20
-**Status**: Draft
+**Last Updated**: 2026-06-23
+**Status**: Core implemented (31/42) — matching engine for bias/dark/flat + assign/ranking/candidate shipped (`crates/calibration/core/src/`). The 11 open tasks are all explicitly **DEFERRED** contract-test tasks (JSON-Schema test runner not yet in the workspace; domain guards already covered by unit tests), not unstarted work.
 **Input**: User description: "Specify configurable calibration matching rules per calibration type, with recommendations and manual override."
 
 ## Implementation Status: UI scaffolding only

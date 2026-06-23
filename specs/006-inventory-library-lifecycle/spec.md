@@ -15,7 +15,8 @@
 
 **Feature Branch**: `006-inventory-library-lifecycle`  
 **Created**: 2026-05-09  
-**Status**: Draft  
+**Updated**: 2026-06-23  
+**Status**: Core implemented (28/43) — 14 of the 15 open tasks are explicitly DEFERRED (not unstarted). Closeout-ready pending a verify pass on the deferred set.  
 **Input**: User description: "Specify the Inventory lifecycle, replacing Library tags/handling ambiguity with clear frame types, review state, source details, and consistent actions."
 
 ## User Scenarios & Testing *(mandatory)*

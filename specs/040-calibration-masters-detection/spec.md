@@ -4,7 +4,9 @@
 
 **Created**: 2026-06-19
 
-**Status**: Draft
+**Updated**: 2026-06-23
+
+**Status**: Implemented — per-tool MasterDetector (PixInsight/Siril), individual master items, format field, confirm→Calibration page (PRs #290/#292/#293). Validated end-to-end 2026-06-23: `calibration_master_detect` 23/23, `confirm_master_integration` 3/3.
 
 **Input**: Detect calibration masters from XISF and FITS metadata via an extensible per-tool detector system; classify base frame type + an `isMaster` flag; distinguish masters by filter/exposure; show masters as individual items in the inbox and surface them on the Calibration page. (Sub-frames stay folder-grouped.)
 
