@@ -150,37 +150,35 @@ INFRA / CROSS-CUTTING (mostly independent)
 
 ## Artifact drift audit (2026-06-23)
 
-Per-spec review of plan/research/data-model/contracts/tasks vs shipped code. Open items
-to fix (none block runtime except the `confirm.rs` bug):
+Per-spec review of plan/research/data-model/contracts/tasks vs shipped code.
 
-**Code bug (not a doc):**
-- `crates/app/core/src/inbox/confirm.rs:253-258` filters destinations on `archive | os_trash`,
-  but the canonical token is `archive | trash` (migration `0040`). A `trash` destination would
-  be silently dropped. The comment also misstates the CHECK constraint. **Real bug — fix.**
+### ✅ Resolved (PRs #343 / #344)
+- **`os_trash` "code bug" was a false alarm** — the flagged `crates/app/core/src/inbox/confirm.rs`
+  was **dead code** (orphaned pre-042-split copy; `app_core::inbox` re-exports `app_core_inbox`).
+  The live `crates/app/inbox/src/confirm.rs` already uses `archive | trash` and is tested. The dead
+  file was **deleted** (#343). No live bug ever existed.
+- **017 destination enums** (`plan.get.json`, `plan.list.json`, `data-model.md`) `archive | os_trash`
+  → `archive | trash` (#343). *Error-code strings `os_trash.*` were left intact — they match the live
+  executor `crates/fs/executor/src/failure.rs` and are NOT drift.*
+- **013** STALE/SUPERSEDED banners on `tasks.md` + `research.md` (#344).
+- **023** reconcile banner + status flip (retired gen-2 model, nav reversed) (#344).
+- **002** research §6.2 `catalog.download.*` SUPERSEDED banner (#344).
+- **035** `plan.md` migration filename corrected (#344).
+- **040** artifact-completeness deviation recorded in spec.md (#344).
+- **0047** migration's stale internal `Migration 0046:` comment fixed (#341).
 
-**Stale `os_trash` wire token** (canonical is `trash`; transport contracts are source-of-truth):
-- 017 contracts (`plan.list.json`, `plan.get.json`, `archive.send_to_trash.json`), data-model, research, spec, tasks
-- 025 `contracts/plan.apply.json`, research, plan
-- 016 spec/plan/research
-- 041 `contracts/operations.md:60`
-
-**Stale superseded-approach artifacts (need banners / reconcile):**
-- 013 — `tasks.md` claims "IMPLEMENTED" citing `crates/targeting/src/catalog.rs` + migration `0017`
-  that no longer exist (036 retired them); research builds on the abandoned 014 catalog pipeline.
-  Spec.md banner exists but sub-artifacts contradict it.
-- 023 — spec/tasks/contracts describe the **retired gen-2 target model** (`target_aliases`, `target_id`
-  FKs) and assert "Targets not top-level nav" — both reversed by 035/036. Needs reconcile to gen-3.
-- 002 — research §6.2 documents abandoned `catalog.download.*` topics without a supersession note;
-  session-lifecycle redesign (sessions = derived inventory) not propagated to FRs.
-
-**Contracts lagging Rust DTOs (regenerate):**
+### ⬜ Still open
+**Contracts lagging Rust DTOs (regenerate from bindings, don't hand-edit):**
 - 008 `project.create.json` missing `canonicalTargetId`; `project.source.add.json` missing `role`/`selection`.
 - 002/007 minor: `confidence`/`mismatchedDimensions` placement, `canonicalTargetId` on session DTO.
 - 006 `inventory.session.review.json` enum missing `"noop"`.
 
-**Wrong references (minor):**
-- 035 `plan.md:115` cites `0046_acq_session_canonical_target.sql`; real file is `0046_session_canonical_target.sql`.
+**Prose `os_trash` mentions (low priority, not transport-truth):** 016/025 spec/plan/research still use the
+pre-0040 word in prose; 041 `contracts/operations.md:60` (left to the active single-type agent).
 
-**Artifact-completeness gaps:**
-- 040 shipped (PRs #290/#292/#293) with only spec.md + research.md — no plan/data-model/contracts/tasks.
-- 024 — commands `project.note.get` and `project.manifest.reveal_in_os` shipped without contracts.
+**Other:**
+- 002 — session-lifecycle redesign (sessions = derived inventory) not propagated to FRs.
+- 023 — re-scope onto gen-3 + 035 (banner added; full rewrite pending).
+- 024 — commands `project.note.get` and `project.manifest.reveal_in_os` shipped without contracts (minor).
+- The live confirm path is `crates/app/inbox`; an earlier duplicate in `app_core` was removed — watch for
+  other dead pre-042-split copies if similar drift appears.
