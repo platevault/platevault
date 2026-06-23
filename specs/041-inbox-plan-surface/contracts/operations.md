@@ -88,3 +88,47 @@ Cancel a planned item's plan before apply (FR-006): `{ plan_id }` → `{ plan_id
 - `inbox.plan.apply` refuses a stale plan (CAS) instead of moving changed files.
 - `inbox.stats` per-type counts equal the seeded fixture.
 - `sources.register` rejects `inbox` kind with `organized`.
+
+## Iteration 2026-06-23 — single-type ingest contract changes
+
+Source: `pending-iteration.md` "Contract Deltas" (single-type ingest pivot: A single-type sub-items at ingest, B field-agnostic reclassify, C generalized missing-mandatory gate, D source-group provenance, E lifecycle drop). Same legend (🆕 new · ✳️ changed). All DTOs are specta camelCase; the generated TS surface (`packages/contracts`, tauri-specta `bindings/index.ts`) MUST be regenerated as a follow-up task — no code is generated here.
+
+### ✳️ `inbox.list` → `InboxListItem`
+- **ADD** `frameType: string` — always set for classified single-type items.
+- **ADD** `sourceGroupId: string`, `groupKey: string`, `groupLabel: string` (D — source-group provenance).
+- **ADD** `sourceGroup: { relativePath: string; label: string; siblingCount: u32 }` — provenance, "ingested together".
+- **ADD** `missingMandatory: string[]` — per-item rollup of missing mandatory attributes (per-file detail lives in the metadata DTO).
+- The existing `group_target` / `group_frame_type` / `group_date` / `group_filter` / `group_exposure` / `group_instrument` display keys become **the item's own per-item facts** (one item = one group); retained for the frontend grouping tree.
+- `is_master` / `master_frame_type` unchanged.
+
+### ✳️ `inbox.confirm` → `InboxConfirmRequest` / `Response`
+- **REMOVE** the `("split","mixed")` semantics. `action` becomes **optional / no-op** (default behavior = confirm the single-type item); a mixed folder yields multiple single-type items rather than a split action.
+- `rootId` (optional) = **THE single per-item destination root**. Keep the `destination_root_required` typed error + `candidate_roots` for the >1-candidate flow; per-category root caching removed.
+- Response: keep `actions_summary { moveCount, catalogueCount }` and `destinations[]`; drop per-type group semantics.
+
+### ✳️ `inbox.reclassify` → field-agnostic + bulk (source-group scope)
+- **REQUEST**: `{ sourceGroupId | inboxItemId, overrides: [ { filePath, properties: Record<string, JsonValue> } ], bulk?: [ { property: string, value: JsonValue, filePaths?: string[] } ] }`.
+  - `properties` are validated against the property registry (see `inbox.property_registry`); precedence is **user override > FITS/XISF**.
+  - `bulk` applies one value across many files; omitted `filePaths` = all files in the source group.
+  - Operates at **source-group scope** (a reclassify re-partitions files into sub-items, so it can split or merge groups).
+- **RESPONSE**: the re-materialized sub-items `[ { inboxItemId, groupKey, groupLabel, frameType, fileCount, missingMandatory: string[] } ]`, plus `needsReviewCount`.
+
+### 🆕 `inbox.property_registry`
+- Returns the typed property registry so the UI can render a generic, future-proof metadata editor.
+- Response: `[ { key, kind, unit, overridable, appliesTo: string[], validation } ]`.
+
+### 🆕 `inbox.target_recommendations` (R-17 coordinate-based target resolution)
+- **REQUEST**: `{ inboxItemId | sourceGroupId }` (a light sub-group).
+- **RESPONSE**: `{ candidates: [ { targetId, name, separationDeg } ], pointing: { raDeg, decDeg } | null, objectHint: string | null }`.
+  - FOV-aware nearest-neighbor ranking by angular separation within the configured radius; empty when no pointing is available. `objectHint` carries the `OBJECT` header for display only — never used for matching/search.
+  - The UI also supports free-text search + manual set; the chosen `targetId` is written via `inbox.reclassify` (property `target`).
+
+### ✳️ `inbox.item.metadata` → `InboxFileMetadata`
+- ADD the newly extracted per-file fields (all optional), so the metadata table and grouping can display/edit them: `offset`, `setTempC`, `ccdTempC`, `raDeg`, `decDeg`, `rotatorAngleDeg` (`ROTATANG`, mechanical/flat key), `rotatorName` (`ROTNAME`), `skyRotationDeg` (`OBJCTROT`, informational only), `readoutMode`, `focalLengthMm`, `observerLat` / `observerLong` / `observerElev`, `dateLoc`, `dateEnd`, `mjdAvg`.
+- **NOTE** — rotation is split into `rotatorAngleDeg` (mechanical, flat-match key) vs `skyRotationDeg` (informational, NOT a flat key). This split MUST stay consistent with the property registry (`rotatorAngleDeg` vs `skyRotationDeg`) and the data-model.
+
+### ✳️ `inbox.missing_path_attributes` (error code)
+- Broaden meaning to **missing mandatory (grouping + path) attributes** (no longer path tokens only). Keep the existing **wire code id** for compatibility; the details payload lists per-file missing attributes.
+
+### ✳️ Session contracts (E — lifecycle drop)
+- **REMOVE** session review-state operations and fields (`confirm` / `reopen` / `reject`, `reviewFilter`). Sessions expose **derived, already-confirmed inventory** plus an **editable metadata view** (no review lifecycle gate).
