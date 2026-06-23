@@ -503,6 +503,10 @@ pub async fn inbox_list(
                 group_filter: g.group_filter,
                 group_exposure: g.group_exposure,
                 group_instrument: g.group_instrument,
+                // T070: per-item rollup populated as empty; the gate is enforced
+                // at confirm time (group_key == SENTINEL_NEEDS_REVIEW) and the
+                // per-file detail is surfaced via inbox.item.metadata.
+                missing_mandatory: Vec::new(),
             }
         })
         .collect();

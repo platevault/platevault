@@ -557,8 +557,89 @@ async fn snapshot_overrides(
 }
 
 /// Sentinel group key used for files that are unclassifiable or missing
-/// grouping-mandatory attributes (T066 / R-14). T070 adds the gate logic.
+/// grouping-mandatory attributes (T066 / R-14 / T070).
 pub const SENTINEL_NEEDS_REVIEW: &str = "__needs_review__";
+
+// ── Mandatory-attribute gate (T070 / FR-047 / R-14) ──────────────────────────
+
+/// Derive the **mandatory attribute set** for a frame type (R-14).
+///
+/// Returns the registry key names (camelCase, matching `property_registry()`)
+/// that **must** be present for a file of this type to form a valid single-type
+/// destination.  The set is derived from the `GroupingConfig` default dimensions
+/// (enabled grouping dims whose absence is meaningful) plus hard per-type keys
+/// that are always mandatory regardless of pattern tokens:
+///
+/// | frame_type | Hard mandatory keys                   |
+/// |------------|---------------------------------------|
+/// | light      | `frameType`, `target`, `filter`, `exposureS` |
+/// | dark       | `frameType`, `exposureS`, `gain`      |
+/// | bias       | `frameType`, `gain`                   |
+/// | flat       | `frameType`, `filter`                 |
+///
+/// `target` for lights is a special hard key: it is satisfied by coordinate
+/// auto-resolution (R-17) **or** an explicit user pick, but if neither has
+/// produced a value the file routes to needs-review (FR-047 note).
+///
+/// The returned list is deduplicated and stable.
+#[must_use]
+pub fn mandatory_set_for(ft: FrameType) -> Vec<&'static str> {
+    // Hard mandatory keys per R-14 table.
+    let hard: &[&str] = match ft {
+        FrameType::Light => &["frameType", "target", "filter", "exposureS"],
+        FrameType::Dark | FrameType::DarkFlat => &["frameType", "exposureS", "gain"],
+        FrameType::Bias => &["frameType", "gain"],
+        FrameType::Flat => &["frameType", "filter"],
+    };
+    // Deduplicate (preserving order) — grouping dims may overlap with hard keys.
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for &k in hard {
+        if seen.insert(k) {
+            out.push(k);
+        }
+    }
+    out
+}
+
+/// Check which mandatory attributes are absent for a classified file.
+///
+/// `raw_meta` is `None` when FITS extraction failed entirely (→ all mandatory
+/// attributes except `frameType` are considered missing).  `target_resolved`
+/// indicates whether a target has been resolved by coordinate lookup or user
+/// pick for light frames.
+///
+/// Returns the sorted list of registry key names that are missing.
+#[must_use]
+pub fn check_mandatory_missing(
+    ft: FrameType,
+    raw_meta: Option<&metadata_core::RawFileMetadata>,
+    target_resolved: bool,
+) -> Vec<String> {
+    let mandatory = mandatory_set_for(ft);
+    let mut missing = Vec::new();
+
+    for key in mandatory {
+        let absent = match key {
+            "target" => {
+                // light-only: satisfied by coordinate resolution or user pick.
+                !target_resolved
+                    && raw_meta.and_then(|m| m.object.as_deref()).map_or("", str::trim).is_empty()
+            }
+            "filter" => raw_meta.and_then(|m| m.filter.as_deref()).map_or("", str::trim).is_empty(),
+            "exposureS" => !raw_meta
+                .and_then(|m| m.exposure.as_deref())
+                .is_some_and(|s| s.trim().parse::<f64>().is_ok_and(|v| v > 0.0)),
+            "gain" => raw_meta.and_then(|m| m.gain.as_deref()).map_or("", str::trim).is_empty(),
+            // "frameType" is always present when ft is known; unknown keys never absent.
+            _ => false,
+        };
+        if absent {
+            missing.push(key.to_owned());
+        }
+    }
+    missing
+}
 
 /// Build a [`FrameMetadata`] from a [`metadata_core::RawFileMetadata`] for use
 /// with the grouping engine (T066). Only fields that the grouping engine reads
@@ -619,14 +700,15 @@ pub(crate) fn build_frame_metadata(
 }
 
 /// Materialize one single-type `inbox_items` sub-item per homogeneous group
-/// within a source group (spec 041 T066, R-9/R-10/R-11/R-12).
+/// within a source group (spec 041 T066/T070, R-9/R-10/R-11/R-12/R-14).
 ///
 /// # Algorithm
 /// 1. Build a [`FrameMetadata`] for each file from its extracted raw metadata.
 /// 2. Call [`group_file`] with [`GroupingConfig::default_for`] the file's frame
 ///    type to get a deterministic `(group_key, group_label)`.
-/// 3. Unclassifiable files (no frame type) go into the sentinel
-///    [`SENTINEL_NEEDS_REVIEW`] bucket (gate logic is T070).
+/// 3. Unclassifiable files (no frame type) **or** files missing a mandatory
+///    attribute (T070 / FR-047/FR-048) go into the sentinel
+///    [`SENTINEL_NEEDS_REVIEW`] bucket.
 /// 4. Per group: compute a per-sub-group `content_signature` =
 ///    `folder_signature(sorted per-file sigs of files in that group)`, then
 ///    upsert an `inbox_items` row with identity `(root_id, relative_path,
@@ -645,7 +727,7 @@ pub(crate) async fn materialize_sub_items(
     file_paths: &[PathBuf],
     file_records: &[(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)],
 ) {
-    // Step 1 + 2: partition files by group_key.
+    // Step 1 + 2 + T070 gate: partition files by group_key.
     // key → (group_label, Vec<abs_path>)
     let mut groups: std::collections::HashMap<String, (String, Vec<PathBuf>)> =
         std::collections::HashMap::new();
@@ -654,17 +736,27 @@ pub(crate) async fn materialize_sub_items(
         let abs_path = file_paths.get(i).cloned();
 
         let (group_key, group_label) = if let Some(ft) = *frame_type_opt {
-            // Build effective FrameMetadata for the grouping engine.
-            let meta = raw_meta_opt
-                .as_ref()
-                .map(|r| build_frame_metadata(ft, r))
-                .unwrap_or_else(|| FrameMetadata { frame_type: ft, ..Default::default() });
+            // T070 / FR-047: check mandatory attributes before grouping.
+            // target_resolved=false: coordinate resolution (FR-052) is not yet
+            // integrated at classify time; the user's OBJECT header value is
+            // used as the proxy. Lights with no OBJECT go to needs-review.
+            let missing = check_mandatory_missing(ft, raw_meta_opt.as_ref(), false);
+            if missing.is_empty() {
+                // Build effective FrameMetadata for the grouping engine.
+                let meta = raw_meta_opt.as_ref().map_or_else(
+                    || FrameMetadata { frame_type: ft, ..Default::default() },
+                    |r| build_frame_metadata(ft, r),
+                );
 
-            let config = GroupingConfig::default_for(ft);
-            let result = group_file(&meta, &config);
-            (result.key.0, result.label.0)
+                let config = GroupingConfig::default_for(ft);
+                let result = group_file(&meta, &config);
+                (result.key.0, result.label.0)
+            } else {
+                // Missing mandatory attributes — sentinel bucket (FR-048).
+                (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned())
+            }
         } else {
-            // Unclassifiable — sentinel bucket (T070 adds gate).
+            // Unclassifiable (no frame type) — sentinel bucket (FR-048).
             (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned())
         };
 
@@ -1351,9 +1443,26 @@ mod tests {
     #[tokio::test]
     async fn t066_single_type_folder_produces_one_sub_item() {
         // A folder with only light frames → one single-type sub-item.
+        // T070: lights need OBJECT+FILTER+EXPTIME to pass the mandatory-attr gate.
         let tmp = tempfile::tempdir().unwrap();
-        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
-        write_fits_with_imagetyp(tmp.path(), "light_002.fits", "Light Frame");
+        write_fits_full(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some(300.0),
+            None,
+        );
+        write_fits_full(
+            tmp.path(),
+            "light_002.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some(300.0),
+            None,
+        );
 
         let db = test_db().await;
         insert_source_group_with_item(&db, "sg-t066-single", "item-t066-single", "root-sg1", "")
@@ -1391,10 +1500,35 @@ mod tests {
     #[tokio::test]
     async fn t066_mixed_folder_produces_n_sub_items() {
         // A folder with lights + darks → two single-type sub-items.
+        // T070: lights need OBJECT+FILTER+EXPTIME; darks need EXPTIME+GAIN.
         let tmp = tempfile::tempdir().unwrap();
-        write_fits_with_imagetyp(tmp.path(), "light_ha.fits", "Light Frame");
-        write_fits_with_imagetyp(tmp.path(), "dark_1.fits", "Dark Frame");
-        write_fits_with_imagetyp(tmp.path(), "dark_2.fits", "Dark Frame");
+        write_fits_full(
+            tmp.path(),
+            "light_ha.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some(300.0),
+            None,
+        );
+        write_fits_full(
+            tmp.path(),
+            "dark_1.fits",
+            "Dark Frame",
+            None,
+            None,
+            Some(300.0),
+            Some("100"),
+        );
+        write_fits_full(
+            tmp.path(),
+            "dark_2.fits",
+            "Dark Frame",
+            None,
+            None,
+            Some(300.0),
+            Some("100"),
+        );
 
         let db = test_db().await;
         insert_source_group_with_item(&db, "sg-t066-mixed", "item-t066-mixed", "root-sg2", "")
@@ -1445,9 +1579,26 @@ mod tests {
     async fn t066_rescan_determinism() {
         // Classifying unchanged content twice must produce identical group keys
         // and no duplicated sub-items (FR-042).
+        // T070: lights need OBJECT+FILTER+EXPTIME; darks need EXPTIME+GAIN.
         let tmp = tempfile::tempdir().unwrap();
-        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
-        write_fits_with_imagetyp(tmp.path(), "dark_001.fits", "Dark Frame");
+        write_fits_full(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some(300.0),
+            None,
+        );
+        write_fits_full(
+            tmp.path(),
+            "dark_001.fits",
+            "Dark Frame",
+            None,
+            None,
+            Some(300.0),
+            Some("100"),
+        );
 
         let db = test_db().await;
         insert_source_group_with_item(&db, "sg-t066-determ", "item-t066-determ", "root-sg3", "")
@@ -1969,5 +2120,199 @@ mod tests {
         // The classify response should still show single_type.
         let cached = repo::get_classification(db.pool(), item_id).await.unwrap();
         assert!(cached.is_some(), "classification must be persisted");
+    }
+
+    // ── T070 tests — mandatory-attribute gate ────────────────────────────────
+
+    /// Write a FITS file with optional header cards (imagetyp, object, filter,
+    /// exptime, gain).  Used for the T070 mandatory-attribute gate tests.
+    fn write_fits_full(
+        dir: &Path,
+        name: &str,
+        imagetyp: &str,
+        object: Option<&str>,
+        filter: Option<&str>,
+        exptime: Option<f64>,
+        gain: Option<&str>,
+    ) {
+        let path = dir.join(name);
+        let mut block = vec![b' '; 2880];
+        let mut idx = 0usize;
+        let mut write_card = |card: String| {
+            let bytes = card.as_bytes();
+            let len = bytes.len().min(80);
+            block[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+            idx += 1;
+        };
+        write_card(format!("{:<80}", format!("IMAGETYP= '{imagetyp:<8}'")));
+        if let Some(v) = object {
+            write_card(format!("{:<80}", format!("OBJECT  = '{v}'")));
+        }
+        if let Some(v) = filter {
+            write_card(format!("{:<80}", format!("FILTER  = '{v}'")));
+        }
+        if let Some(v) = exptime {
+            write_card(format!("{:<80}", format!("EXPTIME = {v}")));
+        }
+        if let Some(v) = gain {
+            write_card(format!("{:<80}", format!("GAIN    = {v}")));
+        }
+        block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
+        let mut f = std::fs::File::create(path).unwrap();
+        use std::io::Write as _;
+        f.write_all(&block).unwrap();
+    }
+
+    /// T070/FR-047/FR-048: a light frame missing `target` (no OBJECT header)
+    /// must route to the __needs_review__ sentinel sub-item.
+    #[tokio::test]
+    async fn t070_light_missing_target_goes_to_sentinel() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Light with filter + exptime but NO OBJECT → target is missing.
+        write_fits_full(
+            tmp.path(),
+            "light_no_target.fits",
+            "Light Frame",
+            None, // no OBJECT
+            Some("Ha"),
+            Some(300.0),
+            Some("100"),
+        );
+
+        let db = test_db().await;
+        insert_source_group_with_item(
+            &db,
+            "sg-t070-light-no-target",
+            "item-t070-light-no-target",
+            "root-t070a",
+            "",
+        )
+        .await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t070-light-no-target".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t070-light-no-target").await.unwrap();
+        assert_eq!(sub_items.len(), 1, "light missing target must produce one sentinel sub-item");
+        assert_eq!(
+            sub_items[0].group_key, SENTINEL_NEEDS_REVIEW,
+            "light missing target must go to __needs_review__ sentinel"
+        );
+        assert!(sub_items[0].frame_type.is_none(), "sentinel sub-item must have no frame_type");
+    }
+
+    /// T070/FR-047/FR-048: a dark frame missing `exposureS` must route to the
+    /// __needs_review__ sentinel sub-item.
+    #[tokio::test]
+    async fn t070_dark_missing_exposure_goes_to_sentinel() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Dark with gain but NO EXPTIME → exposureS is missing.
+        write_fits_full(
+            tmp.path(),
+            "dark_no_exp.fits",
+            "Dark Frame",
+            None,
+            None,
+            None, // no EXPTIME
+            Some("100"),
+        );
+
+        let db = test_db().await;
+        insert_source_group_with_item(
+            &db,
+            "sg-t070-dark-no-exp",
+            "item-t070-dark-no-exp",
+            "root-t070b",
+            "",
+        )
+        .await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t070-dark-no-exp".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t070-dark-no-exp").await.unwrap();
+        assert_eq!(sub_items.len(), 1, "dark missing exposure must produce one sentinel sub-item");
+        assert_eq!(
+            sub_items[0].group_key, SENTINEL_NEEDS_REVIEW,
+            "dark missing exposure must go to __needs_review__ sentinel"
+        );
+    }
+
+    /// T070: check_mandatory_missing for various frame types.
+    #[test]
+    fn t070_mandatory_set_for_frame_types() {
+        use metadata_core::FrameType;
+
+        // light: frameType + target + filter + exposureS
+        let set = mandatory_set_for(FrameType::Light);
+        assert!(set.contains(&"target"), "light must require target");
+        assert!(set.contains(&"filter"), "light must require filter");
+        assert!(set.contains(&"exposureS"), "light must require exposureS");
+        assert!(set.contains(&"frameType"), "light must require frameType");
+
+        // dark: frameType + exposureS + gain (no target/filter)
+        let set = mandatory_set_for(FrameType::Dark);
+        assert!(set.contains(&"exposureS"), "dark must require exposureS");
+        assert!(set.contains(&"gain"), "dark must require gain");
+        assert!(!set.contains(&"target"), "dark must NOT require target");
+        assert!(!set.contains(&"filter"), "dark must NOT require filter");
+
+        // bias: frameType + gain (no exposure/filter/target)
+        let set = mandatory_set_for(FrameType::Bias);
+        assert!(set.contains(&"gain"), "bias must require gain");
+        assert!(!set.contains(&"exposureS"), "bias must NOT require exposureS");
+
+        // flat: frameType + filter
+        let set = mandatory_set_for(FrameType::Flat);
+        assert!(set.contains(&"filter"), "flat must require filter");
+        assert!(!set.contains(&"gain"), "flat must NOT require gain by default");
+    }
+
+    /// T070: check_mandatory_missing correctly flags absent attributes.
+    #[test]
+    fn t070_check_mandatory_missing_light() {
+        use metadata_core::{FrameType, RawFileMetadata};
+
+        // Light with no OBJECT, no filter, no exposure → target+filter+exposureS missing.
+        let raw = RawFileMetadata::default();
+        let missing = check_mandatory_missing(FrameType::Light, Some(&raw), false);
+        assert!(missing.contains(&"target".to_owned()), "target must be missing: {missing:?}");
+        assert!(missing.contains(&"filter".to_owned()), "filter must be missing: {missing:?}");
+        assert!(
+            missing.contains(&"exposureS".to_owned()),
+            "exposureS must be missing: {missing:?}"
+        );
+        assert!(!missing.contains(&"frameType".to_owned()), "frameType must not be missing");
+
+        // Light with all mandatory attrs present.
+        let raw_full = RawFileMetadata {
+            object: Some("M42".to_owned()),
+            filter: Some("Ha".to_owned()),
+            exposure: Some("300".to_owned()),
+            ..Default::default()
+        };
+        let missing_full = check_mandatory_missing(FrameType::Light, Some(&raw_full), false);
+        assert!(
+            missing_full.is_empty(),
+            "fully-attributed light must have no missing attrs: {missing_full:?}"
+        );
     }
 }
