@@ -11,7 +11,7 @@
 
 **Feature Branch**: `018-settings-configuration-model`  
 **Created**: 2026-05-09  
-**Status**: In progress (reconciled to as-built 2026-06-23)  
+**Status**: Completed (archived 2026-06-23; PRs #348/#350/#352)  
 **Input**: User description: "Specify the settings model after the UI review: plain labels, one setting per line, hover information, auto-save, no internal technical controls, and grouped submenus that match user workflows."
 
 ## User Scenarios & Testing *(mandatory)*
