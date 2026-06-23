@@ -1,59 +1,101 @@
 # Agent Assignments
-# Feature: 041-inbox-plan-surface (destination-model iteration, T048-T060)
-# Generated: 2026-06-21
+# Feature: 041-inbox-plan-surface (single-type ingest iteration — Phase 12 & 13)
+# Generated: 2026-06-23
 # Command: /speckit.agent-assign.assign
+# Scope: unstarted tasks T061-T080 only (T001-T060 already implemented/merged)
 
 agents_scanned:
+  - name: "coder"
+    source: "project"
+    description: "Bounded code changes, tests, refactors, migrations (designated implementation agent)"
   - name: "rust-pro"
     source: "project"
-    description: "Rust 1.75+ systems/domain specialist"
+    description: "Rust systems/algorithm specialist"
   - name: "frontend-developer"
     source: "project"
     description: "React/TypeScript UI specialist"
   - name: "test-automator"
     source: "project"
-    description: "Test authoring across frameworks"
-  - name: "speckit-implement-task"
-    source: "project"
-    description: "Non-code / tightly scoped SpecKit tasks"
+    description: "Unit/integration/E2E test authoring"
 
 assignments:
-  T048:
-    agent: "speckit-implement-task"
-    reason: "Authoring research.md decision record + attribute matrix (non-code spec artifact)"
-  T049:
+  T061:
+    agent: "coder"
+    reason: "Bounded SQLite migration 0047 (source-groups, sub-item composite identity, overrides table, table-rebuild)."
+    issue: 320
+  T062:
     agent: "rust-pro"
-    reason: "Per-type pattern resolver + selector in crates/patterns (Rust domain crate)"
-  T050:
+    reason: "Rust-heavy FITS/XISF keyword extraction, fallback chains, sexagesimal/unit conversions."
+    issue: 321
+  T063:
+    agent: "coder"
+    reason: "Rust property-registry module + inbox.property_registry contract DTO."
+    issue: 322
+  T064:
     agent: "rust-pro"
-    reason: "Settings persistence in crates/persistence/db (Rust + SQLite)"
-  T051:
-    agent: "frontend-developer"
-    reason: "Settings UI for per-type patterns in apps/desktop (React/TS)"
-  T052:
-    agent: "rust-pro"
-    reason: "confirm.rs pattern selection by resolved type (Rust app/core)"
-  T053:
-    agent: "rust-pro"
-    reason: "confirm.rs destination-root resolution (Rust app/core)"
-  T054:
-    agent: "rust-pro"
-    reason: "Contracts/bindings: optional root_id + absolute destination (Rust contracts + generated TS)"
-  T055:
-    agent: "frontend-developer"
-    reason: "InboxDetail/PlanPanel root picker + absolute-path display (React/TS)"
-  T056:
-    agent: "rust-pro"
-    reason: "classify.rs/confirm.rs missing-path-attribute gate (Rust app/core)"
-  T057:
-    agent: "frontend-developer"
-    reason: "Frontend missing-attribute input gate mirroring IMAGETYP flow (React/TS)"
-  T058:
+    reason: "Core Rust grouping algorithm: per-type recipes, bucketing, pointing/rotation/temp tolerances."
+    issue: 323
+  T065:
+    agent: "coder"
+    reason: "Bounded change to scan.rs (emit source-group rows, stay lazy)."
+    issue: 324
+  T066:
+    agent: "coder"
+    reason: "Bounded change to classify.rs (classify-then-split materialization)."
+    issue: 325
+  T067:
     agent: "test-automator"
-    reason: "Layer-1 cargo tests: pattern resolution, root resolution, missing-attribute gate"
-  T059:
+    reason: "Composite-identity + signature stability test authoring."
+    issue: 326
+  T068:
+    agent: "coder"
+    reason: "Bounded change to reclassify.rs (field-agnostic property map + bulk, re-split)."
+    issue: 328
+  T069:
+    agent: "coder"
+    reason: "Rust persistence: inbox_file_overrides + staleness + column migration."
+    issue: 329
+  T070:
+    agent: "coder"
+    reason: "Rust use-case: generalized missing-mandatory gate + needs-review bucket."
+    issue: 330
+  T071:
+    agent: "coder"
+    reason: "Rust refactor of confirm.rs (delete split/mixed branch, one rootId/item)."
+    issue: 331
+  T072:
+    agent: "frontend-developer"
+    reason: "Contracts + binding regen; owns the TS binding-consumption slice (inbox.list/confirm/reclassify/metadata). Rust DTO edits coordinated with coder if needed."
+    issue: 332
+  T073:
     agent: "test-automator"
-    reason: "vitest: root picker, absolute-path display, missing-attribute input gate"
-  T060:
+    reason: "Layer-1 + vitest test authoring for Phase 12."
+    issue: 333
+  T080:
+    agent: "frontend-developer"
+    reason: "Flat<->light rotation warning — owns the UI surfacing; Rust match logic coordinated at execute time."
+    issue: 334
+  T074:
+    agent: "rust-pro"
+    reason: "Rust coordinate target resolution (haversine FOV-aware nearest-neighbour) + inbox.target_recommendations op."
+    issue: 335
+  T075:
+    agent: "coder"
+    reason: "Bounded Rust change: target propagation to projects."
+    issue: 336
+  T076:
+    agent: "frontend-developer"
+    reason: "Drop session review lifecycle — owns the UI removal (Confirm/Re-open/Reject, derived view); Rust SessionState reduction coordinated with coder."
+    issue: 337
+  T077:
+    agent: "coder"
+    reason: "SQL/Rust migration handling for legacy plan_open items."
+    issue: 338
+  T078:
     agent: "default"
-    reason: "Windows real-app E2E via tauri MCP bridge + coverage-matrix update (main-thread orchestration)"
+    reason: "SpecKit workflow step (/speckit.sync.conflicts + mark 045 superseded) — orchestrator-run, not code implementation."
+    issue: 339
+  T079:
+    agent: "default"
+    reason: "Real-app Windows E2E via tauri MCP + quickstart — orchestrator-driven verification loop."
+    issue: 340
