@@ -17,6 +17,7 @@ import {
 	updateSettings,
 } from "@/api/commands";
 import { Btn } from "@/ui";
+import { m } from "@/lib/i18n";
 import { SettingsSection, SettingsRow } from "./SettingsKit";
 
 interface NamingStructureProps {
@@ -316,7 +317,7 @@ function PatternChipsEditor({
 								className="alm-token-chip__x"
 								role="button"
 								tabIndex={0}
-								aria-label={`Remove ${label}`}
+								aria-label={m.settings_naming_remove_token({ label })}
 								onClick={() => handleRemove(part.id)}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") handleRemove(part.id);
@@ -337,7 +338,7 @@ function PatternChipsEditor({
 							setShowSepMenu(false);
 						}}
 					>
-						+ Token
+						{m.settings_naming_add_token()}
 					</Btn>
 					{showTokenMenu && (
 						<div className="alm-naming__dropdown alm-naming__dropdown--token">
@@ -364,7 +365,7 @@ function PatternChipsEditor({
 							setShowTokenMenu(false);
 						}}
 					>
-						+ Sep
+						{m.settings_naming_add_sep()}
 					</Btn>
 					{showSepMenu && (
 						<div className="alm-naming__dropdown alm-naming__dropdown--sep">
@@ -376,9 +377,9 @@ function PatternChipsEditor({
 									onClick={() => handleAddSep(s)}
 								>
 									{s === "/"
-										? "/ (path separator)"
+										? m.settings_naming_sep_path_label()
 										: s === " "
-											? "⎵ (space)"
+											? "⎵"
 											: s}
 								</button>
 							))}
@@ -390,24 +391,26 @@ function PatternChipsEditor({
 			{/* Validation feedback */}
 			{errorCode && (
 				<div className="alm-naming__error" role="alert">
+					{ }
 					{errorCode === "pattern.empty" &&
-						"Pattern is empty — add at least one token."}
+						m.settings_naming_invalid_pattern()}
+					{ }
 					{errorCode === "token.unknown" &&
-						"Pattern contains an unknown token."}
+						m.settings_naming_invalid_pattern()}
 					{errorCode &&
 						!["pattern.empty", "token.unknown"].includes(errorCode) &&
-						`Invalid pattern (${errorCode})`}
+						m.settings_naming_invalid_pattern()}
 				</div>
 			)}
 			{warnings.length > 0 && (
 				<div className="alm-naming__warning">
 					{warnings.includes("no_path_separator") && (
 						<span>
-							No path separator (/) — all tokens resolve to one flat folder.{" "}
+							{m.settings_naming_warn_no_path_sep()}{" "}
 						</span>
 					)}
 					{warnings.includes("consecutive_separators") && (
-						<span>Consecutive separators detected. </span>
+						<span>{m.settings_naming_consecutive_seps()} </span>
 					)}
 				</div>
 			)}
@@ -504,7 +507,7 @@ function PerTypePatternChipsEditor({
 								className="alm-token-chip__x"
 								role="button"
 								tabIndex={0}
-								aria-label={`Remove ${label}`}
+								aria-label={m.settings_naming_remove_token({ label })}
 								onClick={() => handleRemove(chip.id)}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") handleRemove(chip.id);
@@ -525,7 +528,7 @@ function PerTypePatternChipsEditor({
 							setShowLiteralInput(false);
 						}}
 					>
-						+ Token
+						{m.settings_naming_add_token()}
 					</Btn>
 					{showTokenMenu && (
 						<div className="alm-naming__dropdown alm-naming__dropdown--token">
@@ -545,7 +548,7 @@ function PerTypePatternChipsEditor({
 
 				{/* Add / separator */}
 				<Btn size="sm" onClick={handleAddSep}>
-					+ /
+					{m.settings_naming_add_path_sep()}
 				</Btn>
 
 				{/* Add Literal segment */}
@@ -561,7 +564,7 @@ function PerTypePatternChipsEditor({
 							}
 						}}
 					>
-						+ Literal
+						{m.settings_naming_add_literal()}
 					</Btn>
 					{showLiteralInput && (
 						<div className="alm-naming__dropdown alm-naming__dropdown--literal">
@@ -570,11 +573,11 @@ function PerTypePatternChipsEditor({
 								type="text"
 								className="alm-naming__literal-input"
 								value={literalInput}
-								placeholder="e.g. flats"
+								placeholder={m.settings_naming_literal_placeholder()}
 								spellCheck={false}
 								autoCorrect="off"
 								autoCapitalize="off"
-								aria-label="Literal path segment"
+								aria-label={m.settings_naming_literal_aria()}
 								onChange={(e) => setLiteralInput(e.target.value)}
 								onKeyDown={handleLiteralKeyDown}
 							/>
@@ -583,7 +586,7 @@ function PerTypePatternChipsEditor({
 								className="alm-naming__literal-add-btn"
 								onClick={handleAddLiteral}
 							>
-								Add
+								{m.common_add()}
 							</button>
 						</div>
 					)}
@@ -727,7 +730,7 @@ function PerTypeDestinationPatterns() {
 	};
 
 	return (
-		<SettingsSection title="PER-TYPE DESTINATION PATTERNS">
+		<SettingsSection title={m.settings_naming_pertype_title()}>
 			{FRAME_TYPE_CLASSES.map((cls) => {
 				const chips = chipsByClass[cls];
 				const isOverridden = !chipsAreEmpty(chips);
@@ -774,14 +777,14 @@ function PerTypeDestinationPatterns() {
 									data-testid={`${rowId}-preview`}
 								>
 									<span className="alm-naming__pertype-preview-label">
-										Preview:
+										{m.settings_naming_preview_label()}
 									</span>{" "}
 									<code className="alm-mono alm-naming__pertype-preview-code">
 										{previewPath}
 									</code>
 									{!isOverridden && (
 										<span className="alm-naming__pertype-preview-default">
-											(default)
+											{m.settings_naming_preview_default()}
 										</span>
 									)}
 								</div>
@@ -795,7 +798,7 @@ function PerTypeDestinationPatterns() {
 									data-testid={`naming-pattern-reset-${cls}`}
 									onClick={() => handleReset(cls)}
 								>
-									Reset
+									{m.common_reset()}
 								</Btn>
 							</div>
 						</div>
@@ -895,7 +898,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
 
 	return (
 		<>
-			<SettingsSection title="PROJECT FOLDER PATTERN">
+			<SettingsSection title={m.settings_naming_project_title()}>
 				<div className="alm-settings__row">
 					<div className="alm-settings__row-content">
 						<PatternChipsEditor
@@ -923,18 +926,18 @@ export function NamingStructure({ save }: NamingStructureProps) {
 							checked={autoApplyPattern}
 							onChange={(e) => handleAutoApplyChange(e.target.checked)}
 						/>
-						Auto-apply pattern to new projects without confirmation
+						{m.settings_naming_auto_apply()}
 					</label>
 				</div>
 			</div>
 
-			<SettingsSection title="LIVE PREVIEW">
+			<SettingsSection title={m.settings_naming_live_preview_title()}>
 				<div className="alm-naming__preview-sample">
-					Sample: NGC7000 / Ha / 2026-04-12 / light
+					{m.settings_naming_live_preview_sample()}
 				</div>
 				{!canSave && (
 					<div className="alm-naming__preview-empty">
-						— (invalid or empty pattern)
+						{m.settings_naming_invalid_pattern()}
 					</div>
 				)}
 				{previewError && (
@@ -952,7 +955,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
 						</code>
 						{preview.missingTokens.length > 0 && (
 							<span className="alm-naming__preview-fallback">
-								(fallback used for: {preview.missingTokens.join(", ")})
+								{m.settings_naming_fallback_used({ tokens: preview.missingTokens.join(", ") })}
 							</span>
 						)}
 					</div>

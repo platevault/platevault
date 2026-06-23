@@ -9,6 +9,7 @@
 import { ListSidebar, ListItem } from '@/components';
 import { Pill, EmptyState } from '@/ui';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
+import { m } from '@/lib/i18n';
 
 type Kind = 'dark' | 'flat' | 'bias';
 
@@ -54,12 +55,12 @@ interface Props {
 export function MastersList({ masters, loading, error, selected, onSelect, agingThresholdDays }: Props) {
   if (loading) {
     return (
-      <ListSidebar footer="Loading…">
+      <ListSidebar footer={m.common_loading()}>
         <div
           className="alm-masters-list__status"
           data-testid="masters-loading"
         >
-          Loading calibration masters…
+          {m.calibration_loading()}
         </div>
       </ListSidebar>
     );
@@ -67,8 +68,8 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
 
   if (error) {
     return (
-      <ListSidebar footer="Error">
-        <EmptyState title="Failed to load" desc={error} data-testid="masters-error" />
+      <ListSidebar footer={m.calibration_load_error_title()}>
+        <EmptyState title={m.calibration_load_error_title()} desc={error} data-testid="masters-error" />
       </ListSidebar>
     );
   }
@@ -77,8 +78,8 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
     return (
       <ListSidebar footer="0 items">
         <EmptyState
-          title="No calibration masters"
-          desc="Run a scan to import calibration frames."
+          title={m.calibration_empty_title()}
+          desc={m.calibration_empty_desc()}
           data-testid="masters-empty"
         />
       </ListSidebar>
@@ -92,16 +93,16 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
 
   return (
     <ListSidebar
-      placeholder="Search camera, kind…"
+      placeholder={m.calibration_search_placeholder()}
       controls={
         <>
           <select defaultValue="kind">
-            <option value="kind">Group: kind</option>
-            <option value="camera">camera</option>
+            <option value="kind">{m.calibration_masters_group_kind()}</option>
+            <option value="camera">{m.calibration_masters_group_camera()}</option>
           </select>
           <select defaultValue="name">
-            <option value="name">Sort: name</option>
-            <option value="age">age</option>
+            <option value="name">{m.targets_legacy_sort_name()}</option>
+            <option value="age">{m.calibration_masters_sort_age()}</option>
           </select>
         </>
       }
@@ -110,12 +111,12 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
       {grouped.map((group) => (
         <div key={group.kind}>
           <div className="alm-group-header">{GROUP_LABELS[group.kind]}</div>
-          {group.items.map((m) => {
-            const isAging = m.ageDays > agingThresholdDays;
+          {group.items.map((master) => {
+            const isAging = master.ageDays > agingThresholdDays;
             // Fingerprint may be absent on real master rows (e.g. metadata not yet
             // extracted); guard every field rather than assuming it is populated.
             // Human-readable fingerprint identity (was an opaque id hash).
-            const fp = m.fingerprint;
+            const fp = master.fingerprint;
             const kindCap = group.kind.charAt(0).toUpperCase() + group.kind.slice(1);
             const expStr = fp?.exposureS != null ? `${fp.exposureS}s` : '';
             const filterStr = fp?.filter ?? '';
@@ -130,21 +131,21 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
 
             return (
               <ListItem
-                key={m.id}
-                selected={selected === m.id}
-                onClick={() => onSelect(m.id)}
+                key={master.id}
+                selected={selected === master.id}
+                onClick={() => onSelect(master.id)}
                 title={titleText}
                 meta={
                   <>
                     {metaParts.join(' · ')}
-                    <span className="alm-masters-list__usage" data-testid={`master-usage-${m.id}`}>
+                    <span className="alm-masters-list__usage" data-testid={`master-usage-${master.id}`}>
                       {metaParts.length > 0 && <span className="alm-list-item__meta-sep">·</span>}
-                      {usageSummary(m)}
+                      {usageSummary(master)}
                     </span>
                     {isAging && (
                       <>
                         <span className="alm-list-item__meta-sep">·</span>
-                        <Pill variant="warn">aging {m.ageDays}d</Pill>
+                        <Pill variant="warn">{m.calibration_aging_days({ days: master.ageDays })}</Pill>
                       </>
                     )}
                   </>

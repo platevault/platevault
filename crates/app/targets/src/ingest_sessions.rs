@@ -1,0 +1,587 @@
+//! Ingest light frames → acquisition sessions grouped by capture identity
+//! (spec 035 US4, FR-016).
+//!
+//! When a reviewable inbox plan reaches `applied`, each light frame it moved or
+//! catalogued must be folded into an [`acquisition_session`] keyed by capture
+//! identity (`session_key`: target/OBJECT, filter, binning, gain,
+//! observing-night) and linked to its resolved canonical target. This module is
+//! the production entry point the plan-apply listener calls.
+//!
+//! ## Per-frame pipeline ([`ingest_light_frame`])
+//!
+//! 1. **Resolve the destination root → `library_root` (R9).** Applied inbox
+//!    items store `to_root_id` as a `registered_sources` id, but
+//!    `file_record.root_id` references `library_root`. We mirror the
+//!    `registered_sources` row into a `library_root` row with the SAME id before
+//!    inserting the file record. If neither table can supply a path, the frame
+//!    is skipped (logged) and the rest of the plan still ingests.
+//! 2. **Upsert `file_record`** by its UNIQUE `(root_id, relative_path)` — reuses
+//!    an existing id, sets `state = 'classified'`.
+//! 3. **Associate the FITS `OBJECT`** via [`crate::ingest_resolution::
+//!    associate_or_enqueue`]: a cache hit links the canonical target inline; a
+//!    miss enqueues a `pending` row for the background drain. Never blocks, never
+//!    fabricates a target (FR-009/FR-013).
+//! 4. **Derive `session_key`** ([`sessions::session_key`]). When the observer
+//!    location is unset the observing-night boundary is computed in UTC (R11)
+//!    and `has_observer_location = 0` is recorded; the error is never propagated
+//!    so ingest is never blocked. The key's target component is the resolved
+//!    canonical-target id on a cache hit, else the raw `OBJECT` string so
+//!    unresolved frames still group coherently.
+//! 5. **Upsert `acquisition_session`** by `session_key`: append the file-record
+//!    id to the `frame_ids` JSON array (set-deduped). On insert,
+//!    `state = 'discovered'`, `canonical_target_id` = resolved id or NULL,
+//!    legacy `target_id` left NULL (R10).
+//!
+//! ## Idempotency (R12)
+//!
+//! Re-ingesting the same applied plan is a no-op: `file_record` upserts by its
+//! UNIQUE `(root_id, relative_path)`, `acquisition_session` upserts by a
+//! SELECT-by-`session_key` (a non-unique lookup index) then INSERT-or-append,
+//! and `frame_ids` set-dedup drops a frame id already present.
+//!
+//! ## Constitution
+//!
+//! - §I/§III: metadata/identity only; no image bytes are read beyond the FITS
+//!   header, and no files are written or processed.
+//! - §V: SQLite is the durable record; grouping + linkage are explicit rows.
+
+use std::collections::BTreeSet;
+use std::path::Path;
+
+use audit::EventBus;
+use metadata_core::{MetadataExtractor, RawFileMetadata};
+use metadata_fits::FitsExtractor;
+use metadata_xisf::XisfExtractor;
+use sessions::{session_key, ObserverContext};
+use sqlx::SqlitePool;
+use time::format_description::well_known::Iso8601;
+use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
+use uuid::Uuid;
+
+use contracts_core::error_code::ErrorCode;
+use contracts_core::{ContractError, ErrorSeverity};
+
+use crate::ingest_resolution::{associate_or_enqueue, AssociateOutcome};
+
+fn db_err(e: impl std::fmt::Display) -> ContractError {
+    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
+}
+
+/// Summary of one [`ingest_light_frames`] pass.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct IngestSummary {
+    /// Light frames examined (after filtering out calibration items).
+    pub considered: usize,
+    /// Frames folded into a session (created or appended).
+    pub ingested: usize,
+    /// Frames skipped because their destination root could not be resolved (R9).
+    pub skipped: usize,
+}
+
+/// One applied plan item to ingest (subset of the `plan_items` row).
+#[derive(Clone, Debug)]
+struct AppliedItem {
+    /// Destination root id (a `registered_sources` id for inbox plans).
+    root_id: String,
+    /// Destination relative path under that root.
+    relative_path: String,
+}
+
+/// Ingest every applied light frame from a completed plan (FR-016).
+///
+/// Only `move`/`catalogue` items whose effective frame type is `light` are
+/// processed; calibration frames are out of US4 scope (handled by the spec-040
+/// master path). The plan is read by `plan_id`; the destination path of each
+/// item (`to_root_id` + `to_relative_path`) locates the file on disk to read its
+/// FITS header.
+///
+/// `root_path_of` maps a destination root id to its absolute filesystem path so
+/// the FITS header can be read; it is injected so tests can avoid touching the
+/// real `registered_sources` table layout.
+///
+/// # Errors
+///
+/// Returns [`ContractError`] (`internal.database`) only on a query failure.
+/// Per-frame metadata/IO problems are handled inline (skip + log), never
+/// propagated, so one bad file cannot abort the whole ingest.
+pub async fn ingest_light_frames(
+    pool: &SqlitePool,
+    bus: Option<&EventBus>,
+    plan_id: &str,
+) -> Result<IngestSummary, ContractError> {
+    // Applied move/catalogue items with a destination root + path. Item type is
+    // filtered to light frames below (by reading the FITS header), so calibration
+    // moves are excluded even though they share the `move` action.
+    let rows: Vec<(Option<String>, String, Option<String>, String)> = sqlx::query_as(
+        "SELECT to_root_id, to_relative_path, from_root_id, from_relative_path
+         FROM plan_items
+         WHERE plan_id = ?
+           AND action IN ('move', 'catalogue')
+           AND item_state = 'succeeded'
+         ORDER BY item_index ASC",
+    )
+    .bind(plan_id)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+
+    let mut summary = IngestSummary::default();
+
+    for (to_root_id, to_rel, from_root_id, from_rel) in rows {
+        // Catalogue-in-place keeps the file at its source; a move lands it at the
+        // destination. Prefer the destination, falling back to the source root
+        // when the item carries no `to_root_id` (older/catalogue rows).
+        let (root_id, relative_path) = match (to_root_id, from_root_id) {
+            (Some(r), _) if !to_rel.is_empty() => (r, to_rel),
+            (_, Some(r)) => (r, from_rel),
+            _ => continue,
+        };
+        let item = AppliedItem { root_id, relative_path };
+
+        match ingest_light_frame(pool, bus, &item).await? {
+            FrameOutcome::NotLight => {}
+            FrameOutcome::Skipped => summary.skipped += 1,
+            FrameOutcome::Ingested => {
+                summary.considered += 1;
+                summary.ingested += 1;
+            }
+        }
+    }
+
+    Ok(summary)
+}
+
+enum FrameOutcome {
+    /// Not a light frame (calibration / unknown IMAGETYP) — out of US4 scope.
+    NotLight,
+    /// A light frame whose destination root could not be resolved (R9).
+    Skipped,
+    /// A light frame folded into a session.
+    Ingested,
+}
+
+/// Ingest one applied light frame. See the module docs for the pipeline.
+async fn ingest_light_frame(
+    pool: &SqlitePool,
+    bus: Option<&EventBus>,
+    item: &AppliedItem,
+) -> Result<FrameOutcome, ContractError> {
+    // R9: ensure a `library_root` row for the destination root before the
+    // `file_record` FK insert. If the path cannot be resolved at all, skip.
+    let Some(root_path) = ensure_library_root(pool, &item.root_id).await? else {
+        tracing::warn!(
+            root_id = %item.root_id,
+            relative_path = %item.relative_path,
+            "ingest: destination root not resolvable to a library_root; skipping frame"
+        );
+        return Ok(FrameOutcome::Skipped);
+    };
+
+    // Read the FITS/XISF header at the destination. A missing/unreadable file or
+    // a calibration frame is not an error — it just isn't an ingestable light.
+    let abs_path = join_path(&root_path, &item.relative_path);
+    let meta = read_metadata(&abs_path);
+    let Some(meta) = meta else { return Ok(FrameOutcome::NotLight) };
+    if !is_light_frame(&meta) {
+        return Ok(FrameOutcome::NotLight);
+    }
+
+    // Upsert the file record (UNIQUE root_id+relative_path → reuse id).
+    let image_id = upsert_file_record(pool, &item.root_id, &item.relative_path).await?;
+
+    // Associate the FITS OBJECT → canonical target (inline cache hit or pending).
+    let object_raw = meta.object.as_deref().unwrap_or("").trim().to_owned();
+    let canonical_target_id = if object_raw.is_empty() {
+        None
+    } else {
+        match associate_or_enqueue(pool, bus, &image_id, &object_raw).await? {
+            AssociateOutcome::ResolvedInline(target_id) => Some(target_id),
+            AssociateOutcome::Enqueued | AssociateOutcome::NoObject => None,
+        }
+    };
+
+    // Derive the session key. The target component is the resolved canonical id
+    // on a cache hit, else the raw OBJECT string so unresolved frames still
+    // group (and back-fill later). A blank OBJECT groups under "unknown".
+    let key_target = canonical_target_id.clone().unwrap_or_else(|| {
+        if object_raw.is_empty() {
+            "unknown".to_owned()
+        } else {
+            object_raw.clone()
+        }
+    });
+
+    let (key, has_observer_location) = derive_session_key(&key_target, &meta);
+
+    upsert_session(pool, &key, has_observer_location, canonical_target_id.as_deref(), &image_id)
+        .await?;
+
+    Ok(FrameOutcome::Ingested)
+}
+
+// ── R9: library_root mirroring ──────────────────────────────────────────────────
+
+/// Ensure a `library_root` row exists for `root_id`, returning its absolute path.
+///
+/// Resolution order (R9):
+/// 1. An existing `library_root` row → use its `current_path`.
+/// 2. A `registered_sources` row with the same id → mirror it into a
+///    `library_root` row (same id, `current_path = registered_sources.path`),
+///    and return that path.
+/// 3. Neither → `None` (caller skips the frame).
+async fn ensure_library_root(
+    pool: &SqlitePool,
+    root_id: &str,
+) -> Result<Option<String>, ContractError> {
+    if let Some((path,)) =
+        sqlx::query_as::<_, (String,)>("SELECT current_path FROM library_root WHERE id = ?")
+            .bind(root_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(db_err)?
+    {
+        return Ok(Some(path));
+    }
+
+    let Some((path,)) =
+        sqlx::query_as::<_, (String,)>("SELECT path FROM registered_sources WHERE id = ?")
+            .bind(root_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(db_err)?
+    else {
+        return Ok(None);
+    };
+
+    // Mirror into library_root with the SAME id so the file_record FK holds.
+    sqlx::query(
+        "INSERT OR IGNORE INTO library_root (id, label, current_path, kind, state, created_at)
+         VALUES (?, ?, ?, 'local', 'active', ?)",
+    )
+    .bind(root_id)
+    .bind(root_id)
+    .bind(&path)
+    .bind(OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default())
+    .execute(pool)
+    .await
+    .map_err(db_err)?;
+
+    Ok(Some(path))
+}
+
+// ── file_record upsert ──────────────────────────────────────────────────────────
+
+/// Upsert a `file_record` by its UNIQUE `(root_id, relative_path)`, returning
+/// its id. An existing row's id is reused (state bumped to `classified`).
+async fn upsert_file_record(
+    pool: &SqlitePool,
+    root_id: &str,
+    relative_path: &str,
+) -> Result<String, ContractError> {
+    if let Some((id,)) = sqlx::query_as::<_, (String,)>(
+        "SELECT id FROM file_record WHERE root_id = ? AND relative_path = ?",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .fetch_optional(pool)
+    .await
+    .map_err(db_err)?
+    {
+        sqlx::query("UPDATE file_record SET state = 'classified', last_seen_at = ? WHERE id = ?")
+            .bind(OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default())
+            .bind(&id)
+            .execute(pool)
+            .await
+            .map_err(db_err)?;
+        return Ok(id);
+    }
+
+    let id = Uuid::new_v4().to_string();
+    let now = OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default();
+    sqlx::query(
+        "INSERT INTO file_record
+            (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at)
+         VALUES (?, ?, ?, 0, ?, 'classified', ?, ?)",
+    )
+    .bind(&id)
+    .bind(root_id)
+    .bind(relative_path)
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool)
+    .await
+    .map_err(db_err)?;
+    Ok(id)
+}
+
+// ── session_key derivation ────────────────────────────────────────────────────
+
+/// Derive the `session_key` for a frame, returning `(key, has_observer_location)`.
+///
+/// `has_observer_location` is always `false` for v1: the observer's geographic
+/// location is not yet threaded into the ingest path, so the observing-night
+/// boundary uses the UTC fallback (R11). The error path of
+/// [`sessions::session_key`] is never reached because an observer is always
+/// supplied (UTC); ingest is never blocked on a missing location.
+fn derive_session_key(key_target: &str, meta: &RawFileMetadata) -> (String, bool) {
+    let filter = meta.filter.as_deref().unwrap_or("").trim();
+    let binning = binning_of(meta);
+    let gain = meta.gain.as_deref().unwrap_or("").trim();
+    let capture_at = parse_date_obs(meta.date_obs.as_deref());
+
+    // R11: UTC observer fallback — never propagate ObserverLocationMissing.
+    let observer = ObserverContext { utc_offset: UtcOffset::UTC };
+    let key = session_key(key_target, filter, &binning, gain, capture_at, Some(&observer))
+        .unwrap_or_else(|_| format!("{key_target}|{filter}|{binning}|{gain}|"));
+    (key, false)
+}
+
+/// Combine XBINNING/YBINNING into the canonical `NxM` form (e.g. `1x1`), or `""`.
+fn binning_of(meta: &RawFileMetadata) -> String {
+    match (meta.x_binning.as_deref(), meta.y_binning.as_deref()) {
+        (Some(x), Some(y)) => format!("{}x{}", x.trim(), y.trim()),
+        (Some(x), None) => x.trim().to_owned(),
+        _ => String::new(),
+    }
+}
+
+/// Parse a FITS `DATE-OBS` value into a UTC [`OffsetDateTime`].
+///
+/// FITS `DATE-OBS` is ISO 8601, usually without a timezone designator
+/// (`2026-03-15T21:00:00[.sss]`). We try a full offset parse first, then a
+/// primitive (no-offset) parse assumed UTC. An absent/garbled value falls back
+/// to the current UTC time so the frame still groups (into "today"'s night).
+fn parse_date_obs(raw: Option<&str>) -> OffsetDateTime {
+    let Some(raw) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+        return OffsetDateTime::now_utc();
+    };
+    if let Ok(dt) = OffsetDateTime::parse(raw, &Iso8601::DEFAULT) {
+        return dt;
+    }
+    if let Ok(dt) = PrimitiveDateTime::parse(raw, &Iso8601::DEFAULT) {
+        return dt.assume_utc();
+    }
+    OffsetDateTime::now_utc()
+}
+
+// ── acquisition_session upsert ────────────────────────────────────────────────
+
+/// Upsert an `acquisition_session` by `session_key`, appending `image_id` to the
+/// `frame_ids` JSON array (set-deduped). On insert: `state = 'discovered'`,
+/// `canonical_target_id` set, legacy `target_id` NULL (R10).
+///
+/// Idempotent (R12): the SELECT-by-`session_key` lookup keeps grouping
+/// single-row, and a repeat append of the same frame id is dropped (set-dedup).
+async fn upsert_session(
+    pool: &SqlitePool,
+    key: &str,
+    has_observer_location: bool,
+    canonical_target_id: Option<&str>,
+    image_id: &str,
+) -> Result<(), ContractError> {
+    if let Some((id, frame_ids_json, existing_target)) = sqlx::query_as::<
+        _,
+        (String, String, Option<String>),
+    >(
+        "SELECT id, frame_ids, canonical_target_id FROM acquisition_session WHERE session_key = ?",
+    )
+    .bind(key)
+    .fetch_optional(pool)
+    .await
+    .map_err(db_err)?
+    {
+        let mut frames: BTreeSet<String> =
+            serde_json::from_str(&frame_ids_json).unwrap_or_default();
+        frames.insert(image_id.to_owned());
+        let frames_json =
+            serde_json::to_string(&frames.into_iter().collect::<Vec<_>>()).map_err(db_err)?;
+
+        // Back-fill the link if it resolved this pass and the row had none.
+        if existing_target.is_none() && canonical_target_id.is_some() {
+            sqlx::query(
+                "UPDATE acquisition_session SET frame_ids = ?, canonical_target_id = ? WHERE id = ?",
+            )
+            .bind(&frames_json)
+            .bind(canonical_target_id)
+            .bind(&id)
+            .execute(pool)
+            .await
+            .map_err(db_err)?;
+        } else {
+            sqlx::query("UPDATE acquisition_session SET frame_ids = ? WHERE id = ?")
+                .bind(&frames_json)
+                .bind(&id)
+                .execute(pool)
+                .await
+                .map_err(db_err)?;
+        }
+        return Ok(());
+    }
+
+    let id = Uuid::new_v4().to_string();
+    let frames_json = serde_json::to_string(&[image_id]).map_err(db_err)?;
+    sqlx::query(
+        "INSERT INTO acquisition_session
+            (id, session_key, target_id, canonical_target_id, has_observer_location,
+             frame_ids, state, observer_location, created_at)
+         VALUES (?, ?, NULL, ?, ?, ?, 'discovered', NULL, ?)",
+    )
+    .bind(&id)
+    .bind(key)
+    .bind(canonical_target_id)
+    .bind(i64::from(has_observer_location))
+    .bind(&frames_json)
+    .bind(OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default())
+    .execute(pool)
+    .await
+    .map_err(db_err)?;
+    Ok(())
+}
+
+// ── Back-fill (T043) ──────────────────────────────────────────────────────────
+
+/// Back-fill `acquisition_session.canonical_target_id` for sessions whose frames
+/// resolved after the initial ingest (spec 035 US4/T043, FR-016).
+///
+/// For each session with a NULL `canonical_target_id`, look for any frame id in
+/// its `frame_ids` array that now has a `resolved` `ingest_resolution` row, and
+/// adopt that row's `target_id`. Idempotent: already-linked sessions are
+/// skipped, and a session is updated at most once per resolved frame found.
+///
+/// Returns the number of sessions linked in this pass.
+///
+/// # Errors
+///
+/// Returns [`ContractError`] (`internal.database`) on a query failure.
+pub async fn backfill_session_targets(pool: &SqlitePool) -> Result<usize, ContractError> {
+    // Map of image_id → resolved canonical target id (only resolved rows).
+    let resolved: Vec<(String, String)> = sqlx::query_as(
+        "SELECT image_id, target_id
+         FROM ingest_resolution
+         WHERE state = 'resolved' AND target_id IS NOT NULL",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+    if resolved.is_empty() {
+        return Ok(0);
+    }
+    let resolved: std::collections::HashMap<String, String> = resolved.into_iter().collect();
+
+    let unlinked: Vec<(String, String)> = sqlx::query_as(
+        "SELECT id, frame_ids FROM acquisition_session WHERE canonical_target_id IS NULL",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+
+    let mut linked = 0usize;
+    for (session_id, frame_ids_json) in unlinked {
+        let frames: Vec<String> = serde_json::from_str(&frame_ids_json).unwrap_or_default();
+        let Some(target_id) = frames.iter().find_map(|f| resolved.get(f)) else {
+            continue;
+        };
+        sqlx::query(
+            "UPDATE acquisition_session SET canonical_target_id = ?
+             WHERE id = ? AND canonical_target_id IS NULL",
+        )
+        .bind(target_id)
+        .bind(&session_id)
+        .execute(pool)
+        .await
+        .map_err(db_err)?;
+        linked += 1;
+    }
+    Ok(linked)
+}
+
+// ── FITS helpers ──────────────────────────────────────────────────────────────
+
+/// Read FITS/XISF header metadata for a file, or `None` when unreadable /
+/// unsupported (treated as "not an ingestable light", never an error).
+fn read_metadata(abs_path: &Path) -> Option<RawFileMetadata> {
+    if let Ok(Some(m)) = FitsExtractor.extract(abs_path) {
+        return Some(m);
+    }
+    if let Ok(Some(m)) = XisfExtractor.extract(abs_path) {
+        return Some(m);
+    }
+    None
+}
+
+/// True when the frame's `IMAGETYP` normalizes to a light frame. Calibration
+/// frames (bias/dark/flat) and unknown/absent IMAGETYP are excluded (US4 scope).
+fn is_light_frame(meta: &RawFileMetadata) -> bool {
+    matches!(
+        meta.image_typ.as_deref().map(str::trim).map(str::to_ascii_lowercase).as_deref(),
+        Some(
+            "light"
+                | "light frame"
+                | "light frames"
+                | "science"
+                | "science frame"
+                | "science frames"
+                | "object"
+        )
+    )
+}
+
+/// Join a root path and a relative path with a single separator.
+fn join_path(root: &str, relative: &str) -> std::path::PathBuf {
+    Path::new(root).join(relative)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn meta_imagetyp(t: &str) -> RawFileMetadata {
+        RawFileMetadata { image_typ: Some(t.to_owned()), ..RawFileMetadata::default() }
+    }
+
+    #[test]
+    fn is_light_recognizes_variants() {
+        assert!(is_light_frame(&meta_imagetyp("Light Frame")));
+        assert!(is_light_frame(&meta_imagetyp("LIGHT")));
+        assert!(is_light_frame(&meta_imagetyp("Science")));
+        assert!(!is_light_frame(&meta_imagetyp("Dark")));
+        assert!(!is_light_frame(&meta_imagetyp("Flat Frame")));
+        assert!(!is_light_frame(&meta_imagetyp("Bias")));
+        assert!(!is_light_frame(&RawFileMetadata::default()));
+    }
+
+    #[test]
+    fn binning_combines_axes() {
+        let m = RawFileMetadata {
+            x_binning: Some("1".to_owned()),
+            y_binning: Some("1".to_owned()),
+            ..RawFileMetadata::default()
+        };
+        assert_eq!(binning_of(&m), "1x1");
+        let m = RawFileMetadata { x_binning: Some("1".to_owned()), ..RawFileMetadata::default() };
+        assert_eq!(binning_of(&m), "1");
+    }
+
+    #[test]
+    fn date_obs_parses_no_offset_as_utc() {
+        let dt = parse_date_obs(Some("2026-03-15T21:00:00"));
+        assert_eq!(dt.offset(), UtcOffset::UTC);
+        assert_eq!(dt.year(), 2026);
+    }
+
+    #[test]
+    fn session_key_uses_utc_fallback() {
+        let m = RawFileMetadata {
+            filter: Some("Ha".to_owned()),
+            x_binning: Some("1".to_owned()),
+            y_binning: Some("1".to_owned()),
+            gain: Some("100".to_owned()),
+            date_obs: Some("2026-03-15T21:00:00".to_owned()),
+            ..RawFileMetadata::default()
+        };
+        let (key, has_loc) = derive_session_key("M 31", &m);
+        assert!(!has_loc, "UTC fallback marks observer location absent");
+        assert_eq!(key, "M 31|Ha|1x1|100|2026-03-15");
+    }
+}

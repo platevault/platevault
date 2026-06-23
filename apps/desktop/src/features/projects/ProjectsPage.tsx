@@ -36,6 +36,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { projectStateLabel } from '@/lib/lifecycle';
 import {
@@ -145,16 +146,16 @@ export function ProjectsPage() {
           search={{
             value: search,
             onChange: setSearch,
-            placeholder: 'Search name, tool…',
-            ariaLabel: 'Search projects',
+            placeholder: m.projects_search_placeholder(),
+            ariaLabel: m.projects_search_aria(),
           }}
           fields={[
             {
               key: 'state',
-              label: 'State',
+              label: m.sessions_col_state(),
               value: lifecycleValue,
               options: LIFECYCLE_OPTIONS,
-              allLabel: 'All states',
+              allLabel: m.projects_filter_all_states(),
               onChange: onLifecycleChange,
             },
           ]}
@@ -167,7 +168,7 @@ export function ProjectsPage() {
           onClick={handleNewProject}
           data-guide-anchor="projects.create-cta"
         >
-          + New project
+          {m.projects_new_btn()}
         </Btn>
       }
     />

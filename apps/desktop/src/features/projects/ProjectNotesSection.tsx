@@ -13,6 +13,7 @@
 import { useState, useEffect } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 import { addToast } from '@/shared/toast';
 import { saveNote, noteByteLength, MAX_NOTE_BYTES, NOTE_DEBOUNCE_MS } from './manifests';
 
@@ -67,9 +68,9 @@ export function ProjectNotesSection({
         if (error === 'note.content_too_large') {
           setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
         } else if (error === 'project.read_only') {
-          addToast({ message: 'This project is archived. Notes cannot be edited.', variant: 'error' });
+          addToast({ message: m.projects_toast_archived_readonly(), variant: 'error' });
         } else if (error) {
-          addToast({ message: `Failed to save notes: ${error}`, variant: 'error' });
+          addToast({ message: m.projects_toast_save_notes_failed({ error: String(error) }), variant: 'error' });
         } else if (updatedAt) {
           setLastSaved(updatedAt);
           setFieldError(null);
@@ -98,10 +99,10 @@ export function ProjectNotesSection({
     if (error === 'note.content_too_large') {
       setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
     } else if (error === 'project.read_only') {
-      addToast({ message: 'This project is archived. Notes cannot be edited.', variant: 'error' });
+      addToast({ message: m.projects_toast_archived_readonly(), variant: 'error' });
       setEditing(false);
     } else if (error) {
-      addToast({ message: `Failed to save notes: ${error}`, variant: 'error' });
+      addToast({ message: m.projects_toast_save_notes_failed({ error: String(error) }), variant: 'error' });
     } else if (updatedAt) {
       setLastSaved(updatedAt);
       setFieldError(null);
@@ -133,13 +134,13 @@ export function ProjectNotesSection({
             data-testid="notes-empty"
             className="alm-project-notes__empty"
           >
-            No notes.
+            {m.projects_notes_empty()}
           </span>
         )}
         {!readOnly && (
           <div>
             <Btn size="sm" variant="ghost" onClick={() => setEditing(true)}>
-              Edit
+              {m.projects_detail_edit_btn()}
             </Btn>
           </div>
         )}
@@ -148,7 +149,7 @@ export function ProjectNotesSection({
             data-testid="notes-saved-indicator"
             className="alm-project-notes__saved"
           >
-            Saved
+            {m.projects_notes_saved()}
           </span>
         )}
       </div>
@@ -179,11 +180,11 @@ export function ProjectNotesSection({
                 : 'var(--alm-text-muted)',
           }}
         >
-          {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()} bytes
+          {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()} {m.projects_notes_bytes_unit()}
         </span>
         <div className="alm-project-notes__actions">
           <Btn size="sm" variant="ghost" onClick={handleCancel} disabled={saving}>
-            Cancel
+            {m.common_cancel()}
           </Btn>
           <Btn
             size="sm"
@@ -191,7 +192,7 @@ export function ProjectNotesSection({
             onClick={handleSave}
             disabled={saving || overLimit}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? m.common_saving() : m.projects_edit_save_btn()}
           </Btn>
         </div>
       </div>

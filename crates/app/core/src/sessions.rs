@@ -35,6 +35,13 @@ use contracts_core::sessions::{
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 
+/// One `acquisition_session` row joined with its canonical target (spec 035
+/// US4/T044). Columns: id, session_key, state, legacy target_id,
+/// frame_ids (JSON), created_at, canonical_target_id, canonical primary
+/// designation.
+type SessionRow =
+    (String, String, String, Option<String>, String, String, Option<String>, Option<String>);
+
 // -- Public use-case functions ------------------------------------------------
 
 /// `sessions.list` -- return all acquisition sessions from real DB rows.
@@ -45,26 +52,39 @@ use std::collections::HashMap;
 /// # Errors
 /// Returns `Err(String)` on database failure.
 pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>, String> {
-    let rows: Vec<(
-        String,         // id
-        String,         // session_key (JSON)
-        String,         // state
-        Option<String>, // target_id
-        String,         // frame_ids (JSON array)
-        String,         // created_at
-    )> = sqlx::query_as(
-        "SELECT id, session_key, state, target_id, frame_ids, created_at
-         FROM acquisition_session
-         ORDER BY created_at DESC",
+    // spec 035 US4/T044: LEFT JOIN the spec-035 canonical_target so a session's
+    // resolved target name (`primary_designation`) surfaces in the read path.
+    // `canonical_target_id` (migration 0046) is the spec-035 link; it coexists
+    // with the legacy `target_id` (→ old `target` table, left NULL by ingest).
+    let rows: Vec<SessionRow> = sqlx::query_as(
+        "SELECT s.id, s.session_key, s.state, s.target_id, s.frame_ids, s.created_at,
+                s.canonical_target_id, ct.primary_designation
+         FROM acquisition_session s
+         LEFT JOIN canonical_target ct ON ct.id = s.canonical_target_id
+         ORDER BY s.created_at DESC",
     )
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;
 
     let mut sessions = Vec::with_capacity(rows.len());
-    for (id, session_key_json, state, target_id, frame_ids_json, _created_at) in rows {
+    for (
+        id,
+        session_key_json,
+        state,
+        target_id,
+        frame_ids_json,
+        _created_at,
+        canonical_target_id,
+        canonical_name,
+    ) in rows
+    {
         let fp = load_fingerprint(pool, &id).await?;
-        let sk = parse_session_key(&session_key_json, fp.as_ref());
+        let mut sk = parse_session_key(&session_key_json, fp.as_ref());
+        // Prefer the canonical target's display designation when linked.
+        if let Some(name) = canonical_name.filter(|n| !n.is_empty()) {
+            sk.target = name;
+        }
         let st = parse_session_state(&state);
         // TODO(037): confidence has no column; derive a best-effort value from state.
         let confidence = confidence_from_state(st);
@@ -78,7 +98,9 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
         let total_size_bytes = 0_u64;
         // TODO(037): metadata -- not stored as structured provenance rows yet.
         let metadata = HashMap::new();
-        let target_ids = target_id.into_iter().collect();
+        // Surface the canonical target id (spec 035) when the legacy target_id is
+        // absent — ingested sessions link via canonical_target_id (R10).
+        let target_ids = target_id.or(canonical_target_id).into_iter().collect();
         let project_ids = load_project_ids(pool, &id).await?;
         // TODO(037): warnings -- not stored; derive from state/fingerprint in future.
         let warnings = Vec::new();
@@ -108,28 +130,34 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
 /// # Errors
 /// Returns `Err(String)` on database failure or when the session is absent.
 pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, String> {
-    let row: Option<(
-        String,         // id
-        String,         // session_key (JSON)
-        String,         // state
-        Option<String>, // target_id
-        String,         // frame_ids (JSON)
-        String,         // created_at
-    )> = sqlx::query_as(
-        "SELECT id, session_key, state, target_id, frame_ids, created_at
-         FROM acquisition_session
-         WHERE id = ?",
+    let row: Option<SessionRow> = sqlx::query_as(
+        "SELECT s.id, s.session_key, s.state, s.target_id, s.frame_ids, s.created_at,
+                s.canonical_target_id, ct.primary_designation
+         FROM acquisition_session s
+         LEFT JOIN canonical_target ct ON ct.id = s.canonical_target_id
+         WHERE s.id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    let (id, session_key_json, state, target_id, frame_ids_json, _created_at) =
-        row.ok_or_else(|| format!("session.not_found: {id}"))?;
+    let (
+        id,
+        session_key_json,
+        state,
+        target_id,
+        frame_ids_json,
+        _created_at,
+        canonical_target_id,
+        canonical_name,
+    ) = row.ok_or_else(|| format!("session.not_found: {id}"))?;
 
     let fp = load_fingerprint(pool, &id).await?;
-    let sk = parse_session_key(&session_key_json, fp.as_ref());
+    let mut sk = parse_session_key(&session_key_json, fp.as_ref());
+    if let Some(name) = canonical_name.filter(|n| !n.is_empty()) {
+        sk.target = name;
+    }
     let st = parse_session_state(&state);
     // TODO(037): confidence has no column; derive from state.
     let confidence = confidence_from_state(st);
@@ -142,7 +170,7 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     let total_size_bytes = 0_u64;
     // TODO(037): metadata -- not stored as structured provenance rows yet.
     let metadata = HashMap::new();
-    let target_ids = target_id.into_iter().collect();
+    let target_ids = target_id.or(canonical_target_id).into_iter().collect();
     let project_ids = load_project_ids(pool, &id).await?;
     // TODO(037): warnings -- not stored.
     let warnings = Vec::new();

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { m } from '@/lib/i18n';
 import { useNavigate } from '@tanstack/react-router';
 import { WizardShell, Btn } from '@/ui';
 import type { WizardStep } from '@/ui';
@@ -155,22 +156,22 @@ export function WizardPage() {
 
       if (result.planId) {
         addToast({
-          message: `Project "${wizardData.name.name}" created. Review the folder plan before applying.`,
+          message: m.projects_wizard_toast_created_plan({ name: wizardData.name.name }),
           variant: 'info',
           action: {
-            label: 'View plan',
+            label: m.projects_wizard_view_plan_btn(),
             onClick: () => void navigate({ to: '/archive', search: { selected: undefined } as never }),
           },
         });
       } else {
-        addToast({ message: `Project "${wizardData.name.name}" created.`, variant: 'success' });
+        addToast({ message: m.projects_wizard_toast_created({ name: wizardData.name.name }), variant: 'success' });
       }
 
       // Navigate back to projects list; the list re-fetches automatically.
       void navigate({ to: '/projects' });
     } catch (err: unknown) {
       const msg = errMessage(err);
-      addToast({ message: `Could not create project: ${msg}`, variant: 'error' });
+      addToast({ message: m.projects_wizard_toast_failed({ msg }), variant: 'error' });
     } finally {
       setCreating(false);
     }
@@ -207,7 +208,7 @@ export function WizardPage() {
   const summary = (
     <div className="alm-wizard-page__summary">
       <div className="alm-wizard-page__summary-heading">
-        Project summary
+        {m.projects_wizard_summary_title()}
       </div>
       <div>
         <div className="alm-wizard-page__summary-project-name">{projectLabel}</div>
@@ -216,20 +217,20 @@ export function WizardPage() {
 
       <div>
         <div className="alm-wizard-page__summary-section-heading">
-          Selected
+          {m.projects_wizard_summary_selected()}
         </div>
         <div className="alm-wizard-page__summary-list">
-          <SummaryRow label="Lights" value={`${wizardData.sources.selectedSessionIds.length} sess`} />
-          <SummaryRow label="Darks" value={`${darkSelected} master`} />
-          <SummaryRow label="Flats" value={`${flatsMapped} masters`} />
-          <SummaryRow label="Bias" value={`${biasSelected} master`} />
+          <SummaryRow label={m.projects_wizard_summary_lights_label()} value={`${wizardData.sources.selectedSessionIds.length} sess`} />
+          <SummaryRow label={m.projects_wizard_summary_darks_label()} value={`${darkSelected} master`} />
+          <SummaryRow label={m.projects_wizard_flats_label()} value={`${flatsMapped} masters`} />
+          <SummaryRow label={m.projects_wizard_bias_label()} value={`${biasSelected} master`} />
         </div>
       </div>
 
       {currentStep < 5 && (
         <div>
           <div className="alm-wizard-page__summary-section-heading">
-            Coming up
+            {m.projects_wizard_summary_coming_up()}
           </div>
           <div className="alm-wizard-page__summary-list">
             {STEP_LABELS.slice(currentStep + 1).map((label, i) => (
@@ -247,12 +248,12 @@ export function WizardPage() {
       )}
 
       <div className="alm-wizard-page__footprint">
-        <div className="alm-wizard-page__footprint-label">Estimated on-disk footprint</div>
+        <div className="alm-wizard-page__footprint-label">{m.projects_wizard_footprint_label()}</div>
         <div className="alm-mono alm-wizard-page__footprint-value">
-          ~12 KB
+          {m.projects_wizard_footprint_value()}
         </div>
         <div className="alm-wizard-page__footprint-note">
-          plan will create directories + manifest only &middot; no light frames are copied
+          {m.projects_wizard_footprint_note()}
         </div>
       </div>
 
@@ -279,7 +280,7 @@ export function WizardPage() {
             style={{ flex: 1 }}
             data-testid="wizard-create-btn"
           >
-            {creating ? 'Creating…' : 'Create project'}
+            {creating ? m.projects_create_creating() : m.projects_create_btn()}
           </Btn>
         )}
       </div>
@@ -293,27 +294,27 @@ export function WizardPage() {
       {/* Wizard toolbar — styled consistently with other page toolbars */}
       <div className="alm-page__bar alm-wizard-page__toolbar">
         <span className="alm-wizard-page__toolbar-title">
-          New project &mdash; {projectLabel}
+          {m.projects_wizard_toolbar_title()} {projectLabel}
         </span>
         <span className="alm-wizard-page__spacer" />
-        <Btn size="sm" onClick={() => saveDraft(wizardData)}>Save draft</Btn>
+        <Btn size="sm" onClick={() => saveDraft(wizardData)}>{m.projects_wizard_save_draft_btn()}</Btn>
         {devSkip && (
           <Btn size="sm" onClick={() => { clearDraft(); setWizardData(INITIAL_DATA); setCurrentStep(0); }}>
-            Reset wizard
+            {m.projects_wizard_reset_btn()}
           </Btn>
         )}
-        <Btn size="sm" onClick={handleCancel}>Cancel</Btn>
+        <Btn size="sm" onClick={handleCancel}>{m.common_cancel()}</Btn>
       </div>
 
       {/* Sub-toolbar: workflow profile breadcrumb */}
       <div className="alm-page__bar alm-wizard-page__subbbar">
-        <span>Workflow profile: {profileLabel}</span>
+        <span>{m.projects_wizard_workflow_profile_label()} {profileLabel}</span>
         <span>&middot;</span>
         {wizardData.name.name && (
-          <span>From target context: {wizardData.name.name.split(/[\s·—]/)[0]}</span>
+          <span>{m.projects_wizard_from_target_label()} {wizardData.name.name.split(/[\s·—]/)[0]}</span>
         )}
         <span className="alm-wizard-page__subbar-note">
-          Sources are selected here; the filesystem plan is shown at step 6 before anything is created.
+          {m.projects_wizard_subbar_note()}
         </span>
       </div>
 
@@ -324,7 +325,7 @@ export function WizardPage() {
         {currentStep < 5 && (
           <div className="alm-wizard-page__step-header">
             <h2 className="alm-wizard-page__step-title">
-              Step {currentStep + 1} &middot; {STEP_LABELS[currentStep]}
+              {m.projects_wizard_step_label()} {currentStep + 1} &middot; {STEP_LABELS[currentStep]}
             </h2>
           </div>
         )}

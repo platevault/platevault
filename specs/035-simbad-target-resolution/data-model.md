@@ -68,6 +68,23 @@ are retryable and never silently mis-assigned (FR-009). Matching is **exact norm
 designation/identifier** only (no fuzzy/probabilistic match, no confidence score, FR-008): a
 non-matching or ambiguous `object_raw` stays `unresolved` rather than being guessed.
 
+### AcquisitionSession (persisted) — additive extension
+
+The existing `acquisition_session` table (from the sessions crate) gains an additive nullable column
+for the spec-035 canonical target link. This mirrors the `projects.canonical_target_id` column added
+by migration 0033.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `canonical_target_id` | TEXT? (FK → `canonical_target.id`) | The resolved canonical target for this session. NULL when the OBJECT value is unresolved or pending; back-filled by the background resolver. Added by migration 0046 — additive, nullable, no NOT NULL constraint. |
+| `has_observer_location` | int (0/1) | Set to 0 when the observing-night in `session_key` was computed in UTC due to missing observer location (degraded mode). |
+
+**Design note**: The existing `target_id` column (FK → the legacy `target` table, used by pre-gen-3
+schema) is intentionally left untouched. The spec-035 canonical link uses the new
+`canonical_target_id` column exclusively, following the 0033 precedent for projects (additive,
+never rewriting legacy foreign keys). A join table was considered and rejected (R3 in research.md):
+an additive nullable column is simpler, idempotent to insert, and follows the established pattern.
+
 ### CaldwellMap (static, bundled)
 
 A committed, immutable C1–C109 → NGC/IC (or other) designation mapping (Patrick Moore's list), since

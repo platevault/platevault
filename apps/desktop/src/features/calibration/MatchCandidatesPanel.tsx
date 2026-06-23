@@ -29,6 +29,7 @@ import type {
   SuggestStatus,
   MismatchReason,
 } from '@/api/commands';
+import { m } from '@/lib/i18n';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -106,11 +107,12 @@ function DimensionBreakdown({ match }: { match: CalibrationMatchDto }) {
           <Check
             size={12}
             role="img"
-            aria-label="matched"
+            aria-label={m.calibration_dim_matched_aria()}
             className="alm-match-candidates__dim-check"
           />{' '}
           {d.dimension}
           {d.delta != null && d.delta > 0 && (
+            // eslint-disable-next-line alm/no-user-string -- mathematical delta notation, not translatable prose
             <span className="alm-match-candidates__dim-delta"> (Δ{d.delta.toFixed(2)})</span>
           )}
         </span>
@@ -124,11 +126,12 @@ function DimensionBreakdown({ match }: { match: CalibrationMatchDto }) {
           >
             <AlertTriangle
               size={12}
-              aria-label="mismatch"
+              aria-label={m.calibration_dim_mismatch_aria()}
               className="alm-match-candidates__dim-mismatch-icon"
             />{' '}
             {d.dimension}: {reasonLabel(d.reason)}
             {d.delta != null && (
+              // eslint-disable-next-line alm/no-user-string -- mathematical delta notation, not translatable prose
               <span className="alm-match-candidates__dim-delta"> (Δ{d.delta.toFixed(2)})</span>
             )}
           </span>
@@ -197,10 +200,10 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
             disabled={assigning}
             data-testid="assign-confirm-btn"
           >
-            {assigning ? 'Assigning…' : 'Confirm assign'}
+            {assigning ? m.calibration_assign_assigning() : m.calibration_assign_confirm_btn()}
           </Btn>
           <Btn size="sm" variant="ghost" onClick={handleCancel} data-testid="assign-cancel-btn">
-            Cancel
+            {m.common_cancel()}
           </Btn>
         </div>
       </div>
@@ -224,14 +227,14 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
             disabled={assigning}
             data-testid="assign-override-btn"
           >
-            Force-assign
+            {m.calibration_assign_force_btn()}
           </Btn>
           <Btn size="sm" variant="ghost" onClick={handleCancel}>
-            Cancel
+            {m.common_cancel()}
           </Btn>
         </div>
         <div className="alm-match-candidates__override-dims">
-          Violates: {overrideDims.join(', ')}
+          {m.calibration_assign_violates({ dims: overrideDims.join(', ') })}
         </div>
       </div>
     );
@@ -244,7 +247,7 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
       onClick={handleClick}
       data-testid={`assign-btn-${match.masterId}`}
     >
-      Assign
+      {m.calibration_assign_btn()}
     </Btn>
   );
 }
@@ -272,12 +275,12 @@ export function MatchCandidatesPanel({
 }: MatchCandidatesPanelProps) {
   if (loading) {
     return (
-      <Section title="Compatible sessions">
+      <Section title={m.calibration_compatible_sessions_title()}>
         <div
           className="alm-match-candidates__loading"
           data-testid="suggest-loading"
         >
-          Finding compatible sessions…
+          {m.calibration_compatible_sessions_loading()}
         </div>
       </Section>
     );
@@ -285,9 +288,9 @@ export function MatchCandidatesPanel({
 
   if (error) {
     return (
-      <Section title="Compatible sessions">
+      <Section title={m.calibration_compatible_sessions_title()}>
         <Banner variant="danger" data-testid="suggest-error">
-          Failed to load compatible sessions: {error}
+          {m.calibration_compatible_sessions_error({ error })}
         </Banner>
       </Section>
     );
@@ -295,8 +298,8 @@ export function MatchCandidatesPanel({
 
   if (!response) {
     return (
-      <Section title="Compatible sessions">
-        <EmptyState title="No session selected" desc="Select a master to see which sessions it can calibrate." />
+      <Section title={m.calibration_compatible_sessions_title()}>
+        <EmptyState title={m.calibration_compatible_sessions_no_selection_title()} desc={m.calibration_compatible_sessions_no_selection_desc()} />
       </Section>
     );
   }
@@ -308,23 +311,26 @@ export function MatchCandidatesPanel({
     // rather than a raw "Session … not found" error.
     if (code === 'session.not_found') {
       return (
-        <Section title="Compatible sessions">
+        <Section title={m.calibration_compatible_sessions_title()}>
           <EmptyState
-            title="No compatible sessions"
-            desc="This master has no matched acquisition sessions yet."
+            title={m.calibration_compatible_sessions_none_title()}
+            desc={m.calibration_compatible_sessions_no_anchor_desc()}
           />
         </Section>
       );
     }
     const isObserverMissing = code === 'match.observer_location_missing' || response.suggestStatus === 'observer_location_missing';
+     
+    const isMixedState = response.error?.code === 'session.mixed_state';
+    const guardMessage = isObserverMissing
+      ? m.calibration_observer_missing_guard()
+      : isMixedState
+        ? m.calibration_session_mixed_state()
+        : m.calibration_suggest_error({ message: response.error?.message ?? code });
     return (
-      <Section title="Compatible sessions">
+      <Section title={m.calibration_compatible_sessions_title()}>
         <Banner variant="warn" data-testid="suggest-guard-error">
-          {isObserverMissing
-            ? 'Observer location or acquisition time is missing — cannot suggest calibration masters.'
-            : response.error?.code === 'session.mixed_state'
-              ? 'Session is mixed (light + dark frames). Split it before requesting calibration suggestions.'
-              : `Suggestion error: ${response.error?.message ?? code}`}
+          {guardMessage}
         </Banner>
       </Section>
     );
@@ -335,9 +341,9 @@ export function MatchCandidatesPanel({
 
   if (suggestStatus === 'observer_location_missing') {
     return (
-      <Section title="Compatible sessions">
+      <Section title={m.calibration_compatible_sessions_title()}>
         <Banner variant="warn" data-testid="suggest-observer-missing">
-          Observer location or acquisition time is missing — cannot match this master to sessions.
+          {m.calibration_observer_missing_match()}
         </Banner>
       </Section>
     );
@@ -345,10 +351,10 @@ export function MatchCandidatesPanel({
 
   if (suggestStatus === 'no_match' || matches.length === 0) {
     return (
-      <Section title="Compatible sessions">
+      <Section title={m.calibration_compatible_sessions_title()}>
         <EmptyState
-          title="No compatible sessions"
-          desc="No acquisition sessions matched this master's fingerprint. Adjust tolerances in Settings → Calibration."
+          title={m.calibration_compatible_sessions_none_title()}
+          desc={m.calibration_compatible_sessions_none_desc()}
         />
       </Section>
     );
@@ -356,28 +362,29 @@ export function MatchCandidatesPanel({
 
   return (
     <Section
-      title="Compatible sessions"
+      title={m.calibration_compatible_sessions_title()}
       count={matches.length}
     >
       <div className="alm-match-candidates__status-row">
         <Pill variant={statusVariant(suggestStatus)} data-testid="suggest-status-pill">
           {statusLabel(suggestStatus)}
         </Pill>
+        { }
         {suggestStatus === 'ambiguous' && (
           <span className="alm-match-candidates__ambiguous-hint">
-            Multiple sessions at similar confidence — review before assigning.
+            {m.calibration_ambiguous_hint()}
           </span>
         )}
       </div>
       <Table
         columns={[
-          { key: 'session', label: 'Session', style: { width: 150 } },
-          { key: 'target', label: 'Target', style: { width: 130 } },
-          { key: 'filter', label: 'Filter', style: { width: 64 } },
-          { key: 'night', label: 'Night', style: { width: 100 } },
-          { key: 'frames', label: 'Frames', style: { width: 64 } },
-          { key: 'confidence', label: 'Match', style: { width: 120 } },
-          { key: 'dimensions', label: 'Dimensions' },
+          { key: 'session', label: m.calibration_col_session(), style: { width: 150 } },
+          { key: 'target', label: m.projects_create_target_label(), style: { width: 130 } },
+          { key: 'filter', label: m.common_filter(), style: { width: 64 } },
+          { key: 'night', label: m.sessions_col_night(), style: { width: 100 } },
+          { key: 'frames', label: m.projects_wizard_col_frames(), style: { width: 64 } },
+          { key: 'confidence', label: m.calibration_col_match(), style: { width: 120 } },
+          { key: 'dimensions', label: m.calibration_col_dimensions() },
           { key: 'assign', label: '', style: { width: 120 } },
         ]}
         rows={matches.map((m) => ({

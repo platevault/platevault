@@ -40,6 +40,7 @@ import {
   type InventoryFilters,
 } from './store';
 import { addToast } from '@/shared/toast';
+import { m } from '@/lib/i18n';
 import type { InventorySource } from '@/api/commands';
 import type { ReviewFilter } from '@/lib/route-contract';
 import { REVIEW_FILTERS } from '@/lib/route-contract';
@@ -131,9 +132,9 @@ export function SessionsPage() {
     const result = await review(selected, 'confirm');
     if (result.noop) return;
     if (result.ok) {
-      addToast({ message: 'Session confirmed.', variant: 'success' });
+      addToast({ message: m.sessions_toast_confirmed(), variant: 'success' });
     } else {
-      addToast({ message: result.error ?? 'Confirm failed.', variant: 'error' });
+      addToast({ message: result.error ?? m.sessions_toast_confirmed(), variant: 'error' });
     }
   }, [selected, review]);
 
@@ -142,9 +143,9 @@ export function SessionsPage() {
     const result = await review(selected, 'reopen');
     if (result.noop) return;
     if (result.ok) {
-      addToast({ message: 'Review re-opened.', variant: 'info' });
+      addToast({ message: m.sessions_toast_reopened(), variant: 'info' });
     } else {
-      addToast({ message: result.error ?? 'Re-open failed.', variant: 'error' });
+      addToast({ message: result.error ?? m.sessions_toast_reopened(), variant: 'error' });
     }
   }, [selected, review]);
 
@@ -153,9 +154,9 @@ export function SessionsPage() {
     const result = await review(selected, 'reject');
     if (result.noop) return;
     if (result.ok) {
-      addToast({ message: 'Session rejected.', variant: 'warn' });
+      addToast({ message: m.sessions_toast_rejected(), variant: 'warn' });
     } else {
-      addToast({ message: result.error ?? 'Reject failed.', variant: 'error' });
+      addToast({ message: result.error ?? m.sessions_toast_rejected(), variant: 'error' });
     }
   }, [selected, review]);
 
@@ -184,13 +185,13 @@ export function SessionsPage() {
           search={{
             value: search,
             onChange: setSearch,
-            placeholder: 'Search target, filter, camera…',
+            placeholder: m.sessions_search_placeholder(),
             ariaLabel: 'Search sessions',
           }}
           fields={[
             {
               key: 'review',
-              label: 'Review',
+              label: m.sessions_review_filter_label(),
               value: reviewFilter ?? '',
               options: REVIEW_OPTIONS,
               allLabel: 'Default',
@@ -224,10 +225,10 @@ export function SessionsPage() {
         ) : undefined
       }
       onCloseDetail={selectedSession != null ? clearSelection : undefined}
-      detailLabel="Session details"
+      detailLabel={m.cmp_listpage_close_session_details_aria()}
     >
       {error != null ? (
-        <div className="alm-sessions-table__empty">Failed to load sessions.</div>
+        <div className="alm-sessions-table__empty">{m.sessions_load_error()}</div>
       ) : (
         <SessionsTable
           sources={sources}

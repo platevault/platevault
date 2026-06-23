@@ -25,6 +25,7 @@ import { useMemo } from 'react';
 import { Pill, Table, EmptyState } from '@/ui';
 import type { PillVariant, TableColumn, TableRow } from '@/ui';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
+import { m } from '@/lib/i18n';
 
 // ── Kind grouping model ────────────────────────────────────────────────────────
 
@@ -202,15 +203,15 @@ function groupMasters(masters: CalibrationMaster[], sort: MasterSort): MasterGro
 // ── Column model ──────────────────────────────────────────────────────────────
 
 const COLUMNS: Array<{ key: string; label: string; sort: MasterSortCol; className?: string }> = [
-  { key: 'master', label: 'Master', sort: 'master' },
-  { key: 'camera', label: 'Camera', sort: 'camera', className: 'alm-calib-cell--muted' },
-  { key: 'filter', label: 'Filter', sort: 'filter' },
-  { key: 'gain', label: 'Gain', sort: 'gain', className: 'alm-calib-cell--num' },
-  { key: 'exposure', label: 'Exposure', sort: 'exposure', className: 'alm-calib-cell--mono' },
-  { key: 'temp', label: 'Temp', sort: 'temp', className: 'alm-calib-cell--mono' },
-  { key: 'binning', label: 'Binning', sort: 'binning', className: 'alm-calib-cell--mono' },
-  { key: 'usage', label: 'Usage', sort: 'usage', className: 'alm-calib-cell--muted' },
-  { key: 'created', label: 'Date', sort: 'created', className: 'alm-calib-cell--mono' },
+  { key: 'master', label: m.calibration_col_master(), sort: 'master' },
+  { key: 'camera', label: m.settings_calmatch_camera(), sort: 'camera', className: 'alm-calib-cell--muted' },
+  { key: 'filter', label: m.common_filter(), sort: 'filter' },
+  { key: 'gain', label: m.settings_calmatch_gain(), sort: 'gain', className: 'alm-calib-cell--num' },
+  { key: 'exposure', label: m.calibration_fp_exposure(), sort: 'exposure', className: 'alm-calib-cell--mono' },
+  { key: 'temp', label: m.calibration_col_temp(), sort: 'temp', className: 'alm-calib-cell--mono' },
+  { key: 'binning', label: m.settings_calmatch_binning(), sort: 'binning', className: 'alm-calib-cell--mono' },
+  { key: 'usage', label: m.calibration_col_usage(), sort: 'usage', className: 'alm-calib-cell--muted' },
+  { key: 'created', label: m.archive_prop_date(), sort: 'created', className: 'alm-calib-cell--mono' },
 ];
 
 // ── Props ───────────────────────────────────────────────────────────────────────
@@ -244,7 +245,7 @@ export function MastersTable({
   if (loading) {
     return (
       <div className="alm-calib-table__status" data-testid="masters-loading">
-        Loading calibration masters…
+        {m.calibration_loading()}
       </div>
     );
   }
@@ -252,7 +253,7 @@ export function MastersTable({
   if (error) {
     return (
       <div className="alm-calib-table__status">
-        <EmptyState title="Failed to load" desc={error} data-testid="masters-error" />
+        <EmptyState title={m.calibration_load_error_title()} desc={error} data-testid="masters-error" />
       </div>
     );
   }
@@ -261,8 +262,8 @@ export function MastersTable({
     return (
       <div className="alm-calib-table__status">
         <EmptyState
-          title="No calibration masters"
-          desc="Run a scan to import calibration frames."
+          title={m.calibration_empty_title()}
+          desc={m.calibration_empty_desc()}
           data-testid="masters-empty"
         />
       </div>
@@ -278,11 +279,12 @@ export function MastersTable({
         type="button"
         className={'alm-calib-sorth' + (sort.col === c.sort ? ' alm-calib-sorth--active' : '')}
         onClick={() => onSort(c.sort)}
-        aria-label={`Sort by ${c.label}`}
+        aria-label={m.calibration_sort_by_aria({ col: c.label })}
       >
         {c.label}
         {sort.col === c.sort && (
           <span className="alm-calib-sorth__arrow" aria-hidden="true">
+            { }
             {sort.dir === 'asc' ? '▲' : '▼'}
           </span>
         )}
@@ -299,7 +301,7 @@ export function MastersTable({
         <span>
           {group.label}
           <span className="alm-calib-table__group-count">
-            {group.masters.length} {group.masters.length === 1 ? 'master' : 'masters'}
+            {group.masters.length} {group.masters.length === 1 ? m.calibration_master_singular() : m.status_masters_label()}
           </span>
         </span>
       ),
@@ -313,28 +315,28 @@ export function MastersTable({
       created: '',
     });
 
-    for (const m of group.masters) {
-      const isAging = m.ageDays > agingThresholdDays;
-      const kindStr = m.kind.toLowerCase();
+    for (const master of group.masters) {
+      const isAging = master.ageDays > agingThresholdDays;
+      const kindStr = master.kind.toLowerCase();
       rows.push({
         _rowClassName:
-          'alm-calib-table__row' + (selected === m.id ? ' alm-calib-table__row--selected' : ''),
-        _onClick: () => onSelect(m.id),
+          'alm-calib-table__row' + (selected === master.id ? ' alm-calib-table__row--selected' : ''),
+        _onClick: () => onSelect(master.id),
         master: (
           <span className="alm-calib-cell__master">
             <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
-            <span className="alm-calib-cell__master-label">{masterLabel(m)}</span>
-            {isAging && <Pill variant="warn">aging {m.ageDays}d</Pill>}
+            <span className="alm-calib-cell__master-label">{masterLabel(master)}</span>
+            {isAging && <Pill variant="warn">{m.calibration_aging_days({ days: master.ageDays })}</Pill>}
           </span>
         ),
-        camera: cameraCell(m),
-        filter: filterCell(m),
-        gain: gainCell(m),
-        exposure: exposureCell(m),
-        temp: tempCell(m),
-        binning: binningCell(m),
-        usage: <span data-testid={`master-usage-${m.id}`}>{usageSummary(m)}</span>,
-        created: createdDate(m),
+        camera: cameraCell(master),
+        filter: filterCell(master),
+        gain: gainCell(master),
+        exposure: exposureCell(master),
+        temp: tempCell(master),
+        binning: binningCell(master),
+        usage: <span data-testid={`master-usage-${master.id}`}>{usageSummary(master)}</span>,
+        created: createdDate(master),
       });
     }
   }

@@ -21,6 +21,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { m } from '@/lib/i18n';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Dialog } from '@base-ui-components/react/dialog';
@@ -41,8 +42,8 @@ import {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const TOOL_OPTIONS: RadioOption[] = [
-  { value: 'PixInsight', label: 'PixInsight', desc: 'WBPP, StarAlignment, integration' },
-  { value: 'Siril', label: 'Siril', desc: 'Free open-source stacking' },
+  { value: 'PixInsight', label: m.setup_tools_pixinsight_name(), desc: 'WBPP, StarAlignment, integration' },
+  { value: 'Siril', label: m.setup_tools_siril_name(), desc: 'Free open-source stacking' },
 ];
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -101,7 +102,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
       const list = await listProjects008();
       const dup = list.find((p) => p.name.toLowerCase() === trimmedName.toLowerCase());
       if (dup) {
-        setError('name', { type: 'duplicate', message: 'A project with this name already exists.' });
+        setError('name', { type: 'duplicate', message: m.projects_create_name_duplicate() });
         return;
       }
     } catch {
@@ -134,14 +135,14 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
         <Dialog.Backdrop className="alm-confirm-overlay__backdrop" />
         <Dialog.Popup
           className="alm-confirm-overlay alm-create-project__popup"
-          aria-label="Create project"
+          aria-label={m.projects_create_btn()}
         >
           <form onSubmit={rhfHandleSubmit(onValid)} noValidate>
             {/* Header */}
             <div className="alm-confirm-overlay__header">
-              <Dialog.Title className="alm-confirm-overlay__title">New project</Dialog.Title>
+              <Dialog.Title className="alm-confirm-overlay__title">{m.projects_create_title()}</Dialog.Title>
               <Dialog.Description className="alm-confirm-overlay__description">
-                Set up a project to collect and organize acquisition sessions.
+                {m.projects_create_desc()}
               </Dialog.Description>
             </div>
 
@@ -150,12 +151,12 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
               {/* Name */}
               <div>
-                <label className="alm-field-label" htmlFor="cp-name">Project name</label>
+                <label className="alm-field-label" htmlFor="cp-name">{m.projects_name_label()}</label>
                 <input
                   id="cp-name"
                   className="alm-input"
                   type="text"
-                  placeholder="e.g. NGC 7000 Narrowband"
+                  placeholder={m.projects_create_name_placeholder()}
                   maxLength={MAX_NAME_LEN + 10}
                   aria-invalid={Boolean(errors.name)}
                   aria-describedby={errors.name ? 'name-error' : undefined}
@@ -173,21 +174,21 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
               <div>
                 {target ? (
                   <>
-                    <span className="alm-field-label">Target</span>
+                    <span className="alm-field-label">{m.projects_create_target_label()}</span>
                     <div className="alm-create-project__target-row">
                       <Pill variant="accent">{target.primaryDesignation}</Pill>
                       {target.commonName && (
                         <span className="alm-field-hint">{target.commonName}</span>
                       )}
                       <Btn type="button" variant="ghost" onClick={() => setTarget(null)}>
-                        Change
+                        {m.common_change()}
                       </Btn>
                     </div>
                   </>
                 ) : (
                   <TargetSearch
-                    label="Target (optional)"
-                    placeholder="e.g. M31, NGC 224, Andromeda"
+                    label={m.projects_create_target_search_label()}
+                    placeholder={m.projects_create_target_search_placeholder()}
                     onSelect={setTarget}
                   />
                 )}
@@ -195,7 +196,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
               {/* Tool */}
               <div>
-                <label className="alm-field-label">Processing tool</label>
+                <label className="alm-field-label">{m.projects_tool_label()}</label>
                 <Controller
                   control={control}
                   name="tool"
@@ -204,7 +205,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
                       options={TOOL_OPTIONS}
                       value={field.value}
                       onChange={(v) => field.onChange(v)}
-                      aria-label="Processing tool"
+                      aria-label={m.projects_tool_label()}
                     />
                   )}
                 />
@@ -216,14 +217,14 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
               {/* Path */}
               <div>
                 <label className="alm-field-label" htmlFor="cp-path">
-                  Folder path
-                  <span className="alm-field-hint"> — library-root-relative (e.g. projects/NGC7000_NB)</span>
+                  {m.projects_create_path_label()}
+                  <span className="alm-field-hint"> {m.projects_create_path_hint()}</span>
                 </label>
                 <input
                   id="cp-path"
                   className="alm-input"
                   type="text"
-                  placeholder="projects/my-project"
+                  placeholder={m.projects_create_path_placeholder()}
                   aria-invalid={Boolean(errors.path)}
                   aria-describedby={errors.path ? 'path-error' : undefined}
                   {...register('path')}
@@ -237,11 +238,11 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
               {/* Notes */}
               <div>
-                <label className="alm-field-label" htmlFor="cp-notes">Notes (optional)</label>
+                <label className="alm-field-label" htmlFor="cp-notes">{m.projects_create_notes_label()}</label>
                 <textarea
                   id="cp-notes"
                   className="alm-input"
-                  placeholder="Any notes about this project…"
+                  placeholder={m.projects_create_notes_placeholder()}
                   rows={3}
                   maxLength={MAX_NOTES_LEN + 10}
                   {...register('notes')}
@@ -257,10 +258,10 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
             {/* Footer */}
             <div className="alm-confirm-overlay__footer">
               <Btn type="button" variant="ghost" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>
-                Cancel
+                {m.common_cancel()}
               </Btn>
               <Btn type="submit" variant="primary" disabled={isSubmitting}>
-                {isSubmitting ? 'Creating…' : 'Create project'}
+                {isSubmitting ? m.projects_create_creating() : m.projects_create_btn()}
               </Btn>
             </div>
           </form>

@@ -14,6 +14,7 @@
 
 import type { ReactNode } from 'react';
 import { Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 
 export interface FilterOption {
   value: string;
@@ -316,8 +317,8 @@ export function FilterToolbar({
             variant="ghost"
             className="alm-filterbar__sort-dir"
             onClick={sort.onDirToggle}
-            aria-label={`Sort direction: ${sort.dir === 'asc' ? 'ascending' : 'descending'}`}
-            title={sort.dir === 'asc' ? 'Ascending' : 'Descending'}
+            aria-label={m.filter_sort_dir_aria({ dir: sort.dir === 'asc' ? m.filter_sort_dir_ascending() : m.filter_sort_dir_descending() })}
+            title={sort.dir === 'asc' ? m.filter_sort_dir_ascending() : m.filter_sort_dir_descending()}
           >
             <span aria-hidden="true">{sort.dir === 'asc' ? '▲' : '▼'}</span>
           </Btn>

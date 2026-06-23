@@ -35,6 +35,7 @@ import {
 import type { TargetDetailV3, TargetOpError, TargetListItem } from '@/api/commands';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 import { rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
 import { FilterBadges } from './FilterBadges';
 
@@ -62,8 +63,9 @@ function kindLabel(kind: string): string {
       return 'desig';
     case 'common_name':
       return 'name';
+     
     case 'user':
-      return 'user';
+      return m.targets_alias_kind_user();
     default:
       return kind;
   }
@@ -216,7 +218,7 @@ function AltitudeGraph({ points }: AltitudeGraphProps) {
       <svg
         className="alm-planner__graph-svg"
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-        aria-label="Tonight altitude graph (approximate)"
+        aria-label={m.targets_detail_alt_graph_aria()}
         role="img"
       >
         {/* Usable altitude shaded band (≥30°) */}
@@ -266,7 +268,7 @@ function AltitudeGraph({ points }: AltitudeGraphProps) {
           y={PAD_T + 9}
           className="alm-planner__graph-label-text"
         >
-          transit
+          {m.targets_detail_transit()}
         </text>
 
         {/* Y-axis */}
@@ -430,7 +432,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   if (loadState.status === 'loading') {
     return (
       <DetailPane>
-        <EmptyState title="Loading…" desc="" />
+        <EmptyState title={m.common_loading()} desc="" />
       </DetailPane>
     );
   }
@@ -438,7 +440,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   if (loadState.status === 'error') {
     return (
       <DetailPane>
-        <EmptyState title="Error" desc={loadState.message} />
+        <EmptyState title={m.settings_advanced_log_error()} desc={loadState.message} />
       </DetailPane>
     );
   }
@@ -466,25 +468,25 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
 
   // Identity facts split across two tabular columns (left-packed).
   const identityA: PropertyDef[] = [
-    { key: 'desig', label: 'Designation', value: detail.primaryDesignation },
-    { key: 'type', label: 'Type', value: detail.objectType.replace(/_/g, ' ') },
-    { key: 'constellation', label: 'Constellation', value: item?.constellation ?? null },
-    { key: 'radec', label: 'RA / Dec', value: raDecStr },
+    { key: 'desig', label: m.targets_col_designation(), value: detail.primaryDesignation },
+    { key: 'type', label: m.cmp_target_search_type_label(), value: detail.objectType.replace(/_/g, ' ') },
+    { key: 'constellation', label: m.targets_prop_constellation(), value: item?.constellation ?? null },
+    { key: 'radec', label: m.targets_prop_ra_dec(), value: raDecStr },
   ];
   const identityB: PropertyDef[] = [
-    { key: 'magnitude', label: 'Magnitude', value: item?.magnitude ?? null },
-    { key: 'source', label: 'Source', value: detail.source },
+    { key: 'magnitude', label: m.targets_prop_magnitude(), value: item?.magnitude ?? null },
+    { key: 'source', label: m.projects_wizard_col_source(), value: detail.source },
     ...(detail.simbadOid != null
-      ? [{ key: 'simbad', label: 'SIMBAD OID', value: detail.simbadOid } as PropertyDef]
+      ? [{ key: 'simbad', label: m.targets_prop_simbad_oid(), value: detail.simbadOid } as PropertyDef]
       : []),
   ];
 
   // Tonight stats (numeric) — Filters render separately (a component, not a value).
   const tonightStats: PropertyDef[] = rowAlt
     ? [
-        { key: 'maxalt', label: 'Max alt', value: `${Math.round(rowAlt.maxAltDeg)}°` },
-        { key: 'imgtime', label: 'Img time', value: `${rowAlt.hoursAboveUsable.toFixed(1)} h` },
-        { key: 'lunar', label: 'Lunar', value: `${Math.round(rowAlt.lunarDistanceDeg)}°` },
+        { key: 'maxalt', label: m.targets_col_max_alt(), value: `${Math.round(rowAlt.maxAltDeg)}°` },
+        { key: 'imgtime', label: m.targets_col_img_time(), value: `${rowAlt.hoursAboveUsable.toFixed(1)} h` },
+        { key: 'lunar', label: m.targets_col_lunar(), value: `${Math.round(rowAlt.lunarDistanceDeg)}°` },
       ]
     : [];
 
@@ -512,10 +514,10 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
                   void navigate({ to: '/projects/new' });
                 }}
               >
-                + New project here
+                {m.targets_detail_new_project()}
               </Btn>
               <Btn size="sm" variant="ghost" disabled>
-                Add to plan
+                {m.targets_detail_add_to_plan()}
               </Btn>
             </div>
           </div>
@@ -543,14 +545,14 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         {/* Tonight column: a small transit graph + the planner stats. */}
         <div className="alm-planner__tonight">
           <div className="alm-planner__graph-title">
-            Tonight · ~{Math.round(STUB_OBSERVER_LAT_DEG)}°N
+            {m.targets_detail_tonight_title({ lat: Math.round(STUB_OBSERVER_LAT_DEG) })}
           </div>
           <AltitudeGraph points={tonightPoints} />
           {rowAlt && (
             <>
               <PropertyTable mode="view" properties={tonightStats} />
               <div className="alm-planner__tonight-filters">
-                <span className="alm-planner__tonight-filters-label">Filters</span>
+                <span className="alm-planner__tonight-filters-label">{m.common_filters()}</span>
                 <FilterBadges recommendation={rowAlt.filters} />
               </div>
             </>
@@ -562,10 +564,10 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       {/* STUB: target coverage — gen-3 TargetDetailV3 does not yet expose
           per-filter coverage. Render the section header with a stub note. */}
       <div className="alm-planner__coverage">
-        <p className="alm-planner__section-title">Coverage</p>
+        <p className="alm-planner__section-title">{m.common_coverage()}</p>
         <div className="alm-planner__coverage-list">
           <span className="alm-planner__coverage-stub">
-            No coverage data yet.
+            {m.targets_detail_no_coverage()}
           </span>
         </div>
       </div>
@@ -574,25 +576,25 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       {/* STUB: target↔session/project linkage backend pending (spec 036 open gap). */}
       <div className="alm-planner__links">
         <div>
-          <p className="alm-planner__link-col-title">Sessions</p>
+          <p className="alm-planner__link-col-title">{m.common_sessions()}</p>
           <span className="alm-planner__link-empty">
-            No linked sessions yet.
+            {m.targets_detail_no_sessions()}
           </span>
         </div>
         <div>
-          <p className="alm-planner__link-col-title">Projects</p>
+          <p className="alm-planner__link-col-title">{m.common_projects()}</p>
           <span className="alm-planner__link-empty">
-            No projects linked.
+            {m.targets_detail_no_projects_linked()}
           </span>
         </div>
       </div>
 
       {/* ── Display label ────────────────────────────────────────────────── */}
-      <Section title="Display label">
+      <Section title={m.targets_detail_display_label_title()}>
         {displayAliasEditing ? (
           <div className="alm-target-detail__display-alias-edit">
             <input
-              aria-label="Display label"
+              aria-label={m.targets_detail_display_label_title()}
               placeholder={detail.primaryDesignation}
               value={displayAliasInput}
               onChange={(e) => setDisplayAliasInput(e.target.value)}
@@ -607,21 +609,21 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               onClick={handleDisplayAliasSet}
               className="alm-target-detail__action-btn"
             >
-              Save
+              {m.common_save()}
             </button>
             {detail.displayAlias != null && (
               <button
                 onClick={handleDisplayAliasClear}
                 className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
               >
-                Clear
+                {m.common_clear()}
               </button>
             )}
             <button
               onClick={() => setDisplayAliasEditing(false)}
               className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
             >
-              Cancel
+              {m.common_cancel()}
             </button>
           </div>
         ) : (
@@ -629,7 +631,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
             <span className="alm-target-detail__display-alias-value">
               {detail.displayAlias ?? (
                 <em className="alm-target-detail__display-alias-placeholder">
-                  Not set — showing primary designation
+                  {m.targets_detail_display_label_unset()}
                 </em>
               )}
             </span>
@@ -637,18 +639,20 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               onClick={() => setDisplayAliasEditing(true)}
               className="alm-target-detail__edit-btn"
             >
-              {detail.displayAlias != null ? 'Edit' : 'Set'}
+              {detail.displayAlias != null
+                ? m.projects_detail_edit_btn()
+                : m.targets_detail_set_alias()}
             </button>
           </div>
         )}
       </Section>
 
       {/* ── Aliases ──────────────────────────────────────────────────────── */}
-      <Section title="Aliases" count={detail.aliases.length}>
+      <Section title={m.common_aliases()} count={detail.aliases.length}>
         <div className="alm-target-detail__alias-list">
           {detail.aliases.map((a) => (
             <Pill key={a.id} variant={a.kind === 'user' ? 'accent' : 'ghost'}>
-              <span title={`kind: ${a.kind}`}>
+              <span title={m.targets_detail_alias_kind_title({ kind: a.kind })}>
                 <span className="alm-target-detail__alias-kind">
                   [{kindLabel(a.kind)}]
                 </span>
@@ -656,7 +660,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               </span>
               {a.kind === 'user' && (
                 <button
-                  aria-label={`Remove alias ${a.alias}`}
+                  aria-label={m.targets_detail_alias_remove_aria({ alias: a.alias })}
                   className="alm-target-detail__alias-remove"
                   onClick={() => handleAliasRemove(a.id)}
                 >
@@ -667,7 +671,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
           ))}
           {detail.aliases.length === 0 && (
             <span className="alm-target-detail__alias-empty">
-              No aliases
+              {m.targets_detail_no_aliases()}
             </span>
           )}
         </div>
@@ -675,8 +679,8 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         {/* Add user alias form */}
         <div className="alm-target-detail__alias-add-row">
           <input
-            aria-label="New alias"
-            placeholder="Add user alias…"
+            aria-label={m.targets_detail_alias_input_aria()}
+            placeholder={m.targets_detail_alias_placeholder()}
             value={aliasInput}
             onChange={(e) => setAliasInput(e.target.value)}
             onKeyDown={(e) => {
@@ -688,7 +692,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
             onClick={handleAliasAdd}
             className="alm-target-detail__action-btn"
           >
-            Add
+            {m.common_add()}
           </button>
         </div>
         {aliasError && (
@@ -708,11 +712,11 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
           section was removed to avoid two Sessions surfaces. */}
 
       {/* ── Projects (empty-state stub) ──────────────────────────────────── */}
-      <Section title="Projects">
+      <Section title={m.common_projects()}>
         {/* STUB: target↔project linkage backend pending */}
         <EmptyState
-          title="No projects linked"
-          desc="No projects linked."
+          title={m.targets_detail_no_projects_linked_title()}
+          desc={m.targets_detail_no_projects_linked()}
         />
       </Section>
 
@@ -721,7 +725,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         className="alm-target-detail__back-btn"
         onClick={() => navigate({ to: '/targets' })}
       >
-        ← All targets
+        {m.targets_detail_back()}
       </button>
     </DetailPane>
   );

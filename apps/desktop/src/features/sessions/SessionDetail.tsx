@@ -19,6 +19,7 @@ import {
   type PropertyDef,
 } from '@/components';
 import { EmptyState, Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 
 interface Props {
   session: InventorySession | null;
@@ -80,8 +81,8 @@ export function SessionDetail({
     return (
       <DetailPane>
         <EmptyState
-          title="Select a session"
-          desc="Select a session to view its details."
+          title={m.sessions_select_title()}
+          desc={m.sessions_select_desc()}
         />
       </DetailPane>
     );
@@ -94,22 +95,22 @@ export function SessionDetail({
 
   // Session facts as a clean tabular PropertyTable, spread across two columns.
   const factProps: PropertyDef[] = [
-    { key: 'target', label: 'Target', value: session.target ?? null, source: prov?.target ? 'inferred' : 'fits' },
-    { key: 'filter', label: 'Filter', value: session.filter ?? null, source: prov?.filter ? 'inferred' : 'fits' },
-    { key: 'frames', label: 'Frames', value: session.frames },
-    { key: 'exposure', label: 'Exposure', value: session.exposure ?? null, source: 'fits' },
+    { key: 'target', label: m.projects_create_target_label(), value: session.target ?? null, source: prov?.target ? 'inferred' : 'fits' },
+    { key: 'filter', label: m.common_filter(), value: session.filter ?? null, source: prov?.filter ? 'inferred' : 'fits' },
+    { key: 'frames', label: m.projects_wizard_col_frames(), value: session.frames },
+    { key: 'exposure', label: m.calibration_fp_exposure(), value: session.exposure ?? null, source: 'fits' },
     ...(integrationLabel != null
-      ? [{ key: 'integration', label: 'Total integration', value: integrationLabel } as PropertyDef]
+      ? [{ key: 'integration', label: m.sessions_col_total_integration(), value: integrationLabel } as PropertyDef]
       : []),
-    { key: 'night', label: 'Night', value: session.capturedOn ?? null, source: 'fits' },
-    { key: 'camera', label: 'Camera', value: session.camera ?? null, source: 'fits' },
-    { key: 'gain', label: 'Gain', value: session.gain ?? null, source: 'fits' },
-    { key: 'binning', label: 'Binning', value: session.binning ?? null, source: 'fits' },
+    { key: 'night', label: m.sessions_col_night(), value: session.capturedOn ?? null, source: 'fits' },
+    { key: 'camera', label: m.settings_calmatch_camera(), value: session.camera ?? null, source: 'fits' },
+    { key: 'gain', label: m.settings_calmatch_gain(), value: session.gain ?? null, source: 'fits' },
+    { key: 'binning', label: m.settings_calmatch_binning(), value: session.binning ?? null, source: 'fits' },
     ...(session.setTemp
-      ? [{ key: 'temp', label: 'Sensor temp', value: session.setTemp, source: 'fits' } as PropertyDef]
+      ? [{ key: 'temp', label: m.settings_calmatch_sensor_temp(), value: session.setTemp, source: 'fits' } as PropertyDef]
       : []),
     ...(prov?.confirmedBy
-      ? [{ key: 'confirmedby', label: 'Confirmed by', value: prov.confirmedBy, source: 'user' } as PropertyDef]
+      ? [{ key: 'confirmedby', label: m.sessions_col_confirmed_by(), value: prov.confirmedBy, source: 'user' } as PropertyDef]
       : []),
   ];
 
@@ -124,17 +125,17 @@ export function SessionDetail({
     <span className="alm-session-detail2__actions">
       {confirmVisible && (
         <Btn size="sm" variant="primary" onClick={onConfirm} disabled={pending}>
-          Confirm
+          {m.setup_step_confirm_label()}
         </Btn>
       )}
       {reopenVisible && (
         <Btn size="sm" onClick={onReopen} disabled={pending}>
-          Re-open review
+          {m.sessions_reopen_btn()}
         </Btn>
       )}
       {rejectVisible && (
         <Btn size="sm" variant="danger" onClick={onReject} disabled={pending}>
-          Reject
+          {m.sessions_reject_btn()}
         </Btn>
       )}
     </span>
@@ -156,7 +157,7 @@ export function SessionDetail({
           <PropertyTable mode="view" showSource properties={colB} />
         </div>
         <div className="alm-session-detail2__linked">
-          <div className="alm-session-detail2__head">Linked projects</div>
+          <div className="alm-session-detail2__head">{m.sessions_linked_projects_heading()}</div>
           {isLinked ? (
             <div className="alm-session-detail2__linked-list">
               {session.linked?.projects?.map((p) => (
@@ -171,7 +172,7 @@ export function SessionDetail({
               ))}
             </div>
           ) : (
-            <span className="alm-session-detail2__muted">None</span>
+            <span className="alm-session-detail2__muted">{m.common_none()}</span>
           )}
         </div>
       </div>

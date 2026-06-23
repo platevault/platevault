@@ -10,6 +10,7 @@ import { useState, useEffect, Fragment } from 'react';
 import { Toggle, SegControl, Pill, Banner } from '@/ui';
 import { getSettings } from '@/api/commands';
 import { CLEANUP_TYPES, CLEANUP_STAGE_ORDER, type CleanupTypeFixture } from '@/data/fixtures/settings';
+import { m } from '@/lib/i18n';
 import { SettingsSection, SettingsRow } from './SettingsKit';
 
 type CleanupAction = CleanupTypeFixture['action'];
@@ -109,9 +110,9 @@ export function Cleanup({ save }: CleanupProps) {
   return (
     <>
       {/* Source protection — spec 018 owned, persisted via settings backend */}
-      <SettingsSection title="Source Protection">
+      <SettingsSection title={m.settings_cleanup_protection_title()}>
         <SettingsRow
-          label="Block permanent delete"
+          label={m.settings_cleanup_block_delete_label()}
           info="Routes all destructive operations through archive or trash workflows instead of immediate permanent deletion."
         >
           <Toggle
@@ -124,7 +125,7 @@ export function Cleanup({ save }: CleanupProps) {
         </SettingsRow>
 
         <SettingsRow
-          label="Default protection"
+          label={m.settings_cleanup_default_protection_label()}
           info="Controls the starting protection level assigned to newly ingested sources. Protected sources are skipped by cleanup plans unless explicitly approved."
         >
           <select
@@ -136,27 +137,26 @@ export function Cleanup({ save }: CleanupProps) {
               save('cleanup', { defaultProtection: v });
             }}
           >
-            <option value="protected">Protected</option>
-            <option value="normal">Normal</option>
-            <option value="unprotected">Unprotected</option>
+            <option value="protected">{m.settings_cleanup_protection_protected()}</option>
+            <option value="normal">{m.settings_cleanup_protection_normal()}</option>
+            <option value="unprotected">{m.settings_cleanup_protection_unprotected()}</option>
           </select>
         </SettingsRow>
       </SettingsSection>
 
       {/* Per-type cleanup actions — fixture mockup, not yet wired to backend */}
       {/* TODO(cleanup-plan-spec): replace CLEANUP_TYPES fixture with backend data */}
-      <SettingsSection title="Per-Type Default Actions">
+      <SettingsSection title={m.settings_cleanup_pertype_title()}>
         {warnedTypes.length > 0 && (
           <Banner variant="danger" className="alm-cleanup__warning">
-            Protected categories are set to a destructive action: {warnedTypes.join(', ')}.
-            These are costly to reacquire — confirm this is intentional.
+            {m.settings_cleanup_pertype_desc({ types: warnedTypes.join(', ') })}
           </Banner>
         )}
         <table className="alm-table">
           <thead>
             <tr>
-              <th>Data type</th>
-              <th className="alm-cleanup__action-col">Default action</th>
+              <th>{m.settings_cleanup_col_datatype()}</th>
+              <th className="alm-cleanup__action-col">{m.settings_cleanup_col_action()}</th>
             </tr>
           </thead>
           <tbody>
@@ -173,7 +173,7 @@ export function Cleanup({ save }: CleanupProps) {
                         <span className="alm-cleanup__type-cell">
                           {row.type}
                           {row.warnOnChange && (
-                            <Pill variant="neutral">Protected</Pill>
+                            <Pill variant="neutral">{m.settings_cleanup_protection_protected()}</Pill>
                           )}
                         </span>
                       </td>

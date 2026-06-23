@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DimensionAccessor } from './grouping';
 import type { InboxListItem } from '@/api/commands';
+import { m } from '@/lib/i18n';
 
 // ── Grouping dimension registry ─────────────────────────────────────────────────
 
@@ -43,15 +44,15 @@ function basename(p: string | null | undefined): string | null {
  * NONE_KEY → "(none)" label.
  */
 export const GROUPING_DIMENSIONS: readonly Dimension[] = [
-  { id: 'target',     label: 'Target',      accessor: (i) => i.groupTarget },
-  { id: 'frameType',  label: 'Frame type',  accessor: (i) => i.groupFrameType },
-  { id: 'date',       label: 'Date',        accessor: (i) => i.groupDate },
-  { id: 'filter',     label: 'Filter',      accessor: (i) => i.groupFilter },
-  { id: 'exposure',   label: 'Exposure',    accessor: (i) => i.groupExposure },
-  { id: 'instrument', label: 'Instrument',  accessor: (i) => i.groupInstrument },
-  { id: 'source',     label: 'Source',      accessor: (i) => basename(i.rootAbsolutePath) },
-  { id: 'format',     label: 'Format',      accessor: (i) => i.format },
-  { id: 'orgState',   label: 'Org. state',  accessor: (i) => i.organizationState },
+  { id: 'target',     label: m.inbox_dim_target(),      accessor: (i) => i.groupTarget },
+  { id: 'frameType',  label: m.inbox_frame_type_label(), accessor: (i) => i.groupFrameType },
+  { id: 'date',       label: m.archive_prop_date(),     accessor: (i) => i.groupDate },
+  { id: 'filter',     label: m.common_filter(),         accessor: (i) => i.groupFilter },
+  { id: 'exposure',   label: m.inbox_dim_exposure(),    accessor: (i) => i.groupExposure },
+  { id: 'instrument', label: m.inbox_dim_instrument(),  accessor: (i) => i.groupInstrument },
+  { id: 'source',     label: m.inbox_dim_source(),      accessor: (i) => basename(i.rootAbsolutePath) },
+  { id: 'format',     label: m.inbox_dim_format(),      accessor: (i) => i.format },
+  { id: 'orgState',   label: m.inbox_dim_org_state(),   accessor: (i) => i.organizationState },
 ];
 
 /** Accessor map keyed by dimension id, consumed by `groupByDimensions`. */
@@ -176,16 +177,16 @@ export function InboxControls({
               value={value}
               disabled={disabled}
               onChange={(e) => setSlot(slot, e.target.value)}
-              aria-label={slot === 0 ? 'Group by' : `Then group by (level ${slot + 1})`}
+              aria-label={slot === 0 ? m.inbox_group_by_aria() : m.inbox_group_by_level_aria({ level: slot + 1 })}
             >
               <option value={NONE_DIM}>
-                {slot === 0 ? 'Group: none' : 'then: —'}
+                {slot === 0 ? m.inbox_controls_group_none() : m.inbox_controls_then_none()}
               </option>
               {GROUPING_DIMENSIONS.filter(
                 (d) => d.id === value || !usedEarlier.has(d.id),
               ).map((d) => (
                 <option key={d.id} value={d.id}>
-                  {slot === 0 ? `Group: ${d.label}` : `then: ${d.label}`}
+                  {slot === 0 ? m.inbox_groupby_chip_primary({ label: d.label }) : m.inbox_groupby_chip_secondary({ label: d.label })}
                 </option>
               ))}
             </select>
@@ -198,10 +199,10 @@ export function InboxControls({
           className="alm-select"
           value={sortBy}
           onChange={(e) => onSortByChange(e.target.value as InboxSortBy)}
-          aria-label="Sort by"
+          aria-label={m.inbox_sort_by_aria()}
         >
-          <option value="name">Sort: name</option>
-          <option value="state">Sort: state</option>
+          <option value="name">{m.targets_legacy_sort_name()}</option>
+          <option value="state">{m.inbox_sort_state()}</option>
         </select>
         <select
           className="alm-select"
@@ -210,11 +211,11 @@ export function InboxControls({
             const v = e.target.value as FilterType;
             onFilterTypeChange(v === 'all' ? undefined : v);
           }}
-          aria-label="Filter file type"
+          aria-label={m.inbox_filter_file_type_aria()}
         >
-          <option value="all">All file types</option>
-          <option value="fits">FITS</option>
-          <option value="video">Video</option>
+          <option value="all">{m.inbox_filter_all_file_types()}</option>
+          <option value="fits">{m.inbox_filter_fits()}</option>
+          <option value="video">{m.inbox_filter_video()}</option>
         </select>
       </div>
     </div>

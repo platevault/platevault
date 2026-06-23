@@ -27,7 +27,8 @@ export function InfoTip({ tip, label = 'More information', className }: InfoTipP
       aria-label={text ? `${label}: ${text}` : label}
       data-tip={text}
     >
-      i
+      {/* eslint-disable-next-line alm/no-user-string -- decorative icon glyph, not user prose */}
+      {'i'}
     </span>
   );
 }

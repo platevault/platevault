@@ -93,3 +93,22 @@ destination-model scenarios (calibration structure, inbox root selection,
 multi-root prompt vs single-root auto, missing-date gate) is the recommended
 post-merge verification loop (see the `tauri-mcp-windows-verify-mechanics`
 memory); Layer-1 + vitest coverage above gates the merge.
+
+## Spec 035 iteration — US4 ingest → session → target — 2026-06-21
+
+Applied light frames create `acquisition_session` records grouped by capture
+identity and link a resolved `canonical_target` (FR-016). Folds into areas
+#3/#4 (inbox lifecycle) + the Sessions read path. Closes GitHub issue #307
+(empty Sessions page; targets never linked).
+
+| Scenario (spec 035 US4 acceptance) | Layer-1 test |
+|---|---|
+| M31 cache-hit grouping: two alias-spelled light frames (`M 31`, `NGC 224`) → ONE session, `frame_ids` length 2, `canonical_target_id` = seeded M31, `list_sessions` frame_count 2 + target name | `crates/app/core/tests/ingest_sessions_integration.rs::two_m31_frames_group_into_one_linked_session` (T045) |
+| Unknown OBJECT → session created, `canonical_target_id` NULL, `ingest_resolution` pending, never fabricated; `resolve_pending` (FakeResolver) + back-fill → linked | `crates/app/core/tests/ingest_sessions_integration.rs::unknown_object_session_backfills_after_resolve` (T046) |
+| Per-frame ingest unit coverage (light detection, binning, DATE-OBS UTC fallback, session_key) | `crates/app/targets/src/ingest_sessions.rs` unit tests |
+| Inline cache-hit / miss-enqueue / drain / offline-pending | `crates/app/targets/src/ingest_resolution.rs` unit tests |
+
+**Background drain (T043)**: the `resolve_pending` + `backfill_session_targets`
+interval task in `apps/desktop/src-tauri/src/lib.rs::run_app` is exercised
+function-by-function at Layer 1 (T046 calls both directly); the live interval
+loop is validated in the Windows real-app E2E loop.

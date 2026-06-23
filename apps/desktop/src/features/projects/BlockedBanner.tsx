@@ -21,6 +21,7 @@
  */
 
 import { Banner, Btn } from '@/ui';
+import { m } from '@/lib/i18n';
 
 export interface BlockedReasonSourceMissing {
   kind: 'source_missing';
@@ -124,7 +125,7 @@ export function BlockedBanner({ reason, onResolve, disabled }: BlockedBannerProp
             disabled={disabled}
             data-testid="blocked-resolve-btn"
           >
-            Resolve blocker
+            {m.projects_resolve_blocker()}
           </Btn>
         </div>
       </div>

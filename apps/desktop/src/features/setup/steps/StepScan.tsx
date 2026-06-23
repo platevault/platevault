@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pill } from '@/ui/Pill';
 import type { PillVariant } from '@/ui/Pill';
+import { m } from '@/lib/i18n';
 import { inboxScanFolder, inboxClassify } from '@/api/commands';
 import type { InboxItemSummary, InboxClassifyResponse } from '@/api/commands';
 import type { SourceEntry } from '../sources-store';
@@ -45,13 +46,13 @@ export interface StepScanProps {
 function phaseLabel(phase: ScanPhase): string {
   switch (phase) {
     case 'pending':
-      return 'Pending';
+      return m.setup_scan_phase_pending();
     case 'scanning':
-      return 'Scanning…';
+      return m.setup_scan_scanning();
     case 'done':
-      return 'Done';
+      return m.setup_scan_phase_done();
     case 'error':
-      return 'Error';
+      return m.settings_advanced_log_error();
   }
 }
 
@@ -197,7 +198,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
 
       {phase === 'scanning' && (
         <p className="alm-setup-scan__msg alm-setup-scan__msg--scanning">
-          Scanning…
+          {m.setup_scan_scanning()}
         </p>
       )}
 
@@ -206,7 +207,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
           data-testid="scan-empty"
           className="alm-setup-scan__msg alm-setup-scan__msg--empty"
         >
-          Nothing detected in this folder.
+          {m.setup_scan_nothing_detected()}
         </p>
       )}
 
@@ -232,10 +233,10 @@ function SourceSummary({ state }: SourceSummaryProps) {
             <table className="alm-setup-scan__table">
               <thead>
                 <tr className="alm-setup-scan__thead-row">
-                  <th className="alm-setup-scan__cell">Folder / File</th>
-                  <th className="alm-setup-scan__cell">Files</th>
-                  <th className="alm-setup-scan__cell">Format</th>
-                  <th className="alm-setup-scan__cell">Detected types</th>
+                  <th className="alm-setup-scan__cell">{m.setup_scan_col_folder()}</th>
+                  <th className="alm-setup-scan__cell">{m.setup_scan_col_files()}</th>
+                  <th className="alm-setup-scan__cell">{m.setup_scan_col_format()}</th>
+                  <th className="alm-setup-scan__cell">{m.setup_scan_col_types()}</th>
                 </tr>
               </thead>
               <tbody>
@@ -254,7 +255,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
                     >
                       <td className="alm-setup-scan__cell--path">
                         <span className="alm-setup-scan__path-cell-inner">
-                          {item.isMaster && <Pill variant="info">Master</Pill>}
+                          {item.isMaster && <Pill variant="info">{m.setup_scan_master()}</Pill>}
                           {item.relativePath}
                         </span>
                       </td>
@@ -382,7 +383,7 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
     >
       {sourceStates.length === 0 ? (
         <p className="alm-setup-scan__empty-msg">
-          No sources registered. Go back and add at least one folder.
+          {m.setup_scan_no_sources()}
         </p>
       ) : (
         <>
@@ -401,8 +402,8 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
               className="alm-setup-scan__summary"
             >
               {totalDetected > 0
-                ? `${totalDetected} folder${totalDetected !== 1 ? 's' : ''} detected across all sources. Head to the Inbox to review and approve.`
-                : 'No folders detected. You can add more sources in Settings.'}
+                ? m.setup_scan_summary_found({ count: totalDetected, suffix: totalDetected !== 1 ? 's' : '' })
+                : m.setup_scan_summary_empty()}
             </p>
           )}
         </>

@@ -13,6 +13,7 @@
 
 import { Component } from 'react';
 import type { ReactNode, ErrorInfo } from 'react';
+import { m } from '@/lib/i18n';
 
 interface Props {
   children: ReactNode;
@@ -59,10 +60,10 @@ export class AppErrorBoundary extends Component<Props, State> {
           className="alm-error-boundary__overlay"
         >
           <h1 className="alm-error-boundary__heading">
-            Something went wrong
+            {m.shell_error_heading()}
           </h1>
           <p className="alm-error-boundary__body">
-            Something failed to render. Reload the view, or restart the app if it keeps happening.
+            {m.shell_error_body()}
           </p>
           {error.message && (
             <pre className="alm-error-boundary__detail">
@@ -75,7 +76,7 @@ export class AppErrorBoundary extends Component<Props, State> {
             data-testid="app-error-boundary-reset"
             className="alm-error-boundary__reset-btn"
           >
-            Try again
+            {m.common_try_again()}
           </button>
         </div>
       );

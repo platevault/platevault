@@ -1,6 +1,7 @@
 // TODO(spec 030 (ingestion settings)): wire to backend when owning spec implements its command.
 import { useState } from 'react';
 import { Toggle } from '@/ui';
+import { m } from '@/lib/i18n';
 import { SettingsSection, SettingsRow } from './SettingsKit';
 
 interface IngestionProps {
@@ -27,9 +28,9 @@ export function Ingestion({ save }: IngestionProps) {
 
   return (
     <>
-      <SettingsSection title="Scan defaults">
+      <SettingsSection title={m.settings_ingestion_scan_title()}>
         <SettingsRow
-          label="Scan on startup"
+          label={m.settings_ingestion_scan_startup()}
           info="Scan all roots each time the application opens."
         >
           <Toggle
@@ -39,7 +40,7 @@ export function Ingestion({ save }: IngestionProps) {
         </SettingsRow>
 
         <SettingsRow
-          label="Follow symbolic links"
+          label={m.settings_ingestion_follow_symlinks()}
           info="Follow symlinks during filesystem scans. Disabled by default to prevent scan loops."
         >
           <Toggle
@@ -49,7 +50,7 @@ export function Ingestion({ save }: IngestionProps) {
         </SettingsRow>
 
         <SettingsRow
-          label="Follow NTFS junctions"
+          label={m.settings_ingestion_follow_junctions()}
           info="Follow NTFS directory junctions on Windows. Enable if your library uses junctions for external drives."
         >
           <Toggle
@@ -59,9 +60,9 @@ export function Ingestion({ save }: IngestionProps) {
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection title="File hashing">
+      <SettingsSection title={m.settings_ingestion_hashing_title()}>
         <SettingsRow
-          label="Hashing mode"
+          label={m.settings_ingestion_hashing_mode()}
           info="Lazy defers hashing until a feature needs it (e.g. duplicate detection). Eager hashes every file on first scan. Off disables hashing entirely."
         >
           <select
@@ -73,9 +74,9 @@ export function Ingestion({ save }: IngestionProps) {
               persist({ hashing_mode: v });
             }}
           >
-            <option value="lazy">Lazy — hash only when needed</option>
-            <option value="eager">Eager — hash every file on first scan</option>
-            <option value="off">Off — never hash</option>
+            <option value="lazy">{m.settings_ingestion_hashing_lazy()}</option>
+            <option value="eager">{m.settings_ingestion_hashing_eager()}</option>
+            <option value="off">{m.settings_ingestion_hashing_off()}</option>
           </select>
         </SettingsRow>
       </SettingsSection>

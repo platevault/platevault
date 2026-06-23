@@ -1,4 +1,5 @@
 import { clsx } from 'clsx';
+import { m } from '@/lib/i18n';
 import { useLogPanel } from './LogPanelContext';
 import { useOperationStatus } from './OperationStatusContext';
 import { usePageStatus } from './PageStatusContext';
@@ -43,7 +44,7 @@ export function StatusBar() {
             <span>{statusLabel}</span>
           </>
         ) : (
-          <span className="alm-statusbar__idle">Ready</span>
+          <span className="alm-statusbar__idle">{m.status_ready()}</span>
         )}
       </div>
 
@@ -61,21 +62,21 @@ export function StatusBar() {
           from the status_summary contract. Images is a STUB until a library-wide
           file count lands in the metadata pipeline. */}
       <div className="alm-statusbar__lib" data-testid="statusbar-library-stats">
-        <span title="Total acquisition sessions">
-          {formatCount(status.sessionCount)} sessions
+        <span title={m.status_sessions_title()}>
+          {formatCount(status.sessionCount)} {m.status_sessions_label()}
         </span>
         <span className="alm-statusbar__sep">·</span>
-        <span title="Total projects">{formatCount(status.projectCount)} projects</span>
+        <span title={m.status_projects_title()}>{formatCount(status.projectCount)} {m.status_projects_label()}</span>
         <span className="alm-statusbar__sep">·</span>
-        <span title="Total calibration masters">
-          {formatCount(status.calibrationCount)} masters
+        <span title={m.status_masters_title()}>
+          {formatCount(status.calibrationCount)} {m.status_masters_label()}
         </span>
       </div>
 
       {/* RIGHT — persistent storage / cleanup health + log */}
       <div className="alm-statusbar__right">
         {status.cleanupReclaimableBytes > 0 && (
-          <span>{formatBytes(status.cleanupReclaimableBytes)} reclaimable</span>
+          <span>{formatBytes(status.cleanupReclaimableBytes)} {m.status_reclaimable()}</span>
         )}
         {status.volumes.map((vol) => {
           const usedPct =
@@ -85,7 +86,7 @@ export function StatusBar() {
             <span
               key={vol.path}
               className={clsx('alm-statusbar__vol', vol.warning && 'alm-statusbar__vol--warn')}
-              title={`${vol.path}: ${formatBytes(vol.freeBytes)} free / ${formatBytes(vol.totalBytes)}`}
+              title={m.statusbar_vol_title({ path: vol.path, free: formatBytes(vol.freeBytes), total: formatBytes(vol.totalBytes) })}
             >
               <span>{label}</span>
               <span className="alm-statusbar__meter">
@@ -100,9 +101,9 @@ export function StatusBar() {
           type="button"
           className="alm-statusbar__log-toggle"
           onClick={toggle}
-          aria-label="Toggle log panel"
+          aria-label={m.status_log_toggle_aria()}
         >
-          Log
+          {m.status_log_label()}
         </button>
       </div>
     </div>

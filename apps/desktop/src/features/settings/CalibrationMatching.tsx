@@ -15,6 +15,7 @@
 //   Comment tag: STUB-OFFSET-REQUIRED
 import { useState, useEffect } from 'react';
 import { Toggle, Pill } from '@/ui';
+import { m } from '@/lib/i18n';
 import { SettingsSection } from './SettingsKit';
 import {
   calibrationTolerancesGet,
@@ -116,59 +117,59 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
   }
 
   return (
-    <SettingsSection title="Matching criteria">
+    <SettingsSection title={m.settings_calmatch_title()}>
       <table className="alm-table alm-calmatch__table">
         <thead>
           <tr>
-            <th>Field</th>
-            <th className="alm-calmatch__col-required">Match required</th>
-            <th className="alm-calmatch__col-tolerance">Tolerance</th>
+            <th>{m.settings_calmatch_field()}</th>
+            <th className="alm-calmatch__col-required">{m.settings_calmatch_required()}</th>
+            <th className="alm-calmatch__col-tolerance">{m.settings_calmatch_tolerance()}</th>
           </tr>
         </thead>
         <tbody>
           {/* Camera — hard toggle, persists to requireSameCamera */}
           <tr>
-            <td>Camera</td>
+            <td>{m.settings_calmatch_camera()}</td>
             <td>
               <Toggle checked={requireCamera} onChange={handleCameraToggle} />
             </td>
-            <td className="mono">exact</td>
+            <td className="mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Binning — hard toggle, persists to requireSameBinning */}
           <tr>
-            <td>Binning</td>
+            <td>{m.settings_calmatch_binning()}</td>
             <td>
               <Toggle checked={requireBinning} onChange={handleBinningToggle} />
             </td>
-            <td className="mono">exact</td>
+            <td className="mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Gain — hard toggle, persists to requireSameGain */}
           <tr>
-            <td>Gain</td>
+            <td>{m.settings_calmatch_gain()}</td>
             <td>
               <Toggle checked={requireGain} onChange={handleGainToggle} />
             </td>
-            <td className="mono">exact</td>
+            <td className="mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Offset — STUB-OFFSET-REQUIRED: local state only, no backend key */}
           <tr>
-            <td>Offset</td>
+            <td>{m.settings_calmatch_offset()}</td>
             <td>
               {/* STUB: backend MatchingRuleConfig per-field required flags pending
                   (requireSameOffset) — persists locally only */}
               <Toggle checked={requireOffset} onChange={handleOffsetToggle} />
             </td>
-            <td className="mono">exact</td>
+            <td className="mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Sensor temp — soft field: pill label + number input */}
           <tr>
-            <td>Sensor temp</td>
+            <td>{m.settings_calmatch_sensor_temp()}</td>
             <td>
-              <Pill variant="neutral">soft</Pill>
+              <Pill variant="neutral">{m.settings_calmatch_soft()}</Pill>
             </td>
             <td>
               <span className="alm-calmatch__tol-input-row">
@@ -179,18 +180,18 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
                   min={0}
                   step={0.5}
                   onChange={handleTempChange}
-                  aria-label="Sensor temperature tolerance in degrees Celsius"
+                  aria-label={m.settings_calmatch_sensor_temp_aria()}
                 />
-                <span className="alm-calmatch__unit">°C</span>
+                <span className="alm-calmatch__unit">{m.settings_calmatch_unit_c()}</span>
               </span>
             </td>
           </tr>
 
           {/* Dark / bias age — warn-level soft field */}
           <tr>
-            <td>Dark / bias age</td>
+            <td>{m.settings_calmatch_dark_bias_age()}</td>
             <td>
-              <Pill variant="warn">warn</Pill>
+              <Pill variant="warn">{m.settings_calmatch_warn()}</Pill>
             </td>
             <td>
               <span className="alm-calmatch__tol-input-row">
@@ -201,9 +202,9 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
                   min={1}
                   max={3650}
                   onChange={handleAgingChange}
-                  aria-label="Dark and bias age limit in days"
+                  aria-label={m.settings_calmatch_dark_bias_age_aria()}
                 />
-                <span className="alm-calmatch__unit">d</span>
+                <span className="alm-calmatch__unit">{m.settings_calmatch_unit_d()}</span>
               </span>
             </td>
           </tr>
@@ -211,8 +212,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
       </table>
 
       <p className="alm-calmatch__help">
-        Toggle a field off to exclude it from matching (e.g. ignore gain).
-        Soft/warn fields never block a match — they only lower confidence.
+        {m.settings_calmatch_help()}
       </p>
     </SettingsSection>
   );

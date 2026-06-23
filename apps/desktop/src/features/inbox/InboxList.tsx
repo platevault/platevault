@@ -17,6 +17,7 @@ import type { InboxListItem } from '@/api/commands';
 import { Table, type TableColumn, type TableRow } from '@/ui';
 import { groupByDimensions, type GroupNode } from './grouping';
 import { ACCESSORS, DIM_LABELS, type InboxSortBy } from './InboxControls';
+import { m } from '@/lib/i18n';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -136,11 +137,11 @@ export function flattenVisibleTree(
 
 const COLUMNS: TableColumn[] = [
   { key: 'detection', label: 'Detection' },
-  { key: 'type', label: 'Type', style: { width: '7.5rem' } },
-  { key: 'count', label: 'Files', className: 'num', style: { width: '5rem' } },
+  { key: 'type', label: m.inbox_col_type(), style: { width: '7.5rem' } },
+  { key: 'count', label: m.inbox_col_files(), className: 'num', style: { width: '5rem' } },
   {
     key: 'format',
-    label: 'Format',
+    label: m.inbox_dim_format(),
     className: 'alm-inbox-cell--right',
     style: { width: '7rem' },
   },

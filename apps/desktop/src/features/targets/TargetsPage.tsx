@@ -47,6 +47,7 @@ import { listTargets } from '@/api/commands';
 import type { TargetListItem } from '@/api/commands';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
+import { m } from '@/lib/i18n';
 import { Btn, EmptyState } from '@/ui';
 import { AddTargetDialog } from './AddTargetDialog';
 import { TargetDetailV2 } from './TargetDetailV2';
@@ -98,8 +99,8 @@ const MY_TARGETS_EMPTY: TargetListItem[] = [];
 
 /** Group-by options for the Planner top bar (mirrors the other list pages). */
 const GROUP_BY_OPTIONS: FilterOption[] = [
-  { value: 'catalogue', label: 'Catalogue' },
-  { value: 'type', label: 'Object type' },
+  { value: 'catalogue', label: m.cmp_target_search_catalogue_label() },
+  { value: 'type', label: m.targets_groupby_object_type() },
 ];
 
 /** Catalogue multi-select options, in canonical display order. */
@@ -154,7 +155,7 @@ export function matchesSearch(t: TargetListItem, query: string): boolean {
 
 /** My Targets filter options for the FilterToolbar single-select (#91). */
 const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
-  { value: MY_TARGETS_VALUE, label: 'My Targets' },
+  { value: MY_TARGETS_VALUE, label: m.nav_my_targets() },
 ];
 
 /**
@@ -167,13 +168,13 @@ const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
  * any narrowband-possible target. MOCK — not astronomy.
  */
 const FILTER_BAND_OPTIONS: FilterOption[] = [
-  { value: 'L', label: 'L (Lum)' },
-  { value: 'R', label: 'R' },
-  { value: 'G', label: 'G' },
-  { value: 'B', label: 'B' },
-  { value: 'Ha', label: 'Ha' },
-  { value: 'OIII', label: 'OIII' },
-  { value: 'SII', label: 'SII' },
+  { value: 'L', label: m.targets_band_l_lum() },
+  { value: 'R', label: m.targets_band_r() },
+  { value: 'G', label: m.targets_band_g() },
+  { value: 'B', label: m.targets_band_b() },
+  { value: 'Ha', label: m.targets_band_ha() },
+  { value: 'OIII', label: m.targets_band_oiii() },
+  { value: 'SII', label: m.targets_band_sii() },
 ];
 
 export function TargetsPage() {
@@ -230,7 +231,7 @@ export function TargetsPage() {
     setListState({ status: 'loading' });
     listTargets()
       .then((items) => setListState({ status: 'loaded', items }))
-      .catch(() => setListState({ status: 'error', message: 'Failed to load targets.' }));
+      .catch(() => setListState({ status: 'error', message: m.targets_page_error_load() }));
   }, []);
 
   useEffect(() => {
@@ -314,19 +315,19 @@ export function TargetsPage() {
           search={{
             value: search,
             onChange: setSearch,
-            placeholder: 'Search targets...',
-            ariaLabel: 'Search targets',
+            placeholder: m.targets_page_search_placeholder(),
+            ariaLabel: m.targets_page_search_aria(),
           }}
           // My Targets filter (#91): single-select with implicit "All targets"
           // leading option that shows the full Planner catalog when selected.
           fields={[
             {
               key: 'myTargets',
-              label: 'Show',
+              label: m.targets_filter_show_label(),
               value: myTargetsFilter,
               options: MY_TARGETS_FILTER_OPTIONS,
               onChange: setMyTargetsFilter,
-              allLabel: 'All targets',
+              allLabel: m.targets_page_filter_all_targets(),
             },
           ]}
           // Catalogue multi-select, filter-by-filter, and group-by stay visible
@@ -336,7 +337,7 @@ export function TargetsPage() {
           multiFields={[
             {
               key: 'catalogues',
-              label: 'Catalogues',
+              label: m.targets_filter_catalogues_label(),
               value: enabledCatalogues,
               options: CATALOGUE_OPTIONS,
               onChange: (v) => setEnabledCatalogues(v as CatalogueId[]),
@@ -346,7 +347,7 @@ export function TargetsPage() {
               // mock-recommended filter set includes ALL selected bands.
               // NOT astronomy — see planner-altitude.ts for the mock rule.
               key: 'filterBands',
-              label: 'Filters',
+              label: m.common_filters(),
               value: filterBands,
               options: FILTER_BAND_OPTIONS,
               onChange: (v) => setFilterBands(v as FilterBand[]),
@@ -363,7 +364,7 @@ export function TargetsPage() {
         // "Add target" is a page-level action (creates a new catalog object).
         // Per-item actions ("+ New project here") live in TargetDetailV2's
         // detail body, not the top bar.
-        <Btn size="sm" onClick={() => setAddOpen(true)}>Add target</Btn>
+        <Btn size="sm" onClick={() => setAddOpen(true)}>{m.targets_add_target()}</Btn>
       }
     />
   );
@@ -390,7 +391,7 @@ export function TargetsPage() {
         detailLabel="Target details"
       >
         {listState.status === 'error' ? (
-          <EmptyState title="Error" desc={listState.message} />
+          <EmptyState title={m.settings_advanced_log_error()} desc={listState.message} />
         ) : (
           <TargetsTable
             targets={visibleTargets}
@@ -409,10 +410,10 @@ export function TargetsPage() {
               isMyTargets
                 ? favouriteIds.size === 0
                   // No stars yet — nudge the user to star something.
-                  ? 'No favourites yet. Star a target (☆) to add it here.'
+                  ? m.targets_page_my_targets_no_favs()
                   // Stars exist but filters excluded them all.
-                  : 'No favourites match the current filters.'
-                : 'No catalog targets match the current filters.'
+                  : m.targets_page_my_targets_no_match()
+                : m.targets_page_no_match()
             }
           />
         )}

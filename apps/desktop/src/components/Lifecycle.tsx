@@ -1,4 +1,5 @@
 import { PROJECT_LIFECYCLE, projectStateIndex } from '@/lib/lifecycle';
+import { m } from '@/lib/i18n';
 
 export interface LifecycleProps {
   /** Stored project state (e.g. "processing", "setup_incomplete", "blocked"). */
@@ -63,7 +64,7 @@ export function Lifecycle({ state }: LifecycleProps) {
             <div className="alm-lifecycle__dot alm-lifecycle__dot--blocked" />
           </div>
           <span className="alm-lifecycle__label alm-lifecycle__label--danger">
-            blocked
+            {m.projects_stepper_blocked_chip()}
           </span>
         </div>
       )}

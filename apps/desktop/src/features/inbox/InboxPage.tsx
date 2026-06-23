@@ -38,6 +38,8 @@ import { listRoots } from "@/api/commands";
 import type { InboxConfirmDestination } from "@/api/commands";
 import { useSetPageStatus } from "@/app/PageStatusContext";
 import { FilterToolbar, ListPageLayout, PageTopBar } from "@/components";
+import { usePlanApplyProgress } from "@/features/plans/usePlanApplyProgress";
+import { m } from "@/lib/i18n";
 import type { FrameType } from "@/lib/route-contract";
 import { useStaleSelectionCleanup } from "@/lib/use-stale-selection";
 import { addToast } from "@/shared/toast";
@@ -272,6 +274,10 @@ export function InboxPage() {
 	const { applySelected, loading: applySelectedLoading } =
 		useApplySelectedInboxPlans();
 	const { cancel, loading: cancelLoading } = useInboxPlanCancel();
+	// Live long-op progress consumer (spec 042 US16 / FR-021): streams per-item
+	// OperationEvents over the channel when applying a single ingestion plan.
+	const { progress: applyProgress, run: runPlanApply } = usePlanApplyProgress();
+	const [progressPlanId, setProgressPlanId] = useState<string | null>(null);
 
 	/**
 	 * Confirm `item` (optionally targeting a caller-chosen destination `rootId`).
@@ -301,7 +307,9 @@ export function InboxPage() {
 				// spec 041: masters now always return a plan too — every confirm produces
 				// a reviewable plan that appears in the aggregate surface below.
 				addToast({
-					message: `Plan created (${result.itemsTotal} items). Review below before applying.`,
+					message: m.inbox_toast_plan_created({
+						count: String(result.itemsTotal),
+					}),
 					variant: "info",
 				});
 				refreshAll();
@@ -317,8 +325,7 @@ export function InboxPage() {
 						});
 						setRootPickItemId(item.inboxItemId);
 						addToast({
-							message:
-								"Choose a destination library root to generate the plan.",
+							message: m.inbox_toast_choose_dest_root(),
 							variant: "warn",
 						});
 						return;
@@ -343,24 +350,23 @@ export function InboxPage() {
 					// FR-032 (US9): files lack a path-load-bearing attribute. The detail
 					// panel already annotates each blocked file; point the user there.
 					addToast({
-						message:
-							"Some files are missing required attributes. Assign the missing values in the file list, then confirm again.",
+						message: m.inbox_toast_missing_path_attrs(),
 						variant: "warn",
 					});
 					return;
 				}
 				if (message.includes("inbox.has.open.plan")) {
-					addToast({
-						message: "An open plan already exists for this item.",
-						variant: "warn",
-					});
+					addToast({ message: m.inbox_toast_has_open_plan(), variant: "warn" });
 				} else if (message.includes("classification.stale")) {
 					addToast({
-						message: "Folder changed since classification — rescan to refresh.",
+						message: m.inbox_toast_stale_classification(),
 						variant: "warn",
 					});
 				} else {
-					addToast({ message: `Confirm failed: ${message}`, variant: "error" });
+					addToast({
+						message: m.inbox_toast_confirm_failed({ message }),
+						variant: "error",
+					});
 				}
 			}
 		},
@@ -425,18 +431,23 @@ export function InboxPage() {
 		setBulkConfirmLoading(false);
 		if (failCount > 0 && successCount > 0) {
 			addToast({
-				message: `${successCount} confirmed; ${failCount} skipped (mixed, missing metadata, or needs root pick).`,
+				message: m.inbox_toast_bulk_partial({
+					success: String(successCount),
+					fail: String(failCount),
+				}),
 				variant: "warn",
 			});
 		} else if (failCount > 0 && successCount === 0) {
 			addToast({
-				message:
-					"Bulk confirm: all items need review (mixed folders or missing metadata).",
+				message: m.inbox_toast_bulk_all_need_review(),
 				variant: "warn",
 			});
 		} else {
 			addToast({
-				message: `${successCount} item${successCount !== 1 ? "s" : ""} confirmed — review plans below.`,
+				message: m.inbox_toast_bulk_confirmed({
+					success: String(successCount),
+					suffix: successCount !== 1 ? "s" : "",
+				}),
 				variant: "info",
 			});
 		}
@@ -466,21 +477,23 @@ export function InboxPage() {
 			const failed = result.results.filter((r) => r.error != null).length;
 			if (failed > 0) {
 				addToast({
-					message: `${result.results.length - failed} plan(s) applied; ${failed} failed.`,
+					message: m.inbox_toast_plans_partial({
+						applied: String(result.results.length - failed),
+						failed: String(failed),
+					}),
 					variant: "warn",
 				});
 			} else {
 				addToast({
-					message: `${result.results.length} plan(s) are being applied.`,
+					message: m.inbox_toast_plans_applying({
+						count: String(result.results.length),
+					}),
 					variant: "info",
 				});
 			}
 			refreshAll();
 		} else {
-			addToast({
-				message: "Apply failed — please try again.",
-				variant: "error",
-			});
+			addToast({ message: m.inbox_toast_apply_failed(), variant: "error" });
 		}
 	};
 
@@ -490,12 +503,17 @@ export function InboxPage() {
 			const failed = result.results.filter((r) => r.error != null).length;
 			if (failed > 0) {
 				addToast({
-					message: `${result.results.length - failed} plans applied; ${failed} failed.`,
+					message: m.inbox_toast_all_plans_partial({
+						applied: String(result.results.length - failed),
+						failed: String(failed),
+					}),
 					variant: "warn",
 				});
 			} else {
 				addToast({
-					message: `All ${result.results.length} plans are being applied.`,
+					message: m.inbox_toast_all_plans_applying({
+						count: String(result.results.length),
+					}),
 					variant: "info",
 				});
 			}
@@ -503,12 +521,23 @@ export function InboxPage() {
 		}
 	};
 
+	// Apply a single ingestion plan with live per-item progress streamed over
+	// the long-operation OperationEvent channel (spec 042 US16 / FR-021). This is
+	// the end-to-end consumer of the channel contract on the inbox plan surface.
+	const handleApplyOne = async (planId: string) => {
+		setProgressPlanId(planId);
+		const response = await runPlanApply({ id: planId });
+		if (response) {
+			addToast({ message: m.inbox_plan_applied_toast(), variant: "info" });
+			refreshAll();
+		} else {
+			addToast({ message: m.inbox_plan_apply_failed_toast(), variant: "error" });
+		}
+	};
+
 	const handleCancel = async (inboxItemId: string) => {
 		await cancel(inboxItemId);
-		addToast({
-			message: "Plan discarded. Item is available for re-confirmation.",
-			variant: "info",
-		});
+		addToast({ message: m.inbox_toast_plan_discarded(), variant: "info" });
 		refreshAll();
 	};
 
@@ -656,7 +685,7 @@ export function InboxPage() {
 	const folderCount = items.filter((it) => !it.isMaster).length;
 	const masterCount = items.filter((it) => it.isMaster).length;
 	const summary = useMemo(() => {
-		if (listLoading) return "Loading…";
+		if (listLoading) return m.common_loading();
 		const parts: string[] = [];
 		if (folderCount > 0)
 			parts.push(`${folderCount} folder${folderCount !== 1 ? "s" : ""}`);
@@ -742,8 +771,8 @@ export function InboxPage() {
 							data-testid="inbox-bulk-confirm-btn"
 						>
 							{bulkConfirmLoading
-								? "Confirming…"
-								: `Confirm all (${bulkEligibleItems.length})`}
+								? m.common_confirming()
+								: m.inbox_confirm_all({ count: bulkEligibleItems.length })}
 						</Btn>
 					)}
 					{/* Per-detection "Confirm to inventory" lives in the bottom detail
@@ -771,7 +800,7 @@ export function InboxPage() {
 		<>
 			<ListPageLayout
 				topBar={topBar}
-				detailLabel="Detection details"
+				detailLabel={m.inbox_detection_details()}
 				detail={
 					selectedItem != null ? (
 						<InboxDetail
@@ -808,7 +837,9 @@ export function InboxPage() {
 
 			{/* Plan-approval overlay — opens via top-bar trigger.
 			    Wraps the existing PlanPanel; all apply/cancel/root-pick
-			    handlers are passed through unchanged. */}
+			    handlers are passed through unchanged. The per-plan live-apply
+			    progress stream (spec 042 US16 / FR-021) threads through here so
+			    the overlay's PlanPanel can show per-group apply progress. */}
 			<PlanApprovalOverlay
 				open={planOverlayOpen}
 				onClose={() => setPlanOverlayOpen(false)}
@@ -818,8 +849,11 @@ export function InboxPage() {
 				onDestructiveDestinationChange={setDestructiveDestination}
 				onApplySelected={(ids) => void handleApplySelected(ids)}
 				onApplyAll={() => void handleApplyAll()}
+				onApplyOne={(planId) => void handleApplyOne(planId)}
+				progress={applyProgress}
+				progressPlanId={progressPlanId}
 				onCancel={(id) => void handleCancel(id)}
-				busy={planBusy}
+				busy={planBusy || applyProgress.running}
 				pendingRootPick={pendingRootPick}
 				onPickDestinationRoot={(rootId) =>
 					void handlePickDestinationRoot(rootId)

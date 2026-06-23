@@ -364,20 +364,6 @@ export async function createProjectPlan(args: {
   return unwrap(await commands.projectsCreatePlan(args.wizard_state));
 }
 
-export async function approvePlan(args: {
-  id: string;
-  delete_acknowledged?: boolean;
-}): Promise<FilesystemPlan> {
-  // Generated plansApprove(id) returns PlanApproveResponse (not FilesystemPlan).
-  // delete_acknowledged was silently ignored by the old invoke path; no callers
-  // exist. We use the generated binding (T115); the caller type is kept for
-  // back-compat. Cast via unknown because the return shape differs (approvePlan
-  // callers never existed and the Phase 4 plan workflow will replace this wrapper).
-  void args.delete_acknowledged;
-  const response = unwrap(await commands.plansApprove(args.id));
-  return response as unknown as FilesystemPlan;
-}
-
 export async function applyPlan(args: {
   id: string;
   approvalToken?: string;
@@ -391,7 +377,7 @@ export async function applyPlan(args: {
    * projection only.
    */
   onEvent?: (event: OperationEvent) => void;
-}): Promise<OperationHandle> {
+}): Promise<PlanApplyResponse> {
   // Bridge the optional callback onto a Tauri channel. When no subscriber is
   // supplied we still pass a (no-op) channel because the generated command
   // signature requires the parameter.
@@ -404,10 +390,13 @@ export async function applyPlan(args: {
   // We thread the token through the signature (T115); when absent we default to
   // '' which the backend will reject — the real plan-apply flow must supply the
   // token from plansApprove.approvalToken.
-  const response = unwrap(
+  // `plansApplyReal` resolves with the real `PlanApplyResponse` ({ planId,
+  // runId, newState }) once the run is registered; per-item progress arrives
+  // live over the channel above. No cast — the generated return type is the
+  // source of truth (spec 042 T270).
+  return unwrap(
     await commands.plansApplyReal(args.id, args.approvalToken ?? '', channel),
   );
-  return response as unknown as OperationHandle;
 }
 
 export async function discardPlan(args: { id: string }): Promise<void> {

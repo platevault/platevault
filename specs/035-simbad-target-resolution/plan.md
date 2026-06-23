@@ -106,6 +106,64 @@ machinery in `crates/targeting/catalogs` (`download.rs`/`loader.rs`) and spec-01
 retired. New operation contracts live in `crates/contracts/core` + `packages/contracts`. The Tauri
 `commands/catalogs.rs` surface is replaced by a `targets.rs` resolver surface.
 
+## Phase 6 Extension: US4 Ingest→Session→Target Pipeline
+
+*Added by iteration 2026-06-21 (reactivation of T026/T028).*
+
+### Migration 0046 — `acquisition_session.canonical_target_id`
+
+`crates/persistence/db/migrations/0046_acq_session_canonical_target.sql`:
+
+```sql
+ALTER TABLE acquisition_session ADD COLUMN canonical_target_id TEXT REFERENCES canonical_target(id);
+ALTER TABLE acquisition_session ADD COLUMN has_observer_location INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_acq_session_canonical_target ON acquisition_session(canonical_target_id);
+```
+
+Additive, nullable, no NOT NULL constraint; mirrors the pattern from migration 0033
+(`projects.canonical_target_id`). The legacy `target_id` column is left untouched.
+
+### Ingest Module (`crates/app/targets/`)
+
+Per applied light frame arriving from the plan-apply pipeline:
+
+1. Upsert a `file_record` row with UNIQUE constraint `(root_id, relative_path)` — idempotent
+   re-ingest. Resolve/ensure a `library_root` row exists for the destination root before insert
+   (R2 — inbox destinations may resolve to `registered_sources`; ensure a matching `library_root`
+   row or skip + audit if it cannot be resolved).
+2. Extract FITS `OBJECT`; call `associate_or_enqueue` — cache hit sets `canonical_target_id` inline;
+   miss enqueues to `ingest_resolution` and leaves `canonical_target_id` NULL.
+3. Derive `session_key` from (OBJECT/target, filter, binning, gain, observing-night). When observer
+   location is unset, compute observing-night in UTC (`has_observer_location = 0`).
+4. Upsert `acquisition_session` by `session_key`, appending `file_record.id` to `frame_ids`;
+   set `canonical_target_id` if known at ingest time.
+
+### Plan-Apply Completion Hook (`crates/app/inbox/src/plan_listener.rs`)
+
+`handle_plan_completed` gains a sibling call alongside `register_master_if_applicable`: a
+`ingest_light_frames_if_applicable` function that drives the ingest module above for `move` and
+`catalogue` plan items whose `terminal_state == "applied"`. Only light-frame items are processed
+(calibration frames are out of US4 scope). The hook is idempotent: `file_record` UNIQUE on
+`(root_id, relative_path)` and `acquisition_session` UNIQUE on `session_key` ensure safe re-runs;
+`frame_ids` appends use set-dedup to prevent duplicate entries.
+
+### Background `resolve_pending` Drain (`apps/desktop/src-tauri/src/lib.rs`)
+
+`run_app` spawns a background interval task that:
+
+1. Reads `resolver_settings` to obtain the current resolver configuration.
+2. Calls `resolve_pending` to drain the `ingest_resolution` queue using a fresh `SimbadResolver`
+   (or `FakeResolver` in test builds).
+3. After each drain, back-fills `acquisition_session.canonical_target_id` for sessions whose
+   frames have just resolved (JOIN `file_record` → `ingest_resolution` → `canonical_target`).
+
+### Sessions Read-Path Join
+
+`app_core::sessions::list_sessions` (and any inventory read that surfaces session summaries) joins
+`canonical_target` via `acquisition_session.canonical_target_id` so the Sessions page can display
+the linked target's `primary_designation`. Specta bindings are regenerated only if the
+`SessionSummary` / `SessionDetail` DTO gains a new field; if a field already exists it is reused.
+
 ## Complexity Tracking
 
 > No constitution violations — section intentionally empty.

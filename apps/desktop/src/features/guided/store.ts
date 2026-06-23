@@ -10,6 +10,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { m } from '@/lib/i18n';
 
 // ── Types (mirror the Rust DTOs) ──────────────────────────────────────────────
 
@@ -59,16 +60,16 @@ export const STEP_ORDER = [
 
 export const STEP_HINT_TEXT: Record<string, { title: string; body: string }> = {
   [STEP_INBOX_CONFIRM_FIRST]: {
-    title: 'Confirm your first inventory item',
-    body: 'Select a folder in your Inbox and click Confirm to move it into Inventory.',
+    title: m.guided_step_inbox_title(),
+    body: m.guided_step_inbox_body(),
   },
   [STEP_PROJECT_CREATE_FIRST]: {
-    title: 'Create your first project',
-    body: 'Click "+ New project" to create a project from your confirmed inventory items.',
+    title: m.guided_step_project_title(),
+    body: m.guided_step_project_body(),
   },
   [STEP_TOOL_OPEN_FIRST]: {
-    title: 'Open your project in a processing tool',
-    body: 'Click "Open in {tool}" to prepare your project for processing.',
+    title: m.guided_step_tool_title(),
+    body: m.guided_step_tool_body({ tool: '{tool}' }),
   },
 };
 

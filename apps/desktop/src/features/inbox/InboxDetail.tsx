@@ -25,6 +25,7 @@ import type { InboxFileMetadata, InboxItemSummary } from "@/api/commands";
 import type { PropertyDef } from "@/components";
 import { DetailPanel, PropertyTable } from "@/components";
 import { errMessage } from "@/lib/errors";
+import { m } from "@/lib/i18n";
 import type { PillVariant } from "@/ui";
 import { Banner, Btn, Pill, Section, Table } from "@/ui";
 import type { InboxClassifyResponse } from "./store";
@@ -148,27 +149,27 @@ function FileInspector({ file }: { file: InboxFileMetadata | null }) {
 	const rows: Array<{ label: string; value: React.ReactNode; testid: string }> =
 		[
 			{
-				label: "Instrument",
+				label: m.inbox_field_instrument(),
 				value: fmtOrDash(file.instrume),
 				testid: "inspector-instrume",
 			},
 			{
-				label: "Telescope",
+				label: m.inbox_field_telescope(),
 				value: fmtOrDash(file.telescop),
 				testid: "inspector-telescop",
 			},
 			{
-				label: "Dimensions",
+				label: m.inbox_field_dimensions(),
 				value: fmtDimensions(file.naxis1, file.naxis2),
 				testid: "inspector-dims",
 			},
 			{
-				label: "Stack count",
+				label: m.inbox_field_stack_count(),
 				value: fmtOrDash(file.stackCount),
 				testid: "inspector-stackcount",
 			},
 			{
-				label: "Raw IMAGETYP",
+				label: m.inbox_field_raw_imagetyp(),
 				value: fmtOrDash(file.imageTyp),
 				testid: "inspector-imagetyp",
 			},
@@ -365,8 +366,8 @@ export function InboxDetail({
 
 	const unclassifiedColumns = [
 		{ key: "select", label: "", style: { width: 36 } },
-		{ key: "file", label: "File", style: { width: 160 } },
-		{ key: "override", label: "Assign frame type" },
+		{ key: "file", label: m.inbox_col_file(), style: { width: 160 } },
+		{ key: "override", label: m.inbox_col_assign_frame_type() },
 	];
 
 	const unclassifiedRows = unclassifiedFiles.map((filePath, idx) => ({
@@ -375,7 +376,7 @@ export function InboxDetail({
 				type="checkbox"
 				checked={selectedFiles.has(filePath)}
 				onChange={() => handleToggleFile(filePath)}
-				aria-label={`Select ${filePath}`}
+				aria-label={m.inbox_select_file_aria({ file: filePath })}
 				data-testid={`reclassify-select-${idx}`}
 			/>
 		),
@@ -388,11 +389,11 @@ export function InboxDetail({
 			<select
 				value={pendingOverrides[filePath] ?? ""}
 				onChange={(e) => handleOverrideChange(filePath, e.target.value)}
-				aria-label={`Override frame type for ${filePath}`}
+				aria-label={m.inbox_override_frame_type_aria({ file: filePath })}
 				data-testid={`override-select-${filePath}`}
 				className="alm-select alm-select--sm"
 			>
-				<option value="">— pick type —</option>
+				<option value="">{m.inbox_pick_type_placeholder()}</option>
 				{FRAME_TYPE_OPTIONS.map((t) => (
 					<option key={t} value={t}>
 						{t}
@@ -405,15 +406,15 @@ export function InboxDetail({
 	// ── Per-file metadata table (FR-010) ──────────────────────────────────────
 
 	const metadataColumns = [
-		{ key: "file", label: "File", style: { minWidth: 160 } },
-		{ key: "type", label: "Type", style: { width: 80 } },
-		{ key: "filter", label: "Filter", style: { width: 70 } },
-		{ key: "exposure", label: "Exposure", style: { width: 80 } },
-		{ key: "binning", label: "Binning", style: { width: 70 } },
-		{ key: "gain", label: "Gain", style: { width: 60 } },
-		{ key: "temp", label: "Temp", style: { width: 70 } },
-		{ key: "object", label: "Object", style: { width: 100 } },
-		{ key: "date", label: "Date", style: { width: 110 } },
+		{ key: "file", label: m.inbox_col_file(), style: { minWidth: 160 } },
+		{ key: "type", label: m.inbox_col_type(), style: { width: 80 } },
+		{ key: "filter", label: m.common_filter(), style: { width: 70 } },
+		{ key: "exposure", label: m.inbox_col_exposure(), style: { width: 80 } },
+		{ key: "binning", label: m.inbox_col_binning(), style: { width: 70 } },
+		{ key: "gain", label: m.inbox_col_gain(), style: { width: 60 } },
+		{ key: "temp", label: m.inbox_col_temp(), style: { width: 70 } },
+		{ key: "object", label: m.inbox_col_object(), style: { width: 100 } },
+		{ key: "date", label: m.archive_prop_date(), style: { width: 110 } },
 	];
 
 	// FR-032 (US9): files missing a path-load-bearing attribute.
@@ -436,10 +437,10 @@ export function InboxDetail({
 					{missingAttrs.length > 0 && (
 						<span
 							data-testid={`inbox-missing-attr-${fileName}`}
-							title={`Missing required attribute(s): ${missingAttrs.join(", ")}`}
+							title={m.inbox_missing_attrs_title({ attrs: missingAttrs.join(", ") })}
 							className="alm-inbox-detail__missing-attr-badge"
 						>
-							needs {missingAttrs.join(", ")}
+							{m.inbox_needs_attrs({ attrs: missingAttrs.join(", ") })}
 						</span>
 					)}
 				</span>
@@ -599,7 +600,7 @@ export function InboxDetail({
 		<span className="alm-session-detail2__actions">
 			<Pill variant={classificationVariant(classType)}>
 				{classType === "single_type"
-					? (classification?.frameType ?? "single")
+					? (classification?.frameType ?? m.inbox_detail_single_fallback())
 					: classType}
 			</Pill>
 			{item.lane === "video" && <Pill variant="ghost">video</Pill>}
@@ -613,7 +614,7 @@ export function InboxDetail({
 					data-testid="inbox-confirm-btn"
 					data-guide-anchor="inbox.confirm-row"
 				>
-					{confirmBusy ? "Working…" : confirmLabel}
+					{confirmBusy ? m.common_working() : confirmLabel}
 				</Btn>
 			)}
 			{/* Destination library picker — to the RIGHT of Confirm. Lets the user
@@ -658,10 +659,9 @@ export function InboxDetail({
 					data-testid="inbox-mixed-alert"
 				>
 					<div className="alm-inbox-alert__msg">
-						<span className="alm-inbox-alert__title">Mixed folder</span>
+						<span className="alm-inbox-alert__title">{m.inbox_mixed_folder_title()}</span>
 						<span className="alm-inbox-alert__body">
-							Multiple frame types detected. Confirm to produce a reviewable
-							split plan.
+							{m.inbox_mixed_folder_body()}
 						</span>
 					</div>
 				</Banner>
@@ -675,10 +675,9 @@ export function InboxDetail({
 					data-testid="inbox-unclassified-alert"
 				>
 					<div className="alm-inbox-alert__msg">
-						<span className="alm-inbox-alert__title">Frame types required</span>
+						<span className="alm-inbox-alert__title">{m.inbox_frame_types_required_title()}</span>
 						<span className="alm-inbox-alert__body">
-							No IMAGETYP headers could be read. Assign frame types below, then
-							confirm.
+							{m.inbox_frame_types_required_body()}
 						</span>
 					</div>
 				</Banner>
@@ -686,7 +685,7 @@ export function InboxDetail({
 
 			{!classification && (
 				<div className="alm-inbox-detail__empty">
-					Select an item to see the classification breakdown.
+					{m.inbox_select_item_prompt()}
 				</div>
 			)}
 
@@ -728,17 +727,17 @@ export function InboxDetail({
 						>
 							<Popover.Trigger
 								className="alm-inbox-detail__files-trigger"
-								aria-label={`File metadata (${metadataRows.length})`}
+								aria-label={m.inbox_file_metadata_count({ count: metadataRows.length })}
 								data-testid="inbox-files-popover-trigger"
 							>
-								File metadata ({metadataRows.length}) ▾
+								{m.inbox_file_metadata_count({ count: metadataRows.length })} ▾
 							</Popover.Trigger>
 							<Popover.Portal>
 								<Popover.Positioner side="bottom" align="start" sideOffset={4}>
 									<Popover.Popup
 										className="alm-inbox-detail__files-popup"
 										data-testid="inbox-files-popup"
-										aria-label="File metadata"
+										aria-label={m.inbox_file_metadata_aria()}
 									>
 										{/* Scrollable metadata table */}
 										<div className="alm-inbox-detail__files-popup-table">
@@ -768,7 +767,7 @@ export function InboxDetail({
 				{/* Needs review — rendered when unclassified files exist */}
 				{unclassifiedRows.length > 0 && (
 					<div className="alm-session-detail2__col">
-						<Section title={`Needs review (${unclassifiedRows.length})`}>
+						<Section title={m.inbox_needs_review_title({ count: unclassifiedRows.length })}>
 							<div className="alm-inbox-detail__select-all-row">
 								<input
 									type="checkbox"
@@ -777,13 +776,13 @@ export function InboxDetail({
 										if (el) el.indeterminate = someSelected;
 									}}
 									onChange={handleSelectAll}
-									aria-label="Select all unclassified files"
+									aria-label={m.inbox_select_all_unclassified_aria()}
 									data-testid="reclassify-select-all"
 								/>
 								<span className="alm-inbox-detail__select-all-label">
 									{selectedFiles.size === 0
-										? "Select all"
-										: `${selectedFiles.size} selected`}
+										? m.common_select_all()
+										: m.inbox_n_selected({ count: selectedFiles.size })}
 								</span>
 							</div>
 							<Table columns={unclassifiedColumns} rows={unclassifiedRows} />
@@ -791,24 +790,24 @@ export function InboxDetail({
 							{selectedFiles.size > 0 && (
 								<fieldset className="alm-inbox-detail__bulk-controls">
 									<legend className="alm-visually-hidden">
-										Bulk override controls
+										{m.inbox_bulk_override_controls_aria()}
 									</legend>
 									<div className="alm-inbox-detail__bulk-field">
 										<label
 											htmlFor="bulk-frame-type"
 											className="alm-inbox-detail__bulk-label"
 										>
-											Frame type
+											{m.inbox_frame_type_label()}
 										</label>
 										<select
 											id="bulk-frame-type"
 											value={bulkFrameType}
 											onChange={(e) => setBulkFrameType(e.target.value)}
-											aria-label="Bulk frame type"
+											aria-label={m.inbox_bulk_frame_type_aria()}
 											data-testid="bulk-frame-type"
 											className="alm-select alm-select--sm"
 										>
-											<option value="">— unchanged —</option>
+											<option value="">{m.inbox_unchanged_placeholder()}</option>
 											{FRAME_TYPE_OPTIONS.map((t) => (
 												<option key={t} value={t}>
 													{t}
@@ -822,15 +821,15 @@ export function InboxDetail({
 											htmlFor="bulk-filter"
 											className="alm-inbox-detail__bulk-label"
 										>
-											Filter
+											{m.common_filter()}
 										</label>
 										<input
 											id="bulk-filter"
 											type="text"
 											value={bulkFilter}
 											onChange={(e) => setBulkFilter(e.target.value)}
-											placeholder="e.g. Ha"
-											aria-label="Bulk filter"
+											placeholder={m.inbox_filter_placeholder()}
+											aria-label={m.inbox_bulk_filter_aria()}
 											data-testid="bulk-filter"
 											className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
 										/>
@@ -841,15 +840,15 @@ export function InboxDetail({
 											htmlFor="bulk-exposure"
 											className="alm-inbox-detail__bulk-label"
 										>
-											Exposure (s)
+											{m.inbox_exposure_label()}
 										</label>
 										<input
 											id="bulk-exposure"
 											type="number"
 											value={bulkExposureS}
 											onChange={(e) => setBulkExposureS(e.target.value)}
-											placeholder="e.g. 300"
-											aria-label="Bulk exposure seconds"
+											placeholder={m.inbox_exposure_placeholder()}
+											aria-label={m.inbox_bulk_exposure_aria()}
 											data-testid="bulk-exposure-s"
 											className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
 											min={0}
@@ -861,98 +860,95 @@ export function InboxDetail({
 											htmlFor="bulk-binning"
 											className="alm-inbox-detail__bulk-label"
 										>
-											Binning
+											{m.settings_calmatch_binning()}
 										</label>
 										<input
 											id="bulk-binning"
 											type="text"
 											value={bulkBinning}
 											onChange={(e) => setBulkBinning(e.target.value)}
-											placeholder="e.g. 2x2"
-											aria-label="Bulk binning"
+											placeholder={m.inbox_binning_placeholder()}
+											aria-label={m.inbox_bulk_binning_aria()}
 											data-testid="bulk-binning"
 											className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
 										/>
 									</div>
 
-									<button
-										type="button"
-										className="alm-btn alm-btn--sm alm-btn--accent"
-										onClick={handleBulkApply}
-										disabled={reclassifyLoading}
-										aria-label={`Apply bulk override to ${selectedFiles.size} file${selectedFiles.size !== 1 ? "s" : ""}`}
-										data-testid="bulk-apply-btn"
-									>
-										{reclassifyLoading
-											? "Applying…"
-											: `Apply to selected (${selectedFiles.size})`}
-									</button>
-								</fieldset>
-							)}
-
-							{bulkError && (
-								<Banner
-									variant="danger"
-									className="alm-inbox-detail__banner-mt2"
+								<button
+									type="button"
+									className="alm-btn alm-btn--sm alm-btn--accent"
+									onClick={handleBulkApply}
+									disabled={reclassifyLoading}
+									aria-label={m.inbox_bulk_override_apply_aria({ count: selectedFiles.size })}
+									data-testid="bulk-apply-btn"
 								>
-									{bulkError}
-								</Banner>
-							)}
+									{reclassifyLoading
+										? m.common_applying()
+										: m.inbox_apply_to_selected({ count: selectedFiles.size })}
+								</button>
+							</fieldset>
+						)}
 
-							{Object.keys(pendingOverrides).length > 0 && (
-								<div className="alm-inbox-detail__apply-row">
-									<button
-										type="button"
-										className="alm-btn alm-btn--sm alm-btn--accent"
-										onClick={handleApplyOverrides}
-										disabled={
-											Object.keys(pendingOverrides).length === 0 ||
-											reclassifyLoading
-										}
-										aria-label="Apply manual overrides"
-									>
-										{reclassifyLoading
-											? "Applying…"
-											: `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? "s" : ""}`}
-									</button>
-								</div>
-							)}
+						{bulkError && (
+							<Banner
+								variant="danger"
+								className="alm-inbox-detail__banner-mt2"
+							>
+								{bulkError}
+							</Banner>
+						)}
 
-							{applyError && (
-								<Banner
-									variant="danger"
-									className="alm-inbox-detail__banner-mt2"
+						{Object.keys(pendingOverrides).length > 0 && (
+							<div className="alm-inbox-detail__apply-row">
+								<button
+									type="button"
+									className="alm-btn alm-btn--sm alm-btn--accent"
+									onClick={handleApplyOverrides}
+									disabled={
+										Object.keys(pendingOverrides).length === 0 ||
+										reclassifyLoading
+									}
+									aria-label={m.inbox_apply_manual_overrides_aria()}
 								>
-									{applyError}
-								</Banner>
-							)}
-						</Section>
-					</div>
-				)}
-
-				{/* FR-032 (US9): blocking banner for missing path attributes */}
-				{filesMissingAttrs.length > 0 && (
-					<div className="alm-session-detail2__col">
-						<Banner
-							variant="danger"
-							className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
-							data-testid="inbox-missing-attr-banner"
-						>
-							<div className="alm-inbox-alert__msg">
-								<span className="alm-inbox-alert__title">
-									Required metadata missing
-								</span>
-								<span className="alm-inbox-alert__body">
-									{filesMissingAttrs.length} file
-									{filesMissingAttrs.length !== 1 ? "s" : ""} missing required
-									attribute(s) for their destination — confirm disabled. Assign
-									the missing value(s) in "Needs review" above, then confirm.
-								</span>
+									{reclassifyLoading
+										? m.common_applying()
+										: `Apply ${Object.keys(pendingOverrides).length} override${Object.keys(pendingOverrides).length !== 1 ? "s" : ""}`}
+								</button>
 							</div>
-						</Banner>
-					</div>
-				)}
-			</div>
-		</DetailPanel>
+						)}
+
+						{applyError && (
+							<Banner
+								variant="danger"
+								className="alm-inbox-detail__banner-mt2"
+							>
+								{applyError}
+							</Banner>
+						)}
+					</Section>
+				</div>
+			)}
+
+			{/* FR-032 (US9): blocking banner for missing path attributes */}
+			{filesMissingAttrs.length > 0 && (
+				<div className="alm-session-detail2__col">
+					<Banner
+						variant="danger"
+						className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
+						data-testid="inbox-missing-attr-banner"
+					>
+						<div className="alm-inbox-alert__msg">
+							<span className="alm-inbox-alert__title">
+								{m.inbox_required_metadata_missing_title()}
+							</span>
+							<span className="alm-inbox-alert__body">
+								{m.inbox_required_metadata_body({ count: filesMissingAttrs.length })}
+							</span>
+						</div>
+					</Banner>
+				</div>
+			)}
+		</div>
+	</DetailPanel>
 	);
 }
