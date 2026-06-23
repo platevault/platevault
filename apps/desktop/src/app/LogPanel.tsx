@@ -415,6 +415,7 @@ function LogEntryRow({
   const isClickable = hasEntityLink || hasAuditLink;
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- interactivity is conditional; role/tabindex/keydown all upgrade to button only when clickable
     <li
       ref={measureRef}
       data-index={index}
@@ -423,6 +424,7 @@ function LogEntryRow({
       className={`alm-logpanel__event${isClickable ? ' alm-logpanel__event--link' : ''}`}
       onClick={isClickable ? handleClick : undefined}
       role={isClickable ? 'button' : 'listitem'}
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- only focusable when clickable, where role becomes button
       tabIndex={isClickable ? 0 : undefined}
       onKeyDown={
         isClickable

@@ -46,26 +46,26 @@ export function StepViews({ data, onChange }: StepViewsProps) {
       {/* Step description */}
       <div className="alm-wizard-views__desc">
         {m.projects_wizard_views_desc()}{' '}
-        <a
-          href="#"
+        <button
+          type="button"
           onClick={(e) => e.preventDefault()}
           className="alm-wizard-views__link"
         >
           {m.projects_wizard_views_settings_link()}
-        </a>{' '}
+        </button>{' '}
         {m.projects_wizard_views_override_note()}
       </div>
 
       {/* ── Strategy (from settings) ── */}
       <Box title={m.projects_wizard_strategy_title()}>
         <div className="alm-wizard-views__box-header">
-          <a
-            href="#"
+          <button
+            type="button"
             onClick={(e) => e.preventDefault()}
             className="alm-wizard-views__box-link"
           >
             {m.projects_wizard_strategy_override_link()}
-          </a>
+          </button>
         </div>
         <div className="alm-wizard-views__strategy-row">
           <Pill variant="ok">{m.projects_wizard_strategy_ntfs()}</Pill>
@@ -119,46 +119,54 @@ export function StepViews({ data, onChange }: StepViewsProps) {
       {/* ── Conflict policy ── */}
       <Box title={m.projects_wizard_conflict_title()}>
         <div className="alm-wizard-views__box-header">
-          <a
-            href="#"
+          <button
+            type="button"
             onClick={(e) => e.preventDefault()}
             className="alm-wizard-views__box-link"
           >
             {m.projects_wizard_conflict_defaults_link()}
-          </a>
+          </button>
         </div>
         <div className="alm-wizard-views__radio-group">
-          <label className="alm-wizard-views__radio-label">
+          <label className="alm-wizard-views__radio-label" htmlFor="conflict-policy-fail">
             <input
+              id="conflict-policy-fail"
               type="radio"
               name="conflict-policy"
+              aria-label={m.projects_wizard_conflict_fail()}
               checked={conflictPolicy === 'fail'}
               onChange={() => onChange({ ...data, conflictPolicy: 'fail' })}
             />{' '}
             {m.projects_wizard_conflict_fail()}
           </label>
-          <label className="alm-wizard-views__radio-label">
+          <label className="alm-wizard-views__radio-label" htmlFor="conflict-policy-rename">
             <input
+              id="conflict-policy-rename"
               type="radio"
               name="conflict-policy"
+              aria-label={m.projects_wizard_conflict_rename()}
               checked={conflictPolicy === 'rename'}
               onChange={() => onChange({ ...data, conflictPolicy: 'rename' })}
             />{' '}
             {m.projects_wizard_conflict_rename()}
           </label>
-          <label className="alm-wizard-views__radio-label">
+          <label className="alm-wizard-views__radio-label" htmlFor="conflict-policy-skip">
             <input
+              id="conflict-policy-skip"
               type="radio"
               name="conflict-policy"
+              aria-label={m.projects_wizard_conflict_skip()}
               checked={conflictPolicy === 'skip'}
               onChange={() => onChange({ ...data, conflictPolicy: 'skip' })}
             />{' '}
             {m.projects_wizard_conflict_skip()}
           </label>
-          <label className="alm-wizard-views__radio-label">
+          <label className="alm-wizard-views__radio-label" htmlFor="conflict-policy-manual">
             <input
+              id="conflict-policy-manual"
               type="radio"
               name="conflict-policy"
+              aria-label={m.projects_wizard_conflict_manual()}
               checked={conflictPolicy === 'manual'}
               onChange={() => onChange({ ...data, conflictPolicy: 'manual' })}
             />{' '}

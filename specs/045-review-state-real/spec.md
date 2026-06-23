@@ -1,8 +1,17 @@
 # Spec 045 — Review-State Real (session + calibration provenance gate)
 
-Status: **draft** (Phase 1 — not yet plan/research/tasks ready).
-Branch: TBD (depends on spec 041 plan-listener and spec 035 ingest paths
-being fully landed on `main` before implementation begins).
+> **SUPERSEDED (2026-06-23) by [Spec 041 — Inbox Plan Surface](../041-inbox-plan-surface/spec.md), iteration "single-type inbox sub-items".**
+> Spec 041 reverses this spec's central premise: sessions become **derived, already-confirmed
+> inventory** (the `discovered/candidate/needs_review/confirmed/rejected` review lifecycle and the
+> Confirm/Re-open/Reject actions are dropped — 041 FR-051, SC-018). Metadata correctness is enforced
+> at the **Inbox missing-mandatory gate before confirm** (041 FR-047–FR-049), not via a post-hoc
+> session review state. The still-valuable parts of this spec are **absorbed into 041**: light-frame
+> **session creation at plan-apply** and **per-field provenance** (header vs inferred, surfaced as
+> INFERRED metadata + the missing-mandatory set). Do not implement this spec as written; see 041
+> R-16 and tasks T076–T077.
+
+Status: **superseded by spec 041** (was: draft, Phase 1).
+Branch: n/a (superseded).
 
 ---
 

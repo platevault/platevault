@@ -200,11 +200,11 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 				{/* Single column with both session popovers stacked vertically. */}
 				<div className="alm-session-detail2__linked alm-session-detail2__linked--stack">
 					<SessionListPopover
-						label="Used by"
+						label={m.calibration_used_by_label()}
 						names={detail.loading ? [] : detail.confirmedNames}
 					/>
 					<SessionListPopover
-						label="Compatible"
+						label={m.calibration_compatible_label()}
 						names={detail.loading ? [] : detail.compatibleNames}
 					/>
 				</div>

@@ -129,7 +129,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
   // Compact count summary for the always-visible header line.
   const countSummary =
     phase === 'done' && totalItems > 0
-      ? `${totalItems} folder${totalItems !== 1 ? 's' : ''} · ${totalFiles} file${totalFiles !== 1 ? 's' : ''}`
+      ? `${m.setup_scan_folder_count({ count: totalItems })} · ${m.setup_scan_file_count({ count: totalFiles })}`
       : null;
 
   return (
@@ -138,8 +138,10 @@ function SourceSummary({ state }: SourceSummaryProps) {
       className="alm-setup-scan__card"
     >
       {/* ── Always-visible header row ─────────────────────────────────────── */}
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- conditionally interactive: role=button + keyboard (Enter/Space) handler applied together only when isExpandable; inert div otherwise */}
       <div
         role={isExpandable ? 'button' : undefined}
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- tabIndex is paired with role=button (above) only when isExpandable, making the element a focusable button
         tabIndex={isExpandable ? 0 : undefined}
         aria-expanded={isExpandable ? expanded : undefined}
         onClick={isExpandable ? () => setExpanded((v) => !v) : undefined}
@@ -402,7 +404,7 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
               className="alm-setup-scan__summary"
             >
               {totalDetected > 0
-                ? m.setup_scan_summary_found({ count: totalDetected, suffix: totalDetected !== 1 ? 's' : '' })
+                ? m.setup_scan_summary_found({ count: totalDetected })
                 : m.setup_scan_summary_empty()}
             </p>
           )}

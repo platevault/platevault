@@ -2719,6 +2719,11 @@
 
 /* Shared link style used in multiple boxes */
 .alm-wizard-views__link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
   color: var(--alm-accent);
   text-decoration: underline;
 }
@@ -2735,6 +2740,11 @@
 }
 
 .alm-wizard-views__box-link {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
   font-size: var(--alm-text-xs);
   color: var(--alm-accent);
   text-decoration: underline;

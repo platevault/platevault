@@ -127,28 +127,19 @@ function GroupingSelects({ grouping }: { grouping: GroupingControl }) {
         const usedEarlier = new Set(dims.slice(0, slot));
         return (
           <select
-            // eslint-disable-next-line react/no-array-index-key -- fixed-length slot list
             key={slot}
             className="alm-filterbar__select"
             value={value}
             disabled={disabled}
             onChange={(e) => setSlot(slot, e.target.value)}
-            aria-label={
-              slot === 0
-                ? m.inbox_group_by_aria()
-                : m.inbox_group_by_level_aria({ level: slot + 1 })
-            }
+            aria-label={slot === 0 ? m.inbox_group_by_aria() : m.inbox_group_by_level_aria({ level: slot + 1 })}
           >
-            <option value="">
-              {slot === 0 ? m.inbox_controls_group_none() : m.inbox_controls_then_none()}
-            </option>
+            <option value="">{slot === 0 ? m.inbox_controls_group_none() : m.inbox_controls_then_none()}</option>
             {dimensions
               .filter((d) => d.value === value || !usedEarlier.has(d.value))
               .map((d) => (
                 <option key={d.value} value={d.value}>
-                  {slot === 0
-                    ? m.inbox_groupby_chip_primary({ label: d.label })
-                    : m.inbox_groupby_chip_secondary({ label: d.label })}
+                  {slot === 0 ? m.inbox_groupby_chip_primary({ label: d.label }) : m.inbox_groupby_chip_secondary({ label: d.label })}
                 </option>
               ))}
           </select>
@@ -174,7 +165,7 @@ function LabeledSelect({
   leadingOption?: string;
 }) {
   return (
-    <label className="alm-filterbar__field">
+    <label className="alm-filterbar__field" htmlFor={id}>
       <span className="alm-filterbar__field-label">{label}</span>
       <select
         className="alm-filterbar__select"
@@ -230,7 +221,9 @@ function MultiSelect({
         : `${selected.size} selected`;
 
   return (
-    <label className="alm-filterbar__field">
+    // A `<details>` is not a labelable control, so this field is a labelled
+    // group (heading + aria-label) rather than a `<label>` wrapper.
+    <div className="alm-filterbar__field">
       <span className="alm-filterbar__field-label">{label}</span>
       <details className="alm-filterbar__multi" id={id}>
         <summary className="alm-filterbar__multi-summary" aria-label={`${label}: ${summary}`}>
@@ -238,19 +231,21 @@ function MultiSelect({
         </summary>
         <div className="alm-filterbar__multi-menu" role="group" aria-label={label}>
           {options.map((o) => (
-            <label key={o.value} className="alm-filterbar__multi-option">
+            <label key={o.value} className="alm-filterbar__multi-option" htmlFor={`${id}-${o.value}`}>
               <input
                 type="checkbox"
+                id={`${id}-${o.value}`}
                 className="alm-filterbar__multi-check"
                 checked={selected.has(o.value)}
                 onChange={() => toggle(o.value)}
+                aria-label={o.label}
               />
               <span>{o.label}</span>
             </label>
           ))}
         </div>
       </details>
-    </label>
+    </div>
   );
 }
 

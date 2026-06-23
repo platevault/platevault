@@ -30,7 +30,7 @@ export async function installRecorder(
     // Build the real Tauri dispatch function as the base.
     const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
     const baseDispatch: DispatchFn = (cmd, args) =>
-      tauriInvoke<unknown>(cmd, args as Record<string, unknown>);
+      tauriInvoke<unknown>(cmd, args);
 
     const wrapped = wrap(baseDispatch, true, []);
     setInvokeOverride(wrapped);

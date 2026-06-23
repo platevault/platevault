@@ -330,7 +330,7 @@ export async function getPreferences(): Promise<AppPreferences> {
 }
 
 export async function searchGlobal(args: { query: string }): Promise<SearchResult[]> {
-  return unwrap(await commands.searchGlobal(args.query)) as SearchResult[];
+  return unwrap(await commands.searchGlobal(args.query));
 }
 
 // ---------- Mutation Commands ----------
@@ -765,7 +765,7 @@ export async function inboxReclassify(
 ): Promise<InboxReclassifyResponse> {
   return unwrap(
     await commands.inboxReclassify(req as Parameters<typeof commands.inboxReclassify>[0]),
-  ) as InboxReclassifyResponse;
+  );
 }
 
 /**
@@ -1010,7 +1010,7 @@ export type { CalibrationTolerances, UpdateCalibrationTolerances };
  * tolerances (temperature, aging limit, hard-required dimension flags).
  */
 export async function calibrationTolerancesGet(): Promise<CalibrationTolerances> {
-  return unwrap(await commands.calibrationTolerancesGet()) as CalibrationTolerances;
+  return unwrap(await commands.calibrationTolerancesGet());
 }
 
 /**
@@ -1022,7 +1022,7 @@ export async function calibrationTolerancesUpdate(
 ): Promise<CalibrationTolerances> {
   return unwrap(
     await commands.calibrationTolerancesUpdate(request),
-  ) as CalibrationTolerances;
+  );
 }
 
 // ── Inventory commands (spec 006) ─────────────────────────────────────────────

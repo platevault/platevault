@@ -70,6 +70,7 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
         <input
           type="text"
           placeholder={m.projects_wizard_filter_target_placeholder()}
+          aria-label={m.projects_wizard_filter_target_placeholder()}
           value={filterTarget}
           onChange={(e) => setFilterTarget(e.target.value)}
           className="alm-wizard-sources__filter-input"
@@ -77,6 +78,7 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
         <input
           type="text"
           placeholder={m.projects_wizard_filter_filter_placeholder()}
+          aria-label={m.projects_wizard_filter_filter_placeholder()}
           value={filterFilter}
           onChange={(e) => setFilterFilter(e.target.value)}
           className="alm-wizard-sources__filter-input"
@@ -111,6 +113,7 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
 
         {/* Rows */}
         {filtered.map((session) => (
+           
           <label
             key={session.id}
             className="alm-wizard-sources__row"

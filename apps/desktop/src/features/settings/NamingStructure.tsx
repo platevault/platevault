@@ -178,15 +178,15 @@ function validatePatternString(value: string): string | null {
 	if (value.trim() === "") return null; // empty = use default
 	const unknown: string[] = [];
 	const re = /\{([^}]*)\}/g;
-	let m: RegExpExecArray | null;
-	while ((m = re.exec(value)) !== null) {
-		const token = m[1];
+	let match: RegExpExecArray | null;
+	while ((match = re.exec(value)) !== null) {
+		const token = match[1];
 		if (!VALID_PATTERN_TOKENS.has(token as (typeof AVAILABLE_TOKENS)[number])) {
 			unknown.push(token);
 		}
 	}
 	if (unknown.length > 0) {
-		return `Unknown token${unknown.length > 1 ? "s" : ""}: ${unknown.map((t) => `{${t}}`).join(", ")}`;
+		return `${m.settings_naming_unknown_tokens({ count: unknown.length })}: ${unknown.map((t) => `{${t}}`).join(", ")}`;
 	}
 	return null;
 }
@@ -919,8 +919,10 @@ export function NamingStructure({ save }: NamingStructureProps) {
 
 			<div className="alm-settings__group">
 				<div className="alm-settings__row">
-					<label className="alm-settings__row-label">
+					<label className="alm-settings__row-label" htmlFor="naming-auto-apply">
+						{/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
 						<input
+							id="naming-auto-apply"
 							type="checkbox"
 							className="alm-naming__checkbox"
 							checked={autoApplyPattern}

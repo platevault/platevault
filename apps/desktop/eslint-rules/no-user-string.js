@@ -378,8 +378,55 @@ const rule = {
   },
 };
 
+// alm/no-js-plural (spec 046 task #7). Flags JS-side pluralization — a ternary
+// whose branches are a lone plural suffix and empty string, e.g.
+// `count !== 1 ? 's' : ''` (inline) or `{ suffix: n === 1 ? '' : 's' }` (param).
+// This bakes English plural rules into code; the message catalog can't localize
+// them. Use an inlang plural VARIANT message instead
+// (declarations/selectors/match → Intl.PluralRules), called m.<key>({ count }).
+/** @type {import('eslint').Rule.RuleModule} */
+const noJsPlural = {
+  meta: {
+    type: "problem",
+    docs: {
+      description:
+        "Disallow JS-side pluralization (lone suffix ternaries); use an inlang plural variant message.",
+    },
+    schema: [],
+    messages: {
+      jsPlural:
+        "JS-side pluralization {{text}} bakes English plural rules into code. Use an inlang plural variant message (declarations/selectors/match) called as m.<key>({ count }). If genuinely not a plural, add `// eslint-disable-next-line alm/no-js-plural -- <reason>`.",
+    },
+  },
+  create(context) {
+    const PLURAL = new Set(["s", "es", "ies"]);
+    return {
+      ConditionalExpression(node) {
+        const branches = [node.consequent, node.alternate];
+        if (
+          !branches.every(
+            (b) => b.type === "Literal" && typeof b.value === "string",
+          )
+        ) {
+          return;
+        }
+        const vals = branches.map((b) => b.value);
+        const isSuffixOrEmpty = (v) => v === "" || PLURAL.has(v);
+        if (vals.every(isSuffixOrEmpty) && vals.some((v) => PLURAL.has(v))) {
+          context.report({
+            node,
+            messageId: "jsPlural",
+            data: { text: `\`${vals.map((v) => v || "∅").join("/")}\`` },
+          });
+        }
+      },
+    };
+  },
+};
+
 export default {
   rules: {
     "no-user-string": rule,
+    "no-js-plural": noJsPlural,
   },
 };

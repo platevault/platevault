@@ -119,9 +119,11 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
       {!compact && (
         <>
           <SettingsRow
+             
             label={<label htmlFor={endpointId}>{m.settings_resolver_endpoint_label()}</label>}
             info="The CDS TAP service URL queried for long-tail resolution."
           >
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={endpointId} (cross-column association the rule can't trace) */}
             <input
               id={endpointId}
               className="alm-input"
@@ -134,9 +136,11 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
           </SettingsRow>
 
           <SettingsRow
+             
             label={<label htmlFor={debounceId}>{m.settings_resolver_debounce_label()}</label>}
             info="How long to wait after typing before querying SIMBAD."
           >
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={debounceId} (cross-column association the rule can't trace) */}
             <input
               id={debounceId}
               className="alm-input alm-resolver-settings__narrow-input"
@@ -153,9 +157,11 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
           </SettingsRow>
 
           <SettingsRow
+             
             label={<label htmlFor={timeoutId}>{m.settings_resolver_timeout_label()}</label>}
             info="How long to wait for a SIMBAD response before giving up."
           >
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={timeoutId} (cross-column association the rule can't trace) */}
             <input
               id={timeoutId}
               className="alm-input alm-resolver-settings__narrow-input"

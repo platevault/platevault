@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useId } from 'react';
 import { Btn, Pill, Table } from '@/ui';
 import { AUDIT_EVENTS, type AuditEventFixture } from '@/data/fixtures/settings';
 import { formatDateTime, compareDateDesc, toEpochMs } from '@/lib/datetime';
@@ -23,6 +23,8 @@ export function AuditLog() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(0);
+  const dateFromId = useId();
+  const dateToId = useId();
 
   const filtered = useMemo(() => {
     let result = AUDIT_EVENTS;
@@ -62,18 +64,22 @@ export function AuditLog() {
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             aria-label={m.settings_auditlog_search_aria()}
           />
-          <label className="alm-audit-log__date-label">
+          <label className="alm-audit-log__date-label" htmlFor={dateFromId}>
             {m.settings_auditlog_date_from()}
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
             <input
+              id={dateFromId}
               type="date"
               className="alm-input alm-audit-log__date-input"
               value={dateFrom}
               onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
             />
           </label>
-          <label className="alm-audit-log__date-label">
+          <label className="alm-audit-log__date-label" htmlFor={dateToId}>
             {m.settings_auditlog_date_to()}
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
             <input
+              id={dateToId}
               type="date"
               className="alm-input alm-audit-log__date-input"
               value={dateTo}
@@ -124,8 +130,8 @@ export function AuditLog() {
         {/* Pagination */}
         <div className="alm-audit-log__pagination">
           <span className="alm-audit-log__page-count">
-            {/* eslint-disable-next-line alm/no-user-string -- plural composite: count + page + total JS expressions cannot be split into a single catalog key without ICU plural support */}
-            {filtered.length} event{filtered.length !== 1 ? 's' : ''} &middot; page {page + 1} of {totalPages}
+            {/* eslint-disable-next-line alm/no-user-string -- pagination separator fragments "· page X of Y" are structural, not translatable copy */}
+            {m.settings_auditlog_event_count({ count: filtered.length })} &middot; page {page + 1} of {totalPages}
           </span>
           <div className="alm-audit-log__page-btns">
             <Btn size="sm" variant="ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>

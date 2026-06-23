@@ -531,7 +531,7 @@ export function TargetsTable({
                 Height is dynamic (virtualizer offset), allowed by convention. */}
             {paddingBefore > 0 && (
               <tr aria-hidden="true" className="alm-targets-table__spacer">
-                {/* eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer before-spacer height (start of first windowed row) */}
+                {/* eslint-disable-next-line no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer before-spacer height; empty presentational cell inside an aria-hidden spacer row (no label needed) */}
                 <td colSpan={COL_COUNT} style={{ height: `${paddingBefore}px` }} />
               </tr>
             )}
@@ -704,7 +704,7 @@ export function TargetsTable({
                 Height is dynamic (virtualizer remainder), allowed by convention. */}
             {paddingAfter > 0 && (
               <tr aria-hidden="true" className="alm-targets-table__spacer">
-                {/* eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer after-spacer height (totalSize minus end of last windowed row) */}
+                {/* eslint-disable-next-line no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer after-spacer height; empty presentational cell inside an aria-hidden spacer row (no label needed) */}
                 <td colSpan={COL_COUNT} style={{ height: `${paddingAfter}px` }} />
               </tr>
             )}

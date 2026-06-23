@@ -355,7 +355,7 @@ export function SetupWizard() {
       {/* Folder count summary on source step */}
       {step === 0 && totalFolders > 0 && (
         <span className="alm-setup-wizard__folder-count">
-          {m.setup_wizard_folder_count({ count: totalFolders, suffix: totalFolders !== 1 ? 's' : '' })}
+          {m.setup_wizard_folder_count({ count: totalFolders })}
         </span>
       )}
       {isOnScanStep ? (

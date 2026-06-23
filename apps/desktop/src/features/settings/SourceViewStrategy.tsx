@@ -53,7 +53,8 @@ export function SourceViewStrategy({ save }: SourceViewStrategyProps) {
   return (
     <div className="alm-svs">
       <div className="alm-svs__field">
-        <label className="alm-svs__label" htmlFor="svs-strategy">
+        { }
+        <label className="alm-svs__label">
           {m.settings_sourceview_default_strategy()}
         </label>
         <Select.Root value={selected} onValueChange={handleChange}>

@@ -603,6 +603,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
                 if (e.key === 'Escape') setDisplayAliasEditing(false);
               }}
               className="alm-target-detail__text-input"
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: the inline display-label editor mounts on demand and must receive focus so the user can type immediately
               autoFocus
             />
             <button

@@ -83,7 +83,7 @@ function asRootRequiredDetails(
 		d &&
 		typeof d === "object" &&
 		"candidates" in d &&
-		Array.isArray((d as { candidates: unknown }).candidates)
+		Array.isArray((d).candidates)
 	) {
 		return d as DestinationRootRequiredDetails;
 	}
@@ -468,8 +468,7 @@ export function InboxPage() {
 		} else {
 			addToast({
 				message: m.inbox_toast_bulk_confirmed({
-					success: String(successCount),
-					suffix: successCount !== 1 ? "s" : "",
+					count: successCount,
 				}),
 				variant: "info",
 			});
@@ -711,9 +710,9 @@ export function InboxPage() {
 		if (listLoading) return m.common_loading();
 		const parts: string[] = [];
 		if (folderCount > 0)
-			parts.push(m.inbox_summary_folders({ count: folderCount, suffix: folderCount !== 1 ? "s" : "" }));
+			parts.push(m.inbox_count_folders({ count: folderCount }));
 		if (masterCount > 0)
-			parts.push(m.inbox_summary_masters({ count: masterCount, suffix: masterCount !== 1 ? "s" : "" }));
+			parts.push(m.inbox_count_masters({ count: masterCount }));
 		const base = parts.length > 0 ? parts.join(" · ") : m.inbox_summary_zero_detections();
 		return isCapped ? m.inbox_summary_capped({ base, limit: String(listData?.limit ?? 500) }) : base;
 	}, [listLoading, folderCount, masterCount, isCapped, listData?.limit]);
@@ -799,11 +798,11 @@ export function InboxPage() {
 							size="sm"
 							variant="accent"
 							onClick={() => setPlanOverlayOpen(true)}
-							aria-label={m.inbox_review_plans_aria({ count: String(planCount) })}
+							aria-label={m.inbox_review_plans_with_count({ count: planCount })}
 							data-testid="inbox-review-plans-btn"
 						>
 							{planCount > 0
-								? m.inbox_review_plans_count({ count: String(planCount) })
+								? m.inbox_review_plans_with_count({ count: planCount })
 								: m.inbox_review_plans()}
 						</Btn>
 					)}
@@ -814,8 +813,12 @@ export function InboxPage() {
 							variant="accent"
 							disabled={!canBulkConfirm}
 							onClick={() => void handleBulkConfirm()}
-							aria-label={m.inbox_bulk_confirm_aria({ count: String(bulkEligibleItems.length), suffix: bulkEligibleItems.length !== 1 ? "s" : "" })}
+							aria-label={m.inbox_confirm_all_classified_aria({ count: bulkEligibleItems.length })}
 							data-testid="inbox-bulk-confirm-btn"
+							// Guided-tour target (spec 010/041). The redesign moved the
+							// page-level confirm to this bulk-confirm action; keep the
+							// `inbox.confirm-row` anchor on it so the tour still resolves.
+							data-guide-anchor="inbox.confirm-row"
 						>
 							{bulkConfirmLoading
 								? m.common_confirming()
@@ -831,7 +834,7 @@ export function InboxPage() {
 						onClick={() => void rescan()}
 						aria-label={m.inbox_rescan_all_roots_aria()}
 					>
-						{rescanLoading ? m.inbox_rescanning() : m.common_rescan()}
+						{rescanLoading ? m.common_rescanning() : m.common_rescan()}
 					</Btn>
 				</>
 			}

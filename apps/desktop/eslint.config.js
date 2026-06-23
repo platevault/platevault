@@ -48,6 +48,9 @@ export default tseslint.config(
     ],
     rules: {
       'alm/no-user-string': 'error',
+      // JS-side pluralization ('s'/'es' suffix ternaries) bakes English plural
+      // rules into code; use inlang plural variant messages instead (spec 046 #7).
+      'alm/no-js-plural': 'error',
     },
   },
 
@@ -66,17 +69,24 @@ export default tseslint.config(
     },
   },
 
-  // Accessibility (eslint-plugin-jsx-a11y). The standard a11y gate, previously
-  // absent. Rolled out at `warn` first (same wave strategy as the i18n gate):
-  // the recommended set surfaces ~25 existing findings; once those are fixed in
-  // a focused a11y pass, promote this block to the error-level
-  // `jsxA11y.flatConfigs.recommended` and gate CI on it.
+  // Accessibility (eslint-plugin-jsx-a11y). The standard a11y gate, now enforced
+  // at ERROR across src/** (the prior warn-level rollout has been fully remediated).
   {
     files: ['src/**/*.{ts,tsx}'],
     plugins: { 'jsx-a11y': jsxA11y },
-    rules: Object.fromEntries(
-      Object.keys(jsxA11y.flatConfigs.recommended.rules).map((name) => [name, 'warn']),
-    ),
+    rules: {
+      ...Object.fromEntries(
+        Object.keys(jsxA11y.flatConfigs.recommended.rules).map((name) => [
+          name,
+          'error',
+        ]),
+      ),
+      // `label-has-for` is DEPRECATED (superseded by `label-has-associated-control`)
+      // and its `every: ['nesting','id']` requirement rejects valid htmlFor+id and
+      // Base-UI labelled controls. Keep it off; `label-has-associated-control`
+      // (enabled above) is the active, correct label-association gate.
+      'jsx-a11y/label-has-for': 'off',
+    },
   },
 
   // Project-wide rule overrides — keep pragmatic
@@ -133,6 +143,15 @@ export default tseslint.config(
       // Redundant union constituents — cosmetic, not a bug
       '@typescript-eslint/no-redundant-type-constituents': 'warn',
     },
+  },
+
+  // Test files: `no-unnecessary-type-assertion` false-positives here because the
+  // type-aware service lacks full test type info, and its autofix wrongly strips
+  // load-bearing casts (e.g. `as HTMLInputElement`, `_Serialize`→prop casts).
+  // Off for tests; it stays on for app source.
+  {
+    files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
+    rules: { '@typescript-eslint/no-unnecessary-type-assertion': 'off' },
   },
 
   // Scope: only lint app source (not generated bindings, not archived src)

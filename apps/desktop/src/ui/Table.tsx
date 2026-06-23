@@ -100,9 +100,9 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
 
     const head = (
       <thead>
-        {/* eslint-disable-next-line no-restricted-syntax -- dynamic: Table column header style passthrough from caller */}
         <tr>
           {columns.map((c, i) => (
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: caller-provided column header style passthrough
             <th key={i} className={c.className} style={c.style}>
               {c.label}
             </th>
@@ -143,14 +143,14 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
               <>
                 {paddingBefore > 0 && (
                   <tr aria-hidden="true" className="alm-table__spacer">
-                    {/* eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer before-spacer height */}
+                    {/* eslint-disable-next-line no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer before-spacer height; decorative spacer in aria-hidden row, no label needed */}
                     <td colSpan={colCount} style={{ height: `${paddingBefore}px` }} />
                   </tr>
                 )}
                 {virtualItems.map((vi) => renderRow(rows[vi.index], vi.index))}
                 {paddingAfter > 0 && (
                   <tr aria-hidden="true" className="alm-table__spacer">
-                    {/* eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer after-spacer height */}
+                    {/* eslint-disable-next-line no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer after-spacer height; decorative spacer in aria-hidden row, no label needed */}
                     <td colSpan={colCount} style={{ height: `${paddingAfter}px` }} />
                   </tr>
                 )}

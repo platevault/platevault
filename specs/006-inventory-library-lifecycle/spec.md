@@ -1,5 +1,14 @@
 # Feature Specification: Inventory Lifecycle
 
+> **AMENDED (2026-06-23) by [Spec 041 — Inbox Plan Surface](../041-inbox-plan-surface/spec.md), iteration "single-type inbox sub-items".**
+> The session **review lifecycle** described here (six-state `SessionState`:
+> discovered/candidate/needs_review/confirmed/rejected; the US2 "review & confirm before project use"
+> gate) is **reduced**: sessions become derived/already-confirmed once per-file metadata is fixed at
+> Inbox confirm. The shared `SessionState` enum is collapsed and the US2 AC2 project gate becomes
+> auto-pass. Metadata correctness moves to the Inbox missing-mandatory gate (041 FR-047–FR-051). The
+> enum change + existing-session-row migration are tracked as 041 tasks **T076/T077**. Treat US2's
+> review-state requirements as superseded by 041.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.

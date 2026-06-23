@@ -165,13 +165,11 @@ describe("InboxDetail — FR-011: mixed composition summary", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					mixedClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					mixedClassification
 				}
 			/>,
 		);
@@ -189,13 +187,11 @@ describe("InboxDetail — FR-011: mixed composition summary", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 			/>,
 		);
@@ -208,7 +204,7 @@ describe("InboxDetail — FR-011: mixed composition summary", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={null}
@@ -233,13 +229,11 @@ describe("InboxDetail — FR-010: file metadata popover trigger", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 				fileMetadata={fileMetadataFixture}
 			/>,
@@ -256,13 +250,11 @@ describe("InboxDetail — FR-010: file metadata popover trigger", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 			/>,
 		);
@@ -275,13 +267,11 @@ describe("InboxDetail — FR-010: file metadata popover trigger", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 				fileMetadata={[]}
 			/>,
@@ -295,13 +285,11 @@ describe("InboxDetail — FR-010: file metadata popover trigger", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					mixedClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					mixedClassification
 				}
 				fileMetadata={fileMetadataFixture}
 			/>,
@@ -318,13 +306,11 @@ describe("InboxDetail — FR-010: file metadata popover trigger", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 				fileMetadata={fileMetadataFixture}
 			/>,
@@ -354,13 +340,11 @@ describe("InboxDetail — FR-010: file metadata popover trigger", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 				fileMetadata={withMissing}
 			/>,
@@ -395,13 +379,11 @@ describe("InboxDetail — FR-032: missing-attribute banner", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 				fileMetadata={withMissing}
 			/>,
@@ -415,13 +397,11 @@ describe("InboxDetail — FR-032: missing-attribute banner", () => {
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 				fileMetadata={fileMetadataFixture}
 			/>,
@@ -440,13 +420,11 @@ describe("InboxDetail — task #34: mixed-folder banner + header confirm action"
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					mixedClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					mixedClassification
 				}
 				onConfirm={onConfirm}
 				confirmLabel="Generate split plan"
@@ -468,13 +446,11 @@ describe("InboxDetail — task #34: mixed-folder banner + header confirm action"
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					mixedClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					mixedClassification
 				}
 				onConfirm={vi.fn()}
 				confirmLabel="Generate split plan"
@@ -488,13 +464,11 @@ describe("InboxDetail — task #34: mixed-folder banner + header confirm action"
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					mixedClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					mixedClassification
 				}
 			/>,
 		);
@@ -506,13 +480,11 @@ describe("InboxDetail — task #34: mixed-folder banner + header confirm action"
 		render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 				onConfirm={vi.fn()}
 			/>,
@@ -537,13 +509,11 @@ describe("InboxDetail — compact layout: detection col + popover trigger", () =
 		const { container } = render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 				fileMetadata={fileMetadataFixture}
 			/>,
@@ -560,13 +530,11 @@ describe("InboxDetail — compact layout: detection col + popover trigger", () =
 		const { container } = render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 				fileMetadata={fileMetadataFixture}
 			/>,
@@ -589,13 +557,11 @@ describe("InboxDetail — compact layout: detection col + popover trigger", () =
 		const { container } = render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					mixedClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					mixedClassification
 				}
 			/>,
 		);
@@ -614,13 +580,11 @@ describe("InboxDetail — compact layout: detection col + popover trigger", () =
 		const { container } = render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					singleTypeClassification
 				}
 				fileMetadata={fileMetadataFixture}
 			/>,
@@ -639,13 +603,11 @@ describe("InboxDetail — compact layout: detection col + popover trigger", () =
 		const { container } = render(
 			<InboxDetail
 				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+					sampleItem
 				}
 				rootAbsolutePath="/astro/inbox"
 				classification={
-					mixedClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
+					mixedClassification
 				}
 			/>,
 		);
