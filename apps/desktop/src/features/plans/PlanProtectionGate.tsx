@@ -105,8 +105,8 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
     return (
       <div className="alm-plan-gate__status">
         {m.plans_gate_no_protected()}
-        {normalCount > 0 && ` ${normalCount} normal item(s).`}
-        {unprotectedCount > 0 && ` ${unprotectedCount} unprotected item(s).`}
+        {normalCount > 0 && m.plans_gate_normal_items_sentence({ count: normalCount })}
+        {unprotectedCount > 0 && m.plans_gate_unprotected_items_sentence({ count: unprotectedCount })}
       </div>
     );
   }
@@ -123,7 +123,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
         style={{ background: allDone ? 'var(--alm-surface)' : 'var(--alm-bg3)' }}
       >
         <Pill variant={allDone ? 'ok' : 'warn'}>
-          {allDone ? m.plans_all_acknowledged() : `${total - doneCount} of ${total} require acknowledgement`}
+          {allDone ? m.plans_all_acknowledged() : m.plans_gate_require_ack({ done: total - doneCount, total })}
         </Pill>
         <span className="alm-plan-gate__summary-label">
           {allDone
@@ -187,12 +187,12 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
         <div className="alm-plan-gate__footer-summary">
           {m.plans_gate_also_in_plan()}{' '}
           {checkResult.nonBlockingSummary.normalCount > 0 &&
-            `${checkResult.nonBlockingSummary.normalCount} normal item(s)`}
+            m.plans_gate_normal_items({ count: checkResult.nonBlockingSummary.normalCount })}
           {checkResult.nonBlockingSummary.normalCount > 0 &&
             checkResult.nonBlockingSummary.unprotectedCount > 0 &&
             ', '}
           {checkResult.nonBlockingSummary.unprotectedCount > 0 &&
-            `${checkResult.nonBlockingSummary.unprotectedCount} unprotected item(s)`}
+            m.plans_gate_unprotected_items({ count: checkResult.nonBlockingSummary.unprotectedCount })}
           {' '}{m.plans_no_ack_required()}
         </div>
       )}

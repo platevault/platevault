@@ -1177,5 +1177,55 @@
   "inbox_plan_applied_toast": "Plan applied.",
   "inbox_plan_apply_failed_toast": "Apply failed — please try again.",
   "inbox_apply_plan_live_aria": "Apply plan for {name} with live progress",
-  "inbox_apply_action": "Apply"
+  "inbox_apply_action": "Apply",
+  "inbox_progress_count_of": "{applied} of {total}",
+  "inbox_progress_failed": "Apply failed after {applied} applied, {failed} failed.",
+  "inbox_progress_failed_suffix": ", {failed} failed",
+  "inbox_progress_completed": [
+    {
+      "declarations": [
+        "input applied",
+        "input countText",
+        "local p = applied: plural"
+      ],
+      "selectors": [
+        "p"
+      ],
+      "match": {
+        "p=one": "Applied {countText} item.",
+        "p=other": "Applied {countText} items."
+      }
+    }
+  ],
+  "inbox_progress_running": [
+    {
+      "declarations": [
+        "input applied",
+        "input countText",
+        "input failedText",
+        "local p = applied: plural"
+      ],
+      "selectors": [
+        "p"
+      ],
+      "match": {
+        "p=one": "Applying… {countText} item{failedText}",
+        "p=other": "Applying… {countText} items{failedText}"
+      }
+    }
+  ],
+  "inbox_groupby_chip_primary": "Group: {label}",
+  "inbox_groupby_chip_secondary": "then: {label}",
+  "inbox_needs_attrs": "needs {attrs}",
+  "inbox_n_selected": "{count} selected",
+  "inbox_apply_to_selected": "Apply to selected ({count})",
+  "inbox_confirm_all": "Confirm all ({count})",
+  "inbox_apply_selected_plans": "Apply selected ({count})",
+  "plans_gate_normal_items_sentence": " {count} normal item(s).",
+  "plans_gate_unprotected_items_sentence": " {count} unprotected item(s).",
+  "plans_gate_require_ack": "{done} of {total} require acknowledgement",
+  "plans_gate_normal_items": "{count} normal item(s)",
+  "plans_gate_unprotected_items": "{count} unprotected item(s)",
+  "projects_open_in": "Open in {tool}",
+  "targets_hours_above": "{hours} h"
 }

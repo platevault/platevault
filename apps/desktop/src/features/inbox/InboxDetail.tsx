@@ -413,7 +413,7 @@ export function InboxDetail({
               title={m.inbox_missing_attrs_title({ attrs: missingAttrs.join(', ') })}
               className="alm-inbox-detail__missing-attr-badge"
             >
-              {`needs ${missingAttrs.join(', ')}`}
+              {m.inbox_needs_attrs({ attrs: missingAttrs.join(', ') })}
             </span>
           )}
         </span>
@@ -550,7 +550,7 @@ export function InboxDetail({
               data-testid="reclassify-select-all"
             />
             <span className="alm-inbox-detail__select-all-label">
-              {selectedFiles.size === 0 ? m.common_select_all() : `${selectedFiles.size} selected`}
+              {selectedFiles.size === 0 ? m.common_select_all() : m.inbox_n_selected({ count: selectedFiles.size })}
             </span>
           </div>
           <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
@@ -634,7 +634,7 @@ export function InboxDetail({
               >
                 {reclassifyLoading
                   ? m.common_applying()
-                  : `Apply to selected (${selectedFiles.size})`}
+                  : m.inbox_apply_to_selected({ count: selectedFiles.size })}
               </button>
             </div>
           )}

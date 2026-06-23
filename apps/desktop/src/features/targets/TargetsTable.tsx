@@ -577,7 +577,7 @@ export function TargetsTable({
                     <span
                       title={m.targets_table_hours_above_title({ hours: alt.hoursAboveUsable.toFixed(1), threshold: usableAltDeg })}
                     >
-                      {alt.hoursAboveUsable > 0 ? `${alt.hoursAboveUsable.toFixed(1)} h` : '—'}
+                      {alt.hoursAboveUsable > 0 ? m.targets_hours_above({ hours: alt.hoursAboveUsable.toFixed(1) }) : '—'}
                     </span>
                   </td>
                   {/* MOCK (#57): linked-session count not on TargetListItem yet. */}

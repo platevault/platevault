@@ -582,7 +582,7 @@ export function PlanPanel({
             data-testid="plan-apply-selected"
             aria-label={m.inbox_apply_selected_plans_aria()}
           >
-            {busy ? m.common_applying() : `Apply selected (${selectedArray.length})`}
+            {busy ? m.common_applying() : m.inbox_apply_selected_plans({ count: selectedArray.length })}
           </Btn>
           <Btn
             variant="accent"
@@ -721,19 +721,40 @@ export function PlanPanel({
                   data-testid={`plan-progress-${plan.inboxItemId}`}
                   role="status"
                   aria-live="polite"
-                  style={{
-                    fontSize: 'var(--alm-text-xs)',
-                    color: 'var(--alm-text-secondary)',
-                    marginTop: 'var(--alm-sp-1)',
-                  }}
                 >
-                  {/* eslint-disable alm/no-user-string -- live-progress composite (optional " of {total}" / ", {failed} failed" segments + item plural) from merged spec-042 feature; full catalog migration tracked in spec 046 task #7 (plural variants) */}
-                  {progress.terminal === 'completed'
-                    ? `Applied ${progress.applied}${progress.total != null ? ` of ${progress.total}` : ''} item${progress.applied !== 1 ? 's' : ''}.`
-                    : progress.terminal === 'failed'
-                      ? `Apply failed after ${progress.applied} applied, ${progress.failed} failed.`
-                      : `Applying… ${progress.applied}${progress.total != null ? ` of ${progress.total}` : ''} item${progress.applied !== 1 ? 's' : ''}${progress.failed > 0 ? `, ${progress.failed} failed` : ''}`}
-                  {/* eslint-enable alm/no-user-string */}
+                  {(() => {
+                    // Count label ("N" or "N of M") — kept as a sub-message so the
+                    // "of" connector stays translatable; passed into the plural
+                    // variant messages below as {countText}.
+                    const countText =
+                      progress.total != null
+                        ? m.inbox_progress_count_of({
+                            applied: progress.applied,
+                            total: progress.total,
+                          })
+                        : String(progress.applied);
+                    if (progress.terminal === 'completed') {
+                      return m.inbox_progress_completed({
+                        applied: progress.applied,
+                        countText,
+                      });
+                    }
+                    if (progress.terminal === 'failed') {
+                      return m.inbox_progress_failed({
+                        applied: progress.applied,
+                        failed: progress.failed,
+                      });
+                    }
+                    const failedText =
+                      progress.failed > 0
+                        ? m.inbox_progress_failed_suffix({ failed: progress.failed })
+                        : '';
+                    return m.inbox_progress_running({
+                      applied: progress.applied,
+                      countText,
+                      failedText,
+                    });
+                  })()}
                 </div>
               )}
 

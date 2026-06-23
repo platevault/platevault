@@ -379,7 +379,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                 data-testid="tool-launch-btn"
                 data-guide-anchor="project.open-in-tool"
               >
-                {launchState.working ? m.projects_launching() : `Open in ${projectToolStr}`}
+                {launchState.working ? m.projects_launching() : m.projects_open_in({ tool: projectToolStr })}
               </Btn>
             )}
 

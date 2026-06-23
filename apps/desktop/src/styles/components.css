@@ -1761,6 +1761,14 @@
 
 /* === PLAN PANEL === */
 
+/* Live long-op apply progress line (spec 042 US16). Token-only; moved off an
+   inline style block to satisfy the no-inline-style gate. */
+.alm-plan-panel__progress {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+  margin-top: var(--alm-sp-1);
+}
+
 /* ── Root picker ────────────────────────────────────────────── */
 
 .alm-plan-panel__root-picker {

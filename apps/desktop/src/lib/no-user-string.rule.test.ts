@@ -133,6 +133,28 @@ describe('alm/no-user-string', () => {
     expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(1);
   });
 
+  it('flags template literals rendered as a JSX child (ternary expression)', () => {
+    const out = lint(`
+      function P({ ok, n }) {
+        return <div>{ok ? \`Applied \${n} items\` : \`Failed after \${n}\`}</div>;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(2);
+    expect(hits.every((m) => m.messageId === 'jsxText')).toBe(true);
+  });
+
+  it('does NOT flag template literals in non-render positions (className, var, throw)', () => {
+    const out = lint(`
+      function P({ id }) {
+        const cls = \`row-\${id} active\`;
+        return <div className={\`wrap-\${id}\`}>{cls.length}</div>;
+      }
+    `);
+    // className \`wrap-\${id}\` is an attribute (machine); cls assignment is a var.
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
   it('ignores pure-interpolation / machine template literals (no letters)', () => {
     const out = lint(`
       function P({ a, b, id }) {
