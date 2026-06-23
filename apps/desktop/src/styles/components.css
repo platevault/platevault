@@ -9345,38 +9345,8 @@
  * The path grows to fill remaining space. Count and format are fixed-right.
  */
 
-.alm-inbox-row {
-  display: grid;
-  grid-template-columns:
-    [classification] 7.5rem
-    [path] 1fr
-    [count] 5rem
-    [format] 6rem;
-  align-items: center;
-  column-gap: var(--alm-space-2, 0.5rem);
-  padding: var(--alm-space-2, 0.5rem) var(--alm-space-3, 0.75rem);
-  cursor: pointer;
-  border-bottom: 1px solid var(--alm-rule2);
-  min-height: 2.5rem;
-  background: var(--alm-bg);
-  transition: background var(--alm-transition-fast);
-}
-
-.alm-inbox-row:hover,
-.alm-inbox-row:focus-visible {
-  background: var(--alm-surface);
-  outline: none;
-}
-
-.alm-inbox-row--selected {
-  background: var(--alm-info-bg);
-}
-
-.alm-inbox-row--muted {
-  opacity: 0.6;
-}
-
-/* Classification cell: the frame-type / state pill (leftmost, fixed). */
+/* Classification colours reused by the inbox Table's Type cell (the row/path/
+   count/format rules were retired with the bespoke div-list → shared Table). */
 .alm-inbox-row__classification {
   grid-column: classification;
   font-size: var(--alm-text-xs, 0.75rem);
@@ -9394,36 +9364,6 @@
 .alm-inbox-row__classification--classified { color: var(--alm-info); }
 .alm-inbox-row__classification--plan_open { color: var(--alm-ok); }
 .alm-inbox-row__classification--resolved  { color: var(--alm-ink4); }
-
-/* Path cell: grows, truncates with ellipsis on very narrow viewports. */
-.alm-inbox-row__path {
-  grid-column: path;
-  font-size: var(--alm-text-sm, 0.8125rem);
-  font-weight: 500;
-  color: var(--alm-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
-/* File count: right-aligned, muted, fixed column. */
-.alm-inbox-row__count {
-  grid-column: count;
-  font-size: var(--alm-text-xs, 0.75rem);
-  color: var(--alm-ink3);
-  text-align: right;
-  white-space: nowrap;
-}
-
-/* Format / master badge: right-aligned, fixed column. */
-.alm-inbox-row__format {
-  grid-column: format;
-  font-size: var(--alm-text-xs, 0.75rem);
-  color: var(--alm-ink3);
-  text-align: right;
-  white-space: nowrap;
-}
 
 /* ── task 33: breakdown rows as frame-type filters ──────────────────────────────
  *
