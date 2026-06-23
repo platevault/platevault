@@ -490,7 +490,7 @@ export function PlanPanel({
             onClick={() => onPickDestinationRoot?.(c.rootId)}
             disabled={rootPickBusy}
             data-testid={`inbox-root-option-${c.rootId}`}
-            aria-label={`Use ${c.path} as destination root`}
+            aria-label={m.inbox_use_as_destination_root_aria({ path: c.path })}
             className="alm-plan-panel__root-option"
           >
             <span className="alm-plan-panel__root-option-inner">
@@ -628,7 +628,7 @@ export function PlanPanel({
                   checked={checked}
                   disabled={plan.stale}
                   onChange={() => toggleGroup(plan.inboxItemId, plan.stale)}
-                  aria-label={`Select plan for ${plan.itemName}`}
+                  aria-label={m.inbox_select_plan_aria({ name: plan.itemName })}
                   data-testid={`plan-group-check-${plan.inboxItemId}`}
                 />
                 {/* Expand/collapse the per-file rows (collapsed by default). */}
@@ -640,8 +640,8 @@ export function PlanPanel({
                   aria-controls={rowsId}
                   aria-label={
                     isExpanded
-                      ? `Hide files for ${plan.itemName}`
-                      : `Show files for ${plan.itemName}`
+                      ? m.inbox_hide_files_aria({ name: plan.itemName })
+                      : m.inbox_show_files_aria({ name: plan.itemName })
                   }
                   data-testid={`plan-group-toggle-${plan.inboxItemId}`}
                   className="alm-plan-panel__expand"
@@ -679,7 +679,7 @@ export function PlanPanel({
                   onClick={() => onCancel(plan.inboxItemId)}
                   disabled={busy}
                   data-testid={`plan-cancel-${plan.inboxItemId}`}
-                  aria-label={`Discard plan for ${plan.itemName}`}
+                  aria-label={m.inbox_discard_plan_aria({ name: plan.itemName })}
                 >
                   {m.inbox_discard()}
                 </Btn>

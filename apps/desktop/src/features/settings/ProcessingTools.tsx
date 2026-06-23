@@ -177,7 +177,7 @@ export function ProcessingTools() {
                 className="alm-input alm-proc-tools__path-input"
                 value={pathDraft[tool.id] ?? ''}
                 placeholder={m.settings_tools_path_placeholder()}
-                aria-label={`Executable path for ${tool.name}`}
+                aria-label={m.settings_tools_path_aria({ name: tool.name })}
                 onChange={(e) =>
                   setPathDraft((prev) => ({ ...prev, [tool.id]: e.target.value }))
                 }
@@ -204,7 +204,7 @@ export function ProcessingTools() {
                 onChange={(v) => {
                   void handleToggle(tool.id, v);
                 }}
-                aria-label={`Enable ${tool.name}`}
+                aria-label={m.settings_tools_enable_aria({ name: tool.name })}
               />
             </div>
           </SettingsRow>

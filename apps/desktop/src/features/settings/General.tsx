@@ -12,7 +12,7 @@ import { m } from '@/lib/i18n';
 type FontSize = 'small' | 'default' | 'large';
 
 const CHOICES = [
-  { id: 'system' as const, label: 'System', mode: 'auto' as const },
+  { id: 'system' as const, label: m.settings_general_theme_system(), mode: 'auto' as const },
   ...THEMES,
 ];
 

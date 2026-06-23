@@ -378,13 +378,13 @@ export function MatchCandidatesPanel({
       </div>
       <Table
         columns={[
-          { key: 'session', label: 'Session', style: { width: 150 } },
-          { key: 'target', label: 'Target', style: { width: 130 } },
-          { key: 'filter', label: 'Filter', style: { width: 64 } },
-          { key: 'night', label: 'Night', style: { width: 100 } },
-          { key: 'frames', label: 'Frames', style: { width: 64 } },
-          { key: 'confidence', label: 'Match', style: { width: 120 } },
-          { key: 'dimensions', label: 'Dimensions' },
+          { key: 'session', label: m.calibration_col_session(), style: { width: 150 } },
+          { key: 'target', label: m.projects_create_target_label(), style: { width: 130 } },
+          { key: 'filter', label: m.common_filter(), style: { width: 64 } },
+          { key: 'night', label: m.sessions_col_night(), style: { width: 100 } },
+          { key: 'frames', label: m.projects_wizard_col_frames(), style: { width: 64 } },
+          { key: 'confidence', label: m.calibration_col_match(), style: { width: 120 } },
+          { key: 'dimensions', label: m.calibration_col_dimensions() },
           { key: 'assign', label: '', style: { width: 120 } },
         ]}
         rows={matches.map((m) => ({

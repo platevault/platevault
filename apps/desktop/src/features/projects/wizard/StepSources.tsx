@@ -123,7 +123,7 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
               className="alm-checkbox"
               checked={data.selectedSessionIds.includes(session.id)}
               onCheckedChange={() => toggleSession(session.id)}
-              aria-label={`Select ${session.sessionKey.target} session`}
+              aria-label={m.projects_wizard_select_session_aria({ target: session.sessionKey.target })}
             >
               <Checkbox.Indicator className="alm-checkbox__indicator">
                 &#x2713;

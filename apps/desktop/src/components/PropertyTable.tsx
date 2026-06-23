@@ -166,7 +166,7 @@ export function PropertyTable({
                     className="alm-checkbox"
                     checked={prop.confirmed ?? false}
                     onCheckedChange={() => prop.onConfirmToggle?.()}
-                    aria-label={`Confirm ${prop.label}`}
+                    aria-label={m.proptable_confirm_aria({ label: prop.label })}
                   >
                     <Checkbox.Indicator className="alm-checkbox__indicator">
                       &#x2713;

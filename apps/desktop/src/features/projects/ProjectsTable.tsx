@@ -70,12 +70,12 @@ function compareProjects(a: ProjectSummaryDto, b: ProjectSummaryDto, sort: Proje
 // ── Column model ────────────────────────────────────────────────────────────────
 
 const COLUMNS: Array<{ key: string; label: string; sort?: ProjectSortCol; className?: string }> = [
-  { key: 'name', label: 'Name', sort: 'name' },
-  { key: 'tool', label: 'Tool', sort: 'tool', className: 'alm-projects-table__cell--muted' },
-  { key: 'target', label: 'Target', className: 'alm-projects-table__cell--muted' },
-  { key: 'state', label: 'State', sort: 'state' },
-  { key: 'sources', label: 'Sources', sort: 'sources', className: 'alm-projects-table__cell--num' },
-  { key: 'updated', label: 'Updated', sort: 'updated', className: 'alm-projects-table__cell--mono' },
+  { key: 'name', label: m.projects_col_name(), sort: 'name' },
+  { key: 'tool', label: m.projects_col_tool(), sort: 'tool', className: 'alm-projects-table__cell--muted' },
+  { key: 'target', label: m.projects_create_target_label(), className: 'alm-projects-table__cell--muted' },
+  { key: 'state', label: m.sessions_col_state(), sort: 'state' },
+  { key: 'sources', label: m.common_sources(), sort: 'sources', className: 'alm-projects-table__cell--num' },
+  { key: 'updated', label: m.projects_stepper_updated(), sort: 'updated', className: 'alm-projects-table__cell--mono' },
 ];
 
 // ── Props ───────────────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ export function ProjectsTable({
           'alm-projects-sorth' + (sort.col === c.sort ? ' alm-projects-sorth--active' : '')
         }
         onClick={() => onSort(c.sort as ProjectSortCol)}
-        aria-label={`Sort by ${c.label}`}
+        aria-label={m.projects_sort_by_aria({ col: c.label })}
       >
         {c.label}
         {sort.col === c.sort && (

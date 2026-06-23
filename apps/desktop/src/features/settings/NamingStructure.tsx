@@ -317,7 +317,7 @@ function PatternChipsEditor({
 								className="alm-token-chip__x"
 								role="button"
 								tabIndex={0}
-								aria-label={`Remove ${label}`}
+								aria-label={m.settings_naming_remove_token({ label })}
 								onClick={() => handleRemove(part.id)}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") handleRemove(part.id);
@@ -507,7 +507,7 @@ function PerTypePatternChipsEditor({
 								className="alm-token-chip__x"
 								role="button"
 								tabIndex={0}
-								aria-label={`Remove ${label}`}
+								aria-label={m.settings_naming_remove_token({ label })}
 								onClick={() => handleRemove(chip.id)}
 								onKeyDown={(e) => {
 									if (e.key === "Enter") handleRemove(chip.id);

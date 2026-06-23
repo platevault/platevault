@@ -17,27 +17,27 @@ import { Advanced } from './Advanced';
 import { AuditLog } from './AuditLog';
 
 const PANES = [
-  { id: 'sources', label: 'Data Sources' },
-  { id: 'equipment', label: 'Equipment' },
-  { id: 'ingestion', label: 'Ingestion' },
-  { id: 'naming', label: 'Naming & Structure' },
-  { id: 'tools', label: 'Processing Tools' },
-  { id: 'cal', label: 'Calibration Matching' },
-  { id: 'catalogs', label: 'Target Resolution' },
-  { id: 'planner', label: 'Target Planner' },
-  { id: 'cleanup', label: 'Cleanup' },
-  { id: 'general', label: 'Appearance' },
-  { id: 'advanced', label: 'Advanced' },
-  { id: 'audit', label: 'Audit Log' },
+  { id: 'sources', label: m.settings_nav_pane_sources() },
+  { id: 'equipment', label: m.settings_nav_pane_equipment() },
+  { id: 'ingestion', label: m.settings_nav_pane_ingestion() },
+  { id: 'naming', label: m.settings_nav_pane_naming() },
+  { id: 'tools', label: m.settings_nav_pane_tools() },
+  { id: 'cal', label: m.settings_nav_pane_cal() },
+  { id: 'catalogs', label: m.settings_nav_pane_catalogs() },
+  { id: 'planner', label: m.settings_nav_pane_planner() },
+  { id: 'cleanup', label: m.settings_nav_pane_cleanup() },
+  { id: 'general', label: m.settings_nav_pane_general() },
+  { id: 'advanced', label: m.settings_nav_pane_advanced() },
+  { id: 'audit', label: m.settings_nav_pane_audit() },
 ] as const;
 
 type PaneId = (typeof PANES)[number]['id'];
 
 // Grouped sub-nav (Library / Processing / Application).
 const NAV_GROUPS: { label: string; panes: PaneId[] }[] = [
-  { label: 'Library', panes: ['sources', 'equipment', 'ingestion', 'naming', 'catalogs', 'planner'] },
-  { label: 'Processing', panes: ['tools', 'cal', 'cleanup'] },
-  { label: 'Application', panes: ['general', 'advanced', 'audit'] },
+  { label: m.settings_nav_group_library(), panes: ['sources', 'equipment', 'ingestion', 'naming', 'catalogs', 'planner'] },
+  { label: m.settings_nav_group_processing(), panes: ['tools', 'cal', 'cleanup'] },
+  { label: m.settings_nav_group_application(), panes: ['general', 'advanced', 'audit'] },
 ];
 
 const PANE_META: Record<PaneId, { title: string; desc: string }> = {

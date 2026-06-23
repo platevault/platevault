@@ -85,7 +85,7 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
           {AVAILABLE_TOKENS.map((t) => (
             <span
               key={t.token}
-              title={`Example: ${t.example}`}
+              title={m.projects_wizard_token_example_title({ example: t.example })}
               className="alm-wizard-layout__token-chip"
             >
               {t.token}

@@ -34,11 +34,11 @@ import { useHotkeys } from '@/lib/useHotkeys';
 // ── Level chip display helpers ────────────────────────────────────────────────
 
 const LEVEL_CHIPS: { value: LevelFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'error', label: 'Error' },
-  { value: 'warn', label: 'Warn' },
-  { value: 'info', label: 'Info' },
-  { value: 'debug', label: 'Debug' },
+  { value: 'all', label: m.log_level_all() },
+  { value: 'error', label: m.settings_advanced_log_error() },
+  { value: 'warn', label: m.settings_advanced_log_warn() },
+  { value: 'info', label: m.settings_advanced_log_info() },
+  { value: 'debug', label: m.settings_advanced_log_debug() },
 ];
 
 function passesLevelFilter(entryLevel: LogLevel, filter: LevelFilter): boolean {
@@ -293,8 +293,8 @@ export function LogPanel() {
             className={`alm-btn alm-btn--ghost alm-btn--xs${followLogs ? ' alm-logpanel__chip--active' : ''}`}
             onClick={() => setFollowLogs(!followLogs)}
             aria-pressed={followLogs}
-            aria-label={followLogs ? 'Follow tail on (click to pause)' : 'Follow tail off (click to enable)'}
-            title={scrollPaused && followLogs ? 'Paused (scroll to bottom to resume)' : undefined}
+            aria-label={followLogs ? m.log_follow_tail_on_aria() : m.log_follow_tail_off_aria()}
+            title={scrollPaused && followLogs ? m.log_follow_tail_paused_title() : undefined}
           >
             {followLogs ? (scrollPaused ? m.logpanel_follow_paused() : m.logpanel_follow_active()) : m.logpanel_follow_off()}
           </button>
@@ -314,7 +314,7 @@ export function LogPanel() {
 
         <Collapsible.Trigger
           className="alm-btn alm-btn--ghost alm-btn--sm"
-          aria-label={expanded ? 'Collapse log panel' : 'Expand log panel'}
+          aria-label={expanded ? m.log_collapse_panel_aria() : m.log_expand_panel_aria()}
         >
           {expanded ? '▾' : '▸'}
         </Collapsible.Trigger>
@@ -436,7 +436,7 @@ function LogEntryRow({
       }
       aria-label={
         isClickable
-          ? `${entry.level}: ${entry.message} — click to navigate`
+          ? m.log_entry_navigate_aria({ level: entry.level, message: entry.message })
           : undefined
       }
     >

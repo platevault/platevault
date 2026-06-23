@@ -200,14 +200,14 @@ function ToolCard({
               variant="ghost"
               onClick={handleRedetect}
               disabled={redetecting}
-              aria-label={`Redetect ${def.name} binary`}
+              aria-label={m.setup_tools_redetect_binary_aria({ name: def.name })}
             >
               {redetecting ? m.common_detecting() : m.setup_tools_redetect()}
             </Btn>
             <Toggle
               checked={config.enabled}
               onChange={onToggle}
-              aria-label={`Enable ${def.name}`}
+              aria-label={m.setup_tools_enable_aria({ name: def.name })}
             />
           </div>
           {notFound && (
@@ -273,7 +273,7 @@ function ToolPathPicker({
         size="sm"
         onClick={handleChoose}
         disabled={loading}
-        aria-label={`Select ${toolName} binary`}
+        aria-label={m.setup_tools_select_binary_aria({ name: toolName })}
       >
         {loading ? m.setup_choosing() : m.setup_tools_select_binary()}
       </Btn>

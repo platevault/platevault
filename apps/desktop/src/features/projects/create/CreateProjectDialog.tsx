@@ -42,8 +42,8 @@ import {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const TOOL_OPTIONS: RadioOption[] = [
-  { value: 'PixInsight', label: 'PixInsight', desc: 'WBPP, StarAlignment, integration' },
-  { value: 'Siril', label: 'Siril', desc: 'Free open-source stacking' },
+  { value: 'PixInsight', label: m.setup_tools_pixinsight_name(), desc: 'WBPP, StarAlignment, integration' },
+  { value: 'Siril', label: m.setup_tools_siril_name(), desc: 'Free open-source stacking' },
 ];
 
 // ── Props ────────────────────────────────────────────────────────────────────

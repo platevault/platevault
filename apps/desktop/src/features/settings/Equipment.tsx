@@ -34,11 +34,11 @@ export function Equipment({ save: _save }: EquipmentProps) {
       >
         <Table
           columns={[
-            { key: 'name', label: 'Name' },
-            { key: 'camera', label: 'Camera' },
-            { key: 'telescope', label: 'Telescope' },
-            { key: 'focalLength', label: 'Focal length' },
-            { key: 'pixelScale', label: 'Pixel scale' },
+            { key: 'name', label: m.settings_equipment_col_name() },
+            { key: 'camera', label: m.settings_equipment_col_camera() },
+            { key: 'telescope', label: m.settings_equipment_col_telescope() },
+            { key: 'focalLength', label: m.settings_equipment_col_focal_length() },
+            { key: 'pixelScale', label: m.settings_equipment_col_pixel_scale() },
             { key: 'actions', label: '', style: { width: 80 } },
           ]}
           rows={trains.map((t) => ({
@@ -68,11 +68,11 @@ export function Equipment({ save: _save }: EquipmentProps) {
       >
         <Table
           columns={[
-            { key: 'model', label: 'Model' },
-            { key: 'sensor', label: 'Sensor' },
-            { key: 'pixelSize', label: 'Pixel size' },
-            { key: 'resolution', label: 'Resolution' },
-            { key: 'flags', label: 'Flags' },
+            { key: 'model', label: m.settings_equipment_col_model() },
+            { key: 'sensor', label: m.settings_equipment_col_sensor() },
+            { key: 'pixelSize', label: m.settings_equipment_col_pixel_size() },
+            { key: 'resolution', label: m.settings_equipment_col_resolution() },
+            { key: 'flags', label: m.settings_equipment_col_flags() },
             { key: 'actions', label: '', style: { width: 80 } },
           ]}
           rows={cameras.map((c) => ({
@@ -107,10 +107,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
       >
         <Table
           columns={[
-            { key: 'model', label: 'Model' },
-            { key: 'aperture', label: 'Aperture' },
-            { key: 'focalLength', label: 'Focal length' },
-            { key: 'fRatio', label: 'f-ratio' },
+            { key: 'model', label: m.settings_equipment_col_model() },
+            { key: 'aperture', label: m.settings_equipment_col_aperture() },
+            { key: 'focalLength', label: m.settings_equipment_col_focal_length() },
+            { key: 'fRatio', label: m.settings_equipment_col_fratio() },
             { key: 'actions', label: '', style: { width: 80 } },
           ]}
           rows={telescopes.map((t) => ({

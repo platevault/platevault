@@ -58,7 +58,7 @@ export function StepConfirm({
 
   return (
     <div className="alm-setup-confirm">
-      <Section title={`Source folders (${totalFolders} folder${totalFolders !== 1 ? 's' : ''})`}>
+      <Section title={m.setup_confirm_source_folders_title({ count: totalFolders })}>
         {kindsWithFolders.length > 0 ? (
           <div className="alm-setup-confirm__kind-list">
             {kindsWithFolders.map((kind) => (
@@ -96,7 +96,7 @@ export function StepConfirm({
         )}
       </Section>
 
-      <Section title={`Processing tools (${enabledTools.length} enabled)`}>
+      <Section title={m.setup_confirm_tools_enabled_title({ count: enabledTools.length })}>
         {enabledTools.length > 0 ? (
           <div className="alm-setup-confirm__tool-list">
             {enabledTools.map((key) => (

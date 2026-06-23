@@ -14,9 +14,9 @@ export interface StepNameProps {
 }
 
 const PROFILES = [
-  { id: 'pixinsight' as const, label: 'PixInsight / WBPP', description: 'Deep-sky processing with WeightedBatchPreProcessing' },
-  { id: 'siril' as const, label: 'Siril', description: 'Free deep-sky stacking and processing' },
-  { id: 'planetary' as const, label: 'Planetary / Lunar', description: 'Video-based capture with stacking tools' },
+  { id: 'pixinsight' as const, label: m.projects_wizard_profile_pixinsight(), description: m.projects_wizard_profile_pixinsight_desc() },
+  { id: 'siril' as const, label: m.projects_wizard_profile_siril(), description: m.projects_wizard_profile_siril_desc() },
+  { id: 'planetary' as const, label: m.projects_wizard_profile_planetary(), description: m.projects_wizard_profile_planetary_desc() },
 ];
 
 /**

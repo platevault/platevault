@@ -21,6 +21,7 @@
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useCallback, useState } from 'react';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
+import { m } from '@/lib/i18n';
 import type { FilterOption } from '@/components';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { MasterDetail } from './MasterDetail';
@@ -34,7 +35,7 @@ import { useCalibrationMasters, useCalibrationSettings } from './useCalibration'
 
 // ── Toolbar vocab ─────────────────────────────────────────────────────────────
 
-const GROUP_BY_OPTIONS: FilterOption[] = [{ value: 'kind', label: 'Kind' }];
+const GROUP_BY_OPTIONS: FilterOption[] = [{ value: 'kind', label: m.calibration_fp_kind() }];
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -100,8 +101,8 @@ export function CalibrationPage() {
           search={{
             value: search,
             onChange: setSearch,
-            placeholder: 'Search camera, kind, filter…',
-            ariaLabel: 'Search calibration masters',
+            placeholder: m.calibration_search_masters_placeholder(),
+            ariaLabel: m.calibration_search_masters_aria(),
           }}
           groupBy={{
             value: groupBy,

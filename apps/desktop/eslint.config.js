@@ -2,6 +2,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 import alm from './eslint-rules/no-user-string.js';
 
 // The i18n catalog migration is complete: the `alm/no-user-string` gate is
@@ -42,6 +43,7 @@ export default tseslint.config(
       '**/*.spec.{ts,tsx}',
       '**/__fixtures__/**',
       'src/api/mocks.ts',
+      'src/data/**',
       'src/dev/**',
     ],
     rules: {
@@ -62,6 +64,19 @@ export default tseslint.config(
       // visible but don't block CI.
       'react-hooks/set-state-in-effect': 'warn',
     },
+  },
+
+  // Accessibility (eslint-plugin-jsx-a11y). The standard a11y gate, previously
+  // absent. Rolled out at `warn` first (same wave strategy as the i18n gate):
+  // the recommended set surfaces ~25 existing findings; once those are fixed in
+  // a focused a11y pass, promote this block to the error-level
+  // `jsxA11y.flatConfigs.recommended` and gate CI on it.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: { 'jsx-a11y': jsxA11y },
+    rules: Object.fromEntries(
+      Object.keys(jsxA11y.flatConfigs.recommended.rules).map((name) => [name, 'warn']),
+    ),
   },
 
   // Project-wide rule overrides — keep pragmatic

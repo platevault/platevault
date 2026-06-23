@@ -99,8 +99,8 @@ const MY_TARGETS_EMPTY: TargetListItem[] = [];
 
 /** Group-by options for the Planner top bar (mirrors the other list pages). */
 const GROUP_BY_OPTIONS: FilterOption[] = [
-  { value: 'catalogue', label: 'Catalogue' },
-  { value: 'type', label: 'Object type' },
+  { value: 'catalogue', label: m.cmp_target_search_catalogue_label() },
+  { value: 'type', label: m.targets_groupby_object_type() },
 ];
 
 /** Catalogue multi-select options, in canonical display order. */
@@ -155,7 +155,7 @@ export function matchesSearch(t: TargetListItem, query: string): boolean {
 
 /** My Targets filter options for the FilterToolbar single-select (#91). */
 const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
-  { value: MY_TARGETS_VALUE, label: 'My Targets' },
+  { value: MY_TARGETS_VALUE, label: m.nav_my_targets() },
 ];
 
 /**
@@ -168,13 +168,13 @@ const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
  * any narrowband-possible target. MOCK — not astronomy.
  */
 const FILTER_BAND_OPTIONS: FilterOption[] = [
-  { value: 'L', label: 'L (Lum)' },
-  { value: 'R', label: 'R' },
-  { value: 'G', label: 'G' },
-  { value: 'B', label: 'B' },
-  { value: 'Ha', label: 'Ha' },
-  { value: 'OIII', label: 'OIII' },
-  { value: 'SII', label: 'SII' },
+  { value: 'L', label: m.targets_band_l_lum() },
+  { value: 'R', label: m.targets_band_r() },
+  { value: 'G', label: m.targets_band_g() },
+  { value: 'B', label: m.targets_band_b() },
+  { value: 'Ha', label: m.targets_band_ha() },
+  { value: 'OIII', label: m.targets_band_oiii() },
+  { value: 'SII', label: m.targets_band_sii() },
 ];
 
 export function TargetsPage() {
@@ -323,11 +323,11 @@ export function TargetsPage() {
           fields={[
             {
               key: 'myTargets',
-              label: 'Show',
+              label: m.targets_filter_show_label(),
               value: myTargetsFilter,
               options: MY_TARGETS_FILTER_OPTIONS,
               onChange: setMyTargetsFilter,
-              allLabel: 'All targets',
+              allLabel: m.targets_page_filter_all_targets(),
             },
           ]}
           // Catalogue multi-select, filter-by-filter, and group-by stay visible
@@ -337,7 +337,7 @@ export function TargetsPage() {
           multiFields={[
             {
               key: 'catalogues',
-              label: 'Catalogues',
+              label: m.targets_filter_catalogues_label(),
               value: enabledCatalogues,
               options: CATALOGUE_OPTIONS,
               onChange: (v) => setEnabledCatalogues(v as CatalogueId[]),
@@ -347,7 +347,7 @@ export function TargetsPage() {
               // mock-recommended filter set includes ALL selected bands.
               // NOT astronomy — see planner-altitude.ts for the mock rule.
               key: 'filterBands',
-              label: 'Filters',
+              label: m.common_filters(),
               value: filterBands,
               options: FILTER_BAND_OPTIONS,
               onChange: (v) => setFilterBands(v as FilterBand[]),

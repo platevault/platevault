@@ -138,27 +138,27 @@ function FileInspector({ file }: { file: InboxFileMetadata | null }) {
 
   const rows: Array<{ label: string; value: React.ReactNode; testid: string }> = [
     {
-      label: 'Instrument',
+      label: m.inbox_field_instrument(),
       value: fmtOrDash(file.instrume),
       testid: 'inspector-instrume',
     },
     {
-      label: 'Telescope',
+      label: m.inbox_field_telescope(),
       value: fmtOrDash(file.telescop),
       testid: 'inspector-telescop',
     },
     {
-      label: 'Dimensions',
+      label: m.inbox_field_dimensions(),
       value: fmtDimensions(file.naxis1, file.naxis2),
       testid: 'inspector-dims',
     },
     {
-      label: 'Stack count',
+      label: m.inbox_field_stack_count(),
       value: fmtOrDash(file.stackCount),
       testid: 'inspector-stackcount',
     },
     {
-      label: 'Raw IMAGETYP',
+      label: m.inbox_field_raw_imagetyp(),
       value: fmtOrDash(file.imageTyp),
       testid: 'inspector-imagetyp',
     },
@@ -284,9 +284,9 @@ export function InboxDetail({
   // No samples column; always visible (no Section/collapsible).
   // task 6: destination cell uses ellipsis class.
   const breakdownColumns = [
-    { key: 'kind',        label: 'Frame type',  style: { width: '28%' } },
-    { key: 'count',       label: 'Files',        style: { width: '14%' } },
-    { key: 'destination', label: 'Destination',  style: { width: '58%' } },
+    { key: 'kind',        label: m.inbox_frame_type_label(),  style: { width: '28%' } },
+    { key: 'count',       label: m.inbox_col_files(),         style: { width: '14%' } },
+    { key: 'destination', label: m.inbox_col_destination(),   style: { width: '58%' } },
   ];
 
   // task 33: clicking a row sets/clears the active frame-type filter.
@@ -343,9 +343,9 @@ export function InboxDetail({
   const someSelected = selectedFiles.size > 0 && !allSelected;
 
   const unclassifiedColumns = [
-    { key: 'select',   label: '',                 style: { width: 36 } },
-    { key: 'file',     label: 'File',             style: { width: 160 } },
-    { key: 'override', label: 'Assign frame type' },
+    { key: 'select',   label: '',                              style: { width: 36 } },
+    { key: 'file',     label: m.inbox_col_file(),             style: { width: 160 } },
+    { key: 'override', label: m.inbox_col_assign_frame_type() },
   ];
 
   const unclassifiedRows = unclassifiedFiles.map((filePath, idx) => ({
@@ -354,7 +354,7 @@ export function InboxDetail({
         type="checkbox"
         checked={selectedFiles.has(filePath)}
         onChange={() => handleToggleFile(filePath)}
-        aria-label={`Select ${filePath}`}
+        aria-label={m.inbox_select_file_aria({ file: filePath })}
         data-testid={`reclassify-select-${idx}`}
       />
     ),
@@ -367,7 +367,7 @@ export function InboxDetail({
       <select
         value={pendingOverrides[filePath] ?? ''}
         onChange={(e) => handleOverrideChange(filePath, e.target.value)}
-        aria-label={`Override frame type for ${filePath}`}
+        aria-label={m.inbox_override_frame_type_aria({ file: filePath })}
         data-testid={`override-select-${filePath}`}
         className="alm-select alm-select--sm"
       >
@@ -382,15 +382,15 @@ export function InboxDetail({
   // ── Per-file metadata table (FR-010) ──────────────────────────────────────
 
   const metadataColumns = [
-    { key: 'file',     label: 'File',     style: { minWidth: 160 } },
-    { key: 'type',     label: 'Type',     style: { width: 80 } },
-    { key: 'filter',   label: 'Filter',   style: { width: 70 } },
-    { key: 'exposure', label: 'Exposure', style: { width: 80 } },
-    { key: 'binning',  label: 'Binning',  style: { width: 70 } },
-    { key: 'gain',     label: 'Gain',     style: { width: 60 } },
-    { key: 'temp',     label: 'Temp',     style: { width: 70 } },
-    { key: 'object',   label: 'Object',   style: { width: 100 } },
-    { key: 'date',     label: 'Date',     style: { width: 110 } },
+    { key: 'file',     label: m.inbox_col_file(),     style: { minWidth: 160 } },
+    { key: 'type',     label: m.inbox_col_type(),     style: { width: 80 } },
+    { key: 'filter',   label: m.common_filter(),      style: { width: 70 } },
+    { key: 'exposure', label: m.inbox_col_exposure(), style: { width: 80 } },
+    { key: 'binning',  label: m.inbox_col_binning(),  style: { width: 70 } },
+    { key: 'gain',     label: m.inbox_col_gain(),     style: { width: 60 } },
+    { key: 'temp',     label: m.inbox_col_temp(),     style: { width: 70 } },
+    { key: 'object',   label: m.inbox_col_object(),   style: { width: 100 } },
+    { key: 'date',     label: m.archive_prop_date(),  style: { width: 110 } },
   ];
 
   // FR-032 (US9): files missing a path-load-bearing attribute.
@@ -410,7 +410,7 @@ export function InboxDetail({
           {missingAttrs.length > 0 && (
             <span
               data-testid={`inbox-missing-attr-${fileName}`}
-              title={`Missing required attribute(s): ${missingAttrs.join(', ')}`}
+              title={m.inbox_missing_attrs_title({ attrs: missingAttrs.join(', ') })}
               className="alm-inbox-detail__missing-attr-badge"
             >
               {`needs ${missingAttrs.join(', ')}`}
@@ -539,7 +539,7 @@ export function InboxDetail({
 
       {/* Needs review */}
       {unclassifiedRows.length > 0 && (
-        <Section title={`Needs review (${unclassifiedRows.length})`}>
+        <Section title={m.inbox_needs_review_title({ count: unclassifiedRows.length })}>
           <div className="alm-inbox-detail__select-all-row">
             <input
               type="checkbox"
@@ -629,7 +629,7 @@ export function InboxDetail({
                 className="alm-btn alm-btn--sm alm-btn--accent"
                 onClick={handleBulkApply}
                 disabled={reclassifyLoading}
-                aria-label={`Apply bulk override to ${selectedFiles.size} file${selectedFiles.size !== 1 ? 's' : ''}`}
+                aria-label={m.inbox_bulk_override_apply_aria({ count: selectedFiles.size })}
                 data-testid="bulk-apply-btn"
               >
                 {reclassifyLoading

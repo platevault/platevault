@@ -84,11 +84,11 @@ export function AuditLog() {
 
         <Table
           columns={[
-            { key: 'timestamp', label: 'Timestamp', style: { width: 150 } },
-            { key: 'event', label: 'Event' },
-            { key: 'entity', label: 'Entity' },
-            { key: 'outcome', label: 'Outcome', style: { width: 90 } },
-            { key: 'actor', label: 'Actor', style: { width: 72 } },
+            { key: 'timestamp', label: m.settings_auditlog_col_timestamp(), style: { width: 150 } },
+            { key: 'event', label: m.settings_auditlog_col_event() },
+            { key: 'entity', label: m.settings_auditlog_col_entity() },
+            { key: 'outcome', label: m.settings_auditlog_col_outcome(), style: { width: 90 } },
+            { key: 'actor', label: m.settings_auditlog_col_actor(), style: { width: 72 } },
           ]}
           rows={pageItems.map((e) => ({
             timestamp: (

@@ -146,16 +146,16 @@ export function ProjectsPage() {
           search={{
             value: search,
             onChange: setSearch,
-            placeholder: 'Search name, tool…',
-            ariaLabel: 'Search projects',
+            placeholder: m.projects_search_placeholder(),
+            ariaLabel: m.projects_search_aria(),
           }}
           fields={[
             {
               key: 'state',
-              label: 'State',
+              label: m.sessions_col_state(),
               value: lifecycleValue,
               options: LIFECYCLE_OPTIONS,
-              allLabel: 'All states',
+              allLabel: m.projects_filter_all_states(),
               onChange: onLifecycleChange,
             },
           ]}

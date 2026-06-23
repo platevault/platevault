@@ -288,11 +288,11 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   // ── Sources table ────────────────────────────────────────────────────────
 
   const sourceColumns = [
-    { key: 'role',   label: 'ROLE',   className: 'alm-project-detail__role-cell' },
-    { key: 'source', label: 'SOURCE' },
-    { key: 'filter', label: 'FILTER' },
-    { key: 'subs',   label: 'SUBS',  className: 'alm-project-detail__num-cell' },
-    { key: 'integ',  label: 'INTEG', className: 'alm-project-detail__integ-cell' },
+    { key: 'role',   label: m.projects_col_role(),   className: 'alm-project-detail__role-cell' },
+    { key: 'source', label: m.projects_col_source() },
+    { key: 'filter', label: m.common_filter() },
+    { key: 'subs',   label: m.projects_col_subs(),  className: 'alm-project-detail__num-cell' },
+    { key: 'integ',  label: m.projects_col_integ(), className: 'alm-project-detail__integ-cell' },
   ];
 
   const sourceRows = project.sources.map((src) => ({
@@ -373,7 +373,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                 title={
                   launchDisabledReason
                     ? toolLaunchDisabledTooltip(launchDisabledReason)
-                    : `Open this project in ${projectToolStr}`
+                    : m.projects_open_in_tool_title({ tool: projectToolStr })
                 }
                 onClick={() => void launchTool()}
                 data-testid="tool-launch-btn"
@@ -437,11 +437,11 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             value: derivedChannels.reduce((s, c) => s + c.totalIntegS, 0) > 0
               ? fmtIntegS(derivedChannels.reduce((s, c) => s + c.totalIntegS, 0))
               : '—',
-            label: 'integration',
+            label: m.projects_metric_integration(),
           },
-          { value: project.sources.length, label: 'sources' },
-          { value: project.channels?.length ?? 0, label: 'channels' },
-          { value: toolLabel, label: 'tool' },
+          { value: project.sources.length, label: m.projects_metric_sources() },
+          { value: project.channels?.length ?? 0, label: m.projects_metric_channels() },
+          { value: toolLabel, label: m.projects_metric_tool() },
         ]}
       />
 
@@ -493,7 +493,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
          */}
         {(derivedChannels.length > 0 || (project.channels?.length ?? 0) > 0) && (
           <Section
-            title={paletteLabel ? `Channels — ${paletteLabel} palette` : 'Channels'}
+            title={paletteLabel ? m.projects_channels_palette_title({ channels: m.projects_edit_channels_label(), palette: paletteLabel }) : m.projects_edit_channels_label()}
             right={allInSync ? <Pill variant="ghost">{m.projects_channels_in_sync()}</Pill> : undefined}
           >
             <div className="alm-project-detail__channels-section">
@@ -548,7 +548,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={`${projectToolStr} may already be running`}
+          aria-label={m.projects_tool_already_running_aria({ tool: projectToolStr })}
           className="alm-project-detail__modal-overlay"
           data-testid="relaunch-modal"
         >

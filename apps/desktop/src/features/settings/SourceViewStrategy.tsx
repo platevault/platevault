@@ -15,25 +15,25 @@ interface StrategyOption {
 const STRATEGIES: StrategyOption[] = [
   {
     id: 'junctions',
-    label: 'NTFS Junctions',
+    label: m.settings_sourceview_label_junctions(),
     description:
       'Directory junctions on Windows. WBPP-friendly, no admin privileges required. Only works on the same volume.',
   },
   {
     id: 'symlinks',
-    label: 'Symbolic Links',
+    label: m.settings_sourceview_label_symlinks(),
     description:
       'POSIX-style symlinks. Cross-platform, cross-volume. May require admin/developer mode on Windows.',
   },
   {
     id: 'hardlinks',
-    label: 'Hard Links',
+    label: m.settings_sourceview_label_hardlinks(),
     description:
       'Same-volume file links sharing an inode. Zero extra disk usage but cannot cross volume boundaries.',
   },
   {
     id: 'copy',
-    label: 'Full Copy',
+    label: m.settings_sourceview_label_copy(),
     description:
       'Duplicate every source file into the project tree. Maximum compatibility but uses significant disk space.',
   },

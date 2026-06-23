@@ -192,7 +192,7 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                     {view.items.map((item: PreparedViewItemDetail) => (
                       <li
                         key={item.id}
-                        title={`Inventory item: ${item.inventoryItemId}`}
+                        title={m.projects_source_view_item_title({ id: item.inventoryItemId })}
                         className="alm-source-views__refs-item"
                       >
                         {item.viewRelativePath}

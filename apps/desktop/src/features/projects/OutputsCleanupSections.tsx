@@ -58,9 +58,9 @@ export interface OutputsSectionProps {
 
 export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSectionProps) {
   const columns = [
-    { key: 'name', label: 'OUTPUT' },
-    { key: 'format', label: 'FORMAT' },
-    { key: 'verified', label: 'VERIFICATION' },
+    { key: 'name', label: m.projects_col_output() },
+    { key: 'format', label: m.projects_col_format() },
+    { key: 'verified', label: m.projects_col_verification() },
   ];
 
   const rows = outputs.map((o) => ({

@@ -46,9 +46,9 @@ interface ContextualAction {
 
 function masterActions(master: CalibrationMaster, agingThresholdDays: number): ContextualAction[] {
   const isAging = master.ageDays > agingThresholdDays;
-  const actions: ContextualAction[] = [{ label: 'Use in project', variant: 'primary' }];
-  if (isAging) actions.push({ label: 'Replace master', variant: 'danger' });
-  actions.push({ label: 'Reveal in Explorer' });
+  const actions: ContextualAction[] = [{ label: m.calibration_action_use_in_project(), variant: 'primary' }];
+  if (isAging) actions.push({ label: m.calibration_action_replace_master(), variant: 'danger' });
+  actions.push({ label: m.calibration_action_reveal_explorer() });
   return actions;
 }
 
@@ -147,10 +147,10 @@ export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: 
       <RailCard title={m.calibration_rail_usage()}>
         <MetricLine
           metrics={[
-            { value: fmtBytes(master.sizeBytes), label: 'on disk' },
-            { value: `${master.ageDays}d`, label: 'age' },
-            { value: (master.usedBySessionIds ?? []).length, label: 'sessions' },
-            { value: (master.usedByProjectIds ?? []).length, label: 'projects' },
+            { value: fmtBytes(master.sizeBytes), label: m.calibration_metric_on_disk() },
+            { value: `${master.ageDays}d`, label: m.calibration_masters_sort_age() },
+            { value: (master.usedBySessionIds ?? []).length, label: m.status_sessions_label() },
+            { value: (master.usedByProjectIds ?? []).length, label: m.calibration_metric_projects() },
           ]}
         />
       </RailCard>

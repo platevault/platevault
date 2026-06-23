@@ -30,7 +30,7 @@ export function SessionsFilterBar() {
             type="button"
             className="alm-sessions-filter__chip-remove"
             onClick={() => removeFilter(f.key)}
-            aria-label={`Remove ${f.key} filter`}
+            aria-label={m.sessions_remove_filter_aria({ key: f.key })}
           >
             <X size={12} aria-hidden="true" />
           </button>

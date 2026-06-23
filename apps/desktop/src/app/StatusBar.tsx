@@ -86,7 +86,7 @@ export function StatusBar() {
             <span
               key={vol.path}
               className={clsx('alm-statusbar__vol', vol.warning && 'alm-statusbar__vol--warn')}
-              title={`${vol.path}: ${formatBytes(vol.freeBytes)} free / ${formatBytes(vol.totalBytes)}`}
+              title={m.statusbar_vol_title({ path: vol.path, free: formatBytes(vol.freeBytes), total: formatBytes(vol.totalBytes) })}
             >
               <span>{label}</span>
               <span className="alm-statusbar__meter">

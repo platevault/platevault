@@ -244,7 +244,7 @@ function AddFolderButton({
         variant="primary"
         onClick={handleChoose}
         disabled={loading}
-        aria-label={`Add ${SOURCE_KIND_LABELS[kind]} folder`}
+        aria-label={m.setup_sources_add_folder_aria({ kind: SOURCE_KIND_LABELS[kind] })}
       >
         {loading ? m.setup_choosing() : m.setup_add_folder()}
       </Btn>
@@ -258,7 +258,7 @@ function AddFolderButton({
         <span data-testid={`e2e-add-by-path-${kind}`}>
           <input
             data-testid={`e2e-path-input-${kind}`}
-            aria-label={`E2E ${SOURCE_KIND_LABELS[kind]} path`}
+            aria-label={m.setup_sources_e2e_path_aria({ kind: SOURCE_KIND_LABELS[kind] })}
             value={e2ePath}
             onChange={(ev) => setE2ePath(ev.target.value)}
           />

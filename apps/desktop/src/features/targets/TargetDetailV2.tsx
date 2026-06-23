@@ -468,25 +468,25 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
 
   // Identity facts split across two tabular columns (left-packed).
   const identityA: PropertyDef[] = [
-    { key: 'desig', label: 'Designation', value: detail.primaryDesignation },
-    { key: 'type', label: 'Type', value: detail.objectType.replace(/_/g, ' ') },
-    { key: 'constellation', label: 'Constellation', value: item?.constellation ?? null },
-    { key: 'radec', label: 'RA / Dec', value: raDecStr },
+    { key: 'desig', label: m.targets_col_designation(), value: detail.primaryDesignation },
+    { key: 'type', label: m.cmp_target_search_type_label(), value: detail.objectType.replace(/_/g, ' ') },
+    { key: 'constellation', label: m.targets_prop_constellation(), value: item?.constellation ?? null },
+    { key: 'radec', label: m.targets_prop_ra_dec(), value: raDecStr },
   ];
   const identityB: PropertyDef[] = [
-    { key: 'magnitude', label: 'Magnitude', value: item?.magnitude ?? null },
-    { key: 'source', label: 'Source', value: detail.source },
+    { key: 'magnitude', label: m.targets_prop_magnitude(), value: item?.magnitude ?? null },
+    { key: 'source', label: m.projects_wizard_col_source(), value: detail.source },
     ...(detail.simbadOid != null
-      ? [{ key: 'simbad', label: 'SIMBAD OID', value: detail.simbadOid } as PropertyDef]
+      ? [{ key: 'simbad', label: m.targets_prop_simbad_oid(), value: detail.simbadOid } as PropertyDef]
       : []),
   ];
 
   // Tonight stats (numeric) — Filters render separately (a component, not a value).
   const tonightStats: PropertyDef[] = rowAlt
     ? [
-        { key: 'maxalt', label: 'Max alt', value: `${Math.round(rowAlt.maxAltDeg)}°` },
-        { key: 'imgtime', label: 'Img time', value: `${rowAlt.hoursAboveUsable.toFixed(1)} h` },
-        { key: 'lunar', label: 'Lunar', value: `${Math.round(rowAlt.lunarDistanceDeg)}°` },
+        { key: 'maxalt', label: m.targets_col_max_alt(), value: `${Math.round(rowAlt.maxAltDeg)}°` },
+        { key: 'imgtime', label: m.targets_col_img_time(), value: `${rowAlt.hoursAboveUsable.toFixed(1)} h` },
+        { key: 'lunar', label: m.targets_col_lunar(), value: `${Math.round(rowAlt.lunarDistanceDeg)}°` },
       ]
     : [];
 
@@ -655,7 +655,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         <div className="alm-target-detail__alias-list">
           {detail.aliases.map((a) => (
             <Pill key={a.id} variant={a.kind === 'user' ? 'accent' : 'ghost'}>
-              <span title={`kind: ${a.kind}`}>
+              <span title={m.targets_detail_alias_kind_title({ kind: a.kind })}>
                 <span className="alm-target-detail__alias-kind">
                   [{kindLabel(a.kind)}]
                 </span>
@@ -663,7 +663,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               </span>
               {a.kind === 'user' && (
                 <button
-                  aria-label={`Remove alias ${a.alias}`}
+                  aria-label={m.targets_detail_alias_remove_aria({ alias: a.alias })}
                   className="alm-target-detail__alias-remove"
                   onClick={() => handleAliasRemove(a.id)}
                 >

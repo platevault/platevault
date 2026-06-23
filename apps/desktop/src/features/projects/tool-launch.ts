@@ -138,7 +138,7 @@ export function useToolLaunch(
           variant: 'error',
           action: isNotConfigured
             ? {
-                label: 'Configure path',
+                label: m.projects_tool_configure_path(),
                 onClick: () => {
                   // Navigate to settings/tools pane — best-effort via location
                   window.location.hash = '#/settings?pane=tools';

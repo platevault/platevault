@@ -30,27 +30,27 @@ interface NavGroup {
 // Grouped by workflow stage: capture → organize → work on.
 const NAV_GROUPS: NavGroup[] = [
   {
-    label: 'Capture',
-    items: [{ id: 'inbox', icon: Inbox, label: 'Inbox', path: '/inbox' }],
+    label: m.nav_group_capture(),
+    items: [{ id: 'inbox', icon: Inbox, label: m.settings_datasources_category_inbox(), path: '/inbox' }],
   },
   {
-    label: 'Library',
+    label: m.nav_group_library(),
     items: [
-      { id: 'sessions', icon: Camera, label: 'Sessions', path: '/sessions' },
-      { id: 'calibration', icon: Crosshair, label: 'Calibration', path: '/calibration' },
-      { id: 'targets', icon: Target, label: 'Targets', path: '/targets' },
+      { id: 'sessions', icon: Camera, label: m.common_sessions(), path: '/sessions' },
+      { id: 'calibration', icon: Crosshair, label: m.settings_datasources_category_calibration(), path: '/calibration' },
+      { id: 'targets', icon: Target, label: m.nav_targets(), path: '/targets' },
     ],
   },
   {
-    label: 'Work',
+    label: m.nav_group_work(),
     items: [
-      { id: 'projects', icon: FolderOpen, label: 'Projects', path: '/projects' },
-      { id: 'archive', icon: Archive, label: 'Archive', path: '/archive' },
+      { id: 'projects', icon: FolderOpen, label: m.common_projects(), path: '/projects' },
+      { id: 'archive', icon: Archive, label: m.verb_archive(), path: '/archive' },
     ],
   },
 ];
 
-const SETTINGS_ITEM: NavItem = { id: 'settings', icon: Settings, label: 'Settings', path: '/settings' };
+const SETTINGS_ITEM: NavItem = { id: 'settings', icon: Settings, label: m.settings_page_title(), path: '/settings' };
 
 function badgeFor(id: string, status: StatusSummary): number {
   switch (id) {
@@ -123,7 +123,7 @@ export function Sidebar() {
           type="button"
           className="alm-sidebar__collapse"
           onClick={() => setCollapsed(!collapsed)}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? m.nav_expand_sidebar_aria() : m.nav_collapse_sidebar_aria()}
         >
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>

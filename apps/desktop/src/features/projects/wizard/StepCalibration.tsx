@@ -35,9 +35,9 @@ const MOCK_FLAT_ROWS: FlatRow[] = [
     filter: 'Ha',
     lightsCovered: 'NGC 7000 · Ha · 11-30 (54×) · NGC 7000 · Ha · 12-15 (30×)',
     options: [
-      { id: 'm-7', label: 'MasterFlat_Ha_2024-11 (12d old)', isDefault: true },
-      { id: 'm-5', label: 'MasterFlat_Ha_2024-12 (newer)', isDefault: false },
-      { id: 'skip-ha', label: 'Skip — no flat for Ha', isDefault: false },
+      { id: 'm-7', label: m.projects_wizard_mock_flat_ha_2024_11(), isDefault: true },
+      { id: 'm-5', label: m.projects_wizard_mock_flat_ha_2024_12(), isDefault: false },
+      { id: 'skip-ha', label: m.projects_wizard_mock_skip_ha(), isDefault: false },
     ],
     score: '0.88',
     notes: 'filter-matched · same camera',
@@ -46,9 +46,9 @@ const MOCK_FLAT_ROWS: FlatRow[] = [
     filter: 'OIII',
     lightsCovered: 'NGC 7000 · OIII · 11-30 (38×)',
     options: [
-      { id: 'm-8', label: 'MasterFlat_OIII_2024-11 (12d old)', isDefault: true },
-      { id: 'm-6', label: 'MasterFlat_OIII_2024-12', isDefault: false },
-      { id: 'skip-oiii', label: 'Skip — no flat for OIII', isDefault: false },
+      { id: 'm-8', label: m.projects_wizard_mock_flat_oiii_2024_11(), isDefault: true },
+      { id: 'm-6', label: m.projects_wizard_mock_flat_oiii_2024_12(), isDefault: false },
+      { id: 'skip-oiii', label: m.projects_wizard_mock_skip_oiii(), isDefault: false },
     ],
     score: '0.88',
     notes: 'filter-matched · same camera',
@@ -73,9 +73,9 @@ const SHARED_ROWS: SharedRow[] = [
     role: 'dark',
     field: 'sharedDarkId',
     options: [
-      { value: 'm-1', label: 'MasterDark_300s_-10C_g100 · ASI2600MM · 23d (recommended)' },
-      { value: 'cal-sess', label: 'Use calibration session instead…' },
-      { value: '', label: 'Skip darks' },
+      { value: 'm-1', label: m.projects_wizard_mock_dark_recommended() },
+      { value: 'cal-sess', label: m.projects_wizard_mock_use_cal_session() },
+      { value: '', label: m.projects_wizard_mock_skip_darks() },
     ],
     defaultValue: 'm-1',
     score: '0.92',
@@ -87,8 +87,8 @@ const SHARED_ROWS: SharedRow[] = [
     role: 'bias',
     field: 'sharedBiasId',
     options: [
-      { value: 'm-10', label: 'MasterBias_g100 · ASI2600MM (180d old — aging)' },
-      { value: '', label: 'Skip bias (rely on darks)' },
+      { value: 'm-10', label: m.projects_wizard_mock_bias_aging() },
+      { value: '', label: m.projects_wizard_mock_skip_bias() },
     ],
     defaultValue: 'm-10',
     score: '0.71',
@@ -100,7 +100,7 @@ const SHARED_ROWS: SharedRow[] = [
     role: 'dark flat',
     field: 'sharedDarkFlatId',
     options: [
-      { value: '', label: 'Skip (no dark flats in library)' },
+      { value: '', label: m.projects_wizard_mock_skip_dark_flats() },
     ],
     defaultValue: '',
     score: '—',
@@ -153,7 +153,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                         })
                       }
                       className="alm-wizard-calib__select"
-                      aria-label={`Flat master for ${row.filter}`}
+                      aria-label={m.projects_wizard_flat_master_for_aria({ filter: row.filter })}
                     >
                       {row.options.map((opt) => (
                         <option key={opt.id} value={opt.id}>{opt.label}</option>
@@ -192,7 +192,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                       value={currentValue}
                       onChange={(e) => onChange({ ...data, [row.field]: e.target.value })}
                       className="alm-wizard-calib__select"
-                      aria-label={`Pick ${row.role}`}
+                      aria-label={m.projects_wizard_pick_role_aria({ role: row.role })}
                     >
                       {row.options.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>

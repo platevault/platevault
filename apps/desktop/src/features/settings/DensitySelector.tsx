@@ -5,9 +5,9 @@ import type { Density } from '@/bindings/types';
 import { m } from '@/lib/i18n';
 
 const DENSITY_OPTIONS: { value: Density; label: string; description: string }[] = [
-  { value: 'compact', label: 'Compact', description: '24px row height — fits more rows on screen' },
-  { value: 'comfortable', label: 'Comfortable', description: '32px row height — default' },
-  { value: 'spacious', label: 'Spacious', description: '40px row height — easier to click' },
+  { value: 'compact', label: m.settings_density_compact(), description: '24px row height — fits more rows on screen' },
+  { value: 'comfortable', label: m.settings_density_comfortable(), description: '32px row height — default' },
+  { value: 'spacious', label: m.settings_density_spacious(), description: '40px row height — easier to click' },
 ];
 
 export function DensitySelector() {

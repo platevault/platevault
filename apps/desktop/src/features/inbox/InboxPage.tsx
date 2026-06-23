@@ -590,7 +590,7 @@ export function InboxPage() {
           search={{
             value: search,
             onChange: setSearch,
-            placeholder: 'Search detections…',
+            placeholder: m.inbox_search_placeholder(),
             ariaLabel: 'Search inbox',
           }}
           actions={
@@ -616,7 +616,7 @@ export function InboxPage() {
               variant="ghost"
               disabled={!canBulkConfirm}
               onClick={() => void handleBulkConfirm()}
-              aria-label={`Confirm all ${bulkEligibleItems.length} classified item${bulkEligibleItems.length !== 1 ? 's' : ''}`}
+              aria-label={m.inbox_bulk_confirm_aria({ count: bulkEligibleItems.length })}
               data-testid="inbox-bulk-confirm-btn"
             >
               {bulkConfirmLoading

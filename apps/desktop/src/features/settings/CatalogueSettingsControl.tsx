@@ -68,7 +68,7 @@ export function CatalogueSettingsControl() {
         >
           <Toggle
             checked={enabled.has(c.id)}
-            aria-label={`Enable ${c.label} by default`}
+            aria-label={m.settings_catalogue_enable_default_aria({ label: c.label })}
             onChange={(v) => toggle(c.id, v)}
           />
         </SettingsRow>

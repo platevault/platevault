@@ -46,19 +46,45 @@ const TOAST_NAMES = new Set([
   "confirm",
 ]);
 
-// Object properties that carry user-facing text when passed to a toast/dialog
-// call (e.g. addToast({ message }), confirm({ title, body })).
-const USER_OBJECT_PROPS = new Set([
-  "message",
-  "title",
-  "body",
-  "description",
+
+// Object-property keys whose string values are user-facing prose when they
+// appear in data structures (nav configs, table columns, status maps, dialog
+// defs). Deliberately excludes machine-ish keys like `name`, `id`, `key`,
+// `value`, `path`, `route`, `icon`, `variant` to keep false positives low.
+const LABEL_PROP_KEYS = new Set([
   "label",
+  "heading",
+  "subtitle",
+  "placeholder",
+  "tooltip",
+  "cta",
+  "emptyText",
   "confirmLabel",
   "cancelLabel",
 ]);
 
+// Keys carrying user-facing text specifically inside a toast/dialog CALL arg
+// (addToast({message}), confirm({title, body})). These keys are too common in
+// machine/internal objects to flag globally, but in a toast/dialog call they
+// are always shown to the user.
+const TOAST_OBJECT_PROPS = new Set(["message", "title", "body", "description"]);
+
 const hasLetter = (s) => /\p{L}/u.test(s);
+
+// A template literal carries user-facing prose when any of its static text
+// chunks (quasis) contains a letter, e.g. `Sort by ${col}` or `Remove ${name}`.
+// Pure-interpolation templates with no letters (`${a}-${b}`, `${x}px`) are
+// machine strings and are ignored.
+const templateHasLetter = (node) =>
+  node.type === "TemplateLiteral" &&
+  node.quasis.some((q) => hasLetter(q.value.cooked ?? q.value.raw ?? ""));
+
+// A short preview of a template literal for the diagnostic: static chunks kept,
+// interpolations shown as `${…}`.
+const templatePreview = (node) =>
+  node.quasis
+    .map((q, i) => (q.value.cooked ?? "") + (i < node.expressions.length ? "${…}" : ""))
+    .join("");
 
 /** @type {import('eslint').Rule.RuleModule} */
 const rule = {
@@ -182,6 +208,83 @@ const rule = {
             messageId: "attr",
             data: { attr: name, text: quote(val) },
           });
+          return;
+        }
+        // Template-literal value: aria-label={`Remove ${name}`} — user-facing
+        // prose with interpolation. Must become a parameterized catalog message
+        // m.<key>({ name }). Pure-interpolation templates (no letters) are skipped.
+        if (
+          node.value &&
+          node.value.type === "JSXExpressionContainer" &&
+          templateHasLetter(node.value.expression)
+        ) {
+          context.report({
+            node: node.value.expression,
+            messageId: "attr",
+            data: { attr: name, text: quote(templatePreview(node.value.expression)) },
+          });
+          return;
+        }
+        // Ternary value: aria-label={open ? 'Collapse' : 'Expand'} — flag each
+        // string-literal OR template-literal branch.
+        if (
+          node.value &&
+          node.value.type === "JSXExpressionContainer" &&
+          node.value.expression.type === "ConditionalExpression"
+        ) {
+          for (const branch of [
+            node.value.expression.consequent,
+            node.value.expression.alternate,
+          ]) {
+            if (
+              branch.type === "Literal" &&
+              typeof branch.value === "string" &&
+              hasLetter(branch.value)
+            ) {
+              context.report({
+                node: branch,
+                messageId: "attr",
+                data: { attr: name, text: quote(branch.value) },
+              });
+            } else if (templateHasLetter(branch)) {
+              context.report({
+                node: branch,
+                messageId: "attr",
+                data: { attr: name, text: quote(templatePreview(branch)) },
+              });
+            }
+          }
+        }
+      },
+
+      // User-facing string literals declared as object properties in data
+      // structures (nav configs, table column defs, status-label maps, etc.),
+      // e.g. `{ label: 'Sessions' }` / `{ title: 'Export' }`. These reach the
+      // screen via a variable, so the JSX visitors never see them.
+      Property(node) {
+        if (
+          node.computed ||
+          node.key.type !== "Identifier" ||
+          !LABEL_PROP_KEYS.has(node.key.name)
+        ) {
+          return;
+        }
+        if (
+          node.value.type === "Literal" &&
+          typeof node.value.value === "string" &&
+          hasLetter(node.value.value)
+        ) {
+          context.report({
+            node: node.value,
+            messageId: "attr",
+            data: { attr: node.key.name, text: quote(node.value.value) },
+          });
+        } else if (templateHasLetter(node.value)) {
+          context.report({
+            node: node.value,
+            messageId: "attr",
+            data: { attr: node.key.name, text: quote(templatePreview(node.value)) },
+          });
         }
       },
 
@@ -207,13 +310,13 @@ const rule = {
           });
           return;
         }
-        // Object form: addToast({ message: 'Saved' }) / confirm({ title, body })
+        // Object form: addToast({ message: 'Saved' }) / confirm({ title, body }).
         if (arg && arg.type === "ObjectExpression") {
           for (const prop of arg.properties) {
             if (
               prop.type !== "Property" ||
               prop.key.type !== "Identifier" ||
-              !USER_OBJECT_PROPS.has(prop.key.name)
+              !TOAST_OBJECT_PROPS.has(prop.key.name)
             ) {
               continue;
             }

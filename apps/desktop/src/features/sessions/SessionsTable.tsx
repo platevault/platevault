@@ -208,7 +208,7 @@ export function SessionsTable({
           'alm-sessions-sorth' + (sort.col === c.sort ? ' alm-sessions-sorth--active' : '')
         }
         onClick={() => onSort(c.sort as SessionSortCol)}
-        aria-label={`Sort by ${c.label}`}
+        aria-label={m.sessions_sort_by_aria({ col: c.label })}
       >
         {c.label}
         {sort.col === c.sort && (

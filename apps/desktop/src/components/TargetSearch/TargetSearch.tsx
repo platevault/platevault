@@ -518,7 +518,7 @@ export function TargetSearch({
                               <button
                                 type="button"
                                 className="alm-target-search__override"
-                                aria-label={`Set "${query.trim()}" to ${s.primaryDesignation}`}
+                                aria-label={m.cmp_target_search_set_primary_aria({ query: query.trim(), designation: s.primaryDesignation })}
                                 disabled={overriding != null || query.trim().length === 0}
                                 onPointerDown={(e) => {
                                   // Don't trigger the row's select-on-press.

@@ -16,6 +16,7 @@
  */
 
 import type { InboxStatsResponse, InboxStatsPerType } from './store';
+import { m } from '@/lib/i18n';
 
 export interface InboxStatsSummaryProps {
   stats: InboxStatsResponse;
@@ -47,9 +48,7 @@ function PerTypeChip({ row }: { row: InboxStatsPerType }) {
     <span
       className="alm-inbox-stats__per-type"
       data-testid={`inbox-stats-type-${row.frameType}`}
-      title={`${row.folderCount} folder${row.folderCount === 1 ? '' : 's'}${
-        row.masterCount > 0 ? ` · ${row.masterCount} master${row.masterCount === 1 ? '' : 's'}` : ''
-      } · ${row.imageCount} files`}
+      title={m.inbox_stats_per_type_title({ folderCount: row.folderCount, masterCount: row.masterCount, imageCount: row.imageCount })}
     >
       <span className="alm-inbox-stats__type">{row.frameType}</span>
       <span className="alm-inbox-stats__num">{count}</span>

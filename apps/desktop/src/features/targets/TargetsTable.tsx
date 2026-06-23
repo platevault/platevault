@@ -265,19 +265,19 @@ const COLUMNS: Array<{
   title?: string;
 }> = [
   // task #18: star column (no label — icon-only header)
-  { key: 'star', label: '★', className: 'alm-targets-cell--center', title: 'Favourite' },
-  { key: 'designation', label: 'Designation', sort: 'designation' },
-  { key: 'type', label: 'Type', sort: 'type' },
-  { key: 'maxAlt', label: 'Max alt', sort: 'maxAlt', className: 'alm-targets-cell--num', title: 'Peak altitude tonight (approximate)' },
-  { key: 'spark', label: 'Tonight', className: 'alm-targets-cell--spark' },
-  { key: 'visible', label: 'Visible', sort: 'visible', className: 'alm-targets-cell--center', title: 'Visible tonight above usable altitude threshold' },
-  { key: 'opposition', label: 'Opposition', sort: 'opposition', className: 'alm-targets-cell--opposition', title: 'Next opposition date' },
+  { key: 'star', label: '★', className: 'alm-targets-cell--center', title: m.targets_col_favourite() },
+  { key: 'designation', label: m.targets_col_designation(), sort: 'designation' },
+  { key: 'type', label: m.cmp_target_search_type_label(), sort: 'type' },
+  { key: 'maxAlt', label: m.targets_col_max_alt(), sort: 'maxAlt', className: 'alm-targets-cell--num', title: m.targets_table_approx_max_alt() },
+  { key: 'spark', label: m.targets_col_tonight(), className: 'alm-targets-cell--spark' },
+  { key: 'visible', label: m.targets_col_visible(), sort: 'visible', className: 'alm-targets-cell--center', title: m.targets_col_visible_title() },
+  { key: 'opposition', label: m.targets_col_opposition(), sort: 'opposition', className: 'alm-targets-cell--opposition', title: m.targets_table_next_opposition() },
   // task #5: abbreviated header "Lunar" fits the widened 80px column without clipping
-  { key: 'lunarDist', label: 'Lunar', sort: 'lunarDist', className: 'alm-targets-cell--num', title: 'Angular separation from the Moon tonight' },
-  { key: 'filters', label: 'Filters', className: 'alm-targets-cell--filters', title: 'Recommended filter set for tonight' },
+  { key: 'lunarDist', label: m.targets_col_lunar(), sort: 'lunarDist', className: 'alm-targets-cell--num', title: m.targets_col_lunar_title() },
+  { key: 'filters', label: m.common_filters(), className: 'alm-targets-cell--filters', title: m.targets_col_filters_title() },
   // task #5: abbreviated header "Img time" fits the widened 100px column without clipping
-  { key: 'imagingTime', label: 'Img time', sort: 'imagingTime', className: 'alm-targets-cell--num', title: 'Hours above usable altitude tonight' },
-  { key: 'sessions', label: 'Sessions', sort: 'sessions', className: 'alm-targets-cell--num', title: 'Linked sessions' },
+  { key: 'imagingTime', label: m.targets_col_img_time(), sort: 'imagingTime', className: 'alm-targets-cell--num', title: m.targets_col_img_time_title() },
+  { key: 'sessions', label: m.common_sessions(), sort: 'sessions', className: 'alm-targets-cell--num', title: m.targets_col_sessions_title() },
 ];
 
 // COL_COUNT is derived from COLUMNS so adding/removing a column stays in sync.
@@ -391,7 +391,7 @@ export function TargetsTable({
           'alm-targets-sorth' + (sort.col === c.sort ? ' alm-targets-sorth--active' : '')
         }
         onClick={() => onSort(c.sort as TargetSortCol)}
-        aria-label={`Sort by ${c.label}`}
+        aria-label={m.targets_table_sort_by_aria({ col: c.label })}
         title={c.title}
       >
         {c.label}
@@ -503,9 +503,9 @@ export function TargetsTable({
                         'alm-targets-star' +
                         (isFav ? ' alm-targets-star--active' : '')
                       }
-                      aria-label={isFav ? `Unfavourite ${t.effectiveLabel}` : `Favourite ${t.effectiveLabel}`}
+                      aria-label={isFav ? m.targets_star_unfavourite_aria({ label: t.effectiveLabel }) : m.targets_star_favourite_aria({ label: t.effectiveLabel })}
                       aria-pressed={isFav}
-                      title={isFav ? 'Remove from My Targets' : 'Add to My Targets'}
+                      title={isFav ? m.targets_star_remove_title() : m.targets_star_add_title()}
                       onClick={(e) => {
                         e.stopPropagation();
                         resolvedToggle(t.id);
@@ -533,21 +533,21 @@ export function TargetsTable({
                   </td>
                   {/* STUB (#58): inline altitude sparkline for the night. */}
                   <td className="alm-targets-cell--spark">
-                    <AltitudeSparkline alt={alt} label={`Altitude tonight for ${t.effectiveLabel}`} />
+                    <AltitudeSparkline alt={alt} label={m.targets_table_alt_sparkline_aria({ label: t.effectiveLabel })} />
                   </td>
                   {/* MOCK (#58): visible-tonight indicator (peaks above usable alt). */}
                   <td className="alm-targets-cell--center">
                     {alt.visibleTonight ? (
                       <span
                         className="alm-targets-vis alm-targets-vis--yes"
-                        title={`Reaches ${Math.round(alt.maxAltDeg)}° · ~${alt.hoursAboveUsable.toFixed(1)} h above ${usableAltDeg}°`}
+                        title={m.targets_table_visible_reaches_title({ deg: Math.round(alt.maxAltDeg), hours: alt.hoursAboveUsable.toFixed(1), threshold: usableAltDeg })}
                       >
                         ●<span className="alm-targets-vis__label">{m.targets_table_visible_tonight()}</span>
                       </span>
                     ) : (
                       <span
                         className="alm-targets-vis alm-targets-vis--no"
-                        title={`Peaks at ${Math.round(alt.maxAltDeg)}° — below ${usableAltDeg}° tonight`}
+                        title={m.targets_table_visible_peaks_title({ deg: Math.round(alt.maxAltDeg), threshold: usableAltDeg })}
                       >
                         ○<span className="alm-targets-vis__label">{m.targets_table_visible_low()}</span>
                       </span>
@@ -563,7 +563,7 @@ export function TargetsTable({
                   <td className="alm-targets-cell--num">
                     <span
                       className="alm-targets-cell--lunardist"
-                      title={`Lunar distance: ${Math.round(alt.lunarDistanceDeg)}°`}
+                      title={m.targets_table_lunar_dist_title({ deg: Math.round(alt.lunarDistanceDeg) })}
                     >
                       {Math.round(alt.lunarDistanceDeg)}°
                     </span>
@@ -575,7 +575,7 @@ export function TargetsTable({
                   {/* MOCK (spec 044): hours above the usable-altitude threshold. */}
                   <td className="alm-targets-cell--num">
                     <span
-                      title={`~${alt.hoursAboveUsable.toFixed(1)} h above ${usableAltDeg}° tonight`}
+                      title={m.targets_table_hours_above_title({ hours: alt.hoursAboveUsable.toFixed(1), threshold: usableAltDeg })}
                     >
                       {alt.hoursAboveUsable > 0 ? `${alt.hoursAboveUsable.toFixed(1)} h` : '—'}
                     </span>

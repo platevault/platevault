@@ -104,7 +104,7 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
           className="artifact-mark-resolved-btn alm-tool-launches__resolve-btn"
           onClick={handleMarkResolved}
           disabled={working}
-          aria-label={`Mark ${fileName} as resolved`}
+          aria-label={m.projects_mark_resolved_aria({ file: fileName })}
         >
           {working ? m.common_resolving() : m.projects_mark_resolved()}
         </button>
