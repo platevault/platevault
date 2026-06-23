@@ -187,6 +187,36 @@
 .alm-table td.num { font-variant-numeric: tabular-nums; text-align: right; }
 .alm-table td.muted { color: var(--alm-text-muted); }
 
+/* Group-header rows (sessions/calibration/projects/inbox/targets grouping): the
+   expand/label button sits in the FIRST cell with NO colspan and intentionally
+   overflows across the empty adjacent cells to show the full "label · count".
+   Exempt these cells from the global clip above — otherwise the group label is
+   chopped to the first column's width (looks like a boxed/truncated chip). */
+.alm-table tr[class*="__group"] > td {
+  overflow: visible;
+}
+
+/* Group-header cell button: reset the native <button> chrome (UA outset border +
+   grey background) and lay out caret + label + count inline with spacing. Only
+   the inbox table had this; sessions/calibration/projects/targets rendered the
+   default button box with the count jammed against the label. Unified globally. */
+.alm-table [class*="__group-cell"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: var(--alm-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text-muted);
+}
+
 /* Virtualized Table (opt-in `virtualized` prop): own scroll container + sticky
    header + zero-chrome sentinel spacer rows (padding-spacer windowing). */
 .alm-table__scroll {
