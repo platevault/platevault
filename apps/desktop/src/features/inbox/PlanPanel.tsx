@@ -122,18 +122,6 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-/** Build a human summary like "3 move · 2 catalogue" for one group. */
-function buildCountSummary(actions: InboxPlanAction[]): string {
-  const counts = new Map<string, number>();
-  for (const a of actions) {
-    counts.set(a.action, (counts.get(a.action) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([kind, count]) => `${count} ${actionLabel(kind).toLowerCase()}`)
-    .join(' · ');
-}
-
 /**
  * Frame-type keywords we look for in a destination path to label a summary
  * line. `InboxPlanAction` carries no frame type, so we infer it from the path
@@ -539,11 +527,7 @@ export function PlanPanel({
               aria-label="Select all plans"
               data-testid="plan-select-all"
             />
-            <span
-              className="alm-plan-panel__title"
-            >
-              Planned actions
-            </span>
+            <span className="alm-plan-panel__select-all-label">Select all</span>
           </label>
           <span
             className="alm-plan-panel__count-summary"
@@ -575,12 +559,6 @@ export function PlanPanel({
             Apply all
           </Btn>
         </div>
-      </div>
-
-      <div
-        className="alm-plan-panel__hint"
-      >
-        Selection is per ingestion — checking a group applies that whole plan.
       </div>
 
       {/* ── Scrollable group list ── */}
@@ -661,9 +639,60 @@ export function PlanPanel({
                 >
                   {plan.itemName}
                 </span>
-                <span className="alm-plan-panel__group-count">
-                  {buildCountSummary(plan.actions)}
-                </span>
+                {/* Inline breakdown summary on the same row as the group header:
+                    "10 bias · 21 dark · 12 light → <dest>". */}
+                <ul
+                  className="alm-plan-panel__summary alm-plan-panel__summary--inline"
+                  data-testid={`plan-group-summary-${plan.inboxItemId}`}
+                >
+                  {breakdownEntries.length > 0 && breakdownDest ? (
+                    <li className="alm-plan-panel__summary-line">
+                      <span className="alm-plan-panel__summary-breakdown">
+                        {breakdownEntries.map((entry, i) => (
+                          <span key={entry.key} className="alm-plan-panel__summary-type">
+                            {i > 0 && (
+                              <span className="alm-plan-panel__summary-sep" aria-hidden="true">
+                                ·{' '}
+                              </span>
+                            )}
+                            <span className="alm-plan-panel__summary-type-count">
+                              {entry.count}
+                            </span>{' '}
+                            <span className="alm-plan-panel__summary-type-name">
+                              {pluralLabel(entry.frameType, entry.count)}
+                            </span>
+                          </span>
+                        ))}
+                      </span>
+                      <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
+                        →
+                      </span>
+                      <code
+                        className="alm-plan-panel__summary-dest"
+                        title={breakdownDest.full}
+                      >
+                        {breakdownDest.short}
+                      </code>
+                    </li>
+                  ) : (
+                    summaryLines.map((line) => (
+                      <li key={line.key} className="alm-plan-panel__summary-line">
+                        <span className="alm-plan-panel__summary-count">
+                          {line.count} {pluralLabel(line.frameType, line.count)}
+                        </span>
+                        <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
+                          →
+                        </span>
+                        <code
+                          className="alm-plan-panel__summary-dest"
+                          title={line.destinationFull}
+                        >
+                          {line.destinationShort}
+                        </code>
+                      </li>
+                    ))
+                  )}
+                </ul>
                 {plan.stale && (
                   <span
                     className="alm-plan-panel__stale-badge"
@@ -688,63 +717,6 @@ export function PlanPanel({
                   Source files changed — discard and re-confirm to regenerate this plan.
                 </Banner>
               )}
-
-              {/* Collapsed summary. When the ingestion's frame-type breakdown
-                  is available, render ONE line listing each type with its count
-                  ("10 bias · 21 dark · 12 light → <dest>"). Otherwise fall back
-                  to one line per (frame type → destination) bucket. */}
-              <ul
-                className="alm-plan-panel__summary"
-                data-testid={`plan-group-summary-${plan.inboxItemId}`}
-              >
-                {breakdownEntries.length > 0 && breakdownDest ? (
-                  <li className="alm-plan-panel__summary-line">
-                    <span className="alm-plan-panel__summary-breakdown">
-                      {breakdownEntries.map((entry, i) => (
-                        <span key={entry.key} className="alm-plan-panel__summary-type">
-                          {i > 0 && (
-                            <span className="alm-plan-panel__summary-sep" aria-hidden="true">
-                              ·{' '}
-                            </span>
-                          )}
-                          <span className="alm-plan-panel__summary-type-count">
-                            {entry.count}
-                          </span>{' '}
-                          <span className="alm-plan-panel__summary-type-name">
-                            {pluralLabel(entry.frameType, entry.count)}
-                          </span>
-                        </span>
-                      ))}
-                    </span>
-                    <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
-                      →
-                    </span>
-                    <code
-                      className="alm-plan-panel__summary-dest"
-                      title={breakdownDest.full}
-                    >
-                      {breakdownDest.short}
-                    </code>
-                  </li>
-                ) : (
-                  summaryLines.map((line) => (
-                    <li key={line.key} className="alm-plan-panel__summary-line">
-                      <span className="alm-plan-panel__summary-count">
-                        {line.count} {pluralLabel(line.frameType, line.count)}
-                      </span>
-                      <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
-                        →
-                      </span>
-                      <code
-                        className="alm-plan-panel__summary-dest"
-                        title={line.destinationFull}
-                      >
-                        {line.destinationShort}
-                      </code>
-                    </li>
-                  ))
-                )}
-              </ul>
 
               {/* Action rows — hidden until the group is expanded. */}
               {isExpanded && (

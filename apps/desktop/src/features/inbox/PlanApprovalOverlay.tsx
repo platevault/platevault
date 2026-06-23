@@ -95,12 +95,25 @@ export function PlanApprovalOverlay({
   return (
     <Dialog.Root
       open={open}
-      onOpenChange={(isOpen) => {
-        if (!isOpen) onClose();
+      onOpenChange={(isOpen, eventDetails) => {
+        if (isOpen) return;
+        // Ignore `outside-press`: base-ui treats a click on an inner control
+        // that re-renders/unmounts (the plan checkboxes, the file foldout) as an
+        // outside press because the original target is gone from the DOM by
+        // pointer-up, which would wrongly close the overlay on every interaction.
+        // Genuine outside dismissal is handled by the Backdrop onClick below;
+        // Escape ('escape-key') and the ✕ ('close-press') still close here.
+        if (eventDetails?.reason === 'outside-press') return;
+        onClose();
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop className="alm-plan-overlay__backdrop" />
+        <Dialog.Backdrop
+          className="alm-plan-overlay__backdrop"
+          // Explicit backdrop dismissal — fires only for true outside clicks
+          // (clicks inside the popup never reach this sibling element).
+          onClick={onClose}
+        />
         <Dialog.Popup
           className="alm-plan-overlay"
           aria-label="Review plans"

@@ -190,12 +190,18 @@ export interface InboxDetailProps {
 	 */
 	fileMetadata?: InboxFileMetadata[];
 	/**
-	 * Inline action for the mixed-folder: generate a split plan for this item.
-	 * Optional — when absent the header button is omitted.
+	 * Primary confirm action for this detection — runs the confirm/split flow.
+	 * For a mixed folder the page labels this "Generate split plan"; otherwise
+	 * "Confirm to inventory". Rendered inline-left in the detail header (the
+	 * canonical Sessions placement). Omit to hide the button.
 	 */
-	onGenerateSplitPlan?: () => void;
-	/** True while a confirm/split is in flight — disables the inline action. */
-	splitPlanBusy?: boolean;
+	onConfirm?: () => void;
+	/** Header confirm label, e.g. "Confirm to inventory" / "Generate split plan". */
+	confirmLabel?: string;
+	/** Disable the confirm action (gated: unclassified / missing attrs / open plan). */
+	confirmDisabled?: boolean;
+	/** True while a confirm/split is in flight — shows "Working…" + disables. */
+	confirmBusy?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -204,8 +210,10 @@ export function InboxDetail({
 	item,
 	classification,
 	fileMetadata,
-	onGenerateSplitPlan,
-	splitPlanBusy = false,
+	onConfirm,
+	confirmLabel = "Confirm to inventory",
+	confirmDisabled = false,
+	confirmBusy = false,
 }: InboxDetailProps) {
 	const { reclassify, loading: reclassifyLoading } = useInboxReclassify(
 		item.inboxItemId,
@@ -532,6 +540,13 @@ export function InboxDetail({
 			: []),
 	];
 
+	// Spread the detection facts across two left-packed columns (the canonical
+	// SessionDetail shape) so the bottom panel reads as multi-column, not one
+	// cramped stack.
+	const detMid = Math.ceil(detectionProps.length / 2);
+	const detColA = detectionProps.slice(0, detMid);
+	const detColB = detectionProps.slice(detMid);
+
 	// ── Inline header actions ─────────────────────────────────────────────────
 
 	const titleActions = (
@@ -542,16 +557,17 @@ export function InboxDetail({
 					: classType}
 			</Pill>
 			{item.lane === "video" && <Pill variant="ghost">video</Pill>}
-			{classType === "mixed" && onGenerateSplitPlan && (
+			{onConfirm && (
 				<Btn
 					size="sm"
-					variant="accent"
-					onClick={onGenerateSplitPlan}
-					disabled={splitPlanBusy}
-					aria-label="Generate split plan"
-					data-testid="inbox-mixed-split-btn"
+					variant="primary"
+					onClick={onConfirm}
+					disabled={confirmDisabled || confirmBusy}
+					aria-label={confirmLabel}
+					data-testid="inbox-confirm-btn"
+					data-guide-anchor="inbox.confirm-row"
 				>
-					{splitPlanBusy ? "Working…" : "Generate split plan"}
+					{confirmBusy ? "Working…" : confirmLabel}
 				</Btn>
 			)}
 		</span>
@@ -609,12 +625,23 @@ export function InboxDetail({
 
 			{/* Left-packed .alm-session-detail2 row */}
 			<div className="alm-session-detail2">
-				{/* Col A: detection PropertyTable */}
+				{/* Col A: detection facts (first half) */}
 				<div className="alm-session-detail2__col">
-					<div className="alm-session-detail2__head">Detection</div>
-					<PropertyTable mode="view" showSource properties={detectionProps} />
+					<PropertyTable mode="view" showSource properties={detColA} />
+				</div>
 
-					{/* FR-011: compact mixed-composition summary below the facts */}
+				{/* Col B: detection facts (second half) — only when there are enough */}
+				{detColB.length > 0 && (
+					<div className="alm-session-detail2__col">
+						<PropertyTable mode="view" showSource properties={detColB} />
+					</div>
+				)}
+
+				{/* Col C: Files — mixed-composition summary + the metadata popover */}
+				<div className="alm-session-detail2__col">
+					<div className="alm-session-detail2__head">Files</div>
+
+					{/* FR-011: compact mixed-composition summary */}
 					{mixedSummary && (
 						<section
 							aria-label="Mixed composition summary"
@@ -625,7 +652,7 @@ export function InboxDetail({
 					)}
 
 					{/* Files popover — trigger + portaled popup with metadata table + inspector */}
-					{hasMetadata && (
+					{hasMetadata ? (
 						<Popover.Root
 							onOpenChange={() => {
 								// Reset inspector selection whenever the popover is closed.
@@ -662,6 +689,12 @@ export function InboxDetail({
 								</Popover.Positioner>
 							</Popover.Portal>
 						</Popover.Root>
+					) : (
+						!mixedSummary && (
+							<span className="alm-session-detail2__muted">
+								No file metadata
+							</span>
+						)
 					)}
 				</div>
 

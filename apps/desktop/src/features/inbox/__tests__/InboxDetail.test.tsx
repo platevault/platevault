@@ -434,9 +434,9 @@ describe("InboxDetail — FR-032: missing-attribute banner", () => {
 
 // ── task #34: mixed-folder — banner in body, action in header ────────────────
 
-describe("InboxDetail — task #34: mixed-folder banner + header action button", () => {
-	it('renders the mixed banner AND the "Generate split plan" button in the header', () => {
-		const onGenerateSplitPlan = vi.fn();
+describe("InboxDetail — task #34: mixed-folder banner + header confirm action", () => {
+	it('renders the mixed banner AND the confirm button (labelled "Generate split plan") in the header', () => {
+		const onConfirm = vi.fn();
 		render(
 			<InboxDetail
 				item={
@@ -448,21 +448,23 @@ describe("InboxDetail — task #34: mixed-folder banner + header action button",
 						typeof InboxDetail
 					>[0]["classification"]
 				}
-				onGenerateSplitPlan={onGenerateSplitPlan}
+				onConfirm={onConfirm}
+				confirmLabel="Generate split plan"
 			/>,
 		);
 		expect(screen.getByTestId("inbox-mixed-alert")).toBeInTheDocument();
-		const btn = screen.getByTestId("inbox-mixed-split-btn");
+		const btn = screen.getByTestId("inbox-confirm-btn");
+		expect(btn).toHaveTextContent("Generate split plan");
 		fireEvent.click(btn);
-		expect(onGenerateSplitPlan).toHaveBeenCalledTimes(1);
+		expect(onConfirm).toHaveBeenCalledTimes(1);
 		// Button is NOT inside the banner.
 		const banner = screen.getByTestId("inbox-mixed-alert");
 		expect(
-			banner.querySelector('[data-testid="inbox-mixed-split-btn"]'),
+			banner.querySelector('[data-testid="inbox-confirm-btn"]'),
 		).toBeNull();
 	});
 
-	it("disables the header split button while busy", () => {
+	it("disables the header confirm button while busy", () => {
 		render(
 			<InboxDetail
 				item={
@@ -474,14 +476,15 @@ describe("InboxDetail — task #34: mixed-folder banner + header action button",
 						typeof InboxDetail
 					>[0]["classification"]
 				}
-				onGenerateSplitPlan={vi.fn()}
-				splitPlanBusy
+				onConfirm={vi.fn()}
+				confirmLabel="Generate split plan"
+				confirmBusy
 			/>,
 		);
-		expect(screen.getByTestId("inbox-mixed-split-btn")).toBeDisabled();
+		expect(screen.getByTestId("inbox-confirm-btn")).toBeDisabled();
 	});
 
-	it("does not render the header split button when no callback is supplied", () => {
+	it("does not render the header confirm button when no callback is supplied", () => {
 		render(
 			<InboxDetail
 				item={
@@ -496,12 +499,10 @@ describe("InboxDetail — task #34: mixed-folder banner + header action button",
 			/>,
 		);
 		expect(screen.getByTestId("inbox-mixed-alert")).toBeInTheDocument();
-		expect(
-			screen.queryByTestId("inbox-mixed-split-btn"),
-		).not.toBeInTheDocument();
+		expect(screen.queryByTestId("inbox-confirm-btn")).not.toBeInTheDocument();
 	});
 
-	it("does NOT render the mixed banner for single-type folders", () => {
+	it("does NOT render the mixed banner for single-type folders, but DOES render the confirm button", () => {
 		render(
 			<InboxDetail
 				item={
@@ -513,13 +514,15 @@ describe("InboxDetail — task #34: mixed-folder banner + header action button",
 						typeof InboxDetail
 					>[0]["classification"]
 				}
-				onGenerateSplitPlan={vi.fn()}
+				onConfirm={vi.fn()}
 			/>,
 		);
 		expect(screen.queryByTestId("inbox-mixed-alert")).not.toBeInTheDocument();
-		expect(
-			screen.queryByTestId("inbox-mixed-split-btn"),
-		).not.toBeInTheDocument();
+		// The unified confirm action (default label "Confirm to inventory") is the
+		// per-detection primary action for single-type folders.
+		expect(screen.getByTestId("inbox-confirm-btn")).toHaveTextContent(
+			"Confirm to inventory",
+		);
 	});
 });
 
@@ -553,51 +556,7 @@ describe("InboxDetail — compact layout: detection col + popover trigger", () =
 		expect(container.querySelector(".alm-inbox-detail__meta-col")).toBeNull();
 	});
 
-	it("renders a PropertyTable col with detection classification", () => {
-		const { container } = render(
-			<InboxDetail
-				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
-				}
-				rootAbsolutePath="/astro/inbox"
-				classification={
-					singleTypeClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
-				}
-			/>,
-		);
-		expect(
-			container.querySelector(".alm-session-detail2__head"),
-		).not.toBeNull();
-		expect(screen.getByText("Detection")).toBeInTheDocument();
-		// 'light' from frameType appears in the PropertyTable value.
-		expect(screen.getAllByText(/light/).length).toBeGreaterThan(0);
-	});
-
-	it("mixed composition summary is inside the detection col (not a separate column)", () => {
-		const { container } = render(
-			<InboxDetail
-				item={
-					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
-				}
-				rootAbsolutePath="/astro/inbox"
-				classification={
-					mixedClassification as unknown as Parameters<
-						typeof InboxDetail
-					>[0]["classification"]
-				}
-			/>,
-		);
-		const col = container.querySelector(".alm-session-detail2__col");
-		expect(col).not.toBeNull();
-		// Summary is a descendant of the first (only) col, not a sibling col.
-		expect(
-			col?.querySelector('[aria-label="Mixed composition summary"]'),
-		).not.toBeNull();
-	});
-
-	it("files popover trigger is inside the detection col", () => {
+	it("renders detection facts spread across multiple property columns", () => {
 		const { container } = render(
 			<InboxDetail
 				item={
@@ -612,10 +571,68 @@ describe("InboxDetail — compact layout: detection col + popover trigger", () =
 				fileMetadata={fileMetadataFixture}
 			/>,
 		);
-		const col = container.querySelector(".alm-session-detail2__col");
+		// Left-packed multi-column body (Sessions convention): ≥2 columns.
 		expect(
-			col?.querySelector('[data-testid="inbox-files-popover-trigger"]'),
-		).not.toBeNull();
+			container.querySelectorAll(".alm-session-detail2__col").length,
+		).toBeGreaterThanOrEqual(2);
+		// The Files column carries a head label (scoped to the head element —
+		// "Files" also appears as a PropertyTable row label).
+		const heads = [
+			...container.querySelectorAll(".alm-session-detail2__head"),
+		];
+		expect(heads.some((h) => h.textContent === "Files")).toBe(true);
+		// 'light' from frameType appears in the PropertyTable value.
+		expect(screen.getAllByText(/light/).length).toBeGreaterThan(0);
+	});
+
+	it("mixed composition summary renders inside a detail column", () => {
+		const { container } = render(
+			<InboxDetail
+				item={
+					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+				}
+				rootAbsolutePath="/astro/inbox"
+				classification={
+					mixedClassification as unknown as Parameters<
+						typeof InboxDetail
+					>[0]["classification"]
+				}
+			/>,
+		);
+		const cols = [...container.querySelectorAll(".alm-session-detail2__col")];
+		expect(cols.length).toBeGreaterThan(0);
+		// Summary lives within one of the left-packed columns (the Files column).
+		expect(
+			cols.some(
+				(c) =>
+					c.querySelector('[aria-label="Mixed composition summary"]') != null,
+			),
+		).toBe(true);
+	});
+
+	it("files popover trigger renders inside a detail column", () => {
+		const { container } = render(
+			<InboxDetail
+				item={
+					sampleItem as unknown as Parameters<typeof InboxDetail>[0]["item"]
+				}
+				rootAbsolutePath="/astro/inbox"
+				classification={
+					singleTypeClassification as unknown as Parameters<
+						typeof InboxDetail
+					>[0]["classification"]
+				}
+				fileMetadata={fileMetadataFixture}
+			/>,
+		);
+		const cols = [...container.querySelectorAll(".alm-session-detail2__col")];
+		expect(
+			cols.some(
+				(c) =>
+					c.querySelector('[data-testid="inbox-files-popover-trigger"]') !=
+					null,
+			),
+		).toBe(true);
 	});
 
 	it("no breakdown table is rendered in the detail body", () => {

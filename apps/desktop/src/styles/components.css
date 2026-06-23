@@ -1819,9 +1819,9 @@
   cursor: pointer;
 }
 
-.alm-plan-panel__title {
-  font-weight: 600;
+.alm-plan-panel__select-all-label {
   font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
 }
 
 .alm-plan-panel__count-summary {
@@ -1864,7 +1864,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
+  /* Share the row with the inline breakdown summary: take content width
+     (capped) rather than all free space, so the summary sits beside it. */
+  flex: 0 1 auto;
+  max-width: 38%;
+}
+
+/* Inline breakdown summary docked on the same row as the group header. */
+.alm-plan-panel__summary--inline {
+  flex: 1 1 auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.alm-plan-panel__summary--inline .alm-plan-panel__summary-line {
+  min-width: 0;
+}
+.alm-plan-panel__summary--inline .alm-plan-panel__summary-dest {
+  max-width: 100%;
 }
 
 .alm-plan-panel__group-count {
@@ -9945,8 +9965,8 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(92vw, 960px);
-  max-height: min(90vh, 800px);
+  width: min(96vw, 1280px);
+  max-height: min(92vh, 880px);
   background: var(--alm-surface-raised);
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-lg);

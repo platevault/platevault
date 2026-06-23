@@ -36,7 +36,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InboxConfirmDestination } from "@/api/commands";
 import { useSetPageStatus } from "@/app/PageStatusContext";
-import { FilterToolbar, PageTopBar } from "@/components";
+import { FilterToolbar, ListPageLayout, PageTopBar } from "@/components";
 import type { FrameType } from "@/lib/route-contract";
 import { useStaleSelectionCleanup } from "@/lib/use-stale-selection";
 import { addToast } from "@/shared/toast";
@@ -717,17 +717,9 @@ export function InboxPage() {
 								: `Confirm all (${bulkEligibleItems.length})`}
 						</Btn>
 					)}
-					<Btn
-						size="sm"
-						variant="accent"
-						disabled={confirmLoading || !canConfirm}
-						onClick={() => void handleConfirm()}
-						aria-label={confirmLabel}
-						data-testid="inbox-confirm-btn"
-						data-guide-anchor="inbox.confirm-row"
-					>
-						{confirmLoading ? "Working…" : confirmLabel}
-					</Btn>
+					{/* Per-detection "Confirm to inventory" lives in the bottom detail
+						header (Sessions convention). The top bar keeps only page-level
+						actions: review plans, bulk confirm, rescan. */}
 					<Btn
 						size="sm"
 						disabled={rescanLoading}
@@ -741,71 +733,46 @@ export function InboxPage() {
 		/>
 	);
 
-	// Stage B: "show plans" gating for the trigger button (plan overlay).
-
-	// ── 2-zone body (Stage B — side panel REMOVED) ──
-	//   row 1: detection LIST — full width (no side panel column)
-	//   row 2: file DETAILS in the docked BOTTOM panel (auto-size, own scroll)
-	// Plan review moves to the full-screen PlanApprovalOverlay.
-	// Composed directly (not ListPageLayout) — the Inbox is a special page.
+	// ── Standardised list-page layout (Sessions/Calibration reference) ──
+	//   primary: detection LIST (full width)
+	//   detail:  InboxDetail docked in the BOTTOM panel (auto-size, own scroll)
+	//            with the per-detection "Confirm to inventory" inline in its
+	//            header. Plan review remains the focused PlanApprovalOverlay.
 	return (
-		<div className="alm-page alm-inbox-page">
-			{topBar}
-
-			<div className="alm-inbox-body">
-				{/* Row 1: list — full width, no plan side panel */}
-				<div className="alm-inbox-upper">
-					<div className="alm-inbox-upper__list">
-						<InboxList
-							items={filteredItems}
-							selectedIdx={selected ?? null}
-							onSelect={onSelect}
-							filterType={type ?? "all"}
-							dims={dims}
-							sortBy={sortBy}
+		<>
+			<ListPageLayout
+				topBar={topBar}
+				detailLabel="Detection details"
+				detail={
+					selectedItem != null ? (
+						<InboxDetail
+							// Remount per item so per-item state (pending type overrides)
+							// never leaks across selections.
+							key={selectedItem.inboxItemId}
+							item={selectedItem}
+							rootAbsolutePath={selectedRootPath}
+							classification={classification ?? null}
+							fileMetadata={fileMetadata}
+							// Confirm/split runs the same flow the old top-bar button did
+							// (handleConfirm picks 'split' for mixed folders).
+							onConfirm={() => void handleConfirm()}
+							confirmLabel={confirmLabel}
+							confirmDisabled={!canConfirm}
+							confirmBusy={confirmLoading}
 						/>
-					</div>
-				</div>
-
-				{/* Row 2: file DETAILS — docked full width, auto-sized to
-            content (capped ~40vh) with its own scroll. Shown only when a
-            detection is selected. */}
-				{selectedItem != null && (
-					<section
-						className="alm-inbox-plandock alm-inbox-plandock--details"
-						aria-label="Detection details"
-						data-testid="inbox-side-panel"
-					>
-						<div className="alm-inbox-plandock__head">
-							<span className="alm-inbox-plandock__spacer" />
-							<button
-								type="button"
-								className="alm-inbox-plandock__close"
-								onClick={clearSelection}
-								aria-label="Close details"
-							>
-								✕
-							</button>
-						</div>
-						<div className="alm-inbox-plandock__scroll">
-							<InboxDetail
-								// Remount per item so per-item state (pending type
-								// overrides) never leaks across selections.
-								key={selectedItem.inboxItemId}
-								item={selectedItem}
-								rootAbsolutePath={selectedRootPath}
-								classification={classification ?? null}
-								fileMetadata={fileMetadata}
-								// task #34: inline "Generate split plan" inside the
-								// mixed-folder alert reuses the same confirm/split flow the
-								// top-bar Confirm button runs (handleConfirm picks 'split').
-								onGenerateSplitPlan={() => void handleConfirm()}
-								splitPlanBusy={confirmLoading}
-							/>
-						</div>
-					</section>
-				)}
-			</div>
+					) : undefined
+				}
+				onCloseDetail={selectedItem != null ? clearSelection : undefined}
+			>
+				<InboxList
+					items={filteredItems}
+					selectedIdx={selected ?? null}
+					onSelect={onSelect}
+					filterType={type ?? "all"}
+					dims={dims}
+					sortBy={sortBy}
+				/>
+			</ListPageLayout>
 
 			{/* Plan-approval overlay — opens via top-bar trigger.
 			    Wraps the existing PlanPanel; all apply/cancel/root-pick
@@ -830,6 +797,6 @@ export function InboxPage() {
 				frameTypeByItemId={frameTypeByItemId}
 				breakdownByItemId={breakdownByItemId}
 			/>
-		</div>
+		</>
 	);
 }
