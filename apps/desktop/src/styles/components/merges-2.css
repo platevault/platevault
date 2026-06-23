@@ -66,10 +66,6 @@
   color: var(--alm-text);
   text-transform: capitalize;
 }
-.alm-inbox-stats__num {
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
-}
 .alm-inbox-stats__label {
   color: var(--alm-text-muted);
   font-size: var(--alm-text-2xs);
