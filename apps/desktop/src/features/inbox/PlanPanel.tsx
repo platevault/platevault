@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banner, Btn } from '@/ui';
+import type { PlanApplyProgress } from '@/features/plans/usePlanApplyProgress';
 import type { InboxOpenPlan, InboxPlanAction } from './store';
 import { m } from '@/lib/i18n';
 
@@ -60,6 +61,19 @@ export interface PlanPanelProps {
   onApplySelected: (inboxItemIds: string[]) => void;
   /** Apply every open plan. */
   onApplyAll: () => void;
+  /**
+   * Apply a single ingestion group's plan with live per-item progress
+   * streamed over the long-operation `OperationEvent` channel (spec 042
+   * US16 / FR-021). Receives the group's `planId`.
+   */
+  onApplyOne?: (planId: string) => void;
+  /**
+   * Live progress for the plan currently streaming (the one whose `planId`
+   * matches `progressPlanId`). Null when no live apply is in flight.
+   */
+  progress?: PlanApplyProgress | null;
+  /** `planId` of the group whose live `progress` is being shown. */
+  progressPlanId?: string | null;
   /** Discard a single ingestion group's plan. */
   onCancel: (inboxItemId: string) => void;
   busy?: boolean;
@@ -381,6 +395,9 @@ export function PlanPanel({
   onDestructiveDestinationChange,
   onApplySelected,
   onApplyAll,
+  onApplyOne,
+  progress = null,
+  progressPlanId = null,
   onCancel,
   busy = false,
   pendingRootPick = null,
@@ -674,6 +691,17 @@ export function PlanPanel({
                     {m.inbox_stale()}
                   </span>
                 )}
+                {onApplyOne && (
+                  <Btn
+                    variant="ghost"
+                    onClick={() => onApplyOne(plan.planId)}
+                    disabled={busy || plan.stale}
+                    data-testid={`plan-apply-one-${plan.inboxItemId}`}
+                    aria-label={`Apply plan for ${plan.itemName} with live progress`}
+                  >
+                    Apply
+                  </Btn>
+                )}
                 <Btn
                   variant="ghost"
                   onClick={() => onCancel(plan.inboxItemId)}
@@ -684,6 +712,28 @@ export function PlanPanel({
                   {m.inbox_discard()}
                 </Btn>
               </div>
+
+              {/* Live long-op progress for the plan currently streaming over
+                  the OperationEvent channel (spec 042 US16 / FR-021). */}
+              {progress && progressPlanId === plan.planId && (
+                <div
+                  className="alm-plan-panel__progress"
+                  data-testid={`plan-progress-${plan.inboxItemId}`}
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    fontSize: 'var(--alm-text-xs)',
+                    color: 'var(--alm-text-secondary)',
+                    marginTop: 'var(--alm-sp-1)',
+                  }}
+                >
+                  {progress.terminal === 'completed'
+                    ? `Applied ${progress.applied}${progress.total != null ? ` of ${progress.total}` : ''} item${progress.applied !== 1 ? 's' : ''}.`
+                    : progress.terminal === 'failed'
+                      ? `Apply failed after ${progress.applied} applied, ${progress.failed} failed.`
+                      : `Applying… ${progress.applied}${progress.total != null ? ` of ${progress.total}` : ''} item${progress.applied !== 1 ? 's' : ''}${progress.failed > 0 ? `, ${progress.failed} failed` : ''}`}
+                </div>
+              )}
 
               {plan.stale && (
                 <Banner variant="danger" className="alm-plan-panel__stale-banner">

@@ -36,6 +36,7 @@ import type {
   RemapVerification,
   IpcOperationHandle,
   OperationEvent,
+  PlanApplyResponse,
   AuditListResponse_Serialize,
 } from '@/bindings/index';
 
@@ -433,7 +434,11 @@ export async function mockInvoke(
           );
         });
       }
-      return { operationId: 'op-mock-001', kind: 'plan_apply' } satisfies IpcOperationHandle;
+      // Resolve with the real `PlanApplyResponse` contract ({ planId, runId,
+      // newState }) — the live per-item progress is the channel stream above
+      // (spec 042 T270).
+      const applyPlanId = (_args as { planId?: string } | undefined)?.planId ?? 'mock-plan';
+      return { planId: applyPlanId, runId: 'op-mock-001', newState: 'applied' } satisfies PlanApplyResponse;
     }
     case 'plans_discard': {
       return null;

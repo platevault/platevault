@@ -127,6 +127,7 @@ name = "app_core_inbox"
 version = "0.1.0"
 dependencies = [
  "app_core_errors",
+ "app_core_targets",
  "audit",
  "calibration_master_detect",
  "camino",
@@ -215,8 +216,12 @@ dependencies = [
  "audit",
  "contracts_core",
  "domain_core",
+ "metadata_core",
+ "metadata_fits",
+ "metadata_xisf",
  "persistence_db",
  "serde_json",
+ "sessions",
  "sqlx",
  "targeting",
  "targeting_resolver",

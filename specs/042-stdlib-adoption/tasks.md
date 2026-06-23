@@ -169,12 +169,24 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 11 — US7 Frontend type-safety & dead-code (P3) — needs US2
 
-- [X] T190 Typed mock fixtures (kill `mockInvoke<T>` `as T`).
-- [X] T191 `useStatusSummary` generated types; concrete `SettingsData`.
-- [X] T192 `satisfies` in fixtures; exhaustive state-label fns vs ProjectState/SessionState.
-  (caught + fixed 4 genuine mock-contract drifts: firstrun_complete/restart/state, roots batch.)
-- [X] T193 Triage ~30 empty `catch {}`; delete dead `lib/display.ts`.
-  (26 found, all already commented intentional ignores; 3 in-scope upgraded; display.ts deleted, 0 importers.)
+- [x] T190 Typed mock fixtures (kill `mockInvoke<T>` `as T`). (re-opened 2026-06-21: phantom — SC/FR unmet)
+- [x] T191 `useStatusSummary` generated types; concrete `SettingsData`. (re-opened 2026-06-21: phantom — SC/FR unmet)
+- [x] T192 `satisfies` in fixtures; exhaustive state-label fns vs ProjectState/SessionState.
+  (caught + fixed 4 genuine mock-contract drifts: firstrun_complete/restart/state, roots batch.) (re-opened 2026-06-21: phantom — SC/FR unmet)
+- [x] T193 Triage ~30 empty `catch {}`; delete dead `lib/display.ts`.
+  (26 found, all already commented intentional ignores; 3 in-scope upgraded; display.ts deleted, 0 importers.) (re-opened 2026-06-21: phantom — SC/FR unmet)
+- [x] T268 [US7] Remove the hand-written struct universe from
+  `apps/desktop/src/bindings/types.ts`: re-export each of the 14 interfaces
+  (MetaValue, AppPreferences, SourceMap, SettingsData, CalibrationMaster, Target,
+  SearchResult, TargetDetail, ProjectSource, ProjectSourceView, ProjectOutput,
+  ProjectArtifactGroup, CalendarData, ProgressEvent) from the generated `_Serialize`
+  types where a backend DTO exists; move genuinely frontend-only types to a labelled
+  frontend-types module. End state: no hand-written `export interface` structs remain
+  in `bindings/types.ts`.
+- [x] T269 [US7] Migrate all field accesses in the ~19 importer files
+  snake_case→camelCase, incrementally by feature area, each batch verified with
+  `tsc --noEmit` + `vitest run <area>`; update fixtures/mocks to camelCase.
+  (Depends on T268.)
 - [ ] **US7 checkpoint**: commit `feat(042): US7 type-safety + dead-code cleanup`.
 
 ## Phase 12 — US10 Reinvented Rust utilities (P3)
@@ -219,7 +231,7 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
 
 ## Phase 16 — US16 Long-operation contract (P3)
 
-- [X] T240 Wire plan-apply through `OperationHandle` + `OperationEvent` over a
+- [x] T240 Wire plan-apply through `OperationHandle` + `OperationEvent` over a
   `tauri::ipc::Channel`; UI subscribes/renders progress; retire the ad-hoc event path
   for this flow.
   (Backend emits Started→per-item→terminal OperationEvents over a Channel<OperationEvent>;
@@ -227,7 +239,15 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   NOTE: no progress-rendering React component added — `applyPlan` had zero callers and no
   existing plan-apply progress view existed to retire (old path was DB-poll). The contract/
   transport/wrapper/mocks are in place for a future consumer; adding a new progress view is
-  net-new feature scope beyond this refactor spec.)
+  net-new feature scope beyond this refactor spec.) (re-opened 2026-06-21: phantom — SC/FR unmet)
+- [x] T270 [US16] Reconcile the `applyPlan` wrapper return type to the generated
+  `PlanApplyResponse`; remove the `as unknown as OperationHandle` cast at
+  `commands.ts:396`; update `commands.applyPlanChannel.test.ts` + any caller.
+  End state: zero `as unknown as` in `commands.ts`.
+- [x] T271 [US16] Wire a real plan-apply progress consumer in the UI over the
+  `OperationEvent` channel (live per-item progress), exercising the long-op contract
+  end-to-end (FR-021); add/extend a vitest for the consumer.
+  (May depend on T270's corrected return type.)
 - [ ] **US16 checkpoint**: commit `feat(042): US16 long-op contract end-to-end`.
 
 ## Phase 17 — US13 Workspace/crate restructuring (P3, highest risk — staged last)
@@ -258,6 +278,9 @@ Frontend: `cd apps/desktop && npx tsc --noEmit` + `npx vitest run <feature>`. Ru
   (moved equipment/first_run/JsonAny + settings stored types to domain_core, re-exported from
   contracts_core → bindings byte-identical; persistence_db contracts_core dep removed (tree=0);
   7 byte-identity guard tests w/ frozen snapshots + real SQL roundtrip.)
+- [x] T272 [US13] Verify crate restructuring (T250–T254) complete: split crates compile
+  independently, no `app/core` god-crate regression; record verification (no code change
+  expected). (Independent of T268–T271.)
 - [ ] **US13 checkpoint**: commit `feat(042): US13 crate restructuring`.
 
 ## Phase 18 — Final verification
@@ -299,6 +322,11 @@ US11 ─ needs T010
 US13-O6 ─ needs O2 (T010 + T140 base promotion); own guarded commit
 US13-O3b (app/core split) ─ LAST (highest risk)
 US3/US4/US5/US6/US8/US9/US10/US12/US14/US15/US16 ─ mutually independent (sequential here)
+
+Reconcile additions (2026-06-21):
+T268 (remove hand-written types.ts structs) ─> T269 (migrate ~19 importer files snake→camel)
+T270 (fix applyPlan return type, remove cast) ─> T271 may depend on T270's corrected return type
+T272 (verify US13 crate split) ─ independent of T268–T271
 ```
 
 ## Notes

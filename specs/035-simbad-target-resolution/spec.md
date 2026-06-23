@@ -57,6 +57,25 @@ SIMBAD is trusted over TLS, no catalog signing/verification or hosted manifest i
 **Tasks removed**: none.
 **Tasks marked complete**: none (implementation not started).
 
+### Iteration 2026-06-21: US4 ingest grouping reactivation
+
+**Change**: Reactivated US4 (T026/T028 were phantom completions — never implemented). Ingested light
+frames now correctly create `acquisition_session` records, link a resolved `canonical_target_id`, and
+enqueue pending resolutions for back-fill. GitHub issue #307 (empty Sessions page; targets never
+linked) is closed by this scope.
+**Scope**: Phase-level (US4) + additive functional requirement (FR-016) + one durable migration
+(0046).
+**Artifacts updated**: spec.md (US4 acceptance scenarios sharpened; FR-016 added; observer-location
+edge case added; this Iterations entry), data-model.md (`acquisition_session.canonical_target_id`
+added), plan.md (migration 0046; plan-apply-completion ingest hook; background drain; Sessions
+read-path join), research.md (decisions R2 updated for `file_record.root_id` FK; R3 for id-space
+choice; UTC fallback; plan_listener idempotency), tasks.md (T026/T028 re-opened; T040–T047 added),
+quickstart.md (S3 ingest scenario expanded with session-grouping and unknown-OBJECT pending detail).
+**Tasks added**: T040 (migration 0046), T041 (ingest module), T042 (plan_listener hook), T043
+(background drain), T044 (Sessions read path), T045 (Layer-1 test: cache-hit grouping), T046
+(Layer-1 test: unknown OBJECT pending + back-fill), T047 (coverage-matrix update).
+**Tasks re-opened**: T026, T028 (phantom completions corrected).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Find a target while creating a project (Priority: P1)
@@ -143,13 +162,23 @@ confirm all are grouped under one canonical target.
 
 **Acceptance Scenarios**:
 
-1. **Given** an imported image with a recognisable `OBJECT` value, **When** it is processed, **Then**
-   it is associated with the canonical target for that object (resolved from cache or SIMBAD).
-2. **Given** several images whose `OBJECT` values are aliases of the same object, **When** ingested,
-   **Then** they are grouped under a single target identity.
-3. **Given** an `OBJECT` value that cannot be resolved (unknown/garbled, or SIMBAD unreachable),
-   **When** processed, **Then** the image is marked unresolved/pending (not mis-assigned, not given
-   fabricated coordinates) and can be resolved later.
+1. **Given** applied light frames arrive via plan completion, **When** they are ingested, **Then**
+   each frame is grouped into an `acquisition_session` keyed by capture identity (`session_key`:
+   target/OBJECT, filter, binning, gain, observing-night); sessions are created or appended
+   idempotently.
+2. **Given** a recognised `OBJECT` value that produces a cache hit, **When** the frame is ingested,
+   **Then** the session's `canonical_target_id` is set inline to the cached canonical target without
+   any network call or blocking.
+3. **Given** an `OBJECT` value that is unknown, garbled, or SIMBAD is unreachable, **When** the
+   frame is ingested, **Then** the session is still created, `canonical_target_id` is left NULL, a
+   pending `ingest_resolution` entry is enqueued — the canonical target is never fabricated —
+   and the linkage is back-filled automatically once the background resolver drains the queue.
+4. **Given** several frames whose `OBJECT` values are aliases of the same physical object (e.g.
+   `M31`, `NGC 224`, `Andromeda`), **When** ingested, **Then** they all group under one
+   `acquisition_session` and link to a single canonical target identity.
+
+**Scope note**: Calibration frames (bias, dark, flat) are out of US4 scope; they are handled by the
+existing master-registration path (spec 040).
 
 ---
 
@@ -187,6 +216,11 @@ confirm only matching objects appear; remove the filter and confirm the full res
   query still resolves to the canonical target and is cached under the queried alias.
 - **Rate/usage limits:** interactive long-tail queries are debounced and de-duplicated so normal use
   stays within polite usage of the public service.
+- **Observer location unset:** when the observer's geographic location is not configured, the
+  observing-night boundary used in `session_key` grouping is computed in UTC rather than local time.
+  This is a documented degraded mode: sessions spanning UTC midnight may be split across two
+  observing-night buckets. The `acquisition_session` records `has_observer_location = 0` to signal
+  the degraded computation so the grouping can be corrected if location is later provided.
 
 ## Requirements *(mandatory)*
 
@@ -231,6 +265,10 @@ confirm only matching objects appear; remove the filter and confirm the full res
   resolutions for that object on subsequent encounters.
 - **FR-015**: The app MUST provide a setting to enable/disable online SIMBAD resolution (default
   enabled); when disabled, resolution uses only the bundled seed + local cache.
+- **FR-016**: Ingesting applied light frames MUST create `acquisition_session` records grouped by
+  capture identity (`session_key`: target/OBJECT, filter, binning, gain, observing-night) and MUST
+  link the resolved canonical target (`canonical_target_id`) when known; linkage is non-blocking and
+  back-filled by the background resolver when the target is resolved after the initial ingest.
 
 ### Key Entities *(include if feature involves data)*
 

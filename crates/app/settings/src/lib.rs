@@ -53,21 +53,12 @@ pub fn is_valid_key(key: &str) -> bool {
         return true;
     }
     // Structured-path keys.
-    is_calibration_override_penalty_key(key)
-        || is_tools_bundle_id_key(key)
+    is_tools_bundle_id_key(key)
         || is_tools_executable_path_key(key)
         || is_tools_enabled_key(key)
         || is_tools_auto_detected_key(key)
         || is_workflow_profile_watch_extensions_key(key)
         || is_workflow_profile_attribution_window_key(key)
-}
-
-fn is_calibration_override_penalty_key(_key: &str) -> bool {
-    // All calibration override penalty keys are now in the descriptor table as
-    // canonical camelCase keys (calibrationDarkOverridePenalty, etc.).
-    // This function is kept for the structured-path fallback shape but always
-    // returns false — the descriptor table handles these keys.
-    false
 }
 
 fn is_tools_bundle_id_key(key: &str) -> bool {

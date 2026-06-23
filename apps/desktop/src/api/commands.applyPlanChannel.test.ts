@@ -7,7 +7,7 @@
  * IPC override (standing in for the backend) and asserts the wrapper:
  *   1. passes the channel through as the `onEvent` invoke argument,
  *   2. delivers every streamed `OperationEvent` to `onEvent` in order, and
- *   3. still resolves with the `OperationHandle` returned by the command.
+ *   3. still resolves with the `PlanApplyResponse` returned by the command.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Channel } from '@tauri-apps/api/core';
@@ -61,18 +61,18 @@ describe('applyPlan streams OperationEvents over the long-op channel', () => {
       channel?.onmessage?.(mk(1, 'item_applied'));
       channel?.onmessage?.(mk(2, 'completed'));
 
-      return Promise.resolve({ operationId: opId, kind: 'plan_apply' });
+      return Promise.resolve({ planId: 'plan-1', runId: opId, newState: 'applied' });
     });
 
     const received: OperationEvent[] = [];
-    const handle = await applyPlan({
+    const response = await applyPlan({
       id: 'plan-1',
       approvalToken: 'tok-1',
       onEvent: (event) => received.push(event),
     });
 
-    // The wrapper returns the OperationHandle from the command.
-    expect(handle).toEqual({ operationId: 'run-xyz', kind: 'plan_apply' });
+    // The wrapper returns the real PlanApplyResponse from the command.
+    expect(response).toEqual({ planId: 'plan-1', runId: 'run-xyz', newState: 'applied' });
 
     // Every streamed event reached the subscriber, in sequence order.
     expect(received.map((e) => e.eventType)).toEqual([
@@ -91,10 +91,10 @@ describe('applyPlan streams OperationEvents over the long-op channel', () => {
       // even when the caller passes no onEvent callback.
       const channel = (args as { onEvent?: Channel<OperationEvent> }).onEvent;
       expect(channel).toBeInstanceOf(Channel);
-      return Promise.resolve({ operationId: 'r', kind: 'plan_apply' });
+      return Promise.resolve({ planId: 'plan-2', runId: 'r', newState: 'applied' });
     });
 
-    const handle = await applyPlan({ id: 'plan-2', approvalToken: 'tok-2' });
-    expect(handle).toEqual({ operationId: 'r', kind: 'plan_apply' });
+    const response = await applyPlan({ id: 'plan-2', approvalToken: 'tok-2' });
+    expect(response).toEqual({ planId: 'plan-2', runId: 'r', newState: 'applied' });
   });
 });
