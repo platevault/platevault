@@ -1173,5 +1173,9 @@
   "inbox_select_plan_aria": "Select plan for {name}",
   "inbox_hide_files_aria": "Hide files for {name}",
   "inbox_show_files_aria": "Show files for {name}",
-  "inbox_discard_plan_aria": "Discard plan for {name}"
+  "inbox_discard_plan_aria": "Discard plan for {name}",
+  "inbox_plan_applied_toast": "Plan applied.",
+  "inbox_plan_apply_failed_toast": "Apply failed — please try again.",
+  "inbox_apply_plan_live_aria": "Apply plan for {name} with live progress",
+  "inbox_apply_action": "Apply"
 }

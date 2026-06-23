@@ -444,10 +444,10 @@ export function InboxPage() {
     setProgressPlanId(planId);
     const response = await runPlanApply({ id: planId });
     if (response) {
-      addToast({ message: 'Plan applied.', variant: 'info' });
+      addToast({ message: m.inbox_plan_applied_toast(), variant: 'info' });
       refreshAll();
     } else {
-      addToast({ message: 'Apply failed — please try again.', variant: 'error' });
+      addToast({ message: m.inbox_plan_apply_failed_toast(), variant: 'error' });
     }
   };
 

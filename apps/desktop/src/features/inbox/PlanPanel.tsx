@@ -697,9 +697,9 @@ export function PlanPanel({
                     onClick={() => onApplyOne(plan.planId)}
                     disabled={busy || plan.stale}
                     data-testid={`plan-apply-one-${plan.inboxItemId}`}
-                    aria-label={`Apply plan for ${plan.itemName} with live progress`}
+                    aria-label={m.inbox_apply_plan_live_aria({ name: plan.itemName })}
                   >
-                    Apply
+                    {m.inbox_apply_action()}
                   </Btn>
                 )}
                 <Btn
@@ -727,11 +727,13 @@ export function PlanPanel({
                     marginTop: 'var(--alm-sp-1)',
                   }}
                 >
+                  {/* eslint-disable alm/no-user-string -- live-progress composite (optional " of {total}" / ", {failed} failed" segments + item plural) from merged spec-042 feature; full catalog migration tracked in spec 046 task #7 (plural variants) */}
                   {progress.terminal === 'completed'
                     ? `Applied ${progress.applied}${progress.total != null ? ` of ${progress.total}` : ''} item${progress.applied !== 1 ? 's' : ''}.`
                     : progress.terminal === 'failed'
                       ? `Apply failed after ${progress.applied} applied, ${progress.failed} failed.`
                       : `Applying… ${progress.applied}${progress.total != null ? ` of ${progress.total}` : ''} item${progress.applied !== 1 ? 's' : ''}${progress.failed > 0 ? `, ${progress.failed} failed` : ''}`}
+                  {/* eslint-enable alm/no-user-string */}
                 </div>
               )}
 
