@@ -138,7 +138,7 @@
 - [X] T063 [US11] Property registry module + `inbox.property_registry` contract (FR-044).
 - [X] T064 [US10] Grouping engine: per-type recipe + bucketing + tolerances (pointing/rotation/temp) + per-dimension config (FR-035/FR-036/FR-037/FR-038/FR-039/FR-040).
 - [X] T065 [US10] scan.rs: emit source-group rows, stay lazy (FR-041).
-- [ ] T066 [US10] classify.rs: materialize single-type sub-items (classify-then-split) + per-sub-group signature (FR-041/FR-042).
+- [X] T066 [US10] classify.rs: materialize single-type sub-items (classify-then-split) + per-sub-group signature (FR-041/FR-042).
 - [ ] T067 [P] [US10] Composite identity + signature stability tests (FR-042).
 - [ ] T068 [US11] reclassify.rs: field-agnostic property map + bulk; fill-missing-only; index-only; source-group-scoped; re-split (FR-044/FR-045/FR-049).
 - [X] T069 [US11] Override persistence (`inbox_file_overrides`) + staleness; migrate old override_* columns (FR-046). Read/write wiring (list_evidence JOINs + set_overrides upsert), old-column→table data migration, and size+mtime staleness on `inbox_file_overrides` all landed; `app_core_inbox` override tests green (57 passed).
@@ -156,7 +156,7 @@
 
 **Depends on Phase 12** (single-type items + extended pointing/focal extraction). T078 (`sync.conflicts`) runs after the spec/data-model/contract artifacts land.
 
-- [ ] T074 [US15] Coordinate target resolution (FOV-aware NN) + `inbox.target_recommendations` op; OBJECT naming-only (FR-052). NOTE: the FOV-aware radius uses `FOCALLEN` + pixel size (T062) + `NAXIS1/2`; when pixel size is unavailable, fall back to a configurable fixed radius (R-17).
+- [X] T074 [US15] Coordinate target resolution (FOV-aware NN) + `inbox.target_recommendations` op; OBJECT naming-only (FR-052). NOTE: the FOV-aware radius uses `FOCALLEN` + pixel size (T062) + `NAXIS1/2`; when pixel size is unavailable, fall back to a configurable fixed radius (R-17).
 - [ ] T075 [US15] Target propagation to projects (FR-052).
 - [ ] T076 [US14] Drop session review lifecycle (states + Confirm/Re-open/Reject); sessions derived; editable metadata view (FR-051).
 - [ ] T077 [US14] Migration handling for plan_open legacy items (FR-054).
