@@ -1,12 +1,22 @@
 # Feature Specification: Target Identity, History, And Notes
 
+> **⚠ NEEDS RECONCILE (2026-06-23).** This spec predates the target-model rebuild and is contradicted
+> by shipped code on two points: (1) it targets the **retired gen-2 model** (`target_aliases`, `target_id`
+> FKs on sessions/projects, `primary_designation` column) that **spec 036 deleted** — identity now lives
+> in the spec-035 `canonical_target` id-space; (2) its "Targets intentionally **not** a top-level nav"
+> assertion was **reversed by spec 036**, which rebuilt Targets as a primary gen-3 nav page
+> (`apps/desktop/src/features/targets/`). The contracts (`target.alias.add/remove`, `target.primary.rename`)
+> encode the gen-2 API — verify each command still exists post-036 before reusing. Re-scope onto gen-3 + 035
+> before any further work.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.
 
 **Feature Branch**: `023-target-identity-history-notes`  
 **Created**: 2026-05-09  
-**Status**: Draft  
+**Updated**: 2026-06-23  
+**Status**: Needs reconcile (was: Draft / NOT IMPLEMENTED) — describes retired gen-2 target model; see banner  
 **Input**: User description: "Specify target identity, aliases, target history, observing-plan references, and notes as bounded follow-on features beyond FITS OBJECT lookup."
 
 ## Implementation Status: NOT IMPLEMENTED

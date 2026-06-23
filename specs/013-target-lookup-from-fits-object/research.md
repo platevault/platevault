@@ -1,7 +1,7 @@
 # Research: Target Lookup From FITS OBJECT
 
 **Branch**: `013-target-lookup-from-fits-object` | **Date**: 2026-05-20
-**Status**: NOT IMPLEMENTED — research decisions are draft and pending review.
+**Status**: SUPERSEDED (2026-06-23) by [Spec 035 — SIMBAD Target Resolution](../035-simbad-target-resolution/spec.md). The catalog-source/licensing decisions below (built on spec 014's `catalog.download` flow, with no bundled catalog data) are no longer the product direction — SIMBAD resolve-on-demand + a bundled seed index won out. Retained for history.
 
 ## R1. Catalog Sources And Licensing
 
