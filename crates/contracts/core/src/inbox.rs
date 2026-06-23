@@ -346,6 +346,13 @@ pub struct InboxListItem {
     /// Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_instrument: Option<String>,
+    /// Per-item rollup of missing mandatory attribute keys (spec 041 T070 /
+    /// FR-047 / R-14). Non-empty when this item is in the needs-review bucket
+    /// because one or more files are missing a mandatory attribute. The set is
+    /// the union of all per-file missing-mandatory lists across the item's files.
+    /// Empty for fully-resolved items. Blocks plan creation (FR-048/SC-015).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_mandatory: Vec<String>,
 }
 
 /// Response from `inbox.list`.
@@ -415,6 +422,14 @@ pub struct InboxFileMetadata {
     /// DATE-OBS). Supplying the value via reclassify clears the gate.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub missing_path_attributes: Vec<String>,
+    /// Registry key names of mandatory attributes that are absent for this file
+    /// (spec 041 T070 / FR-047 / R-14). Empty when all mandatory attributes are
+    /// present. The union of mandatory grouping properties and hard per-type keys
+    /// (e.g. `["target"]` for a light with no OBJECT and no resolved target).
+    /// Non-empty means this file's sub-item is in the needs-review bucket and
+    /// blocks plan creation until the value is supplied via reclassify.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_mandatory: Vec<String>,
 }
 
 /// Request for `inbox.item.metadata`.

@@ -116,6 +116,7 @@ pub async fn get_inbox_item_metadata(
             is_master,
             override_stale,
             missing_path_attributes: Vec::new(),
+            missing_mandatory: Vec::new(),
         };
 
         // US9 (FR-032/FR-033): surface the path-load-bearing attributes this file
@@ -127,6 +128,11 @@ pub async fn get_inbox_item_metadata(
         entry.missing_path_attributes =
             missing_path_attributes(pool, &entry).await.unwrap_or_default();
 
+        // T070 / FR-047: surface the mandatory-attribute gate per file so the UI
+        // can prompt the user before the needs-review bucket blocks confirm.
+        // Uses the same DTO values (override-applied) as missing_path_attributes.
+        entry.missing_mandatory = compute_missing_mandatory(&entry);
+
         files.push(entry);
     }
 
@@ -135,6 +141,47 @@ pub async fn get_inbox_item_metadata(
 
 fn db_err(e: &persistence_db::DbError) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
+}
+
+/// Compute the mandatory-attribute gate for a file from the already-built DTO
+/// (spec 041 T070 / FR-047 / R-14).
+///
+/// Uses the same override-applied values as `missing_path_attributes` so that
+/// supplying a value via reclassify clears the gate on the next read.
+/// Returns an empty vec when all mandatory attributes are present.
+fn compute_missing_mandatory(m: &InboxFileMetadata) -> Vec<String> {
+    let Some(ft_str) = m.frame_type_effective.as_deref() else {
+        // Unclassified files are implicitly needs-review; frameType is the gate.
+        return vec!["frameType".to_owned()];
+    };
+
+    // Derive mandatory set from the same R-14 table as classify::mandatory_set_for.
+    let mandatory: &[&str] = match ft_str {
+        "light" => &["frameType", "target", "filter", "exposureS"],
+        "dark" | "dark_flat" => &["frameType", "exposureS", "gain"],
+        "bias" => &["frameType", "gain"],
+        "flat" => &["frameType", "filter"],
+        _ => return Vec::new(), // unknown type: no gate
+    };
+
+    let mut missing = Vec::new();
+    for &key in mandatory {
+        let absent = match key {
+            "target" => {
+                // light: satisfied by OBJECT header (proxy for coord resolution).
+                m.object.as_deref().map_or("", str::trim).is_empty()
+            }
+            "filter" => m.filter.as_deref().map_or("", str::trim).is_empty(),
+            "exposureS" => !m.exposure_s.is_some_and(|v| v > 0.0),
+            "gain" => m.gain.as_deref().map_or("", str::trim).is_empty(),
+            // "frameType" already resolved (ft_str is Some); unknown keys never absent.
+            _ => false,
+        };
+        if absent {
+            missing.push(key.to_owned());
+        }
+    }
+    missing
 }
 
 /// Compute the path-load-bearing attributes a file is missing for its frame
