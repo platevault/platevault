@@ -502,10 +502,8 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               )}
             </h2>
             <div className="alm-planner__actions">
-              <Btn size="sm" variant="ghost" disabled>
-                Add to plan
-              </Btn>
-              {/* "+ New project here" — opens CreateProjectDialog on the projects route. */}
+              {/* Primary/contextual action FIRST (Sessions convention: the
+                  highlight action leads the inline-left group). */}
               <Btn
                 size="sm"
                 variant="primary"
@@ -515,6 +513,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
                 }}
               >
                 + New project here
+              </Btn>
+              <Btn size="sm" variant="ghost" disabled>
+                Add to plan
               </Btn>
             </div>
           </div>
