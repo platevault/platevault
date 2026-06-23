@@ -97,7 +97,6 @@ export function InboxControls({ dims, setSlot }: InboxControlsProps) {
           const usedEarlier = new Set(dims.slice(0, slot));
           return (
             <select
-              // eslint-disable-next-line react/no-array-index-key -- fixed-length slot list
               key={slot}
               className="alm-select"
               value={value}

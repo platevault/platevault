@@ -259,7 +259,6 @@ export function InboxList({
         }
         onClick={() => onSort?.(col)}
         aria-label={ariaLabel}
-        aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
       >
         {label}
         {active && (

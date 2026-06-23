@@ -555,6 +555,7 @@ export function TargetsTable({
                           className="alm-targets-table__group-cell"
                           data-testid={`targets-group-${row.key}`}
                           aria-expanded={!row.collapsed}
+                          aria-label={row.label}
                           onClick={() => toggleCollapsed(row.path!)}
                           // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
                           style={{ paddingLeft: 8 + depthIndent }}
