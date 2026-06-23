@@ -1,59 +1,31 @@
 /**
- * SessionsTable — spec 043 §4 Sessions redesign (task #36).
+ * SessionsTable — spec 043 §4 Sessions redesign (task #36) + multi-level
+ * grouping (spec 043 gold-standard, shared groupByDimensions engine).
  *
- * Replaces the old narrow `alm-sessions-list` sidebar with a DENSE, FULL-WIDTH
- * sortable table — the same surface pattern as the Audit Log and Equipment
- * settings panes (shared `Table` from `@/ui`). Sessions are flattened across
- * inventory sources and GROUPED BY TARGET: each target is a spanning header
- * row, with its sessions listed beneath.
+ * The table receives an ordered `dims` prop from SessionsPage (fed by
+ * `useGrouping`) and produces collapsible multi-level group headers via the
+ * shared `groupByDimensions` + `flattenVisibleGroups` + `useCollapsibleGroups`
+ * machinery. When `dims` is empty the table renders a flat sorted list (no
+ * synthetic "All" header).
  *
  * Columns: Target · Filter · Frames · Integration · Night · Camera · State ·
- * Projects. State renders as a full-label `Pill` (Confirmed / Needs review —
- * never truncated). The observing NIGHT (capturedOn) is shown once.
- *
- * Sort: clickable sortable column headers (Target / Filter / Frames /
- * Integration / Night / Camera / State). Grouping by target is always on; the
- * sort orders sessions WITHIN each target group, and orders the target groups
- * themselves by their first row.
- *
- * Selecting a row opens the existing SessionDetail in a right-side drawer on
- * SessionsPage. Confirm/Reject live in the page top action bar (unchanged).
- *
- * Search + the review filter + the Group-by control now live in the persistent
- * top bar (shared PageTopBar + FilterToolbar), not inside this surface. The
- * group key is configurable via the `groupBy` prop (Target / Camera / Filter /
- * Month); the legacy frame-type filter was removed (sessions are light frames).
+ * Projects. Sortable column headers call `onSort`. Selecting a row opens the
+ * existing SessionDetail in a right-side drawer on SessionsPage.
  */
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import type { InventorySource, InventorySession } from '@/api/commands';
 import { Table, Pill } from '@/ui';
 import { m } from '@/lib/i18n';
 import type { TableColumn, TableRow } from '@/ui';
 import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
-
-// ── Grouping model ────────────────────────────────────────────────────────────
-
-/** What the table groups rows by (spec 043 §4 toolbar Group-by control). */
-export type SessionGroupBy = 'target' | 'camera' | 'filter' | 'month';
-export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'target';
-
-/** Resolve the group key + display headline for a session under `groupBy`. */
-function groupKeyOf(s: InventorySession, groupBy: SessionGroupBy): string {
-  switch (groupBy) {
-    case 'camera':
-      return s.camera ?? 'Unknown camera';
-    case 'filter':
-      return s.filter ?? 'No filter';
-    case 'month':
-      // capturedOn is an ISO date (e.g. "2026-04-12"); group by year-month.
-      return s.capturedOn ? s.capturedOn.slice(0, 7) : 'Unknown date';
-    case 'target':
-    default:
-      return s.target ?? s.name ?? 'Untitled';
-  }
-}
+import {
+  groupByDimensions,
+  flattenVisibleGroups,
+  type DimensionAccessor,
+} from '@/lib/grouping';
+import { useCollapsibleGroups } from '@/lib/use-grouping';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -73,6 +45,18 @@ export interface SessionSort {
 }
 
 export const DEFAULT_SESSION_SORT: SessionSort = { col: 'night', dir: 'desc' };
+
+// ── Grouping dimensions ────────────────────────────────────────────────────────
+
+export const SESSION_ACCESSORS: Readonly<Record<string, DimensionAccessor<InventorySession>>> = {
+  target: (s) => s.target ?? s.name,
+  filter: (s) => s.filter,
+  night: (s) => s.capturedOn,
+  camera: (s) => s.camera,
+  month: (s) => s.capturedOn?.slice(0, 7),
+};
+
+// ── Sort helpers ────────────────────────────────────────────────────────────────
 
 function compareStr(a: string | null | undefined, b: string | null | undefined): number {
   return (a ?? '').localeCompare(b ?? '');
@@ -106,47 +90,6 @@ function compareSessions(a: InventorySession, b: InventorySession, sort: Session
   return sort.dir === 'asc' ? cmp : -cmp;
 }
 
-// ── Grouping ──────────────────────────────────────────────────────────────────
-
-interface SessionGroup {
-  /** Display headline for the spanning group-header row. */
-  label: string;
-  sessions: InventorySession[];
-}
-
-/**
- * Flatten all sessions across sources, group by the selected key, sort sessions
- * within each group, then order the groups by their first (sorted) row.
- */
-function groupSessions(
-  sources: InventorySource[],
-  sort: SessionSort,
-  groupBy: SessionGroupBy,
-): SessionGroup[] {
-  const byKey = new Map<string, InventorySession[]>();
-  for (const src of sources) {
-    for (const s of src.sessions) {
-      const key = groupKeyOf(s, groupBy);
-      const list = byKey.get(key);
-      if (list) list.push(s);
-      else byKey.set(key, [s]);
-    }
-  }
-
-  const groups: SessionGroup[] = [];
-  for (const [label, sessions] of byKey) {
-    groups.push({ label, sessions: [...sessions].sort((a, b) => compareSessions(a, b, sort)) });
-  }
-
-  // Order groups by their first row under the active sort, breaking ties by the
-  // group label so ordering stays stable and reads naturally.
-  groups.sort((ga, gb) => {
-    const c = compareSessions(ga.sessions[0], gb.sessions[0], sort);
-    return c !== 0 ? c : ga.label.localeCompare(gb.label);
-  });
-  return groups;
-}
-
 // ── Column model ────────────────────────────────────────────────────────────────
 
 const COLUMNS: Array<{ key: string; label: string; sort?: SessionSortCol; className?: string }> = [
@@ -160,13 +103,23 @@ const COLUMNS: Array<{ key: string; label: string; sort?: SessionSortCol; classN
   { key: 'projects', label: m.common_projects() },
 ];
 
+const EMPTY_CELLS = {
+  filter: '' as string | ReactNode,
+  frames: '' as string | ReactNode | number,
+  integration: '' as string | ReactNode,
+  night: '' as string | ReactNode,
+  camera: '' as string | ReactNode,
+  state: '' as string | ReactNode,
+  projects: '' as string | ReactNode,
+};
+
+const INDENT_PER_DEPTH = 12;
+
 function isNeedsReview(state: string): boolean {
   return state === 'discovered' || state === 'candidate' || state === 'needs_review';
 }
 
 function stateLabel(state: string): string {
-  // Full label, never truncated: all "needs review"-class states collapse to a
-  // single readable label; everything else uses the canonical lifecycle label.
   return isNeedsReview(state) ? m.sessions_needs_review_aria() : sessionStateLabel(state);
 }
 
@@ -179,8 +132,11 @@ interface Props {
   loading?: boolean;
   sort: SessionSort;
   onSort: (col: SessionSortCol) => void;
-  /** Key the spanning group-header rows are built from. Default 'target'. */
-  groupBy?: SessionGroupBy;
+  /**
+   * Active ordered grouping dimension ids. Supplied by SessionsPage via
+   * `useGrouping`. When empty the table renders a flat sorted list.
+   */
+  dims?: string[];
 }
 
 export function SessionsTable({
@@ -190,14 +146,29 @@ export function SessionsTable({
   loading,
   sort,
   onSort,
-  groupBy = DEFAULT_SESSION_GROUP_BY,
+  dims = [],
 }: Props) {
-  const groups = useMemo(
-    () => groupSessions(sources, sort, groupBy),
-    [sources, sort, groupBy],
+  const { collapsed, toggle } = useCollapsibleGroups();
+
+  // Flatten all sessions across sources, then sort.
+  const allSessions = useMemo<InventorySession[]>(() => {
+    const flat: InventorySession[] = [];
+    for (const src of sources) flat.push(...src.sessions);
+    return [...flat].sort((a, b) => compareSessions(a, b, sort));
+  }, [sources, sort]);
+
+  // Build the group tree (or a flat pass-through when dims is empty).
+  const tree = useMemo(
+    () => groupByDimensions(allSessions, dims, SESSION_ACCESSORS),
+    [allSessions, dims],
   );
 
-  // Build sortable header labels as button elements (column header passthrough).
+  const visualRows = useMemo(
+    () => flattenVisibleGroups(tree, collapsed),
+    [tree, collapsed],
+  );
+
+  // Build sortable column headers.
   const columns: TableColumn[] = COLUMNS.map((c) => ({
     key: c.key,
     className: c.className,
@@ -222,83 +193,93 @@ export function SessionsTable({
     ),
   }));
 
-  // Flatten groups into rows: a spanning group header row, then session rows.
-  const rows: TableRow[] = [];
-  for (const group of groups) {
-    rows.push({
-      _rowClassName: 'alm-sessions-table__group',
-      target: (
-        <span>
-          {group.label}
-          <span className="alm-sessions-table__group-count">
-            {group.sessions.length} {group.sessions.length === 1 ? m.sessions_singular() : m.status_sessions_label()}
-          </span>
-        </span>
-      ),
-      // Remaining cells render empty for the group header row.
-      filter: '',
-      frames: '',
-      integration: '',
-      night: '',
-      camera: '',
-      state: '',
-      projects: '',
-    });
+  const grouped = dims.length > 0;
 
-    for (const s of group.sessions) {
-      const needsReview = isNeedsReview(s.state);
-      const projects = s.linked?.projects ?? [];
-      rows.push({
-        _rowClassName:
-          'alm-sessions-table__row' +
-          (selected === s.id ? ' alm-sessions-table__row--selected' : ''),
-        _onClick: () => onSelect(s.id),
-        // The group headline lives on the spanning header row; per-session
-        // rows carry only the needs-review marker in the first column so it
-        // stays aligned without repeating the group label on every row.
-        target: needsReview ? (
-          <span className="alm-sessions-cell--muted">
-            <AlertTriangle
-              size={11}
-              role="img"
-              aria-label={m.sessions_needs_review_aria()}
-              className="alm-sessions-cell__warn-icon"
-            />
-          </span>
-        ) : (
-          ''
-        ),
-        filter: s.filter ?? '—',
-        frames: s.frames,
-        integration: s.exposure ?? '—',
-        night: s.capturedOn ?? '—',
-        camera: s.camera ?? '—',
-        state: (
-          <Pill variant={sessionStateVariant(s.state)}>{stateLabel(s.state)}</Pill>
-        ),
-        projects:
-          projects.length > 0 ? (
-            <span className="alm-sessions-cell__projects">
-              {projects.map((p) => (
-                <Pill key={p.id} variant="info">
-                  {p.name}
-                </Pill>
-              ))}
+  const rows: TableRow[] = useMemo(
+    () =>
+      visualRows.map((row) => {
+        if (row.kind === 'header') {
+          const { node, depth, path, collapsed: isCollapsed } = row;
+          return {
+            _rowClassName: 'alm-sessions-table__group',
+            target: (
+              <button
+                type="button"
+                className="alm-sessions-table__group-cell"
+                data-testid={`sessions-group-${node.dimension}-${node.key}`}
+                aria-expanded={!isCollapsed}
+                onClick={() => toggle(path)}
+                // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
+                style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
+              >
+                <span className="alm-sessions-list__group-caret" aria-hidden="true">
+                  {isCollapsed ? '▸' : '▾'}
+                </span>
+                <span className="alm-sessions-list__group-label">{node.label}</span>
+                <span className="alm-sessions-list__group-count">{node.count}</span>
+              </button>
+            ),
+            ...EMPTY_CELLS,
+          };
+        }
+
+        // Flat item or grouped leaf.
+        const s = row.item;
+        const indentPx = grouped ? 8 + row.depth * INDENT_PER_DEPTH : 0;
+        const needsReview = isNeedsReview(s.state);
+        const projects = s.linked?.projects ?? [];
+        return {
+          _rowClassName:
+            'alm-sessions-table__row' +
+            (selected === s.id ? ' alm-sessions-table__row--selected' : ''),
+          _onClick: () => onSelect(s.id),
+          target: needsReview ? (
+            <span
+              className="alm-sessions-cell--muted"
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
+              style={indentPx ? { paddingLeft: indentPx } : undefined}
+            >
+              <AlertTriangle
+                size={11}
+                role="img"
+                aria-label={m.sessions_needs_review_aria()}
+                className="alm-sessions-cell__warn-icon"
+              />
             </span>
           ) : (
-            <span className="alm-sessions-cell--muted">—</span>
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
+            indentPx ? <span style={{ paddingLeft: indentPx }} /> : ''
           ),
-      });
-    }
-  }
+          filter: s.filter ?? '—',
+          frames: s.frames,
+          integration: s.exposure ?? '—',
+          night: s.capturedOn ?? '—',
+          camera: s.camera ?? '—',
+          state: (
+            <Pill variant={sessionStateVariant(s.state)}>{stateLabel(s.state)}</Pill>
+          ),
+          projects:
+            projects.length > 0 ? (
+              <span className="alm-sessions-cell__projects">
+                {projects.map((p) => (
+                  <Pill key={p.id} variant="info">
+                    {p.name}
+                  </Pill>
+                ))}
+              </span>
+            ) : (
+              <span className="alm-sessions-cell--muted">—</span>
+            ),
+        };
+      }),
+    [visualRows, selected, onSelect, toggle, grouped],
+  );
 
-  if (groups.length === 0 && !loading) {
+  if (allSessions.length === 0 && !loading) {
     return (
       <div className="alm-sessions-table__empty">{m.sessions_no_match()}</div>
     );
   }
 
-  // The total count moved to the bottom status bar (top-bar convention,
-  // task #80) — no in-table footer count line.
   return <Table className="alm-sessions-table" columns={columns} rows={rows} />;
 }

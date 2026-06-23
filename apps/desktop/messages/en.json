@@ -1177,5 +1177,15 @@
   "plans_gate_unprotected_items": "{count} unprotected item(s)",
   "projects_open_in": "Open in {tool}",
   "targets_hours_above": "{hours} h",
-  "sessions_dim_month": "Month"
+  "sessions_dim_month": "Month",
+  "sessions_dim_target": "Target",
+  "sessions_dim_camera": "Camera",
+  "sessions_dim_filter": "Filter",
+  "calibration_dim_instrument": "Instrument",
+  "calibration_group_instrument": "Instrument",
+  "projects_dim_lifecycle": "State",
+  "projects_dim_tool": "Tool",
+  "projects_dim_target": "Target",
+  "targets_dim_constellation": "Constellation",
+  "targets_dim_object_type": "Object type"
 }

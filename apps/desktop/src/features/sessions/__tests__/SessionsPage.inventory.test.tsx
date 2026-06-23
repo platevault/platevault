@@ -102,6 +102,7 @@ function renderList(props: Partial<React.ComponentProps<typeof SessionsTable>> =
       loading={false}
       sort={DEFAULT_SESSION_SORT}
       onSort={noop}
+      dims={['target']}
       {...props}
     />,
   );
@@ -231,9 +232,24 @@ describe('FilterToolbar (Sessions toolbar) — search, review filter', () => {
     expect(screen.queryByRole('combobox', { name: /Frame/i })).toBeNull();
   });
 
-  it('6f. there is no group-by control in the Sessions toolbar', () => {
-    renderToolbar();
-    expect(screen.queryByRole('combobox', { name: /Group by/i })).toBeNull();
+  it('6f. the "Group by" grouping control IS present in the Sessions toolbar', () => {
+    render(
+      <FilterToolbar
+        search={{ value: '', onChange: noop, ariaLabel: 'Search sessions' }}
+        grouping={{
+          dimensions: [
+            { value: 'target', label: 'Target' },
+            { value: 'filter', label: 'Filter' },
+          ],
+          dims: ['target'],
+          setSlot: noop,
+        }}
+      />,
+    );
+    // The grouping control renders multiple slots; the first has aria-label "Group by".
+    // getAllByRole to handle multiple grouping selects in the toolbar.
+    const groupBySelects = screen.getAllByRole('combobox', { name: /Group by/i });
+    expect(groupBySelects.length).toBeGreaterThan(0);
   });
 });
 
@@ -447,11 +463,11 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     expect(screen.queryByText('Loading…')).toBeNull();
   });
 
-  it('25. groupBy="camera" headlines groups by camera instead of target', () => {
+  it('25. dims=["camera"] headlines groups by camera instead of target', () => {
     const camera = INVENTORY_LIST_RESPONSE.sources[0].sessions.find((s) => s.camera)?.camera;
     expect(camera).toBeTruthy();
-    renderList({ sources: INVENTORY_LIST_RESPONSE.sources, groupBy: 'camera' });
-    // The camera value heads a group row.
+    renderList({ sources: INVENTORY_LIST_RESPONSE.sources, dims: ['camera'] });
+    // The camera value heads a group row (data-testid sessions-group-camera-<camera>).
     expect(screen.getAllByText(new RegExp(camera as string)).length).toBeGreaterThan(0);
   });
 });

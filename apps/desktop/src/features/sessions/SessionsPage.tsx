@@ -28,6 +28,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
+import { useGrouping } from '@/lib/use-grouping';
 import {
   SessionsTable,
   DEFAULT_SESSION_SORT,
@@ -87,6 +88,20 @@ export function SessionsPage() {
 
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SessionSort>(DEFAULT_SESSION_SORT);
+
+  const { dims, setSlot } = useGrouping({
+    storageKey: 'sessions.grouping.dims.v1',
+    validIds: ['target', 'filter', 'night', 'camera', 'month'],
+    defaultDims: ['target'],
+  });
+
+  const SESSION_DIMENSIONS: FilterOption[] = [
+    { value: 'target', label: m.projects_create_target_label() },
+    { value: 'filter', label: m.common_filter() },
+    { value: 'night', label: m.sessions_col_night() },
+    { value: 'camera', label: m.settings_calmatch_camera() },
+    { value: 'month', label: m.sessions_dim_month() },
+  ];
 
   // Build filters from URL params and pass directly to useInventorySources.
   const filters: InventoryFilters = {};
@@ -201,6 +216,11 @@ export function SessionsPage() {
                 }),
             },
           ]}
+          grouping={{
+            dimensions: SESSION_DIMENSIONS,
+            dims,
+            setSlot,
+          }}
         />
       }
     />
@@ -237,6 +257,7 @@ export function SessionsPage() {
           loading={loading}
           sort={sort}
           onSort={handleSort}
+          dims={dims}
         />
       )}
     </ListPageLayout>
