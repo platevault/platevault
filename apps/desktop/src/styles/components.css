@@ -1843,12 +1843,42 @@
   margin-bottom: var(--alm-sp-3);
 }
 
+/* Aligned plan grid: the list head and every group header share ONE column
+   template so each plan's columns (name · composition · destination · count)
+   line up vertically across all plans. */
+.alm-plan-panel__list-head,
 .alm-plan-panel__group-header {
-  display: flex;
+  display: grid;
+  grid-template-columns:
+    auto                  /* select + expand */
+    minmax(120px, 1.4fr)  /* plan name */
+    minmax(150px, 1.6fr)  /* composition */
+    minmax(120px, 1.3fr)  /* destination */
+    auto                  /* file count */
+    auto;                 /* discard */
   align-items: center;
-  gap: var(--alm-sp-2);
+  column-gap: var(--alm-sp-3);
+}
+
+.alm-plan-panel__list-head {
+  padding: 0 0 var(--alm-sp-1);
+  margin-bottom: var(--alm-sp-1);
+  border-bottom: 1px solid var(--alm-border);
+  font-size: var(--alm-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+}
+
+.alm-plan-panel__group-header {
   padding-bottom: var(--alm-sp-1);
   border-bottom: 1px solid var(--alm-border);
+}
+
+.alm-plan-panel__group-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
 }
 
 .alm-plan-panel__group-name {
@@ -1858,27 +1888,35 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  /* Share the row with the inline breakdown summary: take content width
-     (capped) rather than all free space, so the summary sits beside it. */
-  flex: 0 1 auto;
-  max-width: 38%;
 }
 
-/* Inline breakdown summary docked on the same row as the group header. */
-.alm-plan-panel__summary--inline {
-  flex: 1 1 auto;
-  flex-direction: row;
-  flex-wrap: wrap;
+.alm-plan-panel__group-breakdown {
+  font-size: var(--alm-text-xs);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alm-plan-panel__group-dest {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--alm-sp-1);
+  min-width: 0;
+}
+
+.alm-plan-panel__group-count {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.alm-plan-panel__group-actions {
+  display: inline-flex;
   align-items: center;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-.alm-plan-panel__summary--inline .alm-plan-panel__summary-line {
-  min-width: 0;
-}
-.alm-plan-panel__summary--inline .alm-plan-panel__summary-dest {
-  max-width: 100%;
+  gap: var(--alm-sp-2);
+  justify-self: end;
 }
 
 /* ── Expand/collapse control + chevron ──────────────────────── */

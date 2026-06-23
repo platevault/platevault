@@ -164,10 +164,14 @@ describe('PlanPanel (aggregate surface)', () => {
     renderPanel(plans);
     // No per-file rows by default.
     expect(screen.queryByText('d1.fits')).toBeNull();
-    // Summary present: "2 darks → …/masters/darks".
+    // Summary present: "2 darks" in the composition cell, the destination in
+    // its own aligned cell ("…/masters/darks").
     const summary = screen.getByTestId('plan-group-summary-g1');
     expect(summary).toHaveTextContent('2 darks');
-    expect(summary).toHaveTextContent('masters/darks');
+    const group = screen.getByTestId('plan-group-g1');
+    expect(group.querySelector('.alm-plan-panel__group-dest')).toHaveTextContent(
+      'masters/darks',
+    );
   });
 
   // ── #75: frame-type-hint aggregation for catalogue actions ───────────────────
@@ -255,8 +259,8 @@ describe('PlanPanel (aggregate surface)', () => {
     expect(summary).toHaveTextContent('dark');
     expect(summary).toHaveTextContent('12');
     expect(summary).toHaveTextContent('light');
-    // It is a SINGLE summary line (one <li>), not three per-type/per-file lines.
-    expect(summary.querySelectorAll('.alm-plan-panel__summary-line')).toHaveLength(1);
+    // It is a SINGLE composition cell (all types inline), not per-type rows.
+    expect(summary.querySelectorAll('.alm-plan-panel__summary-type')).toHaveLength(3);
 
     // The ▸ toggle expands the per-file rows on demand.
     fireEvent.click(screen.getByTestId('plan-group-toggle-mix'));
@@ -317,8 +321,8 @@ describe('PlanPanel (aggregate surface)', () => {
     expect(summary).toHaveTextContent('flat');
     expect(summary).not.toHaveTextContent('41');
     expect(summary).not.toHaveTextContent('catalogue');
-    // It is a SINGLE collapsed summary line.
-    expect(summary.querySelectorAll('.alm-plan-panel__summary-line')).toHaveLength(1);
+    // SINGLE collapsed composition cell with the three aligned type tokens.
+    expect(summary.querySelectorAll('.alm-plan-panel__summary-type')).toHaveLength(3);
   });
 
   // ── Selection ──────────────────────────────────────────────────────────────

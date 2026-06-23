@@ -48,7 +48,7 @@ export function PlanApprovalOverlay({
       onClose={onClose}
       title="Review plans"
       subtitle={subtitle}
-      size="lg"
+      size="xl"
       ariaLabel="Review plans"
       data-testid="plan-approval-overlay"
     >

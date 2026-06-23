@@ -563,6 +563,15 @@ export function PlanPanel({
 
       {/* ── Scrollable group list ── */}
       <div className="alm-plan-panel__scroll" data-testid="plan-panel-scroll">
+        {/* Column header — aligns with each plan's group-header grid. */}
+        <div className="alm-plan-panel__list-head" aria-hidden="true">
+          <span className="alm-plan-panel__group-lead" />
+          <span>Plan</span>
+          <span>Composition</span>
+          <span>Destination</span>
+          <span>Files</span>
+          <span />
+        </div>
         {plans.map((plan, planIdx) => {
           const checked = selected.has(plan.inboxItemId);
           const isExpanded = expanded.has(plan.inboxItemId);
@@ -595,121 +604,119 @@ export function PlanPanel({
               className="alm-plan-panel__group"
               data-testid={`plan-group-${plan.inboxItemId}`}
             >
-              {/* Group header */}
-              <div
-                className="alm-plan-panel__group-header"
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={plan.stale}
-                  onChange={() => toggleGroup(plan.inboxItemId, plan.stale)}
-                  aria-label={`Select plan for ${plan.itemName}`}
-                  data-testid={`plan-group-check-${plan.inboxItemId}`}
-                />
-                {/* Expand/collapse the per-file rows (collapsed by default). */}
-                <Btn
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => toggleExpanded(plan.inboxItemId)}
-                  aria-expanded={isExpanded}
-                  aria-controls={rowsId}
-                  aria-label={
-                    isExpanded
-                      ? `Hide files for ${plan.itemName}`
-                      : `Show files for ${plan.itemName}`
-                  }
-                  data-testid={`plan-group-toggle-${plan.inboxItemId}`}
-                  className="alm-plan-panel__expand"
-                >
-                  <span
-                    className={
+              {/* Group header — an aligned grid row (shares its column template
+                  with the list head so every plan's columns line up). */}
+              <div className="alm-plan-panel__group-header">
+                {/* Col 1: select + expand */}
+                <span className="alm-plan-panel__group-lead">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={plan.stale}
+                    onChange={() => toggleGroup(plan.inboxItemId, plan.stale)}
+                    aria-label={`Select plan for ${plan.itemName}`}
+                    data-testid={`plan-group-check-${plan.inboxItemId}`}
+                  />
+                  <Btn
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleExpanded(plan.inboxItemId)}
+                    aria-expanded={isExpanded}
+                    aria-controls={rowsId}
+                    aria-label={
                       isExpanded
-                        ? 'alm-plan-panel__chevron alm-plan-panel__chevron--open'
-                        : 'alm-plan-panel__chevron'
+                        ? `Hide files for ${plan.itemName}`
+                        : `Show files for ${plan.itemName}`
                     }
-                    aria-hidden="true"
+                    data-testid={`plan-group-toggle-${plan.inboxItemId}`}
+                    className="alm-plan-panel__expand"
                   >
-                    ▸
-                  </span>
-                </Btn>
-                <span
-                  className="alm-plan-panel__group-name"
-                  title={plan.itemName}
-                >
+                    <span
+                      className={
+                        isExpanded
+                          ? 'alm-plan-panel__chevron alm-plan-panel__chevron--open'
+                          : 'alm-plan-panel__chevron'
+                      }
+                      aria-hidden="true"
+                    >
+                      ▸
+                    </span>
+                  </Btn>
+                </span>
+
+                {/* Col 2: plan / source folder */}
+                <span className="alm-plan-panel__group-name" title={plan.itemName}>
                   {plan.itemName}
                 </span>
-                {/* Inline breakdown summary on the same row as the group header:
-                    "10 bias · 21 dark · 12 light → <dest>". */}
-                <ul
-                  className="alm-plan-panel__summary alm-plan-panel__summary--inline"
+
+                {/* Col 3: composition breakdown (aligned). */}
+                <span
+                  className="alm-plan-panel__group-breakdown"
                   data-testid={`plan-group-summary-${plan.inboxItemId}`}
                 >
-                  {breakdownEntries.length > 0 && breakdownDest ? (
-                    <li className="alm-plan-panel__summary-line">
-                      <span className="alm-plan-panel__summary-breakdown">
-                        {breakdownEntries.map((entry, i) => (
-                          <span key={entry.key} className="alm-plan-panel__summary-type">
-                            {i > 0 && (
-                              <span className="alm-plan-panel__summary-sep" aria-hidden="true">
-                                ·{' '}
-                              </span>
-                            )}
-                            <span className="alm-plan-panel__summary-type-count">
-                              {entry.count}
-                            </span>{' '}
-                            <span className="alm-plan-panel__summary-type-name">
-                              {pluralLabel(entry.frameType, entry.count)}
-                            </span>
-                          </span>
-                        ))}
-                      </span>
-                      <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
-                        →
-                      </span>
-                      <code
-                        className="alm-plan-panel__summary-dest"
-                        title={breakdownDest.full}
-                      >
-                        {breakdownDest.short}
-                      </code>
-                    </li>
-                  ) : (
-                    summaryLines.map((line) => (
-                      <li key={line.key} className="alm-plan-panel__summary-line">
-                        <span className="alm-plan-panel__summary-count">
-                          {line.count} {pluralLabel(line.frameType, line.count)}
+                  {(breakdownEntries.length > 0
+                    ? breakdownEntries
+                    : summaryLines.map((l) => ({
+                        key: l.key,
+                        frameType: l.frameType,
+                        count: l.count,
+                      }))
+                  ).map((entry, i) => (
+                    <span key={entry.key} className="alm-plan-panel__summary-type">
+                      {i > 0 && (
+                        <span className="alm-plan-panel__summary-sep" aria-hidden="true">
+                          ·{' '}
                         </span>
-                        <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
-                          →
-                        </span>
-                        <code
-                          className="alm-plan-panel__summary-dest"
-                          title={line.destinationFull}
-                        >
-                          {line.destinationShort}
-                        </code>
-                      </li>
-                    ))
-                  )}
-                </ul>
-                {plan.stale && (
-                  <span
-                    className="alm-plan-panel__stale-badge"
-                    data-testid={`plan-stale-${plan.inboxItemId}`}
-                  >
-                    Stale
+                      )}
+                      <span className="alm-plan-panel__summary-type-count">
+                        {entry.count}
+                      </span>{' '}
+                      <span className="alm-plan-panel__summary-type-name">
+                        {pluralLabel(entry.frameType, entry.count)}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+
+                {/* Col 4: destination (aligned across all plans). */}
+                <span className="alm-plan-panel__group-dest">
+                  <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
+                    →
                   </span>
-                )}
-                <Btn
-                  variant="ghost"
-                  onClick={() => onCancel(plan.inboxItemId)}
-                  disabled={busy}
-                  data-testid={`plan-cancel-${plan.inboxItemId}`}
-                  aria-label={`Discard plan for ${plan.itemName}`}
-                >
-                  Discard
-                </Btn>
+                  <code
+                    className="alm-plan-panel__summary-dest"
+                    title={breakdownDest?.full ?? summaryLines[0]?.destinationFull ?? ''}
+                  >
+                    {breakdownDest?.short ?? summaryLines[0]?.destinationShort ?? '—'}
+                  </code>
+                </span>
+
+                {/* Col 5: action / file count */}
+                <span className="alm-plan-panel__group-count">
+                  {plan.actions.length} file{plan.actions.length !== 1 ? 's' : ''}
+                </span>
+
+                {/* Col 6: stale badge + discard */}
+                <span className="alm-plan-panel__group-actions">
+                  {plan.stale && (
+                    <span
+                      className="alm-plan-panel__stale-badge"
+                      data-testid={`plan-stale-${plan.inboxItemId}`}
+                    >
+                      Stale
+                    </span>
+                  )}
+                  <Btn
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onCancel(plan.inboxItemId)}
+                    disabled={busy}
+                    data-testid={`plan-cancel-${plan.inboxItemId}`}
+                    aria-label={`Discard plan for ${plan.itemName}`}
+                  >
+                    Discard
+                  </Btn>
+                </span>
               </div>
 
               {plan.stale && (
