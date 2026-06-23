@@ -47,7 +47,7 @@ Last reconciled: **2026-06-23** (after the 035 / 040 / 041 / 046 iteration waves
 | 020 router-url-state | ✅ Implemented | 22/23 |
 | 021 developer-contract-diagnostics | 🟡 Partial | 32/37 (behind `dev-tools` feature) |
 | 022 mantine-prototype-design-system | 🔴 Superseded by 027 | |
-| 023 target-identity-history-notes | ✅ Implemented on gen-3 | US1 identity/aliases + US2 linked sessions + US3 linked projects + US4 observing notes shipped (migration 0048 + `target.sessions.list`/`target.projects.list`/`target.note.*`). `target.primary.rename` dropped; gen-2 Foundations obsolete |
+| 023 target-identity-history-notes | ✅ **Closed** | US1–US4 shipped on gen-3 (migration 0048 + `target.sessions.list`/`target.projects.list`/`target.note.*`) + caveats (note-edit audit event, UUID project deep-link, 16 KB note cap) + `speckit-verify` passed. `target.primary.rename` dropped; FR-005/FR-007 deferred |
 | 024 project-manifests-and-notes | 🟡 Closeout-ready | 32/37; all 5 open tasks DEFERRED |
 | 025 filesystem-plan-application | 🟡 Partial (out-of-spec) | Real apply shipped via 041; rollback + progress UI open |
 | 026 generated-source-view-removal | 🟡 Likely obsolete | 12/23; removal happened |

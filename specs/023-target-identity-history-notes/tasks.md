@@ -5,7 +5,10 @@
 Tasks are grouped by user story so each story can be developed and tested
 independently.
 
-> **Implementation status (2026-06-23): IMPLEMENTED on gen-3.** The task list below was authored against
+> **Status (2026-06-23): CLOSED.** US1–US4 shipped on gen-3, caveats resolved (note-edit audit event,
+> UUID project deep-link, 16 KB note cap enforced via `note.content_too_large`, SC-003 test added), and
+> `speckit-verify` passed (FR-009 dropped + SC-002 nav reversal sanctioned; FR-005/FR-007 deferred).
+> The task list below was authored against
 > the retired gen-2 model; it has been delivered on the spec-035/036 gen-3 `canonical_target` model instead:
 > - **US1 (identity + aliases)** — `target.get`, `target.alias.add/remove` shipped on gen-3.
 > - **US2 (linked sessions)** — `target.sessions.list` (filters `acquisition_session.canonical_target_id`)
