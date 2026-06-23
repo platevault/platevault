@@ -146,6 +146,7 @@ export function CommandPalette() {
               placeholder={m.cmdk_placeholder()}
               value={query}
               onValueChange={setQuery}
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- command palette is a modal dialog summoned on demand; focusing its input is the expected behavior
               autoFocus
             />
             <Command.List className="alm-palette__list">

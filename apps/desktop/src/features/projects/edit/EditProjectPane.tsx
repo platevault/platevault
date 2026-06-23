@@ -177,6 +177,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Name */}
         <div>
+          { }
           <label className="alm-field-label" htmlFor="ep-name">{m.projects_name_label()}</label>
           <input
             id="ep-name"
@@ -197,6 +198,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Tool */}
         <div>
+          { }
           <label className="alm-field-label" htmlFor="ep-tool">{m.projects_tool_label()}</label>
           <select
             id="ep-tool"
@@ -219,6 +221,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Notes */}
         <div>
+          { }
           <label className="alm-field-label" htmlFor="ep-notes">{m.projects_notes_label()}</label>
           <textarea
             id="ep-notes"

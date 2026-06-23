@@ -43,8 +43,10 @@ describe('ResolverSettingsControl', () => {
   it('loads settings and reflects the online toggle as checked', async () => {
     render(<ResolverSettingsControl />);
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
-    const label = screen.getByLabelText('Enable online SIMBAD resolution');
-    const checkbox = label.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    // The toggle's aria-label now sits on the <input> itself (a11y: the
+    // accessible name belongs on the interactive control), so getByLabelText
+    // returns the checkbox directly.
+    const checkbox = screen.getByLabelText('Enable online SIMBAD resolution') as HTMLInputElement;
     expect(checkbox).toBeChecked();
   });
 

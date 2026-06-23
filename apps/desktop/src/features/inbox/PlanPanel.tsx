@@ -540,6 +540,7 @@ export function PlanPanel({
       {/* ── Pinned header: counts + select-all + apply controls ── */}
       <div className="alm-plan-panel__bar" data-testid="plan-panel-bar">
         <div className="alm-plan-panel__bar-left">
+          { }
           <label
             className="alm-plan-panel__select-all"
           >
@@ -926,6 +927,7 @@ export function PlanPanel({
           <div
             className="alm-plan-panel__dest-options"
           >
+            { }
             <label className="alm-plan-panel__dest-label">
               <input
                 type="radio"
@@ -933,6 +935,7 @@ export function PlanPanel({
                 value="archive"
                 checked={destructiveDestination === 'archive'}
                 onChange={() => onDestructiveDestinationChange('archive')}
+                aria-label={m.inbox_archive_folder()}
                 data-testid="plan-destructive-archive"
               />
               <span>
@@ -942,6 +945,7 @@ export function PlanPanel({
                 </span>
               </span>
             </label>
+            { }
             <label className="alm-plan-panel__dest-label">
               <input
                 type="radio"
@@ -949,6 +953,7 @@ export function PlanPanel({
                 value="trash"
                 checked={destructiveDestination === 'trash'}
                 onChange={() => onDestructiveDestinationChange('trash')}
+                aria-label={m.inbox_system_trash()}
                 data-testid="plan-destructive-trash"
               />
               <span>{m.inbox_system_trash()}</span>

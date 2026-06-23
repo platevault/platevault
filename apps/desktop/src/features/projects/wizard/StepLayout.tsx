@@ -67,6 +67,7 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
     <div className="alm-wizard-layout">
       {/* Naming pattern */}
       <div className="alm-wizard-layout__section">
+        { }
         <label
           htmlFor="naming-pattern"
           className="alm-wizard-layout__label"
@@ -76,6 +77,7 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
         <input
           id="naming-pattern"
           type="text"
+          aria-label={m.projects_wizard_naming_pattern_label()}
           value={pattern}
           onChange={(e) => onChange({ namingPattern: e.target.value })}
           placeholder={DEFAULT_PATTERN}

@@ -165,7 +165,7 @@ function LabeledSelect({
   leadingOption?: string;
 }) {
   return (
-    <label className="alm-filterbar__field">
+    <label className="alm-filterbar__field" htmlFor={id}>
       <span className="alm-filterbar__field-label">{label}</span>
       <select
         className="alm-filterbar__select"
@@ -221,7 +221,9 @@ function MultiSelect({
         : `${selected.size} selected`;
 
   return (
-    <label className="alm-filterbar__field">
+    // A `<details>` is not a labelable control, so this field is a labelled
+    // group (heading + aria-label) rather than a `<label>` wrapper.
+    <div className="alm-filterbar__field">
       <span className="alm-filterbar__field-label">{label}</span>
       <details className="alm-filterbar__multi" id={id}>
         <summary className="alm-filterbar__multi-summary" aria-label={`${label}: ${summary}`}>
@@ -229,19 +231,21 @@ function MultiSelect({
         </summary>
         <div className="alm-filterbar__multi-menu" role="group" aria-label={label}>
           {options.map((o) => (
-            <label key={o.value} className="alm-filterbar__multi-option">
+            <label key={o.value} className="alm-filterbar__multi-option" htmlFor={`${id}-${o.value}`}>
               <input
                 type="checkbox"
+                id={`${id}-${o.value}`}
                 className="alm-filterbar__multi-check"
                 checked={selected.has(o.value)}
                 onChange={() => toggle(o.value)}
+                aria-label={o.label}
               />
               <span>{o.label}</span>
             </label>
           ))}
         </div>
       </details>
-    </label>
+    </div>
   );
 }
 

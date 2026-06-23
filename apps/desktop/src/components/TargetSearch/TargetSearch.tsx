@@ -390,6 +390,7 @@ export function TargetSearch({
         itemToStringLabel={itemToStringLabel}
         onItemHighlighted={handleItemHighlighted}
       >
+        { }
         <label
           className={hideLabel ? 'alm-target-search__label--sr' : 'alm-field-label'}
           htmlFor={id}
@@ -404,6 +405,7 @@ export function TargetSearch({
           aria-label={label}
           aria-describedby={error ? `${id}-error` : undefined}
           placeholder={placeholder}
+          // eslint-disable-next-line jsx-a11y/no-autofocus -- opt-in via the autoFocus prop; callers enable it only for focused search surfaces
           autoFocus={autoFocus}
           onFocus={() => {
             if (query.trim().length > 0) setOpen(true);

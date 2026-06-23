@@ -1500,5 +1500,6 @@
         "pp=other": "{count} files"
       }
     }
-  ]
+  ],
+  "targets_list_view_aria": "View {label}"
 }

@@ -107,7 +107,7 @@ export function CalendarScroll({ nights, onNightSelect }: CalendarScrollProps) {
                 transform: `translateY(${virtualRow.start}px)`,
                 height: `${virtualRow.size}px`,
               }}
-              role="listitem"
+              role="button"
               tabIndex={0}
               onClick={() => onNightSelect?.(night.date)}
               onKeyDown={(e) => {

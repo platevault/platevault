@@ -138,8 +138,10 @@ function SourceSummary({ state }: SourceSummaryProps) {
       className="alm-setup-scan__card"
     >
       {/* ── Always-visible header row ─────────────────────────────────────── */}
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- conditionally interactive: role=button + keyboard (Enter/Space) handler applied together only when isExpandable; inert div otherwise */}
       <div
         role={isExpandable ? 'button' : undefined}
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- tabIndex is paired with role=button (above) only when isExpandable, making the element a focusable button
         tabIndex={isExpandable ? 0 : undefined}
         aria-expanded={isExpandable ? expanded : undefined}
         onClick={isExpandable ? () => setExpanded((v) => !v) : undefined}

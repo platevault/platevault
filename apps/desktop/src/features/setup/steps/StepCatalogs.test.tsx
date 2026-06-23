@@ -67,7 +67,7 @@ describe('StepCatalogs (Configuration)', () => {
 
   it('shows a disabled theme control', () => {
     renderStep();
-    const theme = screen.getByLabelText('Theme') as HTMLSelectElement;
+    const theme = screen.getByLabelText('Theme');
     expect(theme).toBeDisabled();
   });
 

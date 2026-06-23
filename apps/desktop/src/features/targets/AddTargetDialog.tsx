@@ -116,6 +116,7 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
                 label={m.targets_add_target_search_label()}
                 placeholder={m.projects_create_target_search_placeholder()}
                 onSelect={handleSelect}
+                // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: moves focus to the search field when the Add Target dialog opens (expected modal behaviour)
                 autoFocus
               />
             )}

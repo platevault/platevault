@@ -45,6 +45,7 @@ export function SessionListPopover({ label, names }: Props) {
 					<Popover.Portal>
 						<Popover.Positioner side="bottom" align="start" sideOffset={4}>
 							<Popover.Popup className="alm-session-popover__popup">
+								{ }
 								<label htmlFor={inputId} className="alm-visually-hidden">
 									{m.calibration_session_popover_filter_label()}
 								</label>
