@@ -654,9 +654,12 @@ export function PlanPanel({
                   </Btn>
                 </span>
 
-                {/* Col 2: plan / source folder */}
-                <span className="alm-plan-panel__group-name" title={plan.itemName}>
-                  {plan.itemName}
+                {/* Col 2: plan / source folder ("(root)" for the library root) */}
+                <span
+                  className="alm-plan-panel__group-name"
+                  title={plan.itemName || '(root)'}
+                >
+                  {plan.itemName || '(root)'}
                 </span>
 
                 {/* Col 3: composition breakdown (aligned). */}
@@ -783,7 +786,13 @@ export function PlanPanel({
                           {basename(a.fromPath)}
                         </span>
                         <span className="alm-plan-panel__file-action">
-                          {actionLabel(a.action)}
+                          {/* Per-file frame type (composition), inferred from the
+                              path / item hint — not the repetitive action kind. */}
+                          {frameTypeLabel(
+                            a,
+                            destText,
+                            frameTypeByItemId?.[plan.inboxItemId],
+                          )}
                           {a.requiresDestructiveConfirm && (
                             <span className="alm-plan-panel__file-flag">
                               destructive

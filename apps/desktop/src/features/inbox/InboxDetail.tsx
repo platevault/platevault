@@ -570,27 +570,6 @@ export function InboxDetail({
 					: classType}
 			</Pill>
 			{item.lane === "video" && <Pill variant="ghost">video</Pill>}
-			{onConfirm &&
-				destinationRoots &&
-				destinationRoots.length > 1 && (
-					<label className="alm-inbox-detail__dest-root">
-						<span className="alm-inbox-detail__dest-root-label">Source</span>
-						<select
-							className="alm-select alm-select--sm"
-							value={selectedRootId ?? ""}
-							onChange={(e) => onSelectRoot?.(e.target.value)}
-							aria-label="Destination library source"
-							data-testid="inbox-dest-root-select"
-						>
-							<option value="">Auto</option>
-							{destinationRoots.map((r) => (
-								<option key={r.id} value={r.id}>
-									{basename(r.path)} · {r.category}
-								</option>
-							))}
-						</select>
-					</label>
-				)}
 			{onConfirm && (
 				<Btn
 					size="sm"
@@ -603,6 +582,27 @@ export function InboxDetail({
 				>
 					{confirmBusy ? "Working…" : confirmLabel}
 				</Btn>
+			)}
+			{/* Destination library picker — to the RIGHT of Confirm. Lets the user
+			    choose which library the files are placed in (Auto = backend pick). */}
+			{onConfirm && destinationRoots && destinationRoots.length > 1 && (
+				<label className="alm-inbox-detail__dest-root">
+					<span className="alm-inbox-detail__dest-root-label">Library:</span>
+					<select
+						className="alm-select alm-select--sm"
+						value={selectedRootId ?? ""}
+						onChange={(e) => onSelectRoot?.(e.target.value)}
+						aria-label="Destination library"
+						data-testid="inbox-dest-root-select"
+					>
+						<option value="">Auto</option>
+						{destinationRoots.map((r) => (
+							<option key={r.id} value={r.id}>
+								{basename(r.path)} · {r.category}
+							</option>
+						))}
+					</select>
+				</label>
 			)}
 		</span>
 	);
