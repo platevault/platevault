@@ -19,8 +19,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-const { mockSaveNote } = vi.hoisted(() => ({
+const { mockSaveNote, mockGetProjectNote } = vi.hoisted(() => ({
   mockSaveNote: vi.fn(),
+  mockGetProjectNote: vi.fn(),
 }));
 
 vi.mock('./manifests', async (importOriginal) => {
@@ -28,6 +29,7 @@ vi.mock('./manifests', async (importOriginal) => {
   return {
     ...actual,
     saveNote: mockSaveNote,
+    getProjectNote: mockGetProjectNote,
   };
 });
 
@@ -60,6 +62,17 @@ function renderNotes(
 describe('ProjectNotesSection', () => {
   beforeEach(() => {
     mockSaveNote.mockReset();
+    mockGetProjectNote.mockReset();
+    mockGetProjectNote.mockResolvedValue({ projectId: 'proj-test', content: null });
+  });
+
+  it('10. self-fetches the persisted note when no initialContent is provided (SC-002)', async () => {
+    mockGetProjectNote.mockResolvedValue({ projectId: 'proj-test', content: 'Persisted on reload' });
+    renderNotes({}); // no initialContent — drawer mounts the section without a prop
+    await waitFor(() =>
+      expect(screen.getByTestId('notes-body')).toHaveTextContent('Persisted on reload'),
+    );
+    expect(mockGetProjectNote).toHaveBeenCalledWith({ projectId: 'proj-test' });
   });
 
   it('1. renders "No notes." placeholder when no content', () => {

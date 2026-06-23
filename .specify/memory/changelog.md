@@ -35,3 +35,11 @@ app via MCP bridge); SpecKit `verify` pass (FR/SC reconciled to as-built).
 **Known follow-up (non-blocking):** FR-006 keeps density as an Appearance
 preference owned by spec 043 — the per-table density control was removed, the
 single global Appearance density choice is retained.
+
+### Calibration Matching Rules — 2026-06-23 (close-out)
+**Spec:** specs/007-calibration-matching-rules — Status: Completed
+Verified (speckit): all 12 FR implemented; per-type dark/flat/bias matching engine, ranking, assign, override in `crates/calibration/core`. Gates green (`calibration_core` 74). 11 open tasks all DEFERRED (JSON-schema contract-runner). SC-001 accepted: matcher per-type keys are backend-configurable with defaults; the per-criterion surface is the spec-018 Calibration pane (FR-009 split). No contradiction with 018.
+
+### Project Manifests and Notes — 2026-06-23 (close-out)
+**Spec:** specs/024-project-manifests-and-notes — Status: Completed
+Verified (speckit): manifest writer/checkpoints, project notes, audit, subscriber startup all shipped + tested. Fixed at close-out: project notes now self-fetch on drawer reload (`ProjectNotesSection` → `getProjectNote`), closing the SC-002/US2 display gap (+ test). Corrected a stale `tasks.md` deferral (workflow_run subscriber IS wired). 5 open tasks DEFERRED (FR-006 onboarding [010], export-copy [017/025], JSON-schema contract tests).
