@@ -20,32 +20,46 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-COMPONENTS_CSS="$REPO_ROOT/apps/desktop/src/styles/components.css"
+# components.css is now an @import barrel; the actual rules live in the domain
+# partials under styles/components/. Scan the barrel AND every partial so the
+# token policy still covers all component CSS after the split.
+COMPONENTS_CSS=("$REPO_ROOT/apps/desktop/src/styles/components.css" "$REPO_ROOT"/apps/desktop/src/styles/components/*.css)
 SRC_DIR="$REPO_ROOT/apps/desktop/src"
 
 PASS=true
 
 echo "=== Token policy check (spec 022/028) ==="
 
-# ── Check 1: No raw hex colors in components.css ─────────────────────────────
+# Strip /* ... */ comments while preserving line numbers (comment bytes → spaces,
+# newlines kept) so the hex/ms greps below never false-positive on policy prose.
+strip_comments() { perl -0777 -pe 's{/\*.*?\*/}{ (my $m=$&) =~ s/[^\n]/ /g; $m }gse' "$1"; }
+
+# ── Check 1: No raw hex colors in component CSS (barrel + partials) ───────────
 echo ""
-echo "1. Checking for raw hex colors in components.css..."
-# Exclude lines that are in comments and the policy-comment block itself
-HEX_HITS=$(grep -nP '#[0-9a-fA-F]{3,8}\b' "$COMPONENTS_CSS" | grep -v '^\s*[*\/]' || true)
+echo "1. Checking for raw hex colors in component CSS..."
+HEX_HITS=""
+for f in "${COMPONENTS_CSS[@]}"; do
+  h=$(strip_comments "$f" | grep -nP '#[0-9a-fA-F]{3,8}\b' || true)
+  [ -n "$h" ] && HEX_HITS+="${f##*/styles/}:"$'\n'"$h"$'\n'
+done
 if [ -n "$HEX_HITS" ]; then
-  echo "FAIL: Raw hex colors found in components.css (use --alm-* tokens instead):"
+  echo "FAIL: Raw hex colors found in component CSS (use --alm-* tokens instead):"
   echo "$HEX_HITS"
   PASS=false
 else
   echo "  OK: No raw hex colors."
 fi
 
-# ── Check 2: No raw ms values in components.css ──────────────────────────────
+# ── Check 2: No raw ms values in component CSS (barrel + partials) ────────────
 echo ""
-echo "2. Checking for raw ms values in components.css..."
-MS_HITS=$(grep -nP '\b[0-9]+ms\b' "$COMPONENTS_CSS" | grep -v '^\s*[*\/]' || true)
+echo "2. Checking for raw ms values in component CSS..."
+MS_HITS=""
+for f in "${COMPONENTS_CSS[@]}"; do
+  h=$(strip_comments "$f" | grep -nP '\b[0-9]+ms\b' || true)
+  [ -n "$h" ] && MS_HITS+="${f##*/styles/}:"$'\n'"$h"$'\n'
+done
 if [ -n "$MS_HITS" ]; then
-  echo "FAIL: Raw ms values found in components.css (use --alm-transition-* tokens instead):"
+  echo "FAIL: Raw ms values found in component CSS (use --alm-transition-* tokens instead):"
   echo "$MS_HITS"
   PASS=false
 else

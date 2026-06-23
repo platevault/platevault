@@ -1,0 +1,260 @@
+/* === PILL === */
+.alm-pill {
+  display: inline-flex; align-items: center;
+  padding: 1px var(--alm-sp-2); border-radius: 99px;
+  font-size: var(--alm-text-2xs); font-weight: var(--alm-weight-medium);
+  line-height: 1.6; white-space: nowrap;
+  border: 1px solid transparent;
+}
+.alm-pill--neutral { background: var(--alm-chip); color: var(--alm-text-secondary); border-color: var(--alm-rule); }
+.alm-pill--ghost { background: transparent; color: var(--alm-text-muted); border-color: var(--alm-rule); }
+.alm-pill--ok { background: var(--alm-ok-bg); color: var(--alm-ok); border-color: var(--alm-ok-border); }
+.alm-pill--warn { background: var(--alm-warn-bg); color: var(--alm-warn); border-color: var(--alm-warn-border); }
+.alm-pill--danger { background: var(--alm-danger-bg); color: var(--alm-danger); border-color: var(--alm-danger-border); }
+.alm-pill--info { background: var(--alm-info-bg); color: var(--alm-info); border-color: var(--alm-info-border); }
+.alm-pill--accent { background: var(--alm-accent-bg); color: var(--alm-accent-text); border-color: var(--alm-info-border); }
+
+/* === BUTTON === */
+.alm-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: var(--alm-sp-1); height: 28px;
+  padding: 0 var(--alm-sp-3);
+  font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
+  font-family: var(--alm-font-sans);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  background: var(--alm-bg); color: var(--alm-text-secondary);
+  cursor: pointer; white-space: nowrap;
+  transition: all var(--alm-transition-fast);
+}
+.alm-btn:hover { border-color: var(--alm-ink3); color: var(--alm-text); }
+.alm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.alm-btn:disabled:hover { border-color: var(--alm-border); color: var(--alm-text-secondary); }
+/* Primary = theme accent. Was var(--alm-ink), which inverts to a light button
+   in dark themes (ink is the light text color there). Accent stays correct in
+   every theme and unifies the previously-divergent primary/accent variants. */
+.alm-btn--primary { background: var(--alm-accent); color: var(--alm-on-accent); border-color: var(--alm-accent); }
+.alm-btn--primary:hover { background: var(--alm-accent-hover); border-color: var(--alm-accent-hover); }
+.alm-btn--accent { background: var(--alm-accent); color: var(--alm-on-accent); border-color: var(--alm-accent); }
+.alm-btn--accent:hover { background: var(--alm-accent-hover); border-color: var(--alm-accent-hover); }
+.alm-btn--danger { background: var(--alm-danger-bg); color: var(--alm-danger); border-color: var(--alm-danger-border); }
+.alm-btn--danger:hover { background: var(--alm-danger-bg-hover); }
+.alm-btn--sm { height: 24px; padding: 0 var(--alm-sp-2); font-size: var(--alm-text-2xs); }
+
+/* === SECTION === */
+.alm-section { margin-bottom: var(--alm-sp-4); }
+.alm-section__header {
+  display: flex; align-items: center; gap: var(--alm-sp-2);
+  padding-bottom: var(--alm-sp-2);
+  border-bottom: 1px solid var(--alm-border-subtle);
+  margin-bottom: var(--alm-sp-3);
+  cursor: pointer; user-select: none;
+}
+.alm-section__toggle {
+  font-size: var(--alm-text-2xs); color: var(--alm-text-faint);
+  width: 14px; text-align: center; flex-shrink: 0;
+}
+.alm-section__title {
+  font-size: var(--alm-text-sm); font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+.alm-section__count { font-size: var(--alm-text-2xs); color: var(--alm-text-muted); }
+.alm-section__right { margin-left: auto; }
+
+/* === DETAIL v4: METRIC LINE + DASHBOARD GRID + UNIFIED RAIL === */
+/* Quiet summary-stat row (not hero numbers): value and label share the same
+   size; value is medium-weight ink, label is muted. One consistent treatment
+   across every detail header. */
+.alm-metricline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1) var(--alm-sp-4);
+  align-items: baseline;
+  padding: var(--alm-sp-3) 0;
+  border-bottom: 1px solid var(--alm-border-subtle);
+  font-size: var(--alm-text-sm);
+}
+.alm-metricline__m { font-size: var(--alm-text-sm); color: var(--alm-text-muted); }
+.alm-metricline__m b {
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+  margin-right: var(--alm-sp-1);
+}
+
+.alm-dash {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--alm-rail-width);
+  gap: var(--alm-sp-5);
+  margin-top: var(--alm-sp-4);
+}
+.alm-dash__primary { min-width: 0; }
+
+.alm-rail { min-width: 0; }
+.alm-rail__panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-md);
+  overflow: hidden;
+}
+
+/* Dashboard fill mode (DetailPane fill): the pane fills the available height,
+ * header + metric line stay pinned, and the PRIMARY column scrolls on its own
+ * while the rail stays put as a separate region. Robust — no position:sticky. */
+.alm-detail--fill {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.alm-detail--fill > .alm-dash {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+  margin-top: var(--alm-sp-3);
+}
+.alm-detail--fill .alm-dash__primary {
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: var(--alm-sp-3);
+}
+.alm-detail--fill .alm-rail { min-height: 0; }
+.alm-detail--fill .alm-rail__panel {
+  max-height: 100%;
+  overflow-y: auto;
+}
+.alm-rail__card { padding: var(--alm-sp-3) var(--alm-sp-4); }
+.alm-rail__card + .alm-rail__card { border-top: 1px solid var(--alm-border-subtle); }
+.alm-rail__card-h {
+  font-size: var(--alm-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-faint);
+  font-weight: var(--alm-weight-semibold);
+  margin-bottom: var(--alm-sp-2);
+}
+
+/* === BOX / CARD === */
+.alm-box {
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  background: var(--alm-bg);
+  overflow: hidden;
+}
+.alm-box__header {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  background: var(--alm-surface);
+  border-bottom: 1px solid var(--alm-border-subtle);
+  font-size: var(--alm-text-xs); font-weight: var(--alm-weight-semibold);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+}
+.alm-box__body { padding: var(--alm-sp-3); }
+
+/* === TABLE === */
+.alm-table { width: 100%; border-collapse: collapse; }
+.alm-table th {
+  text-align: left; font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-muted); text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-bottom: 1px solid var(--alm-border);
+  background: var(--alm-surface);
+  white-space: nowrap;
+}
+.alm-table td {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-bottom: 1px solid var(--alm-border-subtle);
+  font-size: var(--alm-text-sm);
+  vertical-align: middle;
+}
+.alm-table td.mono { font-family: var(--alm-font-mono); font-size: var(--alm-text-xs); }
+.alm-table td.num { font-variant-numeric: tabular-nums; text-align: right; }
+.alm-table td.muted { color: var(--alm-text-muted); }
+
+/* Virtualized Table (opt-in `virtualized` prop): own scroll container + sticky
+   header + zero-chrome sentinel spacer rows (padding-spacer windowing). */
+.alm-table__scroll {
+  min-height: 0;
+  overflow: auto;
+}
+.alm-table__scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.alm-table__spacer td {
+  padding: 0;
+  border: 0;
+}
+
+/* === KV ROW === */
+.alm-kv { display: flex; padding: var(--alm-sp-1) 0; gap: var(--alm-sp-3); }
+.alm-kv__label {
+  width: 120px; flex-shrink: 0;
+  font-size: var(--alm-text-xs); color: var(--alm-text-muted);
+  text-transform: uppercase; letter-spacing: 0.03em;
+  font-weight: var(--alm-weight-medium);
+}
+.alm-kv__value { font-size: var(--alm-text-sm); }
+.alm-kv__provenance {
+  font-size: var(--alm-text-xs); color: var(--alm-text-faint);
+  margin-left: var(--alm-sp-1);
+}
+
+/* === COVERAGE BAR === */
+.alm-coverage { display: flex; align-items: center; gap: var(--alm-sp-2); }
+.alm-coverage__label {
+  width: 32px; font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
+  text-align: right; flex-shrink: 0;
+}
+.alm-coverage__bar {
+  flex: 1; height: 6px; background: var(--alm-rule2);
+  border-radius: 3px; overflow: hidden;
+}
+.alm-coverage__fill {
+  height: 100%; border-radius: 3px;
+  background: var(--alm-accent);
+  transition: width var(--alm-transition-slow);
+}
+.alm-coverage__fill--low { background: var(--alm-warn); }
+.alm-coverage__fill--ok { background: var(--alm-ok); }
+.alm-coverage__value {
+  width: 36px; font-size: var(--alm-text-2xs); color: var(--alm-text-muted);
+  text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums;
+}
+
+/* === BANNER === */
+.alm-banner {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+  display: flex; align-items: center; gap: var(--alm-sp-2);
+}
+.alm-banner--warn { background: var(--alm-warn-bg); color: var(--alm-warn); border: 1px solid var(--alm-warn-border); }
+.alm-banner--danger { background: var(--alm-danger-bg); color: var(--alm-danger); border: 1px solid var(--alm-danger-border); }
+.alm-banner--info { background: var(--alm-info-bg); color: var(--alm-info); border: 1px solid var(--alm-info-border); }
+
+/* === PROPERTY TABLE === */
+.alm-prop-table { width: 100%; }
+.alm-prop-table__row {
+  display: flex; border-bottom: 1px solid var(--alm-border-subtle);
+  padding: var(--alm-sp-2) 0;
+}
+.alm-prop-table__label {
+  width: 140px; flex-shrink: 0;
+  font-size: var(--alm-text-xs); color: var(--alm-text-muted);
+  font-weight: var(--alm-weight-medium);
+}
+.alm-prop-table__value {
+  flex: 1; font-size: var(--alm-text-sm);
+  display: flex; align-items: center; gap: var(--alm-sp-2);
+}
+.alm-prop-table__source {
+  font-size: var(--alm-text-2xs); color: var(--alm-text-faint);
+  margin-left: auto;
+}
+.alm-prop-table__row--conflict { background: var(--alm-warn-bg); }

@@ -1,0 +1,385 @@
+/* === DEV CALL LIST === */
+
+/* Empty state message */
+.alm-dev-calls__empty {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* Main table */
+.alm-dev-calls__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--alm-text-xs);
+}
+
+/* Header row */
+.alm-dev-calls__thead-row {
+  border-bottom: 1px solid var(--alm-border);
+  text-align: left;
+}
+
+/* Header cells */
+.alm-dev-calls__th {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+}
+
+/* Body rows */
+.alm-dev-calls__row {
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+/* Cell — shared padding (version, duration, outcome) */
+.alm-dev-calls__td {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+}
+
+/* Cell — id column: monospace, muted, slightly smaller */
+.alm-dev-calls__td--id {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-family: var(--alm-font-mono);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-2xs);
+}
+
+/* Cell — contract name: monospace */
+.alm-dev-calls__td--contract {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-family: var(--alm-font-mono);
+}
+
+/* Cell — started: muted timestamp */
+.alm-dev-calls__td--started {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  color: var(--alm-text-muted);
+}
+
+/* Cell — actions: flex row */
+.alm-dev-calls__td--actions {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  display: flex;
+  gap: var(--alm-sp-1);
+}
+
+/* Truncation warning badge */
+.alm-dev-calls__truncated {
+  margin-left: var(--alm-sp-1);
+  color: var(--alm-warn);
+}
+
+/* Outcome: error state */
+.alm-dev-calls__outcome--error {
+  color: var(--alm-danger);
+  font-family: var(--alm-font-mono);
+}
+
+/* Outcome: ok state */
+.alm-dev-calls__outcome--ok {
+  color: var(--alm-ok);
+}
+
+/* === DEV CONTRACT LIST === */
+
+.alm-dev-contracts-list__empty {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+.alm-dev-contracts-list__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--alm-text-xs);
+}
+
+.alm-dev-contracts-list__thead-row {
+  border-bottom: 1px solid var(--alm-border);
+  text-align: left;
+}
+
+.alm-dev-contracts-list__th {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+}
+
+.alm-dev-contracts-list__row {
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+/* Generic cell — padding only */
+.alm-dev-contracts-list__td {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+}
+
+/* Name cell — monospace font */
+.alm-dev-contracts-list__td-name {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-family: var(--alm-font-mono);
+}
+
+/* Direction cell — muted text */
+.alm-dev-contracts-list__td-muted {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  color: var(--alm-text-muted);
+}
+
+/* Replay cell — centered */
+.alm-dev-contracts-list__td-center {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  text-align: center;
+}
+
+/* Schema path cell — truncated monospace muted */
+.alm-dev-contracts-list__td-schema {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-family: var(--alm-font-mono);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--alm-text-muted);
+}
+
+/* Mismatch warning icon */
+.alm-dev-contracts-list__mismatch-icon {
+  color: var(--alm-warn);
+  margin-right: var(--alm-sp-1);
+}
+
+/* Replay-safe checkmark */
+.alm-dev-contracts-list__replay-ok {
+  color: var(--alm-ok);
+}
+
+/* Not-replay-safe dash */
+.alm-dev-contracts-list__replay-na {
+  color: var(--alm-text-muted);
+}
+
+/* === DEV SCHEMA VIEWER === */
+
+/* Overlay — fixed full-screen scrim */
+.alm-dev-schema__overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--alm-ink) 50%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/* Modal panel */
+.alm-dev-schema__panel {
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  width: 80vw;
+  max-width: 900px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  padding: var(--alm-sp-4);
+  gap: var(--alm-sp-3);
+}
+
+/* Header row */
+.alm-dev-schema__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Contract name — monospace bold */
+.alm-dev-schema__name {
+  font-family: var(--alm-font-mono);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Contract version badge */
+.alm-dev-schema__version {
+  color: var(--alm-text-muted);
+  margin-left: var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+}
+
+/* Action button group */
+.alm-dev-schema__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+}
+
+/* Scrollable body */
+.alm-dev-schema__body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* Missing-schema alert */
+.alm-dev-schema__missing {
+  color: var(--alm-danger);
+  padding: var(--alm-sp-4);
+  font-size: var(--alm-text-sm);
+}
+
+/* Path paragraph inside missing alert */
+.alm-dev-schema__missing-path {
+  margin-top: var(--alm-sp-1);
+}
+
+/* Inline code path */
+.alm-dev-schema__missing-code {
+  font-family: var(--alm-font-mono);
+  font-size: 0.8em;
+}
+
+/* Loading state */
+.alm-dev-schema__loading {
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-4);
+}
+
+/* Schema content pre block */
+.alm-dev-schema__pre {
+  margin: 0;
+  padding: var(--alm-sp-2);
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  line-height: var(--alm-leading-normal);
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--alm-bg3);
+  border-radius: var(--alm-radius-sm);
+}
+
+/* === DEV CONTRACTS PAGE === */
+
+/* ── Disabled / loading stub ─────────────────────────────────── */
+
+.alm-dev-contracts-page__stub-body {
+  padding: var(--alm-sp-7);
+  text-align: center;
+  color: var(--alm-text-muted);
+}
+
+.alm-dev-contracts-page__stub-heading {
+  font-size: var(--alm-text-lg);
+  margin-bottom: var(--alm-sp-2);
+}
+
+.alm-dev-contracts-page__stub-text {
+  font-size: var(--alm-text-sm);
+}
+
+.alm-dev-contracts-page__loading {
+  padding: var(--alm-sp-7);
+  color: var(--alm-text-muted);
+}
+
+/* ── Main scroll container ───────────────────────────────────── */
+
+.alm-dev-contracts-page__body {
+  padding: var(--alm-sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+}
+
+/* ── Page header bar ─────────────────────────────────────────── */
+
+.alm-dev-contracts-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--alm-border);
+  padding-bottom: var(--alm-sp-3);
+}
+
+.alm-dev-contracts-page__title {
+  font-size: var(--alm-text-lg);
+  font-weight: var(--alm-weight-semibold);
+}
+
+.alm-dev-contracts-page__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+}
+
+/* ── Inline feedback banners ─────────────────────────────────── */
+
+.alm-dev-contracts-page__error {
+  color: var(--alm-danger);
+  font-size: var(--alm-text-sm);
+}
+
+.alm-dev-contracts-page__export-result {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* ── Section headings ────────────────────────────────────────── */
+
+.alm-dev-contracts-page__section-heading {
+  font-size: var(--alm-text-md);
+  font-weight: var(--alm-weight-semibold);
+  margin-bottom: var(--alm-sp-2);
+}
+
+/* === INFO TIP (settings ⓘ — replaces always-on help prose) === */
+.alm-info-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--alm-text-faint);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+  font-style: normal;
+  line-height: 1;
+  cursor: help;
+  position: relative;
+  flex: none;
+  user-select: none;
+}
+.alm-info-tip:hover,
+.alm-info-tip:focus-visible {
+  border-color: var(--alm-accent);
+  color: var(--alm-accent);
+  outline: none;
+}
+.alm-info-tip:hover::after,
+.alm-info-tip:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 0;
+  top: calc(100% + 7px);
+  background: var(--alm-ink);
+  color: var(--alm-bg);
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-normal);
+  line-height: 1.45;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-radius: var(--alm-radius-md);
+  width: max-content;
+  max-width: 280px;
+  z-index: 60;
+  box-shadow: var(--alm-shadow-sm);
+  white-space: normal;
+  text-align: left;
+  font-style: normal;
+}
+.alm-info-tip:hover::before,
+.alm-info-tip:focus-visible::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: calc(100% + 2px);
+  border: 5px solid transparent;
+  border-bottom-color: var(--alm-ink);
+  z-index: 60;
+}
+
+/* === ADVANCED guided-tour col (flex column for desc + restart button) === */
+.alm-adv-settings__guided-col { display: flex; flex-direction: column; gap: var(--alm-sp-2); align-items: flex-start; }

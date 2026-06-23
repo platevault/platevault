@@ -1,0 +1,1246 @@
+/* === merged from .cssblocks/projects-redesign.css (spec-043 parallel coder) === */
+/* ============================================================================
+ * Projects redesign CSS block (spec 043 — tasks 105 / 104)
+ * ----------------------------------------------------------------------------
+ * Token-only block (no raw hex/rgb/ms). NOT imported directly — the parent
+ * merges these rules into src/styles/components.css after review.
+ *
+ * Two changes:
+ *   1. (105) ProjectStatusTag — replaces status Pill badges with a compact
+ *      dot + plain-text label. Color used sparingly as a 6px dot accent only.
+ *   2. (104) ListPageLayout dual side+bottom variant — new
+ *      `detailPlacement="side-and-bottom"` mode renders a side panel AND a
+ *      bottom panel simultaneously. Adds three new modifier classes:
+ *      .alm-listpage__body--dual, .alm-listpage__side, .alm-listpage__bottom.
+ * ============================================================================ */
+
+/* ── 105 ProjectStatusTag ───────────────────────────────────────────────────
+ * Replaces the filled-background Pill badge in the status column and detail
+ * header. Layout: a small colored dot + plain text label, all inline.
+ * The dot communicates semantic state without a full colored badge background. */
+
+.alm-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  /* No background, no border — just the dot + text */
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
+  white-space: nowrap;
+}
+
+/* The status dot — a 6px circle colored by variant. */
+.alm-status-tag__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  /* Default (neutral/ghost): muted border-color dot */
+  background: var(--alm-text-faint);
+}
+
+/* Per-variant dot colors — map to semantic tokens. */
+.alm-status-tag--ok .alm-status-tag__dot     { background: var(--alm-ok); }
+.alm-status-tag--warn .alm-status-tag__dot   { background: var(--alm-warn); }
+.alm-status-tag--danger .alm-status-tag__dot { background: var(--alm-danger); }
+.alm-status-tag--info .alm-status-tag__dot   { background: var(--alm-info); }
+.alm-status-tag--accent .alm-status-tag__dot { background: var(--alm-accent); }
+.alm-status-tag--neutral .alm-status-tag__dot { background: var(--alm-text-muted); }
+/* ghost: keep the faint default — intentionally low-contrast for inactive states */
+
+/* In the detail header titleExtra slot, bump up the font slightly so it sits
+ * well next to the project name title. */
+.alm-detail__header .alm-status-tag {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* In the blocked state the label itself picks up a danger tint for emphasis. */
+.alm-status-tag--danger {
+  color: var(--alm-danger);
+}
+
+/* ── 104 ListPageLayout dual side+bottom variant ────────────────────────────
+ * When `detailPlacement="side-and-bottom"` is chosen:
+ *
+ *   ┌─────────────────────────────────────────────┐
+ *   │ PageTopBar (pinned)                          │
+ *   ├──────────────────────────────────────────────┤
+ *   │ .alm-listpage__main  │ .alm-listpage__side   │
+ *   │ (full-height,        │ (fixed 420px,         │
+ *   │  scrolls)            │  own scroll)          │
+ *   ├──────────────────────┴───────────────────────┤
+ *   │ .alm-listpage__bottom (full-width, non-      │
+ *   │  resizable, fit-content, max-height cap)     │
+ *   └──────────────────────────────────────────────┘
+ *
+ * The side panel and bottom panel can each be independently present or absent:
+ * if only sideDetail is provided the body shows with only the side column; if
+ * only bottomDetail is provided the body shows as a column (like bottom dock);
+ * if both are present the dual layout activates.
+ *
+ * The existing `detail` + `detailPlacement='side'` path is unchanged — the new
+ * props (sideDetail / bottomDetail) are additive. */
+
+/* Dual body: row — main-col on the left, side panel on the right.
+ * The bottom strip lives INSIDE the main-col so it only sits under the
+ * content area and does not overlap the side panel. */
+.alm-listpage__body--dual {
+  flex-direction: row;
+}
+
+/* Left column: wraps the main content + bottom strip in a flex column.
+ * Takes all remaining width after the fixed side panel. */
+.alm-listpage__main-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Side detail panel inside the dual layout — same width token as the existing
+ * side-only variant to stay visually consistent. */
+.alm-listpage__side {
+  flex: 0 0 var(--alm-side-detail-w, 420px);
+  width: var(--alm-side-detail-w, 420px);
+  height: auto;
+  max-height: none;
+  align-self: stretch;
+  border-left: 1px solid var(--alm-border);
+  background: var(--alm-surface-raised);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Bottom detail strip — same sizing strategy as the existing bottom dock. */
+.alm-listpage__bottom {
+  flex: 0 0 auto;
+  height: fit-content;
+  max-height: 40vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--alm-border);
+  background: var(--alm-surface-raised);
+}
+
+/* Close bar and close button for both new panels — reuse the same structure
+ * as the existing .alm-listpage__detail-bar / __detail-close. */
+.alm-listpage__panel-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+.alm-listpage__panel-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  line-height: 1;
+  padding: var(--alm-sp-1);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-listpage__panel-close:hover { color: var(--alm-text); }
+
+.alm-listpage__panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Apply same project-detail structural tweaks used in the side-only variant
+ * to the new dual side panel too. */
+.alm-listpage__side .alm-project-detail__sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+.alm-listpage__side .alm-stepper {
+  padding-top: var(--alm-sp-1);
+  padding-bottom: var(--alm-sp-1);
+}
+
+.alm-listpage__side .alm-metricline {
+  margin-bottom: var(--alm-sp-1);
+}
+
+.alm-listpage__side .alm-project-detail__bar-actions {
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+}
+
+.alm-listpage__side .alm-project-detail__bar-path {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+/* ── ProjectBottomDetail — horizontal section grid ───────────────────────────
+ * Renders the secondary/operational sections (Notes, Manifests, Calibration,
+ * Source views, Outputs, Cleanup) in a multi-column grid that uses the
+ * full width of the bottom strip. Each cell is a self-contained section.
+ *
+ * Grid: auto-fill columns, min 280px each, so the layout adapts from 2 columns
+ * at ~1100px total width (after the 420px side panel) to 3+ columns on wider
+ * displays. The notes cell spans 2 columns to give editable prose room. */
+
+/* Standardised bottom detail: project identity stacked above the operational
+   sections in one full-width bottom panel (no right side panel). */
+.alm-project-detail-stack {
+  display: flex;
+  flex-direction: column;
+}
+.alm-project-detail-stack > * + * {
+  border-top: 1px solid var(--alm-border-subtle);
+}
+
+.alm-project-bottom {
+  padding: var(--alm-sp-3);
+}
+
+.alm-project-bottom__grid {
+  display: grid;
+  /* Each column is at least 280px; fills the available width. */
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--alm-sp-3);
+  align-items: start;
+}
+
+/* Notes get extra width — prose benefits from room to breathe. */
+.alm-project-bottom__cell--notes {
+  grid-column: span 2;
+}
+
+/* Each cell is a self-contained block; sections handle their own borders/bg. */
+.alm-project-bottom__cell {
+  min-width: 0;
+}
+
+/* Loading / error states in the bottom panel. */
+.alm-project-bottom__loading {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+.alm-project-bottom__error {
+  padding: var(--alm-sp-3);
+}
+
+/* On narrow viewports (e.g. if the app window is squeezed) collapse notes to
+ * a single column so it doesn't overflow its container. */
+@media (max-width: 700px) {
+  .alm-project-bottom__cell--notes {
+    grid-column: span 1;
+  }
+}
+
+/* === merged from .cssblocks/targets-fixes.css (spec-043 parallel coder) === */
+/* === targets-fixes.css — tasks 103a / 103b / #91, spec-043 ===
+ *
+ * SCRATCH FILE: not imported from main.css. Imported directly from
+ * TargetsPage.tsx so it applies without a manual merge. The parent may merge
+ * this into components.css in a future pass.
+ *
+ * Token-only (--alm-* only). No raw hex/rgb/px spacing/ms.
+ *
+ * 103a — virtualizer height fix
+ *   The flex height chain from .alm-page → .alm-listpage__body →
+ *   .alm-listpage__main is normally fine, but .alm-listpage__main uses
+ *   overflow:auto which means its height is content-determined in some
+ *   WebViews (Tauri/Windows). When the scroll container inside
+ *   .alm-targets-table__wrap has zero measured height the virtualizer
+ *   returns zero virtual items. Even with the non-windowed fallback the
+ *   table renders inside a zero-height .alm-targets-table__scroll, so rows
+ *   are invisible.
+ *
+ *   Fix: inside the .alm-targets-page wrapper, switch .alm-listpage__main
+ *   to overflow:hidden (height stays flex-bounded) and make
+ *   .alm-targets-table__wrap fill it absolutely (position:absolute;inset:0)
+ *   so the scroll container always gets the full available height.
+ * ========================================================================= */
+
+/* The wrapper exists only to scope the fix below — it must NOT participate in
+ * layout, or it collapses to the top-bar height and starves .alm-listpage__main
+ * to height 0 (the bug this block fixes). `display: contents` makes it a pure
+ * cascade hook so the flex height chain reaches .alm-listpage__main unchanged. */
+.alm-targets-page {
+  display: contents;
+}
+
+/* Scope the fix to the targets page so other list pages are unaffected. */
+.alm-targets-page .alm-listpage__main {
+  overflow: hidden;
+  position: relative;
+}
+
+.alm-targets-page .alm-targets-table__wrap {
+  position: absolute;
+  inset: 0;
+}
+
+/* === targets-table: fixed layout, narrow columns, Opposition (103a task C) ===
+ *
+ * 1. table-layout: fixed — column widths are stable across windowed pages.
+ *    Without this, `table-layout: auto` recomputes widths per rendered slice
+ *    as pill text varies ("galaxy" vs "open cluster"), causing the column-shift
+ *    bug visible while scrolling. The <colgroup> in TargetsTable.tsx pins each
+ *    column; Designation gets no explicit width so it takes all remaining space.
+ *
+ * 2. Narrow fixed columns — TYPE, MAX ALT, VISIBLE, OPPOSITION, SESSIONS are
+ *    reduced so DESIGNATION gets the most room. Token-only (no raw px on
+ *    spacing/color; column widths in ch/px are layout geometry, not spacing
+ *    tokens, so raw px is acceptable here per the inline-style exception pattern
+ *    already used for virtualizer spacers).
+ *
+ * 3. Opposition column — placeholder for the next midnight-transit peak date.
+ *    Backed on backend ephemeris (#58); renders '—' until that lands.
+ * ========================================================================= */
+
+/* Switch to fixed layout so <colgroup> widths are authoritative. */
+.alm-targets-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Designation: auto (fills all remaining width after fixed cols are subtracted). */
+.alm-targets-col--designation { width: 50%; }
+
+/* Type pill: "open cluster" is the longest label at ~10ch; header is "Type". */
+.alm-targets-col--type { width: 6%; }
+
+/* Max alt: "Max alt" header + "90°" value — short numeric. */
+.alm-targets-col--maxalt { width: 4%; }
+
+/* Sparkline: fixed narrow column (SVG is 64px wide, cell adds padding). */
+.alm-targets-col--spark { width: 5%; }
+
+/* Visible: "●tonight" / "○low" indicator. */
+.alm-targets-col--visible { width: 4.5%; }
+
+/* Opposition: date stub "—" for now; leave room for "Jan 2026" once live. */
+.alm-targets-col--opposition { width: 5.5%; }
+
+/* Sessions: numeric stub "—". */
+.alm-targets-col--sessions { width: 4.5%; }
+
+/* Opposition cell: right-aligned tabular numeric (mirrors max-alt style). */
+.alm-targets-cell--opposition {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--alm-text-muted);
+}
+
+/* === spec 044: Lunar dist, Filters, Imaging time columns + filter badges === */
+
+/* Column widths (task 044) — fixed layout prevents per-page shift. */
+.alm-targets-col--lunardist { width: 5%; }
+.alm-targets-col--filters   { width: 7.5%; }
+.alm-targets-col--imagingtime { width: 6%; }
+
+/* Lunar dist cell: tabular numeric, muted (mock value). */
+.alm-targets-cell--lunardist {
+  font-variant-numeric: tabular-nums;
+  color: var(--alm-text-muted);
+}
+
+/* Filters cell: allow wrapping so badges don't overflow narrow column. */
+.alm-targets-cell--filters {
+  white-space: normal;
+}
+
+/* Filter badge strip: inline row of small pill badges. */
+.alm-filter-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--alm-space-1);
+  align-items: center;
+}
+
+/* Individual filter badge — shared base. */
+.alm-filter-badge {
+  display: inline-block;
+  padding: 0 var(--alm-space-1);
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-font-medium);
+  line-height: var(--alm-leading-tight);
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Broadband (LRGB): subtle warm tint. */
+.alm-filter-badge--broadband {
+  background: color-mix(in srgb, var(--alm-accent) 12%, transparent);
+  color: var(--alm-accent);
+  border-color: color-mix(in srgb, var(--alm-accent) 30%, transparent);
+}
+
+/* Narrowband (Ha/OIII/SII): subtle cool tint. */
+.alm-filter-badge--narrowband {
+  background: color-mix(in srgb, var(--alm-accent-alt, var(--alm-text-muted)) 12%, transparent);
+  color: var(--alm-text-secondary, var(--alm-text-muted));
+  border-color: color-mix(in srgb, var(--alm-text-muted) 30%, transparent);
+}
+
+/* Settings pane: narrow number input + unit label. */
+.alm-settings__num-input {
+  width: 72px;
+  text-align: right;
+}
+
+.alm-settings__unit-label {
+  margin-left: var(--alm-space-2);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* === merged from .cssblocks/inbox-detail.css (task D — inbox detail restructure) === */
+/* === inbox-detail.css — task D: breakdown-left / files-right layout =========
+ *
+ * Overrides the old inspector-column rules (which will be pruned from
+ * components.css at merge). The old .alm-inbox-detail__aside was the
+ * inspector column; it is now the scrollable files column.
+ *
+ * Token-only (--alm-* spacing/surface/border/radius/text). No raw hex/rgb/ms.
+ * No #NNN in comments (hex-color check). Appended to components.css on merge.
+ * ============================================================================ */
+
+/* ── Two-column split: breakdown LEFT + files RIGHT ─────────────────────────
+ *
+ * .alm-inbox-detail__cols           — default: single column (no metadata)
+ * .alm-inbox-detail__cols--split    — two-column row when metadata exists
+ * .alm-inbox-detail__main           — LEFT: breakdown, compact fixed width
+ * .alm-inbox-detail__aside          — RIGHT (was inspector, now files column)
+ * .alm-inbox-detail__files          — modifier; marks the files variant
+ * .alm-inbox-detail__files-scroll   — inner scroll container for the table
+ */
+
+/* Override the old inspector-width fixed column. The files column is wider
+ * (flex 1) because the metadata table has more columns than the inspector KV
+ * grid. The breakdown column takes a compact fixed share. */
+.alm-inbox-detail__cols--split .alm-inbox-detail__aside {
+  /* task D: files column flexes to fill remaining width */
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  /* Not sticky — the files list scrolls independently, not the column itself */
+  position: static;
+  align-self: stretch;
+}
+
+/* The breakdown LEFT column is now the compact fixed-width side. */
+.alm-inbox-detail__cols--split .alm-inbox-detail__main {
+  flex: 0 0 var(--alm-inbox-breakdown-width, 340px);
+  min-width: 0;
+}
+
+/* Separator between breakdown and files columns */
+.alm-inbox-detail__files {
+  border-left: 1px solid var(--alm-border-subtle);
+  padding-left: var(--alm-sp-3);
+}
+
+/* The files scroll container: caps height so a long list scrolls within the
+ * column rather than growing the panel. Uses the bottom-dock cap (~40vh) as
+ * the reference; the inner scroll lets all files be reached without resizing
+ * the panel. overflow-x: auto handles wide tables gracefully. */
+.alm-inbox-detail__files-scroll {
+  overflow-y: auto;
+  overflow-x: auto;
+  /* Reserve gutter so a scrollbar never narrows the table and shifts columns */
+  scrollbar-gutter: stable;
+  max-height: 32vh;
+  min-height: 0;
+}
+
+/* === merged from .cssblocks/inbox-wave3.css (spec-043 wave 3) === */
+/*
+ * inbox-wave3.css — Inbox UI wave 3 improvements.
+ *
+ * Tasks covered:
+ *   task 32 — classification-forward aligned grid rows in InboxList
+ *   task 33 — breakdown rows as clickable frame-type filters (active state)
+ *   task 35 — bulk-confirm button (top-bar / page-level)
+ *   task 6  — ellipsis on breakdown destination column (left panel 340px)
+ *
+ * Conventions:
+ *   - Token-only: --alm-* variables exclusively. No raw hex/rgb/ms values.
+ *   - No raw colour literals in comments (use "task NN" references).
+ *   - No element-level inline styles; all layout via class.
+ */
+
+/* ── task 32: inbox list grid rows ─────────────────────────────────────────────
+ *
+ * Each row is a CSS grid with four named columns so values align vertically
+ * across all rows regardless of content length:
+ *
+ *   [classification]  [path]           [count]   [format]
+ *   classified        lights/NGC7000   18 files  FITS
+ *   plan open         masters/dark     1 file    dark master
+ *
+ * The classification pill is the primary visual anchor (leftmost, fixed width).
+ * The path grows to fill remaining space. Count and format are fixed-right.
+ */
+
+/* Classification colours reused by the inbox Table's Type cell (the row/path/
+   count/format rules were retired with the bespoke div-list → shared Table). */
+.alm-inbox-row__classification {
+  grid-column: classification;
+  font-size: var(--alm-text-xs, 0.75rem);
+  font-weight: 600;
+  color: var(--alm-info);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* State variant colours (task 32). */
+.alm-inbox-row__classification--pending  { color: var(--alm-ink3); }
+.alm-inbox-row__classification--classified { color: var(--alm-info); }
+.alm-inbox-row__classification--plan_open { color: var(--alm-ok); }
+.alm-inbox-row__classification--resolved  { color: var(--alm-ink4); }
+
+/* ── task 33: breakdown rows as frame-type filters ──────────────────────────────
+ *
+ * Each breakdown row in InboxDetail is now a pressable button. When it is the
+ * active filter it gets a filled background; when no filter is active all rows
+ * look neutral. Clicking a row that is already active clears the filter.
+ */
+
+.alm-breakdown-filter-row {
+  display: contents; /* table layout is owner; this class is the interaction host */
+}
+
+/* Wrapper <button> that wraps the entire breakdown table row cell contents.
+ * We make the <tr> a button via role=button + tabIndex to keep table semantics. */
+.alm-breakdown-filter-btn {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-space-2, 0.5rem);
+  width: 100%;
+  cursor: pointer;
+  border-radius: var(--alm-radius-sm, 3px);
+  padding: var(--alm-space-1, 0.25rem) var(--alm-space-2, 0.5rem);
+  transition: background var(--alm-transition-fast);
+}
+
+.alm-breakdown-filter-btn:hover {
+  background: var(--alm-surface);
+}
+
+.alm-breakdown-filter-btn:focus-visible {
+  outline: 2px solid var(--alm-info);
+  outline-offset: -2px;
+}
+
+/* Active: the selected frame-type filter row */
+.alm-breakdown-filter-btn--active {
+  background: var(--alm-info-bg);
+  color: var(--alm-info);
+}
+
+.alm-breakdown-filter-btn--active:hover {
+  background: var(--alm-info-bg);
+}
+
+/* Filter-active indicator label for the breakdown section header */
+.alm-breakdown-filter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-space-1, 0.25rem);
+  font-size: var(--alm-text-xs, 0.75rem);
+  color: var(--alm-info);
+  margin-left: var(--alm-space-2, 0.5rem);
+}
+
+.alm-breakdown-filter-clear {
+  all: unset;
+  cursor: pointer;
+  font-size: var(--alm-text-xs, 0.75rem);
+  color: var(--alm-info);
+  text-decoration: underline;
+}
+
+.alm-breakdown-filter-clear:hover {
+  color: var(--alm-ink);
+}
+
+/* ── task 35: bulk-confirm button ───────────────────────────────────────────────
+ *
+ * A secondary action in the top bar next to the primary Confirm button.
+ * Only shown when there are cleanly-classified items (state === 'classified' and
+ * classification.type !== 'unclassified'). The button is deliberately less
+ * prominent (ghost style) so users do not mistake it for a destructive action.
+ */
+
+/* The bulk-confirm button uses the standard Btn component (ghost size sm); no
+ * extra wrapper styles needed. The top-bar actions gap handles spacing.
+ * This rule documents the semantic intent for the data-testid. */
+[data-testid="inbox-bulk-confirm-btn"] {
+  /* intentionally empty — layout comes from alm-btn + PageTopBar actions gap */
+}
+
+/* ── task 6: breakdown destination ellipsis ─────────────────────────────────────
+ *
+ * The LEFT breakdown column in InboxDetail is 340px wide. The Destination cell
+ * wraps on long paths. Force single-line + ellipsis tail instead.
+ */
+
+.alm-inbox-detail__dest-cell {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* === merged from .cssblocks/targets-wave2.css (spec-043 wave 3) === */
+/* targets-wave2.css — task 5, task 19, task 18
+ *
+ * Token-only (--alm-* everywhere; no raw hex/rgb/ms).
+ * No #NNN colour values in comments — refer tasks by number.
+ * Merged into components.css by the team lead; do NOT edit components.css directly.
+ *
+ * task 5:  widen lunardist + imagingtime columns; tighten filter-badge gap
+ * task 19: smaller sparkline, bottom time-axis ticks, hover-capable SVG
+ * task 18: favourite-star button in Planner rows
+ * ========================================================================= */
+
+/* ── task 5: column-width corrections ──────────────────────────────────────
+ * "LUNAR DIST" clipped at 68 px — widen to 80 px (fits "Lunar" header + "180°").
+ * "IMAGING TIME" clipped at 80 px — widen to 100 px (fits "Img time" + "12.0 h").
+ * Filter badges run together — increase gap from sp-1 to sp-2.
+ * These override the values set in the spec 044 block in components.css. */
+
+.alm-targets-col--lunardist  { width: 5%; }
+.alm-targets-col--imagingtime { width: 6%; }
+
+/* task 5: add readable spacing between filter badges (was alm-sp-1 = 4px). */
+.alm-filter-badges { gap: var(--alm-sp-2); }
+
+/* ── task 19: sparkline size + time-axis ───────────────────────────────────
+ * Make the sparkline shorter vertically (from 18 px → 14 px) and a touch
+ * wider (from 64 px → 72 px) so the bottom time-axis ticks have headroom.
+ * The SVG viewBox is updated in AltitudeSparkline.tsx to match. */
+
+.alm-targets-spark {
+  width: 72px;
+  height: 22px; /* taller than before to fit axis ticks below the curve */
+}
+
+/* task 19: axis tick lines (bottom of sparkline viewBox). */
+.alm-targets-spark__axis-tick {
+  stroke: var(--alm-border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* task 19: axis tick labels (hour marks below the curve). */
+.alm-targets-spark__axis-label {
+  font-size: var(--alm-text-2xs);
+  fill: var(--alm-text-faint);
+  font-family: var(--alm-font-sans);
+}
+
+/* task 19: hover tooltip title — pointer-events on the SVG so browser shows
+ * the native <title> tooltip. The SVG itself was pointer-events:none before;
+ * we enable it here so hovering works without JS. */
+.alm-targets-spark {
+  pointer-events: auto;
+  cursor: default;
+}
+
+/* ── task 18: favourite star button in Planner rows ───────────────────────
+ * A 16×16 toggle button that appears in each Planner row.
+ * Renders ☆ (unfavourited) / ★ (favourited); colour-coded.
+ *
+ * STUB until task #54 (FITS OBJECT → target_id linkage) lands — stored
+ * client-side in localStorage only. See useFavourites.ts. */
+
+/* Extra column for the star (sits leftmost, before Designation). */
+.alm-targets-col--star { width: 2%; }
+
+/* Star toggle button: tiny, borderless, centred in its cell. */
+.alm-targets-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  font-size: var(--alm-text-base);
+  line-height: 1;
+  color: var(--alm-text-faint);
+  transition: color var(--alm-transition-fast);
+}
+
+.alm-targets-star:hover,
+.alm-targets-star:focus-visible {
+  color: var(--alm-accent);
+  outline: none;
+  background: color-mix(in srgb, var(--alm-accent) 12%, transparent);
+}
+
+/* Favourited state: filled star in accent colour. */
+.alm-targets-star--active {
+  color: var(--alm-accent);
+}
+
+/* task 18: "My Targets" empty-state nudge when no favourites are starred. */
+.alm-targets-my-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-5) var(--alm-sp-4);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  text-align: center;
+}
+
+.alm-targets-my-empty__icon {
+  font-size: var(--alm-text-2xl);
+  color: var(--alm-text-faint);
+}
+
+/* === Sessions detail — left-packed columns: [props A][props B][linked] ===
+   A flex row, left-justified, so growing the panel adds TRAILING whitespace
+   on the right rather than spreading gaps between the data columns. Each
+   column is content-bounded (not 1fr) so the tables and linked-projects stay
+   grouped together at the left edge. */
+.alm-session-detail2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--alm-sp-6);
+  padding: var(--alm-sp-4);
+}
+.alm-session-detail2__col {
+  flex: 0 1 400px;
+  min-width: 340px;
+}
+.alm-session-detail2__linked {
+  flex: 0 0 auto;
+  min-width: 160px;
+}
+.alm-session-detail2__head {
+  font-size: var(--alm-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-2);
+}
+.alm-session-detail2__linked-list { display: flex; flex-direction: column; gap: var(--alm-sp-2); }
+.alm-session-detail2__muted { color: var(--alm-text-muted); }
+/* Review actions inline with the title (left-grouped). */
+.alm-session-detail2__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  margin-left: var(--alm-sp-3);
+}
+/* Linked-project link rendered as a button — reset native button chrome. */
+.alm-session-detail2__link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--alm-accent);
+}
+.alm-session-detail2__link:hover { text-decoration: underline; }
+/* Stacked variant: two SessionListPopover blocks in one column. */
+.alm-session-detail2__linked--stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+}
+
+/* === Session list popover — anchored, portaled, searchable ===
+   Reuses menu tokens (surface-raised, shadow-sm, border, radius-md).
+   No grey cards, no side-stripe borders, radius ≤ 12px. */
+.alm-session-popover__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  padding: 1px var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  font-family: inherit;
+  color: var(--alm-text);
+  background: none;
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.alm-session-popover__trigger:hover {
+  background: var(--alm-hover-bg);
+}
+.alm-session-popover__trigger:focus-visible {
+  outline: 2px solid var(--alm-focus-ring);
+  outline-offset: 1px;
+}
+.alm-session-popover__popup {
+  min-width: 260px;
+  max-width: 360px;
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  box-shadow: var(--alm-shadow-sm);
+  outline: none;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.alm-session-popover__search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  font-size: var(--alm-text-sm);
+  font-family: inherit;
+  color: var(--alm-text);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--alm-border-subtle);
+  outline: none;
+}
+.alm-session-popover__search:focus {
+  border-bottom-color: var(--alm-accent);
+}
+.alm-session-popover__list {
+  overflow-y: auto;
+  max-height: 240px;
+  padding: var(--alm-sp-1);
+  margin: 0;
+  list-style: none;
+}
+.alm-session-popover__item {
+  padding: 3px var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  border-radius: var(--alm-radius-sm);
+  color: var(--alm-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.alm-session-popover__empty {
+  padding: var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+/* Visually-hidden utility for the label element. */
+.alm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* === Inbox detail — "Files (N) ▾" popover (metadata table + inspector) ===
+   Trigger reuses the session-popover trigger shape. Popup is wider to
+   accommodate the metadata table; scrollable interior; no grey cards. */
+.alm-inbox-detail__files-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  margin-top: var(--alm-sp-3);
+  padding: 1px var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  font-family: inherit;
+  color: var(--alm-text);
+  background: none;
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.alm-inbox-detail__files-trigger:hover { background: var(--alm-hover-bg); }
+.alm-inbox-detail__files-trigger:focus-visible {
+  outline: 2px solid var(--alm-focus-ring);
+  outline-offset: 1px;
+}
+.alm-inbox-detail__files-popup {
+  min-width: 560px;
+  max-width: 840px;
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  box-shadow: var(--alm-shadow-sm);
+  outline: none;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.alm-inbox-detail__files-popup-table {
+  overflow-y: auto;
+  max-height: 280px;
+}
+.alm-inbox-detail__files-popup-inspector {
+  border-top: 1px solid var(--alm-border-subtle);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+}
+
+/* === Targets planner detail — left-packed: [facts A][facts B][tonight] ===
+   Mirrors the Sessions detail: a flex row, left-justified, so growing the
+   panel adds trailing whitespace rather than spreading the data apart. The
+   tonight column holds a small transit graph + the planner stats. */
+.alm-planner__cols {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--alm-sp-6);
+  padding: var(--alm-sp-4);
+}
+.alm-planner__col {
+  flex: 0 1 360px;
+  min-width: 300px;
+}
+.alm-planner__tonight {
+  flex: 0 0 320px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+/* Keep the transit graph compact in the third column. */
+.alm-planner__tonight .alm-planner__graph-wrap { max-width: 300px; }
+.alm-planner__tonight-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+.alm-planner__tonight-filters-label {
+  font-size: var(--alm-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text-muted);
+}
+
+/* ==========================================================================
+ * Modal — shared parameterised dialog/overlay (components/Modal.tsx)
+ *
+ * Centered card over a dimmed backdrop. ✕ top-right in the header; body
+ * scrolls within a height cap; optional pinned footer. Width via size presets.
+ * ==========================================================================*/
+.alm-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: color-mix(in srgb, var(--alm-ink) 45%, transparent);
+  backdrop-filter: blur(2px);
+}
+@supports not (backdrop-filter: blur(2px)) {
+  .alm-modal__backdrop {
+    background: color-mix(in srgb, var(--alm-ink) 55%, transparent);
+  }
+}
+
+.alm-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 501;
+  display: flex;
+  flex-direction: column;
+  width: min(94vw, var(--alm-modal-w, 640px));
+  max-height: 88vh;
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-lg);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--alm-ink) 16%, transparent);
+  overflow: hidden;
+}
+
+/* Width presets. `auto` hugs content up to a sane cap. */
+.alm-modal--sm {
+  --alm-modal-w: 420px;
+}
+.alm-modal--md {
+  --alm-modal-w: 640px;
+}
+.alm-modal--lg {
+  --alm-modal-w: 920px;
+}
+.alm-modal--xl {
+  --alm-modal-w: 1200px;
+}
+.alm-modal--auto {
+  width: auto;
+  max-width: 94vw;
+}
+
+.alm-modal__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-modal__title {
+  font-size: var(--alm-text-md);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+  margin: 0;
+}
+.alm-modal__title-spacer {
+  flex: 1;
+}
+.alm-modal__subtitle {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+/* ✕ pinned to the top-right of the header. */
+.alm-modal__close {
+  margin-left: auto;
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  line-height: 1;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-modal__close:hover {
+  color: var(--alm-text);
+  background: var(--alm-hover-bg);
+}
+
+.alm-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--alm-sp-4);
+}
+
+.alm-modal__footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  border-top: 1px solid var(--alm-border-subtle);
+}
+
+/* ==========================================================================
+ * Plan-approval overlay (spec 043 Stage B — PlanApprovalOverlay)
+ *
+ * Full-screen focused overlay for plan review. Opens from the top-bar
+ * "Review plans (N)" trigger. Highest-stakes surface → blurred/dimmed
+ * backdrop, Dialog focus trap, Escape-to-close.
+ *
+ * Layout inside the popup:
+ *   - .alm-plan-overlay__header  — title + subtitle + close button
+ *   - .alm-plan-overlay__body    — flex row: optional rail + main panel
+ *   - .alm-plan-overlay__rail    — plan list (only when > 1 plan)
+ *   - .alm-plan-overlay__main    — PlanPanel scroll container
+ *
+ * z-index sits above the app shell (z: 500) but below any toast/tooltip layer.
+ * Token-only: no raw hex/rgb values beyond those already in tokens.css.
+ * ========================================================================== */
+
+/* ── Backdrop: semi-transparent + blur ────────────────────────────────────── */
+.alm-plan-overlay__backdrop {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--alm-ink) 45%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 500;
+}
+
+/* Respect prefers-reduced-motion: drop the blur animation, use instant scrim */
+@media (prefers-reduced-motion: reduce) {
+  .alm-plan-overlay__backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* ── Popup: centred focused panel ─────────────────────────────────────────── */
+.alm-plan-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 501;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none; /* let clicks pass to backdrop unless on panel */
+}
+
+/* The actual panel card */
+.alm-plan-overlay[data-open] {
+  pointer-events: none;
+}
+
+/* Base UI Dialog.Popup renders the element directly — style the popup itself
+ * as the card so we avoid an extra wrapper div. */
+.alm-plan-overlay {
+  /* Override: make the popup itself the card (not a full-screen wrapper). */
+  position: fixed;
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(96vw, 1280px);
+  max-height: min(92vh, 880px);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-lg);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--alm-ink) 16%, transparent);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: auto;
+  z-index: 501;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+.alm-plan-overlay__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+.alm-plan-overlay__title {
+  font-size: var(--alm-text-md);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+  margin: 0;
+}
+
+.alm-plan-overlay__subtitle {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+.alm-plan-overlay__close {
+  margin-left: auto;
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  line-height: 1;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-plan-overlay__close:hover {
+  color: var(--alm-text);
+  background: var(--alm-hover-bg);
+}
+
+/* ── Body: rail + main ────────────────────────────────────────────────────── */
+.alm-plan-overlay__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ── Left rail: plan list (only when > 1 plan) ────────────────────────────── */
+.alm-plan-overlay__rail {
+  flex: 0 0 200px;
+  width: 200px;
+  overflow-y: auto;
+  border-right: 1px solid var(--alm-border-subtle);
+  display: flex;
+  flex-direction: column;
+  padding: var(--alm-sp-2) 0;
+  gap: 1px;
+}
+
+.alm-plan-overlay__rail-item {
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  text-align: left;
+  color: var(--alm-text-secondary);
+  font-size: var(--alm-text-sm);
+  border-radius: 0;
+  transition: background var(--alm-transition-fast);
+}
+.alm-plan-overlay__rail-item:hover {
+  background: var(--alm-hover-bg);
+  color: var(--alm-text);
+}
+.alm-plan-overlay__rail-item--active {
+  background: var(--alm-accent-bg);
+  color: var(--alm-accent-text);
+  font-weight: var(--alm-weight-semibold);
+}
+.alm-plan-overlay__rail-item--active:hover {
+  background: var(--alm-accent-bg);
+}
+
+.alm-plan-overlay__rail-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alm-plan-overlay__rail-count {
+  flex-shrink: 0;
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.alm-plan-overlay__rail-item--active .alm-plan-overlay__rail-count {
+  color: var(--alm-accent-text);
+}
+
+/* ── Main: scrollable PlanPanel host ─────────────────────────────────────── */
+.alm-plan-overlay__main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}

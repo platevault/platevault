@@ -1,0 +1,890 @@
+/* === merged from .cssblocks/targets.css (parallel coder, spec-043) === */
+/* ===========================================================================
+ * Targets — My Targets vs Planner split (task #40, spec 043 §4).
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms.
+ *
+ * Layout: the Targets list column (the left pane of .alm-two-pane) gains a
+ * fixed tab strip on top ("My Targets" | "Planner") with the existing
+ * ListSidebar (search + density + virtualized rows) filling the rest below it.
+ * .alm-targets-list IS the flex-column child of .alm-two-pane, so it owns the
+ * list-column width and lets the inner .alm-list-sidebar stretch to fill.
+ * ======================================================================== */
+
+.alm-targets-list {
+  width: var(--alm-list-width);
+  min-width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--alm-border);
+  background: var(--alm-bg);
+}
+
+/* Tab strip pinned above the list; never scrolls. */
+.alm-targets-list__tabs {
+  flex-shrink: 0;
+  display: flex;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-bottom: 1px solid var(--alm-border);
+  background: var(--alm-surface);
+}
+
+/* The SegControl should fill the strip width so the two tabs split evenly. */
+.alm-targets-list__tabs .alm-seg {
+  flex: 1;
+}
+.alm-targets-list__tabs .alm-seg__btn {
+  flex: 1;
+}
+
+/* Inner ListSidebar / EmptyState fill the remaining height; the wrapper now
+   owns the column width, so the nested sidebar stretches rather than keeping
+   its own fixed --alm-list-width. */
+.alm-targets-list .alm-list-sidebar {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+  border-right: none;
+}
+.alm-targets-list .alm-empty {
+  flex: 1;
+}
+
+/* === merged from .cssblocks/calibration.css (parallel coder, spec-043) === */
+/* ===========================================================================
+ * Calibration — master detail hero = compatible-sessions match table + list
+ * usage count (task #39, spec 043 §4).
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms.
+ *
+ * The existing `.alm-match-candidates__*` rules (status row, confidence bar,
+ * dimension breakdown, assign column) already live in components.css and are
+ * reused unchanged — only the NEW selectors below are added here.
+ * ======================================================================== */
+
+/* --- List row usage count -------------------------------------------------
+ * "3 sessions · 1 project" / "unused" appended to a master row's meta line.
+ * Quiet, secondary — it is reuse context, not the row's identity. */
+.alm-masters-list__usage {
+  color: var(--alm-text-muted);
+}
+
+/* --- Compatible-sessions match table (detail hero) ------------------------
+ * Session identifier cell. Monospace + truncation already supplied by the
+ * shared `.alm-mono`; this only constrains width and color so the table stays
+ * readable when session ids are long. */
+.alm-match-candidates__session-id {
+  color: var(--alm-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Placeholder cell for backend-absent columns (Target / Filter / Night /
+ * Frames). Faint em-dash so the column reads as "not yet available" rather
+ * than empty/broken. De-stub once the suggest contract carries session
+ * enrichment. */
+.alm-match-candidates__stub-cell {
+  color: var(--alm-text-faint);
+}
+
+/* === merged from .cssblocks/projects.css (parallel coder, spec-043) === */
+/* === PROJECTS LIST: rich list rows (spec 043 §4 / task #43) ===
+ *
+ * The project LIST row meta line shows the fields available on the project
+ * summary DTO — tool · sources · updated — plus the existing channel-drift
+ * badge and state pill (rendered by ListItem). Backend-gated fields from the
+ * spec mock (target · integration · size · cleanup) are NOT on the list DTO
+ * and are intentionally omitted (see // STUB: notes in ProjectsList.tsx).
+ *
+ * Token-only (--alm-*). Do NOT import; the parent merges these into the
+ * compiled stylesheet during the components.css split (task #60).
+ */
+
+/* Rich meta line: wraps to a second line on a narrow sidebar instead of
+   truncating, so every present field stays scannable. */
+.alm-projects-list__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  row-gap: var(--alm-sp-0);
+}
+
+/* A single labelled field segment (e.g. tool, sources, updated). */
+.alm-projects-list__meta-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-0);
+  white-space: nowrap;
+}
+
+/* The leading tool segment reads as the row's secondary identity. */
+.alm-projects-list__meta-tool {
+  color: var(--alm-text-muted);
+  font-weight: var(--alm-weight-medium);
+}
+
+/* === merged from .cssblocks/inbox-warn.css (wave 2, spec-043) === */
+/* === merged from .cssblocks/inbox-warn.css (parallel coder, spec-043) === */
+/* ===========================================================================
+ * Inbox — warnings rendered as alerts with an inline action (task #34, spec
+ * 043 §4 Inbox).
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms.
+ *
+ * The shared `.alm-banner` / `.alm-banner--warn|danger` rules already live in
+ * components.css and supply the alert chrome (bg, color, border, padding,
+ * radius). These NEW selectors layer the alert's internal structure on top:
+ * a message column and an inline-action region so the call-to-action lives
+ * INSIDE the alert instead of as a separate row.
+ * ======================================================================== */
+
+/* The alert becomes a flex row: message takes the available width, the inline
+ * action sits at the trailing edge and never shrinks. Wraps to a new line on
+ * narrow panes so the button is never clipped. `.alm-banner` already sets
+ * display:flex + gap; we only override alignment/wrapping here. */
+.alm-inbox-alert {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+/* Message column: stacked title + body text. Flex-grows so the action is
+ * pushed to the trailing edge; min-width:0 lets long text wrap rather than
+ * overflow the alert. */
+.alm-inbox-alert__msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+/* Alert title — slightly stronger than the body so the alert reads as a
+ * heading + explanation pair. Inherits the variant color from `.alm-banner`. */
+.alm-inbox-alert__title {
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Alert body — the explanation / why-blocked sentence. Quieter than the title
+ * but still inherits the variant color for contrast within the tinted alert. */
+.alm-inbox-alert__body {
+  font-size: var(--alm-text-xs);
+  line-height: var(--alm-leading-normal);
+}
+
+/* Inline-action region: holds the call-to-action button(s) inside the alert.
+ * Does not shrink, so the action stays a stable hit target as the message
+ * column flexes. */
+.alm-inbox-alert__action {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* === merged from .cssblocks/projects-detail.css (wave 2, spec-043) === */
+/**
+ * projects-detail.css — spec 043 §4 (task #44)
+ *
+ * CSS block for the Projects detail Outputs + Cleanup-preview sections.
+ * Token-only (--alm-*). NOT imported here — the parent build merges
+ * apps/desktop/.cssblocks/* into the stylesheet. Do not add raw hex/rgb/ms.
+ *
+ * Classes already owned by src/styles/components.css and reused as-is (NOT
+ * redefined here): .alm-project-detail__outputs, .alm-project-detail__cleanup-preview,
+ * .alm-project-detail__cleanup-note, .alm-project-detail__cleanup-protected.
+ * Only the NEW classes introduced by OutputsCleanupSections.tsx live below.
+ */
+
+/* ── Outputs table cells ──────────────────────────────────────────────────── */
+.alm-project-detail__output-name {
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+}
+
+.alm-project-detail__output-format {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Cleanup: protected-category block ────────────────────────────────────── */
+.alm-project-detail__cleanup-protected-head {
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-2) 0 var(--alm-sp-1);
+}
+
+.alm-project-detail__cleanup-protected-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+/* === merged from .cssblocks/naming.css (wave 2, spec-043) === */
+/*
+ * Settings → Naming & Structure — per-type destination pattern editor.
+ * Spec 043 §4: pattern editor + buttons on SEPARATE lines, plus a working
+ * live preview row per frame type.
+ *
+ * Token-only (--alm-*). Do NOT import — the parent merges .cssblocks/*.css
+ * into the compiled stylesheet. These classes supersede the side-by-side
+ * `.alm-naming__pertype-row-inner` layout in src/styles/components.css.
+ */
+
+/* Stack the chip editor, live preview, and actions vertically. */
+.alm-naming__pertype-stack {
+	display: flex;
+	flex-direction: column;
+	gap: var(--alm-sp-2);
+	align-items: stretch;
+}
+
+/* Live preview row: resolved sample path for this frame type. */
+.alm-naming__pertype-preview {
+	font-size: var(--alm-text-xs);
+	color: var(--alm-text-muted);
+	padding: var(--alm-sp-1) var(--alm-sp-2);
+	background: var(--alm-surface-raised);
+	border: 1px solid var(--alm-border-subtle);
+	border-radius: var(--alm-radius-sm);
+}
+
+.alm-naming__pertype-preview-label {
+	color: var(--alm-text-faint);
+}
+
+.alm-naming__pertype-preview-code {
+	font-size: var(--alm-text-xs);
+	color: var(--alm-text-secondary);
+}
+
+.alm-naming__pertype-preview-default {
+	margin-left: var(--alm-sp-1);
+	color: var(--alm-text-faint);
+	font-style: italic;
+}
+
+/* Buttons line — sits below the editor + preview. */
+.alm-naming__pertype-actions {
+	display: flex;
+	gap: var(--alm-sp-2);
+}
+
+/* === merged from .cssblocks/calibration-layout.css (adoption wave, spec-043) === */
+/*
+ * calibration-layout.css — spec 043 §4 Calibration shared-layout adoption (#73).
+ *
+ * Token-only (--alm-*) styling for the full-width MastersTable that replaced the
+ * narrow MastersList sidebar. Mirrors the SessionsTable surface conventions so
+ * Calibration reads identically to Sessions. DO NOT @import — the parent build
+ * merges these blocks into the shared stylesheet.
+ */
+
+/* === MASTERS TABLE (full-width, grouped by kind) === */
+.alm-calib-table {
+  /* Inherits .alm-table base; tighten cell padding for density. */
+  table-layout: auto;
+}
+.alm-calib-table th {
+  user-select: none;
+}
+.alm-calib-table td,
+.alm-calib-table th {
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+}
+
+/* Sortable column header (button-in-th) — matches .alm-sessions-sorth. */
+.alm-calib-sorth {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.alm-calib-sorth:hover {
+  color: var(--alm-text);
+}
+.alm-calib-sorth--active {
+  color: var(--alm-text);
+}
+.alm-calib-sorth__arrow {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+
+/* Kind group header row — spans the table, headlines the kind. */
+.alm-calib-table__group td {
+  background: var(--alm-surface);
+  font-weight: var(--alm-weight-semibold);
+  font-size: var(--alm-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+  border-bottom: 1px solid var(--alm-border-subtle);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+}
+.alm-calib-table__group-count {
+  margin-left: var(--alm-sp-2);
+  font-weight: var(--alm-weight-normal);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+/* Selectable master rows. */
+.alm-calib-table__row {
+  cursor: pointer;
+}
+.alm-calib-table__row:hover td {
+  background: var(--alm-surface);
+}
+.alm-calib-table__row--selected td {
+  background: var(--alm-accent-bg);
+}
+
+/* Master cell: kind pill + readable label + optional aging pill. */
+.alm-calib-cell__master {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+.alm-calib-cell__master-label {
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+}
+
+/* Cell helpers (token-only). */
+.alm-calib-cell--num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.alm-calib-cell--mono {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+.alm-calib-cell--muted {
+  color: var(--alm-text-muted);
+}
+
+/* Status surfaces (loading / error / empty) shown in place of the table. */
+.alm-calib-table__status {
+  padding: var(--alm-sp-5);
+  text-align: center;
+  color: var(--alm-text-muted);
+}
+
+/* === merged from .cssblocks/projects-layout.css (adoption wave, spec-043) === */
+/* === merged from .cssblocks/projects-layout.css (spec-043, tasks #73/#74) === */
+/* ===========================================================================
+ * Projects — shared list-page layout adoption (#73) + compact lifecycle
+ * stepper (#74).
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms. No JSX inline styles — every selector here backs a
+ * className used by ProjectsTable.tsx / ProjectLifecycleStepper.tsx /
+ * ProjectDetail.tsx.
+ *
+ * Reuses the already-merged shared list-page primitives (.alm-topbar*,
+ * .alm-filterbar*, .alm-listpage__*) — those are NOT redefined here. Also
+ * reuses .alm-project-detail__target-info / __target-name / __target-common
+ * (owned by components.css) for the inline target block; only the NEW
+ * __target-label child is added below.
+ * ======================================================================== */
+
+/* --- Projects dense sortable table (mirrors .alm-sessions-table) ---------- */
+.alm-projects-table {
+  table-layout: auto;
+}
+.alm-projects-table th { user-select: none; }
+.alm-projects-table td,
+.alm-projects-table th {
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+}
+
+/* Selectable project rows. */
+.alm-projects-table__row { cursor: pointer; }
+.alm-projects-table__row:hover td { background: var(--alm-surface); }
+.alm-projects-table__row--selected td {
+  background: var(--alm-accent-bg);
+}
+
+/* Name cell: primary identity + optional blocked icon + drift badge. */
+.alm-projects-table__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+}
+.alm-projects-table__blocked-icon {
+  color: var(--alm-danger);
+  flex-shrink: 0;
+}
+.alm-projects-table__drift-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-0);
+  margin-left: var(--alm-sp-1);
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-normal);
+  color: var(--alm-warn);
+}
+
+/* Cell helpers (token-only). */
+.alm-projects-table__cell--muted { color: var(--alm-text-muted); }
+.alm-projects-table__cell--num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.alm-projects-table__cell--mono {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+.alm-projects-table__dash { color: var(--alm-text-muted); }
+
+/* Sortable column header (button-in-th). */
+.alm-projects-sorth {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.alm-projects-sorth:hover { color: var(--alm-text); }
+.alm-projects-sorth--active { color: var(--alm-text); }
+.alm-projects-sorth__arrow {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+
+/* Empty + footer states. */
+.alm-projects-table__empty {
+  padding: var(--alm-sp-5);
+  text-align: center;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+.alm-projects-table__footer {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  border-top: 1px solid var(--alm-border-subtle);
+}
+
+/* --- Compact horizontal lifecycle stepper (#74) --------------------------- */
+/* Replaces the vertical .alm-lifecycle rail inside the Projects detail. Stage
+ * chips flow horizontally (wrapping on narrow panes); the current chip is
+ * highlighted, prior chips read as done, and an off-track project gets a
+ * trailing danger chip. A single next-action line sits beneath. */
+.alm-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-3);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-stepper__track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.alm-stepper__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--alm-sp-0) var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+  text-transform: capitalize;
+  color: var(--alm-text-muted);
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-lg);
+  white-space: nowrap;
+}
+.alm-stepper__chip--done {
+  color: var(--alm-text-secondary);
+  border-color: var(--alm-border);
+}
+.alm-stepper__chip--active {
+  color: var(--alm-accent-text);
+  background: var(--alm-accent-bg);
+  border-color: var(--alm-accent);
+  font-weight: var(--alm-weight-semibold);
+}
+.alm-stepper__chip--blocked {
+  color: var(--alm-danger);
+  background: var(--alm-danger-bg);
+  border-color: var(--alm-danger);
+  font-weight: var(--alm-weight-semibold);
+}
+.alm-stepper__next {
+  margin: 0;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+.alm-stepper__history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-0);
+}
+.alm-stepper__history-row {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* --- Detail single-column sections wrapper -------------------------------- */
+/* The detail pane no longer uses the two-column dashboard grid; sections stack
+ * in one column beneath the stepper + target block. */
+.alm-project-detail__sections {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inline target block (under the stepper) — reuses __target-info layout; only
+ * the leading uppercase label is new. */
+.alm-project-detail__target-info {
+  padding: 0 var(--alm-sp-3) var(--alm-sp-2);
+}
+.alm-project-detail__target-label {
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+}
+
+/* === merged from .cssblocks/targets-layout.css (adoption wave, spec-043) === */
+/* ===========================================================================
+ * Targets — shared list-page layout adoption (task #73, spec 043).
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms.
+ *
+ * Targets adopts the Sessions surface pattern: the pinned PageTopBar (title +
+ * summary + FilterToolbar + actions) lives in .alm-page__bar, and the body is
+ * the shared .alm-listpage__body split — a dense FULL-WIDTH sortable
+ * .alm-targets-table on the left, with TargetDetailV2 in the detail pane that
+ * mounts on selection. The old `.alm-targets-list*` sidebar rules are now dead
+ * (parent removes them on merge).
+ * ======================================================================== */
+
+/* --- Dense sortable table ------------------------------------------------- */
+/* Row density follows the GLOBAL density setting (task #82): row vertical
+ * rhythm is keyed off `--alm-row-height` (set by the `.density-*` class on
+ * <html> in tokens.css), so there is no per-page density toggle. */
+.alm-targets-table {
+  /* Inherits .alm-table base; tighten cell padding for density. */
+  table-layout: auto;
+}
+.alm-targets-table th { user-select: none; }
+.alm-targets-table td,
+.alm-targets-table th {
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+}
+.alm-targets-table tbody td { height: var(--alm-row-height); }
+
+/* Sortable column header (button-in-th). */
+.alm-targets-sorth {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.alm-targets-sorth:hover { color: var(--alm-text); }
+.alm-targets-sorth--active { color: var(--alm-text); }
+.alm-targets-sorth__arrow {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+
+/* Selectable target rows. */
+.alm-targets-table__row { cursor: pointer; }
+.alm-targets-table__row:hover td { background: var(--alm-surface); }
+.alm-targets-table__row--selected td {
+  background: var(--alm-accent-bg);
+}
+/* Spanning group-header rows (task #82) — mirror .alm-sessions-table__group:
+ * a quiet banded row that labels each catalogue/type group with a count. */
+.alm-targets-table__group td {
+  background: var(--alm-surface);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+  font-size: var(--alm-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.alm-targets-table__group-count {
+  margin-left: var(--alm-sp-2);
+  font-weight: var(--alm-weight-regular);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--alm-text-muted);
+}
+
+/* Designation cell — primary label + optional secondary designation. */
+.alm-targets-cell__desig {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--alm-sp-2);
+  min-width: 0;
+}
+.alm-targets-cell__label {
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+}
+.alm-targets-cell__alt {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Cell helpers (token-only). */
+.alm-targets-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
+.alm-targets-cell--muted { color: var(--alm-text-muted); }
+
+/* Empty + footer states. */
+.alm-targets-table__empty {
+  padding: var(--alm-sp-5);
+  text-align: center;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+.alm-targets-table__footer {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  border-top: 1px solid var(--alm-border-subtle);
+}
+
+/* === merged from .cssblocks/sessions-detail.css (refine wave, spec-043) === */
+/*
+ * sessions-detail.css — task #79 (Sessions detail header refinement).
+ *
+ * NOT imported. New token-only classes staged here for the components.css
+ * split (task #60). Append/merge into src/styles/components.css when wiring.
+ *
+ * Context: the SessionDetail header now uses the full panel width — the target
+ * is the heading and a single acquisition line replaces the cramped repeated
+ * pills. Review actions sit in the header's actions slot (shared
+ * .alm-detail__actions, already defined). The acquisition summary is plain
+ * prose, not a filesystem path, so it overrides the mono/break-all path styling
+ * the default .alm-detail__subtitle uses.
+ */
+
+/* Heading: target name (+ optional lock) as the full-width identity line. */
+.alm-session-detail__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  min-width: 0;
+}
+
+/* Acquisition summary line — prose, not a path. Override the default
+ * mono/break-all subtitle treatment with readable body text that truncates. */
+.alm-session-detail__summary.alm-detail__subtitle {
+  font-family: var(--alm-font-sans);
+  font-size: var(--alm-text-sm);
+  word-break: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* === merged from .cssblocks/projects-detail-fix.css (refine wave, spec-043) === */
+/* ── Projects detail header overlap fix (task #81) ────────────────────────── */
+/* Symptom (1100×720): the contextual action cluster (Reveal in Explorer ·    */
+/* Open in {tool} · Mark as Completed) was forced into the shared action       */
+/* bar's single fixed-height (--alm-toolbar-height) non-wrapping flex row.     */
+/* When the tool + path breadcrumb is wide, the buttons overflowed the 40px    */
+/* box and rendered ON TOP of the MetricLine and the path line below.          */
+/*                                                                             */
+/* Fix: scope a relaxed layout to the project detail only. The shared          */
+/* TopActionBar is untouched for every other consumer. Within this scope the   */
+/* bar grows to fit its content, the breadcrumb sits on the first row, and a   */
+/* full-width spacer forces the action cluster onto its OWN row beneath it —   */
+/* so actions can never overlap the breadcrumb or the MetricLine.              */
+/* Token-only; merged into components.css by the parent — not imported.        */
+
+.alm-project-detail__action-bar .alm-action-bar {
+  /* Relax the fixed single-row height: let the bar grow for a second row. */
+  height: auto;
+  min-height: var(--alm-toolbar-height);
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: var(--alm-sp-2);
+  padding-top: var(--alm-sp-2);
+  padding-bottom: var(--alm-sp-2);
+}
+
+/* Force the action cluster onto its own row: a full-width flex spacer wraps,  */
+/* pushing everything after it (the actions) to the next line.                 */
+.alm-project-detail__action-bar .alm-action-bar__spacer {
+  flex-basis: 100%;
+}
+
+/* Action cluster owns its row; right-align to match the bar convention. */
+.alm-project-detail__action-bar .alm-action-bar__actions {
+  flex: 1 1 100%;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  row-gap: var(--alm-sp-1);
+}
+
+/* === merged from .cssblocks/inbox-layout.css (refine wave, spec-043) === */
+/* === merged from .cssblocks/inbox-layout.css (spec-043, tasks #73/#75/#76/#61) ===
+ * ===========================================================================
+ * Inbox — shared list-page layout adoption.
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms.
+ *
+ * The Inbox now uses the shared ListPageLayout + PageTopBar + FilterToolbar
+ * primitives (same system Sessions adopts). The page header region pins TWO
+ * bars that never scroll: the PageTopBar (search + group-by + sort + frame-type
+ * filter + Confirm/Rescan actions) and, directly below it, the inbox stats
+ * strip (#61 — Folders/Masters/Images + per-type, always-on-top). The body is
+ * the shared list + detail PANE split: the detections list is the primary
+ * content, and the detail pane holds the per-detection classification AND, when
+ * a plan exists, the planned-actions surface (#76 — moved out of the old
+ * full-width docked bottom strip).
+ * ======================================================================== */
+
+/* The stats strip is a SECOND pinned bar in the page header zone (#61). It
+ * carries `.alm-page__bar` (flex-shrink:0) so it sits above `.alm-listpage__body`
+ * and never scrolls out of view. A subtle top rule separates it from the
+ * PageTopBar above it. */
+.alm-inbox-statsbar {
+  flex-shrink: 0;
+}
+
+/* In the top bar the grouping/sort/filter controls lay out INLINE (a single
+ * row that wraps) rather than stacked, and drop the sidebar padding since the
+ * FilterToolbar already supplies the row gap. */
+.alm-inbox-list__controls--toolbar {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: 0;
+}
+
+/* The detail-pane content stack: per-detection detail, then (when present) the
+ * plan surface. It owns no scroll of its own — the shared
+ * `.alm-listpage__detail-body` is the single scroll region for the pane. */
+.alm-inbox-detail-pane {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inside the detail pane the plan surface sits below the per-detection detail.
+ * It must not be a full-width bottom strip — it now flows inside the right-hand
+ * detail pane's scroll region (#76). A top rule separates it from the detail
+ * above it. */
+.alm-inbox-detail-plans {
+  border-top: 1px solid var(--alm-border);
+  margin-top: var(--alm-sp-3);
+  padding-top: var(--alm-sp-2);
+}
+
+/* When no detection is selected but plans exist, the plan surface owns the
+ * detail pane on its own — drop the separating rule so it does not read as a
+ * detached fragment. */
+.alm-inbox-detail-plans--solo {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+/* Within the (narrower) detail pane the plan-panel group rows wrap rather than
+ * clip, and the per-file destination paths break instead of forcing horizontal
+ * overflow. */
+.alm-listpage__detail-body .alm-plan-panel__bar {
+  flex-wrap: wrap;
+  gap: var(--alm-sp-2);
+}
+.alm-listpage__detail-body .alm-plan-panel__bar-actions {
+  flex-wrap: wrap;
+}
+.alm-listpage__detail-body .alm-plan-panel__summary-dest,
+.alm-listpage__detail-body .alm-plan-panel__dest {
+  word-break: break-all;
+}
+
+/* === merged from .cssblocks/layout-bottompanel.css (spec-043, task #87) ===
+ * GLOBAL library inventory totals in the status bar (replaces the per-page
+ * summary of task #80). Stable across routes; sits between the operation zone
+ * and the right-aligned storage/log zone. */
+.alm-statusbar__lib {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  color: var(--alm-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* === statusbar page-contextual slot (task B — inbox metrics in status bar) ===
+ * Shown left-of-center when the active page populates PageStatusContext.
+ * Inbox uses it for folder/master count + per-frame-type breakdown chips.
+ * Inherits the same muted secondary style as the global lib totals. */
+.alm-statusbar__page {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  color: var(--alm-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+  padding-right: var(--alm-sp-3);
+  border-right: 1px solid var(--alm-border-subtle);
+}
