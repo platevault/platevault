@@ -19,7 +19,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
-import type { InboxListItem } from '@/api/commands';
+import type { InboxListItem } from '@/bindings/index';
 import { Table, type TableColumn, type TableRow } from '@/ui';
 import { SortHeader } from '@/components';
 import { groupByDimensions, type GroupNode } from './grouping';

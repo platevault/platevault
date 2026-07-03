@@ -22,7 +22,7 @@
 
 import { Popover } from "@base-ui-components/react/popover";
 import { useState } from "react";
-import type { InboxFileMetadata, InboxItemSummary } from "@/api/commands";
+import type { InboxFileMetadata_Serialize as InboxFileMetadata, InboxItemSummary } from "@/bindings/index";
 import type { PropertyDef } from "@/components";
 import { DetailPanel, PropertyTable } from "@/components";
 import { errMessage } from "@/lib/errors";

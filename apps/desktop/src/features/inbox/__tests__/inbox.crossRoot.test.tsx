@@ -22,16 +22,18 @@ function makeWrapper() {
   return { queryClient, wrapper };
 }
 import { InboxList } from '../InboxList';
-import type { InboxListItem, InboxListResponse } from '@/api/commands';
+import type { InboxListItem, InboxListResponse } from '@/bindings/index';
 
 // ── sync mock registered at module level (required by vitest hoisting) ────────
 
-vi.mock('@/api/commands', () => ({
-  inboxList: vi.fn(),
-  inboxScanFolder: vi.fn(),
-  inboxClassify: vi.fn(),
-  inboxConfirm: vi.fn(),
-  inboxReclassify: vi.fn(),
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    inboxList: vi.fn(),
+    inboxScanFolder: vi.fn(),
+    inboxClassify: vi.fn(),
+    inboxConfirm: vi.fn(),
+    inboxReclassify: vi.fn(),
+  },
 }));
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
@@ -148,8 +150,11 @@ describe('T039-3: useInboxList hook (FR-001)', () => {
   });
 
   it('returns items after loading', async () => {
-    const { inboxList } = await import('@/api/commands');
-    (inboxList as ReturnType<typeof vi.fn>).mockResolvedValue(multiRootResponse);
+    const { commands } = await import('@/bindings/index');
+    (commands.inboxList as ReturnType<typeof vi.fn>).mockResolvedValue({
+      status: 'ok',
+      data: multiRootResponse,
+    });
 
     const { useInboxList } = await import('../store');
     const { wrapper } = makeWrapper();
@@ -162,9 +167,9 @@ describe('T039-3: useInboxList hook (FR-001)', () => {
   });
 
   it('refresh triggers a re-fetch', async () => {
-    const { inboxList } = await import('@/api/commands');
-    const mockFn = inboxList as ReturnType<typeof vi.fn>;
-    mockFn.mockResolvedValue(multiRootResponse);
+    const { commands } = await import('@/bindings/index');
+    const mockFn = commands.inboxList as ReturnType<typeof vi.fn>;
+    mockFn.mockResolvedValue({ status: 'ok', data: multiRootResponse });
 
     const { useInboxList } = await import('../store');
     const { wrapper } = makeWrapper();
@@ -188,10 +193,10 @@ describe('T039-4: useInboxRescan (FR-005)', () => {
   });
 
   it('calls inboxScanFolder once per unique root', async () => {
-    const { inboxScanFolder } = await import('@/api/commands');
-    (inboxScanFolder as ReturnType<typeof vi.fn>).mockResolvedValue({
-      rootId: 'root-001',
-      items: [],
+    const { commands } = await import('@/bindings/index');
+    (commands.inboxScanFolder as ReturnType<typeof vi.fn>).mockResolvedValue({
+      status: 'ok',
+      data: { rootId: 'root-001', items: [] },
     });
 
     const { useInboxRescan } = await import('../store');
@@ -206,13 +211,13 @@ describe('T039-4: useInboxRescan (FR-005)', () => {
       await result.current.rescan();
     });
 
-    expect((inboxScanFolder as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+    expect((commands.inboxScanFolder as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
     expect(onComplete).toHaveBeenCalledOnce();
   });
 
   it('calls onComplete even when a root errors (offline root graceful failure)', async () => {
-    const { inboxScanFolder } = await import('@/api/commands');
-    (inboxScanFolder as ReturnType<typeof vi.fn>).mockRejectedValue(
+    const { commands } = await import('@/bindings/index');
+    (commands.inboxScanFolder as ReturnType<typeof vi.fn>).mockRejectedValue(
       new Error('root offline'),
     );
 

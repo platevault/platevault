@@ -13,28 +13,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/data/queryKeys";
-import {
-  inboxScanFolder,
-  inboxClassify,
-  inboxConfirm,
-  inboxList,
-  inboxItemMetadata,
-  inboxReclassify,
-  inboxPlan,
-  inboxPlanApply,
-  inboxPlanApplyAll,
-  inboxPlanCancel,
-  listOpenInboxPlans,
-  applySelectedInboxPlans,
-  inboxStats,
-} from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import type {
-  InboxClassifyResponse,
-  InboxConfirmResponse,
   InboxListItem,
   InboxListResponse,
-  InboxReclassifyResponse,
-  InboxFileMetadata,
+  InboxConfirmResponse,
   InboxScanFolderResponse,
   InboxApplyAllResponse,
   InboxPlanCancelResponse,
@@ -46,7 +30,12 @@ import type {
   InboxStatsResponse,
   InboxStatsPerType,
   InboxStatsTotals,
-} from '@/api/commands';
+  InboxFileMetadata_Serialize as InboxFileMetadata,
+} from '@/bindings/index';
+import type {
+  InboxClassifyResponse,
+  InboxReclassifyResponse,
+} from '@/bindings/aliases';
 
 export type {
   InboxFileMetadata,
@@ -81,13 +70,15 @@ export function useInboxClassification(
     : `${rootAbsolutePath}|${inboxItemId}`;
   const { data, isFetching, error } = useQuery<InboxClassifyResponse>({
     queryKey: [queryKeys.inbox.list('all')[0], "classify", key],
-    queryFn: () => {
+    queryFn: async () => {
       const [rootPath, itemId, forceStr] = key.split("|");
-      return inboxClassify({
-        inboxItemId: itemId,
-        rootAbsolutePath: rootPath,
-        forceRescan: forceStr === "force",
-      });
+      return unwrap(
+        await commands.inboxClassify({
+          inboxItemId: itemId,
+          rootAbsolutePath: rootPath,
+          forceRescan: forceStr === "force",
+        }),
+      );
     },
     enabled: !!inboxItemId && !!rootAbsolutePath,
   });
@@ -128,12 +119,14 @@ export function useInboxPlanBreakdowns(
       const key = `${t.rootAbsolutePath}|${t.inboxItemId}`;
       return {
         queryKey: [queryKeys.inbox.list("all")[0], "classify", key],
-        queryFn: () =>
-          inboxClassify({
-            inboxItemId: t.inboxItemId,
-            rootAbsolutePath: t.rootAbsolutePath,
-            forceRescan: false,
-          }),
+        queryFn: async () =>
+          unwrap(
+            await commands.inboxClassify({
+              inboxItemId: t.inboxItemId,
+              rootAbsolutePath: t.rootAbsolutePath,
+              forceRescan: false,
+            }),
+          ),
         enabled: !!t.inboxItemId && !!t.rootAbsolutePath,
         // Breakdown is stable for an unchanged folder — avoid re-fetch churn.
         staleTime: 30_000,
@@ -172,7 +165,8 @@ export function useInboxPlanBreakdowns(
 export function useInboxScan(rootId: string, rootAbsolutePath: string) {
   const { data, isFetching, error } = useQuery<InboxScanFolderResponse>({
     queryKey: [queryKeys.inbox.list('all')[0], "scan", rootId, rootAbsolutePath],
-    queryFn: () => inboxScanFolder({ rootId, rootAbsolutePath, followSymlinks: false }),
+    queryFn: async () =>
+      unwrap(await commands.inboxScanFolder({ rootId, rootAbsolutePath, followSymlinks: false })),
     enabled: !!rootId && !!rootAbsolutePath,
   });
   return { data, loading: isFetching, error: error ?? undefined };
@@ -190,7 +184,7 @@ export function useInboxList() {
   const listKey = queryKeys.inbox.list('all');
   const { data, isFetching, error } = useQuery<InboxListResponse>({
     queryKey: listKey,
-    queryFn: () => inboxList(),
+    queryFn: async () => unwrap(await commands.inboxList()),
   });
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: listKey });
@@ -271,13 +265,15 @@ export function useInboxConfirm() {
     }) => {
       setState({ loading: true, result: null, error: null, errorCode: null, errorDetails: null });
       try {
-        const result = await inboxConfirm({
-          inboxItemId: args.inboxItemId,
-          contentSignature: args.contentSignature,
-          rootAbsolutePath: args.rootAbsolutePath,
-          destructiveDestination: args.destructiveDestination ?? null,
-          rootId: args.rootId ?? null,
-        });
+        const result = unwrap(
+          await commands.inboxConfirm({
+            inboxItemId: args.inboxItemId,
+            contentSignature: args.contentSignature,
+            rootAbsolutePath: args.rootAbsolutePath,
+            destructiveDestination: args.destructiveDestination ?? null,
+            rootId: args.rootId ?? null,
+          }),
+        );
         setState({ loading: false, result, error: null, errorCode: null, errorDetails: null });
         // Invalidate the inbox list so it refreshes after confirmation.
         // Use queryKeys.inbox.list(rootId) prefix — ['inbox'] covers both the
@@ -321,7 +317,11 @@ export function useInboxReclassify(inboxItemId: string) {
     async (overrides: Array<{ filePath: string; frameType?: string | null; filter?: string | null; exposureS?: number | null; binning?: string | null }>) => {
       setState({ loading: true, result: null, error: null });
       try {
-        const result = await inboxReclassify({ inboxItemId, overrides });
+        const result = unwrap(
+          await commands.inboxReclassify(
+            { inboxItemId, overrides } as Parameters<typeof commands.inboxReclassify>[0],
+          ),
+        );
         setState({ loading: false, result, error: null });
         // Invalidate all classification cache entries so the UI refreshes.
         void queryClient.invalidateQueries({
@@ -356,7 +356,10 @@ export interface InboxItemMetadataState {
 export function useInboxItemMetadata(itemId: string | null): InboxItemMetadataState {
   const { data, isFetching, error } = useQuery<InboxFileMetadata[]>({
     queryKey: queryKeys.inbox.metadata(itemId ?? '__none__'),
-    queryFn: () => inboxItemMetadata(itemId as string),
+    queryFn: async () => {
+      const resp = unwrap(await commands.inboxItemMetadata({ inboxItemId: itemId as string }));
+      return resp.files;
+    },
     enabled: itemId != null,
   });
 
@@ -390,8 +393,14 @@ export function useInboxRescan(
     setState({ loading: true, error: null });
     try {
       await Promise.all(
-        roots.map((r) =>
-          inboxScanFolder({ rootId: r.rootId, rootAbsolutePath: r.rootAbsolutePath, followSymlinks: false }),
+        roots.map(async (r) =>
+          unwrap(
+            await commands.inboxScanFolder({
+              rootId: r.rootId,
+              rootAbsolutePath: r.rootAbsolutePath,
+              followSymlinks: false,
+            }),
+          ),
         ),
       );
       setState({ loading: false, error: null });
@@ -428,7 +437,7 @@ export function useInboxPlan(inboxItemId: string) {
     }
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const plan = await inboxPlan(inboxItemId);
+      const plan = unwrap(await commands.inboxPlan(inboxItemId));
       setState({ plan, loading: false, error: null });
     } catch (e: unknown) {
       const msg = String(e);
@@ -458,7 +467,7 @@ export function useInboxPlanApply() {
     async (inboxItemId: string): Promise<PlanApplyResponse | null> => {
       setState({ loading: true, error: null });
       try {
-        const result = await inboxPlanApply(inboxItemId);
+        const result = unwrap(await commands.inboxPlanApply(inboxItemId));
         setState({ loading: false, error: null });
         return result;
       } catch (e: unknown) {
@@ -479,7 +488,7 @@ export function useInboxPlanApplyAll() {
   const applyAll = useCallback(async (): Promise<InboxApplyAllResponse | null> => {
     setState({ loading: true, error: null });
     try {
-      const result = await inboxPlanApplyAll();
+      const result = unwrap(await commands.inboxPlanApplyAll());
       setState({ loading: false, error: null });
       return result;
     } catch (e: unknown) {
@@ -499,7 +508,7 @@ export function useInboxPlanCancel() {
     async (inboxItemId: string): Promise<InboxPlanCancelResponse | null> => {
       setState({ loading: true, error: null });
       try {
-        const result = await inboxPlanCancel(inboxItemId);
+        const result = unwrap(await commands.inboxPlanCancel(inboxItemId));
         setState({ loading: false, error: null });
         return result;
       } catch (e: unknown) {
@@ -539,7 +548,9 @@ export function useOpenInboxPlans() {
   useEffect(() => {
     let cancelled = false;
     setState((s) => ({ ...s, loading: true, error: null }));
-    listOpenInboxPlans()
+    commands
+      .inboxPlanListOpen()
+      .then(unwrap)
       .then((resp) => {
         if (!cancelled) setState({ data: resp, loading: false, error: null });
       })
@@ -567,7 +578,7 @@ export function useApplySelectedInboxPlans() {
     async (inboxItemIds: string[]): Promise<InboxApplyAllResponse | null> => {
       setState({ loading: true, error: null });
       try {
-        const result = await applySelectedInboxPlans(inboxItemIds);
+        const result = unwrap(await commands.inboxPlanApplySelected({ inboxItemIds }));
         setState({ loading: false, error: null });
         return result;
       } catch (e: unknown) {
@@ -605,7 +616,9 @@ export function useInboxStats() {
   useEffect(() => {
     let cancelled = false;
     setState((s) => ({ ...s, loading: true, error: null }));
-    inboxStats()
+    commands
+      .inboxStats()
+      .then(unwrap)
       .then((resp) => {
         if (!cancelled) setState({ data: resp, loading: false, error: null });
       })

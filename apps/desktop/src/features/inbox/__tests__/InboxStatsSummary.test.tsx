@@ -20,8 +20,8 @@ const { mockInboxStats } = vi.hoisted(() => ({
   mockInboxStats: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  inboxStats: mockInboxStats,
+vi.mock('@/bindings/index', () => ({
+  commands: { inboxStats: mockInboxStats },
 }));
 
 vi.stubEnv('VITE_USE_MOCKS', 'true');
@@ -92,7 +92,7 @@ describe('useInboxStats hook', () => {
   });
 
   it('calls inboxStats on mount and returns the response as data', async () => {
-    mockInboxStats.mockResolvedValue(statsWithTypes);
+    mockInboxStats.mockResolvedValue({ status: 'ok', data: statsWithTypes });
 
     const { result } = renderHook(() => useInboxStats());
 

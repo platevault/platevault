@@ -16,7 +16,7 @@
  * used by the InboxList header and footer.
  */
 
-import type { InboxListItem, InboxStatsResponse, InboxStatsPerType } from '@/api/commands';
+import type { InboxListItem, InboxStatsResponse, InboxStatsPerType } from '@/bindings/index';
 
 /** Bucket key for a folder/master whose frame type is unknown or spans types. */
 const MIXED_KEY = 'mixed';

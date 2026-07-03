@@ -34,8 +34,9 @@
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { listRoots } from "@/api/commands";
-import type { InboxConfirmDestination } from "@/api/commands";
+import { commands } from "@/bindings/index";
+import { unwrap } from "@/api/ipc";
+import type { InboxConfirmDestination } from "@/bindings/index";
 import { useSetPageStatus } from "@/app/PageStatusContext";
 import { FilterToolbar, ListPageLayout, PageTopBar } from "@/components";
 import { usePlanApplyProgress } from "@/features/plans/usePlanApplyProgress";
@@ -232,7 +233,9 @@ export function InboxPage() {
 	const [selectedDestRootId, setSelectedDestRootId] = useState("");
 	useEffect(() => {
 		let alive = true;
-		listRoots()
+		commands
+			.rootsList()
+			.then(unwrap)
 			.then((rs) => {
 				if (!alive) return;
 				setDestRoots(
