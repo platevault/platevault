@@ -4,7 +4,8 @@ import { WizardShell } from '@/ui/WizardShell';
 import { Btn } from '@/ui/Btn';
 import { m } from '@/lib/i18n';
 import { setPreference } from '@/data/preferences';
-import { completeFirstRun, toolUpdate } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import {
   StepSourceFolders,
   StepTools,
@@ -298,9 +299,13 @@ export function SetupWizard() {
           { id: 'pixinsight', enabled: state.tools.pixinsight.enabled, path: state.tools.pixinsight.path },
           { id: 'siril', enabled: state.tools.siril.enabled, path: state.tools.siril.path },
         ];
-        await Promise.all(toolEntries.map((t) => toolUpdate({ id: t.id, enabled: t.enabled, path: t.path })));
+        await Promise.all(
+          toolEntries.map(async (t) =>
+            unwrap(await commands.toolsUpdate({ id: t.id, enabled: t.enabled, path: t.path })),
+          ),
+        );
 
-        await completeFirstRun();
+        unwrap(await commands.firstrunComplete());
       }
 
       setPreference('setupCompleted', true);

@@ -8,8 +8,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Pill } from '@/ui/Pill';
 import type { PillVariant } from '@/ui/Pill';
 import { m } from '@/lib/i18n';
-import { inboxScanFolder, inboxClassify } from '@/api/commands';
-import type { InboxItemSummary, InboxClassifyResponse } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { InboxItemSummary } from '@/bindings/index';
+import type { InboxClassifyResponse_Serialize as InboxClassifyResponse } from '@/bindings/index';
 import type { SourceEntry } from '../sources-store';
 import type { FlushResult } from '../sources-store';
 import { errMessage } from '@/lib/errors';
@@ -323,10 +325,12 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
 
         try {
           // 1. Scan the folder
-          const scanResponse = await inboxScanFolder({
-            rootId: entry.rootId,
-            rootAbsolutePath: entry.source.path,
-          });
+          const scanResponse = unwrap(
+            await commands.inboxScanFolder({
+              rootId: entry.rootId,
+              rootAbsolutePath: entry.source.path,
+            }),
+          );
 
           const items = scanResponse.items ?? [];
 
@@ -335,10 +339,12 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
           await Promise.allSettled(
             items.map(async (item) => {
               try {
-                const cls = await inboxClassify({
-                  inboxItemId: item.inboxItemId,
-                  rootAbsolutePath: entry.source.path,
-                });
+                const cls = unwrap(
+                  await commands.inboxClassify({
+                    inboxItemId: item.inboxItemId,
+                    rootAbsolutePath: entry.source.path,
+                  }),
+                );
                 classifications.set(item.inboxItemId, cls);
               } catch {
                 // Classification failure for one item: skip but don't abort
