@@ -20,6 +20,7 @@
     "pretypecheck": "pnpm i18n:compile",
     "knip": "knip",
     "madge:circular": "madge --circular --extensions ts,tsx src",
+    "css:dup-sniff": "node scripts/css-dup-sniff.mjs",
     "size": "size-limit"
   },
   "dependencies": {
