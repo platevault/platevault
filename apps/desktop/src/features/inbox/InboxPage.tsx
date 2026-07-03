@@ -311,13 +311,11 @@ export function InboxPage() {
 		async (
 			item: { inboxItemId: string; rootAbsolutePath: string },
 			contentSignature: string,
-			action: string,
 			rootId?: string,
 		) => {
 			try {
 				const result = await confirm({
 					inboxItemId: item.inboxItemId,
-					action,
 					contentSignature,
 					rootAbsolutePath: item.rootAbsolutePath,
 					destructiveDestination,
@@ -397,15 +395,21 @@ export function InboxPage() {
 	);
 
 	const handleConfirm = async () => {
-		if (!selectedItem || !classification) return;
-		const action = classification.type === "mixed" ? "split" : "confirm";
+		// spec 041 T071/T072 (FR-050): the backend "split" action is removed —
+		// classification.type === "mixed" is only reachable when the SELECTED
+		// item is still the pre-materialization leaf-folder row spanning more
+		// than one frame type (T066 already split it into single-type
+		// sub-items, which appear as separate list rows). Such a row can never
+		// itself be confirmed (its classification.result is never
+		// "classified"), so confirm is gated off entirely for it via
+		// `canConfirm` below — guard here too as defense in depth.
+		if (!selectedItem || !classification || classification.type === "mixed") return;
 		await runConfirm(
 			{
 				inboxItemId: selectedItem.inboxItemId,
 				rootAbsolutePath: selectedRootPath,
 			},
 			classification.contentSignature,
-			action,
 			// "" = auto-select (let the backend choose); otherwise the picked root.
 			selectedDestRootId || undefined,
 		);
@@ -440,7 +444,6 @@ export function InboxPage() {
 			try {
 				await confirm({
 					inboxItemId: it.inboxItemId,
-					action: "confirm",
 					contentSignature: it.contentSignature,
 					rootAbsolutePath: it.rootAbsolutePath,
 					destructiveDestination,
@@ -480,14 +483,16 @@ export function InboxPage() {
 	const handlePickDestinationRoot = async (rootId: string) => {
 		if (!rootPickItemId || !selectedItem || !classification) return;
 		if (selectedItem.inboxItemId !== rootPickItemId) return;
-		const action = classification.type === "mixed" ? "split" : "confirm";
+		// A "mixed" classification can never reach the destination-root picker
+		// (confirm rejects it with classification.ambiguous before root
+		// resolution runs) — guarded as defense in depth, matching handleConfirm.
+		if (classification.type === "mixed") return;
 		await runConfirm(
 			{
 				inboxItemId: selectedItem.inboxItemId,
 				rootAbsolutePath: selectedRootPath,
 			},
 			classification.contentSignature,
-			action,
 			rootId,
 		);
 	};
@@ -569,7 +574,6 @@ export function InboxPage() {
 	// confirm — any file lacking a path-load-bearing attribute cannot be routed
 	// to a destination, so the backend rejects it (inbox.missing_path_attributes).
 	// Disable confirm up-front and let the detail pane's danger alert explain why.
-	// A MIXED folder is NOT blocked here: confirming it generates a split plan.
 	const hasMissingRequiredMeta = useMemo(
 		() =>
 			(fileMetadata ?? []).some(
@@ -578,10 +582,16 @@ export function InboxPage() {
 		[fileMetadata],
 	);
 
+	// spec 041 T071/T072 (FR-050): the backend "split" action for MIXED items
+	// is removed — a folder that still classifies as "mixed" (multiple frame
+	// types on this row) can never itself be confirmed; only "single_type"
+	// rows (including the sub-items T066 already materialized alongside it)
+	// are confirmable, so confirm is disabled for both "unclassified" and
+	// "mixed" here.
 	const canConfirm =
 		!!selectedItem &&
 		!!classification &&
-		classification.type !== "unclassified" &&
+		classification.type === "single_type" &&
 		!hasMissingRequiredMeta &&
 		!hasOpenPlan;
 
@@ -597,10 +607,10 @@ export function InboxPage() {
 		}
 	}, [planOverlayOpen, openPlans.length, pendingRootPick]);
 
-	const confirmLabel =
-		classification?.type === "mixed"
-			? m.inbox_generate_split_plan()
-			: m.inbox_confirm_to_inventory();
+	// spec 041 T072: "Generate split plan" is retired along with the backend
+	// "split" action (FR-050) — a mixed row is disabled via `canConfirm`
+	// above, so the label is always the plain confirm label now.
+	const confirmLabel = m.inbox_confirm_to_inventory();
 
 	// spec 041 US6: aggregate inbox queue stats. Derived from the SAME item list
 	// the header/footer count from (distinct-folder counting) so the stats strip,
@@ -861,8 +871,9 @@ export function InboxPage() {
 							rootAbsolutePath={selectedRootPath}
 							classification={classification ?? null}
 							fileMetadata={fileMetadata}
-							// Confirm/split runs the same flow the old top-bar button did
-							// (handleConfirm picks 'split' for mixed folders).
+							// Confirm runs the same flow the old top-bar button did.
+							// Disabled entirely for "mixed" rows (FR-050) — see
+							// canConfirm above.
 							onConfirm={() => void handleConfirm()}
 							confirmLabel={confirmLabel}
 							confirmDisabled={!canConfirm}

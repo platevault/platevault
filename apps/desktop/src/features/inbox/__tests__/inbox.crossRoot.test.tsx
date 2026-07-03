@@ -38,6 +38,8 @@ vi.mock('@/api/commands', () => ({
 
 const itemRoot1a: InboxListItem = {
   inboxItemId: 'item-r1-a',
+  groupId: 'item-r1-a',
+  groupKey: '',
   rootId: 'root-001',
   rootAbsolutePath: '/astro/raw',
   relativePath: '2025-10-10/NGC7000',
@@ -55,6 +57,8 @@ const itemRoot1a: InboxListItem = {
 
 const itemRoot1b: InboxListItem = {
   inboxItemId: 'item-r1-b',
+  groupId: 'item-r1-b',
+  groupKey: '',
   rootId: 'root-001',
   rootAbsolutePath: '/astro/raw',
   relativePath: '2025-10-10/darks',
@@ -72,6 +76,8 @@ const itemRoot1b: InboxListItem = {
 
 const itemRoot2a: InboxListItem = {
   inboxItemId: 'item-r2-a',
+  groupId: 'item-r2-a',
+  groupKey: '',
   rootId: 'root-002',
   rootAbsolutePath: '/astro/inbox',
   relativePath: '2025-11-01/Jupiter',

@@ -38,6 +38,8 @@ vi.mock("@/api/commands", async (importOriginal) => {
 function makeListItem(overrides: Partial<InboxListItem> = {}): InboxListItem {
 	return {
 		inboxItemId: "item-001",
+		groupId: "item-001",
+		groupKey: "",
 		rootId: "root-001",
 		rootAbsolutePath: "/astro",
 		relativePath: "lights/NGC7000",
