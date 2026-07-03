@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Btn, Pill } from '@/ui';
 import { DirPicker } from '@/ui/DirPicker';
-import { listRoots, registerRoot, startScan, settingsSourceOverrideSet, settingsOverridableKeys } from '@/api/commands';
+import { listRoots, registerRoot, startScan, settingsSourceOverrideSet, settingsOverridableKeys } from './settingsIpc';
 import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';

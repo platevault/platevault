@@ -21,8 +21,8 @@ import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
 import {
   calibrationTolerancesGet,
   calibrationTolerancesUpdate,
-} from '@/api/commands';
-import type { UpdateCalibrationTolerances } from '@/api/commands';
+} from './settingsIpc';
+import type { UpdateCalibrationTolerances } from './settingsIpc';
 
 interface CalibrationMatchingProps {
   /** Unused in this pane — tolerances use their own IPC commands. Kept for

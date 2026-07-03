@@ -16,9 +16,11 @@ const { mockGet, mockUpdate } = vi.hoisted(() => ({
   mockUpdate: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  getResolverSettings: mockGet,
-  updateResolverSettings: mockUpdate,
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    targetResolutionSettings: mockGet,
+    targetResolutionSettingsUpdate: mockUpdate,
+  },
 }));
 
 import { ResolverSettingsControl } from './ResolverSettingsControl';
@@ -33,9 +35,15 @@ const SETTINGS = {
 beforeEach(() => {
   mockGet.mockReset();
   mockUpdate.mockReset();
-  mockGet.mockResolvedValue({ contractVersion: '1.0', requestId: 'r', settings: SETTINGS });
-  mockUpdate.mockImplementation((settings: unknown) =>
-    Promise.resolve({ contractVersion: '1.0', requestId: 'r', settings }),
+  mockGet.mockResolvedValue({
+    status: 'ok',
+    data: { contractVersion: '1.0', requestId: 'r', settings: SETTINGS },
+  });
+  mockUpdate.mockImplementation((req: { settings: unknown }) =>
+    Promise.resolve({
+      status: 'ok',
+      data: { contractVersion: '1.0', requestId: 'r', settings: req.settings },
+    }),
   );
 });
 
@@ -61,7 +69,7 @@ describe('ResolverSettingsControl', () => {
     });
 
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ onlineEnabled: false }),
+      expect.objectContaining({ settings: expect.objectContaining({ onlineEnabled: false }) }),
     );
   });
 
