@@ -51,10 +51,10 @@ vi.mock('@tanstack/react-router', () => ({
 // Catalog manifest fetch resolves to 'failed' so StepCatalogs renders its
 // graceful unavailable state in these gating tests (download flow is covered
 // in StepCatalogs.test.tsx).
+//
+// StepCatalogs' ResolverSettingsControl still reads @/api/commands directly
+// (out of this migration's scope), so those two mocks stay here.
 vi.mock('@/api/commands', () => ({
-  completeFirstRun: vi.fn().mockResolvedValue({ success: true }),
-  registerRoot: vi.fn().mockResolvedValue({ id: 'mock-root', path: '' }),
-  registerRootBatch: vi.fn().mockResolvedValue({ results: [] }),
   // Repurposed "Target resolution" step reads/writes resolver settings.
   getResolverSettings: vi.fn().mockResolvedValue({
     contractVersion: '1.0',
@@ -69,24 +69,59 @@ vi.mock('@/api/commands', () => ({
   updateResolverSettings: vi.fn().mockImplementation((settings) =>
     Promise.resolve({ contractVersion: '1.0', requestId: 'r', settings }),
   ),
-  // Configuration step also reads/writes the default source-protection setting.
-  getSettings: vi.fn().mockResolvedValue({ values: { defaultProtection: 'protected' } }),
-  updateSettings: vi.fn().mockResolvedValue(undefined),
+}));
+
+// spec 037: the wizard, sources-store, StepCatalogs, and StepScan now call
+// generated commands.* bindings + unwrap directly. Mock the bindings surface
+// (Result-shaped responses) and let unwrap really unwrap them.
+// vi.hoisted: vi.mock factories below are hoisted above these declarations.
+const {
+  mockToolsUpdate,
+  mockFirstrunComplete,
+  mockRootsRegisterBatch,
+  mockSettingsGet,
+  mockSettingsUpdate,
+  mockInboxScanFolder,
+  mockInboxClassify,
+} = vi.hoisted(() => ({
+  mockToolsUpdate: vi.fn().mockResolvedValue({
+    status: 'ok',
+    data: {
+      id: 'pixinsight',
+      name: 'PixInsight',
+      enabled: false,
+      configured: false,
+      available: false,
+      supportsOpenFolder: false,
+      autoDetected: false,
+      executablePath: null,
+    },
+  }),
+  mockFirstrunComplete: vi.fn().mockResolvedValue({ status: 'ok', data: { success: true } }),
+  mockRootsRegisterBatch: vi.fn().mockResolvedValue({ status: 'ok', data: { status: 'success', items: [] } }),
+  mockSettingsGet: vi.fn().mockResolvedValue({
+    status: 'ok',
+    data: { values: { defaultProtection: 'protected' } },
+  }),
+  mockSettingsUpdate: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
   // StepScan calls these — stub with empty responses so render doesn't throw
   // if the Scan step is reached during tests that navigate that far.
-  inboxScanFolder: vi.fn().mockResolvedValue({ rootId: 'root-mock', items: [] }),
-  inboxClassify: vi.fn().mockResolvedValue(null),
-  // Processing-tool persistence: called in handleFinish before completeFirstRun.
-  toolUpdate: vi.fn().mockResolvedValue({
-    id: 'pixinsight',
-    name: 'PixInsight',
-    enabled: false,
-    configured: false,
-    available: false,
-    supportsOpenFolder: false,
-    autoDetected: false,
-    executablePath: null,
-  }),
+  mockInboxScanFolder: vi.fn().mockResolvedValue({ status: 'ok', data: { rootId: 'root-mock', items: [] } }),
+  // Never actually invoked in these gating tests (scan responses carry no
+  // items), but the module surface must still expose it.
+  mockInboxClassify: vi.fn(),
+}));
+
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    toolsUpdate: mockToolsUpdate,
+    firstrunComplete: mockFirstrunComplete,
+    rootsRegisterBatch: mockRootsRegisterBatch,
+    settingsGet: mockSettingsGet,
+    settingsUpdate: mockSettingsUpdate,
+    inboxScanFolder: mockInboxScanFolder,
+    inboxClassify: mockInboxClassify,
+  },
 }));
 
 // Mock @tauri-apps/api/core to prevent any accidental live invoke.
@@ -431,10 +466,8 @@ describe('SetupWizard 5-step flow', () => {
   });
 
   it('persists wizard processing-tool config to the backend when finishing', async () => {
-    // Access the mocked module to spy on calls.
-    const commands = await import('@/api/commands');
-    vi.mocked(commands.toolUpdate).mockClear();
-    vi.mocked(commands.completeFirstRun).mockClear();
+    mockToolsUpdate.mockClear();
+    mockFirstrunComplete.mockClear();
 
     // Seed at the Confirm step (step 3) with PixInsight enabled+pathed and
     // Siril disabled, so we can verify both tools are sent to toolUpdate.
@@ -476,22 +509,22 @@ describe('SetupWizard 5-step flow', () => {
       await new Promise((r) => setTimeout(r, 0));
     });
 
-    // handleFinish (non-mock path: VITE_USE_MOCKS='false') must call toolUpdate
-    // once per tool before completeFirstRun.
-    await waitFor(() => expect(vi.mocked(commands.toolUpdate)).toHaveBeenCalledTimes(2));
+    // handleFinish (non-mock path: VITE_USE_MOCKS='false') must call toolsUpdate
+    // once per tool before firstrunComplete.
+    await waitFor(() => expect(mockToolsUpdate).toHaveBeenCalledTimes(2));
 
-    expect(vi.mocked(commands.toolUpdate)).toHaveBeenCalledWith({
+    expect(mockToolsUpdate).toHaveBeenCalledWith({
       id: 'pixinsight',
       enabled: true,
       path: '/Applications/PixInsight/PixInsight.app',
     });
-    expect(vi.mocked(commands.toolUpdate)).toHaveBeenCalledWith({
+    expect(mockToolsUpdate).toHaveBeenCalledWith({
       id: 'siril',
       enabled: false,
       path: null,
     });
 
-    // completeFirstRun must be called exactly once, after the tool updates.
-    expect(vi.mocked(commands.completeFirstRun)).toHaveBeenCalledTimes(1);
+    // firstrunComplete must be called exactly once, after the tool updates.
+    expect(mockFirstrunComplete).toHaveBeenCalledTimes(1);
   });
 });

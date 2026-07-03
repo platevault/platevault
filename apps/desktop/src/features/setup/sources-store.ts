@@ -1,4 +1,4 @@
-import { registerRootBatch } from '@/api/commands';
+import { registerRootBatch } from './registerSources';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
 
