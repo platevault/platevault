@@ -2,14 +2,16 @@
  * Playwright smoke: Sessions page grouped table + detail provenance surface.
  *
  * Updated for the spec-043 redesign: SessionsList (`.alm-list-item` rows) was
- * replaced by a grouped SessionsTable (a spanning `.alm-sessions-table__group`
- * header per target, then `.alm-sessions-table__row` rows), and the standalone
- * "Provenance" <Section> in SessionDetail was folded into a single PropertyTable
- * whose Source column tags each fact (FITS / Inferred / User).
+ * replaced by a SessionsTable of `.alm-sessions-table__row` rows. The list is
+ * FLAT by default (spec 043 §4 / PR #360 — grouping is opt-in via the top-bar
+ * Group-by control, and group headers now use the shared `.alm-listgroup`
+ * class), and the standalone "Provenance" <Section> in SessionDetail was folded
+ * into a single PropertyTable whose Source column tags each fact (FITS /
+ * Inferred / User).
  *
  * What this test proves:
- *  1. The Sessions page at /#/sessions renders the grouped table without
- *     crashing (group-header row + session rows).
+ *  1. The Sessions page at /#/sessions renders the flat table without
+ *     crashing (session rows).
  *  2. Clicking a session row opens the detail pane, which renders a
  *     PropertyTable with source-tagged facts (the redesigned provenance surface).
  *  3. With no selection, the detail pane shows the "Select a session" empty
@@ -31,7 +33,7 @@ function seedSetupComplete(page: import("@playwright/test").Page): void {
 }
 
 test.describe("lifecycle detail · sessions page + provenance UI (spec 006 / spec 043)", () => {
-  test("grouped session rows render; clicking opens detail with source-tagged facts", async ({
+  test("session rows render; clicking opens detail with source-tagged facts", async ({
     page,
   }) => {
     seedSetupComplete(page);
@@ -40,14 +42,10 @@ test.describe("lifecycle detail · sessions page + provenance UI (spec 006 / spe
     // ── 1. Page renders without error boundary ────────────────────────────────
     await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
 
-    // ── 2. Grouped table renders: a target group header + session rows ────────
-    const ngcGroup = page
-      .locator(".alm-sessions-table__group")
-      .filter({ hasText: "NGC 7000" });
-    await expect(ngcGroup).toBeVisible({ timeout: 8_000 });
-
+    // ── 2. Flat table renders session rows (spec 043 §4: the list is FLAT by
+    //       default — grouping is opt-in via the top-bar Group-by control) ─────
     const rows = page.locator(".alm-sessions-table__row");
-    await expect(rows.first()).toBeVisible();
+    await expect(rows.first()).toBeVisible({ timeout: 8_000 });
 
     // ── 3. Click a session row → detail pane opens ────────────────────────────
     // Sessions are selected by id; no row is auto-selected, so a click is needed.
@@ -71,9 +69,9 @@ test.describe("lifecycle detail · sessions page + provenance UI (spec 006 / spe
 
     await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
 
-    // The grouped sessions table renders.
+    // The flat sessions table renders its rows.
     await expect(
-      page.locator(".alm-sessions-table__group").first(),
+      page.locator(".alm-sessions-table__row").first(),
     ).toBeVisible({ timeout: 8_000 });
 
     // The redesigned SessionsPage mounts the bottom SessionDetail pane ONLY when
