@@ -748,7 +748,7 @@ async fn load_config(pool: &SqlitePool) -> MatchingRuleConfig {
     let mut config = MatchingRuleConfig::default();
 
     // `require_same_offset` is persisted on the `calibration_tolerances`
-    // singleton row (migration 0050), not the generic settings key/value
+    // singleton row (migration 0051), not the generic settings key/value
     // store — it's user-controlled via the Settings > Calibration Matching
     // "Offset match required" toggle (spec 043 P8). Falls back to
     // `MatchingRuleConfig::default()` (true) on read failure.
@@ -1120,7 +1120,7 @@ mod masters_tests {
     }
 
     /// Spec 043 P8: `load_config` defaults `require_same_offset` to true on a
-    /// fresh DB, matching `MatchingRuleConfig::default()` (migration 0008/0050
+    /// fresh DB, matching `MatchingRuleConfig::default()` (migration 0008/0051
     /// seed row).
     #[tokio::test]
     async fn load_config_defaults_require_same_offset_true() {

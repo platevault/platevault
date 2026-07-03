@@ -1,5 +1,5 @@
 //! Repository for the calibration matching tolerances singleton row
-//! (spec 007 / spec 043 P8, migration 0008 + 0050).
+//! (spec 007 / spec 043 P8, migration 0008 + 0051).
 //!
 //! `calibration_tolerances` holds exactly one row (`singleton_id = 'default'`)
 //! seeded unconditionally by migration 0008, so `get` can always `fetch_one`.
@@ -20,7 +20,7 @@ pub struct CalibrationTolerancesRow {
     pub require_same_gain: bool,
     pub require_same_binning: bool,
     /// Hard rule: master must carry the same OFFSET as the light session
-    /// (migration 0050). Feeds `MatchingRuleConfig::require_same_offset`.
+    /// (migration 0051). Feeds `MatchingRuleConfig::require_same_offset`.
     pub require_same_offset: bool,
 }
 
@@ -123,7 +123,7 @@ mod tests {
         assert!(row.require_same_camera);
         assert!(row.require_same_gain);
         assert!(row.require_same_binning);
-        assert!(row.require_same_offset, "migration 0050 default must be true");
+        assert!(row.require_same_offset, "migration 0051 default must be true");
     }
 
     #[tokio::test]

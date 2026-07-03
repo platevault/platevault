@@ -15,7 +15,7 @@ pub struct CalibrationTolerances {
     pub require_same_binning: bool,
     /// Hard rule: master must carry the same OFFSET as the light session for
     /// dark/bias matching. Feeds `calibration_core::ranking::MatchingRuleConfig
-    /// ::require_same_offset` (spec 007). Default `true` (see migration 0050).
+    /// ::require_same_offset` (spec 007). Default `true` (see migration 0051).
     pub require_same_offset: bool,
 }
 

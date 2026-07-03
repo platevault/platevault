@@ -1,7 +1,7 @@
 //! Spec 007 / spec 043 P8 calibration tolerances commands.
 //!
 //! Backed by the `calibration_tolerances` singleton table (migration 0008 +
-//! 0050) via `app_core::calibration::{tolerances_get, tolerances_update}`.
+//! 0051) via `app_core::calibration::{tolerances_get, tolerances_update}`.
 //! `require_same_offset` additionally feeds
 //! `calibration_core::ranking::MatchingRuleConfig::require_same_offset`
 //! through `app_core::calibration`'s `load_config` (see

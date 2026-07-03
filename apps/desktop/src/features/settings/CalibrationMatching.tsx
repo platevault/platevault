@@ -4,7 +4,7 @@
 //
 // Owned backend keys (CalibrationTolerances / UpdateCalibrationTolerances),
 // persisted to the `calibration_tolerances` singleton table (migration 0008 +
-// 0050) via `calibration.tolerances.get`/`update`:
+// 0051) via `calibration.tolerances.get`/`update`:
 //   - requireSameCamera   (boolean) — Camera "Match required" toggle
 //   - requireSameBinning  (boolean) — Binning "Match required" toggle
 //   - requireSameGain     (boolean) — Gain "Match required" toggle

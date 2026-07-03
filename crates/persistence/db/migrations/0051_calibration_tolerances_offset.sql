@@ -1,4 +1,4 @@
--- Migration 0050: add require_same_offset to calibration_tolerances (spec 043 P8).
+-- Migration 0051: add require_same_offset to calibration_tolerances (spec 043 P8).
 --
 -- The matching engine's `MatchingRuleConfig.require_same_offset` hard-rule
 -- flag (crates/calibration/core/src/ranking.rs) has existed since the

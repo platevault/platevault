@@ -1,6 +1,6 @@
 //! Calibration matching tolerances use cases (spec 007 / spec 043 P8).
 //!
-//! Bridges the `calibration_tolerances` singleton row (migration 0008 + 0050,
+//! Bridges the `calibration_tolerances` singleton row (migration 0008 + 0051,
 //! `persistence_db::repositories::calibration_tolerances`) with the
 //! `CalibrationTolerances` / `UpdateCalibrationTolerances` contract DTOs used
 //! by the Tauri `calibration.tolerances.get`/`update` commands.
