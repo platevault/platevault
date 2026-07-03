@@ -28,10 +28,11 @@ import { Dialog } from '@base-ui-components/react/dialog';
 import { Btn, RadioGroup, Pill } from '@/ui';
 import type { RadioOption } from '@/ui';
 import { callCreateProject } from '@/features/projects/store';
-import { listProjects008 } from '@/api/commands';
-import type { TargetSuggestion } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { TargetSuggestion } from '@/bindings/aliases';
 import { TargetSearch } from '@/components';
-import type { ProjectCreateResult } from '@/bindings/index';
+import type { ProjectCreateResult, ProjectSummaryDto } from '@/bindings/index';
 import {
   createProjectFormSchema,
   type CreateProjectFormValues,
@@ -100,7 +101,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
   async function onValid(values: CreateProjectFormValues) {
     const trimmedName = values.name.trim();
     try {
-      const list = await listProjects008();
+      const list: ProjectSummaryDto[] = unwrap(await commands.projectsList(null));
       const dup = list.find((p) => p.name.toLowerCase() === trimmedName.toLowerCase());
       if (dup) {
         setError('name', { type: 'duplicate', message: m.projects_create_name_duplicate() });
