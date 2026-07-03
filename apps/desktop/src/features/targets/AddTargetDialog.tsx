@@ -19,7 +19,7 @@ import { Btn, Pill } from '@/ui';
 import { TargetSearch } from '@/components';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
-import type { TargetSuggestion } from '@/bindings/index';
+import type { TargetSuggestion } from '@/bindings/aliases';
 
 /** Contract version for the spec-035 `target.*` resolution commands. */
 const TARGET_SEARCH_CONTRACT_VERSION = '1.0';

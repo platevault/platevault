@@ -43,7 +43,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 import { AddTargetDialog } from './AddTargetDialog';
-import type { TargetSuggestion } from '@/bindings/index';
+import type { TargetSuggestion } from '@/bindings/aliases';
 
 const M31: TargetSuggestion = {
   targetId: 'tgt-m31',

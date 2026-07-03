@@ -27,7 +27,8 @@ import { X } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
-import type { TargetDetailV3, TargetOpError, TargetListItem } from '@/bindings/index';
+import type { TargetDetailV3, TargetOpError } from '@/bindings/aliases';
+import type { TargetListItem } from '@/bindings/index';
 import type { TargetSessionItem, TargetProjectItem } from '@/bindings';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
@@ -369,7 +370,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       .targetGet({ targetId })
       .then(unwrap)
       .then((data) => {
-        setLoadState({ status: 'loaded', data });
+        setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
         setDisplayAliasInput(data.displayAlias ?? '');
       })
       .catch(() => {
@@ -479,7 +480,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       const data = unwrap(
         await commands.targetDisplayAliasSet({ targetId, displayAlias: displayAliasInput.trim() }),
       );
-      setLoadState({ status: 'loaded', data });
+      setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
       setDisplayAliasInput(data.displayAlias ?? '');
       setDisplayAliasEditing(false);
     } catch (err) {
@@ -493,7 +494,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
     setActionError(null);
     try {
       const data = unwrap(await commands.targetDisplayAliasClear({ targetId }));
-      setLoadState({ status: 'loaded', data });
+      setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
       setDisplayAliasInput('');
       setDisplayAliasEditing(false);
     } catch (err) {
