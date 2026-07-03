@@ -41,6 +41,7 @@ import type {
   ResolverSettings,
   ResolverSettingsResponse,
   IpcOperationHandle,
+  FirstRunRestartResponse,
 } from '@/bindings/index';
 
 export type {
@@ -50,6 +51,7 @@ export type {
   SourceProtectionSetResponse,
   ToolProfileSummary,
   ResolverSettings,
+  FirstRunRestartResponse,
 };
 export type { PatternPartDto as PatternPart };
 export type { PatternValidateResponse, PatternPreviewResponse };
@@ -115,6 +117,18 @@ export async function settingsSourceOverrideSet(args: {
 
 export async function listRoots(): Promise<LibraryRoot[]> {
   return unwrap(await commands.rootsList());
+}
+
+/**
+ * `firstrun.restart` — reopen the first-run source setup wizard (spec 003
+ * US3). Distinct from the spec-010 guided first-project tour: this clears the
+ * `first_run_state.completed_at` flag and returns the currently registered
+ * sources so the wizard's working buffer can be prefilled for editing (A7).
+ * `confirm: true` is required by the backend to guard against accidental
+ * restarts (R-E5).
+ */
+export async function restartFirstRun(): Promise<FirstRunRestartResponse> {
+  return unwrap(await commands.firstrunRestart({ confirm: true }));
 }
 
 export async function registerRoot(args: {

@@ -452,8 +452,9 @@
   height: 28px;
 }
 
-/* Guided-flow description paragraph */
-.alm-adv-settings__guided-desc {
+/* Settings-row control description paragraph — shared by the guided-tour
+   restart and first-run setup restart controls. */
+.alm-adv-settings__control-desc {
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
   margin-bottom: var(--alm-sp-3);
