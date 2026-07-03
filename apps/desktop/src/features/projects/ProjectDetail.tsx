@@ -157,6 +157,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     projectId,
     toolId,
     projectToolStr || 'tool',
+    toolProfile?.supportsOpenFolder,
   );
   const launchDisabledReason = toolLaunchDisabledReason(toolProfile);
 

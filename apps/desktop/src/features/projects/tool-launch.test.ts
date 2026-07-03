@@ -1,21 +1,41 @@
 /**
- * Vitest tests for tool-launch helpers (spec 011 T013/T018).
+ * Vitest tests for tool-launch helpers (spec 011 T013/T018/T021).
  *
  * Tests pure functions only (no process spawning):
  * - toolIdFromProjectTool()
  * - toolLaunchDisabledReason()
  * - toolLaunchDisabledTooltip()
+ * - hasSeenCwdAnchoredHint() / markCwdAnchoredHintSeen()
  *
- * These cover T017/T018 acceptance scenarios (disabled-state copy matrix).
+ * These cover T017/T018 acceptance scenarios (disabled-state copy matrix)
+ * and T021 (one-time cwd-anchored hint seen-state).
  */
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import {
   toolIdFromProjectTool,
   toolLaunchDisabledReason,
   toolLaunchDisabledTooltip,
+  hasSeenCwdAnchoredHint,
+  markCwdAnchoredHintSeen,
+  useToolLaunch,
   type LaunchDisabledReason,
 } from './tool-launch';
-import type { ToolProfileSummary } from '@/api/commands';
+import type { ToolProfileSummary, ToolLaunchResponse } from '@/api/commands';
+
+const { toolLaunchMock, addToastMock } = vi.hoisted(() => ({
+  toolLaunchMock: vi.fn(),
+  addToastMock: vi.fn(),
+}));
+
+vi.mock('@/api/commands', () => ({
+  toolProfileList: vi.fn(),
+  toolLaunch: toolLaunchMock,
+}));
+
+vi.mock('@/shared/toast', () => ({
+  addToast: addToastMock,
+}));
 
 // ── toolIdFromProjectTool ──────────────────────────────────────────────────────
 
@@ -89,5 +109,89 @@ describe('toolLaunchDisabledTooltip', () => {
 
   it.each(cases)('reason=%s → tooltip=%s', (reason, expected) => {
     expect(toolLaunchDisabledTooltip(reason)).toBe(expected);
+  });
+});
+
+// ── hasSeenCwdAnchoredHint / markCwdAnchoredHintSeen (T021) ───────────────────
+
+describe('hasSeenCwdAnchoredHint / markCwdAnchoredHintSeen', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('returns false when the hint has never been shown for a tool', () => {
+    expect(hasSeenCwdAnchoredHint('siril')).toBe(false);
+  });
+
+  it('returns true after marking the hint seen', () => {
+    markCwdAnchoredHintSeen('siril');
+    expect(hasSeenCwdAnchoredHint('siril')).toBe(true);
+  });
+
+  it('tracks seen-state independently per tool id', () => {
+    markCwdAnchoredHintSeen('siril');
+    expect(hasSeenCwdAnchoredHint('siril')).toBe(true);
+    expect(hasSeenCwdAnchoredHint('pixinsight')).toBe(false);
+  });
+});
+
+// ── useToolLaunch cwd-anchored hint (T021) ────────────────────────────────────
+
+function successResponse(): ToolLaunchResponse {
+  return { status: 'success', launchId: 'launch-1' } as ToolLaunchResponse;
+}
+
+describe('useToolLaunch — one-time cwd-anchored hint', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    toolLaunchMock.mockReset();
+    addToastMock.mockReset();
+    toolLaunchMock.mockResolvedValue(successResponse());
+  });
+
+  it('shows the hint toast on the first successful launch of a no-folder-chooser tool', async () => {
+    const { result } = renderHook(() => useToolLaunch('project-1', 'siril', 'Siril', false));
+
+    await act(async () => {
+      await result.current.launch();
+    });
+
+    await waitFor(() => {
+      expect(addToastMock).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'info', duration: 0 }),
+      );
+    });
+    expect(hasSeenCwdAnchoredHint('siril')).toBe(true);
+  });
+
+  it('does not show the hint again on a second launch of the same tool', async () => {
+    const { result } = renderHook(() => useToolLaunch('project-1', 'siril', 'Siril', false));
+
+    await act(async () => {
+      await result.current.launch();
+    });
+    addToastMock.mockClear();
+
+    await act(async () => {
+      await result.current.launch();
+    });
+
+    const infoCalls = addToastMock.mock.calls.filter(
+      (call: unknown[]) => (call[0] as { variant?: string }).variant === 'info',
+    );
+    expect(infoCalls).toHaveLength(0);
+  });
+
+  it('never shows the hint for a tool that supports opening a folder', async () => {
+    const { result } = renderHook(() => useToolLaunch('project-1', 'pixinsight', 'PixInsight', true));
+
+    await act(async () => {
+      await result.current.launch();
+    });
+
+    const infoCalls = addToastMock.mock.calls.filter(
+      (call: unknown[]) => (call[0] as { variant?: string }).variant === 'info',
+    );
+    expect(infoCalls).toHaveLength(0);
   });
 });
