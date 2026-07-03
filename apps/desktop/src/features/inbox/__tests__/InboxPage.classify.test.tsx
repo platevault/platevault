@@ -54,11 +54,13 @@ const {
 	mockAddToast: vi.fn(),
 }));
 
-vi.mock("@/api/commands", () => ({
-	inboxClassify: mockInboxClassify,
-	inboxConfirm: mockInboxConfirm,
-	inboxReclassify: mockInboxReclassify,
-	inboxScanFolder: mockInboxScanFolder,
+vi.mock("@/bindings/index", () => ({
+	commands: {
+		inboxClassify: mockInboxClassify,
+		inboxConfirm: mockInboxConfirm,
+		inboxReclassify: mockInboxReclassify,
+		inboxScanFolder: mockInboxScanFolder,
+	},
 }));
 
 vi.mock("@/shared/toast", () => ({
@@ -96,11 +98,8 @@ vi.stubEnv("VITE_USE_MOCKS", "true");
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
-import type {
-	InboxClassifyResponse,
-	InboxItemSummary,
-	InboxListItem,
-} from "@/api/commands";
+import type { InboxItemSummary, InboxListItem } from "@/bindings/index";
+import type { InboxClassifyResponse } from "@/bindings/aliases";
 
 const mixedClassification: InboxClassifyResponse = {
 	inboxItemId: "item-001",
@@ -201,10 +200,13 @@ describe("InboxDetail", () => {
 
 	it("fires reclassify with correct payload when override applied", async () => {
 		mockInboxReclassify.mockResolvedValue({
-			inboxItemId: "item-001",
-			updatedType: "mixed",
-			remainingUnclassified: 0,
-			appliedCount: 1,
+			status: "ok",
+			data: {
+				inboxItemId: "item-001",
+				updatedType: "mixed",
+				remainingUnclassified: 0,
+				appliedCount: 1,
+			},
 		});
 
 		render(

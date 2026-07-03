@@ -16,7 +16,7 @@
  */
 
 import type { DimensionAccessor } from './grouping';
-import type { InboxListItem } from '@/api/commands';
+import type { InboxListItem } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 
 // ── Grouping dimension registry ─────────────────────────────────────────────────
