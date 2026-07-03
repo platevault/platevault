@@ -14,12 +14,17 @@ import { SchemaViewer } from './SchemaViewer';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('@/api/commands', () => ({
-  devSchemaGet: vi.fn(),
-}));
+const { mockDevSchemaGet } = vi.hoisted(() => ({ mockDevSchemaGet: vi.fn() }));
 
-import { devSchemaGet } from '@/api/commands';
-const mockDevSchemaGet = vi.mocked(devSchemaGet);
+// Adapt the raw payload into the generated `{ status: 'ok', data }` Result the
+// real `unwrap` consumes (spec 037); mockResolvedValue/mockRejectedValue sites
+// stay unchanged.
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    devSchemaGet: (...a: unknown[]) =>
+      Promise.resolve(mockDevSchemaGet(...a)).then((data) => ({ status: 'ok', data })),
+  },
+}));
 
 const SAMPLE_SCHEMA = JSON.stringify(
   {
@@ -105,7 +110,7 @@ describe('SchemaViewer (T024)', () => {
 
     await waitFor(() => screen.getByTestId('schema-content'));
 
-    expect(mockDevSchemaGet).toHaveBeenCalledWith('/exact/path/to/schema.json');
+    expect(mockDevSchemaGet).toHaveBeenCalledWith({ schemaPath: '/exact/path/to/schema.json' });
   });
 
   it('renders the copy button when content is loaded', async () => {

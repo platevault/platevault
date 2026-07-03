@@ -16,13 +16,12 @@ import {
   resetRecorder,
   type DispatchFn,
 } from './recorder';
-import { setInvokeOverride } from '@/api/commands';
+import { setInvokeOverride } from '@/api/ipc';
 
-vi.mock('@/api/commands', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/api/commands')>();
+vi.mock('@/api/ipc', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/ipc')>();
   return {
     ...actual,
-    getSettings: vi.fn().mockResolvedValue({ values: { devMode: true } }),
     setInvokeOverride: vi.fn(),
   };
 });

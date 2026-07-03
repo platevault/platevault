@@ -10,14 +10,9 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import {
-  devContractsList,
-  devCallsList,
-  devExport,
-  type ContractMeta,
-  type ContractCall,
-  getSettings,
-} from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { ContractMeta, ContractCall } from '@/bindings/index';
 import { PageShell } from '@/components';
 import { ContractList } from './ContractList';
 import { CallList } from './CallList';
@@ -60,7 +55,9 @@ export function ContractsPage() {
   // Check devMode on mount.
   useEffect(() => {
     let cancelled = false;
-    getSettings({ scope: 'advanced' })
+    commands
+      .settingsGet('advanced')
+      .then(unwrap)
       .then((data) => {
         if (cancelled) return;
         const vals = data.values as Record<string, unknown>;
@@ -74,13 +71,17 @@ export function ContractsPage() {
 
   // Load contracts when devMode is confirmed on.
   const loadContracts = useCallback(() => {
-    devContractsList()
+    commands
+      .devContractsList({ requestId: null })
+      .then(unwrap)
       .then((resp) => setContracts(resp.contracts))
       .catch((e: unknown) => setError(String(e)));
   }, []);
 
   const loadCalls = useCallback(() => {
-    devCallsList()
+    commands
+      .devCallsList({ requestId: null, limit: null })
+      .then(unwrap)
       .then((resp) => setCalls(resp.calls))
       .catch((e: unknown) => setError(String(e)));
   }, []);
@@ -124,11 +125,14 @@ export function ContractsPage() {
     setExporting(true);
     setExportResult(null);
     try {
-      const resp = await devExport({
-        outputPath,
-        includeContracts: true,
-        includeCalls: true,
-      });
+      const resp = unwrap(
+        await commands.devExport({
+          requestId: null,
+          outputPath,
+          includeContracts: true,
+          includeCalls: true,
+        }),
+      );
       setExportResult(
         `Exported ${resp.contractCount} contracts and ${resp.callCount} calls to ${resp.writtenPath}`,
       );
