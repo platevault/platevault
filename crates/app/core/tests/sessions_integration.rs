@@ -39,6 +39,42 @@ async fn insert_acquisition_session(pool: &sqlx::SqlitePool, id: &str, state: &s
     .expect("insert acquisition_session");
 }
 
+/// Insert a `library_root` row with the given lifecycle `state`.
+///
+/// Schema (migration 0002_lifecycle.sql):
+///   id, label, current_path, kind CHECK(local|external|network),
+///   state CHECK(active|missing|disabled|reconnect_required), created_at
+async fn insert_library_root(pool: &sqlx::SqlitePool, id: &str, state: &str) {
+    sqlx::query(
+        "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
+         VALUES (?, 'Root', '/tmp/root', 'local', ?, '2026-05-01T00:00:00Z')",
+    )
+    .bind(id)
+    .bind(state)
+    .execute(pool)
+    .await
+    .expect("insert library_root");
+}
+
+/// Insert an `acquisition_session` linked to a `library_root` via `root_id`.
+async fn insert_acquisition_session_with_root(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    state: &str,
+    root_id: &str,
+) {
+    sqlx::query(
+        "INSERT INTO acquisition_session (id, session_key, frame_ids, state, created_at, root_id) \
+         VALUES (?, 'KEY', '[]', ?, '2026-05-01T00:00:00Z', ?)",
+    )
+    .bind(id)
+    .bind(state)
+    .bind(root_id)
+    .execute(pool)
+    .await
+    .expect("insert acquisition_session with root");
+}
+
 // ── 1. review_session: session not found ─────────────────────────────────────
 
 #[tokio::test]
@@ -128,6 +164,47 @@ async fn review_session_discovered_to_candidate_persists_new_state() {
         .await
         .expect("session row must still exist");
     assert_eq!(state, "candidate", "DB must show the new state after transition");
+}
+
+// ── 3b. review_session: disabled source refuses transition (T403, FR-... §E4) ─
+
+#[tokio::test]
+async fn review_session_refused_when_source_disabled() {
+    let (db, repo, bus) = support::setup().await;
+
+    // Seed a disabled root and a discovered session that lives under it.
+    let root_id = Uuid::new_v4().to_string();
+    insert_library_root(db.pool(), &root_id, "disabled").await;
+    let session_id = Uuid::new_v4().to_string();
+    insert_acquisition_session_with_root(db.pool(), &session_id, "discovered", &root_id).await;
+
+    let req = InventorySessionReviewRequest {
+        contract_version: "1.0.0".to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        next_state: InventorySessionState::Candidate,
+        action_label: None,
+        actor: "user".to_owned(),
+    };
+
+    let resp = review_session(db.pool(), &repo, &bus, req).await;
+
+    assert_eq!(resp.status, "error", "disabled source must refuse review: {resp:?}");
+    let err = resp.error.expect("error field must be set on refusal");
+    assert_eq!(err.code, "transition.refused", "expected transition.refused, got: {:?}", err.code);
+    assert!(
+        err.message.contains("disabled"),
+        "message should explain the source is disabled, got: {}",
+        err.message
+    );
+
+    // The session state must be unchanged after a refused transition.
+    let (state,): (String,) = sqlx::query_as("SELECT state FROM acquisition_session WHERE id = ?")
+        .bind(&session_id)
+        .fetch_one(db.pool())
+        .await
+        .expect("session row must still exist");
+    assert_eq!(state, "discovered", "state must be unchanged after a refused transition");
 }
 
 // ── 4. sessions stub: merge and split return not-implemented errors ───────────

@@ -1460,6 +1460,25 @@ export async function revealManifestInOs(request: ManifestRevealRequest): Promis
   unwrap(await commands.manifestRevealInOs(request));
 }
 
+/**
+ * `native.reveal` — reveal a path in the OS file browser (spec 004).
+ * Backs the Sessions/Inventory row "Reveal in OS" action (spec 006 FR-007).
+ * Tags the audit correlation as an `inventory_row`.
+ */
+export async function revealInventoryPath(args: {
+  path: string;
+  sessionId?: string;
+}): Promise<void> {
+  unwrap(
+    await commands.nativeReveal({
+      requestId: crypto.randomUUID(),
+      path: args.path,
+      entityKind: 'inventory_row',
+      entityId: args.sessionId ?? null,
+    }),
+  );
+}
+
 // Re-export manifest types for callers.
 export type {
   ManifestListRequest,

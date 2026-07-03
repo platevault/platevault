@@ -33,7 +33,8 @@ pub enum InventorySessionState {
 
 /// Frame type for an inventory session.
 /// `DarkFlat` is reserved but never returned in v1.
-/// `Mixed` is a server-derived sentinel for post-promotion regressions.
+/// (`Mixed` removed 2026-07-03: Inbox single-type ingest — spec 041 — splits
+/// mixed folders into single-type items at ingest, so a session is never mixed.)
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum InventoryFrameType {
@@ -41,7 +42,6 @@ pub enum InventoryFrameType {
     Dark,
     Flat,
     Bias,
-    Mixed,
 }
 
 // ── SourceKind / SourceState ─────────────────────────────────────────────────

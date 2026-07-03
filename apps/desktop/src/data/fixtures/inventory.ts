@@ -16,7 +16,9 @@ export type SessionState =
   | 'rejected'
   | 'ignored';
 
-export type FrameType = 'light' | 'dark' | 'flat' | 'bias' | 'mixed';
+// `mixed` removed 2026-07-03 (spec 006 iteration): Inbox single-type ingest
+// (spec 041) splits mixed folders at ingest, so an inventory item is never mixed.
+export type FrameType = 'light' | 'dark' | 'flat' | 'bias';
 export type SourceKind = 'local_disk' | 'external_disk' | 'removable' | 'network_share';
 export type SourceState = 'active' | 'missing' | 'disabled' | 'reconnect_required';
 

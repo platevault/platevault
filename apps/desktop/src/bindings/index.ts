@@ -3168,9 +3168,10 @@ export type IngestionSettings = {
 /**
  *  Frame type for an inventory session.
  *  `DarkFlat` is reserved but never returned in v1.
- *  `Mixed` is a server-derived sentinel for post-promotion regressions.
+ *  (`Mixed` removed 2026-07-03: Inbox single-type ingest — spec 041 — splits
+ *  mixed folders into single-type items at ingest, so a session is never mixed.)
  */
-export type InventoryFrameType = "light" | "dark" | "flat" | "bias" | "mixed";
+export type InventoryFrameType = "light" | "dark" | "flat" | "bias";
 
 /**  Outbound references shown in the drawer's "Linked" section. */
 export type InventoryLinkedRefs = InventoryLinkedRefs_Serialize | InventoryLinkedRefs_Deserialize;

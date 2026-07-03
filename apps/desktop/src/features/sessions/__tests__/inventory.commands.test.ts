@@ -129,7 +129,7 @@ describe('Inventory fixture data', () => {
   });
 
   it('session frame type values are all valid', () => {
-    const validTypes = ['light', 'dark', 'flat', 'bias', 'mixed'];
+    const validTypes = ['light', 'dark', 'flat', 'bias'];
     for (const src of INVENTORY_SOURCES) {
       for (const session of src.sessions) {
         expect(validTypes).toContain(session.type);
@@ -208,11 +208,9 @@ describe('inventory.session.review response contract (T303, T304, T305)', () => 
     expect(resp.error?.code).toBe('transition.refused');
   });
 
-  it('T308: session.mixed_state error has correct code', () => {
-    const resp = makeReviewResponse({ status: 'error', code: 'session.mixed_state' });
-    expect(resp.status).toBe('error');
-    expect(resp.error?.code).toBe('session.mixed_state');
-  });
+  // T308 removed 2026-07-03: the inventory `session.mixed_state` guard was a
+  // phantom (documented, never implemented) and is obsolete after the spec 041
+  // Inbox single-type split. See spec 006 pending-iteration.md.
 });
 
 describe('Inventory filter logic (T101)', () => {
