@@ -43,8 +43,9 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { listTargets } from '@/api/commands';
-import type { TargetListItem } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { TargetListItem } from '@/bindings/index';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { m } from '@/lib/i18n';
@@ -241,7 +242,9 @@ export function TargetsPage() {
 
   const load = useCallback(() => {
     setListState({ status: 'loading' });
-    listTargets()
+    commands
+      .targetList()
+      .then(unwrap)
       .then((items) => setListState({ status: 'loaded', items }))
       .catch(() => setListState({ status: 'error', message: m.targets_page_error_load() }));
   }, []);

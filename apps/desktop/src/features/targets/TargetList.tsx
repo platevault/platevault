@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { TargetListItem } from '@/api/commands';
+import type { TargetListItem } from '@/bindings/index';
 import { ListSidebar } from '@/components';
 import { Pill, SegControl } from '@/ui';
 import { m } from '@/lib/i18n';

@@ -17,8 +17,12 @@ import { Dialog } from '@base-ui-components/react/dialog';
 import { m } from '@/lib/i18n';
 import { Btn, Pill } from '@/ui';
 import { TargetSearch } from '@/components';
-import { resolveTarget, TARGET_SEARCH_CONTRACT_VERSION } from '@/api/commands';
-import type { TargetSuggestion } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { TargetSuggestion } from '@/bindings/aliases';
+
+/** Contract version for the spec-035 `target.*` resolution commands. */
+const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
 
 export interface AddTargetDialogProps {
   open: boolean;
@@ -58,12 +62,12 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
     setResolving(true);
     setError(null);
     try {
-      const res = await resolveTarget({
+      const res = unwrap(await commands.targetResolve({
         contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
         requestId: crypto.randomUUID(),
         query: pending.primaryDesignation,
         override: null,
-      });
+      }));
       if (res.status === 'resolved' && res.target) {
         handleOpenChange(false);
         onAdded(res.target.targetId);

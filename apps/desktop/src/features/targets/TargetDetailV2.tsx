@@ -25,18 +25,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
-import {
-  getTargetDetail,
-  addTargetAlias,
-  removeTargetAlias,
-  setDisplayAlias,
-  clearDisplayAlias,
-  listTargetSessions,
-  listTargetProjects,
-  getTargetNote,
-  updateTargetNote,
-} from '@/api/commands';
-import type { TargetDetailV3, TargetOpError, TargetListItem } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { TargetDetailV3, TargetOpError } from '@/bindings/aliases';
+import type { TargetListItem } from '@/bindings/index';
 import type { TargetSessionItem, TargetProjectItem } from '@/bindings';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
@@ -373,9 +365,11 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
 
   const load = useCallback(() => {
     setLoadState({ status: 'loading' });
-    getTargetDetail({ targetId })
+    commands
+      .targetGet({ targetId })
+      .then(unwrap)
       .then((data) => {
-        setLoadState({ status: 'loaded', data });
+        setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
         setDisplayAliasInput(data.displayAlias ?? '');
       })
       .catch(() => {
@@ -390,7 +384,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   // US2: load linked sessions when targetId changes.
   useEffect(() => {
     setSessionsLoading(true);
-    listTargetSessions({ targetId })
+    commands
+      .targetSessionsList({ targetId })
+      .then(unwrap)
       .then((data) => setSessions(data))
       .catch(() => setSessions([]))
       .finally(() => setSessionsLoading(false));
@@ -399,7 +395,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   // US3: load linked projects when targetId changes.
   useEffect(() => {
     setProjectsLoading(true);
-    listTargetProjects({ targetId })
+    commands
+      .targetProjectsList({ targetId })
+      .then(unwrap)
       .then((data) => setProjects(data))
       .catch(() => setProjects([]))
       .finally(() => setProjectsLoading(false));
@@ -407,9 +405,11 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
 
   // US4: load observing notes when targetId changes.
   useEffect(() => {
-    getTargetNote({ targetId })
+    commands
+      .targetNoteGet({ targetId })
+      .then(unwrap)
       .then(({ notes: n }) => {
-        setNotes(n);
+        setNotes(n ?? null);
         setNotesDraft(n ?? '');
       })
       .catch(() => {
@@ -427,8 +427,8 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
     setNotesSaving(true);
     setNotesError(null);
     try {
-      const { notes: saved } = await updateTargetNote({ targetId, notes: notesDraft });
-      setNotes(saved);
+      const { notes: saved } = unwrap(await commands.targetNoteUpdate({ targetId, notes: notesDraft }));
+      setNotes(saved ?? null);
       setNotesDraft(saved ?? '');
       setNotesEditing(false);
       setNotesSaved(true);
@@ -448,7 +448,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
     }
     setAliasError(null);
     try {
-      await addTargetAlias({ targetId, alias });
+      unwrap(await commands.targetAliasAdd({ targetId, alias }));
       setAliasInput('');
       load();
     } catch (err) {
@@ -462,7 +462,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
     async (aliasId: string) => {
       setActionError(null);
       try {
-        await removeTargetAlias({ targetId, aliasId });
+        unwrap(await commands.targetAliasRemove({ targetId, aliasId }));
         load();
       } catch (err) {
         const e = err as TargetOpError;
@@ -476,8 +476,10 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   const handleDisplayAliasSet = useCallback(async () => {
     setActionError(null);
     try {
-      const data = await setDisplayAlias({ targetId, displayAlias: displayAliasInput.trim() });
-      setLoadState({ status: 'loaded', data });
+      const data = unwrap(
+        await commands.targetDisplayAliasSet({ targetId, displayAlias: displayAliasInput.trim() }),
+      );
+      setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
       setDisplayAliasInput(data.displayAlias ?? '');
       setDisplayAliasEditing(false);
     } catch (err) {
@@ -490,8 +492,8 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   const handleDisplayAliasClear = useCallback(async () => {
     setActionError(null);
     try {
-      const data = await clearDisplayAlias({ targetId });
-      setLoadState({ status: 'loaded', data });
+      const data = unwrap(await commands.targetDisplayAliasClear({ targetId }));
+      setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
       setDisplayAliasInput('');
       setDisplayAliasEditing(false);
     } catch (err) {
