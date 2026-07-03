@@ -1,9 +1,8 @@
 # Persistence Layer Hardening
 
-Status: infrastructure scaffolding landed (branch `persistence-layer-infra`).
-The actual query relocation is a **separate, later effort** that runs after
-spec 041 merges. This document seeds the future tinyspec and records the
-research behind the chosen mechanisms.
+Status: infrastructure scaffolding landed. The actual query relocation is a
+**separate, later effort**. This document seeds the future tinyspec and
+records the research behind the chosen mechanisms.
 
 This branch adds **scaffolding + a guard rail only**. It does NOT migrate any
 existing query, convert any query code, or touch domain-crate query sites.
@@ -27,13 +26,17 @@ occurrences, including test code):
 Production-only count, as measured by the ratchet (`scripts/check-db-boundary.sh`,
 which excludes `tests/` directories and inline `#[cfg(test)]` modules):
 
-- **198 production query sites** across **22 production files** (pre-spec-041 baseline).
+- **212 production query sites** across **23 production files** (baseline as
+  regenerated for this branch; see `scripts/db-boundary-baseline.txt` for the
+  authoritative per-file counts, which will keep moving as other work lands).
 
-> The raw audit count (~504) and the ratchet count (198) differ because the
-> ratchet deliberately scopes to *production* code only — it excludes integration
-> tests under `*/tests/**` and the inline `#[cfg(test)] mod tests` blocks that
-> live at the bottom of many production source files. The ratchet count is the
-> meaningful enforcement number.
+> The raw audit count (~504, taken when this scaffolding was first drafted) and
+> the ratchet count differ because the ratchet deliberately scopes to
+> *production* code only — it excludes integration tests under `*/tests/**` and
+> the inline `#[cfg(test)] mod tests` blocks that live at the bottom of many
+> production source files. The ratchet count is the meaningful enforcement
+> number, and `scripts/db-boundary-baseline.txt` (not this doc) is the source of
+> truth for current per-file counts.
 
 ### Top offenders (production sites, from `scripts/db-boundary-baseline.txt`)
 
@@ -43,21 +46,23 @@ which excludes `tests/` directories and inline `#[cfg(test)]` modules):
 | 28 | `crates/app/targets/src/ingest_sessions.rs` |
 | 16 | `crates/app/targets/src/ingest_resolution.rs` |
 | 16 | `crates/app/calibration/src/matching.rs` |
+| 14 | `crates/app/targets/src/target_management.rs` |
 | 12 | `crates/app/core/src/sessions.rs` |
 | 12 | `crates/app/core/src/search.rs` |
 | 10 | `crates/app/core/src/log_stream.rs` |
 | 10 | `apps/desktop/src-tauri/src/commands/status.rs` |
 |  8 | `apps/desktop/src-tauri/src/commands/inbox.rs` |
-|  7 | `crates/audit/src/bus.rs` |
 
-(Full per-file list lives in `scripts/db-boundary-baseline.txt`.)
+(Full per-file list lives in `scripts/db-boundary-baseline.txt`; treat that file,
+not this table, as authoritative — it will drift as unrelated work lands.)
 
 ### Stack
 
 - **sqlx 0.9** (sqlite, `runtime-tokio`, `tls-rustls`, `macros`, `migrate`,
   `uuid`, `time`, `json`) — async, ratified in spec 002.
 - Canonical store: SQLite. Migrations in `crates/persistence/db/migrations/`,
-  applied via `sqlx::migrate!("./migrations")`. Latest migration today: `0047`.
+  applied via `sqlx::migrate!("./migrations")`. Latest migration as of this
+  branch: `0049`.
 
 ---
 
@@ -120,7 +125,8 @@ bash scripts/check-db-boundary.sh --list     # print current per-file counts
 just db-boundary                             # = the CI check
 ```
 
-Current state: **green** at 22 files / 198 sites.
+Current state: **green** at 23 files / 212 sites (see
+`scripts/db-boundary-baseline.txt` for the live numbers).
 
 ### clippy.toml (secondary signal)
 
@@ -135,10 +141,14 @@ legitimate sites while letting a developer surface the signal on demand:
 cargo clippy -- -W clippy::disallowed_methods
 ```
 
-### CI wiring
+### CI wiring — NOT YET DONE
 
-Add a `db-boundary` step to `.github/workflows/ci.yml`, alongside the existing
-fast checks (e.g. right after `cargo fmt --all --check`):
+`just db-boundary` runs locally today but is **not** wired into any GitHub
+Actions workflow yet. This branch intentionally leaves `.github/workflows/*`
+untouched (a separate concern from landing the scaffolding — see the PR that
+introduced this doc for the reason). To wire it in later, add a step to the
+relevant workflow alongside the existing fast checks (e.g. right after
+`cargo fmt --all --check`):
 
 ```yaml
       - name: DB boundary ratchet
@@ -151,18 +161,19 @@ ubuntu/macos runners; the Windows runner has Git Bash — if Windows portability
 is a concern, restrict the step to `if: runner.os != 'Windows'` since the
 ratchet only needs to run once).
 
-### Regeneration after spec 041
+### Regenerating the baseline
 
-Spec 041 is actively rewriting the inbox/sessions/confirm/classify code on
-another branch. That changes the query counts in several baseline files. **After
-041 merges**, regenerate the baseline:
+Any refactor that materially shuffles query sites outside `persistence/db`
+(renames, file splits, moving code between crates) changes the per-file counts.
+Regenerate and review the diff before committing:
 
 ```bash
 bash scripts/check-db-boundary.sh --generate
 ```
 
-and commit the updated `scripts/db-boundary-baseline.txt`. Until then the
-baseline reflects pre-041 `main`.
+`scripts/db-boundary-baseline.txt` is the source of truth for current counts;
+this document's tables are illustrative snapshots only and are expected to
+drift.
 
 ---
 
@@ -286,17 +297,18 @@ time. To avoid requiring a live DB during normal/CI builds, sqlx supports an
    Add this to the workspace build/test jobs once `query!` macros are actually
    in use. (No effect today, since no macro queries exist yet.)
 
-### 5.3 Finalize after spec 041's migration 0048
+### 5.3 Sequencing the relocation effort
 
-The cache encodes the schema. **Cache generation must run after spec 041's
-migration `0048` lands** so the schema is final; a cache generated against a
-pre-041 schema would be stale. Sequence for the migration effort:
+The offline cache encodes the schema, so it must be regenerated whenever
+migrations change — run `just sqlx-prepare` against the latest migrated schema,
+not a stale one. Sequence for the migration effort:
 
-1. Land spec 041 (adds migration 0048).
-2. Regenerate the boundary baseline (`§3`).
-3. Begin relocating queries into `persistence/db`, converting static ones to
+1. Regenerate the boundary baseline (`§3`) against the current `main`/base
+   branch immediately before starting relocation work.
+2. Begin relocating queries into `persistence/db`, converting static ones to
    `query!`/`query_as!` macros.
-4. `just sqlx-prepare`, commit `.sqlx/`, enable `SQLX_OFFLINE=true` in CI.
+3. `just sqlx-prepare`, commit `.sqlx/`, enable `SQLX_OFFLINE=true` in CI once
+   the workflow step from §3 exists.
 
 ---
 
