@@ -377,28 +377,31 @@
   color: var(--alm-text-muted);
 }
 
-/* === WIZARD STEP SOURCES === */
+/* === SHARED SESSION SOURCE PICKER ===
+ * Used by the project-creation wizard's StepSources AND EditProjectPane's
+ * post-creation "add sources" flow (WP-008-C) — one component, one class set.
+ */
 
 /* Loading state */
-.alm-wizard-sources__loading {
+.alm-source-picker__loading {
   color: var(--alm-text-muted);
 }
 
 /* Root flex column */
-.alm-wizard-sources {
+.alm-source-picker {
   display: flex;
   flex-direction: column;
   gap: var(--alm-sp-4);
 }
 
 /* Filter row */
-.alm-wizard-sources__filter-row {
+.alm-source-picker__filter-row {
   display: flex;
   gap: var(--alm-sp-2);
 }
 
 /* Filter inputs */
-.alm-wizard-sources__filter-input {
+.alm-source-picker__filter-input {
   padding: var(--alm-sp-1) var(--alm-sp-2);
   border: 1px solid var(--alm-border);
   border-radius: 4px;
@@ -408,17 +411,17 @@
   transition: border-color var(--alm-transition-fast);
 }
 
-.alm-wizard-sources__filter-input:focus {
+.alm-source-picker__filter-input:focus {
   outline: none;
   border-color: var(--alm-accent);
 }
 
-.alm-wizard-sources__filter-input::placeholder {
+.alm-source-picker__filter-input::placeholder {
   color: var(--alm-text-faint);
 }
 
 /* Summary bar */
-.alm-wizard-sources__summary {
+.alm-source-picker__summary {
   display: flex;
   gap: var(--alm-sp-4);
   font-size: var(--alm-text-xs);
@@ -426,7 +429,7 @@
 }
 
 /* Session list container */
-.alm-wizard-sources__list {
+.alm-source-picker__list {
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -436,7 +439,7 @@
 }
 
 /* List header */
-.alm-wizard-sources__list-header {
+.alm-source-picker__list-header {
   display: grid;
   grid-template-columns: 32px 1fr 80px 80px 100px;
   padding: var(--alm-sp-2) var(--alm-sp-3);
@@ -448,7 +451,7 @@
 }
 
 /* Session row */
-.alm-wizard-sources__row {
+.alm-source-picker__row {
   display: grid;
   grid-template-columns: 32px 1fr 80px 80px 100px;
   padding: var(--alm-sp-2) var(--alm-sp-3);
@@ -459,19 +462,19 @@
 }
 
 /* Session row — selected */
-.alm-wizard-sources__row--selected {
+.alm-source-picker__row--selected {
   background: var(--alm-surface);
 }
 
 /* Train ID cell — mono + truncate */
-.alm-wizard-sources__train-id {
+.alm-source-picker__train-id {
 
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 /* Empty state */
-.alm-wizard-sources__empty {
+.alm-source-picker__empty {
   padding: var(--alm-sp-4);
   text-align: center;
   color: var(--alm-text-muted);

@@ -583,9 +583,10 @@ pub async fn update(
 /// - Source not already linked (`source.already.linked`).
 /// - Lifecycle not archived.
 ///
-/// Note: `source.not_confirmed` check against the Inventory table is deferred
-/// to spec 003 integration (the Inventory table does not exist yet). When spec
-/// 003 lands, this function should verify `acquisition_sessions.state == "confirmed"`.
+/// Note (D9, 2026-07-03): the old spec-002 `source.not_confirmed` gate against
+/// `acquisition_sessions.state` is descoped. Post spec-041, sessions are
+/// derived, already-confirmed inventory (there is no unconfirmed state left to
+/// gate on), so no confirmation check runs here.
 ///
 /// Recomputes channel inference and merges with existing manual channels.
 /// Sets `channel_drift = true` when channels were manually overridden before.
@@ -627,9 +628,9 @@ pub async fn add_source(
         .with_details(serde_json::json!({ "existingLinkAt": dupe.linked_at })));
     }
 
-    // NOTE: spec 003 Inventory integration pending.
-    // TODO: when spec 003 lands, query `acquisition_sessions` WHERE id = req.inventory_session_id
-    // and verify `state == "confirmed"`. Return `source.not_confirmed` otherwise.
+    // D9 (2026-07-03): no confirmation gate here — sessions are derived,
+    // already-confirmed inventory post spec-041, so there is no
+    // `source.not_confirmed` state to check.
 
     let now = Timestamp::now_iso();
     let src_id = new_id();
