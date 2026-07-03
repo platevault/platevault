@@ -172,6 +172,46 @@ describe('alm/no-user-string', () => {
     expect(run("const a = n === 1 ? 'item' : 'items';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
   });
 
+  it('alm/no-js-plural flags suffix template-literal ternaries and short-circuit suffixes', () => {
+    const linter = new Linter();
+    const run = (code: string) =>
+      linter.verify(code, {
+        plugins: { alm: plugin },
+        languageOptions: { parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } },
+        rules: { 'alm/no-js-plural': 'error' },
+      });
+    // template-literal suffix/empty branches (no interpolation) → flagged
+    expect(run('const a = n === 1 ? `` : `s`;').filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    // short-circuit suffix → flagged
+    expect(run("const a = `${n}${n !== 1 && 's'}`;").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    // non-suffix logical-AND → NOT flagged
+    expect(run("const a = ok && 'Save';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
+  });
+
+  it('alm/no-js-plural flags a ternary picking between paired m.*_plural()/m.*_singular() catalog calls', () => {
+    const linter = new Linter();
+    const run = (code: string) =>
+      linter.verify(code, {
+        plugins: { alm: plugin },
+        languageOptions: { parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } },
+        rules: { 'alm/no-js-plural': 'error' },
+      });
+    const out = run("const a = n !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular();");
+    const hits = out.filter((m) => m.ruleId === 'alm/no-js-plural');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('jsPluralPairedCall');
+    // reversed branch order → still flagged
+    expect(
+      run("const b = n === 1 ? m.inbox_list_file_singular() : m.inbox_list_file_plural();").filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(1);
+    // ternary between two unrelated catalog calls → NOT flagged
+    expect(
+      run("const c = ok ? m.common_save() : m.common_cancel();").filter((m) => m.ruleId === 'alm/no-js-plural'),
+    ).toHaveLength(0);
+  });
+
   it('ignores pure-interpolation / machine template literals (no letters)', () => {
     const out = lint(`
       function P({ a, b, id }) {

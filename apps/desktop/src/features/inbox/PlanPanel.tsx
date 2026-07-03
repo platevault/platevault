@@ -752,7 +752,7 @@ export function PlanPanel({
                       : m.inbox_plan_file_count_tooltip_inplace({ count: plan.actions.length })
                   }
                 >
-                  {plan.actions.length}{' '}{plan.actions.length !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular()}
+                  {m.inbox_list_file_count({ count: plan.actions.length })}
                 </span>
 
                 {/* Col 6: stale badge + per-group apply (live progress) + discard */}

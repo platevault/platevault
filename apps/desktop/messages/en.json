@@ -1330,8 +1330,21 @@
   "calibration_filter_all_kinds": "All kinds",
   "inbox_prop_classification": "Classification",
   "inbox_lane_video": "video",
-  "inbox_list_file_plural": "files",
-  "inbox_list_file_singular": "file",
+  "inbox_list_file_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} file",
+        "countPlural=other": "{count} files"
+      }
+    }
+  ],
   "inbox_list_root_label": "(root)",
   "inbox_dest_root_label": "Library:",
   "inbox_dest_root_aria": "Destination library",

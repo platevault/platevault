@@ -549,9 +549,15 @@ const rule = {
   },
 };
 
-// alm/no-js-plural (spec 046 task #7). Flags JS-side pluralization — a ternary
-// whose branches are a lone plural suffix and empty string, e.g.
-// `count !== 1 ? 's' : ''` (inline) or `{ suffix: n === 1 ? '' : 's' }` (param).
+// alm/no-js-plural (spec 046 task #7). Flags JS-side pluralization:
+//   - a ternary whose branches are a lone plural suffix and empty string, e.g.
+//     `count !== 1 ? 's' : ''` (inline) or `{ suffix: n === 1 ? '' : 's' }` (param)
+//   - the same suffix-or-empty shape written as a template literal, e.g.
+//     `` n === 1 ? `` : `s` ``
+//   - a short-circuit suffix, e.g. `count !== 1 && 's'`
+//   - a ternary/if that picks between a `m.*_plural()` and `m.*_singular()`
+//     catalog call based on a JS condition instead of a single count-selected
+//     variant message
 // This bakes English plural rules into code; the message catalog can't localize
 // them. Use an inlang plural VARIANT message instead
 // (declarations/selectors/match → Intl.PluralRules), called m.<key>({ count }).
@@ -561,33 +567,110 @@ const noJsPlural = {
     type: "problem",
     docs: {
       description:
-        "Disallow JS-side pluralization (lone suffix ternaries); use an inlang plural variant message.",
+        "Disallow JS-side pluralization (lone suffix ternaries, suffix short-circuits, paired plural/singular catalog calls); use an inlang plural variant message.",
     },
     schema: [],
     messages: {
       jsPlural:
         "JS-side pluralization {{text}} bakes English plural rules into code. Use an inlang plural variant message (declarations/selectors/match) called as m.<key>({ count }). If genuinely not a plural, add `// eslint-disable-next-line alm/no-js-plural -- <reason>`.",
+      jsPluralPairedCall:
+        "Picking between {{text}} with a JS condition bakes English plural rules into code. Merge them into a single inlang plural variant message (declarations/selectors/match) called as m.<key>({ count }). If genuinely not a plural, add `// eslint-disable-next-line alm/no-js-plural -- <reason>`.",
     },
   },
   create(context) {
     const PLURAL = new Set(["s", "es", "ies"]);
+
+    /** String value of a Literal, or of a TemplateLiteral with no interpolation. */
+    function staticStringValue(node) {
+      if (node.type === "Literal" && typeof node.value === "string") {
+        return node.value;
+      }
+      if (
+        node.type === "TemplateLiteral" &&
+        node.expressions.length === 0 &&
+        node.quasis.length === 1
+      ) {
+        return node.quasis[0].value.cooked;
+      }
+      return undefined;
+    }
+
+    function isSuffixOrEmpty(node) {
+      const v = staticStringValue(node);
+      return v === "" || (v !== undefined && PLURAL.has(v));
+    }
+
+    function isPluralSuffix(node) {
+      const v = staticStringValue(node);
+      return v !== undefined && PLURAL.has(v);
+    }
+
+    /** `m.someKey(...)` call → the message key, else undefined. */
+    function catalogCallKey(node) {
+      if (
+        node.type === "CallExpression" &&
+        node.callee.type === "MemberExpression" &&
+        !node.callee.computed &&
+        node.callee.object.type === "Identifier" &&
+        node.callee.object.name === "m" &&
+        node.callee.property.type === "Identifier"
+      ) {
+        return node.callee.property.name;
+      }
+      return undefined;
+    }
+
+    function reportSuffixTernary(node, branches) {
+      const vals = branches.map((b) => staticStringValue(b) ?? "");
+      context.report({
+        node,
+        messageId: "jsPlural",
+        data: { text: `\`${vals.map((v) => v || "∅").join("/")}\`` },
+      });
+    }
+
     return {
       ConditionalExpression(node) {
         const branches = [node.consequent, node.alternate];
+
+        // Case 1: lone plural-suffix-or-empty ternary (Literal or plain
+        // TemplateLiteral), e.g. `n !== 1 ? 's' : ''`.
         if (
-          !branches.every(
-            (b) => b.type === "Literal" && typeof b.value === "string",
-          )
+          branches.every(isSuffixOrEmpty) &&
+          branches.some(isPluralSuffix)
         ) {
+          reportSuffixTernary(node, branches);
           return;
         }
-        const vals = branches.map((b) => b.value);
-        const isSuffixOrEmpty = (v) => v === "" || PLURAL.has(v);
-        if (vals.every(isSuffixOrEmpty) && vals.some((v) => PLURAL.has(v))) {
+
+        // Case 2: paired `m.*_plural()` / `m.*_singular()` catalog calls
+        // chosen via a JS condition instead of one variant message.
+        const keys = branches.map(catalogCallKey);
+        if (keys.every((k) => k !== undefined)) {
+          const isPluralKey = (k) => /(^|_)plural$/i.test(k);
+          const isSingularKey = (k) => /(^|_)singular$/i.test(k);
+          const [keyA, keyB] = keys;
+          if (
+            (isPluralKey(keyA) && isSingularKey(keyB)) ||
+            (isSingularKey(keyA) && isPluralKey(keyB))
+          ) {
+            context.report({
+              node,
+              messageId: "jsPluralPairedCall",
+              data: { text: `\`m.${keyA}()\` / \`m.${keyB}()\`` },
+            });
+          }
+        }
+      },
+
+      // Short-circuit suffix, e.g. `count !== 1 && 's'`.
+      LogicalExpression(node) {
+        if (node.operator !== "&&") return;
+        if (isPluralSuffix(node.right)) {
           context.report({
             node,
             messageId: "jsPlural",
-            data: { text: `\`${vals.map((v) => v || "∅").join("/")}\`` },
+            data: { text: `\`${staticStringValue(node.right)}\`` },
           });
         }
       },

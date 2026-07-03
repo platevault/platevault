@@ -348,7 +348,7 @@ export function InboxList({
               {classificationLabel(item)}
             </span>
           ),
-          count: `${item.fileCount} ${item.fileCount !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular()}`,
+          count: m.inbox_list_file_count({ count: item.fileCount }),
           format: item.isMaster
             ? `${item.masterFrameType ?? 'master'} master`
             : formatTag(item),
