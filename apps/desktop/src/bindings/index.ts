@@ -1101,6 +1101,20 @@ export const commands = {
 	 */
 	inboxReclassify: (req: InboxReclassifyRequest_Deserialize) => typedError<InboxReclassifyResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_reclassify", { req })),
 	/**
+	 *  `inbox.reclassify` v2 — field-agnostic property-map + bulk reclassify,
+	 *  scoped to a source group (spec 041 T068/T072 / FR-044/FR-045/FR-049).
+	 * 
+	 *  Unlike [`inbox_reclassify`] (fixed `frame_type`/`filter`/`exposure_s`/`binning`,
+	 *  single item), this accepts an open property map validated against
+	 *  `inbox.property_registry`, plus bulk "set all" entries, and re-splits the
+	 *  source group's files into re-materialized single-type sub-items.
+	 * 
+	 *  # Errors
+	 *  `inbox.item.not_found` | `inbox.has.open.plan` | `file.not_found` |
+	 *  `inbox.reclassify.unknown_property` | `inbox.reclassify.non_overridable_property`
+	 */
+	inboxReclassifyV2: (req: InboxReclassifyV2Request_Deserialize) => typedError<InboxReclassifyV2Response_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_reclassify_v2", { req })),
+	/**
 	 *  `inbox.item.metadata` — assemble per-file extracted metadata for an inbox
 	 *  item (spec 041 US2/FR-010).
 	 * 
@@ -1200,6 +1214,37 @@ export const commands = {
 	 *  Returns a string error only if the underlying list/plan queries fail.
 	 */
 	inboxPlanListOpen: () => typedError<InboxOpenPlansResponse, string>(__TAURI_INVOKE("inbox_plan_list_open")),
+	/**
+	 *  `inbox.property_registry` — return the typed property registry.
+	 * 
+	 *  The registry lists every per-file property that the field-agnostic
+	 *  reclassifier (spec 041 R-13) understands: its key, value kind, physical
+	 *  unit, source FITS/XISF header(s), whether it is user-overridable, the frame
+	 *  types it applies to, and an optional validation hint.
+	 * 
+	 *  The UI uses this registry to render a generic metadata editor without
+	 *  hard-coding field names, so future properties can be added without frontend
+	 *  changes (FR-044).
+	 * 
+	 *  # Errors
+	 *  Never fails; always returns `Ok`.
+	 */
+	inboxPropertyRegistry: () => typedError<PropertyRegistryEntry_Serialize[], string>(__TAURI_INVOKE("inbox_property_registry")),
+	/**
+	 *  `inbox.target_recommendations` — recommend canonical targets for a light
+	 *  sub-group by sky-coordinate proximity (spec 041 R-17 / FR-052).
+	 * 
+	 *  Ranks catalog targets by great-circle separation from the sub-group's
+	 *  pointing within a FOV-aware (or configurable fixed) radius. The `OBJECT`
+	 *  header is returned only as a display hint, never used for matching. The
+	 *  chosen target is written separately via `inbox.reclassify` (T068).
+	 * 
+	 *  Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
+	 * 
+	 *  # Errors
+	 *  `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
+	 */
+	inboxTargetRecommendations: (req: InboxTargetRecommendationsRequest_Deserialize) => typedError<InboxTargetRecommendationsResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_target_recommendations", { req })),
 	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
@@ -2549,8 +2594,6 @@ export type InboxConfirmRequest = InboxConfirmRequest_Serialize | InboxConfirmRe
 /**  Request for `inbox.confirm`. */
 export type InboxConfirmRequest_Deserialize = {
 	inboxItemId: string,
-	/**  `"split"` for mixed items; `"confirm"` for `single_type` items. */
-	action: string,
 	contentSignature: string,
 	destructiveDestination: string | null,
 	/**
@@ -2574,8 +2617,6 @@ export type InboxConfirmRequest_Deserialize = {
 /**  Request for `inbox.confirm`. */
 export type InboxConfirmRequest_Serialize = {
 	inboxItemId: string,
-	/**  `"split"` for mixed items; `"confirm"` for `single_type` items. */
-	action: string,
 	contentSignature: string,
 	destructiveDestination?: string | null,
 	/**
@@ -2723,6 +2764,33 @@ export type InboxFileMetadata_Deserialize = {
 	 *  DATE-OBS). Supplying the value via reclassify clears the gate.
 	 */
 	missingPathAttributes?: string[],
+	/**
+	 *  Registry key names of mandatory attributes that are absent for this file
+	 *  (spec 041 T070 / FR-047 / R-14). Empty when all mandatory attributes are
+	 *  present. The union of mandatory grouping properties and hard per-type keys
+	 *  (e.g. `["target"]` for a light with no OBJECT and no resolved target).
+	 *  Non-empty means this file's sub-item is in the needs-review bucket and
+	 *  blocks plan creation until the value is supplied via reclassify.
+	 */
+	missingMandatory?: string[],
+	/**  Camera read-out offset / pedestal (`OFFSET` / `BLKLEVEL`). ADU. */
+	offset: number | null,
+	/**  Sensor set/target temperature (`SET-TEMP`). Degrees Celsius. */
+	setTempC: number | null,
+	/**  Sensor actual temperature (`CCD-TEMP` / `DET-TEMP`). Degrees Celsius. */
+	ccdTempC: number | null,
+	/**  Right ascension, decimal degrees (`RA` / `OBJCTRA`). */
+	raDeg: number | null,
+	/**  Declination, decimal degrees (`DEC` / `OBJCTDEC`). */
+	decDeg: number | null,
+	/**  Mechanical rotator angle, degrees (`ROTATANG` / `ROTATOR`). */
+	rotatorAngleDeg: number | null,
+	/**  Sensor readout mode (`READOUTM`). */
+	readoutMode: string | null,
+	/**  Focal length, millimetres (`FOCALLEN`). */
+	focalLengthMm: number | null,
+	/**  Local civil observation date (`DATE-LOC`). */
+	dateLoc: string | null,
 };
 
 /**
@@ -2767,6 +2835,33 @@ export type InboxFileMetadata_Serialize = {
 	 *  DATE-OBS). Supplying the value via reclassify clears the gate.
 	 */
 	missingPathAttributes?: string[],
+	/**
+	 *  Registry key names of mandatory attributes that are absent for this file
+	 *  (spec 041 T070 / FR-047 / R-14). Empty when all mandatory attributes are
+	 *  present. The union of mandatory grouping properties and hard per-type keys
+	 *  (e.g. `["target"]` for a light with no OBJECT and no resolved target).
+	 *  Non-empty means this file's sub-item is in the needs-review bucket and
+	 *  blocks plan creation until the value is supplied via reclassify.
+	 */
+	missingMandatory?: string[],
+	/**  Camera read-out offset / pedestal (`OFFSET` / `BLKLEVEL`). ADU. */
+	offset?: number | null,
+	/**  Sensor set/target temperature (`SET-TEMP`). Degrees Celsius. */
+	setTempC?: number | null,
+	/**  Sensor actual temperature (`CCD-TEMP` / `DET-TEMP`). Degrees Celsius. */
+	ccdTempC?: number | null,
+	/**  Right ascension, decimal degrees (`RA` / `OBJCTRA`). */
+	raDeg?: number | null,
+	/**  Declination, decimal degrees (`DEC` / `OBJCTDEC`). */
+	decDeg?: number | null,
+	/**  Mechanical rotator angle, degrees (`ROTATANG` / `ROTATOR`). */
+	rotatorAngleDeg?: number | null,
+	/**  Sensor readout mode (`READOUTM`). */
+	readoutMode?: string | null,
+	/**  Focal length, millimetres (`FOCALLEN`). */
+	focalLengthMm?: number | null,
+	/**  Local civil observation date (`DATE-LOC`). */
+	dateLoc?: string | null,
 };
 
 /**  Request for `inbox.item.metadata`. */
@@ -2917,6 +3012,43 @@ export type InboxListItem_Deserialize = {
 	groupExposure: string | null,
 	/**  Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree. */
 	groupInstrument: string | null,
+	/**
+	 *  Per-item rollup of missing mandatory attribute keys (spec 041 T070 /
+	 *  FR-047 / R-14). Non-empty when this item is in the needs-review bucket
+	 *  because one or more files are missing a mandatory attribute. The set is
+	 *  the union of all per-file missing-mandatory lists across the item's files.
+	 *  Empty for fully-resolved items. Blocks plan creation (FR-048/SC-015).
+	 */
+	missingMandatory?: string[],
+	/**
+	 *  The item's own identity, restated as its "group" id for symmetry with
+	 *  `group_key`/`group_label`. Equals `inbox_item_id`.
+	 */
+	groupId: string,
+	/**
+	 *  Deterministic canonical group key (R-11). Empty string for legacy
+	 *  pre-Phase-12 rows that have not yet been materialized into a
+	 *  single-type sub-item (e.g. the original leaf-folder row).
+	 */
+	groupKey: string,
+	/**
+	 *  Human-readable label `"(root) · <type> · <dims>"` (R-12). `None` until
+	 *  classified.
+	 */
+	groupLabel: string | null,
+	/**
+	 *  Id of the `inbox_source_groups` row (leaf folder) this sub-item was
+	 *  materialized from (FR-043 provenance). `None` for legacy rows that
+	 *  predate source groups.
+	 */
+	sourceGroupId: string | null,
+	/**
+	 *  Authoritative frame type, singular — items are single-type post
+	 *  materialization (T066), so this is a real value rather than the
+	 *  aggregate-with-"Mixed"-fallback `group_frame_type` above. `None`
+	 *  until classified.
+	 */
+	frameType: string | null,
 };
 
 /**
@@ -2969,6 +3101,43 @@ export type InboxListItem_Serialize = {
 	groupExposure?: string | null,
 	/**  Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree. */
 	groupInstrument?: string | null,
+	/**
+	 *  Per-item rollup of missing mandatory attribute keys (spec 041 T070 /
+	 *  FR-047 / R-14). Non-empty when this item is in the needs-review bucket
+	 *  because one or more files are missing a mandatory attribute. The set is
+	 *  the union of all per-file missing-mandatory lists across the item's files.
+	 *  Empty for fully-resolved items. Blocks plan creation (FR-048/SC-015).
+	 */
+	missingMandatory?: string[],
+	/**
+	 *  The item's own identity, restated as its "group" id for symmetry with
+	 *  `group_key`/`group_label`. Equals `inbox_item_id`.
+	 */
+	groupId: string,
+	/**
+	 *  Deterministic canonical group key (R-11). Empty string for legacy
+	 *  pre-Phase-12 rows that have not yet been materialized into a
+	 *  single-type sub-item (e.g. the original leaf-folder row).
+	 */
+	groupKey: string,
+	/**
+	 *  Human-readable label `"(root) · <type> · <dims>"` (R-12). `None` until
+	 *  classified.
+	 */
+	groupLabel?: string | null,
+	/**
+	 *  Id of the `inbox_source_groups` row (leaf folder) this sub-item was
+	 *  materialized from (FR-043 provenance). `None` for legacy rows that
+	 *  predate source groups.
+	 */
+	sourceGroupId?: string | null,
+	/**
+	 *  Authoritative frame type, singular — items are single-type post
+	 *  materialization (T066), so this is a real value rather than the
+	 *  aggregate-with-"Mixed"-fallback `group_frame_type` above. `None`
+	 *  until classified.
+	 */
+	frameType?: string | null,
 };
 
 /**  Response from `inbox.list`. */
@@ -3065,6 +3234,81 @@ export type InboxPlanView = {
 	actions: InboxPlanAction[],
 };
 
+/**  The sky pointing a recommendation set was computed from (decimal degrees). */
+export type InboxPointing = {
+	/**  Right ascension, ICRS J2000 decimal degrees. */
+	raDeg: number | null,
+	/**  Declination, ICRS J2000 decimal degrees. */
+	decDeg: number | null,
+};
+
+/**
+ *  One bulk "set all" entry: apply one value to many files at once.
+ * 
+ *  `file_paths` is optional: when absent the value is applied to **all** files
+ *  in the source group (the "set all" affordance). When present only the listed
+ *  paths are updated.
+ */
+export type InboxReclassifyBulk = InboxReclassifyBulk_Serialize | InboxReclassifyBulk_Deserialize;
+
+/**
+ *  One bulk "set all" entry: apply one value to many files at once.
+ * 
+ *  `file_paths` is optional: when absent the value is applied to **all** files
+ *  in the source group (the "set all" affordance). When present only the listed
+ *  paths are updated.
+ */
+export type InboxReclassifyBulk_Deserialize = {
+	/**  Registry property key (camelCase) to set uniformly. */
+	property: string,
+	/**  Value to apply (JSON scalar; validated against registry `kind`). */
+	value: unknown,
+	/**
+	 *  Subset of file paths to apply to; `None` / absent = all files in the
+	 *  source group.
+	 */
+	filePaths?: string[] | null,
+};
+
+/**
+ *  One bulk "set all" entry: apply one value to many files at once.
+ * 
+ *  `file_paths` is optional: when absent the value is applied to **all** files
+ *  in the source group (the "set all" affordance). When present only the listed
+ *  paths are updated.
+ */
+export type InboxReclassifyBulk_Serialize = {
+	/**  Registry property key (camelCase) to set uniformly. */
+	property: string,
+	/**  Value to apply (JSON scalar; validated against registry `kind`). */
+	value: unknown,
+	/**
+	 *  Subset of file paths to apply to; `None` / absent = all files in the
+	 *  source group.
+	 */
+	filePaths?: string[] | null,
+};
+
+/**
+ *  One per-file property override entry in the field-agnostic reclassify request
+ *  (T068).
+ * 
+ *  `properties` is an open map of registry-validated property keys (camelCase,
+ *  as in `inbox.property_registry`) to their JSON values. Unknown or
+ *  non-overridable keys are rejected by the use case. Only MISSING / unreadable
+ *  header values may be filled; the frame-type correction (`frameType`) is the
+ *  one exception (it is always accepted regardless of header presence — R-13).
+ */
+export type InboxReclassifyFileOverride = {
+	/**  Relative file path within the source group (must match an evidence row). */
+	filePath: string,
+	/**
+	 *  Property map: `{ "exposureS": 300.0, "filter": "Ha", … }`. Values are
+	 *  JSON scalars; the use case validates them against the registry `kind`.
+	 */
+	properties: { [key in string]: unknown },
+};
+
 /**
  *  A single file override in a reclassify request.
  * 
@@ -3156,6 +3400,95 @@ export type InboxReclassifyResponse_Serialize = {
 	breakdown: InboxBreakdownEntry_Serialize[],
 };
 
+/**
+ *  Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
+ * 
+ *  Scope is the **source group** (R-13): a reclassify may re-partition files
+ *  across sub-items, so operating at sub-item scope is unsafe. Identify the
+ *  group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
+ *  owning source group from the item).
+ */
+export type InboxReclassifyV2Request = InboxReclassifyV2Request_Serialize | InboxReclassifyV2Request_Deserialize;
+
+/**
+ *  Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
+ * 
+ *  Scope is the **source group** (R-13): a reclassify may re-partition files
+ *  across sub-items, so operating at sub-item scope is unsafe. Identify the
+ *  group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
+ *  owning source group from the item).
+ */
+export type InboxReclassifyV2Request_Deserialize = {
+	/**  Identify the source group directly. */
+	sourceGroupId?: string | null,
+	/**  Alternatively, identify the group by one of its sub-item IDs. */
+	inboxItemId?: string | null,
+	/**
+	 *  Per-file property overrides. Each entry targets one file; multiple
+	 *  entries may target the same file (last-writer-wins per `property_key`).
+	 */
+	overrides?: InboxReclassifyFileOverride[],
+	/**  Bulk operations applied after per-file overrides. Processed in order. */
+	bulk?: InboxReclassifyBulk_Deserialize[],
+};
+
+/**
+ *  Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
+ * 
+ *  Scope is the **source group** (R-13): a reclassify may re-partition files
+ *  across sub-items, so operating at sub-item scope is unsafe. Identify the
+ *  group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
+ *  owning source group from the item).
+ */
+export type InboxReclassifyV2Request_Serialize = {
+	/**  Identify the source group directly. */
+	sourceGroupId?: string | null,
+	/**  Alternatively, identify the group by one of its sub-item IDs. */
+	inboxItemId?: string | null,
+	/**
+	 *  Per-file property overrides. Each entry targets one file; multiple
+	 *  entries may target the same file (last-writer-wins per `property_key`).
+	 */
+	overrides: InboxReclassifyFileOverride[],
+	/**  Bulk operations applied after per-file overrides. Processed in order. */
+	bulk?: InboxReclassifyBulk_Serialize[],
+};
+
+/**  Response from `inbox.reclassify` v2 — field-agnostic + bulk (T068). */
+export type InboxReclassifyV2Response = InboxReclassifyV2Response_Serialize | InboxReclassifyV2Response_Deserialize;
+
+/**  Response from `inbox.reclassify` v2 — field-agnostic + bulk (T068). */
+export type InboxReclassifyV2Response_Deserialize = {
+	/**  Source group that was operated on. */
+	sourceGroupId: string,
+	/**
+	 *  Re-materialized single-type sub-items after applying overrides +
+	 *  re-running classification + grouping (R-14 re-split loop).
+	 */
+	subItems: InboxSubItemSummary_Deserialize[],
+	/**
+	 *  Number of sub-items (or files) that still land in the needs-review
+	 *  sentinel bucket (= still have missing mandatory attributes).
+	 */
+	needsReviewCount: number,
+};
+
+/**  Response from `inbox.reclassify` v2 — field-agnostic + bulk (T068). */
+export type InboxReclassifyV2Response_Serialize = {
+	/**  Source group that was operated on. */
+	sourceGroupId: string,
+	/**
+	 *  Re-materialized single-type sub-items after applying overrides +
+	 *  re-running classification + grouping (R-14 re-split loop).
+	 */
+	subItems: InboxSubItemSummary_Serialize[],
+	/**
+	 *  Number of sub-items (or files) that still land in the needs-review
+	 *  sentinel bucket (= still have missing mandatory attributes).
+	 */
+	needsReviewCount: number,
+};
+
 /**  Request to scan a root directory and discover inbox items. */
 export type InboxScanFolderRequest = {
 	rootId: string,
@@ -3208,6 +3541,141 @@ export type InboxStatsTotals = {
 	folders: number,
 	masters: number,
 	images: number,
+};
+
+/**  Summary of one re-materialized sub-item returned after reclassify (T068). */
+export type InboxSubItemSummary = InboxSubItemSummary_Serialize | InboxSubItemSummary_Deserialize;
+
+/**  Summary of one re-materialized sub-item returned after reclassify (T068). */
+export type InboxSubItemSummary_Deserialize = {
+	/**
+	 *  The stable `inbox_items.id` for this sub-item (new UUID if it was
+	 *  just created, or the existing one if it matched the upsert key).
+	 */
+	inboxItemId: string,
+	/**  Deterministic canonical group key (R-11). */
+	groupKey: string,
+	/**  Human-readable label `"(root) · <type> · <dims>"`. */
+	groupLabel: string,
+	/**  Authoritative frame type; `None` for the needs-review sentinel bucket. */
+	frameType: string | null,
+	/**  Number of files belonging to this sub-item after re-split. */
+	fileCount: number,
+	/**
+	 *  Missing mandatory attributes across the sub-item's files (T070 gate).
+	 *  Empty when the sub-item can proceed to confirm.
+	 */
+	missingMandatory?: string[],
+};
+
+/**  Summary of one re-materialized sub-item returned after reclassify (T068). */
+export type InboxSubItemSummary_Serialize = {
+	/**
+	 *  The stable `inbox_items.id` for this sub-item (new UUID if it was
+	 *  just created, or the existing one if it matched the upsert key).
+	 */
+	inboxItemId: string,
+	/**  Deterministic canonical group key (R-11). */
+	groupKey: string,
+	/**  Human-readable label `"(root) · <type> · <dims>"`. */
+	groupLabel: string,
+	/**  Authoritative frame type; `None` for the needs-review sentinel bucket. */
+	frameType?: string | null,
+	/**  Number of files belonging to this sub-item after re-split. */
+	fileCount: number,
+	/**
+	 *  Missing mandatory attributes across the sub-item's files (T070 gate).
+	 *  Empty when the sub-item can proceed to confirm.
+	 */
+	missingMandatory?: string[],
+};
+
+/**  One ranked target candidate (R-17 coordinate nearest-neighbour). */
+export type InboxTargetCandidate = {
+	/**  Persisted `canonical_target.id` (UUID string). */
+	targetId: string,
+	/**  Effective display name (`display_alias ?? primary_designation`). */
+	name: string,
+	/**  Great-circle angular separation from the sub-group's pointing, in degrees. */
+	separationDeg: number | null,
+};
+
+/**
+ *  Request for `inbox.target_recommendations`.
+ * 
+ *  Identify a light sub-group by **either** its `inboxItemId` **or** its
+ *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+ *  one should be set; if both are present, `inboxItemId` takes precedence.
+ */
+export type InboxTargetRecommendationsRequest = InboxTargetRecommendationsRequest_Serialize | InboxTargetRecommendationsRequest_Deserialize;
+
+/**
+ *  Request for `inbox.target_recommendations`.
+ * 
+ *  Identify a light sub-group by **either** its `inboxItemId` **or** its
+ *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+ *  one should be set; if both are present, `inboxItemId` takes precedence.
+ */
+export type InboxTargetRecommendationsRequest_Deserialize = {
+	/**  The single-type inbox item (light sub-group) to resolve a target for. */
+	inboxItemId?: string | null,
+	/**  Alternatively, the originating source group (R-12 provenance). */
+	sourceGroupId?: string | null,
+};
+
+/**
+ *  Request for `inbox.target_recommendations`.
+ * 
+ *  Identify a light sub-group by **either** its `inboxItemId` **or** its
+ *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+ *  one should be set; if both are present, `inboxItemId` takes precedence.
+ */
+export type InboxTargetRecommendationsRequest_Serialize = {
+	/**  The single-type inbox item (light sub-group) to resolve a target for. */
+	inboxItemId?: string | null,
+	/**  Alternatively, the originating source group (R-12 provenance). */
+	sourceGroupId?: string | null,
+};
+
+/**
+ *  Response from `inbox.target_recommendations`.
+ * 
+ *  `candidates` is ranked ascending by angular separation within the configured
+ *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+ *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+ *  carries the raw `OBJECT` header for **display only** — never used for
+ *  matching/search (R-17).
+ */
+export type InboxTargetRecommendationsResponse = InboxTargetRecommendationsResponse_Serialize | InboxTargetRecommendationsResponse_Deserialize;
+
+/**
+ *  Response from `inbox.target_recommendations`.
+ * 
+ *  `candidates` is ranked ascending by angular separation within the configured
+ *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+ *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+ *  carries the raw `OBJECT` header for **display only** — never used for
+ *  matching/search (R-17).
+ */
+export type InboxTargetRecommendationsResponse_Deserialize = {
+	candidates: InboxTargetCandidate[],
+	pointing: InboxPointing | null,
+	objectHint: string | null,
+};
+
+/**
+ *  Response from `inbox.target_recommendations`.
+ * 
+ *  `candidates` is ranked ascending by angular separation within the configured
+ *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+ *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+ *  carries the raw `OBJECT` header for **display only** — never used for
+ *  matching/search (R-17).
+ */
+export type InboxTargetRecommendationsResponse_Serialize = {
+	candidates: InboxTargetCandidate[],
+	pointing?: InboxPointing | null,
+	objectHint?: string | null,
 };
 
 export type IngestionSettings = {
@@ -5089,6 +5557,144 @@ export type ProjectionTransitionRequest_Serialize = {
 	nextState: ProjectionState,
 	actionLabel?: string | null,
 	actor: TransitionActor,
+};
+
+/**
+ *  Discriminant for the value kind of a property in the property registry.
+ * 
+ *  Mirrors the `kind` column in the R-13 property table.  The UI uses this to
+ *  select the appropriate editor widget (number input, enum dropdown, etc.).
+ */
+export type PropertyKind = 
+/**  Free-form text (e.g. camera name, filter label). */
+"string" | 
+/**  IEEE-754 double (e.g. exposureS, raDeg). */
+"number" | 
+/**  Whole number (e.g. offset in ADU). */
+"integer" | 
+/**  Either a numeric or text representation (e.g. gain on some cameras). */
+"numberOrString" | 
+/**  One of a fixed set of string values (e.g. frameType). */
+"enum" | 
+/**  Calendar date (`YYYY-MM-DD`). */
+"date" | 
+/**  ISO-8601 date-time (e.g. obsTimeUtc, dateEnd). */
+"datetime";
+
+/**
+ *  One entry in the property registry exposed by `inbox.property_registry`.
+ * 
+ *  Describes a named inbox-file property that the field-agnostic reclassifier
+ *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
+ *  The UI uses this registry to render a generic metadata editor without
+ *  hard-coding field names.
+ * 
+ *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
+ *  during extraction; empty for derived or resolve-only properties.
+ * 
+ *  `overridable` — when `false` the property is informational or derived and
+ *  the reclassify endpoint will reject an explicit override for it.
+ * 
+ *  `appliesTo` — frame types for which this property is meaningful; the UI
+ *  SHOULD hide non-applicable properties rather than blocking on them.
+ * 
+ *  `validation` — optional human-readable constraint description shown in the
+ *  UI tooltip; not a machine-parseable expression (use for display only).
+ */
+export type PropertyRegistryEntry = PropertyRegistryEntry_Serialize | PropertyRegistryEntry_Deserialize;
+
+/**
+ *  One entry in the property registry exposed by `inbox.property_registry`.
+ * 
+ *  Describes a named inbox-file property that the field-agnostic reclassifier
+ *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
+ *  The UI uses this registry to render a generic metadata editor without
+ *  hard-coding field names.
+ * 
+ *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
+ *  during extraction; empty for derived or resolve-only properties.
+ * 
+ *  `overridable` — when `false` the property is informational or derived and
+ *  the reclassify endpoint will reject an explicit override for it.
+ * 
+ *  `appliesTo` — frame types for which this property is meaningful; the UI
+ *  SHOULD hide non-applicable properties rather than blocking on them.
+ * 
+ *  `validation` — optional human-readable constraint description shown in the
+ *  UI tooltip; not a machine-parseable expression (use for display only).
+ */
+export type PropertyRegistryEntry_Deserialize = {
+	/**  Registry key, camelCase (e.g. `"frameType"`, `"exposureS"`). */
+	key: string,
+	/**  Value kind discriminant used by the UI for widget selection. */
+	kind: PropertyKind,
+	/**
+	 *  Physical unit label for display (e.g. `"s"`, `"deg"`, `"ADU"`).  `None`
+	 *  when the property is dimensionless or a free-form string.
+	 */
+	unit: string | null,
+	/**
+	 *  FITS/XISF source header keyword(s), in priority order.  Empty for
+	 *  properties that are derived or resolved from external sources (e.g.
+	 *  `target`, `opticTrain`).
+	 */
+	sourceHeaders: string[],
+	/**  Whether a user override is accepted by the reclassify use case. */
+	overridable: boolean,
+	/**  Frame types for which this property is applicable. */
+	appliesTo: string[],
+	/**
+	 *  Human-readable validation constraint for display in the UI.  `None`
+	 *  means no documented constraint beyond the `kind` type.
+	 */
+	validation: string | null,
+};
+
+/**
+ *  One entry in the property registry exposed by `inbox.property_registry`.
+ * 
+ *  Describes a named inbox-file property that the field-agnostic reclassifier
+ *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
+ *  The UI uses this registry to render a generic metadata editor without
+ *  hard-coding field names.
+ * 
+ *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
+ *  during extraction; empty for derived or resolve-only properties.
+ * 
+ *  `overridable` — when `false` the property is informational or derived and
+ *  the reclassify endpoint will reject an explicit override for it.
+ * 
+ *  `appliesTo` — frame types for which this property is meaningful; the UI
+ *  SHOULD hide non-applicable properties rather than blocking on them.
+ * 
+ *  `validation` — optional human-readable constraint description shown in the
+ *  UI tooltip; not a machine-parseable expression (use for display only).
+ */
+export type PropertyRegistryEntry_Serialize = {
+	/**  Registry key, camelCase (e.g. `"frameType"`, `"exposureS"`). */
+	key: string,
+	/**  Value kind discriminant used by the UI for widget selection. */
+	kind: PropertyKind,
+	/**
+	 *  Physical unit label for display (e.g. `"s"`, `"deg"`, `"ADU"`).  `None`
+	 *  when the property is dimensionless or a free-form string.
+	 */
+	unit?: string | null,
+	/**
+	 *  FITS/XISF source header keyword(s), in priority order.  Empty for
+	 *  properties that are derived or resolved from external sources (e.g.
+	 *  `target`, `opticTrain`).
+	 */
+	sourceHeaders: string[],
+	/**  Whether a user override is accepted by the reclassify use case. */
+	overridable: boolean,
+	/**  Frame types for which this property is applicable. */
+	appliesTo: string[],
+	/**
+	 *  Human-readable validation constraint for display in the UI.  `None`
+	 *  means no documented constraint beyond the `kind` type.
+	 */
+	validation?: string | null,
 };
 
 /**

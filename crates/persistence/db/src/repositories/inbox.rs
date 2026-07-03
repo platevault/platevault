@@ -158,6 +158,16 @@ pub struct InboxFileMetadataRow {
     pub stack_count: Option<i64>,
     pub file_size_bytes: Option<i64>,
     pub file_mtime: Option<String>,
+    // ── T062 extended extraction (spec 041, migration 0049; wired T072) ─────
+    pub offset: Option<i64>,
+    pub set_temp_c: Option<f64>,
+    pub ccd_temp_c: Option<f64>,
+    pub ra_deg: Option<f64>,
+    pub dec_deg: Option<f64>,
+    pub rotator_angle_deg: Option<f64>,
+    pub readout_mode: Option<String>,
+    pub focal_length_mm: Option<f64>,
+    pub date_loc: Option<String>,
 }
 
 /// Data to upsert one `inbox_file_metadata` row (spec 041 US2).
@@ -183,6 +193,22 @@ pub struct UpsertFileMetadata<'a> {
     pub stack_count: Option<i64>,
     pub file_size_bytes: Option<i64>,
     pub file_mtime: Option<&'a str>,
+    // ── T062 extended extraction (spec 041, migration 0049; wired T072) ─────
+    //
+    // Sourced from `metadata_core::RawFileMetadata`'s T062 fields and wired
+    // into this upsert at classify time (`crates/app/inbox/src/classify.rs`
+    // `persist_file_metadata`) so `inbox.item.metadata` and
+    // `inbox.target_recommendations` (T074) can read real values instead of
+    // permanently-NULL columns.
+    pub offset: Option<i64>,
+    pub set_temp_c: Option<f64>,
+    pub ccd_temp_c: Option<f64>,
+    pub ra_deg: Option<f64>,
+    pub dec_deg: Option<f64>,
+    pub rotator_angle_deg: Option<f64>,
+    pub readout_mode: Option<&'a str>,
+    pub focal_length_mm: Option<f64>,
+    pub date_loc: Option<&'a str>,
 }
 
 /// Flat row from `inbox_plan_links`.
@@ -1057,8 +1083,10 @@ pub async fn upsert_inbox_file_metadata(
         "INSERT INTO inbox_file_metadata
             (id, inbox_item_id, relative_file_path, filter, exposure_s, gain,
              binning_x, binning_y, temperature_c, object, date_obs, instrume,
-             telescop, naxis1, naxis2, stack_count, file_size_bytes, file_mtime)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             telescop, naxis1, naxis2, stack_count, file_size_bytes, file_mtime,
+             offset, set_temp_c, ccd_temp_c, ra_deg, dec_deg, rotator_angle_deg,
+             readout_mode, focal_length_mm, date_loc)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(inbox_item_id, relative_file_path) DO UPDATE SET
              filter = excluded.filter,
              exposure_s = excluded.exposure_s,
@@ -1074,7 +1102,16 @@ pub async fn upsert_inbox_file_metadata(
              naxis2 = excluded.naxis2,
              stack_count = excluded.stack_count,
              file_size_bytes = excluded.file_size_bytes,
-             file_mtime = excluded.file_mtime",
+             file_mtime = excluded.file_mtime,
+             offset = excluded.offset,
+             set_temp_c = excluded.set_temp_c,
+             ccd_temp_c = excluded.ccd_temp_c,
+             ra_deg = excluded.ra_deg,
+             dec_deg = excluded.dec_deg,
+             rotator_angle_deg = excluded.rotator_angle_deg,
+             readout_mode = excluded.readout_mode,
+             focal_length_mm = excluded.focal_length_mm,
+             date_loc = excluded.date_loc",
     )
     .bind(&id)
     .bind(m.inbox_item_id)
@@ -1094,6 +1131,15 @@ pub async fn upsert_inbox_file_metadata(
     .bind(m.stack_count)
     .bind(m.file_size_bytes)
     .bind(m.file_mtime)
+    .bind(m.offset)
+    .bind(m.set_temp_c)
+    .bind(m.ccd_temp_c)
+    .bind(m.ra_deg)
+    .bind(m.dec_deg)
+    .bind(m.rotator_angle_deg)
+    .bind(m.readout_mode)
+    .bind(m.focal_length_mm)
+    .bind(m.date_loc)
     .execute(pool)
     .await?;
     Ok(())
@@ -1402,6 +1448,17 @@ pub struct InboxListRow {
     /// Organization state of the owning registered source
     /// (`"organized"` / `"unorganized"`), joined from `registered_sources`.
     pub organization_state: String,
+    /// FK to `inbox_source_groups`; `None` for legacy rows that predate
+    /// source groups (spec 041 Phase 12, T072/FR-043).
+    pub source_group_id: Option<String>,
+    /// Deterministic canonical group key (R-11). Empty string for legacy
+    /// rows not yet materialized into a single-type sub-item.
+    pub group_key: String,
+    /// Human-readable display label `"(root) · <type> · <dims>"` (R-12).
+    pub group_label: Option<String>,
+    /// Authoritative single frame type for this sub-item; `None` until
+    /// classified.
+    pub frame_type: Option<String>,
 }
 
 /// Return all `inbox_items` whose `state` is **unacknowledged**
@@ -1440,7 +1497,11 @@ pub async fn list_unacknowledged_across_roots(
              i.master_frame_type,
              i.master_filter,
              i.master_exposure_s,
-             COALESCE(r.organization_state, 'unorganized') AS organization_state
+             COALESCE(r.organization_state, 'unorganized') AS organization_state,
+             i.source_group_id,
+             i.group_key,
+             i.group_label,
+             i.frame_type
          FROM inbox_items i
          JOIN registered_sources r ON r.id = i.root_id
          WHERE i.state IN ('pending_classification', 'classified', 'plan_open')

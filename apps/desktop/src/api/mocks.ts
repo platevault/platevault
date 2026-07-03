@@ -527,6 +527,8 @@ export async function mockInvoke(
         items: [
           {
             inboxItemId: 'item-001',
+            groupId: 'item-001',
+            groupKey: '',
             rootId: 'root-lights-001',
             rootAbsolutePath: '/astro/raw',
             relativePath: '2025-10-10/NGC7000',
@@ -540,6 +542,8 @@ export async function mockInvoke(
           },
           {
             inboxItemId: 'item-002',
+            groupId: 'item-002',
+            groupKey: '',
             rootId: 'root-lights-001',
             rootAbsolutePath: '/astro/raw',
             relativePath: '2025-10-10/darks',
@@ -554,6 +558,8 @@ export async function mockInvoke(
           {
             // Individual master item — spec 040 FR-005
             inboxItemId: 'item-master-dark',
+            groupId: 'item-master-dark',
+            groupKey: '',
             rootId: 'root-lights-001',
             rootAbsolutePath: '/astro/raw',
             relativePath: '2025-10-10/darks/masterDark_Ha_300s.xisf',
@@ -570,6 +576,8 @@ export async function mockInvoke(
           },
           {
             inboxItemId: 'item-003',
+            groupId: 'item-003',
+            groupKey: '',
             rootId: 'root-inbox-001',
             rootAbsolutePath: '/astro/inbox',
             relativePath: '2025-11-01/Jupiter',
