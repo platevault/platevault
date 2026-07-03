@@ -15,7 +15,7 @@
 
 import { useMemo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import type { InventorySource, InventorySession } from '@/api/commands';
+import type { InventorySource, InventorySession } from '@/bindings/index';
 import { Table, Pill } from '@/ui';
 import { SortHeader } from '@/components';
 import { m } from '@/lib/i18n';
