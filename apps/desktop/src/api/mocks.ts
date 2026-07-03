@@ -37,6 +37,18 @@ import type {
   OperationEvent,
   PlanApplyResponse,
   AuditListResponse_Serialize,
+  Camera,
+  CreateCamera,
+  UpdateCamera,
+  Telescope,
+  CreateTelescope,
+  UpdateTelescope,
+  OpticalTrain,
+  CreateOpticalTrain,
+  UpdateOpticalTrain,
+  Filter,
+  CreateFilter,
+  UpdateFilter,
 } from '@/bindings/index';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -76,6 +88,48 @@ const mockEquipment: Equipment[] = [
   { id: 'eq-002', name: 'Esprit 100ED', kind: 'telescope', aliases: ['SW Esprit 100ED'] },
   { id: 'eq-003', name: 'EQ6-R Pro', kind: 'mount', aliases: ['EQ6R'] },
 ];
+
+// ── Equipment CRUD (spec 030) ────────────────────────────────────────────────
+//
+// Mutable in-memory stores so mock mode's add/edit/delete flows behave like
+// the real backend across a session (previously `@/data/fixtures/settings`,
+// which the Equipment pane held in local `useState` and never persisted
+// through an IPC round-trip). Seed data replaces those retired fixtures.
+
+let mockCameras: Camera[] = [
+  { id: 'cam-001', name: 'ASI2600MM Pro', aliases: ['ZWO ASI2600MM'], autoDetected: false },
+  { id: 'cam-002', name: 'ASI533MC Pro', aliases: ['ZWO ASI533MC'], autoDetected: false },
+];
+
+let mockTelescopes: Telescope[] = [
+  { id: 'tel-001', name: 'Takahashi FSQ-106EDX4', aliases: [], focalLengthMm: 530, autoDetected: false },
+  { id: 'tel-002', name: 'William Optics GT81', aliases: [], focalLengthMm: 478, autoDetected: false },
+];
+
+let mockOpticalTrains: OpticalTrain[] = [
+  {
+    id: 'train-001',
+    name: 'FSQ-106 + ASI2600MM',
+    telescopeId: 'tel-001',
+    cameraId: 'cam-001',
+    focalLengthMm: 530,
+  },
+];
+
+let mockFilters: Filter[] = [
+  { id: 'filt-001', name: 'Ha', category: 'narrowband', autoDetected: false },
+  { id: 'filt-002', name: 'OIII', category: 'narrowband', autoDetected: false },
+  { id: 'filt-003', name: 'SII', category: 'narrowband', autoDetected: false },
+  { id: 'filt-004', name: 'L', category: 'broadband', autoDetected: false },
+  { id: 'filt-005', name: 'R', category: 'broadband', autoDetected: false },
+  { id: 'filt-006', name: 'G', category: 'broadband', autoDetected: false },
+  { id: 'filt-007', name: 'B', category: 'broadband', autoDetected: false },
+];
+
+/** Mirrors the shape `unwrap()` expects on the error branch of a `Result`. */
+function mockContractError(code: string, message: string): never {
+  throw { code, message, severity: 'blocking', retryable: false };
+}
 
 const mockPreferences: AppPreferences = {
   sidebarCollapsed: false,
@@ -348,6 +402,18 @@ export async function mockInvoke(
     }
     case 'equipment_list': {
       return mockEquipment;
+    }
+    case 'equipment_cameras_list': {
+      return mockCameras;
+    }
+    case 'equipment_telescopes_list': {
+      return mockTelescopes;
+    }
+    case 'equipment_trains_list': {
+      return mockOpticalTrains;
+    }
+    case 'equipment_filters_list': {
+      return mockFilters;
     }
     case 'review_queue': {
       const { reviewItems } = await import('@/data/fixtures/review');
@@ -751,6 +817,145 @@ export async function mockInvoke(
 
     case 'preparedview_regenerate': {
       return { planId: 'mock-plan-regen-001', unresolvedItemCount: 0 };
+    }
+
+    // ── Equipment CRUD (spec 030) ───────────────────────────────────────────
+
+    case 'equipment_cameras_create': {
+      const req = (_args as { request?: CreateCamera } | undefined)?.request;
+      const camera: Camera = {
+        id: `cam-${crypto.randomUUID()}`,
+        name: req?.name ?? '',
+        aliases: req?.aliases ?? [],
+        autoDetected: false,
+      };
+      mockCameras = [...mockCameras, camera];
+      return camera;
+    }
+    case 'equipment_cameras_update': {
+      const req = (_args as { request?: UpdateCamera } | undefined)?.request;
+      if (!req) return mockContractError('equipment.not_found', 'camera not found');
+      const existing = mockCameras.find((c) => c.id === req.id);
+      if (!existing) return mockContractError('equipment.not_found', `camera ${req.id} not found`);
+      const updated: Camera = { ...existing, name: req.name, aliases: req.aliases };
+      mockCameras = mockCameras.map((c) => (c.id === req.id ? updated : c));
+      return updated;
+    }
+    case 'equipment_cameras_delete': {
+      const id = (_args as { id?: string } | undefined)?.id;
+      if (!id || !mockCameras.some((c) => c.id === id)) {
+        return mockContractError('equipment.not_found', `camera ${id ?? ''} not found`);
+      }
+      if (mockOpticalTrains.some((t) => t.cameraId === id)) {
+        return mockContractError('internal.database', 'FOREIGN KEY constraint failed');
+      }
+      mockCameras = mockCameras.filter((c) => c.id !== id);
+      return null;
+    }
+
+    case 'equipment_telescopes_create': {
+      const req = (_args as { request?: CreateTelescope } | undefined)?.request;
+      const telescope: Telescope = {
+        id: `tel-${crypto.randomUUID()}`,
+        name: req?.name ?? '',
+        aliases: req?.aliases ?? [],
+        focalLengthMm: req?.focalLengthMm ?? null,
+        autoDetected: false,
+      };
+      mockTelescopes = [...mockTelescopes, telescope];
+      return telescope;
+    }
+    case 'equipment_telescopes_update': {
+      const req = (_args as { request?: UpdateTelescope } | undefined)?.request;
+      if (!req) return mockContractError('equipment.not_found', 'telescope not found');
+      const existing = mockTelescopes.find((t) => t.id === req.id);
+      if (!existing) return mockContractError('equipment.not_found', `telescope ${req.id} not found`);
+      const updated: Telescope = {
+        ...existing,
+        name: req.name,
+        aliases: req.aliases,
+        focalLengthMm: req.focalLengthMm,
+      };
+      mockTelescopes = mockTelescopes.map((t) => (t.id === req.id ? updated : t));
+      return updated;
+    }
+    case 'equipment_telescopes_delete': {
+      const id = (_args as { id?: string } | undefined)?.id;
+      if (!id || !mockTelescopes.some((t) => t.id === id)) {
+        return mockContractError('equipment.not_found', `telescope ${id ?? ''} not found`);
+      }
+      if (mockOpticalTrains.some((t) => t.telescopeId === id)) {
+        return mockContractError('internal.database', 'FOREIGN KEY constraint failed');
+      }
+      mockTelescopes = mockTelescopes.filter((t) => t.id !== id);
+      return null;
+    }
+
+    case 'equipment_trains_create': {
+      const req = (_args as { request?: CreateOpticalTrain } | undefined)?.request;
+      const train: OpticalTrain = {
+        id: `train-${crypto.randomUUID()}`,
+        name: req?.name ?? '',
+        telescopeId: req?.telescopeId ?? null,
+        cameraId: req?.cameraId ?? null,
+        focalLengthMm: req?.focalLengthMm ?? 0,
+      };
+      mockOpticalTrains = [...mockOpticalTrains, train];
+      return train;
+    }
+    case 'equipment_trains_update': {
+      const req = (_args as { request?: UpdateOpticalTrain } | undefined)?.request;
+      if (!req) return mockContractError('equipment.not_found', 'optical train not found');
+      const existing = mockOpticalTrains.find((t) => t.id === req.id);
+      if (!existing) {
+        return mockContractError('equipment.not_found', `optical train ${req.id} not found`);
+      }
+      const updated: OpticalTrain = {
+        ...existing,
+        name: req.name,
+        telescopeId: req.telescopeId,
+        cameraId: req.cameraId,
+        focalLengthMm: req.focalLengthMm,
+      };
+      mockOpticalTrains = mockOpticalTrains.map((t) => (t.id === req.id ? updated : t));
+      return updated;
+    }
+    case 'equipment_trains_delete': {
+      const id = (_args as { id?: string } | undefined)?.id;
+      if (!id || !mockOpticalTrains.some((t) => t.id === id)) {
+        return mockContractError('equipment.not_found', `optical train ${id ?? ''} not found`);
+      }
+      mockOpticalTrains = mockOpticalTrains.filter((t) => t.id !== id);
+      return null;
+    }
+
+    case 'equipment_filters_create': {
+      const req = (_args as { request?: CreateFilter } | undefined)?.request;
+      const filter: Filter = {
+        id: `filt-${crypto.randomUUID()}`,
+        name: req?.name ?? '',
+        category: req?.category ?? 'custom',
+        autoDetected: false,
+      };
+      mockFilters = [...mockFilters, filter];
+      return filter;
+    }
+    case 'equipment_filters_update': {
+      const req = (_args as { request?: UpdateFilter } | undefined)?.request;
+      if (!req) return mockContractError('equipment.not_found', 'filter not found');
+      const existing = mockFilters.find((f) => f.id === req.id);
+      if (!existing) return mockContractError('equipment.not_found', `filter ${req.id} not found`);
+      const updated: Filter = { ...existing, name: req.name, category: req.category };
+      mockFilters = mockFilters.map((f) => (f.id === req.id ? updated : f));
+      return updated;
+    }
+    case 'equipment_filters_delete': {
+      const id = (_args as { id?: string } | undefined)?.id;
+      if (!id || !mockFilters.some((f) => f.id === id)) {
+        return mockContractError('equipment.not_found', `filter ${id ?? ''} not found`);
+      }
+      mockFilters = mockFilters.filter((f) => f.id !== id);
+      return null;
     }
 
     default:

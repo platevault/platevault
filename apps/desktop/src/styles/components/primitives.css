@@ -300,3 +300,18 @@
   margin-left: auto;
 }
 .alm-prop-table__row--conflict { background: var(--alm-warn-bg); }
+
+/* === GLOBAL UTILITIES ===
+ * Shared presentational classes extracted from duplicated component rules.
+ * Reuse these instead of adding another per-feature clone (css-dup-sniff:
+ * the flex-column/gap-1 group alone had 11 identical members).
+ */
+
+/* Vertical stack with the tightest standard gap (label-above-control fields,
+   short lists). Canonical form of the duplicated
+   `display:flex; flex-direction:column; gap:var(--alm-sp-1)` rule. */
+.alm-stack-1 {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}

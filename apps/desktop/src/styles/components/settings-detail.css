@@ -408,26 +408,53 @@
 
 /* === SETTINGS EQUIPMENT === */
 
-.alm-equipment__section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--alm-sp-3);
-}
-
-.alm-equipment__section-title {
-  margin-bottom: 0;
-}
-
 .alm-equipment__empty {
   color: var(--alm-text-muted);
   font-size: var(--alm-text-sm);
   margin-top: var(--alm-sp-2);
 }
 
-.alm-equipment__flags {
+.alm-equipment__badges {
   display: flex;
   gap: var(--alm-sp-1);
+}
+
+.alm-equipment__row-actions {
+  display: flex;
+  gap: var(--alm-sp-1);
+  justify-content: flex-end;
+}
+
+.alm-equipment__load-error {
+  color: var(--alm-danger);
+  font-size: var(--alm-text-sm);
+  margin-top: var(--alm-sp-2);
+}
+
+.alm-equipment__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-3);
+  margin-top: var(--alm-sp-2);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  background: var(--alm-surface);
+}
+
+.alm-equipment__form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--alm-sp-3);
+}
+
+/* Form fields use the global `.alm-stack-1` utility (primitives.css) —
+   no per-feature clone of the flex-column/gap-1 rule here. */
+
+.alm-equipment__form-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  justify-content: flex-end;
 }
 
 /* === SETTINGS ADVANCED === */
