@@ -109,28 +109,6 @@ const HOOK_MANIFEST_TARGETS = [
       },
     }),
   },
-  {
-    // GitHub Copilot reads repo-level hooks from `.github/hooks/*.json`. The same
-    // manifest is honored by the CLI (once committed to the default branch) and
-    // the cloud/app agent. Schema differs: lowercase `postToolUse`, flat entries,
-    // `bash`/`timeoutSec`, and a `matcher` regex against the `edit`/`create` tools.
-    provider: '.github',
-    skillRel: '.github/skills/impeccable',
-    destRel: '.github/hooks/impeccable.json',
-    manifest: () => ({
-      version: 1,
-      hooks: {
-        postToolUse: [
-          {
-            type: 'command',
-            matcher: 'edit|create|apply_patch',
-            bash: 'node "$(git rev-parse --show-toplevel)/.github/skills/impeccable/scripts/hook.mjs"',
-            timeoutSec: TIMEOUT_SECONDS,
-          },
-        ],
-      },
-    }),
-  },
 ];
 
 function readRawConfigFile(filePath) {
@@ -422,10 +400,7 @@ function valueHasImpeccableHookMarker(value) {
 
 function stripImpeccableHookEntry(entry) {
   if (!entry || typeof entry !== 'object') return entry;
-  // `command`/`args`: Claude/Codex/Cursor. `bash`/`powershell`: GitHub Copilot's
-  // flat entry shape, where the marker lives under the shell-command keys.
-  if (valueHasImpeccableHookMarker(entry.command) || valueHasImpeccableHookMarker(entry.args)
-    || valueHasImpeccableHookMarker(entry.bash) || valueHasImpeccableHookMarker(entry.powershell)) {
+  if (valueHasImpeccableHookMarker(entry.command) || valueHasImpeccableHookMarker(entry.args)) {
     return null;
   }
   if (!Array.isArray(entry.hooks)) return entry;
