@@ -17,7 +17,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { getCalibrationMaster, listSessions } from "@/api/commands";
+import { commands } from "@/bindings/index";
+import { unwrap } from "@/api/ipc";
 import type { CalibrationMaster_Serialize as CalibrationMaster } from "@/bindings/index";
 import {
 	DetailPane,
@@ -72,7 +73,10 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 		let cancelled = false;
 		setDetail({ confirmedNames: [], compatibleNames: [], loading: true });
 
-		Promise.all([getCalibrationMaster({ id: masterId }), listSessions()])
+		Promise.all([
+			commands.calibrationMastersGet(masterId).then(unwrap),
+			commands.sessionsList().then(unwrap),
+		])
 			.then(([masterDetail, sessions]) => {
 				if (cancelled) return;
 				const idToName = new Map<string, string>();
