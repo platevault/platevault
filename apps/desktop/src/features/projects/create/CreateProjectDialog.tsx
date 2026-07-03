@@ -28,17 +28,20 @@ import { Dialog } from '@base-ui-components/react/dialog';
 import { Btn, RadioGroup, Pill } from '@/ui';
 import type { RadioOption } from '@/ui';
 import { callCreateProject } from '@/features/projects/store';
-import { commands } from '@/bindings/index';
-import { unwrap } from '@/api/ipc';
 import type { TargetSuggestion } from '@/bindings/aliases';
 import { TargetSearch } from '@/components';
-import type { ProjectCreateResult, ProjectSummaryDto } from '@/bindings/index';
+import type { ProjectCreateResult } from '@/bindings/index';
 import {
   createProjectFormSchema,
   type CreateProjectFormValues,
   MAX_NAME_LEN,
   MAX_NOTES_LEN,
 } from '@/features/projects/schemas';
+import {
+  createProjectErrorCode,
+  findDuplicateProjectName,
+  mapCreateProjectErrorCode,
+} from '@/features/projects/projectCreateErrors';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -100,15 +103,9 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
   async function onValid(values: CreateProjectFormValues) {
     const trimmedName = values.name.trim();
-    try {
-      const list: ProjectSummaryDto[] = unwrap(await commands.projectsList(null));
-      const dup = list.find((p) => p.name.toLowerCase() === trimmedName.toLowerCase());
-      if (dup) {
-        setError('name', { type: 'duplicate', message: m.projects_create_name_duplicate() });
-        return;
-      }
-    } catch {
-      // Non-fatal: let the server enforce uniqueness
+    if (await findDuplicateProjectName(trimmedName)) {
+      setError('name', { type: 'duplicate', message: m.projects_create_name_duplicate() });
+      return;
     }
 
     setServerError(null);
@@ -126,8 +123,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
       handleOpenChange(false);
       onSuccess(result);
     } catch (err: unknown) {
-      const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-      setServerError(mapErrorCode(code));
+      setServerError(mapCreateProjectErrorCode(createProjectErrorCode(err)));
     }
   }
 
@@ -276,18 +272,4 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
       </Dialog.Portal>
     </Dialog.Root>
   );
-}
-
-// ── Error code → user-facing message ─────────────────────────────────────────
-
-function mapErrorCode(code: string): string {
-  switch (code) {
-    case 'name.empty':      return m.projects_create_err_name_empty();
-    case 'name.too_long':   return m.projects_create_err_name_too_long();
-    case 'name.duplicate':  return m.projects_create_name_duplicate();
-    case 'tool.unknown':    return m.projects_create_err_tool_unknown();
-    case 'path.invalid':    return m.projects_create_err_path_invalid();
-    case 'path.collision':  return m.projects_create_err_path_collision();
-    default:                return m.projects_create_err_generic({ code });
-  }
 }
