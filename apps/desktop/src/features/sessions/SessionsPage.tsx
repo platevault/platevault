@@ -68,9 +68,9 @@ function filterSourcesBySearch(sources: InventorySource[], query: string): Inven
 // Toolbar option vocab (label maps live here so the generic FilterToolbar
 // stays presentation-only).
 function reviewFilterLabel(v: string): string {
-  if (v === 'discovered' || v === 'candidate') return `Needs review (${v})`;
-  if (v === 'needs_review') return 'Needs review';
-  if (v === 'all') return 'All states';
+  if (v === 'discovered' || v === 'candidate') return m.sessions_review_needs_review_state({ state: v });
+  if (v === 'needs_review') return m.sessions_needs_review_aria();
+  if (v === 'all') return m.projects_filter_all_states();
   return sessionStateLabel(v);
 }
 
@@ -238,7 +238,7 @@ export function SessionsPage() {
             value: search,
             onChange: setSearch,
             placeholder: m.sessions_search_placeholder(),
-            ariaLabel: 'Search sessions',
+            ariaLabel: m.sessions_search_aria(),
           }}
           fields={[
             {
@@ -246,7 +246,7 @@ export function SessionsPage() {
               label: m.sessions_review_filter_label(),
               value: reviewFilter ?? '',
               options: REVIEW_OPTIONS(),
-              allLabel: 'Default',
+              allLabel: m.sessions_review_filter_default_label(),
               onChange: (v) =>
                 navigate({
                   search: (prev) => ({ ...prev, reviewFilter: (v as ReviewFilter) || undefined }),

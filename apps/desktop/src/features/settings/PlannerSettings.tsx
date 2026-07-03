@@ -44,11 +44,7 @@ export function PlannerSettings() {
     <SettingsSection title={m.settings_planner_altitude_title()}>
       <SettingsRow
         label={m.settings_planner_altitude_label()}
-        info={
-          `Minimum elevation above the horizon (in degrees) considered acceptable ` +
-          `for imaging. Drives the "Visible tonight" and "Imaging time" columns in ` +
-          `the Planner table. Default: ${USABLE_ALT_DEG}°.`
-        }
+        info={m.settings_planner_altitude_info({ deg: USABLE_ALT_DEG })}
       >
         <input
           type="number"

@@ -17,6 +17,7 @@ import type {
   InventoryFrameType,
 } from "@/api/commands";
 import { errMessage } from '@/lib/errors';
+import { m } from '@/lib/i18n';
 
 export type { InventoryListResponse, InventorySessionReviewResponse };
 export type { InventorySource, InventorySession } from "@/api/commands";
@@ -77,12 +78,15 @@ const REVIEW_NEXT_STATE: Record<ReviewAction, InventorySessionReviewRequest["nex
   ignore: "ignored",
 };
 
-const REVIEW_LABEL: Record<ReviewAction, string> = {
-  confirm: "Confirmed",
-  reopen: "Re-opened review",
-  reject: "Rejected session",
-  ignore: "Ignored session",
-};
+/** Render-time factory (spec 046 #8b) so review action labels re-read the active locale. */
+function reviewActionLabel(action: ReviewAction): string {
+  switch (action) {
+    case "confirm": return m.sessions_review_action_confirm();
+    case "reopen": return m.sessions_review_action_reopen();
+    case "reject": return m.sessions_review_action_reject();
+    case "ignore": return m.sessions_review_action_ignore();
+  }
+}
 
 /**
  * Hook that returns a callback to trigger a session review action.
@@ -104,7 +108,7 @@ export function useSessionReview() {
           requestId: crypto.randomUUID(),
           sessionId,
           nextState: REVIEW_NEXT_STATE[action],
-          actionLabel: REVIEW_LABEL[action],
+          actionLabel: reviewActionLabel(action),
           actor: "user",
         });
         if (resp.status === "success") {
@@ -117,7 +121,7 @@ export function useSessionReview() {
         return {
           ok: false,
           noop: false,
-          error: resp.error?.message ?? "Review failed",
+          error: resp.error?.message ?? m.sessions_review_failed(),
         };
       } catch (err) {
         return {
@@ -164,7 +168,7 @@ export function useInventorySessionReview() {
         requestId: crypto.randomUUID(),
         sessionId,
         nextState: REVIEW_NEXT_STATE[action],
-        actionLabel: REVIEW_LABEL[action],
+        actionLabel: reviewActionLabel(action),
         actor: "user",
       }),
     onSuccess: () => {

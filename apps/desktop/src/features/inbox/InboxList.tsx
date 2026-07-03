@@ -46,13 +46,13 @@ export const DEFAULT_INBOX_SORT: InboxSort = { col: 'detection', dir: 'asc' };
  * frame-type-forward rather than state-forward.
  */
 function classificationLabel(item: InboxListItem): string {
-  if (item.isMaster) return item.masterFrameType ?? 'master';
+  if (item.isMaster) return item.masterFrameType ?? m.inbox_state_master_fallback();
   if (item.groupFrameType) return item.groupFrameType;
   switch (item.state) {
-    case 'pending_classification': return 'pending';
-    case 'classified':             return 'classified';
-    case 'plan_open':              return 'plan open';
-    case 'resolved':               return 'resolved';
+    case 'pending_classification': return m.inbox_state_pending();
+    case 'classified':             return m.inbox_state_classified();
+    case 'plan_open':              return m.inbox_state_plan_open();
+    case 'resolved':               return m.inbox_state_resolved();
     default:                       return item.state;
   }
 }
@@ -264,7 +264,7 @@ export function InboxList({
   const COLUMNS: TableColumn[] = [
     {
       key: 'detection',
-      label: makeSortHeader('detection', 'Detection', m.inbox_sort_detection_aria()),
+      label: makeSortHeader('detection', m.inbox_col_detection(), m.inbox_sort_detection_aria()),
     },
     {
       key: 'type',
@@ -350,7 +350,7 @@ export function InboxList({
           ),
           count: m.inbox_list_file_count({ count: item.fileCount }),
           format: item.isMaster
-            ? `${item.masterFrameType ?? 'master'} master`
+            ? m.inbox_master_row_label({ type: item.masterFrameType ?? m.inbox_state_master_fallback() })
             : formatTag(item),
         };
       }),

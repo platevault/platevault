@@ -121,15 +121,14 @@ export interface PlanPanelProps {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-const ACTION_LABELS: Record<string, string> = {
-  move: 'Move',
-  catalogue: 'Catalogue',
-  archive: 'Archive',
-  trash: 'Trash',
-};
-
 function actionLabel(kind: string): string {
-  return ACTION_LABELS[kind] ?? kind;
+  switch (kind) {
+    case 'move': return m.inbox_action_move();
+    case 'catalogue': return m.inbox_action_catalogue();
+    case 'archive': return m.inbox_action_archive();
+    case 'trash': return m.inbox_action_trash();
+    default: return kind;
+  }
 }
 
 function basename(path: string): string {

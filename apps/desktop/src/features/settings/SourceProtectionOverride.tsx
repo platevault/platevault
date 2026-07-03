@@ -38,14 +38,14 @@ const LEVEL_VARIANT: Record<ProtectionLevel, 'ok' | 'info' | 'warn' | 'danger' |
 
 /** Convert a ProtectionLevel to its hint string (spec 016 T034). */
 function levelHint(level: ProtectionLevel, inherits: boolean): string {
-  const prefix = inherits ? 'Inherits global default — ' : '';
+  const prefix = inherits ? m.settings_source_protect_inherits_prefix() : '';
   switch (level) {
     case 'protected':
-      return `${prefix}Cleanup plans require explicit approval for this source's files.`;
+      return m.settings_source_protect_hint_protected({ prefix });
     case 'normal':
-      return `${prefix}Standard plan review applies; no extra acknowledgement required.`;
+      return m.settings_source_protect_hint_normal({ prefix });
     case 'unprotected':
-      return `${prefix}Destructive plan actions proceed without additional confirmation.`;
+      return m.settings_source_protect_hint_unprotected({ prefix });
   }
 }
 

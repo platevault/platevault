@@ -24,12 +24,15 @@ interface DataSourcesProps {
 /** Display order and labels for category groups (matches mock: Raw / Calibration / Project / Inbox). */
 const CATEGORY_ORDER: RootCategory[] = ['raw', 'calibration', 'project', 'inbox'];
 
-const CATEGORY_LABEL: Record<RootCategory, string> = {
-  raw: 'Raw',
-  calibration: 'Calibration',
-  project: 'Project',
-  inbox: 'Inbox',
-};
+/** Render-time factory (spec 046 #8b) so category labels re-read the active locale. */
+function categoryLabel(category: RootCategory): string {
+  switch (category) {
+    case 'raw': return m.settings_datasources_category_raw();
+    case 'calibration': return m.settings_datasources_category_calibration();
+    case 'project': return m.settings_datasources_category_project();
+    case 'inbox': return m.settings_datasources_category_inbox();
+  }
+}
 
 export function DataSources({ save: _save }: DataSourcesProps) {
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
@@ -206,7 +209,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
       {grouped.map(({ category, roots: groupRoots }) => (
         <div key={category} className="alm-data-sources__group">
           <h4 className="alm-data-sources__group-label">
-            {CATEGORY_LABEL[category]}
+            {categoryLabel(category)}
           </h4>
           {groupRoots.map((root) => (
             <RootCard
@@ -316,7 +319,7 @@ function RootCard({ root, onRescan }: RootCardProps) {
     );
   }
   if (root.lastScanned) {
-    metaParts.push(`scanned ${root.lastScanned}`);
+    metaParts.push(m.settings_datasources_scanned({ date: root.lastScanned }));
   }
   const meta = metaParts.join(' · ');
 
