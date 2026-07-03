@@ -62,7 +62,7 @@ not this table, as authoritative — it will drift as unrelated work lands.)
   `uuid`, `time`, `json`) — async, ratified in spec 002.
 - Canonical store: SQLite. Migrations in `crates/persistence/db/migrations/`,
   applied via `sqlx::migrate!("./migrations")`. Latest migration as of this
-  branch: `0049`.
+  branch: `0050`.
 
 ---
 
