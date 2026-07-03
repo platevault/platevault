@@ -31,7 +31,7 @@ contracts-build:
 # committed tree. Wire this into CI for spec 002 + onward.
 check-generated:
     cargo run -q -p contracts_core --bin generate-contracts
-    cargo test -q -p desktop_shell --test bindings
+    cargo test -q -p desktop_shell --features dev-tools --test bindings
     git diff --exit-code specs/*/contracts/*.generated.json apps/desktop/src/bindings/
 
 # Full pre-merge gate: lint + tests + typecheck + generated-artifact drift.

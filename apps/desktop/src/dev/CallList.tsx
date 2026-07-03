@@ -5,7 +5,7 @@
  * and actions (view schema, replay when replay-safe).
  */
 
-import type { ContractCall, ContractMeta } from '@/api/commands';
+import type { ContractCall, ContractMeta } from '@/bindings/index';
 
 interface CallListProps {
   calls: ContractCall[];
@@ -13,7 +13,8 @@ interface CallListProps {
   onViewSchema: (call: ContractCall) => void;
 }
 
-function formatDuration(ms: number): string {
+function formatDuration(ms: number | null): string {
+  if (ms == null) return '—';
   if (ms < 1) return '<1 ms';
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return `${(ms / 1000).toFixed(2)} s`;

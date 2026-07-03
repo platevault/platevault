@@ -15,34 +15,32 @@ import { ContractsPage } from './ContractsPage';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('@/api/commands', () => ({
-  getSettings: vi.fn(),
-  devContractsList: vi.fn(),
-  devCallsList: vi.fn(),
-  devExport: vi.fn(),
-  devSchemaGet: vi.fn(),
+const { mockGetSettings, mockDevContractsList, mockDevCallsList, mockDevExport, mockDevSchemaGet } =
+  vi.hoisted(() => ({
+    mockGetSettings: vi.fn(),
+    mockDevContractsList: vi.fn(),
+    mockDevCallsList: vi.fn(),
+    mockDevExport: vi.fn(),
+    mockDevSchemaGet: vi.fn(),
+  }));
+
+// Adapt each hoisted mock's raw payload into the generated `{ status: 'ok', data }`
+// Result the real `unwrap` consumes (spec 037), so the mockResolvedValue sites
+// below stay unchanged.
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    settingsGet: (...a: unknown[]) =>
+      Promise.resolve(mockGetSettings(...a)).then((data) => ({ status: 'ok', data })),
+    devContractsList: (...a: unknown[]) =>
+      Promise.resolve(mockDevContractsList(...a)).then((data) => ({ status: 'ok', data })),
+    devCallsList: (...a: unknown[]) =>
+      Promise.resolve(mockDevCallsList(...a)).then((data) => ({ status: 'ok', data })),
+    devExport: (...a: unknown[]) =>
+      Promise.resolve(mockDevExport(...a)).then((data) => ({ status: 'ok', data })),
+    devSchemaGet: (...a: unknown[]) =>
+      Promise.resolve(mockDevSchemaGet(...a)).then((data) => ({ status: 'ok', data })),
+  },
 }));
-
-import {
-  getSettings,
-  devContractsList,
-  devCallsList,
-  devExport,
-} from '@/api/commands';
-
-const mockGetSettings = vi.mocked(getSettings);
-const mockDevContractsList = vi.mocked(devContractsList);
-const mockDevCallsList = vi.mocked(devCallsList);
-const mockDevExport = vi.mocked(devExport);
-
-// ── Fixtures ──────────────────────────────────────────────────────────────────
-
-function _settingsResponse(devMode: boolean) {
-  return {
-    scope: 'advanced',
-    values: { devMode, logLevel: 'info' },
-  } as Parameters<typeof getSettings>[0] extends never ? never : Awaited<ReturnType<typeof getSettings>>;
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
