@@ -20,7 +20,7 @@
  *    gets an actionable message instead of a raw database error; the backend
  *    constraint remains the source of truth for correctness.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Btn, Table, Pill } from '@/ui';
 import type { TableRow } from '@/ui';
 import { ConfirmOverlay } from '@/components';
@@ -115,6 +115,41 @@ function autoDetectedBadge(autoDetected: boolean) {
         <Pill variant="neutral">{m.settings_equipment_manual()}</Pill>
       )}
     </span>
+  );
+}
+
+// ── Shared add/edit form shell ────────────────────────────────────────────────
+
+interface EquipmentFormShellProps {
+  /** Form-level error (wrapped save-error frame or validation message). */
+  error: string | null;
+  /** Disables the actions and switches the save label while a call is in flight. */
+  saving: boolean;
+  onCancel: () => void;
+  onSave: () => void | Promise<void>;
+  /** The entity-specific field controls (each wrapped in `.alm-stack-1`). */
+  children: ReactNode;
+}
+
+/**
+ * The one parameterised form frame all four equipment sections share: field
+ * grid + error line + cancel/save actions. Only the fields differ per entity
+ * type (shared-component mandate — no per-section clones).
+ */
+function EquipmentFormShell({ error, saving, onCancel, onSave, children }: EquipmentFormShellProps) {
+  return (
+    <div className="alm-equipment__form">
+      <div className="alm-equipment__form-grid">{children}</div>
+      {error && <span className="alm-field-error">{error}</span>}
+      <div className="alm-equipment__form-actions">
+        <Btn size="sm" variant="ghost" onClick={onCancel} disabled={saving}>
+          {m.common_cancel()}
+        </Btn>
+        <Btn size="sm" onClick={() => void onSave()} disabled={saving}>
+          {saving ? m.common_saving() : m.common_save()}
+        </Btn>
+      </div>
+    </div>
   );
 }
 
@@ -487,82 +522,76 @@ export function Equipment({ save: _save }: EquipmentProps) {
         )}
 
         {trainForm && (
-          <div className="alm-equipment__form">
-            <div className="alm-equipment__form-grid">
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-train-name">
-                  {m.settings_equipment_col_name()}
-                </label>
-                <input
-                  id="equipment-train-name"
-                  type="text"
-                  className="alm-input"
-                  aria-label={m.settings_equipment_col_name()}
-                  value={trainForm.name}
-                  onChange={(e) => setTrainForm({ ...trainForm, name: e.target.value })}
-                />
-              </div>
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-train-camera">
-                  {m.settings_equipment_field_camera()}
-                </label>
-                <select
-                  id="equipment-train-camera"
-                  className="alm-select"
-                  value={trainForm.cameraId}
-                  onChange={(e) => setTrainForm({ ...trainForm, cameraId: e.target.value })}
-                >
-                  <option value="">{m.settings_equipment_field_none()}</option>
-                  {cameras.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-train-telescope">
-                  {m.settings_equipment_field_telescope()}
-                </label>
-                <select
-                  id="equipment-train-telescope"
-                  className="alm-select"
-                  value={trainForm.telescopeId}
-                  onChange={(e) => setTrainForm({ ...trainForm, telescopeId: e.target.value })}
-                >
-                  <option value="">{m.settings_equipment_field_none()}</option>
-                  {telescopes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-train-focal-length">
-                  {m.settings_equipment_field_focal_length()}
-                </label>
-                <input
-                  id="equipment-train-focal-length"
-                  type="text"
-                  inputMode="numeric"
-                  className="alm-input"
-                  aria-label={m.settings_equipment_field_focal_length()}
-                  value={trainForm.focalLengthMmText}
-                  onChange={(e) => setTrainForm({ ...trainForm, focalLengthMmText: e.target.value })}
-                />
-              </div>
+          <EquipmentFormShell
+            error={trainFormError}
+            saving={trainSaving}
+            onCancel={() => setTrainForm(null)}
+            onSave={handleTrainSubmit}
+          >
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-train-name">
+                {m.settings_equipment_col_name()}
+              </label>
+              <input
+                id="equipment-train-name"
+                type="text"
+                className="alm-input"
+                aria-label={m.settings_equipment_col_name()}
+                value={trainForm.name}
+                onChange={(e) => setTrainForm({ ...trainForm, name: e.target.value })}
+              />
             </div>
-            {trainFormError && <span className="alm-field-error">{trainFormError}</span>}
-            <div className="alm-equipment__form-actions">
-              <Btn size="sm" variant="ghost" onClick={() => setTrainForm(null)} disabled={trainSaving}>
-                {m.common_cancel()}
-              </Btn>
-              <Btn size="sm" onClick={() => void handleTrainSubmit()} disabled={trainSaving}>
-                {trainSaving ? m.common_saving() : m.common_save()}
-              </Btn>
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-train-camera">
+                {m.settings_equipment_field_camera()}
+              </label>
+              <select
+                id="equipment-train-camera"
+                className="alm-select"
+                value={trainForm.cameraId}
+                onChange={(e) => setTrainForm({ ...trainForm, cameraId: e.target.value })}
+              >
+                <option value="">{m.settings_equipment_field_none()}</option>
+                {cameras.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
-          </div>
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-train-telescope">
+                {m.settings_equipment_field_telescope()}
+              </label>
+              <select
+                id="equipment-train-telescope"
+                className="alm-select"
+                value={trainForm.telescopeId}
+                onChange={(e) => setTrainForm({ ...trainForm, telescopeId: e.target.value })}
+              >
+                <option value="">{m.settings_equipment_field_none()}</option>
+                {telescopes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-train-focal-length">
+                {m.settings_equipment_field_focal_length()}
+              </label>
+              <input
+                id="equipment-train-focal-length"
+                type="text"
+                inputMode="numeric"
+                className="alm-input"
+                aria-label={m.settings_equipment_field_focal_length()}
+                value={trainForm.focalLengthMmText}
+                onChange={(e) => setTrainForm({ ...trainForm, focalLengthMmText: e.target.value })}
+              />
+            </div>
+          </EquipmentFormShell>
         )}
       </SettingsSection>
 
@@ -602,7 +631,15 @@ export function Equipment({ save: _save }: EquipmentProps) {
                     >
                       {m.common_edit()}
                     </Btn>
-                    <Btn size="sm" variant="ghost" onClick={() => requestDeleteCamera(c)}>
+                    {/* Disabled until trains load: the in-use guard reads the
+                        trains list, so a click before it arrives would bypass
+                        the check (TOCTOU) and hit the raw FK error instead. */}
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      disabled={trainsLoading}
+                      onClick={() => requestDeleteCamera(c)}
+                    >
                       {m.common_remove()}
                     </Btn>
                   </span>
@@ -616,46 +653,40 @@ export function Equipment({ save: _save }: EquipmentProps) {
         )}
 
         {cameraForm && (
-          <div className="alm-equipment__form">
-            <div className="alm-equipment__form-grid">
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-camera-name">
-                  {m.settings_equipment_col_name()}
-                </label>
-                <input
-                  id="equipment-camera-name"
-                  type="text"
-                  className="alm-input"
-                  aria-label={m.settings_equipment_col_name()}
-                  value={cameraForm.name}
-                  onChange={(e) => setCameraForm({ ...cameraForm, name: e.target.value })}
-                />
-              </div>
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-camera-aliases">
-                  {m.common_aliases()}
-                  <span className="alm-field-hint"> ({m.settings_equipment_field_aliases_hint()})</span>
-                </label>
-                <input
-                  id="equipment-camera-aliases"
-                  type="text"
-                  className="alm-input"
-                  aria-label={m.common_aliases()}
-                  value={cameraForm.aliasesText}
-                  onChange={(e) => setCameraForm({ ...cameraForm, aliasesText: e.target.value })}
-                />
-              </div>
+          <EquipmentFormShell
+            error={cameraFormError}
+            saving={cameraSaving}
+            onCancel={() => setCameraForm(null)}
+            onSave={handleCameraSubmit}
+          >
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-camera-name">
+                {m.settings_equipment_col_name()}
+              </label>
+              <input
+                id="equipment-camera-name"
+                type="text"
+                className="alm-input"
+                aria-label={m.settings_equipment_col_name()}
+                value={cameraForm.name}
+                onChange={(e) => setCameraForm({ ...cameraForm, name: e.target.value })}
+              />
             </div>
-            {cameraFormError && <span className="alm-field-error">{cameraFormError}</span>}
-            <div className="alm-equipment__form-actions">
-              <Btn size="sm" variant="ghost" onClick={() => setCameraForm(null)} disabled={cameraSaving}>
-                {m.common_cancel()}
-              </Btn>
-              <Btn size="sm" onClick={() => void handleCameraSubmit()} disabled={cameraSaving}>
-                {cameraSaving ? m.common_saving() : m.common_save()}
-              </Btn>
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-camera-aliases">
+                {m.common_aliases()}
+                <span className="alm-field-hint"> ({m.settings_equipment_field_aliases_hint()})</span>
+              </label>
+              <input
+                id="equipment-camera-aliases"
+                type="text"
+                className="alm-input"
+                aria-label={m.common_aliases()}
+                value={cameraForm.aliasesText}
+                onChange={(e) => setCameraForm({ ...cameraForm, aliasesText: e.target.value })}
+              />
             </div>
-          </div>
+          </EquipmentFormShell>
         )}
       </SettingsSection>
 
@@ -713,7 +744,13 @@ export function Equipment({ save: _save }: EquipmentProps) {
                     >
                       {m.common_edit()}
                     </Btn>
-                    <Btn size="sm" variant="ghost" onClick={() => requestDeleteTelescope(t)}>
+                    {/* Disabled until trains load — same TOCTOU guard as cameras. */}
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      disabled={trainsLoading}
+                      onClick={() => requestDeleteTelescope(t)}
+                    >
                       {m.common_remove()}
                     </Btn>
                   </span>
@@ -727,67 +764,56 @@ export function Equipment({ save: _save }: EquipmentProps) {
         )}
 
         {telescopeForm && (
-          <div className="alm-equipment__form">
-            <div className="alm-equipment__form-grid">
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-telescope-name">
-                  {m.settings_equipment_col_name()}
-                </label>
-                <input
-                  id="equipment-telescope-name"
-                  type="text"
-                  className="alm-input"
-                  aria-label={m.settings_equipment_col_name()}
-                  value={telescopeForm.name}
-                  onChange={(e) => setTelescopeForm({ ...telescopeForm, name: e.target.value })}
-                />
-              </div>
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-telescope-aliases">
-                  {m.common_aliases()}
-                  <span className="alm-field-hint"> ({m.settings_equipment_field_aliases_hint()})</span>
-                </label>
-                <input
-                  id="equipment-telescope-aliases"
-                  type="text"
-                  className="alm-input"
-                  aria-label={m.common_aliases()}
-                  value={telescopeForm.aliasesText}
-                  onChange={(e) => setTelescopeForm({ ...telescopeForm, aliasesText: e.target.value })}
-                />
-              </div>
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-telescope-focal-length">
-                  {m.settings_equipment_field_focal_length()}
-                </label>
-                <input
-                  id="equipment-telescope-focal-length"
-                  type="text"
-                  inputMode="numeric"
-                  className="alm-input"
-                  aria-label={m.settings_equipment_field_focal_length()}
-                  value={telescopeForm.focalLengthMmText}
-                  onChange={(e) =>
-                    setTelescopeForm({ ...telescopeForm, focalLengthMmText: e.target.value })
-                  }
-                />
-              </div>
+          <EquipmentFormShell
+            error={telescopeFormError}
+            saving={telescopeSaving}
+            onCancel={() => setTelescopeForm(null)}
+            onSave={handleTelescopeSubmit}
+          >
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-telescope-name">
+                {m.settings_equipment_col_name()}
+              </label>
+              <input
+                id="equipment-telescope-name"
+                type="text"
+                className="alm-input"
+                aria-label={m.settings_equipment_col_name()}
+                value={telescopeForm.name}
+                onChange={(e) => setTelescopeForm({ ...telescopeForm, name: e.target.value })}
+              />
             </div>
-            {telescopeFormError && <span className="alm-field-error">{telescopeFormError}</span>}
-            <div className="alm-equipment__form-actions">
-              <Btn
-                size="sm"
-                variant="ghost"
-                onClick={() => setTelescopeForm(null)}
-                disabled={telescopeSaving}
-              >
-                {m.common_cancel()}
-              </Btn>
-              <Btn size="sm" onClick={() => void handleTelescopeSubmit()} disabled={telescopeSaving}>
-                {telescopeSaving ? m.common_saving() : m.common_save()}
-              </Btn>
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-telescope-aliases">
+                {m.common_aliases()}
+                <span className="alm-field-hint"> ({m.settings_equipment_field_aliases_hint()})</span>
+              </label>
+              <input
+                id="equipment-telescope-aliases"
+                type="text"
+                className="alm-input"
+                aria-label={m.common_aliases()}
+                value={telescopeForm.aliasesText}
+                onChange={(e) => setTelescopeForm({ ...telescopeForm, aliasesText: e.target.value })}
+              />
             </div>
-          </div>
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-telescope-focal-length">
+                {m.settings_equipment_field_focal_length()}
+              </label>
+              <input
+                id="equipment-telescope-focal-length"
+                type="text"
+                inputMode="numeric"
+                className="alm-input"
+                aria-label={m.settings_equipment_field_focal_length()}
+                value={telescopeForm.focalLengthMmText}
+                onChange={(e) =>
+                  setTelescopeForm({ ...telescopeForm, focalLengthMmText: e.target.value })
+                }
+              />
+            </div>
+          </EquipmentFormShell>
         )}
       </SettingsSection>
 
@@ -842,51 +868,45 @@ export function Equipment({ save: _save }: EquipmentProps) {
         )}
 
         {filterForm && (
-          <div className="alm-equipment__form">
-            <div className="alm-equipment__form-grid">
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-filter-name">
-                  {m.settings_equipment_col_name()}
-                </label>
-                <input
-                  id="equipment-filter-name"
-                  type="text"
-                  className="alm-input"
-                  aria-label={m.settings_equipment_col_name()}
-                  value={filterForm.name}
-                  onChange={(e) => setFilterForm({ ...filterForm, name: e.target.value })}
-                />
-              </div>
-              <div className="alm-equipment__form-field">
-                <label className="alm-field-label" htmlFor="equipment-filter-category">
-                  {m.settings_equipment_field_category()}
-                </label>
-                <select
-                  id="equipment-filter-category"
-                  className="alm-select"
-                  value={filterForm.category}
-                  onChange={(e) =>
-                    setFilterForm({ ...filterForm, category: e.target.value as FilterCategory })
-                  }
-                >
-                  {FILTER_CATEGORIES.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {filterCategoryLabel(cat)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <EquipmentFormShell
+            error={filterFormError}
+            saving={filterSaving}
+            onCancel={() => setFilterForm(null)}
+            onSave={handleFilterSubmit}
+          >
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-filter-name">
+                {m.settings_equipment_col_name()}
+              </label>
+              <input
+                id="equipment-filter-name"
+                type="text"
+                className="alm-input"
+                aria-label={m.settings_equipment_col_name()}
+                value={filterForm.name}
+                onChange={(e) => setFilterForm({ ...filterForm, name: e.target.value })}
+              />
             </div>
-            {filterFormError && <span className="alm-field-error">{filterFormError}</span>}
-            <div className="alm-equipment__form-actions">
-              <Btn size="sm" variant="ghost" onClick={() => setFilterForm(null)} disabled={filterSaving}>
-                {m.common_cancel()}
-              </Btn>
-              <Btn size="sm" onClick={() => void handleFilterSubmit()} disabled={filterSaving}>
-                {filterSaving ? m.common_saving() : m.common_save()}
-              </Btn>
+            <div className="alm-stack-1">
+              <label className="alm-field-label" htmlFor="equipment-filter-category">
+                {m.settings_equipment_field_category()}
+              </label>
+              <select
+                id="equipment-filter-category"
+                className="alm-select"
+                value={filterForm.category}
+                onChange={(e) =>
+                  setFilterForm({ ...filterForm, category: e.target.value as FilterCategory })
+                }
+              >
+                {FILTER_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {filterCategoryLabel(cat)}
+                  </option>
+                ))}
+              </select>
             </div>
-          </div>
+          </EquipmentFormShell>
         )}
       </SettingsSection>
 

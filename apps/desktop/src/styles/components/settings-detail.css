@@ -448,11 +448,8 @@
   gap: var(--alm-sp-3);
 }
 
-.alm-equipment__form-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--alm-sp-1);
-}
+/* Form fields use the global `.alm-stack-1` utility (primitives.css) —
+   no per-feature clone of the flex-column/gap-1 rule here. */
 
 .alm-equipment__form-actions {
   display: flex;

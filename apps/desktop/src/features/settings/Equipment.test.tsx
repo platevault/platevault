@@ -270,6 +270,22 @@ describe('Equipment', () => {
     ).toBeInTheDocument();
   });
 
+  it('disables camera Remove while trains are still loading (TOCTOU guard)', async () => {
+    mockCamerasList.mockResolvedValue(ok([CAMERA]));
+    // Trains never resolve: the in-use pre-check has no data yet, so Remove
+    // must be disabled rather than allowing a delete that bypasses the guard.
+    mockTrainsList.mockReturnValue(new Promise(() => {}));
+
+    render(<Equipment save={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument());
+
+    const removeBtn = screen.getByText(m.common_remove()).closest('button');
+    expect(removeBtn).toBeDisabled();
+    fireEvent.click(removeBtn as HTMLButtonElement);
+    expect(mockCamerasDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('blocks deleting a telescope still referenced by an optical train', async () => {
     mockTelescopesList.mockResolvedValue(ok([TELESCOPE]));
     mockTrainsList.mockResolvedValue(ok([TRAIN]));
