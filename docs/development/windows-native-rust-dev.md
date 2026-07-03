@@ -4,6 +4,24 @@
 Library Manager desktop app as a **native Windows Tauri application**, when your
 canonical working copy lives inside WSL.
 
+## 🔒 Golden rule: the Windows checkout is a READ-ONLY runtime mirror
+
+**Never edit files in the Windows checkout** (`C:\dev\astro-plan`, or its
+`/mnt/c/dev/astro-plan` view from WSL) — not by hand, not with an editor, not via
+an agent. It exists only to *build and run* the app. The **only** thing that ever
+changes it is `git reset --hard origin/<branch>`.
+
+All edits happen in the **canonical WSL checkout**. The loop is always:
+
+> **edit in WSL → commit → `git push` → sync + relaunch the mirror.**
+
+Why: the mirror and the WSL repo are two independent checkouts. If anyone edits
+the mirror directly, its tree diverges and the next sync either silently loses
+those edits or collides with them. Keeping the mirror strictly read-only makes a
+conflict **impossible**. Use [`scripts/win-sync-run.ps1`](#sync--relaunch-in-one-step-agents-use-this)
+for every sync — it enforces this by discarding (and loudly reporting) any local
+change it finds on the mirror.
+
 ## Why this setup exists
 
 Running the app from the WSL checkout fails or is painful for two independent
@@ -20,14 +38,14 @@ reasons:
 The fix that eliminates **both**: keep a **second checkout on a native Windows
 NTFS drive** (e.g. `C:\dev\astro-plan`) and build/run there. node, cargo, Vite,
 and the WebView2 window are all Windows-native — nothing crosses the WSL
-boundary. The WSL copy stays as the canonical repo; the Windows copy is the
-runtime/preview mirror. An agent (or you) can edit the Windows copy from the WSL
-side via `/mnt/c/dev/astro-plan`, and Vite still hot-reloads (see Auto-update).
+boundary. The WSL copy stays as the canonical repo; the Windows copy is a
+**read-only runtime mirror** (see the golden rule above). You never edit the
+mirror; you sync it to a pushed branch and it runs that code.
 
 ```
-WSL  /home/<you>/dev/astro-plan      <- canonical git checkout (agent works here too)
-Win  C:\dev\astro-plan               <- native build + run + live preview
-      = /mnt/c/dev/astro-plan from inside WSL (edit here to drive HMR)
+WSL  /home/<you>/dev/astro-plan      <- canonical git checkout (ALL edits happen here)
+Win  C:\dev\astro-plan               <- read-only runtime mirror: build + run only
+      = /mnt/c/dev/astro-plan from inside WSL (never edit through this path)
 ```
 
 ## One-time prerequisites (Windows side)
@@ -92,6 +110,51 @@ pnpm install
 pnpm rebuild esbuild
 ```
 
+## Sync + relaunch in one step (agents: use this)
+
+**The Windows app always runs the persistent `win-qa` branch.** `win-qa` is the
+live QA integration branch that *every* agent merges into. It is never rebased
+away or renamed; Windows tracks it and nothing else.
+
+To get any change in front of the Windows app, the loop is always the same:
+
+1. **Do the work in WSL and commit it** on your branch. You may be in the primary
+   checkout or in an **isolated git worktree** — either is fine.
+2. **Land it on `win-qa`.** Push your branch and merge it into `win-qa`
+   (`gh pr create --base win-qa … && gh pr merge --squash`, or a direct merge +
+   push). If you worked in a **worktree**, its branch is *not* something Windows
+   can run — you **must** merge it into `win-qa` in the shared repo first. A
+   branch that only exists in your worktree will never appear on the mirror.
+3. **Sync + (re)launch the mirror** — from WSL, drive the Windows script:
+
+   ```bash
+   powershell.exe -NoProfile -File 'C:\dev\astro-plan\scripts\win-sync-run.ps1'
+   ```
+
+   It hard-resets the mirror to `origin/win-qa`, fixes the stale-mtime rebuild
+   trap, reinstalls deps if the lockfile moved, and starts the app (or restarts
+   it if anything changed). Add `-Mocks` for a UI-only preview, `-SyncOnly` to
+   update without touching the running app, or `-Force` to restart a wedged
+   window. `-Branch <name>` runs a different pushed branch for a one-off check.
+
+> **Never edit the mirror to preview a change faster.** Editing
+> `C:\dev\astro-plan` (or `/mnt/c/dev/astro-plan`) diverges it from `win-qa` and
+> the next sync will discard your edits. The mirror is read-only; `win-qa` is the
+> only channel.
+
+**Bootstrapping (one-time, if the script isn't on the mirror yet):** the script
+lives in the repo, so it self-updates on every sync. For the very first run,
+sync the mirror by hand once, then use the script thereafter:
+
+```powershell
+cd C:\dev\astro-plan
+git fetch origin; git checkout -B win-qa origin/win-qa; git reset --hard origin/win-qa
+pwsh -File scripts\win-sync-run.ps1
+```
+
+The sections below document the underlying `win-native-dev.ps1` launcher and the
+manual steps `win-sync-run.ps1` automates.
+
 ## Daily run
 
 Use the launch script (real backend + WSL-edit-safe HMR by default):
@@ -138,32 +201,42 @@ Consequences:
   `%APPDATA%\dev.astro-plan.astro-library-manager\alm.db`.
 - `VITE_USE_MOCKS=true` ⇒ data comes from `apps/desktop/src/data/fixtures/*`.
 
-## Auto-update (HMR) and where to edit
+## How updates reach the running app
 
-- Edit on the **Windows side** (VS Code on `C:\…`, etc.) → native file
-  notifications → instant HMR.
-- Edit from the **WSL side** via `/mnt/c/dev/astro-plan/…` → Windows file-change
-  notifications across the WSL bridge are unreliable, so **polling**
-  (`CHOKIDAR_USEPOLLING=true`, set by the launch script) is what guarantees Vite
-  sees the change. Verified: a `/mnt/c` edit produces
-  `[vite] (client) page reload …` and the window updates.
-- Component edits hot-swap in place; editing entry files (`main.tsx`) triggers a
-  full page reload. Rust source changes under `crates/…` or `src-tauri/…` cause
-  `tauri dev` to rebuild and relaunch the app automatically.
+The mirror is read-only, so updates never come from editing it — they come from
+syncing `win-qa` (see [Sync + relaunch](#sync--relaunch-in-one-step-agents-use-this)).
+Once `win-sync-run.ps1` has fast-forwarded the mirror and touched the changed
+files, the running `tauri dev` picks them up:
+
+- **Frontend changes** hot-reload via Vite. Polling
+  (`CHOKIDAR_USEPOLLING=true`, set by the launcher) guarantees Vite notices files
+  rewritten by `git reset` — a change produces `[vite] (client) page reload …`.
+  Editing entry files (`main.tsx`) triggers a full page reload.
+- **Rust changes** under `crates/…` or `src-tauri/…` make `tauri dev` rebuild and
+  relaunch the app. This only happens if the changed files have a *newer* mtime
+  than the last build, which is exactly why `win-sync-run.ps1` touches every file
+  it pulled — `git reset` alone restores old mtimes and cargo would skip the
+  rebuild, leaving a **stale binary** (the classic "my fix isn't showing" bug).
+
+Because a `reset --hard` can look like a large simultaneous change, the default
+`win-sync-run.ps1` behaviour is to **fully restart** the app on any change rather
+than trust in-place HMR — the running binary must always reflect the latest
+`win-qa` commit.
 
 ### Driving it from WSL (agent workflow)
 
-An agent operating in WSL can run the whole thing without a human at the Windows
-terminal:
+An agent in WSL runs the whole loop without a human at the Windows terminal — but
+**only through git + the sync script**, never by editing the mirror:
 
-- Edit files via the `/mnt/c/dev/astro-plan/…` paths.
-- Launch/stop/inspect the build via `powershell.exe -NoProfile -Command '…'`.
-- Launch detached and tee logs so the build can be watched without blocking:
-  ```powershell
-  Start-Process cmd.exe -WindowStyle Hidden -WorkingDirectory C:\dev\astro-plan\apps\desktop `
-    -ArgumentList '/c','set VITE_USE_MOCKS=false&& set CHOKIDAR_USEPOLLING=true&& pnpm tauri dev > C:\dev\astro-plan\tauri-dev.log 2>&1'
+- Make and commit edits in the **WSL** checkout (primary or worktree).
+- Merge them into **`win-qa`** and push.
+- Sync + relaunch, then read the log:
+  ```bash
+  powershell.exe -NoProfile -File 'C:\dev\astro-plan\scripts\win-sync-run.ps1'
+  #   watch progress:
+  #   powershell.exe -NoProfile -Command "Get-Content -Wait 'C:\dev\astro-plan\tauri-dev.log'"
   ```
-  Then read `/mnt/c/dev/astro-plan/tauri-dev.log` for progress.
+  Read `/mnt/c/dev/astro-plan/tauri-dev.log` from WSL for build progress.
 
 ## Stop / cleanup
 
@@ -185,5 +258,6 @@ Get-Process desktop_shell,cargo,rustc -ErrorAction SilentlyContinue | Stop-Proce
 | `UNC paths are not supported. Defaulting to Windows directory` | Harmless — `powershell.exe` was started with a WSL CWD. Always `Set-Location C:\dev\astro-plan` (or use the script) before building. |
 | `link.exe`/`cl` “not found” at the Rust link step | Install VS Build Tools 2022 “Desktop development with C++”. |
 | WSL-side edits don’t hot-reload | Ensure `CHOKIDAR_USEPOLLING=true` (default in the launch script). |
-| Keeping the two checkouts in sync | Treat WSL as canonical: `git push origin main` from WSL, then on Windows `git fetch origin; git reset --hard origin/main` (the mirror tree is often dirty/divergent so a plain `git pull` won't fast-forward — `git stash` first to keep any local mods). **Do NOT** pull the Windows checkout from the WSL repo over a `\\wsl.localhost\…` UNC path: `node`/`pnpm` fail over UNC and git is flaky there. Keep all git + node + cargo on the native `C:\` filesystem. |
+| Keeping the two checkouts in sync | Use `scripts\win-sync-run.ps1` — it does the canonical `git fetch; git reset --hard origin/win-qa` for you (and never preserves mirror-local edits, because there should be none). The mirror is read-only: WSL is canonical, everything lands on `win-qa`, Windows only ever *resets* to it. **Do NOT** pull the Windows checkout from the WSL repo over a `\\wsl.localhost\…` UNC path: `node`/`pnpm` fail over UNC and git is flaky there. Keep all git + node + cargo on the native `C:\` filesystem. |
+| Windows mirror shows unexpected local edits | Someone edited the read-only mirror (a rule violation). `win-sync-run.ps1` discards them on the next sync and reports what it dropped. Make the change in WSL, merge to `win-qa`, and re-sync instead. |
 | `tauri dev` fails with `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL … Exit status 4294967295` | The `beforeDevCommand` (Vite) couldn't bind `:5173`. A Vite dev server left running **inside WSL** on `:5173` is forwarded to Windows `localhost:5173`, and Vite uses `strictPort`. Kill the WSL `:5173` server (`lsof -ti :5173 \| xargs kill`) before launching on Windows, or change the port. |
