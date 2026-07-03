@@ -15,7 +15,7 @@ import { useDebouncedCallback } from 'use-debounce';
 import { Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { addToast } from '@/shared/toast';
-import { saveNote, noteByteLength, MAX_NOTE_BYTES, NOTE_DEBOUNCE_MS } from './manifests';
+import { saveNote, getProjectNote, noteByteLength, MAX_NOTE_BYTES, NOTE_DEBOUNCE_MS } from './manifests';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -40,12 +40,33 @@ export function ProjectNotesSection({
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
 
-  // Sync draft with upstream changes (e.g. after a reload).
+  // Sync draft with parent-provided content (when a caller passes initialContent).
   useEffect(() => {
-    if (!editing) {
+    if (initialContent !== undefined && !editing) {
       setDraft(initialContent ?? '');
     }
   }, [initialContent, editing]);
+
+  // Self-fetch the persisted spec-024 note on mount when the parent does NOT
+  // supply `initialContent` (e.g. the project detail drawer). Without this the
+  // saved note is invisible after the drawer is reopened (spec 024 SC-002 /
+  // US2 acceptance #1). Callers that pass `initialContent` keep prop-driven
+  // behavior and skip the fetch.
+  useEffect(() => {
+    if (initialContent !== undefined) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await getProjectNote({ projectId });
+        if (!cancelled) setDraft((prev) => (prev ? prev : res.content ?? ''));
+      } catch {
+        // Backend unavailable — leave the placeholder; saving still works.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, initialContent]);
 
   const byteCount = noteByteLength(draft);
   const overLimit = byteCount > MAX_NOTE_BYTES;

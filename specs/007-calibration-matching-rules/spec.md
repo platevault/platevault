@@ -7,7 +7,7 @@
 **Feature Branch**: `007-calibration-matching-rules`
 **Created**: 2026-05-09
 **Last Updated**: 2026-06-23
-**Status**: **Implemented** (closed 2026-07-03) — matching engine for bias/dark/flat + assign/ranking/candidate shipped (`crates/calibration/core/src/`), Tauri adapters + app use cases (`crates/app/calibration/`) and DTO mirrors in `contracts_core` in place. The 11 open tasks are all **DEFERRED**, not unstarted: 8 contract-test tasks blocked on the absent JSON-Schema test runner (domain guards already covered by unit tests), T040 blocked on spec-002's canonical `calibration_types` enum artifact, and T032/T033 doc/perf polish.
+**Status**: **Implemented** (closed 2026-07-03) — matching engine for bias/dark/flat + assign/ranking/candidate shipped (`crates/calibration/core/src/`), Tauri adapters + app use cases (`crates/app/calibration/`) and DTO mirrors in `contracts_core` in place. The 11 open tasks are all **DEFERRED**, not unstarted: 8 contract-test tasks blocked on the absent JSON-Schema test runner (domain guards already covered by unit tests), T040 blocked on spec-002's canonical `calibration_types` enum artifact, and T032/T033 doc/perf polish. (Earlier verify pass on 2026-06-23 accepted SC-001: matcher per-type keys are backend-configurable with defaults; the per-criterion surface is the spec-018 Calibration pane (FR-009 split); gates were green with `calibration_core` 74 tests.)
 **Input**: User description: "Specify configurable calibration matching rules per calibration type, with recommendations and manual override."
 
 ## Implementation Status: Implemented (2026-07-03)

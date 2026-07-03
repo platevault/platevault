@@ -101,6 +101,8 @@ function errorMessage(err: TargetOpError, fallback: string): string {
       return m.targets_detail_target_not_found();
     case 'target.invalid_id':
       return m.targets_detail_invalid_target_id();
+    case 'note.content_too_large':
+      return m.err_note_content_too_large();
     default:
       return fallback;
   }
@@ -870,6 +872,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               placeholder={m.targets_detail_notes_placeholder()}
               value={notesDraft}
               rows={5}
+              maxLength={16384}
               disabled={notesSaving}
               onChange={(e) => {
                 setNotesDraft(e.target.value);

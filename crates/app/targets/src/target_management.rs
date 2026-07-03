@@ -28,6 +28,11 @@ use domain_core::ids::Timestamp;
 use targeting_resolver::cache::{self, CachedTarget, TargetListRow};
 use targeting_resolver::AliasKind;
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+/// Maximum UTF-8 byte length for a target observing note (FR-004 / spec 023).
+const MAX_NOTE_BYTES: usize = 16_384;
+
 // ── Error helpers ────────────────────────────────────────────────────────────
 
 fn not_found(id: &str) -> TargetOpError {
@@ -434,6 +439,8 @@ pub async fn note_get(
 ///
 /// Empty or whitespace-only `notes` clears the field (stores NULL).
 /// Returns the stored value after the update.
+/// Notes exceeding 16 384 UTF-8 bytes (after trimming) are rejected with
+/// `note.content_too_large` (FR-004).
 ///
 /// Emits a `target.note.updated` audit event after a successful DB write.
 /// Bus publish failures are logged at `warn` but do NOT fail the operation.
@@ -441,7 +448,7 @@ pub async fn note_get(
 /// # Errors
 ///
 /// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
-/// or `internal.database`.
+/// `note.content_too_large`, or `internal.database`.
 pub async fn note_update(
     pool: &SqlitePool,
     bus: &EventBus,
@@ -462,6 +469,17 @@ pub async fn note_update(
     }
     // Blank/whitespace → store NULL (clear).
     let trimmed = req.notes.trim();
+    // FR-004: reject notes exceeding 16 KB UTF-8.
+    if trimmed.len() > MAX_NOTE_BYTES {
+        return Err(TargetOpError {
+            code: "note.content_too_large".to_owned(),
+            message: format!(
+                "Note body exceeds the 16 384-byte limit ({} bytes supplied).",
+                trimmed.len()
+            ),
+            details: None,
+        });
+    }
     let stored: Option<&str> = if trimmed.is_empty() { None } else { Some(trimmed) };
     let updated =
         persistence_db::repositories::targets::set_target_notes(pool, &req.target_id, stored)
@@ -1044,5 +1062,72 @@ mod tests {
         };
         let err = note_update(db.pool(), &bus, &req).await.unwrap_err();
         assert_eq!(err.code, "target.not_found");
+    }
+
+    // ── SC-003 / US4-AS3: note survives alias mutations ───────────────────────
+
+    /// A stored note must be unchanged after a user alias is added and then
+    /// removed on the same target (SC-003 / US4-AS3).
+    #[tokio::test]
+    async fn note_survives_alias_add_and_remove() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        let bus = make_bus(&db);
+
+        // Step 1: store a note.
+        let upd = TargetNoteUpdateRequest {
+            target_id: id.to_string(),
+            notes: "Best viewed in autumn.".to_owned(),
+        };
+        note_update(db.pool(), &bus, &upd).await.unwrap();
+
+        // Step 2: add a user alias.
+        let add_req =
+            TargetAliasAddRequest { target_id: id.to_string(), alias: "Andromeda".to_owned() };
+        let added = alias_add(db.pool(), &add_req).await.unwrap();
+
+        // Step 3: remove that alias.
+        let rem_req =
+            TargetAliasRemoveRequest { target_id: id.to_string(), alias_id: added.alias.id };
+        alias_remove(db.pool(), &rem_req).await.unwrap();
+
+        // Step 4: note must still be intact.
+        let get_req = TargetNoteGetRequest { target_id: id.to_string() };
+        let result = note_get(db.pool(), &get_req).await.unwrap();
+        assert_eq!(
+            result.notes.as_deref(),
+            Some("Best viewed in autumn."),
+            "SC-003: note must survive alias add + remove"
+        );
+    }
+
+    // ── FR-004: 16 KB note size cap ───────────────────────────────────────────
+
+    /// A note exceeding 16 384 UTF-8 bytes (after trimming) must be rejected
+    /// with error code `note.content_too_large` (FR-004).
+    #[tokio::test]
+    async fn note_update_over_16kb_rejected() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        let bus = make_bus(&db);
+
+        // 16 385 ASCII bytes (one byte over the 16 384-byte cap).
+        let oversized = "x".repeat(MAX_NOTE_BYTES + 1);
+        let req = TargetNoteUpdateRequest { target_id: id.to_string(), notes: oversized };
+        let err = note_update(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, "note.content_too_large", "FR-004: notes >16 KB must be rejected");
+    }
+
+    /// A note exactly at the 16 384-byte limit must be accepted.
+    #[tokio::test]
+    async fn note_update_exactly_16kb_accepted() {
+        let db = setup().await;
+        let id = seed_m31(&db).await;
+        let bus = make_bus(&db);
+
+        let at_limit = "x".repeat(MAX_NOTE_BYTES);
+        let req = TargetNoteUpdateRequest { target_id: id.to_string(), notes: at_limit.clone() };
+        let result = note_update(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(result.notes.as_deref(), Some(at_limit.as_str()));
     }
 }
