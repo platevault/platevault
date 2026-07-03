@@ -49,8 +49,13 @@ export function General() {
                 </span>
                 <span className="alm-theme-swatch__name">{t.label()}</span>
                 <span className="alm-theme-swatch__mode">
-                  {/* eslint-disable-next-line alm/no-user-string -- theme discriminants compared, not displayed */}
-                  {t.id === 'system' ? `auto · ${resolved.includes('dark') ? 'dark' : 'light'}` : t.mode}
+                  {t.id === 'system'
+                    ? resolved.includes('dark')
+                      ? m.settings_theme_mode_auto_dark()
+                      : m.settings_theme_mode_auto_light()
+                    : t.mode === 'dark'
+                      ? m.settings_theme_mode_dark()
+                      : m.settings_theme_mode_light()}
                 </span>
               </button>
             );

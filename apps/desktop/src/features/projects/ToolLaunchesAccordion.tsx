@@ -61,7 +61,11 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
       {/* Kind badge */}
       <span
         className={`artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge` + (isFallback ? ' alm-tool-launches__kind-badge--fallback' : '')}
-        title={`${artifact.kind}${isFallback ? ' (low confidence)' : ''}`}
+        title={
+          isFallback
+            ? m.projects_toollaunch_low_confidence({ kind: artifact.kind })
+            : artifact.kind
+        }
       >
         {artifact.kind}
       </span>

@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { TargetListItem } from '@/bindings/index';
+import type { TargetListItem, TargetObjectType } from '@/bindings/index';
 import { ListSidebar } from '@/components';
 import { Pill, SegControl } from '@/ui';
 import { m } from '@/lib/i18n';
+import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 
 /**
  * Estimated row height (px) for the virtualizer's initial measurement.
@@ -35,9 +36,9 @@ function matchesSearch(t: TargetListItem, query: string): boolean {
   );
 }
 
-/** Formats the objectType string into a readable label. */
+/** Formats the objectType string into a readable, localized label. */
 function formatType(objectType: string): string {
-  return objectType.replace(/_/g, ' ');
+  return objectTypeLabel(objectType as TargetObjectType);
 }
 
 export function TargetList({ targets, selected, onSelect }: Props) {
