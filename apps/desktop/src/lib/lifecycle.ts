@@ -1,5 +1,6 @@
 import type { PillVariant } from '@/ui';
 import type { ProjectState, SessionState } from '@/bindings/index';
+import { m } from '@/lib/i18n';
 
 /**
  * Centralized project lifecycle model — the single source of truth for the
@@ -34,14 +35,17 @@ export const projectStateIndex: Record<ProjectState, number> = {
   blocked: -1,
 };
 
-const PROJECT_STATE_LABELS: Record<ProjectState, string> = {
-  setup_incomplete: 'Setup',
-  ready: 'Ready',
-  prepared: 'Prepared',
-  processing: 'Processing',
-  completed: 'Completed',
-  archived: 'Archived',
-  blocked: 'Blocked',
+// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8) —
+// the Record itself stays exhaustive over `ProjectState`, but no `m.*()` call
+// happens until `projectStateLabel` actually invokes the thunk.
+const PROJECT_STATE_LABEL_FNS: Record<ProjectState, () => string> = {
+  setup_incomplete: () => m.lifecycle_state_setup(),
+  ready: () => m.lifecycle_state_ready(),
+  prepared: () => m.lifecycle_state_prepared(),
+  processing: () => m.lifecycle_state_processing(),
+  completed: () => m.lifecycle_state_completed(),
+  archived: () => m.lifecycle_state_archived(),
+  blocked: () => m.lifecycle_state_blocked(),
 };
 
 const PROJECT_STATE_VARIANTS: Record<ProjectState, PillVariant> = {
@@ -55,7 +59,7 @@ const PROJECT_STATE_VARIANTS: Record<ProjectState, PillVariant> = {
 };
 
 export function projectStateLabel(state: string): string {
-  return PROJECT_STATE_LABELS[state as ProjectState] ?? state;
+  return PROJECT_STATE_LABEL_FNS[state as ProjectState]?.() ?? state;
 }
 
 export function projectStateVariant(state: string): PillVariant {
