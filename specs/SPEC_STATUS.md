@@ -68,7 +68,7 @@ updated 041 / 017 rows and the CI note.
 | 037 e2e-integration-testing | 🟠 Partial / gated | 24/39; Layer-1 + CI Stage A done. Gate note is now stale — `search.global`/`sessions.list`/`calibration.masters` graduated to real backends; only `sessions.transition` + tauri-driver wiring remain |
 | 037 ipc-wrapper-removal | 🟡 In progress (~8/15) | tasks.md says 2/15 but Phases 1–2 shipped: `api/ipc.ts` switcher exists, `commands.ts` has 0 invoke literals. Phase 3–4 (repoint 99 `@/api/commands` importers) open |
 | 038 wizard-scan-step | ✅ Implemented | merged (no committed tasks.md) |
-| 039 cross-root-inbox | ⚪ Not started | no plan/tasks; 041 base now on main |
+| 039 cross-root-inbox | 🔴 Superseded by 041 | Scope fully implemented via 041 — cross-root `inbox_list`, inbox optional (`REQUIRED_KINDS`), rescan-all, bounded/virtualized. All 3 US + 7 FR + 5 SC verified in code 2026-07-03. No plan/tasks.md authored |
 | 040 calibration-masters-detection | ✅ Implemented | validated end-to-end 2026-06-23 |
 | 041 inbox-plan-surface | ✅ iteration-1 / 🟡 iteration-2 implemented on `redesign-ui-platevault` (pending merge to main) | iter-1 (confirm + plan surface + apply + destination model) shipped 59/59. **iter-2 (single-type sub-items, T061–T081) is now implemented with tests on `redesign-ui-platevault`** — migration `0049_inbox_single_type.sql`, real missing-mandatory gate (`inbox/confirm.rs` sentinel), field-agnostic `reclassify_v2` (`inbox/reclassify.rs`), `build_frame_metadata` grouping (`inbox/classify.rs`), split/mixed confirm action removed from the contract. **Not yet on `main`** — lands with PR #349. Supersedes 005 |
 | 042 stdlib-adoption | ✅ Implemented | 80/97; reconciled #310 |
