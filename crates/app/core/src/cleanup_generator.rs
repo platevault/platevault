@@ -401,6 +401,7 @@ mod tests {
         PlanProtectionCheckRequest, ProtectionLevel, SourceProtectionSetRequest,
     };
     use persistence_db::repositories::artifacts::{insert_artifact, InsertArtifact};
+    use persistence_db::repositories::plans as plans_repo;
     use persistence_db::repositories::projects::{insert_project, InsertProject};
     use persistence_db::Database;
 
@@ -622,9 +623,8 @@ mod tests {
         scan(db.pool(), "p1").await.unwrap();
 
         // No plan rows exist after a pure scan.
-        let count: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM plans").fetch_one(db.pool()).await.unwrap();
-        assert_eq!(count.0, 0, "scan must not create a plan (D11 step 1)");
+        let plans = plans_repo::list_plans(db.pool(), &[], &[], None, 100).await.unwrap();
+        assert!(plans.is_empty(), "scan must not create a plan (D11 step 1)");
     }
 
     #[tokio::test]
@@ -653,21 +653,13 @@ mod tests {
         // approval (constitution II).
         assert_eq!(resp.protected_item_count, 2);
 
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM plan_items WHERE plan_id = ?")
-            .bind(&resp.plan_id)
-            .fetch_one(db.pool())
-            .await
-            .unwrap();
-        assert_eq!(count.0, 2);
+        let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+        assert_eq!(items.len(), 2);
 
         // FR-012 / D17: the plan carries a real destination byte requirement —
         // the sum of the two archive-action item sizes (1000 + 2000).
-        let bytes: (i64,) = sqlx::query_as("SELECT total_bytes_required FROM plans WHERE id = ?")
-            .bind(&resp.plan_id)
-            .fetch_one(db.pool())
-            .await
-            .unwrap();
-        assert_eq!(bytes.0, 3000);
+        let plan = plans_repo::get_plan(db.pool(), &resp.plan_id, false).await.unwrap();
+        assert_eq!(plan.total_bytes_required, 3000);
     }
 
     #[tokio::test]
@@ -693,12 +685,8 @@ mod tests {
         let resp = generate(db.pool(), "p1", None, None).await.unwrap();
         assert_eq!(resp.item_count, 1);
 
-        let bytes: (i64,) = sqlx::query_as("SELECT total_bytes_required FROM plans WHERE id = ?")
-            .bind(&resp.plan_id)
-            .fetch_one(db.pool())
-            .await
-            .unwrap();
-        assert_eq!(bytes.0, 0, "delete items need no destination space");
+        let plan = plans_repo::get_plan(db.pool(), &resp.plan_id, false).await.unwrap();
+        assert_eq!(plan.total_bytes_required, 0, "delete items need no destination space");
     }
 
     // ── Protected-category exclusion end-to-end ───────────────────────────
