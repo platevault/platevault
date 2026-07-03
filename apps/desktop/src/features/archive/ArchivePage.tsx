@@ -81,7 +81,7 @@ export function ArchivePage() {
                     <Pill variant="ghost">{a.entityType}</Pill>
                   </>
                 }
-                meta={`Archived ${a.archivedAt}`}
+                meta={m.archive_item_archived_on({ date: a.archivedAt })}
               />
             ))}
           </ListSidebar>

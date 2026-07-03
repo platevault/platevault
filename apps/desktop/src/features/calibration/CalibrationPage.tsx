@@ -161,7 +161,7 @@ export function CalibrationPage() {
         ) : undefined
       }
       onCloseDetail={master != null ? clearSelection : undefined}
-      detailLabel="Master details"
+      detailLabel={m.calibration_master_details_label()}
     >
       <MastersTable
         masters={visibleMasters}

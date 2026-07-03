@@ -46,19 +46,19 @@ function statusVariant(status: SuggestStatus | string): PillVariant {
 
 function statusLabel(status: SuggestStatus | string): string {
   switch (status) {
-    case 'match': return 'match';
-    case 'ambiguous': return 'ambiguous';
-    case 'no_match': return 'no match';
-    case 'observer_location_missing': return 'location missing';
+    case 'match': return m.calibration_status_match();
+    case 'ambiguous': return m.calibration_status_ambiguous();
+    case 'no_match': return m.calibration_status_no_match();
+    case 'observer_location_missing': return m.calibration_status_location_missing();
     default: return status;
   }
 }
 
 function reasonLabel(reason: MismatchReason): string {
   switch (reason) {
-    case 'out_of_tolerance': return 'out of tolerance';
-    case 'metadata_missing': return 'metadata missing';
-    case 'hard_rule_violation': return 'hard rule violation';
+    case 'out_of_tolerance': return m.calibration_reason_out_of_tolerance();
+    case 'metadata_missing': return m.calibration_reason_metadata_missing();
+    case 'hard_rule_violation': return m.calibration_reason_hard_rule_violation();
     default: return reason;
   }
 }

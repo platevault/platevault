@@ -264,7 +264,7 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         kind: s.kind,
         path: s.path,
         success: false,
-        error: `Batch registration failed: ${errMessage(err)}`,
+        error: m.setup_sources_error_batch_registration_failed({ message: errMessage(err) }),
       })),
       allSucceeded: false,
     };
