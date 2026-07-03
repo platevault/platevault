@@ -20,7 +20,6 @@ const ROW_ESTIMATE_DENSE = 34;
 const ROW_ESTIMATE_RICH = 54;
 
 type RowDensity = 'Dense' | 'Rich';
-const DENSITY_OPTIONS: RowDensity[] = ['Dense', 'Rich'];
 
 interface Props {
   targets: TargetListItem[];
@@ -70,7 +69,10 @@ export function TargetList({ targets, selected, onSelect }: Props) {
       controls={
         <>
           <SegControl
-            options={DENSITY_OPTIONS}
+            options={[
+              { value: 'Dense', label: m.targets_legacy_density_dense() },
+              { value: 'Rich', label: m.targets_legacy_density_rich() },
+            ]}
             value={density}
             onChange={(v) => setDensity(v as RowDensity)}
             aria-label={m.targets_legacy_row_density_aria()}
