@@ -4,8 +4,11 @@
 //! - `validate_pattern` — structural validation without metadata.
 //! - `resolve_pattern`  — full resolution against a metadata bundle.
 //! - `preview_pattern`  — preview resolution against sample metadata for the UI.
+//! - `preview_path_pattern` — preview resolution of a per-type **path-string**
+//!   pattern (spec 041 destination model, package P11) against sample
+//!   metadata.
 //!
-//! All three delegate to `crates/patterns` and translate domain errors into
+//! All four delegate to `crates/patterns` and translate domain errors into
 //! `ContractError` codes matching the JSON Schemas in
 //! `specs/015-token-pattern-builder/contracts/`.
 
@@ -17,13 +20,14 @@
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
 use contracts_core::patterns::{
-    PatternPartDto, PatternPreviewRequest, PatternPreviewResponse, PatternResolveRequest,
-    PatternResolveResponse, PatternValidateRequest, PatternValidateResponse,
+    PathPatternPreviewRequest, PathPatternPreviewResponse, PatternPartDto, PatternPreviewRequest,
+    PatternPreviewResponse, PatternResolveRequest, PatternResolveResponse, PatternValidateRequest,
+    PatternValidateResponse,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use patterns::{
     registry::V1_REGISTRY,
-    resolver::{ResolveError, ResolverConfig},
+    resolver::{resolve_pattern_str, ResolveError, ResolverConfig},
     validator::ValidateError,
     PatternPart,
 };
@@ -141,6 +145,35 @@ pub fn preview_pattern(
         missing_tokens: r.missing_tokens,
         warnings: r.warnings,
     })
+}
+
+// ── preview_path_pattern (spec 041 per-type destination patterns, P11) ───────
+
+/// Preview a per-type destination **path-string** pattern (e.g.
+/// `masters/flats/{filter}/`) against sample metadata, for the Settings
+/// per-frame-type destination pattern editor's live preview.
+///
+/// Delegates to `patterns::resolver::resolve_pattern_str`, which reuses
+/// [`V1_REGISTRY`] as the single token-name authority and applies the same
+/// sanitization/traversal/reserved-name/length pipeline as [`resolve_pattern`].
+///
+/// # Errors
+///
+/// Returns `ContractError` for an empty pattern, an unknown `{token}`, or a
+/// resolved path that fails sanitization or length limits — the same error
+/// codes as [`resolve_pattern`].
+#[allow(clippy::result_large_err)]
+pub fn preview_path_pattern(
+    req: &PathPatternPreviewRequest,
+) -> Result<PathPatternPreviewResponse, ContractError> {
+    let metadata = req.sample_metadata.to_bundle();
+    resolve_pattern_str(&req.pattern, &metadata)
+        .map(|r| PathPatternPreviewResponse {
+            resolved_path: r.relative_path,
+            missing_tokens: r.missing_tokens,
+            warnings: r.warnings.iter().map(|w| w.code().to_owned()).collect(),
+        })
+        .map_err(map_resolve_error)
 }
 
 // ── Error mapping ─────────────────────────────────────────────────────────────
@@ -327,5 +360,90 @@ mod tests {
         let resp = preview_pattern(&req).unwrap();
         assert!(resp.missing_tokens.contains(&"filter".to_owned()));
         assert!(resp.resolved_path.contains("nofilter"));
+    }
+
+    // ── preview_path_pattern (spec 041 per-type destination patterns, P11) ──
+
+    #[test]
+    fn path_preview_resolves_master_flat_default() {
+        let req = PathPatternPreviewRequest {
+            pattern: "masters/flats/{filter}/".to_owned(),
+            sample_metadata: MetadataBundleDto {
+                filter: Some("Ha".to_owned()),
+                ..Default::default()
+            },
+        };
+        let resp = preview_path_pattern(&req).unwrap();
+        assert_eq!(resp.resolved_path, "masters/flats/Ha");
+        assert!(resp.missing_tokens.is_empty());
+    }
+
+    #[test]
+    fn path_preview_resolves_light_default_with_literal_segment() {
+        let req = PathPatternPreviewRequest {
+            pattern: "{target}/{filter}/{date}/light/".to_owned(),
+            sample_metadata: MetadataBundleDto {
+                target: Some("M31".to_owned()),
+                filter: Some("Ha".to_owned()),
+                date: Some("2026-06-21".to_owned()),
+                ..Default::default()
+            },
+        };
+        let resp = preview_path_pattern(&req).unwrap();
+        assert_eq!(resp.resolved_path, "M31/Ha/2026-06-21/light");
+        assert!(resp.missing_tokens.is_empty());
+    }
+
+    #[test]
+    fn path_preview_missing_token_falls_back_and_reports() {
+        let req = PathPatternPreviewRequest {
+            pattern: "darks/{exposure}/".to_owned(),
+            sample_metadata: MetadataBundleDto::default(),
+        };
+        let resp = preview_path_pattern(&req).unwrap();
+        assert_eq!(resp.resolved_path, "darks/unknown-exposure");
+        assert!(resp.missing_tokens.contains(&"exposure".to_owned()));
+    }
+
+    #[test]
+    fn path_preview_literal_only_pattern() {
+        let req = PathPatternPreviewRequest {
+            pattern: "bias/".to_owned(),
+            sample_metadata: MetadataBundleDto::default(),
+        };
+        let resp = preview_path_pattern(&req).unwrap();
+        assert_eq!(resp.resolved_path, "bias");
+        assert!(resp.missing_tokens.is_empty());
+    }
+
+    #[test]
+    fn path_preview_empty_pattern_returns_pattern_empty_code() {
+        let req = PathPatternPreviewRequest {
+            pattern: String::new(),
+            sample_metadata: MetadataBundleDto::default(),
+        };
+        let err = preview_path_pattern(&req).unwrap_err();
+        assert_eq!(err.code, ErrorCode::PatternEmpty);
+    }
+
+    #[test]
+    fn path_preview_unknown_token_returns_token_unknown_code() {
+        let req = PathPatternPreviewRequest {
+            pattern: "{telescope}/x/".to_owned(),
+            sample_metadata: MetadataBundleDto::default(),
+        };
+        let err = preview_path_pattern(&req).unwrap_err();
+        assert_eq!(err.code, ErrorCode::TokenUnknown);
+        assert_eq!(err.details.0.get("token").and_then(|t| t.as_str()), Some("telescope"));
+    }
+
+    #[test]
+    fn path_preview_literal_traversal_rejected() {
+        let req = PathPatternPreviewRequest {
+            pattern: "masters/../x/".to_owned(),
+            sample_metadata: MetadataBundleDto::default(),
+        };
+        let err = preview_path_pattern(&req).unwrap_err();
+        assert_eq!(err.code, ErrorCode::PathTraversal);
     }
 }

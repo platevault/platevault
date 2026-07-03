@@ -57,9 +57,41 @@ import type {
   UpdateIngestionSettings,
   AuditFilterDto,
   AuditPaginationDto,
+  PathPatternPreviewResponse,
 } from '@/bindings/index';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// ── pattern.path_preview token bridge (spec 041 P11) ──────────────────────────
+//
+// Maps a v1 registry `{token}` name (snake_case, as it appears in a per-type
+// destination pattern string) to the camelCase `MetadataBundleDto` field name
+// carried in `sampleMetadata`. Fallbacks mirror `crates/patterns/src/registry.rs`
+// (data-model.md §Errors) so the mock preview matches the real resolver's
+// "missing token" substitution.
+const PATH_PREVIEW_TOKEN_FIELDS: Record<string, string> = {
+  target: 'target',
+  filter: 'filter',
+  date: 'date',
+  frame_type: 'frameType',
+  camera: 'camera',
+  exposure: 'exposure',
+  gain: 'gain',
+  binning: 'binning',
+  set_temp: 'setTemp',
+};
+
+const PATH_PREVIEW_TOKEN_FALLBACKS: Record<string, string> = {
+  target: 'unclassified',
+  filter: 'nofilter',
+  date: 'undated',
+  frame_type: 'unknown',
+  camera: 'unknown-camera',
+  exposure: 'unknown-exposure',
+  gain: 'unknown-gain',
+  binning: '1x1',
+  set_temp: 'untempered',
+};
 
 // --- Inline fixtures for modules not yet created by T015 ---
 //
@@ -1143,6 +1175,41 @@ export async function mockInvoke(
       }
       mockFilters = mockFilters.filter((f) => f.id !== id);
       return null;
+    }
+
+    // ── pattern.path_preview (spec 041 per-type destination patterns, P11) ──
+    //
+    // Mirrors the real resolver's token-substitution + missing-token report
+    // for the mock/dev environment. `{token}` names are the v1 registry
+    // token names (snake_case); `sampleMetadata` carries the camelCase DTO
+    // field names, so PATH_PREVIEW_TOKEN_FIELDS bridges the two.
+    case 'pattern_path_preview': {
+      const req = (_args as { request?: { pattern?: string; sampleMetadata?: Record<string, string | null | undefined> } } | undefined)?.request;
+      const pattern = req?.pattern ?? '';
+      const sample = req?.sampleMetadata ?? {};
+      if (pattern.trim() === '') {
+        throw 'pattern.empty';
+      }
+      const missingTokens: string[] = [];
+      const segments = pattern
+        .split('/')
+        .filter((seg) => seg !== '')
+        .map((seg) =>
+          seg.replace(/\{([^}]*)\}/g, (_match, token: string) => {
+            const field = PATH_PREVIEW_TOKEN_FIELDS[token];
+            const value = field ? sample[field] : undefined;
+            if (value == null || value === '') {
+              missingTokens.push(token);
+              return PATH_PREVIEW_TOKEN_FALLBACKS[token] ?? token;
+            }
+            return value;
+          }),
+        );
+      return {
+        resolvedPath: segments.join('/'),
+        missingTokens,
+        warnings: [],
+      } satisfies PathPatternPreviewResponse;
     }
 
     default:
