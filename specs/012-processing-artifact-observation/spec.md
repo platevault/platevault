@@ -10,11 +10,22 @@
 **Status**: Draft  
 **Input**: User description: "Specify how the app observes outputs from PixInsight, Siril, planetary/lunar tools, and future workflow profiles without becoming the processing tool."
 
-## Implementation Status: NOT IMPLEMENTED
+## Implementation Status: Substantially implemented (2026-07-03)
 
-No code lands for this feature. Mockup state for the Tool Launches drawer
-accordion is the only visible surface today (see feature 011 desktop mock).
-Architecture, contracts, and tasks below define the future-build target.
+Superseding the original "NOT IMPLEMENTED" note: the functional core is built.
+Real crate `crates/workflow/artifacts/` (watcher, classifier, reconciler,
+rules), migration `0025_artifacts.sql`, repository
+`crates/persistence/db/src/repositories/artifacts.rs`, and app use-cases in
+`crates/app/lifecycle/src/artifact.rs` (`detect`/`list`/`classify_override`/
+`mark_resolved`/`mark_missing`/`reattribute`/`complete_run`) are in place, with
+Tauri commands (`artifact_list`/`classify`/`mark_resolved`) + generated
+bindings, a live notify-rs OS watcher (`crates/fs/inventory/src/artifact_watcher.rs`,
+wired at `src-tauri/src/lib.rs`), and the `ToolLaunchesAccordion` drawer UI.
+Detection, classification, override, missing-state, attribution, persistence,
+contracts, and Tauri wiring all exist (T008's notify-rs watcher, marked deferred
+in tasks.md, is in fact done). Remaining open items are peripheral: integration/
+e2e/contract tests, a research doc, cross-spec sign-off (011/017/024), and a
+per-profile `watch_extensions` override (blocked on spec 018) — not core build.
 
 ## User Scenarios & Testing *(mandatory)*
 

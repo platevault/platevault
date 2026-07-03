@@ -42,9 +42,9 @@ updated 041 / 017 rows and the CI note.
 | 010 guided-first-project-flow | 🟡 Near-complete | 31/33 |
 | 011 processing-tool-launch | ✅ Implemented (closed 2026-07-03) | Launch pipeline + UI + cwd-guard + detach/pid shipped & tested; T021 hint + X-1/X-2 done in closeout; 2 open (T018 Playwright, T022 real-spawn) DEFERRED (WSL/sandbox-blocked). Unblocks 012 |
 | 012 processing-artifact-observation | 🟡 Partial | 26/36 (follows 011) |
-| 013 target-lookup-from-fits-object | 🟡 Near-complete | 18/21 (largely folded into 035) |
+| 013 target-lookup-from-fits-object | 🔴 Superseded by 035 | Fully subsumed by 035 — every FR/US covered by SIMBAD resolve-on-demand, or its one unique feature (fuzzy variant matching + confidence tiers) deliberately reversed (035 clarification Q4: exact-match only). 3 open tasks are obsolete stubs (spec-014 download pipeline / removed `catalog_equivalences`). Target-identity model retained in `crates/targeting/` |
 | 014 catalog-index-licensing | 🔴 Superseded by 035 | download-catalog mechanism abandoned; attribution model retained |
-| 015 token-pattern-builder | 🟡 Mockup only | 0/0 tasks |
+| 015 token-pattern-builder | ✅ Implemented | Chip-based naming-pattern builder shipped: `crates/patterns/` (registry/resolver/validator/sanitize, ~64 tests) + contracts + Tauri `pattern_validate`/`resolve`/`preview` + live `PatternChipsEditor` in `NamingStructure.tsx` (validate + preview). Full SpecKit artifact set exists (~30 tasks, not "0/0"). Deferred downstream scope (per-source overrides, session-backed preview) handed to spec 018 |
 | 016 source-protection-defaults | 🟡 Near-complete | 17/20 (underpins 017) |
 | 017 cleanup-archive-review-plans | 🟡 Backend done; Archive UI shipped, cleanup-review UI remainder open | Backend + archive/trash executor done; Archive UI exists (`features/archive/ArchivePage/List/Detail`). Remaining open work is the cleanup-plan *review* UI (contextual per v4), not greenfield — earlier "19 real-open / UI open" overstated it |
 | 018 settings-configuration-model | ✅ Reconciled + implemented (#348) | 42/46; spec reconciled to as-built scope/values architecture; backend + UI shipped & verified (live T034 walkthrough); 4 obsolete (contracts mirror, 014 key); open: FR-006↔043 density tension (cross-spec decision) |
