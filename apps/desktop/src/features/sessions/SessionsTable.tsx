@@ -195,22 +195,22 @@ export function SessionsTable({
         if (row.kind === 'header') {
           const { node, depth, path, collapsed: isCollapsed } = row;
           return {
-            _rowClassName: 'alm-sessions-table__group',
+            _rowClassName: 'alm-listgroup',
             target: (
               <button
                 type="button"
-                className="alm-sessions-table__group-cell"
+                className="alm-listgroup__cell"
                 data-testid={`sessions-group-${node.dimension}-${node.key}`}
                 aria-expanded={!isCollapsed}
                 onClick={() => toggle(path)}
                 // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
                 style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
               >
-                <span className="alm-sessions-list__group-caret" aria-hidden="true">
+                <span className="alm-listgroup__caret" aria-hidden="true">
                   {isCollapsed ? '▸' : '▾'}
                 </span>
-                <span className="alm-sessions-list__group-label">{node.label}</span>
-                <span className="alm-sessions-list__group-count">{node.count}</span>
+                <span className="alm-listgroup__label">{node.label}</span>
+                <span className="alm-listgroup__count">{node.count}</span>
               </button>
             ),
             ...EMPTY_CELLS,

@@ -21,7 +21,7 @@
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-sm);
   font-size: var(--alm-text-sm);
-  font-family: var(--alm-font-sans);
+
   background: var(--alm-bg);
   color: var(--alm-text);
   outline: none;

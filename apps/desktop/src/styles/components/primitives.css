@@ -20,7 +20,7 @@
   gap: var(--alm-sp-1); height: 28px;
   padding: 0 var(--alm-sp-3);
   font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
-  font-family: var(--alm-font-sans);
+
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-sm);
   background: var(--alm-bg); color: var(--alm-text-secondary);
@@ -183,7 +183,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.alm-table td.mono { font-family: var(--alm-font-mono); font-size: var(--alm-text-xs); }
+.alm-table td.mono {font-size: var(--alm-text-xs); }
 .alm-table td.num { font-variant-numeric: tabular-nums; text-align: right; }
 .alm-table td.muted { color: var(--alm-text-muted); }
 
