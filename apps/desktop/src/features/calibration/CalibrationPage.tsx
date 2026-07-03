@@ -36,7 +36,8 @@ import { useCalibrationMasters, useCalibrationSettings } from './useCalibration'
 
 // ── Toolbar vocab ─────────────────────────────────────────────────────────────
 
-const CALIB_DIMENSIONS: FilterOption[] = [
+// Render-time factory (spec 046 #8b) so dimension labels re-read the active locale.
+const CALIB_DIMENSIONS = (): FilterOption[] => [
   { value: 'kind', label: m.calibration_fp_kind() },
   { value: 'camera', label: m.settings_calmatch_camera() },
   { value: 'instrument', label: m.calibration_dim_instrument() },
@@ -138,7 +139,7 @@ export function CalibrationPage() {
               : undefined
           }
           grouping={{
-            dimensions: CALIB_DIMENSIONS,
+            dimensions: CALIB_DIMENSIONS(),
             dims,
             setSlot,
           }}

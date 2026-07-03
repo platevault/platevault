@@ -23,7 +23,7 @@ import type { InboxListItem } from '@/api/commands';
 import { Table, type TableColumn, type TableRow } from '@/ui';
 import { SortHeader } from '@/components';
 import { groupByDimensions, type GroupNode } from './grouping';
-import { ACCESSORS, DIM_LABELS } from './InboxControls';
+import { ACCESSORS, dimLabel } from './InboxControls';
 import { m } from '@/lib/i18n';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
@@ -358,7 +358,7 @@ export function InboxList({
   );
 
   const groupingHint = grouped
-    ? m.inbox_grouping_hint({ dims: dims.map((d) => DIM_LABELS[d]).join(' › ') })
+    ? m.inbox_grouping_hint({ dims: dims.map((d) => dimLabel(d)).join(' › ') })
     : null;
 
   return (

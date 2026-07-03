@@ -73,10 +73,12 @@ function reviewFilterLabel(v: string): string {
   return sessionStateLabel(v);
 }
 
-const REVIEW_OPTIONS: FilterOption[] = REVIEW_FILTERS.map((rf) => ({
-  value: rf,
-  label: reviewFilterLabel(rf),
-}));
+// Render-time factory (spec 046 #8b) so review labels re-read the active locale.
+const REVIEW_OPTIONS = (): FilterOption[] =>
+  REVIEW_FILTERS.map((rf) => ({
+    value: rf,
+    label: reviewFilterLabel(rf),
+  }));
 
 export function SessionsPage() {
   const { selected, sourceFilter, reviewFilter } = useSearch({
@@ -206,7 +208,7 @@ export function SessionsPage() {
               key: 'review',
               label: m.sessions_review_filter_label(),
               value: reviewFilter ?? '',
-              options: REVIEW_OPTIONS,
+              options: REVIEW_OPTIONS(),
               allLabel: 'Default',
               onChange: (v) =>
                 navigate({
