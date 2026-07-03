@@ -15,6 +15,7 @@
   "projects_tool_unknown": "Unknown tool",
   "projects_toollaunch_label": "Launch {id}…",
   "projects_toollaunch_unattributed": "Unattributed",
+  "projects_toollaunch_low_confidence": "{kind} (low confidence)",
   "projects_create_tool_pixinsight_desc": "WBPP, StarAlignment, integration",
   "projects_create_tool_siril_desc": "Free open-source stacking",
   "settings_density_compact_desc": "24px row height — fits more rows on screen",
@@ -1138,6 +1139,96 @@
   "inbox_kind_flat": "Flat",
   "inbox_kind_light": "Light",
   "inbox_kind_master": "Master",
+  "inbox_frametype_count_light": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} light",
+        "countPlural=other": "{count} lights"
+      }
+    }
+  ],
+  "inbox_frametype_count_dark": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} dark",
+        "countPlural=other": "{count} darks"
+      }
+    }
+  ],
+  "inbox_frametype_count_flat": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} flat",
+        "countPlural=other": "{count} flats"
+      }
+    }
+  ],
+  "inbox_frametype_count_bias": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bias",
+        "countPlural=other": "{count} biases"
+      }
+    }
+  ],
+  "inbox_frametype_count_dark_flat": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} dark flat",
+        "countPlural=other": "{count} dark flats"
+      }
+    }
+  ],
+  "inbox_frametype_count_master": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master",
+        "countPlural=other": "{count} masters"
+      }
+    }
+  ],
   "inbox_master_row_label": "{type} master",
   "inbox_state_classified": "classified",
   "inbox_state_master_fallback": "master",
@@ -1266,6 +1357,10 @@
   "settings_density_comfortable": "Comfortable",
   "settings_density_spacious": "Spacious",
   "settings_general_theme_system": "System",
+  "settings_theme_mode_auto_dark": "auto · dark",
+  "settings_theme_mode_auto_light": "auto · light",
+  "settings_theme_mode_dark": "dark",
+  "settings_theme_mode_light": "light",
   "projects_lifecycle_prepare": "Prepare",
   "projects_lifecycle_mark_processing": "Mark as Processing",
   "projects_lifecycle_revert_ready": "Revert to Ready",

@@ -62,9 +62,10 @@
 
 import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { TargetListItem } from '@/bindings/index';
+import type { TargetListItem, TargetObjectType } from '@/bindings/index';
 import { Pill } from '@/ui';
 import { SortHeader } from '@/components';
+import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
 import { rowAltitudeFor, USABLE_ALT_DEG, type RowAltitude } from './planner-altitude';
 import { AltitudeSparkline } from './AltitudeSparkline';
@@ -115,9 +116,9 @@ export const DEFAULT_TARGET_SORT: TargetSort = { col: 'designation', dir: 'asc' 
 export type TargetGroupBy = 'catalogue' | 'type';
 export const DEFAULT_TARGET_GROUP_BY: TargetGroupBy = 'catalogue';
 
-/** Formats the objectType string into a readable label. */
+/** Formats the objectType string into a readable, localized label. */
 export function formatType(objectType: string): string {
-  return objectType.replace(/_/g, ' ');
+  return objectTypeLabel(objectType as TargetObjectType);
 }
 
 /** Resolve the group key + display headline for a target under `groupBy`. */
