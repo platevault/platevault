@@ -22,14 +22,27 @@ const { mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
   mockResolveTarget: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  searchTargets: mockSearchTargets,
-  resolveTarget: mockResolveTarget,
-  TARGET_SEARCH_CONTRACT_VERSION: '1.0',
+// Mock the generated bindings: adapt each hoisted mock's raw response into the
+// generated `{ status: 'ok', data }` Result shape the real `unwrap` consumes,
+// so the existing mockResolvedValue/mockRejectedValue sites stay unchanged.
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    targetSearch: (req: unknown) =>
+      Promise.resolve(mockSearchTargets(req)).then((data) => ({ status: 'ok', data })),
+    targetResolve: (req: unknown) =>
+      Promise.resolve(mockResolveTarget(req)).then((data) => ({ status: 'ok', data })),
+  },
+}));
+
+vi.mock('@/api/ipc', () => ({
+  unwrap: <T,>(r: { status: string; data?: T; error?: unknown }) => {
+    if (r.status === 'error') throw r.error;
+    return r.data as T;
+  },
 }));
 
 import { TargetSearch } from './TargetSearch';
-import type { TargetSuggestion, ResolvedTarget } from '@/api/commands';
+import type { TargetSuggestion, ResolvedTarget } from '@/bindings/aliases';
 
 /** Build an `unresolved` resolve response (the offline / disabled default). */
 function unresolved(reason = 'offline') {

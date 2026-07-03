@@ -25,7 +25,8 @@ import {
   type LogEntrySource,
 } from '@/data/logStore';
 import { startLogSubscription } from '@/data/logSubscription';
-import { logExport } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import type { LevelFilter } from './LogPanelContext';
 import { errMessage } from '@/lib/errors';
 import { formatTimeOfDay } from '@/lib/datetime';
@@ -221,12 +222,9 @@ export function LogPanel() {
         return;
       }
 
-      await logExport({
-        requestId,
-        filePath,
-        format: 'json',
-        includeDiagnostics: showDiagnostics,
-      });
+      unwrap(
+        await commands.logExport(requestId, filePath, 'json', null, null, null, showDiagnostics),
+      );
     } catch (err) {
       setExportError(errMessage(err));
     }
