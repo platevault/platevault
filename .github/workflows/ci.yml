@@ -87,11 +87,9 @@ jobs:
         run: cargo build --workspace
 
       - name: Rust tests (Layer 1 — real SQLite, real migrations)
-        if: false # TODO(#356): tests disabled pending spec-043 redesign test redo
         run: cargo test --workspace
 
       - name: Frontend unit tests
-        if: false # TODO(#356): tests disabled pending spec-043 redesign test redo
         run: pnpm -r --if-present test
 
       - name: TypeScript typecheck
@@ -107,7 +105,6 @@ jobs:
   # UI regressions surface even when the Rust workspace gate is unrelatedly red.
   ui-e2e:
     name: UI E2E (mock-mode Playwright)
-    if: false # TODO(#356): tests disabled pending spec-043 redesign test redo
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
