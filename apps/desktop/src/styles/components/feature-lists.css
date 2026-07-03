@@ -879,6 +879,71 @@
   margin-top: var(--alm-sp-1);
 }
 
+/* Sources panel — sits between the read-only banner and the <form> below;
+ * mirrors .alm-edit-project__form's horizontal/top padding since it lives
+ * outside that flex column (WP-008-C). */
+.alm-edit-project__sources-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-4) var(--alm-sp-4) 0;
+}
+
+/* Sources — linked-source list + add-sources flow (WP-008-C) */
+.alm-edit-project__sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-1);
+}
+
+.alm-edit-project__sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alm-edit-project__source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border: 1px solid var(--alm-border);
+  border-radius: 4px;
+}
+
+.alm-edit-project__source-name {
+  font-size: var(--alm-text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alm-edit-project__source-confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+.alm-edit-project__add-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  border: 1px solid var(--alm-border);
+  border-radius: 6px;
+  padding: var(--alm-sp-3);
+}
+
+.alm-edit-project__add-sources-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  justify-content: flex-end;
+}
+
 /* Actions row — right-aligned Save / Cancel */
 .alm-edit-project__actions {
   display: flex;
