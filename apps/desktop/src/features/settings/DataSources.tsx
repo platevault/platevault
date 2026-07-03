@@ -10,6 +10,7 @@ import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
 import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
+import { RemapRootDialog } from './RemapRootDialog';
 
 const SOURCES_KEYS = ['followSymlinks', 'hashOnScan', 'alwaysPreviewBeforePlan'];
 
@@ -44,6 +45,9 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   const [addingCategory, setAddingCategory] = useState<RootCategory>('raw');
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+
+  // ── Remap dialog (P6a) ────────────────────────────────────────────────────
+  const [remapRoot, setRemapRoot] = useState<LibraryRoot | null>(null);
 
   // ── Overridable keys — fetched from backend (T025) ──────────────────────────
   const [overridableKeys, setOverridableKeys] = useState<string[]>([...OVERRIDABLE_KEYS_FALLBACK]);
@@ -216,11 +220,18 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               key={root.id}
               root={root}
               onRescan={handleRescan}
+              onRemap={setRemapRoot}
             />
           ))}
         </div>
       ))}
     </SettingsSection>
+
+    <RemapRootDialog
+      root={remapRoot}
+      onClose={() => setRemapRoot(null)}
+      onApplied={loadRoots}
+    />
 
     {/* Per-source setting override (spec 018 T025) */}
     {roots.length > 0 && (
@@ -307,9 +318,10 @@ export function DataSources({ save: _save }: DataSourcesProps) {
 interface RootCardProps {
   root: LibraryRoot;
   onRescan: (root: LibraryRoot) => void;
+  onRemap: (root: LibraryRoot) => void;
 }
 
-function RootCard({ root, onRescan }: RootCardProps) {
+function RootCard({ root, onRescan, onRemap }: RootCardProps) {
   const isOffline = !root.online;
 
   const metaParts: string[] = [];
@@ -366,13 +378,7 @@ function RootCard({ root, onRescan }: RootCardProps) {
             {m.settings_datasources_disable()}
           </Btn>
         )}
-        <Btn
-          size="sm"
-          onClick={() => {
-            // STUB: remap-root dialog flow pending (remapRoot + applyRootRemap exist in commands.ts)
-            console.log('STUB: remap backend command pending', root.id);
-          }}
-        >
+        <Btn size="sm" onClick={() => onRemap(root)}>
           {m.settings_datasources_remap()}
         </Btn>
         {isOffline && (

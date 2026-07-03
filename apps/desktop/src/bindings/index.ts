@@ -599,19 +599,28 @@ export const commands = {
 	 */
 	rootsRegisterBatch: (request: RegisterSourceBatchRequest_Deserialize) => typedError<RegisterSourceBatchResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("roots_register_batch", { request })),
 	/**
-	 *  `roots.remap` — preview a root path remap.
+	 *  `roots.remap` — preview a root path remap (P6a).
+	 * 
+	 *  Delegates to `app_core::first_run::remap_root` for path validation and
+	 *  sample-path verification against the real `registered_sources` row.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `ContractError` (`source.not_found`, `path.not_exists`,
+	 *  `path.not_directory`, `path.permission_denied`, or `internal.database`).
 	 */
 	rootsRemap: (rootId: string, newPath: string) => typedError<RemapVerification, ContractError_Serialize>(__TAURI_INVOKE("roots_remap", { rootId, newPath })),
 	/**
-	 *  `roots.remap.apply` — apply a verified root remap.
+	 *  `roots.remap.apply` — apply a previously previewed root remap (P6a).
+	 * 
+	 *  Delegates to `app_core::first_run::apply_root_remap`, which updates the
+	 *  root's stored path in `registered_sources` and publishes a `root.remapped`
+	 *  audit event.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `ContractError` (`source.not_found`, `path.not_exists`,
+	 *  `path.not_directory`, `path.permission_denied`, or `internal.database`).
 	 */
-	rootsRemapApply: (rootId: string, verified: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("roots_remap_apply", { rootId, verified })),
+	rootsRemapApply: (rootId: string, newPath: string, verified: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("roots_remap_apply", { rootId, newPath, verified })),
 	/**
 	 *  `scan.start` — start a filesystem scan, optionally for specific roots.
 	 * 

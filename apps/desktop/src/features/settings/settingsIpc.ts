@@ -55,6 +55,7 @@ import type {
   UpdateOpticalTrain,
   CreateFilter,
   UpdateFilter,
+  RemapVerification,
 } from '@/bindings/index';
 
 export type {
@@ -78,6 +79,7 @@ export type {
   UpdateOpticalTrain,
   CreateFilter,
   UpdateFilter,
+  RemapVerification,
 };
 export type { PatternPartDto as PatternPart };
 export type { PatternValidateResponse, PatternPreviewResponse };
@@ -169,6 +171,32 @@ export async function startScan(args?: { root_ids?: string[] }): Promise<IpcOper
   // Backend expects camelCase `rootIds`; sending `root_ids` is silently ignored
   // and scans ALL roots instead of the requested subset.
   return unwrap(await commands.scanStart(args?.root_ids ?? null));
+}
+
+/**
+ * `roots.remap` — preview a root path remap. Verifies whether a set of
+ * sample relative paths from the current root can be found under `newPath`
+ * (P6a). Does NOT mutate anything; call `applyRootRemap` after review.
+ */
+export async function remapRoot(args: {
+  rootId: string;
+  newPath: string;
+}): Promise<RemapVerification> {
+  return unwrap(await commands.rootsRemap(args.rootId, args.newPath));
+}
+
+/**
+ * `roots.remap.apply` — apply a previously previewed root remap (P6a).
+ * The backend has no server-side memory of a pending preview, so `newPath`
+ * must be resent (and is re-validated) alongside the `verified` flag, which
+ * should be the `allVerified` value from the matching `remapRoot` preview.
+ */
+export async function applyRootRemap(args: {
+  rootId: string;
+  newPath: string;
+  verified: boolean;
+}): Promise<void> {
+  unwrap(await commands.rootsRemapApply(args.rootId, args.newPath, args.verified));
 }
 
 // ── Calibration tolerances (spec 007) ─────────────────────────────────────────
