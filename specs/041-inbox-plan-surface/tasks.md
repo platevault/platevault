@@ -133,7 +133,7 @@
 
 **Foundational**: T061 (migration 0048) + T062 (extended extraction) block T063–T073/T080. T072 (contracts/binding regen) precedes the frontend portions of T073.
 
-- [X] T061 [P] [US10] Migration **0048** (`0048_inbox_single_type.sql`; **0046 + 0047 already taken** by `0046_session_canonical_target.sql` + `0047_target_constellation_magnitude.sql` — the latter renamed by PR #317 to resolve the dual-0046): `inbox_source_groups`; `inbox_items` +source_group_id/group_key/group_label/frame_type + composite UNIQUE; `inbox_file_overrides`; collapse `inbox_classifications.result` to classified|unclassified; data re-derivation (FR-034/FR-042/FR-046/FR-054).
+- [X] T061 [P] [US10] Migration **0049** (`0049_inbox_single_type.sql`; **0046 + 0047 already taken** by `0046_session_canonical_target.sql` + `0047_target_constellation_magnitude.sql` — the latter renamed by PR #317 to resolve the dual-0046): `inbox_source_groups`; `inbox_items` +source_group_id/group_key/group_label/frame_type + composite UNIQUE; `inbox_file_overrides`; collapse `inbox_classifications.result` to classified|unclassified; data re-derivation (FR-034/FR-042/FR-046/FR-054).
 - [X] T062 [P] [US16] Extend FITS+XISF extraction (FR-053): offset/temps/pointing/rotation/readout/focal/**pixel-size (`XPIXSZ`/`PIXSIZE`, XISF `Image:PixelSize`)**/observer/local-time + XISF unit conversions.
 - [X] T063 [US11] Property registry module + `inbox.property_registry` contract (FR-044).
 - [X] T064 [US10] Grouping engine: per-type recipe + bucketing + tolerances (pointing/rotation/temp) + per-dimension config (FR-035/FR-036/FR-037/FR-038/FR-039/FR-040).

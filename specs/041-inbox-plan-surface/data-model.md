@@ -120,7 +120,7 @@ New / changed data:
 
 ## Iteration 2026-06-23: Single-type sub-items at ingest (Pivot)
 
-New migration **`0048_inbox_single_type.sql`** (head after 0047; **0046 + 0047 already taken** by `0046_session_canonical_target.sql` + `0047_target_constellation_magnitude.sql` — the latter renamed by PR #317 to resolve the dual-0046). Changes the inbox unit of work from one-row-per-leaf-folder to **one row per single-type group within a leaf folder**, adds source-group provenance, replaces fixed override columns with a generic per-file override table, broadens the missing-metadata gate, adds extended extracted metadata, and drops the session review lifecycle. References research decisions R-9…R-18.
+New migration **`0049_inbox_single_type.sql`** (renumbered from 0048 during the redesign-ui-platevault merge — 0048 was already taken by `0048_target_notes.sql`; **0046 + 0047 already taken** by `0046_session_canonical_target.sql` + `0047_target_constellation_magnitude.sql` — the latter renamed by PR #317 to resolve the dual-0046). Changes the inbox unit of work from one-row-per-leaf-folder to **one row per single-type group within a leaf folder**, adds source-group provenance, replaces fixed override columns with a generic per-file override table, broadens the missing-metadata gate, adds extended extracted metadata, and drops the session review lifecycle. References research decisions R-9…R-18.
 
 ### Source group (new table `inbox_source_groups`)
 
