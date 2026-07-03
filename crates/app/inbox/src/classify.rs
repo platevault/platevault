@@ -428,8 +428,9 @@ async fn persist_file_metadata(
             gain: meta.gain.as_deref().map(str::trim).filter(|s| !s.is_empty()),
             binning_x: parse_i64(meta.x_binning.as_ref()),
             binning_y: parse_i64(meta.y_binning.as_ref()),
-            // temperature: not currently extracted into RawFileMetadata; leave None.
-            temperature_c: None,
+            // SET-TEMP is the default dark-grouping temperature source (R-18);
+            // CCD-TEMP is deviation-only and not persisted to this single column.
+            temperature_c: meta.set_temp_c,
             object: meta.object.as_deref().map(str::trim).filter(|s| !s.is_empty()),
             date_obs: meta.date_obs.as_deref().map(str::trim).filter(|s| !s.is_empty()),
             instrume: meta.instrume.as_deref().map(str::trim).filter(|s| !s.is_empty()),
@@ -642,11 +643,12 @@ pub fn check_mandatory_missing(
 }
 
 /// Build a [`FrameMetadata`] from a [`metadata_core::RawFileMetadata`] for use
-/// with the grouping engine (T066). Only fields that the grouping engine reads
-/// are populated; extended fields (set_temp, pointing, rotation, optic-train,
-/// observing-night) require additional FITS keywords not yet extracted by the
-/// core extractor — they default to `None` so those dimensions gracefully fall
-/// back to the [`crate::grouping::SENTINEL_MISSING`] bucket (R-9 best-effort).
+/// with the grouping engine (T066). All extended fields (set_temp, pointing,
+/// rotation, optic-train, observing-night) are sourced from the core
+/// extractor's T062 extraction (spec 041 T081); a field is `None` only when
+/// the source FITS header was absent, in which case that grouping dimension
+/// gracefully falls back to the [`crate::grouping::SENTINEL_MISSING`] bucket
+/// (R-9 best-effort).
 pub(crate) fn build_frame_metadata(
     frame_type: FrameType,
     raw: &metadata_core::RawFileMetadata,
@@ -667,15 +669,20 @@ pub(crate) fn build_frame_metadata(
         filter: raw.filter.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned),
         exposure_s: parse_f64(raw.exposure.as_ref()),
         gain: raw.gain.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned),
-        offset: None, // OFFSET not yet in RawFileMetadata; phase-12 adds it
+        offset: raw.offset,
         binning_x: parse_i32(raw.x_binning.as_ref()),
         binning_y: parse_i32(raw.y_binning.as_ref()),
-        set_temp_c: None, // SET-TEMP: phase-12
-        ccd_temp_c: None, // CCD-TEMP: phase-12
-        ra_deg: None,     // RA/DEC: phase-12
-        dec_deg: None,
-        rotator_angle_deg: None, // ROTATANG: phase-12
-        readout_mode: None,      // READOUTM: phase-12
+        set_temp_c: raw.set_temp_c,
+        ccd_temp_c: raw.ccd_temp_c,
+        ra_deg: raw.ra_deg,
+        dec_deg: raw.dec_deg,
+        rotator_angle_deg: raw.rotator_angle_deg,
+        readout_mode: raw
+            .readout_mode
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned),
         telescop: raw
             .telescop
             .as_deref()
@@ -688,8 +695,13 @@ pub(crate) fn build_frame_metadata(
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(str::to_owned),
-        focal_length_mm: None, // FOCALLEN: phase-12
-        date_loc: None,        // DATE-LOC: phase-12
+        focal_length_mm: raw.focal_length_mm,
+        date_loc: raw
+            .date_loc
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned),
         date_obs: raw
             .date_obs
             .as_deref()
@@ -2328,5 +2340,167 @@ mod tests {
             missing_full.is_empty(),
             "fully-attributed light must have no missing attrs: {missing_full:?}"
         );
+    }
+
+    /// Write a dark-frame fixture with mandatory (EXPTIME/GAIN) plus a
+    /// `SET-TEMP` card (spec 041 T081/T062 — sensor set-temperature).
+    fn write_fits_dark_with_temp(
+        dir: &Path,
+        name: &str,
+        exptime: f64,
+        gain: &str,
+        set_temp_c: f64,
+    ) {
+        let path = dir.join(name);
+        let mut block = vec![b' '; 2880];
+        let mut idx = 0usize;
+        let mut write_card = |card: String| {
+            let bytes = card.as_bytes();
+            let len = bytes.len().min(80);
+            block[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+            idx += 1;
+        };
+        write_card(format!("{:<80}", "IMAGETYP= 'Dark Frame'"));
+        write_card(format!("{:<80}", format!("EXPTIME = {exptime}")));
+        write_card(format!("{:<80}", format!("GAIN    = {gain}")));
+        write_card(format!("{:<80}", format!("SET-TEMP= {set_temp_c}")));
+        block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
+        let mut f = std::fs::File::create(path).unwrap();
+        std::io::Write::write_all(&mut f, &block).unwrap();
+    }
+
+    /// Write a light-frame fixture with mandatory (OBJECT/FILTER/EXPTIME) plus
+    /// decimal `RA`/`DEC` cards (spec 041 T081/T062 — pointing).
+    fn write_fits_light_with_pointing(
+        dir: &Path,
+        name: &str,
+        object: &str,
+        filter: &str,
+        exptime: f64,
+        ra_deg: f64,
+        dec_deg: f64,
+    ) {
+        let path = dir.join(name);
+        let mut block = vec![b' '; 2880];
+        let mut idx = 0usize;
+        let mut write_card = |card: String| {
+            let bytes = card.as_bytes();
+            let len = bytes.len().min(80);
+            block[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+            idx += 1;
+        };
+        write_card(format!("{:<80}", "IMAGETYP= 'Light Frame'"));
+        write_card(format!("{:<80}", format!("OBJECT  = '{object}'")));
+        write_card(format!("{:<80}", format!("FILTER  = '{filter}'")));
+        write_card(format!("{:<80}", format!("EXPTIME = {exptime}")));
+        write_card(format!("{:<80}", format!("RA      = {ra_deg}")));
+        write_card(format!("{:<80}", format!("DEC     = {dec_deg}")));
+        block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
+        let mut f = std::fs::File::create(path).unwrap();
+        std::io::Write::write_all(&mut f, &block).unwrap();
+    }
+
+    /// T081 (spec 041 FR-035–FR-040): darks that differ only by `SET-TEMP`
+    /// must split into distinct grouping sub-items. Before T081,
+    /// `build_frame_metadata` hardcoded `set_temp_c: None`, so the `SetTemp`
+    /// grouping dimension always collapsed to the same sentinel bucket and
+    /// these two darks would have merged into one sub-item.
+    #[tokio::test]
+    async fn t081_darks_differing_by_set_temp_produce_two_sub_items() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_dark_with_temp(tmp.path(), "dark_cold.fits", 300.0, "100", -10.0);
+        write_fits_dark_with_temp(tmp.path(), "dark_warm.fits", 300.0, "100", -20.0);
+
+        let db = test_db().await;
+        insert_source_group_with_item(
+            &db,
+            "sg-t081-dark-temp",
+            "item-t081-dark-temp",
+            "root-t081a",
+            "",
+        )
+        .await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t081-dark-temp".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t081-dark-temp").await.unwrap();
+        assert_eq!(
+            sub_items.len(),
+            2,
+            "darks at two SET-TEMP values must produce two distinct sub-items; got {sub_items:?}"
+        );
+        let keys: std::collections::HashSet<_> =
+            sub_items.iter().map(|s| s.group_key.as_str()).collect();
+        assert_eq!(keys.len(), 2, "group_key must differ between the two SET-TEMP groups");
+        for si in &sub_items {
+            assert_ne!(si.group_key, SENTINEL_NEEDS_REVIEW, "darks must classify, not sentinel");
+            assert!(
+                si.group_key.contains("set_temp="),
+                "group_key must embed the set_temp dimension: {}",
+                si.group_key
+            );
+        }
+    }
+
+    /// T081 (spec 041 FR-035–FR-040): lights that differ only by pointing
+    /// (RA/DEC) must split into distinct grouping sub-items. Before T081,
+    /// `build_frame_metadata` hardcoded `ra_deg`/`dec_deg: None`, so the
+    /// `Pointing` grouping dimension always collapsed to the same sentinel
+    /// bucket and these two lights would have merged into one sub-item.
+    #[tokio::test]
+    async fn t081_lights_differing_by_pointing_produce_two_sub_items() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_light_with_pointing(tmp.path(), "light_a.fits", "M42", "Ha", 300.0, 10.0, 5.0);
+        write_fits_light_with_pointing(tmp.path(), "light_b.fits", "M42", "Ha", 300.0, 50.0, -5.0);
+
+        let db = test_db().await;
+        insert_source_group_with_item(
+            &db,
+            "sg-t081-light-ptg",
+            "item-t081-light-ptg",
+            "root-t081b",
+            "",
+        )
+        .await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t081-light-ptg".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t081-light-ptg").await.unwrap();
+        assert_eq!(
+            sub_items.len(),
+            2,
+            "lights at two pointings must produce two distinct sub-items; got {sub_items:?}"
+        );
+        let keys: std::collections::HashSet<_> =
+            sub_items.iter().map(|s| s.group_key.as_str()).collect();
+        assert_eq!(keys.len(), 2, "group_key must differ between the two pointing groups");
+        for si in &sub_items {
+            assert_ne!(si.group_key, SENTINEL_NEEDS_REVIEW, "lights must classify, not sentinel");
+            assert!(
+                si.group_key.contains("pointing="),
+                "group_key must embed the pointing dimension: {}",
+                si.group_key
+            );
+        }
     }
 }
