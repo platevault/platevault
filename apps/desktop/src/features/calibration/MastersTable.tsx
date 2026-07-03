@@ -3,9 +3,11 @@
  *
  * Replaces the old narrow `MastersList` sidebar with a DENSE, FULL-WIDTH
  * sortable table — the same surface pattern as SessionsTable (shared `Table`
- * from `@/ui`). Masters are GROUPED BY KIND (dark / flat / bias): each kind is a
- * spanning header row, with its masters listed beneath. `dark_flat` and
- * `bad_pixel_map` are not shown in v1 (FR-001).
+ * from `@/ui`). Like every list page, the table is FLAT by default (a single
+ * sorted list); grouping is opt-in via the top-bar Group-by control (Kind,
+ * Camera, Filter, …), sharing the `groupByDimensions` engine + `.alm-listgroup`
+ * header rows. `dark_flat` and `bad_pixel_map` are never shown in v1 (FR-001),
+ * regardless of grouping.
  *
  * Columns: Master (kind · label) · Camera · Filter · Gain · Exposure · Temp ·
  * Binning · Usage · Date(created). A few fields are CONDITIONAL by kind:
@@ -34,19 +36,18 @@ import {
 } from '@/lib/grouping';
 import { useCollapsibleGroups } from '@/lib/use-grouping';
 
-// ── Kind grouping model ────────────────────────────────────────────────────────
+// ── Kind model ──────────────────────────────────────────────────────────────
 
 type Kind = 'dark' | 'flat' | 'bias';
 
-const KIND_ORDER: Kind[] = ['dark', 'flat', 'bias'];
-const GROUP_LABELS: Record<Kind, string> = {
-  dark: 'DARKS',
-  flat: 'FLATS',
-  bias: 'BIAS',
-};
-
-function kindLabel(kind: string): Kind | null {
-  if (kind === 'dark' || kind === 'flat' || kind === 'bias') return kind;
+/**
+ * The only kinds shown in v1 (FR-001): `dark_flat` / `bad_pixel_map` and any
+ * other kind are filtered out at the data level, so they never appear whether
+ * the table is flat or grouped.
+ */
+function shownKind(kind: string): Kind | null {
+  const k = kind.toLowerCase();
+  if (k === 'dark' || k === 'flat' || k === 'bias') return k;
   return null;
 }
 
@@ -75,10 +76,6 @@ export interface MasterSort {
 }
 
 export const DEFAULT_MASTER_SORT: MasterSort = { col: 'created', dir: 'desc' };
-
-/** What the table groups rows by. Kind is the default (and only) grouping in v1. */
-export type MasterGroupBy = 'kind';
-export const DEFAULT_MASTER_GROUP_BY: MasterGroupBy = 'kind';
 
 const EMPTY = '—';
 
@@ -202,25 +199,6 @@ export const MASTER_ACCESSORS: Readonly<Record<string, DimensionAccessor<Calibra
   month: (m) => m.createdAt?.slice(0, 7),
 };
 
-// ── Legacy single-level grouping (kept for the flat-group fallback path) ──────
-
-interface MasterGroup {
-  kind: Kind;
-  label: string;
-  masters: CalibrationMaster[];
-}
-
-/** Group masters by kind (fixed order dark → flat → bias), sorting within each group. */
-function groupMasters(masters: CalibrationMaster[], sort: MasterSort): MasterGroup[] {
-  return KIND_ORDER.map((k) => ({
-    kind: k,
-    label: GROUP_LABELS[k],
-    masters: masters
-      .filter((m) => kindLabel(m.kind.toLowerCase()) === k)
-      .sort((a, b) => compareMasters(a, b, sort)),
-  })).filter((g) => g.masters.length > 0);
-}
-
 // ── Column model ──────────────────────────────────────────────────────────────
 
 const COLUMNS: Array<{ key: string; label: string; sort: MasterSortCol; className?: string }> = [
@@ -249,7 +227,7 @@ interface Props {
   agingThresholdDays: number;
   /**
    * Active ordered grouping dimension ids from `useGrouping`.
-   * When empty the table falls back to the fixed kind grouping.
+   * When empty the table renders a flat sorted list.
    */
   dims?: string[];
 }
@@ -271,12 +249,15 @@ export function MastersTable({
 }: Props) {
   const { collapsed, toggle } = useCollapsibleGroups();
 
+  // FR-001: only dark/flat/bias masters are ever shown, flat or grouped.
+  const shown = useMemo(() => masters.filter((mm) => shownKind(mm.kind) !== null), [masters]);
+
   const sorted = useMemo(
-    () => [...masters].sort((a, b) => compareMasters(a, b, sort)),
-    [masters, sort],
+    () => [...shown].sort((a, b) => compareMasters(a, b, sort)),
+    [shown, sort],
   );
 
-  // Multi-level grouping (when dims non-empty) or fall back to kind grouping.
+  // Flat by default; multi-level grouping only when the user picks dimensions.
   const useMultiGroup = dims.length > 0;
 
   const tree = useMemo(
@@ -288,9 +269,6 @@ export function MastersTable({
     () => (useMultiGroup ? flattenVisibleGroups(tree, collapsed) : []),
     [tree, collapsed, useMultiGroup],
   );
-
-  // Legacy fixed kind-grouping (when dims is empty).
-  const groups = useMemo(() => (useMultiGroup ? [] : groupMasters(masters, sort)), [masters, sort, useMultiGroup]);
 
   if (loading) {
     return (
@@ -308,7 +286,7 @@ export function MastersTable({
     );
   }
 
-  if (masters.length === 0) {
+  if (shown.length === 0) {
     return (
       <div className="alm-calib-table__status">
         <EmptyState
@@ -375,7 +353,7 @@ export function MastersTable({
     };
   }
 
-  // Build rows: multi-level grouping path or fixed kind-grouping path.
+  // Build rows: flat sorted list (default) or multi-level grouping.
   const rows: TableRow[] = [];
 
   if (useMultiGroup) {
@@ -383,22 +361,22 @@ export function MastersTable({
       if (vrow.kind === 'header') {
         const { node, depth, path, collapsed: isCollapsed } = vrow;
         rows.push({
-          _rowClassName: 'alm-calib-table__group',
+          _rowClassName: 'alm-listgroup',
           master: (
             <button
               type="button"
-              className="alm-calib-table__group-cell"
+              className="alm-listgroup__cell"
               data-testid={`calibration-group-${node.dimension}-${node.key}`}
               aria-expanded={!isCollapsed}
               onClick={() => toggle(path)}
               // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
               style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
             >
-              <span className="alm-calib-list__group-caret" aria-hidden="true">
+              <span className="alm-listgroup__caret" aria-hidden="true">
                 {isCollapsed ? '▸' : '▾'}
               </span>
-              <span className="alm-calib-list__group-label">{node.label}</span>
-              <span className="alm-calib-list__group-count">{node.count}</span>
+              <span className="alm-listgroup__label">{node.label}</span>
+              <span className="alm-listgroup__count">{node.count}</span>
             </button>
           ),
           ...EMPTY_MASTER_CELLS,
@@ -409,23 +387,9 @@ export function MastersTable({
       }
     }
   } else {
-    // Flat kind-grouping (default, dims empty).
-    for (const group of groups) {
-      rows.push({
-        _rowClassName: 'alm-calib-table__group',
-        master: (
-          <span>
-            {group.label}
-            <span className="alm-calib-table__group-count">
-              {group.masters.length} {group.masters.length === 1 ? m.calibration_master_singular() : m.status_masters_label()}
-            </span>
-          </span>
-        ),
-        ...EMPTY_MASTER_CELLS,
-      });
-      for (const master of group.masters) {
-        rows.push(masterItemRow(master));
-      }
+    // Flat sorted list (default, dims empty).
+    for (const master of sorted) {
+      rows.push(masterItemRow(master));
     }
   }
 

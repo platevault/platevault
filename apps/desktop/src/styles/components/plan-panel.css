@@ -129,7 +129,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--alm-text-secondary);
-  font-family: var(--alm-font-mono);
+
 }
 .alm-plan-panel__file-action {
   display: inline-flex;

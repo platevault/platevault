@@ -71,7 +71,7 @@
 }
 .alm-logpanel__event:last-child { border-bottom: none; }
 .alm-logpanel__event-time {
-  font-family: var(--alm-font-mono); color: var(--alm-text-muted);
+color: var(--alm-text-muted);
   min-width: 64px; flex-shrink: 0;
 }
 .alm-logpanel__event-level {
@@ -88,7 +88,7 @@
 .alm-select {
   height: 28px; padding: 0 var(--alm-sp-2);
   border: 1px solid var(--alm-border); border-radius: var(--alm-radius-sm);
-  font-size: var(--alm-text-sm); font-family: var(--alm-font-sans);
+  font-size: var(--alm-text-sm);
   background: var(--alm-bg); color: var(--alm-text);
   cursor: pointer;
 }

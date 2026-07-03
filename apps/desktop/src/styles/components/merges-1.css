@@ -214,7 +214,7 @@
 }
 
 .alm-project-detail__output-format {
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
   text-transform: uppercase;
@@ -313,25 +313,7 @@
 /* Sortable column header consolidated into the shared .alm-sorth
  * (tables-lists.css) — used via the <SortHeader> component. */
 
-/* Kind group header row — spans the table, headlines the kind. */
-.alm-calib-table__group td {
-  background: var(--alm-surface);
-  font-weight: var(--alm-weight-semibold);
-  font-size: var(--alm-text-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--alm-text-muted);
-  border-bottom: 1px solid var(--alm-border-subtle);
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-}
-.alm-calib-table__group-count {
-  margin-left: var(--alm-sp-2);
-  font-weight: var(--alm-weight-normal);
-  letter-spacing: normal;
-  text-transform: none;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-xs);
-}
+/* Group-header rows use the shared .alm-listgroup class (tables-lists.css). */
 
 /* Selectable master rows. */
 .alm-calib-table__row {
@@ -362,7 +344,7 @@
   text-align: right;
 }
 .alm-calib-cell--mono {
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
   color: var(--alm-text-secondary);
 }
@@ -442,7 +424,7 @@
   text-align: right;
 }
 .alm-projects-table__cell--mono {
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
   color: var(--alm-text-secondary);
 }
@@ -590,23 +572,8 @@
 .alm-targets-table__row--selected td {
   background: var(--alm-accent-bg);
 }
-/* Spanning group-header rows (task #82) — mirror .alm-sessions-table__group:
- * a quiet banded row that labels each catalogue/type group with a count. */
-.alm-targets-table__group td {
-  background: var(--alm-surface);
-  font-weight: var(--alm-weight-medium);
-  color: var(--alm-text);
-  font-size: var(--alm-text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.alm-targets-table__group-count {
-  margin-left: var(--alm-sp-2);
-  font-weight: var(--alm-weight-normal);
-  text-transform: none;
-  letter-spacing: normal;
-  color: var(--alm-text-muted);
-}
+/* Spanning group-header rows use the shared .alm-listgroup class
+ * (tables-lists.css) — one look across every list-page table (task #82). */
 
 /* Designation cell — primary label + optional secondary designation. */
 .alm-targets-cell__desig {
@@ -668,7 +635,7 @@
 /* Acquisition summary line — prose, not a path. Override the default
  * mono/break-all subtitle treatment with readable body text that truncates. */
 .alm-session-detail__summary.alm-detail__subtitle {
-  font-family: var(--alm-font-sans);
+
   font-size: var(--alm-text-sm);
   word-break: normal;
   overflow: hidden;

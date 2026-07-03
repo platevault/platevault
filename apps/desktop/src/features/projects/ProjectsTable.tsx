@@ -229,22 +229,22 @@ export function ProjectsTable({
       if (vrow.kind === 'header') {
         const { node, depth, path, collapsed: isCollapsed } = vrow;
         rows.push({
-          _rowClassName: 'alm-projects-table__group',
+          _rowClassName: 'alm-listgroup',
           name: (
             <button
               type="button"
-              className="alm-projects-table__group-cell"
+              className="alm-listgroup__cell"
               data-testid={`projects-group-${node.dimension}-${node.key}`}
               aria-expanded={!isCollapsed}
               onClick={() => toggle(path)}
               // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
               style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
             >
-              <span className="alm-projects-list__group-caret" aria-hidden="true">
+              <span className="alm-listgroup__caret" aria-hidden="true">
                 {isCollapsed ? '▸' : '▾'}
               </span>
-              <span className="alm-projects-list__group-label">{node.label}</span>
-              <span className="alm-projects-list__group-count">{node.count}</span>
+              <span className="alm-listgroup__label">{node.label}</span>
+              <span className="alm-listgroup__count">{node.count}</span>
             </button>
           ),
           ...EMPTY_PROJECT_CELLS,
