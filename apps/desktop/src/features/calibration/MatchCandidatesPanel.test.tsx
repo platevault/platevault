@@ -25,7 +25,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
-import type { CalibrationMatchSuggestResponse } from '@/api/commands';
+import type { CalibrationMatchSuggestResponse } from '@/bindings/index';
 
 // ── Test fixtures ──────────────────────────────────────────────────────────
 
