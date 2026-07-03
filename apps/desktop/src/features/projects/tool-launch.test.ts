@@ -21,16 +21,20 @@ import {
   useToolLaunch,
   type LaunchDisabledReason,
 } from './tool-launch';
-import type { ToolProfileSummary, ToolLaunchResponse } from '@/api/commands';
+import type { ToolProfileSummary, ToolLaunchResponse } from '@/bindings/index';
 
 const { toolLaunchMock, addToastMock } = vi.hoisted(() => ({
   toolLaunchMock: vi.fn(),
   addToastMock: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  toolProfileList: vi.fn(),
-  toolLaunch: toolLaunchMock,
+// tool-launch.ts calls commands.toolsList / commands.toolsLaunch + unwrap
+// (spec 037). Mock the generated bindings and let the real unwrap run.
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    toolsList: vi.fn(),
+    toolsLaunch: toolLaunchMock,
+  },
 }));
 
 vi.mock('@/shared/toast', () => ({
@@ -146,7 +150,7 @@ describe('useToolLaunch — one-time cwd-anchored hint', () => {
     localStorage.clear();
     toolLaunchMock.mockReset();
     addToastMock.mockReset();
-    toolLaunchMock.mockResolvedValue(successResponse());
+    toolLaunchMock.mockResolvedValue({ status: 'ok', data: successResponse() });
   });
 
   it('shows the hint toast on the first successful launch of a no-folder-chooser tool', async () => {

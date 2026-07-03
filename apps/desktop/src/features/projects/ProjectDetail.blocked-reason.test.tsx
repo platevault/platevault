@@ -23,17 +23,6 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
-vi.mock('@/api/commands', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/api/commands')>();
-  return {
-    ...original,
-    applyProjectLifecycleTransition: vi.fn(),
-    getProject008: vi.fn(),
-    reinferProjectChannels: vi.fn(),
-    dismissProjectChannelDrift: vi.fn(),
-  };
-});
-
 vi.mock('./store', async (importOriginal) => {
   const original = await importOriginal<typeof import('./store')>();
   return {

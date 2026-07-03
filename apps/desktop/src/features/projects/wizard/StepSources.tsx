@@ -3,7 +3,8 @@ import { m } from '@/lib/i18n';
 import { Checkbox } from '@base-ui-components/react/checkbox';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/data/queryKeys';
-import { listSessions } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 
 import { formatIntegration } from '@/lib/format';
 
@@ -19,7 +20,7 @@ export interface StepSourcesProps {
 export function StepSources({ data, onChange }: StepSourcesProps) {
   const { data: sessions, isFetching: loading } = useQuery({
     queryKey: queryKeys.sessions.all(),
-    queryFn: () => listSessions(),
+    queryFn: async () => unwrap(await commands.sessionsList()),
   });
   const [filterTarget, setFilterTarget] = useState('');
   const [filterFilter, setFilterFilter] = useState('');

@@ -19,18 +19,6 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
-// Mock VITE_USE_MOCKS so commands.ts goes through the mocked invoke path
-vi.mock('@/api/commands', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/api/commands')>();
-  return {
-    ...original,
-    applyProjectLifecycleTransition: vi.fn(),
-    getProject008: vi.fn(),
-    reinferProjectChannels: vi.fn(),
-    dismissProjectChannelDrift: vi.fn(),
-  };
-});
-
 // Mock the project detail store
 vi.mock('./store', async (importOriginal) => {
   const original = await importOriginal<typeof import('./store')>();

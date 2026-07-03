@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { groupArtifactsByLaunch } from './artifacts';
-import type { ArtifactSummary } from '@/api/commands';
+import type { ArtifactSummary } from '@/bindings/index';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 

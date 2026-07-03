@@ -36,28 +36,23 @@ const {
   mockAddToast: vi.fn(),
 }));
 
-// Mock @/api/commands — spread original so other commands keep working.
-vi.mock('@/api/commands', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/api/commands')>();
+// Mock the generated bindings surface — manifests.ts (spec 037 caller
+// migration) now calls commands.manifestList/manifestGet/noteGet/noteUpdate/
+// manifestRevealInOs directly instead of the old @/api/commands wrappers.
+// Spread the original so other commands (e.g. calibrationMatchSuggestBatch)
+// keep working.
+vi.mock('@/bindings/index', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/bindings/index')>();
   return {
     ...original,
-    listManifests: mockListManifests,
-    getManifest: mockGetManifest,
-    getProjectNote: mockGetProjectNote,
-    updateProjectNote: mockUpdateProjectNote,
-    revealManifestInOs: mockRevealManifestInOs,
-    // Other commands used indirectly by ProjectDetail children
-    applyProjectLifecycleTransition: vi.fn(),
-    getProject008: vi.fn(),
-    reinferProjectChannels: vi.fn(),
-    dismissProjectChannelDrift: vi.fn(),
-    calibrationMatchSuggestBatch: vi.fn().mockResolvedValue({
-      status: 'success',
-      contractVersion: '2.0.0',
-      requestId: 'req-0',
-      results: [],
-    }),
-    listToolProfiles: vi.fn().mockResolvedValue([]),
+    commands: {
+      ...original.commands,
+      manifestList: mockListManifests,
+      manifestGet: mockGetManifest,
+      noteGet: mockGetProjectNote,
+      noteUpdate: mockUpdateProjectNote,
+      manifestRevealInOs: mockRevealManifestInOs,
+    },
   };
 });
 
@@ -119,6 +114,11 @@ const MANIFEST_BODY = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Wrap a fixture as a successful generated-binding `Result` (spec 037). */
+function ok<T>(data: T) {
+  return { status: 'ok' as const, data };
+}
+
 function setupStore(project: Partial<ProjectDetailDto> = {}) {
   vi.mocked(store.useProjectDetail).mockReturnValue({
     data: { ...BASE_PROJECT, ...project },
@@ -142,21 +142,20 @@ function renderDetail(projectId = 'proj-m1') {
 describe('ProjectDetail — manifests accordion (spec 024)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetProjectNote.mockResolvedValue({ projectId: 'proj-m1', content: null });
-    mockListManifests.mockResolvedValue({ manifests: [], nextCursor: null });
-    mockGetManifest.mockResolvedValue({
-      manifest: { ...MANIFEST_SUMMARY, projectId: 'proj-m1', version: 1, body: MANIFEST_BODY },
-    });
-    mockRevealManifestInOs.mockResolvedValue(undefined);
-    mockUpdateProjectNote.mockResolvedValue({
-      projectId: 'proj-m1',
-      updatedAt: '2026-06-01T12:00:00Z',
-    });
+    mockGetProjectNote.mockResolvedValue(ok({ projectId: 'proj-m1', content: null }));
+    mockListManifests.mockResolvedValue(ok({ manifests: [], nextCursor: null }));
+    mockGetManifest.mockResolvedValue(
+      ok({ manifest: { ...MANIFEST_SUMMARY, projectId: 'proj-m1', version: 1, body: MANIFEST_BODY } }),
+    );
+    mockRevealManifestInOs.mockResolvedValue(ok(null));
+    mockUpdateProjectNote.mockResolvedValue(
+      ok({ projectId: 'proj-m1', updatedAt: '2026-06-01T12:00:00Z' }),
+    );
     setupStore();
   });
 
   it('1. shows manifests-empty state when project has no manifests', async () => {
-    mockListManifests.mockResolvedValue({ manifests: [], nextCursor: null });
+    mockListManifests.mockResolvedValue(ok({ manifests: [], nextCursor: null }));
     renderDetail();
     // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
     await waitFor(() => {
@@ -165,10 +164,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
   });
 
   it('2. renders manifest list when manifests exist', async () => {
-    mockListManifests.mockResolvedValue({
-      manifests: [MANIFEST_SUMMARY],
-      nextCursor: null,
-    });
+    mockListManifests.mockResolvedValue(ok({ manifests: [MANIFEST_SUMMARY], nextCursor: null }));
     renderDetail();
     // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
     await waitFor(() => {
@@ -182,18 +178,17 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
   });
 
   it('3. clicking a manifest row loads and shows the body', async () => {
-    mockListManifests.mockResolvedValue({
-      manifests: [MANIFEST_SUMMARY],
-      nextCursor: null,
-    });
-    mockGetManifest.mockResolvedValue({
-      manifest: {
-        ...MANIFEST_SUMMARY,
-        projectId: 'proj-m1',
-        version: 1,
-        body: { ...MANIFEST_BODY, lifecycleState: 'processing' },
-      },
-    });
+    mockListManifests.mockResolvedValue(ok({ manifests: [MANIFEST_SUMMARY], nextCursor: null }));
+    mockGetManifest.mockResolvedValue(
+      ok({
+        manifest: {
+          ...MANIFEST_SUMMARY,
+          projectId: 'proj-m1',
+          version: 1,
+          body: { ...MANIFEST_BODY, lifecycleState: 'processing' },
+        },
+      }),
+    );
     renderDetail();
     // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
     await waitFor(() => {
@@ -211,10 +206,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
   });
 
   it('4. Reveal button calls revealManifestInOs', async () => {
-    mockListManifests.mockResolvedValue({
-      manifests: [MANIFEST_SUMMARY],
-      nextCursor: null,
-    });
+    mockListManifests.mockResolvedValue(ok({ manifests: [MANIFEST_SUMMARY], nextCursor: null }));
     renderDetail();
     // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
     await waitFor(() => {
@@ -231,10 +223,7 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
   });
 
   it('5. Reveal failure shows error toast', async () => {
-    mockListManifests.mockResolvedValue({
-      manifests: [MANIFEST_SUMMARY],
-      nextCursor: null,
-    });
+    mockListManifests.mockResolvedValue(ok({ manifests: [MANIFEST_SUMMARY], nextCursor: null }));
     mockRevealManifestInOs.mockRejectedValue('manifest file not found: /some/path');
     renderDetail();
     // Manifests section is defaultOpen=true in the bottom panel — no expand needed.
@@ -264,20 +253,19 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
 describe('ProjectDetail — project notes section (spec 024)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockListManifests.mockResolvedValue({ manifests: [], nextCursor: null });
-    mockGetManifest.mockResolvedValue({
-      manifest: { ...MANIFEST_SUMMARY, projectId: 'proj-m1', version: 1, body: MANIFEST_BODY },
-    });
-    mockRevealManifestInOs.mockResolvedValue(undefined);
-    mockUpdateProjectNote.mockResolvedValue({
-      projectId: 'proj-m1',
-      updatedAt: '2026-06-01T12:00:00Z',
-    });
+    mockListManifests.mockResolvedValue(ok({ manifests: [], nextCursor: null }));
+    mockGetManifest.mockResolvedValue(
+      ok({ manifest: { ...MANIFEST_SUMMARY, projectId: 'proj-m1', version: 1, body: MANIFEST_BODY } }),
+    );
+    mockRevealManifestInOs.mockResolvedValue(ok(null));
+    mockUpdateProjectNote.mockResolvedValue(
+      ok({ projectId: 'proj-m1', updatedAt: '2026-06-01T12:00:00Z' }),
+    );
     setupStore();
   });
 
   it('7. shows "No notes." when project has no notes', async () => {
-    mockGetProjectNote.mockResolvedValue({ projectId: 'proj-m1', content: null });
+    mockGetProjectNote.mockResolvedValue(ok({ projectId: 'proj-m1', content: null }));
     // ProjectNotesSection is rendered inline — check for notes-empty placeholder
     // after the async note fetch resolves.
     renderDetail();
@@ -292,7 +280,7 @@ describe('ProjectDetail — project notes section (spec 024)', () => {
     // receives initialContent as a prop from ProjectDetail, and ProjectDetail
     // currently passes undefined (the component fetches its own data internally),
     // we test the section renders with empty state by default.
-    mockGetProjectNote.mockResolvedValue({ projectId: 'proj-m1', content: null });
+    mockGetProjectNote.mockResolvedValue(ok({ projectId: 'proj-m1', content: null }));
     renderDetail();
     await waitFor(() => {
       expect(screen.getByTestId('notes-empty')).toBeInTheDocument();
@@ -303,7 +291,7 @@ describe('ProjectDetail — project notes section (spec 024)', () => {
   });
 
   it('9. notes section is read-only for archived projects', async () => {
-    mockGetProjectNote.mockResolvedValue({ projectId: 'proj-m1', content: null });
+    mockGetProjectNote.mockResolvedValue(ok({ projectId: 'proj-m1', content: null }));
     setupStore({ lifecycle: 'archived' });
     renderDetail();
     await waitFor(() => {
@@ -314,7 +302,7 @@ describe('ProjectDetail — project notes section (spec 024)', () => {
   });
 
   it('10. listManifests is called with the project id', async () => {
-    mockGetProjectNote.mockResolvedValue({ projectId: 'proj-m1', content: null });
+    mockGetProjectNote.mockResolvedValue(ok({ projectId: 'proj-m1', content: null }));
     renderDetail('proj-m1');
     await waitFor(() => {
       expect(mockListManifests).toHaveBeenCalledWith(

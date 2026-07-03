@@ -18,17 +18,21 @@ import {
   MAX_NOTE_BYTES,
 } from './manifests';
 
-// ── Mock updateProjectNote ────────────────────────────────────────────────────
+// ── Mock updateProjectNote (spec 037: mocked at the generated-bindings
+// boundary — manifests.ts now calls commands.noteUpdate directly) ────────────
 
-const { mockUpdateProjectNote } = vi.hoisted(() => ({
-  mockUpdateProjectNote: vi.fn(),
+const { mockNoteUpdate } = vi.hoisted(() => ({
+  mockNoteUpdate: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  listManifests: vi.fn(),
-  getManifest: vi.fn(),
-  updateProjectNote: mockUpdateProjectNote,
-  revealManifestInOs: vi.fn(),
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    manifestList: vi.fn(),
+    manifestGet: vi.fn(),
+    noteUpdate: mockNoteUpdate,
+    noteGet: vi.fn(),
+    manifestRevealInOs: vi.fn(),
+  },
 }));
 
 // ── manifestReasonLabel ───────────────────────────────────────────────────────
@@ -112,13 +116,13 @@ describe('noteContentValid', () => {
 
 describe('saveNote', () => {
   beforeEach(() => {
-    mockUpdateProjectNote.mockReset();
+    mockNoteUpdate.mockReset();
   });
 
   it('returns updatedAt on success', async () => {
-    mockUpdateProjectNote.mockResolvedValue({
-      projectId: 'proj-1',
-      updatedAt: '2026-06-01T12:00:00Z',
+    mockNoteUpdate.mockResolvedValue({
+      status: 'ok',
+      data: { projectId: 'proj-1', updatedAt: '2026-06-01T12:00:00Z' },
     });
     const result = await saveNote('proj-1', 'My notes');
     expect(result.updatedAt).toBe('2026-06-01T12:00:00Z');
@@ -126,25 +130,25 @@ describe('saveNote', () => {
   });
 
   it('returns error code on command failure (string rejection)', async () => {
-    mockUpdateProjectNote.mockRejectedValue('note.content_too_large');
+    mockNoteUpdate.mockRejectedValue('note.content_too_large');
     const result = await saveNote('proj-1', 'x'.repeat(MAX_NOTE_BYTES + 1));
     expect(result.error).toBe('note.content_too_large');
     expect(result.updatedAt).toBeUndefined();
   });
 
   it('returns error message on Error rejection', async () => {
-    mockUpdateProjectNote.mockRejectedValue(new Error('project.read_only'));
+    mockNoteUpdate.mockRejectedValue(new Error('project.read_only'));
     const result = await saveNote('proj-arch', 'Some content');
     expect(result.error).toBe('project.read_only');
   });
 
   it('passes projectId and content to the command', async () => {
-    mockUpdateProjectNote.mockResolvedValue({
-      projectId: 'proj-2',
-      updatedAt: '2026-06-01T12:00:00Z',
+    mockNoteUpdate.mockResolvedValue({
+      status: 'ok',
+      data: { projectId: 'proj-2', updatedAt: '2026-06-01T12:00:00Z' },
     });
     await saveNote('proj-2', 'Content here');
-    expect(mockUpdateProjectNote).toHaveBeenCalledWith({
+    expect(mockNoteUpdate).toHaveBeenCalledWith({
       projectId: 'proj-2',
       content: 'Content here',
     });

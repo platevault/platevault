@@ -9,15 +9,34 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import {
-  artifactList,
-  artifactClassify,
-  artifactMarkResolved,
-  type ArtifactSummary,
-  type ArtifactListResponse,
-  type ArtifactClassifyRequest,
-} from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type {
+  ArtifactSummary,
+  ArtifactListRequest,
+  ArtifactListResponse,
+  ArtifactClassifyRequest,
+  ArtifactClassifyResponse,
+  ArtifactMarkResolvedRequest,
+} from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
+
+// Local IPC helpers — migrated off the hand-written @/api/commands wrappers
+// (spec 037) onto the generated bindings.
+
+async function artifactList(request: ArtifactListRequest): Promise<ArtifactListResponse> {
+  return unwrap(await commands.artifactList(request));
+}
+
+async function artifactClassify(
+  request: ArtifactClassifyRequest,
+): Promise<ArtifactClassifyResponse> {
+  return unwrap(await commands.artifactClassify(request));
+}
+
+async function artifactMarkResolved(request: ArtifactMarkResolvedRequest): Promise<void> {
+  unwrap(await commands.artifactMarkResolved(request));
+}
 
 // ── Grouping types ─────────────────────────────────────────────────────────────
 
