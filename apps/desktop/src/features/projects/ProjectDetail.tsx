@@ -271,7 +271,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     if (kind === 'prepared_source_stale') {
       return { kind: 'prepared_source_stale', preparedId: note ?? 'unknown' } satisfies BlockedReason;
     }
-    return { kind: 'user', note: note ?? 'Blocked — check project status.' } satisfies BlockedReason;
+    return { kind: 'user', note: note ?? m.projects_blocked_note_fallback() } satisfies BlockedReason;
   })();
 
   // ── Derived channel palette data (STUB — see module comment) ─────────────

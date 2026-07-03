@@ -221,9 +221,9 @@ export function WizardPage() {
         </div>
         <div className="alm-wizard-page__summary-list">
           <SummaryRow label={m.projects_wizard_summary_lights_label()} value={`${wizardData.sources.selectedSessionIds.length} sess`} />
-          <SummaryRow label={m.projects_wizard_summary_darks_label()} value={`${darkSelected} master`} />
-          <SummaryRow label={m.projects_wizard_flats_label()} value={`${flatsMapped} masters`} />
-          <SummaryRow label={m.projects_wizard_bias_label()} value={`${biasSelected} master`} />
+          <SummaryRow label={m.projects_wizard_summary_darks_label()} value={m.inbox_count_masters({ count: darkSelected })} />
+          <SummaryRow label={m.projects_wizard_flats_label()} value={m.inbox_count_masters({ count: flatsMapped })} />
+          <SummaryRow label={m.projects_wizard_bias_label()} value={m.inbox_count_masters({ count: biasSelected })} />
         </div>
       </div>
 

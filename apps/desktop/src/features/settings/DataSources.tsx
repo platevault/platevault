@@ -311,7 +311,9 @@ function RootCard({ root, onRescan }: RootCardProps) {
 
   const metaParts: string[] = [];
   if (root.fileCount != null && root.fileCount > 0) {
-    metaParts.push(`${root.fileCount.toLocaleString()} files`);
+    metaParts.push(
+      m.data_sources_file_count({ count: root.fileCount, formatted: root.fileCount.toLocaleString() }),
+    );
   }
   if (root.lastScanned) {
     metaParts.push(`scanned ${root.lastScanned}`);

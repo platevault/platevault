@@ -80,7 +80,7 @@ export function TargetList({ targets, selected, onSelect }: Props) {
           </select>
         </>
       }
-      footer={`${filtered.length} items`}
+      footer={m.common_item_count({ count: filtered.length })}
     >
       <div
         className="alm-virtual-inner"

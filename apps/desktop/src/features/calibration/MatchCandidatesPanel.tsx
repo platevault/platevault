@@ -181,7 +181,7 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
         setErrorMsg(`Hard-rule mismatch: ${dims.join(', ')}. Confirm to force-assign.`);
       } else {
         setPending('idle');
-        setErrorMsg(res.error?.message ?? 'Assignment failed');
+        setErrorMsg(res.error?.message ?? m.calibration_assignment_failed_fallback());
       }
       return;
     }

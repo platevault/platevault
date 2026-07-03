@@ -279,7 +279,7 @@ export function FilterToolbar({
           value={f.value}
           options={f.options}
           onChange={f.onChange}
-          leadingOption={f.allLabel ?? 'All'}
+          leadingOption={f.allLabel ?? m.common_all()}
         />
       ))}
 

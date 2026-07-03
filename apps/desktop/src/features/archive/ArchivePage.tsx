@@ -50,7 +50,7 @@ export function ArchivePage() {
         topBar={
           <TopActionBar
             title={m.verb_archive()}
-            subtitle={`${ARCHIVE_DATA.length} archived items`}
+            subtitle={m.archive_subtitle_item_count({ count: ARCHIVE_DATA.length })}
             right={
               item && (
                 <>
@@ -68,7 +68,7 @@ export function ArchivePage() {
         list={
           <ListSidebar
             placeholder={m.archive_search_placeholder()}
-            footer={`${ARCHIVE_DATA.length} items`}
+            footer={m.common_item_count({ count: ARCHIVE_DATA.length })}
           >
             {ARCHIVE_DATA.map((a) => (
               <ListItem

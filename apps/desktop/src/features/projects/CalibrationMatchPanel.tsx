@@ -82,7 +82,7 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
         if (cancelled) return;
         setLoading(false);
         if (res.status === 'error') {
-          setFetchError(res.errors?.[0]?.message ?? 'Batch suggest failed');
+          setFetchError(res.errors?.[0]?.message ?? m.calibration_batch_suggest_failed());
           return;
         }
         setResults(res.results ?? []);

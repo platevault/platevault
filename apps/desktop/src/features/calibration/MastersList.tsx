@@ -39,7 +39,7 @@ function usageSummary(master: CalibrationMaster): string {
   const parts: string[] = [];
   if (sessions > 0) parts.push(m.calibration_usage_sessions({ count: sessions }));
   if (projects > 0) parts.push(m.calibration_usage_projects({ count: projects }));
-  return parts.length > 0 ? parts.join(' · ') : 'unused';
+  return parts.length > 0 ? parts.join(' · ') : m.calibration_usage_unused();
 }
 
 interface Props {
@@ -76,7 +76,7 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
 
   if (masters.length === 0) {
     return (
-      <ListSidebar footer="0 items">
+      <ListSidebar footer={m.common_item_count({ count: 0 })}>
         <EmptyState
           title={m.calibration_empty_title()}
           desc={m.calibration_empty_desc()}
@@ -106,7 +106,7 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
           </select>
         </>
       }
-      footer={`${masters.length} items`}
+      footer={m.common_item_count({ count: masters.length })}
     >
       {grouped.map((group) => (
         <div key={group.kind}>

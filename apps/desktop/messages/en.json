@@ -1604,5 +1604,56 @@
   "targets_list_view_aria": "View {label}",
   "settings_datasources_select_source": "— select source —",
   "common_true": "true",
-  "common_false": "false"
+  "common_false": "false",
+  "common_item_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} item",
+        "pp=other": "{count} items"
+      }
+    }
+  ],
+  "archive_subtitle_item_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} archived item",
+        "pp=other": "{count} archived items"
+      }
+    }
+  ],
+  "data_sources_file_count": [
+    {
+      "declarations": [
+        "input count",
+        "input formatted",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{formatted} file",
+        "pp=other": "{formatted} files"
+      }
+    }
+  ],
+  "calibration_usage_unused": "unused",
+  "projects_manifests_reveal_failed_fallback": "Reveal failed.",
+  "calibration_batch_suggest_failed": "Batch suggest failed",
+  "calibration_assignment_failed_fallback": "Assignment failed",
+  "projects_blocked_note_fallback": "Blocked — check project status."
 }
