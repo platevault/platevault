@@ -11,7 +11,7 @@
  * the freed space lets the attribute table use both columns.
  */
 
-import type { InventorySession } from '@/api/commands';
+import type { InventorySession } from '@/bindings/index';
 import {
   DetailPane,
   DetailPanel,

@@ -14,7 +14,7 @@ const { mockNativeReveal } = vi.hoisted(() => ({
 
 // Mock the generated bindings surface and the ipc unwrap so we assert exactly
 // what revealInventoryPath forwards to the native command.
-vi.mock('@/bindings', () => ({
+vi.mock('@/bindings/index', () => ({
   commands: { nativeReveal: mockNativeReveal },
 }));
 
@@ -27,7 +27,7 @@ vi.mock('@/api/ipc', () => ({
   setInvokeOverride: vi.fn(),
 }));
 
-import { revealInventoryPath } from '@/api/commands';
+import { revealInventoryPath } from '@/features/sessions/revealInventory';
 
 interface RevealArg {
   requestId: string;

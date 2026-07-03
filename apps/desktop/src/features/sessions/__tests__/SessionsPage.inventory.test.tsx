@@ -9,7 +9,7 @@
  * (PageTopBar + FilterToolbar). The legacy frame-type filter was removed
  * (sessions are light frames). These tests target the new components.
  *
- * Tests (jsdom, mock @/api/commands and @/features/sessions/store):
+ * Tests (jsdom, mock @/features/sessions/store):
  *
  * 1. SessionsTable renders a target group header for each distinct target.
  * 2. SessionsTable renders session rows with target/filter content.
@@ -25,19 +25,14 @@
 
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { InventorySource, InventorySession } from '@/api/commands';
+import type { InventorySource, InventorySession } from '@/bindings/index';
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
+// The store hook is fully mocked below, so the real IPC layer never runs; we
+// only need the toast spy here (spec 037: no @/api/commands mock required).
 
-const { mockInventoryList, mockInventorySessionReview, mockAddToast } = vi.hoisted(() => ({
-  mockInventoryList: vi.fn(),
-  mockInventorySessionReview: vi.fn(),
+const { mockAddToast } = vi.hoisted(() => ({
   mockAddToast: vi.fn(),
-}));
-
-vi.mock('@/api/commands', () => ({
-  inventoryList: mockInventoryList,
-  inventorySessionReview: mockInventorySessionReview,
 }));
 
 vi.mock('@/shared/toast', () => ({
