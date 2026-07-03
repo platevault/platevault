@@ -49,7 +49,7 @@
 /* Event cell — monospace, extra-small */
 .alm-audit-log__event {
   font-size: var(--alm-text-xs);
-  font-family: var(--alm-font-mono);
+
 }
 
 /* Entity cell — muted, truncated */
@@ -311,7 +311,7 @@
 
 /* Monospace path text */
 .alm-data-sources__root-path {
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
   color: var(--alm-text);
   word-break: break-all;
@@ -384,7 +384,7 @@
 .alm-proc-tools__path-input {
   flex: 1;
   font-size: var(--alm-text-xs);
-  font-family: var(--alm-font-mono);
+
   background: var(--alm-surface-raised);
   color: var(--alm-text);
   border: 1px solid var(--alm-border);
@@ -645,7 +645,7 @@
 }
 
 .alm-tool-launches__file-name {
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-sm);
 }
 
@@ -755,5 +755,5 @@
 .alm-manifests__path {
   margin-top: var(--alm-sp-1);
   color: var(--alm-text-muted);
-  font-family: var(--alm-font-mono);
+
 }

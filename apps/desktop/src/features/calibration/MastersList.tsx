@@ -121,7 +121,7 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
             const expStr = fp?.exposureS != null ? `${fp.exposureS}s` : '';
             const filterStr = fp?.filter ?? '';
             const discriminator = group.kind === 'dark' ? expStr : group.kind === 'flat' ? filterStr : '';
-            const titleText = discriminator ? `Master ${kindCap} · ${discriminator}` : `Master ${kindCap}`;
+            const titleText = discriminator ? m.calibration_master_title_disc({ kind: kindCap, disc: discriminator }) : m.calibration_master_title({ kind: kindCap });
             const metaParts = [
               fp?.tempC != null ? `${fp.tempC}°C` : '',
               fp?.gain != null ? `g${fp.gain}` : '',

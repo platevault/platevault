@@ -54,7 +54,7 @@
 
 .alm-inbox-list__meta-format {
   white-space: nowrap;
-  font-family: var(--alm-font-mono, monospace);
+
   letter-spacing: 0.02em;
 }
 
@@ -308,7 +308,7 @@
 .alm-calib-match-panel__session-id {
   font-size: var(--alm-text-xs);
   color: var(--alm-text-faint);
-  font-family: var(--alm-font-mono);
+
 }
 
 /* Row of calibration-type pills */
@@ -662,7 +662,7 @@
   height: 100vh;
   gap: var(--alm-sp-4);
   padding: var(--alm-sp-6);
-  font-family: var(--alm-font-sans);
+
   color: var(--alm-text);
   background: var(--alm-bg);
 }
@@ -760,7 +760,7 @@
   margin-top: var(--alm-sp-1);
   padding-left: var(--alm-sp-3);
   list-style: disc;
-  font-family: var(--alm-font-mono);
+
 }
 
 /* Individual inventory-ref path item */
@@ -1058,7 +1058,7 @@
 
 /* 6a. DirPicker.tsx — mono path span */
 .alm-dir-picker__path {
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
   flex: 1;
   overflow: hidden;

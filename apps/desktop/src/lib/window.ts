@@ -31,6 +31,7 @@ export async function openInNewWindow(path: string): Promise<void> {
   const label = `alm-win-${Date.now()}-${windowSeq++}`;
   new WebviewWindow(label, {
     url: fullUrl,
+    // eslint-disable-next-line alm/no-user-string -- product/brand name, not translatable
     title: 'PlateVault',
     width: 1280,
     height: 800,

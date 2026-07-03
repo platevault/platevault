@@ -179,7 +179,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   }
 
   const toolLabel =
-    typeof project.tool === 'string' ? project.tool : 'Unknown tool';
+    typeof project.tool === 'string' ? project.tool : m.projects_tool_unknown();
   const lifecycle =
     typeof project.lifecycle === 'string' ? project.lifecycle : 'setup_incomplete';
 

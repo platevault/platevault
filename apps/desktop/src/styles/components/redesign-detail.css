@@ -14,7 +14,7 @@
 .alm-project-detail__bar-path {
   font-size: var(--alm-text-xs);
   color: var(--alm-text-faint);
-  font-family: var(--alm-font-mono);
+
 }
 
 /* Per-project action cluster in the detail action bar. */
@@ -393,7 +393,7 @@
   word-break: break-word;
 }
 .alm-planner__identity-value--mono {
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
 }
 .alm-planner__identity-value--stub {
@@ -427,12 +427,12 @@
 }
 /* SVG uses var() tokens for fill/stroke — injected via currentColor or class */
 .alm-planner__graph-axis-text {
-  font-family: var(--alm-font-sans);
+
   font-size: 9px;
   fill: var(--alm-text-faint);
 }
 .alm-planner__graph-label-text {
-  font-family: var(--alm-font-sans);
+
   font-size: 9px;
   fill: var(--alm-text-muted);
 }
@@ -563,7 +563,7 @@
   margin-left: auto;
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
-  font-family: var(--alm-font-mono);
+
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

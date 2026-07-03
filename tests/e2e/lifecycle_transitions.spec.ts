@@ -55,23 +55,26 @@ test.describe("lifecycle transitions · write-side seam (spec 008 / design-v4)",
     await expect(errorBoundary).not.toBeVisible();
 
     // ── 2. Project row is visible with "Processing" lifecycle pill ────────────
-    // ProjectsList renders each project as a `div.alm-list-item` containing
-    // the project name and a <Pill> with the lifecycle state label.
+    // ProjectsTable (spec 043 redesign) renders each project as a
+    // `tr.alm-projects-table__row` containing the project name and a state tag.
     const projectRow = page
-      .locator(".alm-list-item")
+      .locator(".alm-projects-table__row")
       .filter({ hasText: "NGC 7000 Narrowband" })
       .first();
     await expect(projectRow).toBeVisible({ timeout: 8_000 });
 
-    // The "Processing" pill should be visible in the row.
+    // The "Processing" state tag should be visible in the row.
     await expect(projectRow.getByText("Processing")).toBeVisible();
 
-    // ── 3. Detail pane auto-opens (selected=0 default) ────────────────────────
-    // ProjectsPage sets selectedIdx = selected ?? 0 — first project is selected
-    // on load, so the detail pane renders immediately without needing a click.
-    // The footer shows lifecycle transition buttons for the current state.
+    // ── 3. Select the row → detail pane opens ─────────────────────────────────
+    // Unlike the old list (which auto-selected index 0), the redesigned
+    // ProjectsPage gates the detail on `selected != null`, so the detail pane —
+    // which carries the per-project action bar (data-testid="lifecycle-actions")
+    // with the lifecycle transition buttons — mounts only after a row is picked.
+    await projectRow.click();
+
     // For "processing" state: "Mark as Completed" → nextState "completed".
-    const footerActions = page.getByTestId("lifecycle-footer-actions");
+    const footerActions = page.getByTestId("lifecycle-actions");
     await expect(footerActions).toBeVisible({ timeout: 5_000 });
 
     const markCompletedBtn = page.getByTestId("transition-btn-completed");
@@ -100,13 +103,13 @@ test.describe("lifecycle transitions · write-side seam (spec 008 / design-v4)",
 
     // All three mock projects should appear.
     await expect(
-      page.locator(".alm-list-item").filter({ hasText: "NGC 7000 Narrowband" }),
+      page.locator(".alm-projects-table__row").filter({ hasText: "NGC 7000 Narrowband" }),
     ).toBeVisible({ timeout: 8_000 });
     await expect(
-      page.locator(".alm-list-item").filter({ hasText: "M31 LRGB" }),
+      page.locator(".alm-projects-table__row").filter({ hasText: "M31 LRGB" }),
     ).toBeVisible();
     await expect(
-      page.locator(".alm-list-item").filter({ hasText: "IC 1396 SHO" }),
+      page.locator(".alm-projects-table__row").filter({ hasText: "IC 1396 SHO" }),
     ).toBeVisible();
   });
 

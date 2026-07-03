@@ -112,7 +112,7 @@ function SourceGroup({
           When empty this is the entire card height. */}
       <div className="alm-step-sources__group-header">
         <span className="alm-step-sources__group-header-label">
-          {SOURCE_KIND_LABELS[kind]}
+          {SOURCE_KIND_LABELS[kind]()}
         </span>
         {hasRows && (
           <span className="alm-step-sources__group-header-count">
@@ -244,7 +244,7 @@ function AddFolderButton({
         variant="primary"
         onClick={handleChoose}
         disabled={loading}
-        aria-label={m.setup_sources_add_folder_aria({ kind: SOURCE_KIND_LABELS[kind] })}
+        aria-label={m.setup_sources_add_folder_aria({ kind: SOURCE_KIND_LABELS[kind]() })}
       >
         {loading ? m.setup_choosing() : m.setup_add_folder()}
       </Btn>
@@ -258,7 +258,7 @@ function AddFolderButton({
         <span data-testid={`e2e-add-by-path-${kind}`}>
           <input
             data-testid={`e2e-path-input-${kind}`}
-            aria-label={m.setup_sources_e2e_path_aria({ kind: SOURCE_KIND_LABELS[kind] })}
+            aria-label={m.setup_sources_e2e_path_aria({ kind: SOURCE_KIND_LABELS[kind]() })}
             value={e2ePath}
             onChange={(ev) => setE2ePath(ev.target.value)}
           />

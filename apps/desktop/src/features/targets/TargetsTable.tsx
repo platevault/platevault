@@ -540,12 +540,12 @@ export function TargetsTable({
                     <tr
                       key={row.key}
                       data-index={index}
-                      className="alm-targets-table__group"
+                      className="alm-listgroup"
                     >
                       <td colSpan={COL_COUNT}>
                         <button
                           type="button"
-                          className="alm-targets-table__group-cell"
+                          className="alm-listgroup__cell"
                           data-testid={`targets-group-${row.key}`}
                           aria-expanded={!row.collapsed}
                           aria-label={row.label}
@@ -553,11 +553,11 @@ export function TargetsTable({
                           // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
                           style={{ paddingLeft: 8 + depthIndent }}
                         >
-                          <span className="alm-targets-list__group-caret" aria-hidden="true">
+                          <span className="alm-listgroup__caret" aria-hidden="true">
                             {row.collapsed ? '▸' : '▾'}
                           </span>
-                          <span className="alm-targets-list__group-label">{row.label}</span>
-                          <span className="alm-targets-table__group-count">
+                          <span className="alm-listgroup__label">{row.label}</span>
+                          <span className="alm-listgroup__count">
                             {m.targets_table_target_count({ count: row.count })}
                           </span>
                         </button>
@@ -570,11 +570,11 @@ export function TargetsTable({
                   <tr
                     key={row.key}
                     data-index={index}
-                    className="alm-targets-table__group"
+                    className="alm-listgroup"
                   >
                     <td colSpan={COL_COUNT}>
                       {row.label}
-                      <span className="alm-targets-table__group-count">
+                      <span className="alm-listgroup__count">
                         {m.targets_table_target_count({ count: row.count })}
                       </span>
                     </td>

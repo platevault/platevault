@@ -4,7 +4,8 @@
  *
  * Adopts the Sessions REFERENCE layout: a pinned `PageTopBar` over a
  * `ListPageLayout` body — a dense FULL-WIDTH sortable masters table
- * (MastersTable, grouped by Kind) as primary, with the existing MasterDetail
+ * (MastersTable, flat by default, groupable via the top-bar Group-by control)
+ * as primary, with the existing MasterDetail
  * (fingerprint rail + compatible-sessions match table) hosted in the right-side
  * detail pane that mounts on selection.
  *

@@ -10,12 +10,10 @@
  * Confirm / Re-open / Reject are contextual (they act on the selected session)
  * and live in the SessionDetail header, not the global top bar (task #79).
  *
- * Toolbar (spec 043 §4): search + review-state filter.
- * The Group-by control (Target / Camera / Filter / Month) has been removed:
- * a session already represents a single target/night/equipment group, so
- * grouping by frame type adds no value — sessions contain 1–few frame types
- * by definition. The table always groups by target (DEFAULT_SESSION_GROUP_BY).
- * The legacy frame-type filter was also removed — sessions are light frames.
+ * Toolbar (spec 043 §4): search + review-state filter + Group-by control
+ * (Target / Filter / Night / Camera / Month). Consistent with every list page,
+ * the table is FLAT by default (a single sorted list) and grouping is opt-in.
+ * The legacy frame-type filter was removed — sessions are light frames.
  *
  * URL state (extends spec 020):
  *   selected     — string session UUID
@@ -92,7 +90,7 @@ export function SessionsPage() {
   const { dims, setSlot } = useGrouping({
     storageKey: 'sessions.grouping.dims.v1',
     validIds: ['target', 'filter', 'night', 'camera', 'month'],
-    defaultDims: ['target'],
+    defaultDims: [],
   });
 
   const SESSION_DIMENSIONS: FilterOption[] = [

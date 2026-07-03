@@ -215,10 +215,10 @@ function MultiSelect({
   };
   const summary =
     selected.size === 0
-      ? 'None'
+      ? m.common_none()
       : selected.size === options.length
-        ? 'All'
-        : `${selected.size} selected`;
+        ? m.common_all()
+        : m.filter_multiselect_count({ count: selected.size });
 
   return (
     // A `<details>` is not a labelable control, so this field is a labelled
@@ -264,10 +264,10 @@ export function FilterToolbar({
         <input
           type="search"
           className="alm-filterbar__search"
-          placeholder={search.placeholder ?? 'Search…'}
+          placeholder={search.placeholder ?? m.common_search_placeholder()}
           value={search.value}
           onChange={(e) => search.onChange(e.target.value)}
-          aria-label={search.ariaLabel ?? 'Search'}
+          aria-label={search.ariaLabel ?? m.common_search_aria()}
         />
       )}
 
@@ -299,7 +299,7 @@ export function FilterToolbar({
       {groupBy && (
         <LabeledSelect
           id="filterbar-groupby"
-          label={groupBy.label ?? 'Group by'}
+          label={groupBy.label ?? m.filter_group_by_label()}
           value={groupBy.value}
           options={groupBy.options}
           onChange={groupBy.onChange}
@@ -310,7 +310,7 @@ export function FilterToolbar({
         <div className="alm-filterbar__sort">
           <LabeledSelect
             id="filterbar-sort"
-            label={sort.label ?? 'Sort'}
+            label={sort.label ?? m.filter_sort_label()}
             value={sort.value}
             options={sort.options}
             onChange={sort.onChange}

@@ -8,34 +8,31 @@ interface SourceViewStrategyProps {
 
 interface StrategyOption {
   id: string;
-  label: string;
-  description: string;
+  /** Render-time thunks so the strings re-read the active locale (spec 046 #8). */
+  label: () => string;
+  description: () => string;
 }
 
 const STRATEGIES: StrategyOption[] = [
   {
     id: 'junctions',
-    label: m.settings_sourceview_label_junctions(),
-    description:
-      'Directory junctions on Windows. WBPP-friendly, no admin privileges required. Only works on the same volume.',
+    label: () => m.settings_sourceview_label_junctions(),
+    description: () => m.settings_sourceview_desc_junctions(),
   },
   {
     id: 'symlinks',
-    label: m.settings_sourceview_label_symlinks(),
-    description:
-      'POSIX-style symlinks. Cross-platform, cross-volume. May require admin/developer mode on Windows.',
+    label: () => m.settings_sourceview_label_symlinks(),
+    description: () => m.settings_sourceview_desc_symlinks(),
   },
   {
     id: 'hardlinks',
-    label: m.settings_sourceview_label_hardlinks(),
-    description:
-      'Same-volume file links sharing an inode. Zero extra disk usage but cannot cross volume boundaries.',
+    label: () => m.settings_sourceview_label_hardlinks(),
+    description: () => m.settings_sourceview_desc_hardlinks(),
   },
   {
     id: 'copy',
-    label: m.settings_sourceview_label_copy(),
-    description:
-      'Duplicate every source file into the project tree. Maximum compatibility but uses significant disk space.',
+    label: () => m.settings_sourceview_label_copy(),
+    description: () => m.settings_sourceview_desc_copy(),
   },
 ];
 
@@ -67,7 +64,7 @@ export function SourceViewStrategy({ save }: SourceViewStrategyProps) {
               <Select.Popup className="alm-select__popup">
                 {STRATEGIES.map((s) => (
                   <Select.Item key={s.id} value={s.id} className="alm-select__item">
-                    <Select.ItemText>{s.label}</Select.ItemText>
+                    <Select.ItemText>{s.label()}</Select.ItemText>
                   </Select.Item>
                 ))}
               </Select.Popup>
@@ -77,14 +74,14 @@ export function SourceViewStrategy({ save }: SourceViewStrategyProps) {
       </div>
 
       {current && (
-        <p className="alm-svs__description">{current.description}</p>
+        <p className="alm-svs__description">{current.description()}</p>
       )}
 
       <div className="alm-svs__all-options">
         {STRATEGIES.map((s) => (
           <div key={s.id} className="alm-svs__option-card">
-            <strong className="alm-svs__option-name">{s.label}</strong>
-            <p className="alm-svs__option-desc">{s.description}</p>
+            <strong className="alm-svs__option-name">{s.label()}</strong>
+            <p className="alm-svs__option-desc">{s.description()}</p>
           </div>
         ))}
       </div>

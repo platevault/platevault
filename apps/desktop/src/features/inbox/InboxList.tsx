@@ -334,7 +334,7 @@ export function InboxList({
           detection: (
             <span
               className="alm-inbox-cell__path"
-              title={item.relativePath || '(root)'}
+              title={item.relativePath || m.inbox_list_root_label()}
               // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
               style={indent ? { paddingLeft: indent } : undefined}
             >
@@ -358,7 +358,7 @@ export function InboxList({
   );
 
   const groupingHint = grouped
-    ? `Grouped by ${dims.map((d) => DIM_LABELS[d]).join(' › ')}`
+    ? m.inbox_grouping_hint({ dims: dims.map((d) => DIM_LABELS[d]).join(' › ') })
     : null;
 
   return (

@@ -37,7 +37,7 @@
 /* Cell — id column: monospace, muted, slightly smaller */
 .alm-dev-calls__td--id {
   padding: var(--alm-sp-1) var(--alm-sp-2);
-  font-family: var(--alm-font-mono);
+
   color: var(--alm-text-muted);
   font-size: var(--alm-text-2xs);
 }
@@ -45,7 +45,7 @@
 /* Cell — contract name: monospace */
 .alm-dev-calls__td--contract {
   padding: var(--alm-sp-1) var(--alm-sp-2);
-  font-family: var(--alm-font-mono);
+
 }
 
 /* Cell — started: muted timestamp */
@@ -70,7 +70,7 @@
 /* Outcome: error state */
 .alm-dev-calls__outcome--error {
   color: var(--alm-danger);
-  font-family: var(--alm-font-mono);
+
 }
 
 /* Outcome: ok state */
@@ -112,7 +112,7 @@
 /* Name cell — monospace font */
 .alm-dev-contracts-list__td-name {
   padding: var(--alm-sp-1) var(--alm-sp-2);
-  font-family: var(--alm-font-mono);
+
 }
 
 /* Direction cell — muted text */
@@ -130,7 +130,7 @@
 /* Schema path cell — truncated monospace muted */
 .alm-dev-contracts-list__td-schema {
   padding: var(--alm-sp-1) var(--alm-sp-2);
-  font-family: var(--alm-font-mono);
+
   max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -202,7 +202,7 @@
 
 /* Contract name — monospace bold */
 .alm-dev-schema__name {
-  font-family: var(--alm-font-mono);
+
   font-weight: var(--alm-weight-semibold);
 }
 
@@ -240,7 +240,7 @@
 
 /* Inline code path */
 .alm-dev-schema__missing-code {
-  font-family: var(--alm-font-mono);
+
   font-size: 0.8em;
 }
 
@@ -254,7 +254,7 @@
 .alm-dev-schema__pre {
   margin: 0;
   padding: var(--alm-sp-2);
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
   line-height: var(--alm-leading-normal);
   white-space: pre-wrap;

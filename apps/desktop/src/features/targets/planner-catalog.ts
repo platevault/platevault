@@ -34,20 +34,21 @@ export type CatalogueId = 'M' | 'NGC' | 'IC' | 'Sh2' | 'LBN' | 'LDN' | 'C' | 'B'
  * "Sh2", "IC", "LBN", "LDN") MUST be tested before the single-letter prefixes
  * ("M", "C", "B") so "NGC 7000" classifies as NGC, not as a stray "N…".
  */
-export const PLANNER_CATALOGS: ReadonlyArray<{ id: CatalogueId; prefix: string; label: string }> = [
-  { id: 'NGC', prefix: 'NGC', label: m.targets_catalog_ngc() },
-  { id: 'Sh2', prefix: 'Sh2', label: m.targets_catalog_sharpless() },
-  { id: 'LBN', prefix: 'LBN', label: m.targets_catalog_lbn() },
-  { id: 'LDN', prefix: 'LDN', label: m.targets_catalog_ldn() },
-  { id: 'IC', prefix: 'IC', label: m.targets_catalog_ic() },
-  { id: 'M', prefix: 'M', label: m.targets_catalog_messier() },
-  { id: 'C', prefix: 'C', label: m.targets_catalog_caldwell() },
-  { id: 'B', prefix: 'B', label: m.targets_catalog_barnard() },
-] as const;
+// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
+export const PLANNER_CATALOGS: ReadonlyArray<{ id: CatalogueId; prefix: string; label: () => string }> = [
+  { id: 'NGC', prefix: 'NGC', label: () => m.targets_catalog_ngc() },
+  { id: 'Sh2', prefix: 'Sh2', label: () => m.targets_catalog_sharpless() },
+  { id: 'LBN', prefix: 'LBN', label: () => m.targets_catalog_lbn() },
+  { id: 'LDN', prefix: 'LDN', label: () => m.targets_catalog_ldn() },
+  { id: 'IC', prefix: 'IC', label: () => m.targets_catalog_ic() },
+  { id: 'M', prefix: 'M', label: () => m.targets_catalog_messier() },
+  { id: 'C', prefix: 'C', label: () => m.targets_catalog_caldwell() },
+  { id: 'B', prefix: 'B', label: () => m.targets_catalog_barnard() },
+];
 
 /** Human label for a catalogue id (e.g. "M" → "Messier"). */
 export function catalogueLabel(id: CatalogueId): string {
-  return PLANNER_CATALOGS.find((c) => c.id === id)?.label ?? id;
+  return PLANNER_CATALOGS.find((c) => c.id === id)?.label() ?? id;
 }
 
 /**

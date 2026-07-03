@@ -92,7 +92,7 @@ export function Advanced({ save }: AdvancedProps) {
       <SettingsSection title={m.settings_advanced_log_title()}>
         <SettingsRow
           label={m.settings_advanced_log_level()}
-          info="Controls application log verbosity. Debug emits diagnostic detail; Info is the default; Warn and Error progressively quieter."
+          info={m.settings_advanced_loglevel_info()}
         >
           <select
             className="alm-select alm-adv-settings__log-select"
@@ -116,7 +116,7 @@ export function Advanced({ save }: AdvancedProps) {
         <SettingsSection title={m.settings_advanced_tour_title()}>
           <SettingsRow
             label={m.settings_advanced_tour_label()}
-            info="Walks you through setting up your first project."
+            info={m.settings_advanced_firstrun_info()}
           >
             <div className="alm-adv-settings__guided-col">
               <p className="alm-adv-settings__guided-desc">

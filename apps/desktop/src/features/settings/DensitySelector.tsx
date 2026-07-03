@@ -4,10 +4,11 @@ import { usePreference } from '@/data/preferences';
 import type { Density } from '@/bindings/types';
 import { m } from '@/lib/i18n';
 
-const DENSITY_OPTIONS: { value: Density; label: string; description: string }[] = [
-  { value: 'compact', label: m.settings_density_compact(), description: '24px row height — fits more rows on screen' },
-  { value: 'comfortable', label: m.settings_density_comfortable(), description: '32px row height — default' },
-  { value: 'spacious', label: m.settings_density_spacious(), description: '40px row height — easier to click' },
+// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
+const DENSITY_OPTIONS: { value: Density; label: () => string; description: () => string }[] = [
+  { value: 'compact', label: () => m.settings_density_compact(), description: () => m.settings_density_compact_desc() },
+  { value: 'comfortable', label: () => m.settings_density_comfortable(), description: () => m.settings_density_comfortable_desc() },
+  { value: 'spacious', label: () => m.settings_density_spacious(), description: () => m.settings_density_spacious_desc() },
 ];
 
 export function DensitySelector() {
@@ -29,8 +30,8 @@ export function DensitySelector() {
               <Radio.Indicator className="alm-density-selector__indicator" />
             </Radio.Root>
             <span className="alm-density-selector__label">
-              <span className="alm-density-selector__label-text">{opt.label}</span>
-              <span className="alm-density-selector__desc">{opt.description}</span>
+              <span className="alm-density-selector__label-text">{opt.label()}</span>
+              <span className="alm-density-selector__desc">{opt.description()}</span>
             </span>
           </label>
         ))}

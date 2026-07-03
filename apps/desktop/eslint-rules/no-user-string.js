@@ -33,6 +33,10 @@ const USER_ATTRS = new Set([
   "aria-roledescription",
   "aria-valuetext",
   "label",
+  // Component props that render user-facing prose in this codebase:
+  //   <Command.Group heading="…">, <SettingsRow info="…">.
+  "heading",
+  "info",
 ]);
 
 // toast/notify/dialog-style call targets whose first arg is shown to the user.
@@ -61,6 +65,13 @@ const LABEL_PROP_KEYS = new Set([
   "emptyText",
   "confirmLabel",
   "cancelLabel",
+  // Prose-bearing keys in config objects (nav/pane meta, option descriptions,
+  // settings rows). `title`/`desc`/`description`/`body` are user-facing copy when
+  // written inline in a data structure.
+  "title",
+  "desc",
+  "description",
+  "body",
 ]);
 
 // Keys carrying user-facing text specifically inside a toast/dialog CALL arg
@@ -70,6 +81,24 @@ const LABEL_PROP_KEYS = new Set([
 const TOAST_OBJECT_PROPS = new Set(["message", "title", "body", "description"]);
 
 const hasLetter = (s) => /\p{L}/u.test(s);
+
+// Distinguishes machine tokens from display prose. Used to gate the
+// variable-tracing check, where the value's role isn't vouched for by an
+// attribute/property name: a string rendered through a variable is only flagged
+// when it actually reads like UI copy. Machine = a single identifier-shaped
+// token (`pending`, `no_match`, `setupIncomplete`), SCREAMING_SNAKE, or a
+// token/path/pattern containing `{}` placeholders or slashes and no spaces.
+// Prose = anything with whitespace, or a Capitalized standalone word
+// (`None`, `All`, `Sort`).
+const looksMachine = (s) => {
+  const t = s.trim();
+  if (t === "") return true;
+  if (/\s/.test(t)) return false; // any whitespace → display prose
+  if (/[{}]/.test(t)) return true; // token/naming pattern, e.g. {target}_{filter}
+  if (/^[a-z][\w.-]*$/.test(t)) return true; // lowercase-initial token: pending, no_match, fooBar
+  if (/^[A-Z0-9_]+$/.test(t)) return true; // SCREAMING_SNAKE / ALL_CAPS
+  return false;
+};
 
 // A template literal carries user-facing prose when any of its static text
 // chunks (quasis) contains a letter, e.g. `Sort by ${col}` or `Remove ${name}`.
@@ -85,6 +114,68 @@ const templatePreview = (node) =>
   node.quasis
     .map((q, i) => (q.value.cooked ?? "") + (i < node.expressions.length ? "${…}" : ""))
     .join("");
+
+// True when an expression evaluates to (or can short-circuit to) user-facing
+// prose: a letter-bearing string literal or template, OR a conditional / logical
+// (`?:`, `??`, `||`, `&&`) whose operands include such a value. Used to flag
+// user strings that reach the screen through a variable, a `??` fallback, etc.,
+// which the per-node JSX visitors don't see directly.
+const isUserStringExpr = (node) => {
+  if (!node) return false;
+  if (node.type === "Literal" && typeof node.value === "string") {
+    return hasLetter(node.value);
+  }
+  if (node.type === "TemplateLiteral") return templateHasLetter(node);
+  if (node.type === "ConditionalExpression") {
+    return isUserStringExpr(node.consequent) || isUserStringExpr(node.alternate);
+  }
+  if (node.type === "LogicalExpression") {
+    return isUserStringExpr(node.left) || isUserStringExpr(node.right);
+  }
+  return false;
+};
+
+// A printable preview of any user-string expression for the diagnostic.
+const userStringPreview = (node) => {
+  if (node.type === "Literal") return String(node.value);
+  if (node.type === "TemplateLiteral") return templatePreview(node);
+  if (node.type === "ConditionalExpression") {
+    return (
+      (isUserStringExpr(node.consequent) ? userStringPreview(node.consequent) : "…") +
+      " / " +
+      (isUserStringExpr(node.alternate) ? userStringPreview(node.alternate) : "…")
+    );
+  }
+  if (node.type === "LogicalExpression") {
+    return isUserStringExpr(node.left)
+      ? userStringPreview(node.left)
+      : userStringPreview(node.right);
+  }
+  return "…";
+};
+
+// Like isUserStringExpr but requires at least one prose-like leaf (not a machine
+// token). Gates the variable-tracing check so rendered enum/status values
+// (`'pending'`, `'no_match'`) aren't flagged as translatable copy.
+const userStringHasProse = (node) => {
+  if (!node) return false;
+  if (node.type === "Literal" && typeof node.value === "string") {
+    return hasLetter(node.value) && !looksMachine(node.value);
+  }
+  if (node.type === "TemplateLiteral") {
+    return node.quasis.some((q) => {
+      const s = q.value.cooked ?? q.value.raw ?? "";
+      return hasLetter(s) && !looksMachine(s);
+    });
+  }
+  if (node.type === "ConditionalExpression") {
+    return userStringHasProse(node.consequent) || userStringHasProse(node.alternate);
+  }
+  if (node.type === "LogicalExpression") {
+    return userStringHasProse(node.left) || userStringHasProse(node.right);
+  }
+  return false;
+};
 
 /** @type {import('eslint').Rule.RuleModule} */
 const rule = {
@@ -102,10 +193,46 @@ const rule = {
         "Hardcoded user-facing `{{attr}}` string {{text}}. Move it into messages/en.json and use m.<key>(). If not user-facing, add `// eslint-disable-next-line alm/no-user-string -- <reason>`.",
       toast:
         "Hardcoded user-facing toast string {{text}}. Move it into messages/en.json and use m.<key>().",
+      variable:
+        "Hardcoded user-facing string {{text}} assigned to `{{name}}` and rendered. Move it into messages/en.json and use m.<key>(). If not user-facing, add `// eslint-disable-next-line alm/no-user-string -- <reason>`.",
     },
   },
 
   create(context) {
+    const sourceCode = context.sourceCode ?? context.getSourceCode();
+
+    // True when a referenced identifier reaches the screen: as a JSX child
+    // expression, or as the value of a user-facing JSX attribute. Forwarding
+    // expressions (`?:`, `??`, `||`, templates, concatenation) are followed; a
+    // value handed to a call or a non-user attribute is NOT considered rendered.
+    const isRenderedUsage = (idNode) => {
+      let n = idNode;
+      let p = n.parent;
+      while (p) {
+        if (p.type === "JSXExpressionContainer") {
+          const gp = p.parent;
+          if (gp && (gp.type === "JSXElement" || gp.type === "JSXFragment")) return true;
+          if (gp && gp.type === "JSXAttribute") {
+            const an =
+              gp.name && gp.name.type === "JSXIdentifier" ? gp.name.name : null;
+            return an != null && USER_ATTRS.has(an);
+          }
+          return false;
+        }
+        if (
+          p.type === "ConditionalExpression" ||
+          p.type === "LogicalExpression" ||
+          p.type === "TemplateLiteral" ||
+          p.type === "BinaryExpression"
+        ) {
+          n = p;
+          p = n.parent;
+          continue;
+        }
+        return false;
+      }
+      return false;
+    };
     const quote = (raw) => {
       const t = raw.trim().replace(/\s+/g, " ");
       const clip = t.length > 32 ? `${t.slice(0, 32)}…` : t;
@@ -298,6 +425,20 @@ const rule = {
             }
           }
         }
+        // Logical-fallback value: label={groupBy.label ?? 'Group by'} or
+        // title={x || 'Untitled'} — the literal fallback is user-facing prose.
+        if (
+          node.value &&
+          node.value.type === "JSXExpressionContainer" &&
+          node.value.expression.type === "LogicalExpression" &&
+          isUserStringExpr(node.value.expression)
+        ) {
+          context.report({
+            node: node.value.expression,
+            messageId: "attr",
+            data: { attr: name, text: quote(userStringPreview(node.value.expression)) },
+          });
+        }
       },
 
       // User-facing string literals declared as object properties in data
@@ -328,6 +469,36 @@ const rule = {
             messageId: "attr",
             data: { attr: node.key.name, text: quote(templatePreview(node.value)) },
           });
+        }
+      },
+
+      // User string reached via a LOCAL VARIABLE: a string (or ternary/logical of
+      // strings) assigned to a const/let that is later rendered as a JSX child or
+      // user attribute, e.g. FilterToolbar's
+      //   const summary = n === 0 ? 'None' : n === len ? 'All' : `${n} selected`;
+      //   …<span>{summary}</span>
+      // The per-node JSX visitors never see the literal in `summary`, so we trace
+      // the declaration to its rendered reference. Only flagged when a reference
+      // is actually rendered — variables used purely in machine contexts
+      // (className, ids, keys, fn args) are ignored.
+      VariableDeclarator(node) {
+        if (!node.init || !isUserStringExpr(node.init) || !userStringHasProse(node.init)) {
+          return;
+        }
+        const vars = sourceCode.getDeclaredVariables(node);
+        for (const v of vars) {
+          for (const ref of v.references) {
+            // Skip the initializer write; only reads can be "rendered".
+            if (ref.init || !ref.isRead()) continue;
+            if (isRenderedUsage(ref.identifier)) {
+              context.report({
+                node: node.init,
+                messageId: "variable",
+                data: { name: v.name, text: quote(userStringPreview(node.init)) },
+              });
+              return;
+            }
+          }
         }
       },
 

@@ -170,7 +170,7 @@
   color: var(--alm-text);
   border: none;
   cursor: pointer;
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
 }
 .alm-naming__menu-item:hover {
@@ -183,7 +183,7 @@
 
 /* Literal segment text input inside the literal popover */
 .alm-naming__literal-input {
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
   width: 100px;
   padding: var(--alm-sp-0) 6px;
@@ -220,7 +220,7 @@
 
 /* Placeholder span shown when no chips are present */
 .alm-naming__chip-placeholder {
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
   font-style: italic;

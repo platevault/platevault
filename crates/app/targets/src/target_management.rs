@@ -503,7 +503,7 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].constellation.as_deref(), Some("And"), "constellation mismatch");
         assert!(
-            items[0].magnitude.map_or(false, |m| (m - 3.44).abs() < 1e-6),
+            items[0].magnitude.is_some_and(|m| (m - 3.44).abs() < 1e-6),
             "magnitude mismatch: {:?}",
             items[0].magnitude
         );

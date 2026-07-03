@@ -9,7 +9,8 @@ import { m } from '@/lib/i18n';
 interface AttributionSource {
   name: string;
   org: string;
-  description: string;
+  /** Render-time thunk so the description re-reads the active locale (spec 046 #8). */
+  description: () => string;
   href: string;
 }
 
@@ -17,14 +18,13 @@ const SOURCES: AttributionSource[] = [
   {
     name: 'SIMBAD',
     org: 'CDS, Université de Strasbourg / CNRS',
-    description:
-      'On-demand resolution of designations, common names, coordinates, object types, and aliases.',
+    description: () => m.settings_attribution_simbad_desc(),
     href: 'https://simbad.cds.unistra.fr/simbad/',
   },
   {
     name: 'OpenNGC',
     org: 'Mattia Verga (CC-BY-SA-4.0)',
-    description: 'The bundled seed index of popular NGC/IC and named objects.',
+    description: () => m.settings_attribution_seed_desc(),
     href: 'https://github.com/mattiaverga/OpenNGC',
   },
 ];
@@ -43,7 +43,7 @@ export function Attribution() {
               <strong>{s.name}</strong>
               <span className="alm-attribution__org">{s.org}</span>
             </div>
-            <p className="alm-attribution__desc">{s.description}</p>
+            <p className="alm-attribution__desc">{s.description()}</p>
             <a
               className="alm-attribution__link"
               href={s.href}
