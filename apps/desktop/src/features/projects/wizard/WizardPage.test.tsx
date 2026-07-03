@@ -11,6 +11,14 @@
  * 5. Clicking Create project calls callCreateProject with the wizard data.
  * 6. On success, a toast is shown and navigate('/projects') is called.
  * 7. Target detail "new project" button navigates to /projects/new.
+ *
+ * WP-008-B: per-field projects.create error handling, ported from
+ * CreateProjectDialog (spec 008 US1) —
+ * 8. A live duplicate-name pre-check blocks creation (no backend call) and
+ *    surfaces the error on the name step.
+ * 9. A `name.*`/`tool.*` backend error code routes back to the name step.
+ * 10. A `path.*`/other error code surfaces inline on the review step (no
+ *     dedicated path field exists in the wizard).
  */
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
@@ -30,14 +38,38 @@ vi.mock('@/shared/toast', () => ({
   addToast: vi.fn(),
 }));
 
+// The live duplicate-name pre-check (WP-008-B, ported from CreateProjectDialog)
+// calls commands.projectsList directly.
+const { mockListProjects } = vi.hoisted(() => ({ mockListProjects: vi.fn() }));
+vi.mock('@/bindings/index', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/bindings/index')>();
+  return {
+    ...original,
+    commands: {
+      ...original.commands,
+      projectsList: mockListProjects,
+    },
+  };
+});
+
 // Stub child wizard steps so we only test the WizardPage orchestration.
+// The real StepName also renders a WP-008-B `serverError` prop (name/tool
+// create errors); the stub surfaces it the same way so orchestration tests
+// can assert it lands on this step without pulling in RHF/zod.
 vi.mock('./StepName', () => ({
-  StepName: ({ onChange }: { onChange: (d: { name: string; workflowProfile: string }) => void }) => (
+  StepName: ({
+    onChange,
+    serverError,
+  }: {
+    onChange: (d: { name: string; workflowProfile: string }) => void;
+    serverError?: { field: 'name' | 'tool'; message: string } | null;
+  }) => (
     <div data-testid="step-name">
       <input
         aria-label="Project name"
         onChange={(e) => onChange({ name: e.target.value, workflowProfile: 'pixinsight' })}
       />
+      {serverError && <span role="alert">{serverError.message}</span>}
     </div>
   ),
 }));
@@ -105,6 +137,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Clear the draft from localStorage before each test
   localStorage.removeItem('alm-project-wizard-draft');
+  // Default: no existing projects, so the live duplicate-name pre-check never
+  // blocks a test that doesn't care about it.
+  mockListProjects.mockResolvedValue({ status: 'ok', data: [] });
 });
 
 describe('T078c: WizardPage renders inside main window with correct layout', () => {
@@ -284,7 +319,7 @@ describe('T078c: create project end-to-end', () => {
     });
   });
 
-  it('shows error toast when create fails', async () => {
+  it('routes a name.* backend error back to the name step instead of a toast', async () => {
     mockCallCreateProject.mockRejectedValue(new Error('name.duplicate'));
 
     render(<WizardPage />);
@@ -294,11 +329,67 @@ describe('T078c: create project end-to-end', () => {
       fireEvent.click(screen.getByTestId('wizard-create-btn'));
     });
 
+    // Routed back to step 0 (name) with the mapped message inline, not a toast.
     await waitFor(() => {
-      expect(mockAddToast).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: 'error' }),
-      );
+      expect(screen.getByTestId('step-name')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(/already exists/i);
     });
+    expect(mockAddToast).not.toHaveBeenCalled();
+  });
+
+  it('routes a tool.* backend error back to the name step (workflow profile lives there)', async () => {
+    mockCallCreateProject.mockRejectedValue(new Error('tool.unknown'));
+
+    render(<WizardPage />);
+    await advanceToReview('Some Project');
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('wizard-create-btn'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('step-name')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(/unknown processing tool/i);
+    });
+  });
+
+  it('surfaces a path.* backend error inline on the review step (no dedicated path field)', async () => {
+    mockCallCreateProject.mockRejectedValue(new Error('path.collision'));
+
+    render(<WizardPage />);
+    await advanceToReview('Some Project');
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('wizard-create-btn'));
+    });
+
+    // Stays on the review step (path has no dedicated step/field to return to).
+    await waitFor(() => {
+      expect(screen.getByTestId('step-review')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(/already uses this folder path/i);
+    });
+    expect(mockAddToast).not.toHaveBeenCalled();
+  });
+
+  it('blocks creation via the live duplicate-name pre-check without calling the backend', async () => {
+    mockListProjects.mockResolvedValueOnce({
+      status: 'ok',
+      data: [{ id: 'proj-existing', name: 'Existing Project', tool: 'PixInsight', lifecycle: 'active', path: 'projects/existing', notes: null, channelDrift: false, sourceCount: 0, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', blockedReasonKind: null, blockedReasonNote: null }],
+    });
+
+    render(<WizardPage />);
+    // Same name, different case — the pre-check is case-insensitive.
+    await advanceToReview('existing project');
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('wizard-create-btn'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('step-name')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(/already exists/i);
+    });
+    expect(mockCallCreateProject).not.toHaveBeenCalled();
   });
 });
 

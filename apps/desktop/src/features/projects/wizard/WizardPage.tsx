@@ -11,7 +11,13 @@ import { StepLayout, type StepLayoutData } from './StepLayout';
 import { StepReview } from './StepReview';
 import { callCreateProject } from '@/features/projects/store';
 import { addToast } from '@/shared/toast';
-import { errMessage } from '@/lib/errors';
+import {
+  createProjectErrorCode,
+  findDuplicateProjectName,
+  mapCreateProjectErrorCode,
+  projectCreateErrorField,
+  type ProjectCreateErrorField,
+} from '@/features/projects/projectCreateErrors';
 
 const STORAGE_KEY = 'alm-project-wizard-draft';
 
@@ -90,6 +96,11 @@ export function WizardPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [wizardData, setWizardData] = useState<WizardData>(loadDraft);
   const [creating, setCreating] = useState(false);
+  // Per-field projects.create error (WP-008-B): 'name'/'tool' route back to the
+  // name step (StepName owns both fields); 'path'/'general' have no dedicated
+  // step (path is derived from the project name, never user-edited) so they
+  // surface inline next to the Create button on the review step.
+  const [createError, setCreateError] = useState<{ field: ProjectCreateErrorField; message: string } | null>(null);
 
   // Render-time so labels re-read the active locale (spec 046 #8).
   const labels = stepLabels();
@@ -101,6 +112,14 @@ export function WizardPage() {
   useEffect(() => {
     saveDraft(wizardData);
   }, [currentStep, wizardData]);
+
+  // Clear a stale name/tool create-error once the user edits the field it was
+  // attached to (the corresponding backend rule may no longer apply). Done
+  // inline in the StepName onChange handler below rather than via an effect
+  // watching wizardData.name, so this stays a direct response to the edit.
+  function clearNameToolCreateError(): void {
+    setCreateError((prev) => (prev && (prev.field === 'name' || prev.field === 'tool') ? null : prev));
+  }
 
   // Step validation — devSkip bypasses all gates so you can walk through without data
   function canAdvance(): boolean {
@@ -139,22 +158,34 @@ export function WizardPage() {
   }
 
   // T078c: wire actual project creation at step 5 (Review & create).
+  // WP-008-B: ported CreateProjectDialog's live duplicate-name pre-check and
+  // per-field error mapping (see @/features/projects/projectCreateErrors) so
+  // failures land on the step/field they're actionable from, instead of one
+  // generic error toast.
   async function handleCreate() {
     if (creating) return;
     setCreating(true);
+    setCreateError(null);
     try {
+      const trimmedName = wizardData.name.name.trim();
+
+      if (await findDuplicateProjectName(trimmedName)) {
+        setCreateError({ field: 'name', message: m.projects_create_name_duplicate() });
+        setCurrentStep(0);
+        return;
+      }
+
       const tool = PROFILE_TO_TOOL[wizardData.name.workflowProfile] ?? 'PixInsight';
       // Derive a safe path from the project name (kebab-case, no special chars).
-      const safeName = wizardData.name.name
-        .trim()
+      const safeName = trimmedName
         .toLowerCase()
         .replace(/[^a-z0-9_-]+/g, '-')
         .replace(/^-+|-+$/g, '');
       const path = `projects/${safeName || 'new-project'}`;
 
-      const result = await callCreateProject({
+      await callCreateProject({
         requestId: crypto.randomUUID(),
-        name: wizardData.name.name.trim(),
+        name: trimmedName,
         tool,
         path,
         initialSources: wizardData.sources.selectedSessionIds,
@@ -163,24 +194,25 @@ export function WizardPage() {
 
       clearDraft();
 
-      if (result.planId) {
-        addToast({
-          message: m.projects_wizard_toast_created_plan({ name: wizardData.name.name }),
-          variant: 'info',
-          action: {
-            label: m.projects_wizard_view_plan_btn(),
-            onClick: () => void navigate({ to: '/archive', search: { selected: undefined } as never }),
-          },
-        });
-      } else {
-        addToast({ message: m.projects_wizard_toast_created({ name: wizardData.name.name }), variant: 'success' });
-      }
+      // TODO(plan-review-surface): a `ProjectCreateResult.planId` used to
+      // link a "View plan" toast action to `/archive`, but that route is
+      // fixture-backed archive/delete browsing (see ArchivePage.tsx), not a
+      // real per-project plan review surface — no such surface exists yet
+      // anywhere in the app (SourceViewsSection's `onPlanCreated` callback is
+      // likewise never wired to one). Show a plain success toast until
+      // specs/008 tasks.md US1-7's plan-review destination actually exists,
+      // then reinstate the action here.
+      addToast({ message: m.projects_wizard_toast_created({ name: trimmedName }), variant: 'success' });
 
       // Navigate back to projects list; the list re-fetches automatically.
       void navigate({ to: '/projects' });
     } catch (err: unknown) {
-      const msg = errMessage(err);
-      addToast({ message: m.projects_wizard_toast_failed({ msg }), variant: 'error' });
+      const code = createProjectErrorCode(err);
+      const field = projectCreateErrorField(code);
+      setCreateError({ field, message: mapCreateProjectErrorCode(code) });
+      if (field === 'name' || field === 'tool') {
+        setCurrentStep(0);
+      }
     } finally {
       setCreating(false);
     }
@@ -291,16 +323,27 @@ export function WizardPage() {
           </Btn>
         )}
         {currentStep === 5 && (
-          <Btn
-            variant="primary"
-            size="sm"
-            onClick={() => void handleCreate()}
-            disabled={creating || !wizardData.name.name.trim()}
-            className="alm-wizard-page__flex-fill"
-            data-testid="wizard-create-btn"
-          >
-            {creating ? m.projects_create_creating() : m.projects_create_btn()}
-          </Btn>
+          <>
+            {/* path/general projects.create errors have no dedicated step or
+                field (path is derived from the project name, never user-
+                edited), so they surface here next to the action that raised
+                them — matching CreateProjectDialog's inline serverError. */}
+            {createError && (createError.field === 'path' || createError.field === 'general') && (
+              <span role="alert" className="alm-field-error">
+                {createError.message}
+              </span>
+            )}
+            <Btn
+              variant="primary"
+              size="sm"
+              onClick={() => void handleCreate()}
+              disabled={creating || !wizardData.name.name.trim()}
+              className="alm-wizard-page__flex-fill"
+              data-testid="wizard-create-btn"
+            >
+              {creating ? m.projects_create_creating() : m.projects_create_btn()}
+            </Btn>
+          </>
         )}
       </div>
     </div>
@@ -352,7 +395,15 @@ export function WizardPage() {
         {currentStep === 0 && (
           <StepName
             data={wizardData.name}
-            onChange={(name) => setWizardData({ ...wizardData, name })}
+            onChange={(name) => {
+              setWizardData({ ...wizardData, name });
+              clearNameToolCreateError();
+            }}
+            serverError={
+              createError && (createError.field === 'name' || createError.field === 'tool')
+                ? { field: createError.field, message: createError.message }
+                : null
+            }
           />
         )}
         {currentStep === 1 && (
