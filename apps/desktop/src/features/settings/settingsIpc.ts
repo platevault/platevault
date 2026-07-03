@@ -42,6 +42,19 @@ import type {
   ResolverSettingsResponse,
   IpcOperationHandle,
   FirstRunRestartResponse,
+  Camera,
+  Telescope,
+  OpticalTrain,
+  Filter,
+  FilterCategory,
+  CreateCamera,
+  UpdateCamera,
+  CreateTelescope,
+  UpdateTelescope,
+  CreateOpticalTrain,
+  UpdateOpticalTrain,
+  CreateFilter,
+  UpdateFilter,
 } from '@/bindings/index';
 
 export type {
@@ -52,6 +65,19 @@ export type {
   ToolProfileSummary,
   ResolverSettings,
   FirstRunRestartResponse,
+  Camera,
+  Telescope,
+  OpticalTrain,
+  Filter,
+  FilterCategory,
+  CreateCamera,
+  UpdateCamera,
+  CreateTelescope,
+  UpdateTelescope,
+  CreateOpticalTrain,
+  UpdateOpticalTrain,
+  CreateFilter,
+  UpdateFilter,
 };
 export type { PatternPartDto as PatternPart };
 export type { PatternValidateResponse, PatternPreviewResponse };
@@ -262,4 +288,74 @@ export async function updateResolverSettings(
       settings,
     }),
   );
+}
+
+// ── Equipment (spec 030) ───────────────────────────────────────────────────────
+//
+// Cameras, telescopes, optical trains, and filters. CRUD orchestration lives in
+// `app_core::equipment` (re-exported from `app_core_calibration`); commands are
+// registered in `apps/desktop/src-tauri/src/commands/equipment.rs`.
+
+export async function equipmentCamerasList(): Promise<Camera[]> {
+  return unwrap(await commands.equipmentCamerasList());
+}
+
+export async function equipmentCameraCreate(request: CreateCamera): Promise<Camera> {
+  return unwrap(await commands.equipmentCamerasCreate(request));
+}
+
+export async function equipmentCameraUpdate(request: UpdateCamera): Promise<Camera> {
+  return unwrap(await commands.equipmentCamerasUpdate(request));
+}
+
+export async function equipmentCameraDelete(id: string): Promise<void> {
+  unwrap(await commands.equipmentCamerasDelete(id));
+}
+
+export async function equipmentTelescopesList(): Promise<Telescope[]> {
+  return unwrap(await commands.equipmentTelescopesList());
+}
+
+export async function equipmentTelescopeCreate(request: CreateTelescope): Promise<Telescope> {
+  return unwrap(await commands.equipmentTelescopesCreate(request));
+}
+
+export async function equipmentTelescopeUpdate(request: UpdateTelescope): Promise<Telescope> {
+  return unwrap(await commands.equipmentTelescopesUpdate(request));
+}
+
+export async function equipmentTelescopeDelete(id: string): Promise<void> {
+  unwrap(await commands.equipmentTelescopesDelete(id));
+}
+
+export async function equipmentTrainsList(): Promise<OpticalTrain[]> {
+  return unwrap(await commands.equipmentTrainsList());
+}
+
+export async function equipmentTrainCreate(request: CreateOpticalTrain): Promise<OpticalTrain> {
+  return unwrap(await commands.equipmentTrainsCreate(request));
+}
+
+export async function equipmentTrainUpdate(request: UpdateOpticalTrain): Promise<OpticalTrain> {
+  return unwrap(await commands.equipmentTrainsUpdate(request));
+}
+
+export async function equipmentTrainDelete(id: string): Promise<void> {
+  unwrap(await commands.equipmentTrainsDelete(id));
+}
+
+export async function equipmentFiltersList(): Promise<Filter[]> {
+  return unwrap(await commands.equipmentFiltersList());
+}
+
+export async function equipmentFilterCreate(request: CreateFilter): Promise<Filter> {
+  return unwrap(await commands.equipmentFiltersCreate(request));
+}
+
+export async function equipmentFilterUpdate(request: UpdateFilter): Promise<Filter> {
+  return unwrap(await commands.equipmentFiltersUpdate(request));
+}
+
+export async function equipmentFilterDelete(id: string): Promise<void> {
+  unwrap(await commands.equipmentFiltersDelete(id));
 }
