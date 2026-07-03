@@ -17,9 +17,15 @@ const mockGetSettings = vi.fn().mockResolvedValue({
 });
 const mockUpdateSettings = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('@/api/commands', () => ({
-  getSettings: (...args: unknown[]) => mockGetSettings(...args),
-  updateSettings: (...args: unknown[]) => mockUpdateSettings(...args),
+// Adapt each hoisted mock's raw settings payload into the generated
+// `{ status: 'ok', data }` Result the real `unwrap` consumes (spec 037).
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    settingsGet: (...args: unknown[]) =>
+      Promise.resolve(mockGetSettings(...args)).then((data) => ({ status: 'ok', data })),
+    settingsUpdate: (...args: unknown[]) =>
+      Promise.resolve(mockUpdateSettings(...args)).then((data) => ({ status: 'ok', data })),
+  },
 }));
 
 // ── Test helper component ─────────────────────────────────────────────────────
@@ -56,7 +62,7 @@ describe('LogPanel follow state (T010)', () => {
     await waitFor(() => {
       expect(getByTestId('follow-state').textContent).toBe('on');
     });
-    expect(mockGetSettings).toHaveBeenCalledWith({ scope: 'advanced' });
+    expect(mockGetSettings).toHaveBeenCalledWith('advanced');
   });
 
   it('defaults to follow=false when settings returns false', async () => {
@@ -94,9 +100,8 @@ describe('LogPanel follow state (T010)', () => {
     fireEvent.click(getByRole('button', { name: 'toggle' }));
 
     await waitFor(() => {
-      expect(mockUpdateSettings).toHaveBeenCalledWith({
-        scope: 'advanced',
-        values: { rememberFollowLogs: true },
+      expect(mockUpdateSettings).toHaveBeenCalledWith('advanced', {
+        rememberFollowLogs: true,
       });
     });
   });

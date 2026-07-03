@@ -20,13 +20,18 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
 }));
 
-vi.mock('@/api/commands', () => ({
-  getSettings: vi.fn().mockResolvedValue({
-    scope: 'advanced',
-    values: { logLevel: 'info', rememberFollowLogs: false },
-  }),
-  updateSettings: vi.fn().mockResolvedValue(undefined),
-  logExport: vi.fn().mockResolvedValue({ contractVersion: '2.0.0', requestId: 'r', filePath: '/tmp/x.json', count: 0, status: 'success' }),
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    settingsGet: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: { scope: 'advanced', values: { logLevel: 'info', rememberFollowLogs: false } },
+    }),
+    settingsUpdate: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    logExport: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: { contractVersion: '2.0.0', requestId: 'r', filePath: '/tmp/x.json', count: 0, status: 'success' },
+    }),
+  },
 }));
 
 vi.mock('@/data/logSubscription', () => ({
