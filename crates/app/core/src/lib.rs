@@ -55,6 +55,7 @@ pub use targets::{
 // In-crate modules (file layout under `src/`). These live in `app_core` itself
 // and may reference the extracted domain crates as `crate::errors`,
 // `crate::lifecycle`, etc. via the re-exports above.
+pub mod cleanup_generator;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
 pub mod first_run;

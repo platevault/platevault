@@ -50,3 +50,34 @@ pub struct CleanupScanResult {
     pub candidates: Vec<CleanupCandidate>,
     pub total_reclaimable_bytes: u64,
 }
+
+/// Request for `cleanup.plan.generate` — the second step of the two-step cleanup
+/// flow (D11). `cleanup.scan` is a pure preview; this command materialises a
+/// reviewable cleanup plan (plan row + items) via the spec-016 protection
+/// generator. Generating a plan performs NO filesystem mutation (FR-002).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateCleanupPlanRequest {
+    /// Project whose observed artifacts are scanned for cleanup candidates.
+    pub project_id: String,
+    /// Optional plan title; a default is derived from the project when absent.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// Per-plan destructive destination: `"archive"` (default, app-managed) or
+    /// `"os_trash"` (FR-016). Defaults to `"archive"` when absent.
+    #[serde(default)]
+    pub destructive_destination: Option<String>,
+}
+
+/// Result of `cleanup.plan.generate`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateCleanupPlanResult {
+    /// Id of the newly created plan (in `ready_for_review` state).
+    pub plan_id: String,
+    /// Total number of cleanup items placed on the plan.
+    pub item_count: u32,
+    /// Number of items that resolved to a protected protection level and will
+    /// gate plan approval until acknowledged (constitution II).
+    pub protected_item_count: u32,
+}
