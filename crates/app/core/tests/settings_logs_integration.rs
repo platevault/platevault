@@ -238,7 +238,11 @@ async fn log_stream_recent_entries_returns_emitted_events() {
     let empty = log_stream::recent_entries(pool, RecentOptions::default())
         .await
         .expect("recent_entries on empty db should succeed");
-    assert!(empty.is_empty(), "expected empty log on fresh DB, got {} entries", empty.len());
+    assert!(
+        empty.entries.is_empty(),
+        "expected empty log on fresh DB, got {} entries",
+        empty.entries.len()
+    );
 
     // Trigger an audit event via a non-noisy setting update (logLevel is not noisy).
     let req = SettingsUpdateRequest {
@@ -248,14 +252,17 @@ async fn log_stream_recent_entries_returns_emitted_events() {
     settings::update_setting(pool, &bus, &req).await.expect("update_setting should succeed");
 
     // recent_entries should now include at least one entry.
-    let entries = log_stream::recent_entries(pool, RecentOptions::default())
+    let result = log_stream::recent_entries(pool, RecentOptions::default())
         .await
         .expect("recent_entries should succeed after event emit");
 
-    assert!(!entries.is_empty(), "expected at least one log entry after settings update, got 0");
+    assert!(
+        !result.entries.is_empty(),
+        "expected at least one log entry after settings update, got 0"
+    );
 
     // The entry's id must follow the "aud:<n>" convention.
-    let first = &entries[0];
+    let first = &result.entries[0];
     assert!(
         first.id.starts_with("aud:"),
         "log entry id should start with 'aud:', got '{}'",
