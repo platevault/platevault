@@ -67,13 +67,13 @@ pub async fn log_recent(
         since_event_id,
     };
 
-    let entries = log_stream::recent_entries(pool, options).await.map_err(ContractError::from)?;
+    let result = log_stream::recent_entries(pool, options).await.map_err(ContractError::from)?;
 
     Ok(LogRecentResponse {
         contract_version: LOG_ENTRY_CONTRACT_VERSION.to_owned(),
-        truncated: false,
-        truncated_count: None,
-        entries,
+        truncated: result.truncated,
+        truncated_count: result.truncated_count,
+        entries: result.entries,
     })
 }
 
