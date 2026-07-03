@@ -12,9 +12,14 @@
 
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+// `LibraryRoot` is a plain `_Serialize` re-export in `@/bindings/types` (the
+// facade every settings pane already imports it through), NOT the wider
+// `LibraryRoot_Serialize | LibraryRoot_Deserialize` union `@/bindings/index`
+// exports under the same name — importing the union here would widen
+// `listRoots()`'s return type against DataSources.tsx's `LibraryRoot` state.
+import type { LibraryRoot } from '@/bindings/types';
 import type {
   SettingsData,
-  LibraryRoot,
   RestoreDefaultsResponse,
   SetSourceOverrideResponse,
   CalibrationTolerances,
