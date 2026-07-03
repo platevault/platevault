@@ -1,0 +1,246 @@
+/**
+ * Settings feature IPC helpers (spec 037 caller migration).
+ *
+ * Moves the Settings pane glue off the hand-written `@/api/commands` wrappers
+ * onto the generated `commands.*` bindings (FR-004: behaviour is moved, not
+ * dropped). `unwrap()` turns each generated `Result` into the throw-on-error
+ * contract the panes already rely on. Every settings pane (Advanced, Cleanup,
+ * DataSources, NamingStructure, ProcessingTools, CalibrationMatching,
+ * SourceProtectionOverride, ResolverSettingsControl, useAutoSave, SettingsKit)
+ * imports from this one module.
+ */
+
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type {
+  SettingsData,
+  LibraryRoot,
+  RestoreDefaultsResponse,
+  SetSourceOverrideResponse,
+  CalibrationTolerances,
+  UpdateCalibrationTolerances,
+  ProtectionLevel,
+  SourceProtectionGetResponse,
+  SourceProtectionSetRequest,
+  SourceProtectionSetResponse,
+  ToolProfileListResponse,
+  ToolProfileSummary,
+  ToolDiscoverRequest,
+  ToolDiscoverResponse,
+  UpdateProcessingTool,
+  ToolPathValidation,
+  PatternPartDto,
+  MetadataBundleDto_Serialize as MetadataBundleDto,
+  PatternValidateResponse_Serialize as PatternValidateResponse,
+  PatternPreviewResponse,
+  ResolverSettings,
+  ResolverSettingsResponse,
+  IpcOperationHandle,
+} from '@/bindings/index';
+
+export type {
+  ProtectionLevel,
+  SourceProtectionGetResponse,
+  SourceProtectionSetRequest,
+  SourceProtectionSetResponse,
+  ToolProfileSummary,
+  ResolverSettings,
+};
+export type { PatternPartDto as PatternPart };
+export type { PatternValidateResponse, PatternPreviewResponse };
+export type { UpdateCalibrationTolerances };
+
+// ── Settings scope read/write (spec 018) ──────────────────────────────────────
+
+export async function getSettings(args: { scope: string }): Promise<SettingsData> {
+  return unwrap(await commands.settingsGet(args.scope));
+}
+
+export async function updateSettings(args: {
+  scope: string;
+  values: Record<string, unknown>;
+}): Promise<void> {
+  unwrap(await commands.settingsUpdate(args.scope, args.values));
+}
+
+/**
+ * `settings.restore-defaults` — restore named keys (or all keys when `keys`
+ * is empty) to their default values (spec 018 T028).
+ */
+export async function settingsRestoreDefaults(
+  keys: string[],
+): Promise<RestoreDefaultsResponse> {
+  return unwrap(await commands.settingsRestoreDefaults({ keys }));
+}
+
+/**
+ * `settings.overridable-keys` — return the authoritative list of stable settings
+ * keys that can be overridden per source root (spec 018 T025).
+ *
+ * Falls back to a hardcoded pair when the command fails (forward-compat).
+ */
+export async function settingsOverridableKeys(): Promise<string[]> {
+  try {
+    return unwrap(await commands.settingsOverridableKeys());
+  } catch {
+    // Fallback for older backends or failed calls — matches the formerly hardcoded list.
+    return ['hashOnScan', 'followSymlinks'];
+  }
+}
+
+/**
+ * `settings.source-override.set` — set a per-source settings override
+ * (spec 018 T025).
+ */
+export async function settingsSourceOverrideSet(args: {
+  sourceId: string;
+  key: string;
+  value: unknown;
+}): Promise<SetSourceOverrideResponse> {
+  return unwrap(
+    await commands.settingsSourceOverrideSet({
+      sourceId: args.sourceId,
+      key: args.key,
+      value: args.value,
+    }),
+  );
+}
+
+// ── Data sources / roots (spec 003) ───────────────────────────────────────────
+
+export async function listRoots(): Promise<LibraryRoot[]> {
+  return unwrap(await commands.rootsList());
+}
+
+export async function registerRoot(args: {
+  path: string;
+  category: string;
+  scanSettings: Record<string, unknown>;
+}): Promise<void> {
+  unwrap(await commands.rootsRegister(args.path, args.category, args.scanSettings));
+}
+
+export async function startScan(args?: { root_ids?: string[] }): Promise<IpcOperationHandle> {
+  // Backend expects camelCase `rootIds`; sending `root_ids` is silently ignored
+  // and scans ALL roots instead of the requested subset.
+  return unwrap(await commands.scanStart(args?.root_ids ?? null));
+}
+
+// ── Calibration tolerances (spec 007) ─────────────────────────────────────────
+
+export async function calibrationTolerancesGet(): Promise<CalibrationTolerances> {
+  return unwrap(await commands.calibrationTolerancesGet());
+}
+
+export async function calibrationTolerancesUpdate(
+  request: UpdateCalibrationTolerances,
+): Promise<CalibrationTolerances> {
+  return unwrap(await commands.calibrationTolerancesUpdate(request));
+}
+
+// ── Source protection (spec 016 US2) ──────────────────────────────────────────
+
+/**
+ * `source.protection.get` — resolve effective protection for a source.
+ * Pass `sourceId: null` to retrieve global defaults.
+ */
+export async function sourceProtectionGet(
+  sourceId: string | null,
+): Promise<SourceProtectionGetResponse> {
+  return unwrap(await commands.sourceProtectionGet(sourceId));
+}
+
+/**
+ * `source.protection.set` — set or replace the protection override for a source
+ * (spec 016 US2, T013). Emits a `protection.source.set` audit event.
+ */
+export async function sourceProtectionSet(
+  request: SourceProtectionSetRequest,
+): Promise<SourceProtectionSetResponse> {
+  return unwrap(
+    await commands.sourceProtectionSet(
+      request as Parameters<typeof commands.sourceProtectionSet>[0],
+    ),
+  );
+}
+
+// ── Processing tools (spec 011) ───────────────────────────────────────────────
+
+export async function toolProfileList(): Promise<ToolProfileListResponse> {
+  return unwrap(await commands.toolsList());
+}
+
+export async function toolUpdate(request: UpdateProcessingTool): Promise<ToolProfileSummary> {
+  return unwrap(await commands.toolsUpdate(request));
+}
+
+export async function toolValidatePath(path: string): Promise<ToolPathValidation> {
+  return unwrap(await commands.toolsValidatePath(path));
+}
+
+export async function toolDiscover(request: ToolDiscoverRequest): Promise<ToolDiscoverResponse> {
+  return unwrap(await commands.toolsDiscover(request));
+}
+
+// ── Naming pattern (spec 015) ─────────────────────────────────────────────────
+
+/**
+ * Validate a pattern structurally (no metadata required).
+ * Never rejects — all error states are in the response body.
+ */
+export async function patternValidate(
+  pattern: PatternPartDto[],
+): Promise<PatternValidateResponse> {
+  return unwrap(await commands.patternValidate({ pattern }));
+}
+
+/**
+ * Preview a pattern against sample metadata for the Settings UI live preview.
+ * Applies the same validation and sanitization pipeline as pattern.resolve.
+ */
+export async function patternPreview(
+  pattern: PatternPartDto[],
+  sampleMetadata: MetadataBundleDto,
+): Promise<PatternPreviewResponse> {
+  return unwrap(
+    await commands.patternPreview(
+      { pattern, sampleMetadata } as Parameters<typeof commands.patternPreview>[0],
+    ),
+  );
+}
+
+// ── SIMBAD resolver settings (spec 035, FR-015) ───────────────────────────────
+
+/** Contract version for the spec-035 `target.resolution.settings` commands. */
+const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
+
+/**
+ * `target.resolution.settings` — read the SIMBAD resolver settings
+ * (online toggle, endpoint, debounce, request timeout) (spec 035, FR-015).
+ */
+export async function getResolverSettings(): Promise<ResolverSettingsResponse> {
+  return unwrap(
+    await commands.targetResolutionSettings({
+      contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+      requestId: crypto.randomUUID(),
+      op: 'get',
+    }),
+  );
+}
+
+/**
+ * `target.resolution.settings.update` — persist new resolver settings
+ * (spec 035, FR-015). Returns the saved settings.
+ */
+export async function updateResolverSettings(
+  settings: ResolverSettings,
+): Promise<ResolverSettingsResponse> {
+  return unwrap(
+    await commands.targetResolutionSettingsUpdate({
+      contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+      requestId: crypto.randomUUID(),
+      op: 'update',
+      settings,
+    }),
+  );
+}

@@ -20,7 +20,7 @@ import {
   toolValidatePath,
   toolDiscover,
   type ToolProfileSummary,
-} from '@/api/commands';
+} from './settingsIpc';
 import { m } from '@/lib/i18n';
 import { SettingsSection, SettingsRow } from './SettingsKit';
 

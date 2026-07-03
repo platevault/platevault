@@ -8,19 +8,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
-import type { SourceProtectionGetResponse } from '@/api/commands';
+import type { SourceProtectionGetResponse } from './settingsIpc';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
+// Mocks the generated bindings surface (spec 037) so the real `settingsIpc`
+// wrappers (sourceProtectionGet/Set) run and unwrap the Result envelope.
 
-vi.mock('@/api/commands', () => ({
-  sourceProtectionGet: vi.fn(),
-  sourceProtectionSet: vi.fn(),
+const { mockGet, mockSet } = vi.hoisted(() => ({
+  mockGet: vi.fn(),
+  mockSet: vi.fn(),
 }));
 
-import { sourceProtectionGet, sourceProtectionSet } from '@/api/commands';
-
-const mockGet = vi.mocked(sourceProtectionGet);
-const mockSet = vi.mocked(sourceProtectionSet);
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    sourceProtectionGet: mockGet,
+    sourceProtectionSet: mockSet,
+  },
+}));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -51,7 +55,7 @@ describe('SourceProtectionOverride', () => {
   });
 
   it('shows Protected pill and Inherits global default badge when inheriting', async () => {
-    mockGet.mockResolvedValue(makeGetResponse({ inheritsDefault: true, level: 'protected' }));
+    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ inheritsDefault: true, level: 'protected' }) });
     render(<SourceProtectionOverride sourceId="src-1" />);
 
     await waitFor(() => {
@@ -61,7 +65,7 @@ describe('SourceProtectionOverride', () => {
   });
 
   it('shows override pill without inherits badge when override is set', async () => {
-    mockGet.mockResolvedValue(makeGetResponse({ inheritsDefault: false, level: 'normal' }));
+    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ inheritsDefault: false, level: 'normal' }) });
     render(<SourceProtectionOverride sourceId="src-1" />);
 
     await waitFor(() => {
@@ -72,7 +76,7 @@ describe('SourceProtectionOverride', () => {
   });
 
   it('shows Override button', async () => {
-    mockGet.mockResolvedValue(makeGetResponse());
+    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse() });
     render(<SourceProtectionOverride sourceId="src-1" />);
 
     await waitFor(() => {
@@ -81,7 +85,7 @@ describe('SourceProtectionOverride', () => {
   });
 
   it('opens editing mode on Override click', async () => {
-    mockGet.mockResolvedValue(makeGetResponse());
+    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse() });
     render(<SourceProtectionOverride sourceId="src-1" />);
 
     await waitFor(() => screen.getByRole('button', { name: /Override/i }));
@@ -93,16 +97,19 @@ describe('SourceProtectionOverride', () => {
   });
 
   it('saves override and updates level display', async () => {
-    mockGet.mockResolvedValue(makeGetResponse({ level: 'protected', inheritsDefault: true }));
+    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ level: 'protected', inheritsDefault: true }) });
     mockSet.mockResolvedValue({
-      sourceId: 'src-1',
-      priorLevel: 'protected',
-      newLevel: 'normal',
-      priorBlockPermanentDelete: null,
-      newBlockPermanentDelete: null,
-      priorCategories: null,
-      newCategories: null,
-      auditId: 'audit-1',
+      status: 'ok',
+      data: {
+        sourceId: 'src-1',
+        priorLevel: 'protected',
+        newLevel: 'normal',
+        priorBlockPermanentDelete: null,
+        newBlockPermanentDelete: null,
+        priorCategories: null,
+        newCategories: null,
+        auditId: 'audit-1',
+      },
     });
 
     const onSaved = vi.fn();
@@ -136,7 +143,7 @@ describe('SourceProtectionOverride', () => {
   });
 
   it('shows level hint text for protected level', async () => {
-    mockGet.mockResolvedValue(makeGetResponse({ level: 'protected', inheritsDefault: false }));
+    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ level: 'protected', inheritsDefault: false }) });
     render(<SourceProtectionOverride sourceId="src-1" />);
 
     await waitFor(() => {
@@ -145,7 +152,7 @@ describe('SourceProtectionOverride', () => {
   });
 
   it('can cancel edit without saving', async () => {
-    mockGet.mockResolvedValue(makeGetResponse({ level: 'protected', inheritsDefault: true }));
+    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ level: 'protected', inheritsDefault: true }) });
     render(<SourceProtectionOverride sourceId="src-1" />);
 
     await waitFor(() => screen.getByRole('button', { name: /Override/i }));

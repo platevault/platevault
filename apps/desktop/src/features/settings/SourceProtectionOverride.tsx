@@ -11,8 +11,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Pill, Btn } from '@/ui';
-import { sourceProtectionGet, sourceProtectionSet } from '@/api/commands';
-import type { ProtectionLevel } from '@/api/commands';
+import { sourceProtectionGet, sourceProtectionSet } from './settingsIpc';
+import type { ProtectionLevel } from './settingsIpc';
 import { m } from '@/lib/i18n';
 
 interface SourceProtectionOverrideProps {
