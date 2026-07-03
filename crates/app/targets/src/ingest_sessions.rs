@@ -718,13 +718,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn propagate_overwrites_a_stale_project_target() {
+    async fn propagate_never_overwrites_an_existing_project_target() {
         let db = test_db().await;
         seed_canonical_target(db.pool(), "target-old", "M 42").await;
         seed_canonical_target(db.pool(), "target-new", "M 31").await;
         seed_project(db.pool(), "proj-1").await;
-        // Project already carries a manually-picked target (spec-035 gap #1 /
-        // project creation flow) — the session's live-resolved target wins.
+        // Project already carries a target — manually picked at project
+        // creation (spec-035 gap #1) or from an earlier propagation. Either
+        // way, propagation is first-write-wins: it must not clobber it.
         repo_projects::set_project_canonical_target_id(db.pool(), "proj-1", "target-old")
             .await
             .unwrap();
@@ -734,7 +735,7 @@ mod tests {
 
         let got =
             repo_projects::get_project_canonical_target_id(db.pool(), "proj-1").await.unwrap();
-        assert_eq!(got.as_deref(), Some("target-new"));
+        assert_eq!(got.as_deref(), Some("target-old"), "existing target must not be overwritten");
     }
 
     #[tokio::test]

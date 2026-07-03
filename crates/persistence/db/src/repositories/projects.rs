@@ -241,12 +241,14 @@ pub async fn get_project_canonical_target(
     }))
 }
 
-/// Set (overwrite) a project's spec-035 `canonical_target_id` association.
+/// Set a project's spec-035 `canonical_target_id` association, but only if it
+/// is currently unset.
 ///
 /// Spec 041 R-17/FR-052: called when a light's resolved target propagates from
-/// its acquisition session to a linked project, keeping the project's
-/// canonical target in sync with whatever its lights actually resolve to (not
-/// just the value picked once at project creation, spec-035 US1 #2).
+/// its acquisition session to a linked project. This never overwrites an
+/// existing value — whether it was set manually at project creation
+/// (spec-035 US1 #2) or by an earlier propagation — so a project's canonical
+/// target is first-write-wins, not last-write-wins.
 ///
 /// # Errors
 ///
@@ -257,12 +259,15 @@ pub async fn set_project_canonical_target_id(
     canonical_target_id: &str,
 ) -> DbResult<()> {
     let now = Timestamp::now_iso();
-    sqlx::query("UPDATE projects SET canonical_target_id = ?, updated_at = ? WHERE id = ?")
-        .bind(canonical_target_id)
-        .bind(&now)
-        .bind(id)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "UPDATE projects SET canonical_target_id = ?, updated_at = ? \
+         WHERE id = ? AND canonical_target_id IS NULL",
+    )
+    .bind(canonical_target_id)
+    .bind(&now)
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
