@@ -17,7 +17,11 @@
 //! [`targeting::coords`]; this module is orchestration only (DB load + map).
 //!
 //! This operation is **read-only**: it recommends, it does not write the chosen
-//! target (that is reclassify, T068) nor propagate to projects (T075).
+//! target (that is reclassify, T068). Propagation to a linked project (T075)
+//! happens downstream of this module, at live light ingestion: once a light's
+//! resolved `canonical_target_id` lands on its `acquisition_session`, any
+//! project linked to that session via `project_sources` is kept in sync — see
+//! `app_core_targets::ingest_sessions::propagate_target_to_projects`.
 #![allow(clippy::doc_markdown)] // RA/Dec, FOV, OBJECT are domain terms
 
 use persistence_db::repositories::inbox::{self as repo, InboxPointingRow};
