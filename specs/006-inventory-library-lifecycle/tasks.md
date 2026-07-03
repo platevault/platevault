@@ -135,7 +135,7 @@ review actions on its sessions are refused with
 - [x] T400 [US4] Ensure `inventory.list` projection emits the live `state` for each `InventorySource` rather than a cached value. — `list_roots_with_sessions()` reads `library_root.state` from SQLite on every call.
 - [x] T401 [US4] Implement source-state effects from data-model.md §Source-State Effects: refuse review transitions on `disabled` sources. — source-state guard in `review_session()` using `get_library_root_state()`.
 - [ ] T402 [P] [US4] Implement warning surfacing for `missing` and `reconnect_required` sources. — DEFERRED; contract is additive-bump and not required for v1.
-- [ ] T403 [P] [US4] **Layer-1 test** (executed, no longer deferred): review request on a session under a `disabled` source returns `transition.refused`. Guard already implemented in `review_session()`; this closes the zero-coverage gap flagged at verify.
+- [x] T403 [P] [US4] **Layer-1 test** (executed, no longer deferred): review request on a session under a `disabled` source returns `transition.refused`. Guard already implemented in `review_session()`; this closes the zero-coverage gap flagged at verify. — `review_session_refused_when_source_disabled` in `crates/app/core/tests/sessions_integration.rs`.
 - [ ] T404 [P] [US4] Contract test: review request on a session under a `missing` source still succeeds (best-effort). — DEFERRED.
 - [ ] T405 [P] [US4] Playwright MCP: toggle a fixture source to `missing`. — DEFERRED (no GUI runtime).
 
@@ -149,12 +149,16 @@ review actions on its sessions are refused with
 concept, and implement the two requirements the 043 redesign left as unimplemented
 spec (FR-007 Reveal-in-OS, FR-010 Ignore action + Cmd+K).
 
-- [ ] T430 [US3] Remove the `session.mixed_state` phantom: delete the guard doc
+- [x] T430 [US3] Remove the `session.mixed_state` phantom: delete the guard doc
   comments in `crates/app/core/src/inventory.rs` (module header + `review_session`
   contract note), the `InventoryFrameType::Mixed` enum arm + `map_frame_type("mixed")`
   handling + its unit test, and the fake `session.mixed_state` fixture test in
   `apps/desktop/src/features/sessions/__tests__/inventory.commands.test.ts`.
-  (Supersedes obsolete T308/T311.)
+  (Supersedes obsolete T308/T311.) — done: enum variant removed from
+  `contracts_core::inventory::InventoryFrameType`, bindings regenerated
+  (`InventoryFrameType = "light"|"dark"|"flat"|"bias"`), fixture `FrameType` +
+  validTypes list narrowed. Calibration-domain `session.mixed_state` (spec 007)
+  is a separate, real guard and was left intact.
 - [ ] T410 [US1] FR-007: add a per-row "Open location / Reveal in OS" action on the
   Sessions/Inventory rows (and drawer overflow), wired to the existing spec-004
   native reveal command (the same command projects use, e.g. `reveal_in_os` /

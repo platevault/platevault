@@ -15,8 +15,10 @@
 //!
 //! - If the session's owning `LibraryRoot` is `disabled`, review transitions
 //!   are refused with `transition.refused` + `{reason: "source_disabled"}`.
-//! - If the session `type == "mixed"`, the review transition is refused with
-//!   `session.mixed_state` — the user must split via spec 005 first.
+//!
+//! (A former `session.mixed_state` guard was removed 2026-07-03: spec 041's
+//! Inbox single-type ingest splits mixed folders at ingest, so a session is
+//! never `mixed` and the guard could never fire.)
 
 //!
 //! Extracted from `app_core` into its own crate (spec 042 / T253 O3b). Its only
@@ -120,7 +122,6 @@ pub async fn list(
 /// 1. Session must exist (otherwise `session.not_found`).
 /// 2. Owning `LibraryRoot` must not be `disabled` (otherwise
 ///    `transition.refused` + `reason: "source_disabled"`).
-/// 3. Session type must not be `mixed` (otherwise `session.mixed_state`).
 ///
 /// Idempotency: same-state re-application returns `status: "noop"` (spec 002,
 /// inherited from `apply_transition`).
@@ -305,7 +306,6 @@ fn frame_type_to_str(ft: InventoryFrameType) -> &'static str {
         InventoryFrameType::Dark => "dark",
         InventoryFrameType::Flat => "flat",
         InventoryFrameType::Bias => "bias",
-        InventoryFrameType::Mixed => "mixed",
     }
 }
 
@@ -331,7 +331,6 @@ fn map_frame_type(db_kind: &str) -> InventoryFrameType {
         "dark" => InventoryFrameType::Dark,
         "flat" => InventoryFrameType::Flat,
         "bias" => InventoryFrameType::Bias,
-        "mixed" => InventoryFrameType::Mixed,
         _ => InventoryFrameType::Light,
     }
 }
@@ -534,7 +533,9 @@ mod tests {
         assert!(matches!(map_frame_type("dark"), InventoryFrameType::Dark));
         assert!(matches!(map_frame_type("flat"), InventoryFrameType::Flat));
         assert!(matches!(map_frame_type("bias"), InventoryFrameType::Bias));
-        assert!(matches!(map_frame_type("mixed"), InventoryFrameType::Mixed));
+        // "mixed" no longer maps to a dedicated variant (removed 2026-07-03);
+        // any unknown db_kind, including a legacy "mixed", falls back to Light.
+        assert!(matches!(map_frame_type("mixed"), InventoryFrameType::Light));
     }
 
     #[test]
