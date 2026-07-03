@@ -228,9 +228,46 @@ describe('Equipment', () => {
 
     render(<Equipment save={vi.fn()} />);
 
+    // The catalog-mapped ContractError message is wrapped in the localized
+    // "Could not load: …" frame (spec 046 FR-008 pattern, like DataSources).
     await waitFor(() =>
-      expect(screen.getByText(m.err_internal_database())).toBeInTheDocument(),
+      expect(
+        screen.getByText(
+          m.settings_equipment_load_error({ error: m.err_internal_database() }),
+        ),
+      ).toBeInTheDocument(),
     );
+  });
+
+  it('shows a wrapped save error when create fails', async () => {
+    mockCamerasList.mockResolvedValue(ok([]));
+    mockCamerasCreate.mockResolvedValue(
+      err({
+        code: 'equipment.duplicate',
+        message: 'UNIQUE constraint failed',
+        severity: 'warning',
+        retryable: false,
+      }),
+    );
+
+    render(<Equipment save={vi.fn()} />);
+    await waitFor(() => expect(mockCamerasList).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByText(m.settings_equipment_cameras_add()));
+    fireEvent.change(screen.getByLabelText(m.settings_equipment_col_name()), {
+      target: { value: 'Duplicate Cam' },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText(m.common_save()));
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByText(
+        m.settings_equipment_save_error({ error: m.err_equipment_duplicate() }),
+      ),
+    ).toBeInTheDocument();
   });
 
   it('blocks deleting a telescope still referenced by an optical train', async () => {

@@ -182,7 +182,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
     setCamerasError(null);
     equipmentCamerasList()
       .then(setCameras)
-      .catch((err: unknown) => setCamerasError(errMessage(err)))
+      .catch((err: unknown) =>
+        setCamerasError(m.settings_equipment_load_error({ error: errMessage(err) })),
+      )
       .finally(() => setCamerasLoading(false));
   }, []);
 
@@ -191,7 +193,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
     setTelescopesError(null);
     equipmentTelescopesList()
       .then(setTelescopes)
-      .catch((err: unknown) => setTelescopesError(errMessage(err)))
+      .catch((err: unknown) =>
+        setTelescopesError(m.settings_equipment_load_error({ error: errMessage(err) })),
+      )
       .finally(() => setTelescopesLoading(false));
   }, []);
 
@@ -200,7 +204,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
     setTrainsError(null);
     equipmentTrainsList()
       .then(setTrains)
-      .catch((err: unknown) => setTrainsError(errMessage(err)))
+      .catch((err: unknown) =>
+        setTrainsError(m.settings_equipment_load_error({ error: errMessage(err) })),
+      )
       .finally(() => setTrainsLoading(false));
   }, []);
 
@@ -209,7 +215,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
     setFiltersError(null);
     equipmentFiltersList()
       .then(setFilters)
-      .catch((err: unknown) => setFiltersError(errMessage(err)))
+      .catch((err: unknown) =>
+        setFiltersError(m.settings_equipment_load_error({ error: errMessage(err) })),
+      )
       .finally(() => setFiltersLoading(false));
   }, []);
 
@@ -241,7 +249,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
       setCameraForm(null);
       loadCameras();
     } catch (err: unknown) {
-      setCameraFormError(errMessage(err));
+      setCameraFormError(m.settings_equipment_save_error({ error: errMessage(err) }));
     } finally {
       setCameraSaving(false);
     }
@@ -279,7 +287,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
       setTelescopeForm(null);
       loadTelescopes();
     } catch (err: unknown) {
-      setTelescopeFormError(errMessage(err));
+      setTelescopeFormError(m.settings_equipment_save_error({ error: errMessage(err) }));
     } finally {
       setTelescopeSaving(false);
     }
@@ -328,7 +336,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
       setTrainForm(null);
       loadTrains();
     } catch (err: unknown) {
-      setTrainFormError(errMessage(err));
+      setTrainFormError(m.settings_equipment_save_error({ error: errMessage(err) }));
     } finally {
       setTrainSaving(false);
     }
@@ -359,7 +367,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
       setFilterForm(null);
       loadFilters();
     } catch (err: unknown) {
-      setFilterFormError(errMessage(err));
+      setFilterFormError(m.settings_equipment_save_error({ error: errMessage(err) }));
     } finally {
       setFilterSaving(false);
     }
@@ -397,7 +405,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
       }
       setDeleteTarget(null);
     } catch (err: unknown) {
-      setDeleteError(errMessage(err));
+      setDeleteError(m.settings_equipment_delete_error({ error: errMessage(err) }));
     } finally {
       setDeleteBusy(false);
     }
