@@ -24,6 +24,8 @@ import type {
   SetSourceOverrideResponse,
   CalibrationTolerances,
   UpdateCalibrationTolerances,
+  IngestionSettings,
+  UpdateIngestionSettings,
   ProtectionLevel,
   SourceProtectionGetResponse,
   SourceProtectionSetRequest,
@@ -83,6 +85,7 @@ export type {
 export type { PatternPartDto as PatternPart };
 export type { PatternValidateResponse, PatternPreviewResponse };
 export type { UpdateCalibrationTolerances };
+export type { IngestionSettings, UpdateIngestionSettings };
 
 // ── Settings scope read/write (spec 018) ──────────────────────────────────────
 
@@ -226,6 +229,18 @@ export async function calibrationTolerancesUpdate(
   request: UpdateCalibrationTolerances,
 ): Promise<CalibrationTolerances> {
   return unwrap(await commands.calibrationTolerancesUpdate(request));
+}
+
+// ── Ingestion settings (spec 030, package P12) ────────────────────────────────
+
+export async function ingestionSettingsGet(): Promise<IngestionSettings> {
+  return unwrap(await commands.ingestionSettingsGet());
+}
+
+export async function ingestionSettingsUpdate(
+  request: UpdateIngestionSettings,
+): Promise<IngestionSettings> {
+  return unwrap(await commands.ingestionSettingsUpdate(request));
 }
 
 // ── Source protection (spec 016 US2) ──────────────────────────────────────────

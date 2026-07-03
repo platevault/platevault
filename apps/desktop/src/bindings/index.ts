@@ -1266,17 +1266,20 @@ export const commands = {
 	 */
 	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_list", { req })),
 	/**
-	 *  `ingestion.settings.get` — returns current ingestion/scan settings.
+	 *  `ingestion.settings.get` — returns current ingestion/scan settings,
+	 *  merging any persisted overrides with in-code defaults.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
 	ingestionSettingsGet: () => typedError<IngestionSettings, ContractError_Serialize>(__TAURI_INVOKE("ingestion_settings_get")),
 	/**
-	 *  `ingestion.settings.update` — update ingestion/scan settings.
+	 *  `ingestion.settings.update` — validates, persists, and returns the
+	 *  persisted ingestion/scan settings.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` with code `"value.invalid"` for a negative
+	 *  tolerance, or on database failure.
 	 */
 	ingestionSettingsUpdate: (request: UpdateIngestionSettings) => typedError<IngestionSettings, ContractError_Serialize>(__TAURI_INVOKE("ingestion_settings_update", { request })),
 	/**
@@ -3988,7 +3991,14 @@ export type IngestionSettings = {
 	scanOnStartup: boolean,
 	followSymlinks: boolean,
 	followJunctions: boolean,
-	eagerHashing: boolean,
+	/**
+	 *  Hashing strategy: `"lazy"` | `"eager"` | `"off"` — same vocabulary as
+	 *  the spec-018 `hashOnScan` settings key (data-sources scope). This is a
+	 *  distinct, ingestion-scoped setting (not a read of `hashOnScan`); the
+	 *  package-P12 UI wiring intentionally keeps them independent per-scope
+	 *  values rather than aliasing one to the other.
+	 */
+	hashingMode: string,
 	metadataExtraction: boolean,
 	exposureGroupingToleranceS: number | null,
 	temperatureGroupingToleranceC: number | null,
@@ -7435,7 +7445,8 @@ export type UpdateIngestionSettings = {
 	scanOnStartup: boolean,
 	followSymlinks: boolean,
 	followJunctions: boolean,
-	eagerHashing: boolean,
+	/**  See [`IngestionSettings::hashing_mode`]. */
+	hashingMode: string,
 	metadataExtraction: boolean,
 	exposureGroupingToleranceS: number | null,
 	temperatureGroupingToleranceC: number | null,

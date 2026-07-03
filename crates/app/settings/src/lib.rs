@@ -37,6 +37,13 @@ use sqlx::SqlitePool;
 // value validation are all derived from that single table.
 mod descriptors;
 
+// ── Ingestion settings (spec 030, package P12) ────────────────────────────
+//
+// Stored as a single JSON document via the low-level key/value store below
+// (`repo::get_raw`/`set_raw`), not through the descriptor table — see the
+// module doc comment in `ingestion.rs` for the rationale.
+pub mod ingestion;
+
 // ── Settings schema migration harness (spec 018 US5, T030 / T031) ────────────
 pub mod migrate;
 
