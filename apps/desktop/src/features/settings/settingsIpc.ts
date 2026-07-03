@@ -57,6 +57,9 @@ import type {
   CreateFilter,
   UpdateFilter,
   RemapVerification,
+  AuditListResponse,
+  AuditFilterDto,
+  AuditPaginationDto,
 } from '@/bindings/index';
 
 export type {
@@ -418,4 +421,25 @@ export async function equipmentFilterUpdate(request: UpdateFilter): Promise<Filt
 
 export async function equipmentFilterDelete(id: string): Promise<void> {
   unwrap(await commands.equipmentFiltersDelete(id));
+}
+
+// ── Audit log (spec 029, real backend) ────────────────────────────────────────
+//
+// `audit.list` / `audit.export` were spec-029 stubs returning a hardcoded
+// fixture and ignoring `filters` / `pagination`. They now read the durable
+// `audit_log_entry` table (migration `0002_lifecycle.sql`) via
+// `persistence_db::repositories::audit`, with real server-side filtering
+// (`entityType`, `entityId`, `outcome`, `severity`, `search`, `from`/`to`) and
+// `limit`/`offset` pagination — see `apps/desktop/src-tauri/src/commands/audit.rs`.
+
+export async function auditList(
+  filters: AuditFilterDto | null,
+  pagination: AuditPaginationDto | null,
+): Promise<AuditListResponse> {
+  return unwrap(await commands.auditList(filters, pagination));
+}
+
+/** `audit.export` — export the filtered audit entries as newline-delimited JSON. */
+export async function auditExport(filters: AuditFilterDto | null): Promise<string> {
+  return unwrap(await commands.auditExport(filters));
 }

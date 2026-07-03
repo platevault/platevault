@@ -529,19 +529,46 @@ export const commands = {
 	 */
 	plansApplyStatus: (planId: string) => typedError<PlanApplyStatus_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_apply_status", { planId })),
 	/**
-	 *  `audit.list` — returns paginated audit entries.
+	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
-	auditList: (filters: unknown | null, pagination: unknown | null) => typedError<AuditListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("audit_list", { filters, pagination })),
+	auditList: (filters: {
+	entityType?: string | null,
+	entityId?: string | null,
+	outcome?: AuditOutcome | null,
+	severity?: Severity | null,
+	/**  Case-insensitive substring match against event/entity/actor text. */
+	search?: string | null,
+	/**  RFC 3339 lower bound on the entry timestamp (inclusive). */
+	from?: string | null,
+	/**  RFC 3339 upper bound on the entry timestamp (exclusive). */
+	to?: string | null,
+} | null, pagination: {
+	limit?: number | null,
+	offset?: number | null,
+} | null) => typedError<AuditListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("audit_list", { filters, pagination })),
 	/**
-	 *  `audit.export` — export audit entries as newline-delimited JSON.
+	 *  `audit.export` — export the filtered audit entries as newline-delimited
+	 *  JSON (one `AuditEntry` per line, matching `audit.list`'s entry shape).
+	 *  Ignores pagination — export is always the full filtered set.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
-	auditExport: (filters: unknown | null) => typedError<string, ContractError_Serialize>(__TAURI_INVOKE("audit_export", { filters })),
+	auditExport: (filters: {
+	entityType?: string | null,
+	entityId?: string | null,
+	outcome?: AuditOutcome | null,
+	severity?: Severity | null,
+	/**  Case-insensitive substring match against event/entity/actor text. */
+	search?: string | null,
+	/**  RFC 3339 lower bound on the entry timestamp (inclusive). */
+	from?: string | null,
+	/**  RFC 3339 upper bound on the entry timestamp (exclusive). */
+	to?: string | null,
+} | null) => typedError<string, ContractError_Serialize>(__TAURI_INVOKE("audit_export", { filters })),
 	/**
 	 *  `log.recent` — return the most-recent log entries (initial hydration window).
 	 * 
@@ -1774,6 +1801,26 @@ export type AuditEntry_Serialize = {
 	detail: string,
 };
 
+/**
+ *  Filter args for `audit.list` / `audit.export`.
+ * 
+ *  `entity_type` + `entity_id` are the key fields a future per-entity history
+ *  view (e.g. an archive-detail audit trail) would reuse — kept as plain
+ *  equality filters rather than something bespoke to the settings screen.
+ */
+export type AuditFilterDto = {
+	entityType?: string | null,
+	entityId?: string | null,
+	outcome?: AuditOutcome | null,
+	severity?: Severity | null,
+	/**  Case-insensitive substring match against event/entity/actor text. */
+	search?: string | null,
+	/**  RFC 3339 lower bound on the entry timestamp (inclusive). */
+	from?: string | null,
+	/**  RFC 3339 upper bound on the entry timestamp (exclusive). */
+	to?: string | null,
+};
+
 /**  Paginated response for audit list queries. */
 export type AuditListResponse = AuditListResponse_Serialize | AuditListResponse_Deserialize;
 
@@ -1791,6 +1838,12 @@ export type AuditListResponse_Serialize = {
 
 /**  Outcome of an audited action. */
 export type AuditOutcome = "applied" | "ok" | "refused" | "failed" | "paused";
+
+/**  Pagination args for `audit.list`. */
+export type AuditPaginationDto = {
+	limit?: number | null,
+	offset?: number | null,
+};
 
 /**  Hard error for sessions that could not be evaluated at all (e.g. not found). */
 export type BatchErrorDto = BatchErrorDto_Serialize | BatchErrorDto_Deserialize;
@@ -6528,6 +6581,9 @@ export type SettingsData = {
 	scope: string,
 	values: unknown,
 };
+
+/**  Visibility tier for the audit event (FR-008). */
+export type Severity = "workflow" | "diagnostic";
 
 /**
  *  Kind of a registered source directory.
