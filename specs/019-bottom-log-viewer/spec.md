@@ -6,7 +6,8 @@
 
 **Feature Branch**: `019-bottom-log-viewer`  
 **Created**: 2026-05-09  
-**Status**: Draft (mockup-anchored)  
+**Updated**: 2026-07-03  
+**Status**: **Implemented** (closed 2026-07-03). Full-width bottom fold-out log panel (`apps/desktop/src/app/LogPanel.tsx`) with level chips, remembered follow-tail, entity cross-linking, 500-entry ring buffer, export, truncation marker, debug-gated diagnostics, and full i18n; backend `log_recent`/`log_export` commands + bus→Tauri forwarder. FR-001…FR-017 satisfied (desktop + Rust tests green). Closeout: added the T006/T011 jsdom unit tests, updated the T029 docs index, and **fixed a real bug** — the initial-hydration pull used a dotted `invoke('log.recent')` the real backend rejects; now routed through the generated `log_recent` binding. Remaining open: T028 Playwright quickstart (needs a Tauri runtime host, not WSL) — DEFERRED.  
 **Input**: User description: "Specify the log viewer as a full-width bottom fold-out panel with log level and remembered follow behavior, not a focus rail."
 
 ## User Scenarios & Testing *(mandatory)*

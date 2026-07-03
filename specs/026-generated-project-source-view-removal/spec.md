@@ -6,14 +6,29 @@
 
 **Feature Branch**: `026-generated-project-source-view-removal`  
 **Created**: 2026-05-09  
-**Status**: Draft  
+**Updated**: 2026-07-03  
+**Status**: **OPEN** — core (P1/P2) implemented; P3 deferred; **POSSIBLY OBSOLETE** (see banner). Not closed out: kept open pending a product decision.  
 **Input**: User description: "Specify removing generated project source views and app-created links/folders without touching original Inventory data."
 
-## Implementation Status: IMPLEMENTED
+> ⚠ **POSSIBLY OBSOLETE (2026-07-03) — the generation path this feature manages was dropped.**
+> This spec's remove/regenerate machinery is fully built and wired, but the app
+> no longer has any path that **creates** a generated source view: source-view
+> generation was tied to project-lifecycle **preparation**, which the 041 inbox
+> single-type + 043 redesign work **removed** ("drop session lifecycle"). In a
+> real DB `preparedview.list` therefore returns empty and `SourceViewsSection`
+> shows its empty state (matching 043's "no junction/source-views shown"). The
+> remove/regenerate feature is consequently **vestigial**. This spec is kept
+> **open** with its P3 work deferred until a product decision: either (a) restore
+> a generation path and finish P3, or (b) formally retire the source-view feature
+> and mark this spec Superseded. Do not close as Implemented until that decision.
+
+## Implementation Status: core built (P1/P2); vestigial pending decision
 
 Core persistence (migration 0029), domain types, persistence repository,
 app-core use cases, contract DTOs, Tauri commands, and frontend helpers
-(source-views.ts + SourceViewsSection) are implemented.
+(source-views.ts + SourceViewsSection) are implemented — but see the
+POSSIBLY-OBSOLETE banner above: there is no live source-view *generation* path,
+so this surface currently has nothing to act on.
 
 Deferred/partial items (see tasks.md):
 - T005 cross-platform per-item apply: SourceViewRemove plan is created; the
