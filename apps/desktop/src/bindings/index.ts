@@ -1089,14 +1089,14 @@ export const commands = {
 	 *  `calibration.tolerances.get` — returns current calibration matching tolerances.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
 	calibrationTolerancesGet: () => typedError<CalibrationTolerances, ContractError_Serialize>(__TAURI_INVOKE("calibration_tolerances_get")),
 	/**
 	 *  `calibration.tolerances.update` — update calibration matching tolerances.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
 	calibrationTolerancesUpdate: (request: UpdateCalibrationTolerances) => typedError<CalibrationTolerances, ContractError_Serialize>(__TAURI_INVOKE("calibration_tolerances_update", { request })),
 	/**
@@ -2165,6 +2165,12 @@ export type CalibrationTolerances = {
 	requireSameCamera: boolean,
 	requireSameGain: boolean,
 	requireSameBinning: boolean,
+	/**
+	 *  Hard rule: master must carry the same OFFSET as the light session for
+	 *  dark/bias matching. Feeds `calibration_core::ranking::MatchingRuleConfig
+	 *  ::require_same_offset` (spec 007). Default `true` (see migration 0050).
+	 */
+	requireSameOffset: boolean,
 };
 
 /**
@@ -7516,6 +7522,7 @@ export type UpdateCalibrationTolerances = {
 	requireSameCamera: boolean,
 	requireSameGain: boolean,
 	requireSameBinning: boolean,
+	requireSameOffset: boolean,
 };
 
 export type UpdateCamera = {

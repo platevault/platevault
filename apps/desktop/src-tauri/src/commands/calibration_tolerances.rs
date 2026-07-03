@@ -1,54 +1,46 @@
-//! Spec 030 calibration tolerances commands (T025).
+//! Spec 007 / spec 043 P8 calibration tolerances commands.
 //!
-//! Stubs that return default tolerances and accept updates.
-//! Real persistence will be wired when the tolerances repository is built.
+//! Backed by the `calibration_tolerances` singleton table (migration 0008 +
+//! 0050) via `app_core::calibration::{tolerances_get, tolerances_update}`.
+//! `require_same_offset` additionally feeds
+//! `calibration_core::ranking::MatchingRuleConfig::require_same_offset`
+//! through `app_core::calibration`'s `load_config` (see
+//! `crates/app/calibration/src/matching.rs`).
 
 use contracts_core::calibration_tolerances::{CalibrationTolerances, UpdateCalibrationTolerances};
 use contracts_core::ContractError;
+use tauri::State;
+
+use crate::AppState;
 
 /// `calibration.tolerances.get` — returns current calibration matching tolerances.
 ///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `Err(ContractError)` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn calibration_tolerances_get() -> Result<CalibrationTolerances, ContractError> {
-    tracing::debug!("stub: calibration.tolerances.get");
-    Ok(default_tolerances())
+pub async fn calibration_tolerances_get(
+    state: State<'_, AppState>,
+) -> Result<CalibrationTolerances, ContractError> {
+    tracing::debug!("calibration.tolerances.get");
+    app_core::calibration::tolerances_get(state.repo.pool()).await
 }
 
 /// `calibration.tolerances.update` — update calibration matching tolerances.
 ///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `Err(ContractError)` on database failure.
 #[tauri::command]
 #[specta::specta]
 pub async fn calibration_tolerances_update(
+    state: State<'_, AppState>,
     request: UpdateCalibrationTolerances,
 ) -> Result<CalibrationTolerances, ContractError> {
     tracing::debug!(
-        "stub: calibration.tolerances.update temp={}C exp={}s",
+        "calibration.tolerances.update temp={}C exp={}s require_same_offset={}",
         request.temperature_tolerance_c,
         request.exposure_tolerance_s,
+        request.require_same_offset,
     );
-    // Echo back as if persisted.
-    Ok(CalibrationTolerances {
-        temperature_tolerance_c: request.temperature_tolerance_c,
-        exposure_tolerance_s: request.exposure_tolerance_s,
-        aging_limit_days: request.aging_limit_days,
-        require_same_camera: request.require_same_camera,
-        require_same_gain: request.require_same_gain,
-        require_same_binning: request.require_same_binning,
-    })
-}
-
-fn default_tolerances() -> CalibrationTolerances {
-    CalibrationTolerances {
-        temperature_tolerance_c: 5.0,
-        exposure_tolerance_s: 2.0,
-        aging_limit_days: 365,
-        require_same_camera: true,
-        require_same_gain: true,
-        require_same_binning: true,
-    }
+    app_core::calibration::tolerances_update(state.repo.pool(), request).await
 }

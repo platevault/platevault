@@ -10,6 +10,7 @@ import type {
   MatchCandidate,
 } from '@/bindings/types';
 import type {
+  CalibrationTolerances,
   InboxListResponse_Serialize,
   InboxScanFolderResponse_Serialize,
   InboxClassifyResponse_Serialize,
@@ -139,6 +140,20 @@ let mockIngestionSettings: IngestionSettings = {
   exposureGroupingToleranceS: 2,
   temperatureGroupingToleranceC: 5,
   defaultFilter: null,
+};
+
+// Spec 007 / spec 043 P8 — mirrors the persisted `calibration_tolerances`
+// singleton row's real defaults (migration 0008 + 0051), including
+// `requireSameOffset` (STUB-OFFSET-REQUIRED closed: this is now a real,
+// persisted field, not a local-only stub).
+const mockCalibrationTolerances: CalibrationTolerances = {
+  temperatureToleranceC: 5.0,
+  exposureToleranceS: 2.0,
+  agingLimitDays: 365,
+  requireSameCamera: true,
+  requireSameGain: true,
+  requireSameBinning: true,
+  requireSameOffset: true,
 };
 
 const mockRoots: LibraryRoot[] = [
@@ -354,6 +369,9 @@ export async function mockInvoke(
           candidates: mockCalibrationMatches(sessionId),
         })),
       } satisfies CalibrationMatchBatchResponse;
+    }
+    case 'calibration_tolerances_get': {
+      return mockCalibrationTolerances;
     }
     case 'targets_list': {
       const { targets } = await import('@/data/fixtures/targets');
@@ -655,6 +673,13 @@ export async function mockInvoke(
         mockIngestionSettings = { ...req };
       }
       return mockIngestionSettings;
+    }
+    case 'calibration_tolerances_update': {
+      // Echo the request back, mirroring the real `calibration.tolerances.update`
+      // command's upsert-then-return behaviour (persistence_db::repositories::
+      // calibration_tolerances::update).
+      const req = (_args as { request?: CalibrationTolerances } | undefined)?.request;
+      return { ...mockCalibrationTolerances, ...req } satisfies CalibrationTolerances;
     }
     case 'roots_register': {
       return mockRoots[0];

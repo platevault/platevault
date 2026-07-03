@@ -747,6 +747,15 @@ async fn load_master_by_id(
 async fn load_config(pool: &SqlitePool) -> MatchingRuleConfig {
     let mut config = MatchingRuleConfig::default();
 
+    // `require_same_offset` is persisted on the `calibration_tolerances`
+    // singleton row (migration 0050), not the generic settings key/value
+    // store — it's user-controlled via the Settings > Calibration Matching
+    // "Offset match required" toggle (spec 043 P8). Falls back to
+    // `MatchingRuleConfig::default()` (true) on read failure.
+    if let Ok(row) = persistence_db::repositories::calibration_tolerances::get(pool).await {
+        config.require_same_offset = row.require_same_offset;
+    }
+
     if let Ok(Some(v)) = persistence_db::repositories::settings::get_raw(pool, KEY_DARK_TEMP).await
     {
         if let Some(n) = v.as_f64() {
@@ -1108,5 +1117,41 @@ mod masters_tests {
         let masters = masters_list(db.pool()).await.unwrap();
         assert_eq!(masters.len(), 1);
         assert_eq!(masters[0].id, "cal-t3");
+    }
+
+    /// Spec 043 P8: `load_config` defaults `require_same_offset` to true on a
+    /// fresh DB, matching `MatchingRuleConfig::default()` (migration 0008/0050
+    /// seed row).
+    #[tokio::test]
+    async fn load_config_defaults_require_same_offset_true() {
+        let db = test_db().await;
+        let config = load_config(db.pool()).await;
+        assert!(config.require_same_offset);
+    }
+
+    /// Spec 043 P8: the Settings > Calibration Matching "Offset match
+    /// required" toggle persists via `calibration_tolerances` and must feed
+    /// `MatchingRuleConfig::require_same_offset` on the next `load_config`
+    /// call — this is the engine-side half of closing the STUB-OFFSET-REQUIRED
+    /// gap.
+    #[tokio::test]
+    async fn load_config_reads_require_same_offset_from_tolerances_table() {
+        let db = test_db().await;
+
+        let row = persistence_db::repositories::calibration_tolerances::CalibrationTolerancesRow {
+            temperature_tolerance_c: 5.0,
+            exposure_tolerance_s: 2.0,
+            aging_limit_days: 365,
+            require_same_camera: true,
+            require_same_gain: true,
+            require_same_binning: true,
+            require_same_offset: false,
+        };
+        persistence_db::repositories::calibration_tolerances::update(db.pool(), &row)
+            .await
+            .unwrap();
+
+        let config = load_config(db.pool()).await;
+        assert!(!config.require_same_offset, "toggling off must reach MatchingRuleConfig");
     }
 }
