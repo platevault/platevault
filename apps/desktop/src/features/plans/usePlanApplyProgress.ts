@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { applyPlan } from '@/api/commands';
+import { applyPlan } from './planApply';
 import type { OperationEvent, PlanApplyResponse } from '@/bindings/index';
 
 export interface PlanApplyProgress {

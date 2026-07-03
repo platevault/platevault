@@ -10,8 +10,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Pill, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
-import { planProtectionCheck, protectionPlanAcknowledged } from '@/api/commands';
-import type { ProtectedPlanItem, PlanProtectionCheckResponse } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { ProtectedPlanItem, PlanProtectionCheckResponse } from '@/bindings/index';
 
 interface PlanProtectionGateProps {
   planId: string;
@@ -36,7 +37,9 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
 
   const load = useCallback(() => {
     setLoadState('loading');
-    planProtectionCheck(planId)
+    commands
+      .planProtectionCheckCmd(planId)
+      .then(unwrap)
       .then((resp) => {
         setCheckResult(resp);
         setLoadState('ready');
@@ -57,12 +60,14 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
   const handleAcknowledge = useCallback(
     async (item: ProtectedPlanItem) => {
       try {
-        await protectionPlanAcknowledged(
-          planId,
-          item.itemId,
-          item.sourceId ?? null,
-          item.level,
-          item.reason,
+        unwrap(
+          await commands.protectionPlanAcknowledged(
+            planId,
+            item.itemId,
+            item.sourceId ?? null,
+            item.level,
+            item.reason,
+          ),
         );
         setAcknowledged((prev) => {
           const next = new Set(prev);
