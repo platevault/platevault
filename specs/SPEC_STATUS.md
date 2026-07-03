@@ -2,7 +2,8 @@
 
 **Living index of SpecKit feature status, dependencies, and the actionable frontier.**
 
-Last reconciled: **2026-06-23** (after the 035 / 040 / 041 / 046 iteration waves).
+Last reconciled: **2026-06-23** (full sweep). **2026-07-03**: 043 list-page
+consistency + mock-mode E2E test redo landed (see the 043 row + CI note below).
 
 > The per-spec `Status:` line in each `spec.md` had drifted badly — most still read
 > "Draft" despite shipping. This document is the reconciled source of truth. Status
@@ -67,7 +68,7 @@ Last reconciled: **2026-06-23** (after the 035 / 040 / 041 / 046 iteration waves
 | 040 calibration-masters-detection | ✅ Implemented | validated end-to-end 2026-06-23 |
 | 041 inbox-plan-surface | ✅ Implemented | 59/59 + iteration-1 (#315); supersedes 005 |
 | 042 stdlib-adoption | ✅ Implemented | 80/97; reconciled #310 |
-| 043 ui-redesign-platevault | 🔵 Active | current branch `redesign-ui-platevault` |
+| 043 ui-redesign-platevault | 🔵 Active | Ongoing on `redesign-ui-platevault`. List-page consistency landed (#360): all four list pages (Projects/Targets/Sessions/Calibration) flat-by-default, group headers unified onto shared `.alm-listgroup`, global font enforced (only `reset.css`). Sessions E2E specs redone for the flat table (#364). |
 | 044 targets-planner-astronomy | ⚪ Placeholder | frontend mocked; needs research-led astronomy engine |
 | 045 review-state-real | 🔴 Superseded by 041 | |
 | 046 i18n-error-codes | ✅ Implemented | 36/36 (#311–#314) |
@@ -143,3 +144,13 @@ INFRA / CROSS-CUTTING (mostly independent)
   (`session_canonical_target` + `target_constellation_magnitude`) broke fresh-install
   startup and every real-backend integration test. The later file was renumbered to `0047`.
   Watch for this class of collision when concurrent branches pick the next migration number.
+- **2026-07-03 — mock-mode E2E green again (PR #364):** `lifecycle_detail.spec.ts` asserted on the
+  pre-redesign `.alm-sessions-table__group` header, but #360 renamed it to `.alm-listgroup` AND made
+  Sessions flat-by-default (no group rows unless grouped), so both tests failed. Fixed to assert on
+  `.alm-sessions-table__row`; full mock-mode Playwright suite now 9 passed / 1 skipped.
+- **CI test-disable `45f8bb3` is now over-broad + unpushable.** It blanket-disables ALL test jobs
+  ("#356 pending redesign test redo"), but the mock-Playwright E2E now passes (#364), frontend unit
+  tests pass (404), and Real-UI E2E passes — so the disable mostly discards *working* coverage.
+  It also remains **unpushed** because the token lacks the `workflow` scope, which blocks pushing the
+  local `redesign-ui-platevault` branch (44+ commits ahead of origin). Prefer reverting the disable
+  (re-enable CI) over pushing it; needs a `workflow`-scoped push or a web-UI edit.
