@@ -315,7 +315,19 @@ pub async fn classify(
     // T065 scan → source group). Legacy items without a source group are
     // skipped here (they continue to function as single folder-level items
     // until they are rescanned after T065 is in place).
-    if let Some(ref sg_id) = item.source_group_id {
+    //
+    // spec 041 T077/FR-054: a legacy item with an open plan (`state ==
+    // "plan_open"`, read from the item fetched in step 1, before step 9 below
+    // overwrites it) is NOT re-split even though it already carries a
+    // `source_group_id` — migration 0049 assigns every pre-existing row a
+    // `sg-migrate-*` source group unconditionally (see the doc comment on
+    // `InboxItemRow::source_group_id`), so this state check is what keeps the
+    // plan's 1:1 link to a single legacy sub-item intact until the plan
+    // resolves or is discarded (`plan_listener::transition_via_plan_id`).
+    // Re-derivation into proper single-type sub-items happens naturally the
+    // next time classify runs on the item once it is no longer `plan_open`.
+    let sg_id_for_split = item.source_group_id.as_deref().filter(|_| item.state != "plan_open");
+    if let Some(sg_id) = sg_id_for_split {
         materialize_sub_items(
             pool,
             sg_id,
@@ -2514,5 +2526,171 @@ mod tests {
                 si.group_key
             );
         }
+    }
+
+    // ── T077 / FR-054: plan_open legacy items are not re-split ─────────────────
+
+    /// A legacy item (already carrying a migration-assigned `source_group_id`,
+    /// as migration 0049 gives every pre-existing row — see
+    /// `InboxItemRow::source_group_id`) that is currently `plan_open` must NOT
+    /// be split into single-type sub-items when classify runs again. This
+    /// protects the plan's 1:1 link to the single legacy sub-item (FR-054):
+    /// splitting mid-plan would leave the open plan pointing at a folder-level
+    /// item while new sibling sub-items appeared underneath it.
+    #[tokio::test]
+    async fn t077_plan_open_legacy_item_is_not_split_while_plan_open() {
+        let tmp = tempfile::tempdir().unwrap();
+        // A mixed folder (light + dark) so a real split would be observable
+        // (two sub-items) if the guard were missing.
+        write_fits_full(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some(300.0),
+            None,
+        );
+        write_fits_full(
+            tmp.path(),
+            "dark_001.fits",
+            "Dark Frame",
+            None,
+            None,
+            Some(300.0),
+            Some("100"),
+        );
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t077-open", "item-t077-open", "root-t077-open", "")
+            .await;
+
+        // Simulate the migration 0049 legacy state: item already carries a
+        // source_group_id (set above) but is currently plan_open.
+        inbox_repo::update_inbox_item_state(db.pool(), "item-t077-open", "plan_open")
+            .await
+            .unwrap();
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t077-open".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t077-open").await.unwrap();
+        assert!(
+            sub_items.is_empty(),
+            "plan_open legacy item must not be split into sub-items while its plan is open; \
+             got {sub_items:?}"
+        );
+
+        // The parent item itself must still exist and stay in whatever state
+        // classify leaves non-split items in (it is not force-kept at
+        // plan_open by classify — the plan_listener owns that transition —
+        // but no sub-items must exist underneath it).
+        let item = inbox_repo::get_inbox_item(db.pool(), "item-t077-open").await.unwrap();
+        assert_eq!(item.source_group_id.as_deref(), Some("sg-t077-open"));
+    }
+
+    /// Once a plan_open item's plan resolves or is discarded (simulated here by
+    /// directly flipping the state the way `plan_listener::transition_via_plan_id`
+    /// does), the next classify call must re-derive it into proper single-type
+    /// sub-items — filesystem-free in the sense that no fresh disk scan or
+    /// migration re-run is required beyond the item's own already-persisted
+    /// `source_group_id` link; classify reads the same on-disk files it always
+    /// does, it just now applies the T066 split it skipped while plan_open.
+    #[tokio::test]
+    async fn t077_plan_open_item_re_derives_into_sub_items_after_plan_closes() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_full(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some(300.0),
+            None,
+        );
+        write_fits_full(
+            tmp.path(),
+            "dark_001.fits",
+            "Dark Frame",
+            None,
+            None,
+            Some(300.0),
+            Some("100"),
+        );
+
+        let db = test_db().await;
+        insert_source_group_with_item(
+            &db,
+            "sg-t077-closed",
+            "item-t077-closed",
+            "root-t077-closed",
+            "",
+        )
+        .await;
+
+        inbox_repo::update_inbox_item_state(db.pool(), "item-t077-closed", "plan_open")
+            .await
+            .unwrap();
+
+        // First classify while plan_open: must not split (guard under test).
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t077-closed".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t077-closed").await.unwrap().is_empty(),
+            "must not split while plan_open"
+        );
+
+        // Simulate the plan closing (discard or non-applied terminal state):
+        // plan_listener::transition_via_plan_id flips the item back to
+        // "classified" and deletes the inbox_plan_links row.
+        inbox_repo::update_inbox_item_state(db.pool(), "item-t077-closed", "classified")
+            .await
+            .unwrap();
+
+        // Next classify (force_rescan to bypass the content_signature cache,
+        // which would otherwise short-circuit before reaching the T066 split
+        // step since the folder contents did not change).
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t077-closed".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t077-closed").await.unwrap();
+        assert_eq!(
+            sub_items.len(),
+            2,
+            "once the plan closes, the next classify must re-derive the legacy item into \
+             single-type sub-items (light + dark); got {sub_items:?}"
+        );
+        let frame_types: std::collections::HashSet<_> =
+            sub_items.iter().filter_map(|s| s.frame_type.as_deref()).collect();
+        assert_eq!(
+            frame_types,
+            std::collections::HashSet::from(["light", "dark"]),
+            "re-derived sub-items must cover both frame types present in the folder"
+        );
     }
 }

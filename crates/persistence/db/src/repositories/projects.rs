@@ -241,6 +241,31 @@ pub async fn get_project_canonical_target(
     }))
 }
 
+/// Set (overwrite) a project's spec-035 `canonical_target_id` association.
+///
+/// Spec 041 R-17/FR-052: called when a light's resolved target propagates from
+/// its acquisition session to a linked project, keeping the project's
+/// canonical target in sync with whatever its lights actually resolve to (not
+/// just the value picked once at project creation, spec-035 US1 #2).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn set_project_canonical_target_id(
+    pool: &SqlitePool,
+    id: &str,
+    canonical_target_id: &str,
+) -> DbResult<()> {
+    let now = Timestamp::now_iso();
+    sqlx::query("UPDATE projects SET canonical_target_id = ?, updated_at = ? WHERE id = ?")
+        .bind(canonical_target_id)
+        .bind(&now)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// List all projects ordered by updated_at descending.
 ///
 /// # Errors
@@ -472,6 +497,28 @@ pub async fn set_channel_drift(pool: &SqlitePool, id: &str, has_drift: bool) -> 
 }
 
 // ── project_sources CRUD ──────────────────────────────────────────────────────
+
+/// List the ids of every project linked (via `project_sources`) to a given
+/// `inventory_session_id` (an `acquisition_session.id`).
+///
+/// Spec 041 R-17/FR-052: the read side of target propagation — a session with
+/// no linked project simply returns an empty vec (not an error).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_project_ids_for_session(
+    pool: &SqlitePool,
+    inventory_session_id: &str,
+) -> DbResult<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT project_id FROM project_sources WHERE inventory_session_id = ?",
+    )
+    .bind(inventory_session_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
 
 /// Insert a project source link row.
 ///

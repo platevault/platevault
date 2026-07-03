@@ -158,7 +158,7 @@
 **Depends on Phase 12** (single-type items + extended pointing/focal extraction). T078 (`sync.conflicts`) runs after the spec/data-model/contract artifacts land.
 
 - [X] T074 [US15] Coordinate target resolution (FOV-aware NN) + `inbox.target_recommendations` op; OBJECT naming-only (FR-052). NOTE: the FOV-aware radius uses `FOCALLEN` + pixel size (T062) + `NAXIS1/2`; when pixel size is unavailable, fall back to a configurable fixed radius (R-17).
-- [ ] T075 [US15] Target propagation to projects (FR-052).
+- [X] T075 [US15] Target propagation to projects (FR-052). NOTE: implemented at the live light-ingestion boundary (`app_core_targets::ingest_sessions`), not at the pre-confirm Inbox stage — no `inbox_items`↔project link exists pre-confirm (Inbox has no `project_id`); the only real project↔target plumbing is `projects.canonical_target_id` (migration 0033) reached via `project_sources.inventory_session_id` → `acquisition_session.id`. Whenever a session's `canonical_target_id` transitions from unset to resolved (on insert, on append-time back-fill, or via `backfill_session_targets`), every project linked to that session is overwritten to match (closes spec-035 project↔target gap #1 for the live path, not just project-creation time).
 - [ ] T076 [US14] Drop session review lifecycle (states + Confirm/Re-open/Reject); sessions derived; editable metadata view (FR-051).
 - [ ] T077 [US14] Migration handling for plan_open legacy items (FR-054).
 - [ ] T078 [US14] `/speckit.sync.conflicts` vs 045/006/035; mark spec 045 superseded.
