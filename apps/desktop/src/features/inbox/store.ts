@@ -263,7 +263,6 @@ export function useInboxConfirm() {
   const confirm = useCallback(
     async (args: {
       inboxItemId: string;
-      action: string;
       contentSignature: string;
       rootAbsolutePath: string;
       destructiveDestination?: string;
@@ -274,7 +273,6 @@ export function useInboxConfirm() {
       try {
         const result = await inboxConfirm({
           inboxItemId: args.inboxItemId,
-          action: args.action,
           contentSignature: args.contentSignature,
           rootAbsolutePath: args.rootAbsolutePath,
           destructiveDestination: args.destructiveDestination ?? null,

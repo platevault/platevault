@@ -573,7 +573,6 @@ mod tests {
     async fn do_confirm(db: &Database, item_id: &str, root_path: &std::path::Path) -> String {
         let req = ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
-            action: "confirm".to_owned(),
             content_signature: "sig-abc".to_owned(),
             destructive_destination: None,
             root_absolute_path: root_path.to_path_buf(),

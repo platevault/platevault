@@ -15,6 +15,8 @@ import type { InboxListItem } from '@/api/commands';
 function folder(id: string, frameType: string | null, files: number): InboxListItem {
   return {
     inboxItemId: id,
+    groupId: id,
+    groupKey: '',
     rootId: 'r1',
     rootAbsolutePath: '/lib',
     relativePath: id,

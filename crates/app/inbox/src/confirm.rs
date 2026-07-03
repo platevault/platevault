@@ -49,11 +49,6 @@ use contracts_core::{ContractError, ErrorSeverity};
 #[derive(Clone, Debug)]
 pub struct ConfirmRequest {
     pub inbox_item_id: String,
-    /// Always `"confirm"` (spec 041 FR-050: the legacy "split"/mixed action
-    /// path is removed). Retained as a string on the request rather than
-    /// dropped outright so the wire contract change lands in T072 alongside
-    /// the contracts/binding regen.
-    pub action: String,
     /// Folder content_signature from the most recent classify response (Ref: A8).
     pub content_signature: String,
     /// Required when plan includes destructive items.
@@ -181,20 +176,18 @@ pub async fn confirm(
         ));
     }
 
-    // 7. Validate the request. Spec 041 FR-050/T071: the "split" action and
-    // the mixed per-type confirm branch are removed — "confirm" is the only
-    // valid action, and `classified` (migration 0048's CHECK-constrained
-    // single-type DB value) is the only confirmable classification result.
-    // A folder that classified as `unclassified` (zero or multiple distinct
-    // frame types) is not confirmable directly; it must be re-split into
-    // single-type sub-items (T066 materialization) before confirming.
-    if req.action != "confirm" || classification.result != "classified" {
+    // 7. Validate the request. Spec 041 FR-050/T071/T072: the "split" action
+    // and the mixed per-type confirm branch are removed — the request no
+    // longer carries an `action` field at all; `classified` (migration
+    // 0048's CHECK-constrained single-type DB value) is the only confirmable
+    // classification result. A folder that classified as `unclassified`
+    // (zero or multiple distinct frame types) is not confirmable directly; it
+    // must be re-split into single-type sub-items (T066 materialization)
+    // before confirming.
+    if classification.result != "classified" {
         return Err(ContractError::new(
             ErrorCode::ClassificationAmbiguous,
-            format!(
-                "Action '{}' does not match classification '{}'",
-                req.action, classification.result
-            ),
+            format!("Classification result '{}' is not confirmable", classification.result),
             ErrorSeverity::Blocking,
             false,
         ));
@@ -424,7 +417,7 @@ pub async fn confirm(
         .unwrap_or("archive");
 
     let plan_id = Uuid::new_v4().to_string();
-    let title = format!("Inbox {}: {} ({})", req.action, item.relative_path, classification.result);
+    let title = format!("Inbox confirm: {} ({})", item.relative_path, classification.result);
 
     let insert_plan = plans_repo::InsertPlan {
         id: &plan_id,
@@ -1034,7 +1027,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-c1".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-abc".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1096,7 +1088,6 @@ mod tests {
                 db.pool(),
                 ConfirmRequest {
                     inbox_item_id: "item-dd".to_owned(),
-                    action: "confirm".to_owned(),
                     content_signature: "sig-dd".to_owned(),
                     destructive_destination: dest.map(str::to_owned),
                     root_absolute_path: tmp.path().to_owned(),
@@ -1226,7 +1217,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: item_id.to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: sig.to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1343,7 +1333,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-single".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-single".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1380,7 +1369,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-stale".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-OLD".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1393,12 +1381,15 @@ mod tests {
         assert_eq!(err.code, ErrorCode::ClassificationStale);
     }
 
-    /// Spec 041 FR-050/T071: "split" is no longer a recognized action at all
-    /// (not merely mismatched with this item's classification) — a client
-    /// still sending the legacy action gets the same ambiguous-action error
-    /// rather than being silently accepted or ignored.
+    /// Spec 041 FR-050/T071/T072: `ConfirmRequest` no longer carries an
+    /// `action` field at all — the only gate is `classification.result ==
+    /// "classified"`. An item whose classification is still `"unclassified"`
+    /// (e.g. a folder with multiple distinct frame types that has not yet
+    /// been re-split into single-type sub-items) is rejected with the same
+    /// ambiguous-classification error a legacy "split" action request used
+    /// to hit.
     #[tokio::test]
-    async fn action_mismatch_returns_ambiguous() {
+    async fn unclassified_result_returns_ambiguous() {
         let tmp = tempfile::tempdir().unwrap();
         write_fits(tmp.path(), "frame_000.fits", "Light Frame", None, None, None);
 
@@ -1406,8 +1397,8 @@ mod tests {
         setup_classified_item(
             &db,
             "item-ambig",
-            "classified",
-            Some("light"),
+            "unclassified",
+            None,
             "sig-x",
             &["frame_000.fits"],
         )
@@ -1417,7 +1408,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-ambig".to_owned(),
-                action: "split".to_owned(), // legacy action, no longer valid
                 content_signature: "sig-x".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1466,7 +1456,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-dup".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-dup".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1481,7 +1470,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-dup".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-dup".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1540,7 +1528,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-org".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-org".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1599,7 +1586,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-unorg".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-unorg".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1657,7 +1643,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-absent".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-absent".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1726,7 +1711,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-np".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-np".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1780,7 +1764,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-1cand".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-1c".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1833,7 +1816,6 @@ mod tests {
 
         let mk = |root_id: Option<String>| ConfirmRequest {
             inbox_item_id: "item-2cand".to_owned(),
-            action: "confirm".to_owned(),
             content_signature: "sig-2c".to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
@@ -1888,7 +1870,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-0cand".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-0c".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1929,7 +1910,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-cal-dark".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-cal-dark".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -2004,7 +1984,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-cal-master".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-cal-master".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -2046,7 +2025,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-gate".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-gate".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -2122,7 +2100,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: item_id.to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: sig.to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -2178,7 +2155,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-t070-ok".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-t070-ok".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),

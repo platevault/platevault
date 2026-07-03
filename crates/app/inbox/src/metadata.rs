@@ -117,6 +117,18 @@ pub async fn get_inbox_item_metadata(
             override_stale,
             missing_path_attributes: Vec::new(),
             missing_mandatory: Vec::new(),
+            // spec 041 T072/FR-044: T062 extended fields, for display. Raw
+            // extracted values only (not yet override-merged via
+            // `inbox_file_overrides` — see doc comment on the DTO fields).
+            offset: m.offset,
+            set_temp_c: m.set_temp_c,
+            ccd_temp_c: m.ccd_temp_c,
+            ra_deg: m.ra_deg,
+            dec_deg: m.dec_deg,
+            rotator_angle_deg: m.rotator_angle_deg,
+            readout_mode: m.readout_mode.clone(),
+            focal_length_mm: m.focal_length_mm,
+            date_loc: m.date_loc.clone(),
         };
 
         // US9 (FR-032/FR-033): surface the path-load-bearing attributes this file

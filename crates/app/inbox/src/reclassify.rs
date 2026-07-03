@@ -413,10 +413,16 @@ pub async fn reclassify_v2(
 
     let mut effective_overrides: Vec<(String, String, serde_json::Value)> = Vec::new();
 
-    // Per-file overrides first.
+    // Per-file overrides first. `properties`/`value` are `JsonAny` on the wire
+    // (T072 — specta cannot inline raw `serde_json::Value`); unwrap to the
+    // plain `serde_json::Value` the rest of this pipeline operates on.
     for file_override in &req.overrides {
         for (key, val) in &file_override.properties {
-            effective_overrides.push((file_override.file_path.clone(), key.clone(), val.clone()));
+            effective_overrides.push((
+                file_override.file_path.clone(),
+                key.clone(),
+                val.clone().into(),
+            ));
         }
     }
 
@@ -427,7 +433,7 @@ pub async fn reclassify_v2(
             Some(fps) => fps.clone(),
         };
         for p in target_paths {
-            effective_overrides.push((p, bulk.property.clone(), bulk.value.clone()));
+            effective_overrides.push((p, bulk.property.clone(), bulk.value.clone().into()));
         }
     }
 
@@ -1095,8 +1101,8 @@ mod tests {
                     file_path: "inbox_folder/frame_001.fits".to_owned(),
                     properties: {
                         let mut m = std::collections::HashMap::new();
-                        m.insert("temperatureC".to_owned(), serde_json::json!(-10.0));
-                        m.insert("gain".to_owned(), serde_json::json!("100"));
+                        m.insert("temperatureC".to_owned(), serde_json::json!(-10.0).into());
+                        m.insert("gain".to_owned(), serde_json::json!("100").into());
                         m
                     },
                 }],
@@ -1143,7 +1149,7 @@ mod tests {
                 overrides: vec![],
                 bulk: vec![InboxReclassifyBulk {
                     property: "gain".to_owned(),
-                    value: serde_json::json!(125),
+                    value: serde_json::json!(125).into(),
                     file_paths: None, // all files
                 }],
             },
@@ -1183,11 +1189,11 @@ mod tests {
                         file_path: "inbox_folder/frame_001.fits".to_owned(),
                         properties: {
                             let mut m = std::collections::HashMap::new();
-                            m.insert("frameType".to_owned(), serde_json::json!("dark"));
+                            m.insert("frameType".to_owned(), serde_json::json!("dark").into());
                             // darks need exposure + gain to clear the R-14 mandatory gate
                             // (T070) — without them the file routes to needs-review.
-                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
-                            m.insert("gain".to_owned(), serde_json::json!(100));
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
+                            m.insert("gain".to_owned(), serde_json::json!(100).into());
                             m
                         },
                     },
@@ -1195,11 +1201,11 @@ mod tests {
                         file_path: "inbox_folder/frame_002.fits".to_owned(),
                         properties: {
                             let mut m = std::collections::HashMap::new();
-                            m.insert("frameType".to_owned(), serde_json::json!("dark"));
+                            m.insert("frameType".to_owned(), serde_json::json!("dark").into());
                             // darks need exposure + gain to clear the R-14 mandatory gate
                             // (T070) — without them the file routes to needs-review.
-                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
-                            m.insert("gain".to_owned(), serde_json::json!(100));
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
+                            m.insert("gain".to_owned(), serde_json::json!(100).into());
                             m
                         },
                     },
@@ -1240,7 +1246,7 @@ mod tests {
                     file_path: "inbox_folder/frame_001.fits".to_owned(),
                     properties: {
                         let mut m = std::collections::HashMap::new();
-                        m.insert("exposureS".to_owned(), serde_json::json!(300.0));
+                        m.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
                         m
                     },
                 }],
@@ -1286,11 +1292,11 @@ mod tests {
                         file_path: "inbox_folder/frame_001.fits".to_owned(),
                         properties: {
                             let mut m = std::collections::HashMap::new();
-                            m.insert("frameType".to_owned(), serde_json::json!("dark"));
+                            m.insert("frameType".to_owned(), serde_json::json!("dark").into());
                             // darks need exposure + gain to clear the R-14 mandatory gate
                             // (T070) — without them the file routes to needs-review.
-                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
-                            m.insert("gain".to_owned(), serde_json::json!(100));
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
+                            m.insert("gain".to_owned(), serde_json::json!(100).into());
                             m
                         },
                     },
@@ -1298,11 +1304,11 @@ mod tests {
                         file_path: "inbox_folder/frame_002.fits".to_owned(),
                         properties: {
                             let mut m = std::collections::HashMap::new();
-                            m.insert("frameType".to_owned(), serde_json::json!("dark"));
+                            m.insert("frameType".to_owned(), serde_json::json!("dark").into());
                             // darks need exposure + gain to clear the R-14 mandatory gate
                             // (T070) — without them the file routes to needs-review.
-                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
-                            m.insert("gain".to_owned(), serde_json::json!(100));
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
+                            m.insert("gain".to_owned(), serde_json::json!(100).into());
                             m
                         },
                     },
@@ -1343,11 +1349,11 @@ mod tests {
                         file_path: "inbox_folder/frame_001.fits".to_owned(),
                         properties: {
                             let mut m = std::collections::HashMap::new();
-                            m.insert("frameType".to_owned(), serde_json::json!("dark"));
-                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
-                            m.insert("gain".to_owned(), serde_json::json!(100));
-                            m.insert("offset".to_owned(), serde_json::json!(50));
-                            m.insert("temperatureC".to_owned(), serde_json::json!(-10.0));
+                            m.insert("frameType".to_owned(), serde_json::json!("dark").into());
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
+                            m.insert("gain".to_owned(), serde_json::json!(100).into());
+                            m.insert("offset".to_owned(), serde_json::json!(50).into());
+                            m.insert("temperatureC".to_owned(), serde_json::json!(-10.0).into());
                             m
                         },
                     },
@@ -1355,11 +1361,11 @@ mod tests {
                         file_path: "inbox_folder/frame_002.fits".to_owned(),
                         properties: {
                             let mut m = std::collections::HashMap::new();
-                            m.insert("frameType".to_owned(), serde_json::json!("dark"));
-                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
-                            m.insert("gain".to_owned(), serde_json::json!(100));
-                            m.insert("offset".to_owned(), serde_json::json!(500));
-                            m.insert("temperatureC".to_owned(), serde_json::json!(-20.0));
+                            m.insert("frameType".to_owned(), serde_json::json!("dark").into());
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0).into());
+                            m.insert("gain".to_owned(), serde_json::json!(100).into());
+                            m.insert("offset".to_owned(), serde_json::json!(500).into());
+                            m.insert("temperatureC".to_owned(), serde_json::json!(-20.0).into());
                             m
                         },
                     },
@@ -1409,7 +1415,7 @@ mod tests {
                     file_path: "inbox_folder/frame_001.fits".to_owned(),
                     properties: {
                         let mut m = std::collections::HashMap::new();
-                        m.insert("notARealProperty".to_owned(), serde_json::json!("x"));
+                        m.insert("notARealProperty".to_owned(), serde_json::json!("x").into());
                         m
                     },
                 }],
@@ -1442,7 +1448,7 @@ mod tests {
                     file_path: "inbox_folder/frame_001.fits".to_owned(),
                     properties: {
                         let mut m = std::collections::HashMap::new();
-                        m.insert("skyRotationDeg".to_owned(), serde_json::json!(45.0));
+                        m.insert("skyRotationDeg".to_owned(), serde_json::json!(45.0).into());
                         m
                     },
                 }],
@@ -1492,7 +1498,7 @@ mod tests {
                 overrides: vec![],
                 bulk: vec![InboxReclassifyBulk {
                     property: "gain".to_owned(),
-                    value: serde_json::json!(100),
+                    value: serde_json::json!(100).into(),
                     file_paths: Some(vec!["inbox_folder/frame_001.fits".to_owned()]),
                 }],
             },

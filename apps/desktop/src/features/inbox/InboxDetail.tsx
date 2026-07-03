@@ -5,7 +5,8 @@
  *
  *   HEADER — item path (title, bold) + titleExtra: classification pill +
  *             inline action buttons (left-packed, alm-session-detail2__actions).
- *             "Generate split plan" for mixed folders lives HERE.
+ *             Confirm lives HERE; disabled for "mixed" rows (spec 041 FR-050 —
+ *             the backend "split" action is removed, T071/T072).
  *   BODY   — left-packed .alm-session-detail2 flex row:
  *     col A (PropertyTable) — classification + file-count + FITS metadata
  *     mixed-summary line   — compact "N light · M dark" muted text (mixed only)

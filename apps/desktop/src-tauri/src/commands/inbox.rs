@@ -10,7 +10,9 @@ use app_core::inbox::classify::{classify, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox::metadata::get_inbox_item_metadata;
 use app_core::inbox::property_registry::property_registry as get_property_registry;
-use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
+use app_core::inbox::reclassify::{
+    reclassify, reclassify_v2, ReclassifyOverride, ReclassifyRequest,
+};
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
 use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
 use app_core::inbox::target_recommendations::{
@@ -27,7 +29,8 @@ use contracts_core::inbox::{
     InboxItemMetadataRequest, InboxItemMetadataResponse, InboxItemSummary, InboxListItem,
     InboxListResponse, InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView,
     InboxPropertyRegistryResponse, InboxReclassifyRequest, InboxReclassifyResponse,
-    InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
+    InboxReclassifyV2Request, InboxReclassifyV2Response, InboxScanFolderRequest,
+    InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
     InboxTargetRecommendationsRequest, InboxTargetRecommendationsResponse,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
@@ -105,7 +108,6 @@ pub async fn inbox_confirm(
 ) -> Result<InboxConfirmResponse, ContractError> {
     let use_case_req = ConfirmRequest {
         inbox_item_id: req.inbox_item_id,
-        action: req.action,
         content_signature: req.content_signature,
         destructive_destination: req.destructive_destination,
         root_absolute_path: PathBuf::from(&req.root_absolute_path),
@@ -192,6 +194,28 @@ pub async fn inbox_reclassify(
         // spec 041 — breakdown populated in phase 3+ when use case returns it
         breakdown: vec![],
     })
+}
+
+// ── inbox.reclassify v2 (spec 041 T068/T072 — field-agnostic + bulk) ──────────
+
+/// `inbox.reclassify` v2 — field-agnostic property-map + bulk reclassify,
+/// scoped to a source group (spec 041 T068/T072 / FR-044/FR-045/FR-049).
+///
+/// Unlike [`inbox_reclassify`] (fixed `frame_type`/`filter`/`exposure_s`/`binning`,
+/// single item), this accepts an open property map validated against
+/// `inbox.property_registry`, plus bulk "set all" entries, and re-splits the
+/// source group's files into re-materialized single-type sub-items.
+///
+/// # Errors
+/// `inbox.item.not_found` | `inbox.has.open.plan` | `file.not_found` |
+/// `inbox.reclassify.unknown_property` | `inbox.reclassify.non_overridable_property`
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_reclassify_v2(
+    req: InboxReclassifyV2Request,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<InboxReclassifyV2Response, ContractError> {
+    reclassify_v2(&pool, req).await
 }
 
 // ── inbox.item.metadata ───────────────────────────────────────────────────────
@@ -481,6 +505,9 @@ pub async fn inbox_list(
         .map(|r| {
             let g = grouping.remove(&r.id).unwrap_or_default();
             InboxListItem {
+                // spec 041 Phase 12 (T072/FR-043): the sub-item's own identity,
+                // restated as its "group" id for symmetry with group_key/label.
+                group_id: r.id.clone(),
                 inbox_item_id: r.id,
                 root_id: r.root_id,
                 root_absolute_path: r.root_path,
@@ -507,6 +534,12 @@ pub async fn inbox_list(
                 // at confirm time (group_key == SENTINEL_NEEDS_REVIEW) and the
                 // per-file detail is surfaced via inbox.item.metadata.
                 missing_mandatory: Vec::new(),
+                // spec 041 Phase 12 (T072/FR-043): single-type sub-item identity,
+                // sourced directly from the inbox_items row (no aggregation).
+                source_group_id: r.source_group_id,
+                group_key: r.group_key,
+                group_label: r.group_label,
+                frame_type: r.frame_type,
             }
         })
         .collect();

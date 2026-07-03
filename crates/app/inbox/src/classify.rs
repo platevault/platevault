@@ -440,6 +440,18 @@ async fn persist_file_metadata(
             stack_count: meta.stack_count.map(i64::from),
             file_size_bytes,
             file_mtime: file_mtime.as_deref(),
+            // spec 041 T072/FR-044: persist the T062 extended fields so
+            // `inbox.item.metadata` (display) and `inbox.target_recommendations`
+            // (T074) read real values instead of permanently-NULL columns.
+            offset: meta.offset,
+            set_temp_c: meta.set_temp_c,
+            ccd_temp_c: meta.ccd_temp_c,
+            ra_deg: meta.ra_deg,
+            dec_deg: meta.dec_deg,
+            rotator_angle_deg: meta.rotator_angle_deg,
+            readout_mode: meta.readout_mode.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+            focal_length_mm: meta.focal_length_mm,
+            date_loc: meta.date_loc.as_deref().map(str::trim).filter(|s| !s.is_empty()),
         }
     } else {
         // No header metadata — still record identity for staleness tracking.

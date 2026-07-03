@@ -12,7 +12,24 @@
 //!   - `InboxConfirmResponse` gains `actions_summary` + `organization_state` (US4/US5)
 //!   - `InboxPlanView` / `inbox.plan` (US1/FR-003/FR-004)
 //!   - `InboxListItem` gains `organization_state` (spec 041)
+//!
+//! Extended by spec 041 Phase 12 (single-type ingest, T072 contracts/binding
+//! regen):
+//!   - `InboxListItem` gains `group_id` / `group_key` / `group_label` /
+//!     `source_group_id` / `frame_type` (FR-043 provenance).
+//!   - `InboxConfirmRequest` drops the legacy `action` field (FR-050 — the
+//!     "split"/"mixed" confirm path is removed, T071).
+//!   - `InboxFileMetadata` gains the T062 extended extraction fields
+//!     (`offset`, `set_temp_c`, `ccd_temp_c`, `ra_deg`, `dec_deg`,
+//!     `rotator_angle_deg`, `readout_mode`, `focal_length_mm`, `date_loc`)
+//!     for display (FR-044).
+//!   - `InboxReclassifyFileOverride`/`InboxReclassifyBulk` use `JsonAny`
+//!     instead of raw `serde_json::Value` (T072 binding regen) — specta's
+//!     TypeScript exporter cannot inline `serde_json::Value`'s recursive enum
+//!     definition (infinite-recursion panic); `JsonAny` is the established
+//!     wire-transparent workaround also used by `ProvenanceValue`/`ErrorDetails`.
 
+use crate::JsonAny;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -89,8 +106,6 @@ pub struct InboxClassifyResponse {
 #[serde(rename_all = "camelCase")]
 pub struct InboxConfirmRequest {
     pub inbox_item_id: String,
-    /// `"split"` for mixed items; `"confirm"` for `single_type` items.
-    pub action: String,
     pub content_signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub destructive_destination: Option<String>,
@@ -353,6 +368,34 @@ pub struct InboxListItem {
     /// Empty for fully-resolved items. Blocks plan creation (FR-048/SC-015).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub missing_mandatory: Vec<String>,
+    // ── Single-type sub-item identity (spec 041 Phase 12, T072 / FR-043) ────
+    //
+    // Additive fields exposing the T063–T066 single-type sub-item identity
+    // directly from the `inbox_items` row, alongside the pre-existing
+    // aggregate `group_*` fields above (kept for backward compat — some
+    // callers still use the multi-level grouping UI aggregates).
+    /// The item's own identity, restated as its "group" id for symmetry with
+    /// `group_key`/`group_label`. Equals `inbox_item_id`.
+    pub group_id: String,
+    /// Deterministic canonical group key (R-11). Empty string for legacy
+    /// pre-Phase-12 rows that have not yet been materialized into a
+    /// single-type sub-item (e.g. the original leaf-folder row).
+    pub group_key: String,
+    /// Human-readable label `"(root) · <type> · <dims>"` (R-12). `None` until
+    /// classified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_label: Option<String>,
+    /// Id of the `inbox_source_groups` row (leaf folder) this sub-item was
+    /// materialized from (FR-043 provenance). `None` for legacy rows that
+    /// predate source groups.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_group_id: Option<String>,
+    /// Authoritative frame type, singular — items are single-type post
+    /// materialization (T066), so this is a real value rather than the
+    /// aggregate-with-"Mixed"-fallback `group_frame_type` above. `None`
+    /// until classified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame_type: Option<String>,
 }
 
 /// Response from `inbox.list`.
@@ -430,6 +473,38 @@ pub struct InboxFileMetadata {
     /// blocks plan creation until the value is supplied via reclassify.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub missing_mandatory: Vec<String>,
+    // ── T062 extended extraction, exposed for display (spec 041 T072/FR-044) ─
+    //
+    // Raw extracted values (NOT override-merged — unlike `filter`/`exposure_s`
+    // above, these do not yet consult `inbox_file_overrides`). `None` when the
+    // source header was absent.
+    /// Camera read-out offset / pedestal (`OFFSET` / `BLKLEVEL`). ADU.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<i64>,
+    /// Sensor set/target temperature (`SET-TEMP`). Degrees Celsius.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set_temp_c: Option<f64>,
+    /// Sensor actual temperature (`CCD-TEMP` / `DET-TEMP`). Degrees Celsius.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ccd_temp_c: Option<f64>,
+    /// Right ascension, decimal degrees (`RA` / `OBJCTRA`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ra_deg: Option<f64>,
+    /// Declination, decimal degrees (`DEC` / `OBJCTDEC`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dec_deg: Option<f64>,
+    /// Mechanical rotator angle, degrees (`ROTATANG` / `ROTATOR`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rotator_angle_deg: Option<f64>,
+    /// Sensor readout mode (`READOUTM`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub readout_mode: Option<String>,
+    /// Focal length, millimetres (`FOCALLEN`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focal_length_mm: Option<f64>,
+    /// Local civil observation date (`DATE-LOC`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date_loc: Option<String>,
 }
 
 /// Request for `inbox.item.metadata`.
@@ -721,7 +796,7 @@ pub struct InboxReclassifyFileOverride {
     pub file_path: String,
     /// Property map: `{ "exposureS": 300.0, "filter": "Ha", … }`. Values are
     /// JSON scalars; the use case validates them against the registry `kind`.
-    pub properties: std::collections::HashMap<String, serde_json::Value>,
+    pub properties: std::collections::HashMap<String, JsonAny>,
 }
 
 /// One bulk "set all" entry: apply one value to many files at once.
@@ -735,7 +810,7 @@ pub struct InboxReclassifyBulk {
     /// Registry property key (camelCase) to set uniformly.
     pub property: String,
     /// Value to apply (JSON scalar; validated against registry `kind`).
-    pub value: serde_json::Value,
+    pub value: JsonAny,
     /// Subset of file paths to apply to; `None` / absent = all files in the
     /// source group.
     #[serde(default, skip_serializing_if = "Option::is_none")]
