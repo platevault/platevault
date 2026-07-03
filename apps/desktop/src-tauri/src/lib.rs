@@ -24,7 +24,9 @@ use crate::commands::calibration::{
 use crate::commands::calibration_tolerances::{
     calibration_tolerances_get, calibration_tolerances_update,
 };
-use crate::commands::cleanup::{cleanup_policy_get, cleanup_policy_update, cleanup_scan};
+use crate::commands::cleanup::{
+    cleanup_plan_generate, cleanup_policy_get, cleanup_policy_update, cleanup_scan,
+};
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::{
     dev_calls_list, dev_contracts_list, dev_export, dev_schema_get, CallBuffer,
@@ -301,6 +303,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         cleanup_policy_get,
         cleanup_policy_update,
         cleanup_scan,
+        cleanup_plan_generate,
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,
@@ -501,6 +504,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         cleanup_policy_get,
         cleanup_policy_update,
         cleanup_scan,
+        cleanup_plan_generate,
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,

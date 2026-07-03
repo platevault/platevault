@@ -1014,30 +1014,41 @@ export const commands = {
 	 */
 	statusSummary: () => typedError<StatusSummary, ContractError_Serialize>(__TAURI_INVOKE("status_summary")),
 	/**
-	 *  `cleanup.policy.get` — returns the current cleanup policy.
+	 *  `cleanup.policy.get` — returns the persisted cleanup policy (or the default).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `ContractError` on database failure.
 	 */
 	cleanupPolicyGet: () => typedError<CleanupPolicy, ContractError_Serialize>(__TAURI_INVOKE("cleanup_policy_get")),
 	/**
-	 *  `cleanup.policy.update` — update the cleanup policy.
+	 *  `cleanup.policy.update` — persist the cleanup policy.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `ContractError` on serialisation or database failure.
 	 */
 	cleanupPolicyUpdate: (request: UpdateCleanupPolicy) => typedError<CleanupPolicy, ContractError_Serialize>(__TAURI_INVOKE("cleanup_policy_update", { request })),
 	/**
-	 *  `cleanup.scan` — scan a project for cleanup candidates.
+	 *  `cleanup.scan` — pure, read-only cleanup preview for a project (D11 step 1).
 	 * 
-	 *  Returns an empty candidates list as a stub. The real implementation will
-	 *  walk the project file tree and apply the cleanup policy to identify
-	 *  reclaimable artifacts.
+	 *  Enumerates the project's observed processing artifacts, classifies them,
+	 *  applies the persisted policy, and returns candidate files plus reclaimable
+	 *  bytes. Creates NO plan and performs NO filesystem mutation.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `ContractError` on database failure.
 	 */
 	cleanupScan: (projectId: string) => typedError<CleanupScanResult, ContractError_Serialize>(__TAURI_INVOKE("cleanup_scan", { projectId })),
+	/**
+	 *  `cleanup.plan.generate` — materialise a reviewable cleanup plan (D11 step 2).
+	 * 
+	 *  Builds plan items from the current cleanup candidates and delegates to the
+	 *  spec-016 protection generator, which resolves per-item protection and gates
+	 *  approval. Generating the plan performs NO filesystem mutation (FR-002).
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure.
+	 */
+	cleanupPlanGenerate: (request: GenerateCleanupPlanRequest) => typedError<GenerateCleanupPlanResult, ContractError_Serialize>(__TAURI_INVOKE("cleanup_plan_generate", { request })),
 	/**
 	 *  `calibration.tolerances.get` — returns current calibration matching tolerances.
 	 * 
@@ -2667,6 +2678,37 @@ export type Frameset = {
 	filter: string,
 	count: number,
 	integrationS: number | null,
+};
+
+/**
+ *  Request for `cleanup.plan.generate` — the second step of the two-step cleanup
+ *  flow (D11). `cleanup.scan` is a pure preview; this command materialises a
+ *  reviewable cleanup plan (plan row + items) via the spec-016 protection
+ *  generator. Generating a plan performs NO filesystem mutation (FR-002).
+ */
+export type GenerateCleanupPlanRequest = {
+	/**  Project whose observed artifacts are scanned for cleanup candidates. */
+	projectId: string,
+	/**  Optional plan title; a default is derived from the project when absent. */
+	title?: string | null,
+	/**
+	 *  Per-plan destructive destination: `"archive"` (default, app-managed) or
+	 *  `"os_trash"` (FR-016). Defaults to `"archive"` when absent.
+	 */
+	destructiveDestination?: string | null,
+};
+
+/**  Result of `cleanup.plan.generate`. */
+export type GenerateCleanupPlanResult = {
+	/**  Id of the newly created plan (in `ready_for_review` state). */
+	planId: string,
+	/**  Total number of cleanup items placed on the plan. */
+	itemCount: number,
+	/**
+	 *  Number of items that resolved to a protected protection level and will
+	 *  gate plan approval until acknowledged (constitution II).
+	 */
+	protectedItemCount: number,
 };
 
 /**  A reference to a generated source view embedded in a manifest body. */
