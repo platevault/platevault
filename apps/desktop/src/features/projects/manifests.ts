@@ -12,6 +12,7 @@ import {
   updateProjectNote,
   revealManifestInOs,
 } from '@/api/commands';
+import { m } from '@/lib/i18n';
 import type {
   ManifestListResponse,
   ManifestGetResponse,
@@ -44,15 +45,15 @@ export const NOTE_DEBOUNCE_MS = 5_000;
 export function manifestReasonLabel(reason: string): string {
   switch (reason) {
     case 'created':
-      return 'Project created';
+      return m.projects_manifest_reason_created();
     case 'source_change':
-      return 'Source changed';
+      return m.projects_manifest_reason_source_change();
     case 'lifecycle_transition':
-      return 'Lifecycle transition';
+      return m.projects_manifest_reason_lifecycle_transition();
     case 'cleanup_applied':
-      return 'Cleanup applied';
+      return m.projects_manifest_reason_cleanup_applied();
     case 'workflow_run':
-      return 'Workflow run';
+      return m.projects_manifest_reason_workflow_run();
     default:
       return reason;
   }

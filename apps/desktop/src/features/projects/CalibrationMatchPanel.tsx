@@ -40,11 +40,11 @@ function statusVariant(status: string): PillVariant {
 
 function statusLabel(status: string): string {
   switch (status) {
-    case 'match': return 'match';
-    case 'ambiguous': return 'ambiguous';
-    case 'no_match': return 'no match';
-    case 'observer_location_missing': return 'needs location';
-    case 'session.mixed_state': return 'mixed session';
+    case 'match': return m.projects_calib_status_match();
+    case 'ambiguous': return m.projects_calib_status_ambiguous();
+    case 'no_match': return m.projects_calib_status_no_match();
+    case 'observer_location_missing': return m.projects_calib_status_needs_location();
+    case 'session.mixed_state': return m.projects_calib_status_mixed_session();
     default: return status;
   }
 }

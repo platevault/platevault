@@ -55,9 +55,9 @@ export function toolLaunchDisabledReason(
 export function toolLaunchDisabledTooltip(reason: LaunchDisabledReason): string {
   switch (reason) {
     case 'not_configured':
-      return 'Tool path not configured';
+      return m.projects_toollaunch_not_configured();
     case 'not_available':
-      return 'Tool executable missing';
+      return m.projects_toollaunch_not_available();
     default:
       return '';
   }

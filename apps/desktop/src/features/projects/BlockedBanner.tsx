@@ -65,13 +65,13 @@ export type RecoveryEdge =
 export function blockedReasonMessage(reason: BlockedReason): string {
   switch (reason.kind) {
     case 'source_missing':
-      return `Source missing: ${reason.inventoryId}`;
+      return m.projects_blocked_source_missing({ id: reason.inventoryId });
     case 'prepared_source_stale':
-      return 'Prepared source out of date';
+      return m.projects_blocked_source_stale();
     case 'tool_unconfigured':
-      return `Tool path not configured: ${reason.tool}`;
+      return m.projects_blocked_tool_unconfigured({ tool: reason.tool });
     case 'calibration_unmatched':
-      return 'Calibration set missing';
+      return m.projects_blocked_calibration_missing();
     case 'user':
       return reason.note;
   }

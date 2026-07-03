@@ -206,7 +206,7 @@ export function ProjectsPage() {
         ) : undefined
       }
       onCloseDetail={project ? clearSelection : undefined}
-      detailLabel="Project details"
+      detailLabel={m.projects_detail_label()}
     >
       <ProjectsTable
         projects={filtered}
