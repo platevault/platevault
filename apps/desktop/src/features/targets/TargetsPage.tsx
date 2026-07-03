@@ -108,7 +108,7 @@ const TARGETS_DIMENSIONS: FilterOption[] = [
 /** Catalogue multi-select options, in canonical display order. */
 const CATALOGUE_OPTIONS: FilterOption[] = PLANNER_CATALOGS.map((c) => ({
   value: c.id,
-  label: c.label,
+  label: c.label(),
 }));
 
 /**
