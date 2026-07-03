@@ -8,6 +8,12 @@
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 
 pub mod operation_state;
+/// Reference pattern for the centralized typed persistence layer (sea-query +
+/// manual sqlx 0.9 binding). Compiled only under `cfg(test)`; not wired into
+/// any real repository. See `query_builder_example.rs` and
+/// `docs/development/persistence-layer-hardening.md`.
+#[cfg(test)]
+mod query_builder_example;
 pub mod repositories;
 
 pub const CRATE_NAME: &str = "persistence_db";

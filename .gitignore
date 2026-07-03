@@ -297,6 +297,11 @@ debug/
 **/*.rs.bk
 *.pdb
 
+# sqlx offline query cache (.sqlx/) is intentionally NOT ignored: it must be
+# COMMITTED so CI can build with SQLX_OFFLINE=true (no live DB). Regenerate with
+# `just sqlx-prepare` after migrations change. See
+# docs/development/persistence-layer-hardening.md.
+
 # Tauri / desktop outputs
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
