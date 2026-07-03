@@ -18,12 +18,7 @@
  */
 
 import { useMemo, type ReactNode } from 'react';
-<<<<<<< HEAD
-import type { InventorySource, InventorySession } from '@/api/commands';
-=======
-import { AlertTriangle } from 'lucide-react';
 import type { InventorySource, InventorySession } from '@/bindings/index';
->>>>>>> origin/redesign-ui-platevault
 import { Table, Pill } from '@/ui';
 import { SortHeader } from '@/components';
 import { m } from '@/lib/i18n';

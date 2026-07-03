@@ -405,13 +405,8 @@ describe('TargetDetailV2', () => {
     );
   });
 
-<<<<<<< HEAD
   it('21. (US2) linked session rows render date and frameCount', async () => {
-    mockListTargetSessions.mockResolvedValue([
-=======
-  it('21. (US2) linked session rows render date, frameCount, and state', async () => {
     mockListTargetSessions.mockResolvedValue(ok([
->>>>>>> origin/redesign-ui-platevault
       {
         id: 'sess-1',
         sessionKey: '{}',

@@ -28,33 +28,15 @@
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
-<<<<<<< HEAD
 import { describe, it, expect, vi } from 'vitest';
-import type { InventorySource, InventorySession } from '@/api/commands';
-=======
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { InventorySource, InventorySession } from '@/bindings/index';
->>>>>>> origin/redesign-ui-platevault
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
 // The store hook is fully mocked below, so the real IPC layer never runs; we
 // only need the toast spy here (spec 037: no @/api/commands mock required).
+// Spec 041 FR-051 (T076): the review-action dispatch/toast tests that needed
+// to inspect toast calls are removed, so no hoisted addToast spy is needed.
 
-<<<<<<< HEAD
-const { mockInventoryList } = vi.hoisted(() => ({
-  mockInventoryList: vi.fn(),
-}));
-
-vi.mock('@/api/commands', () => ({
-  inventoryList: mockInventoryList,
-}));
-
-=======
-const { mockAddToast } = vi.hoisted(() => ({
-  mockAddToast: vi.fn(),
-}));
-
->>>>>>> origin/redesign-ui-platevault
 vi.mock('@/shared/toast', () => ({
   addToast: vi.fn(),
   useToasts: () => ({ toasts: [], dismiss: vi.fn() }),
