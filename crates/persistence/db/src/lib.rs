@@ -181,6 +181,10 @@ mod tests {
 
     /// Migration 0047 re-derivation: seeding pre-0047 data (inbox_items with override
     /// columns on evidence) produces source_group rows and migrated override rows.
+    // Single scenario test walking a multi-step seed → re-derivation → assert
+    // pipeline; splitting it would scatter the narrative across helper fns
+    // that are each only ever called once.
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn migration_0047_rederivation_on_seeded_0046_db() {
         // We cannot run migrations up to 0046 and then 0047 separately in the
