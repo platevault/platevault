@@ -326,7 +326,7 @@ mod tests {
             db.pool(),
             &inbox_repo::UpsertClassification {
                 inbox_item_id: item_id,
-                result: "single_type",
+                result: "classified",
                 frame_type: Some("light"),
                 content_signature: "sig",
                 unclassified_file_count: 0,

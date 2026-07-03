@@ -237,6 +237,157 @@ pub struct RawFileMetadata {
     /// Present only in stacked/master files that carry this keyword.
     /// Used by the master-detect crate to identify stacked calibration frames.
     pub stack_count: Option<u32>,
+
+    // ── Extended extracted metadata (spec 041 T062, R-9/R-18) ───────────────
+    // All fields are best-effort: absent header ⇒ `None`, never an error.
+    /// Camera read-out offset / pedestal from `OFFSET` (fallback `BLKLEVEL`).
+    /// Grouping dimension for all four frame types. ADU.
+    pub offset: Option<i64>,
+    /// Sensor set/target temperature from `SET-TEMP`. Default dark-grouping
+    /// temperature source (R-18 temperature policy). Degrees Celsius.
+    pub set_temp_c: Option<f64>,
+    /// Sensor actual temperature from `CCD-TEMP` (fallback `DET-TEMP`,
+    /// DWARF III). Deviation-warning source. Degrees Celsius.
+    pub ccd_temp_c: Option<f64>,
+    /// Right ascension in decimal degrees.
+    ///
+    /// Decimal `RA` is preferred; sexagesimal `OBJCTRA` (`H M S`) is converted
+    /// to decimal degrees (×15) as a fallback. Light pointing + R-17 target
+    /// resolution.
+    pub ra_deg: Option<f64>,
+    /// Declination in decimal degrees.
+    ///
+    /// Decimal `DEC` is preferred; sexagesimal `OBJCTDEC` (`±D M S`) is
+    /// converted to decimal degrees as a fallback. Light pointing + R-17.
+    pub dec_deg: Option<f64>,
+    /// Mechanical rotator angle in degrees from `ROTATANG` (= `ROTATOR`).
+    ///
+    /// This is the flat↔light match key and tolerant light grouping
+    /// dimension (R-18). NOT the sky position angle.
+    pub rotator_angle_deg: Option<f64>,
+    /// Rotator device identifier from `ROTNAME`. Informational only.
+    pub rotator_name: Option<String>,
+    /// Sky position angle in degrees from `OBJCTROT`.
+    ///
+    /// Informational only — explicitly NOT a flat-match key (R-18). Kept
+    /// separate from [`Self::rotator_angle_deg`] so the two are never swapped.
+    pub sky_rotation_deg: Option<f64>,
+    /// Sensor readout mode from `READOUTM`. Optional grouping dim, default OFF.
+    pub readout_mode: Option<String>,
+    /// Focal length in millimetres from `FOCALLEN`
+    /// (XISF `Instrument:Telescope:FocalLength` is in metres → ×1000).
+    /// Optic-train composite input (light + flat).
+    pub focal_length_mm: Option<f64>,
+    /// Pixel size in micrometres from `XPIXSZ` (fallback `PIXSIZE`;
+    /// XISF `Image:PixelSize`). Feeds the FOV-aware target radius (R-17).
+    pub pixel_size_um: Option<f64>,
+    /// Observer latitude in degrees from `SITELAT` → `OBSGEO-B` → `LAT-OBS`.
+    /// Future grouping only.
+    pub observer_lat: Option<f64>,
+    /// Observer longitude in degrees from `SITELONG` → `OBSGEO-L` →
+    /// `LONG-OBS`. Prerequisite for UTC-fallback night binning.
+    pub observer_long: Option<f64>,
+    /// Observer elevation in metres from `SITEELEV` → `OBSGEO-H` → `ALT-OBS`.
+    /// Future grouping only.
+    pub observer_elev: Option<f64>,
+    /// Local civil time of observation from `DATE-LOC`. Observing-night =
+    /// local calendar date under a noon boundary (R-18).
+    pub date_loc: Option<String>,
+    /// Observation end time from `DATE-END`. Dark-run span heuristic.
+    pub date_end: Option<String>,
+    /// Modified Julian Date of exposure midpoint from `MJD-AVG`
+    /// (NINA 3.2+). Ordering / dark-run span / UTC math (preferred).
+    pub mjd_avg: Option<f64>,
+    /// Modified Julian Date of exposure start from `MJD-OBS`.
+    /// Ordering / dark-run span fallback.
+    pub mjd_obs: Option<f64>,
+}
+
+// ── Coordinate / value parsing helpers ──────────────────────────────────────
+
+/// Parse a sexagesimal right-ascension string in `H M S` form (e.g.
+/// `"18 10 38"` or `"5 34 57.984"`) into decimal **degrees**.
+///
+/// RA is expressed in hours; the result is multiplied by 15 (360° / 24h).
+/// Separators may be spaces or colons. Returns `None` for unparseable input.
+#[must_use]
+pub fn sexagesimal_ra_to_deg(raw: &str) -> Option<f64> {
+    let hours = sexagesimal_to_units(raw)?;
+    Some(hours * 15.0)
+}
+
+/// Parse a sexagesimal declination string in `±D M S` form (e.g.
+/// `"-15 01 11"` or `"+0 00 00.00"`) into decimal **degrees**.
+///
+/// A leading `-` on the degrees field applies to the whole value.
+/// Separators may be spaces or colons. Returns `None` for unparseable input.
+#[must_use]
+pub fn sexagesimal_dec_to_deg(raw: &str) -> Option<f64> {
+    sexagesimal_to_units(raw)
+}
+
+/// Shared sexagesimal parser: `D M S` (or `H M S`) → fractional units, sign
+/// taken from the first field. Minutes/seconds are optional.
+fn sexagesimal_to_units(raw: &str) -> Option<f64> {
+    let trimmed = raw.trim().trim_matches('\'').trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Normalise colon separators to spaces, then split on whitespace.
+    let normalised = trimmed.replace(':', " ");
+    let mut parts = normalised.split_whitespace();
+
+    let deg_str = parts.next()?;
+    let negative = deg_str.starts_with('-');
+    let deg: f64 = deg_str.parse().ok()?;
+    let deg_abs = deg.abs();
+
+    let min: f64 = match parts.next() {
+        Some(s) => s.parse().ok()?,
+        None => 0.0,
+    };
+    let sec: f64 = match parts.next() {
+        Some(s) => s.parse().ok()?,
+        None => 0.0,
+    };
+
+    if min < 0.0 || sec < 0.0 {
+        return None;
+    }
+
+    let magnitude = deg_abs + min / 60.0 + sec / 3600.0;
+    Some(if negative { -magnitude } else { magnitude })
+}
+
+/// Parse a decimal value from a FITS/XISF value string, tolerating a trailing
+/// FITS comment is the caller's responsibility (pass the already-extracted
+/// value). Returns `None` for empty or non-numeric input.
+#[must_use]
+pub fn parse_f64(raw: &str) -> Option<f64> {
+    let t = raw.trim();
+    if t.is_empty() {
+        None
+    } else {
+        t.parse::<f64>().ok()
+    }
+}
+
+/// Parse an integer value (e.g. `OFFSET`) from a value string. Accepts values
+/// written as floats (`"20.0"` → `20`) by truncating toward zero.
+#[must_use]
+pub fn parse_i64(raw: &str) -> Option<i64> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return None;
+    }
+    if let Ok(v) = t.parse::<i64>() {
+        return Some(v);
+    }
+    // Fall back to float parse (some writers emit `20.0`); round to nearest
+    // representable integer (offsets/pedestals are small, well within range).
+    #[allow(clippy::cast_possible_truncation)]
+    t.parse::<f64>().ok().map(|f| f.trunc() as i64)
 }
 
 // ── MetadataExtractor ─────────────────────────────────────────────────────────
@@ -357,5 +508,81 @@ mod tests {
         let table = v1_normalization_table();
         assert!(!table.is_empty());
         assert!(table.len() > 10);
+    }
+
+    // ── Sexagesimal coordinate conversion (spec 041 T062) ─────────────────────
+
+    fn approx(a: f64, b: f64) {
+        assert!((a - b).abs() < 1e-6, "expected {b}, got {a}");
+    }
+
+    #[test]
+    fn ra_hms_to_deg_real_poseidon() {
+        // Real Poseidon-C header: OBJCTRA = '18 10 38' (H M S)
+        // 18h10m38s = (18 + 10/60 + 38/3600) * 15 = 272.6583333…°
+        approx(sexagesimal_ra_to_deg("18 10 38").unwrap(), 272.658_333_333);
+    }
+
+    #[test]
+    fn ra_hms_to_deg_with_fractional_seconds() {
+        // Real XISF header: OBJCTRA = '5 34 57.984'
+        approx(sexagesimal_ra_to_deg("5 34 57.984").unwrap(), 83.7416);
+    }
+
+    #[test]
+    fn ra_hms_strips_surrounding_quotes() {
+        approx(sexagesimal_ra_to_deg("'5 34 57.984'").unwrap(), 83.7416);
+    }
+
+    #[test]
+    fn ra_hms_colon_separator() {
+        approx(sexagesimal_ra_to_deg("18:10:38").unwrap(), 272.658_333_333);
+    }
+
+    #[test]
+    fn dec_dms_negative_real_poseidon() {
+        // Real Poseidon-C header: OBJCTDEC = '-15 01 11' (D M S)
+        // -(15 + 1/60 + 11/3600) = -15.019722…
+        approx(sexagesimal_dec_to_deg("-15 01 11").unwrap(), -15.019_722_222);
+    }
+
+    #[test]
+    fn dec_dms_positive_zero() {
+        // Real DWARF/synthetic: OBJCTDEC = '+0 00 00.00'
+        approx(sexagesimal_dec_to_deg("+0 00 00.00").unwrap(), 0.0);
+    }
+
+    #[test]
+    fn dec_dms_negative_sub_degree_keeps_sign() {
+        // -0d 20m → must stay negative even though degree field is 0
+        approx(sexagesimal_dec_to_deg("-0 20 00").unwrap(), -0.333_333_333);
+    }
+
+    #[test]
+    fn sexagesimal_degrees_only() {
+        approx(sexagesimal_dec_to_deg("45").unwrap(), 45.0);
+    }
+
+    #[test]
+    fn sexagesimal_invalid_returns_none() {
+        assert!(sexagesimal_ra_to_deg("").is_none());
+        assert!(sexagesimal_ra_to_deg("abc").is_none());
+        assert!(sexagesimal_dec_to_deg("'   '").is_none());
+    }
+
+    #[test]
+    fn parse_i64_handles_int_and_float() {
+        assert_eq!(parse_i64("20"), Some(20));
+        assert_eq!(parse_i64(" 50 "), Some(50));
+        assert_eq!(parse_i64("20.0"), Some(20));
+        assert_eq!(parse_i64(""), None);
+        assert_eq!(parse_i64("x"), None);
+    }
+
+    #[test]
+    fn parse_f64_helper() {
+        approx(parse_f64("3.76").unwrap(), 3.76);
+        approx(parse_f64(" -15.0055 ").unwrap(), -15.0055);
+        assert!(parse_f64("").is_none());
     }
 }

@@ -44,6 +44,9 @@ Per-type queue breakdown (US6/FR-021).
 ## Inbox — overrides
 
 ### ✳️ `inbox.reclassify`
+
+> **[SUPERSEDED by the "Iteration 2026-06-23 — single-type ingest contract changes" section below]** — this fixed-field shape (`{ filter?, exposure_s?, binning? }`) is replaced by the field-agnostic property-map + bulk form. Retained for history.
+
 Extend overrides beyond frame type and support multi-file scope (US3/FR-013/FR-014).
 - Request: `{ inbox_item_id, overrides: [ { file_path, frame_type?, filter?, exposure_s?, binning? } ] }`
   - Any subset of fields may be set per file; omitted fields are left unchanged.
@@ -56,6 +59,9 @@ Extend overrides beyond frame type and support multi-file scope (US3/FR-013/FR-0
 ## Inbox — confirm & plan
 
 ### ✳️ `inbox.confirm`
+
+> **[SUPERSEDED by the "Iteration 2026-06-23 — single-type ingest contract changes" section below]** — the auto-split-by-frame-type / `action` discriminator semantics are removed (every item is single-type). Retained for history.
+
 Confirm now produces a plan whose actions are decided **per file by the source's organization_state**, auto-splitting by frame type (US4/US5/FR-017/FR-020).
 - Request: `{ inbox_item_id, content_signature, destructive_destination?: 'archive' | 'os_trash' }`
   - (No `action` discriminator needed for the move/catalogue split — it's derived from organization_state.)
@@ -102,7 +108,7 @@ Source: `pending-iteration.md` "Contract Deltas" (single-type ingest pivot: A si
 - `is_master` / `master_frame_type` unchanged.
 
 ### ✳️ `inbox.confirm` → `InboxConfirmRequest` / `Response`
-- **REMOVE** the `("split","mixed")` semantics. `action` becomes **optional / no-op** (default behavior = confirm the single-type item); a mixed folder yields multiple single-type items rather than a split action.
+- **REMOVE** the `("split","mixed")` semantics. `action` is **removed** (every item is single-type, so confirm has one unambiguous behavior); a mixed folder yields multiple single-type items rather than a split action.
 - `rootId` (optional) = **THE single per-item destination root**. Keep the `destination_root_required` typed error + `candidate_roots` for the >1-candidate flow; per-category root caching removed.
 - Response: keep `actions_summary { moveCount, catalogueCount }` and `destinations[]`; drop per-type group semantics.
 

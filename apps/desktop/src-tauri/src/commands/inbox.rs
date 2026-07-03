@@ -9,9 +9,14 @@
 use app_core::inbox::classify::{classify, ClassifyRequest};
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox::metadata::get_inbox_item_metadata;
+use app_core::inbox::property_registry::property_registry as get_property_registry;
 use app_core::inbox::reclassify::{reclassify, ReclassifyOverride, ReclassifyRequest};
 use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
 use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
+use app_core::inbox::target_recommendations::{
+    target_recommendations as target_recommendations_uc, RecommendationTarget,
+    DEFAULT_FIXED_RADIUS_DEG,
+};
 use app_core::inbox_plan::{
     apply_all_inbox_plans, apply_inbox_plan, apply_selected_inbox_plans, cancel_inbox_plan,
     get_inbox_plan, list_open_inbox_plans,
@@ -21,13 +26,17 @@ use contracts_core::inbox::{
     InboxClassifyResponse, InboxConfirmRequest, InboxConfirmResponse, InboxFileEntry,
     InboxItemMetadataRequest, InboxItemMetadataResponse, InboxItemSummary, InboxListItem,
     InboxListResponse, InboxOpenPlansResponse, InboxPlanCancelResponse, InboxPlanView,
-    InboxReclassifyRequest, InboxReclassifyResponse, InboxScanFolderRequest,
-    InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
+    InboxPropertyRegistryResponse, InboxReclassifyRequest, InboxReclassifyResponse,
+    InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult, InboxStatsResponse,
+    InboxTargetRecommendationsRequest, InboxTargetRecommendationsResponse,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::ContractError;
+use domain_core::first_run::OrganizationState;
+use persistence_db::repositories::first_run::get_source_organization_state;
 use persistence_db::repositories::inbox::{
-    grouping_keys_for_items, list_unacknowledged_across_roots,
+    grouping_keys_for_items, list_unacknowledged_across_roots, upsert_inbox_source_group,
+    UpsertSourceGroup,
 };
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -202,6 +211,43 @@ pub async fn inbox_item_metadata(
     Ok(InboxItemMetadataResponse { inbox_item_id: req.inbox_item_id, files })
 }
 
+// ── inbox.target_recommendations ──────────────────────────────────────────────
+
+/// `inbox.target_recommendations` — recommend canonical targets for a light
+/// sub-group by sky-coordinate proximity (spec 041 R-17 / FR-052).
+///
+/// Ranks catalog targets by great-circle separation from the sub-group's
+/// pointing within a FOV-aware (or configurable fixed) radius. The `OBJECT`
+/// header is returned only as a display hint, never used for matching. The
+/// chosen target is written separately via `inbox.reclassify` (T068).
+///
+/// Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
+///
+/// # Errors
+/// `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_target_recommendations(
+    req: InboxTargetRecommendationsRequest,
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<InboxTargetRecommendationsResponse, ContractError> {
+    // inboxItemId takes precedence when both are supplied (contract semantics).
+    let target = if let Some(item_id) = req.inbox_item_id {
+        RecommendationTarget::InboxItem(item_id)
+    } else if let Some(sg_id) = req.source_group_id {
+        RecommendationTarget::SourceGroup(sg_id)
+    } else {
+        return Err(ContractError::new(
+            contracts_core::error_code::ErrorCode::InboxItemNotFound,
+            "target_recommendations requires inboxItemId or sourceGroupId".to_owned(),
+            contracts_core::ErrorSeverity::Blocking,
+            false,
+        ));
+    };
+
+    target_recommendations_uc(&pool, &target, DEFAULT_FIXED_RADIUS_DEG).await
+}
+
 // ── inbox.scan.folder ─────────────────────────────────────────────────────────
 
 /// `inbox.scan.folder` — recursively scan a root directory, discover leaf
@@ -219,9 +265,41 @@ pub async fn inbox_scan_folder(
     let opts = ScanOptions { follow_symlinks: req.follow_symlinks };
     let scanned = scan_root(&root_path, &opts).map_err(ContractError::internal)?;
 
+    // Derive the move-vs-catalogue lane for source groups from the root's
+    // organization_state (spec 041 R-12, data-model §lane column).
+    // organized → "catalogue" (files are already in place; no move needed).
+    // unorganized / unknown → "move" (default for inbox sources).
+    let org_state = get_source_organization_state(&*pool, &req.root_id)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+    let group_lane = match org_state {
+        Some(OrganizationState::Organized) => "catalogue",
+        _ => "move",
+    };
+
     let mut items: Vec<InboxItemSummary> = Vec::new();
 
     for scanned_item in &scanned {
+        // ── Source-group upsert (T065, R-10/R-12) ────────────────────────────
+        //
+        // One `inbox_source_groups` row per leaf folder — written at scan time,
+        // refreshed on rescan. child_count stays 0 here; classify (T066) sets it.
+        // No per-file header reads; reuses the cheap folder content_signature
+        // already computed by scan_root (Constitution §I, lazy hashing).
+        let sg_id = Uuid::new_v4().to_string();
+        upsert_inbox_source_group(
+            &*pool,
+            &UpsertSourceGroup {
+                id: &sg_id,
+                root_id: &req.root_id,
+                relative_path: &scanned_item.relative_path,
+                content_signature: Some(&scanned_item.content_signature),
+                format: Some(scanned_item.format.as_str()),
+                lane: Some(group_lane),
+            },
+        )
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
         // ── A. Individual rows for detected calibration masters ────────────────
         for master in &scanned_item.masters {
             if let Some(summary) =
@@ -425,6 +503,10 @@ pub async fn inbox_list(
                 group_filter: g.group_filter,
                 group_exposure: g.group_exposure,
                 group_instrument: g.group_instrument,
+                // T070: per-item rollup populated as empty; the gate is enforced
+                // at confirm time (group_key == SENTINEL_NEEDS_REVIEW) and the
+                // per-file detail is surfaced via inbox.item.metadata.
+                missing_mandatory: Vec::new(),
             }
         })
         .collect();
@@ -596,4 +678,25 @@ pub async fn inbox_plan_cancel(
 #[specta::specta]
 pub async fn inbox_stats(pool: tauri::State<'_, SqlitePool>) -> Result<InboxStatsResponse, String> {
     inbox_stats_uc(&pool).await.map_err(|e| e.message)
+}
+
+// ── spec 041: property registry (FR-044) ──────────────────────────────────────
+
+/// `inbox.property_registry` — return the typed property registry.
+///
+/// The registry lists every per-file property that the field-agnostic
+/// reclassifier (spec 041 R-13) understands: its key, value kind, physical
+/// unit, source FITS/XISF header(s), whether it is user-overridable, the frame
+/// types it applies to, and an optional validation hint.
+///
+/// The UI uses this registry to render a generic metadata editor without
+/// hard-coding field names, so future properties can be added without frontend
+/// changes (FR-044).
+///
+/// # Errors
+/// Never fails; always returns `Ok`.
+#[tauri::command]
+#[specta::specta]
+pub async fn inbox_property_registry() -> Result<InboxPropertyRegistryResponse, String> {
+    Ok(get_property_registry())
 }

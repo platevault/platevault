@@ -19,10 +19,12 @@
 pub mod assign;
 pub mod candidate;
 pub mod ranking;
+pub mod rotation;
 pub mod rules;
 
 pub use candidate::{CalibrationMatch, MatchedDim, MismatchReason, MismatchedDim, SelectionReason};
 pub use ranking::MatchingRuleConfig;
+pub use rotation::{flat_light_rotation_match, RotationMatch, RotationWarning};
 
 // ── Domain enums ──────────────────────────────────────────────────────────────
 

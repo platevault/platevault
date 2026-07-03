@@ -346,6 +346,13 @@ pub struct InboxListItem {
     /// Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_instrument: Option<String>,
+    /// Per-item rollup of missing mandatory attribute keys (spec 041 T070 /
+    /// FR-047 / R-14). Non-empty when this item is in the needs-review bucket
+    /// because one or more files are missing a mandatory attribute. The set is
+    /// the union of all per-file missing-mandatory lists across the item's files.
+    /// Empty for fully-resolved items. Blocks plan creation (FR-048/SC-015).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_mandatory: Vec<String>,
 }
 
 /// Response from `inbox.list`.
@@ -415,6 +422,14 @@ pub struct InboxFileMetadata {
     /// DATE-OBS). Supplying the value via reclassify clears the gate.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub missing_path_attributes: Vec<String>,
+    /// Registry key names of mandatory attributes that are absent for this file
+    /// (spec 041 T070 / FR-047 / R-14). Empty when all mandatory attributes are
+    /// present. The union of mandatory grouping properties and hard per-type keys
+    /// (e.g. `["target"]` for a light with no OBJECT and no resolved target).
+    /// Non-empty means this file's sub-item is in the needs-review bucket and
+    /// blocks plan creation until the value is supplied via reclassify.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_mandatory: Vec<String>,
 }
 
 /// Request for `inbox.item.metadata`.
@@ -462,6 +477,63 @@ pub struct InboxStatsTotals {
 pub struct InboxStatsResponse {
     pub per_type: Vec<InboxStatsPerType>,
     pub totals: InboxStatsTotals,
+}
+
+// ── inbox.target_recommendations (spec 041 R-17 / FR-052) ─────────────────────
+
+/// Request for `inbox.target_recommendations`.
+///
+/// Identify a light sub-group by **either** its `inboxItemId` **or** its
+/// `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+/// one should be set; if both are present, `inboxItemId` takes precedence.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxTargetRecommendationsRequest {
+    /// The single-type inbox item (light sub-group) to resolve a target for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inbox_item_id: Option<String>,
+    /// Alternatively, the originating source group (R-12 provenance).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_group_id: Option<String>,
+}
+
+/// The sky pointing a recommendation set was computed from (decimal degrees).
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxPointing {
+    /// Right ascension, ICRS J2000 decimal degrees.
+    pub ra_deg: f64,
+    /// Declination, ICRS J2000 decimal degrees.
+    pub dec_deg: f64,
+}
+
+/// One ranked target candidate (R-17 coordinate nearest-neighbour).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxTargetCandidate {
+    /// Persisted `canonical_target.id` (UUID string).
+    pub target_id: String,
+    /// Effective display name (`display_alias ?? primary_designation`).
+    pub name: String,
+    /// Great-circle angular separation from the sub-group's pointing, in degrees.
+    pub separation_deg: f64,
+}
+
+/// Response from `inbox.target_recommendations`.
+///
+/// `candidates` is ranked ascending by angular separation within the configured
+/// FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+/// `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+/// carries the raw `OBJECT` header for **display only** — never used for
+/// matching/search (R-17).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxTargetRecommendationsResponse {
+    pub candidates: Vec<InboxTargetCandidate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pointing: Option<InboxPointing>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub object_hint: Option<String>,
 }
 
 // ── inbox.plan (spec 041 US1/FR-003/FR-004) ───────────────────────────────────
@@ -550,9 +622,182 @@ pub struct InboxOpenPlansResponse {
     pub total_actions: u32,
 }
 
+// ── inbox.property_registry (spec 041 R-13 / FR-044) ─────────────────────────
+
+/// Discriminant for the value kind of a property in the property registry.
+///
+/// Mirrors the `kind` column in the R-13 property table.  The UI uses this to
+/// select the appropriate editor widget (number input, enum dropdown, etc.).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum PropertyKind {
+    /// Free-form text (e.g. camera name, filter label).
+    String,
+    /// IEEE-754 double (e.g. exposureS, raDeg).
+    Number,
+    /// Whole number (e.g. offset in ADU).
+    Integer,
+    /// Either a numeric or text representation (e.g. gain on some cameras).
+    NumberOrString,
+    /// One of a fixed set of string values (e.g. frameType).
+    Enum,
+    /// Calendar date (`YYYY-MM-DD`).
+    Date,
+    /// ISO-8601 date-time (e.g. obsTimeUtc, dateEnd).
+    Datetime,
+}
+
+/// One entry in the property registry exposed by `inbox.property_registry`.
+///
+/// Describes a named inbox-file property that the field-agnostic reclassifier
+/// (spec 041 R-13) can accept, validate, and persist as an index-side override.
+/// The UI uses this registry to render a generic metadata editor without
+/// hard-coding field names.
+///
+/// `sourceHeaders` — the FITS/XISF header keywords that feed this property
+/// during extraction; empty for derived or resolve-only properties.
+///
+/// `overridable` — when `false` the property is informational or derived and
+/// the reclassify endpoint will reject an explicit override for it.
+///
+/// `appliesTo` — frame types for which this property is meaningful; the UI
+/// SHOULD hide non-applicable properties rather than blocking on them.
+///
+/// `validation` — optional human-readable constraint description shown in the
+/// UI tooltip; not a machine-parseable expression (use for display only).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PropertyRegistryEntry {
+    /// Registry key, camelCase (e.g. `"frameType"`, `"exposureS"`).
+    pub key: String,
+    /// Value kind discriminant used by the UI for widget selection.
+    pub kind: PropertyKind,
+    /// Physical unit label for display (e.g. `"s"`, `"deg"`, `"ADU"`).  `None`
+    /// when the property is dimensionless or a free-form string.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    /// FITS/XISF source header keyword(s), in priority order.  Empty for
+    /// properties that are derived or resolved from external sources (e.g.
+    /// `target`, `opticTrain`).
+    pub source_headers: Vec<String>,
+    /// Whether a user override is accepted by the reclassify use case.
+    pub overridable: bool,
+    /// Frame types for which this property is applicable.
+    pub applies_to: Vec<String>,
+    /// Human-readable validation constraint for display in the UI.  `None`
+    /// means no documented constraint beyond the `kind` type.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation: Option<String>,
+}
+
+/// Response from `inbox.property_registry` (spec 041 FR-044).
+///
+/// The full ordered list of known per-file properties, their value kinds, and
+/// their editing semantics.  The UI renders this as a generic metadata editor
+/// without requiring hard-coded field knowledge.
+pub type InboxPropertyRegistryResponse = Vec<PropertyRegistryEntry>;
+
 /// Request for `inbox.plan.apply_selected` (spec 041, US2).
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InboxApplySelectedRequest {
     pub inbox_item_ids: Vec<String>,
+}
+
+// ── inbox.reclassify v2 — field-agnostic + bulk (spec 041 T068 / R-13) ────────
+
+/// One per-file property override entry in the field-agnostic reclassify request
+/// (T068).
+///
+/// `properties` is an open map of registry-validated property keys (camelCase,
+/// as in `inbox.property_registry`) to their JSON values. Unknown or
+/// non-overridable keys are rejected by the use case. Only MISSING / unreadable
+/// header values may be filled; the frame-type correction (`frameType`) is the
+/// one exception (it is always accepted regardless of header presence — R-13).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxReclassifyFileOverride {
+    /// Relative file path within the source group (must match an evidence row).
+    pub file_path: String,
+    /// Property map: `{ "exposureS": 300.0, "filter": "Ha", … }`. Values are
+    /// JSON scalars; the use case validates them against the registry `kind`.
+    pub properties: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// One bulk "set all" entry: apply one value to many files at once.
+///
+/// `file_paths` is optional: when absent the value is applied to **all** files
+/// in the source group (the "set all" affordance). When present only the listed
+/// paths are updated.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxReclassifyBulk {
+    /// Registry property key (camelCase) to set uniformly.
+    pub property: String,
+    /// Value to apply (JSON scalar; validated against registry `kind`).
+    pub value: serde_json::Value,
+    /// Subset of file paths to apply to; `None` / absent = all files in the
+    /// source group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_paths: Option<Vec<String>>,
+}
+
+/// Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
+///
+/// Scope is the **source group** (R-13): a reclassify may re-partition files
+/// across sub-items, so operating at sub-item scope is unsafe. Identify the
+/// group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
+/// owning source group from the item).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxReclassifyV2Request {
+    /// Identify the source group directly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_group_id: Option<String>,
+    /// Alternatively, identify the group by one of its sub-item IDs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inbox_item_id: Option<String>,
+    /// Per-file property overrides. Each entry targets one file; multiple
+    /// entries may target the same file (last-writer-wins per `property_key`).
+    #[serde(default)]
+    pub overrides: Vec<InboxReclassifyFileOverride>,
+    /// Bulk operations applied after per-file overrides. Processed in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bulk: Vec<InboxReclassifyBulk>,
+}
+
+/// Summary of one re-materialized sub-item returned after reclassify (T068).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxSubItemSummary {
+    /// The stable `inbox_items.id` for this sub-item (new UUID if it was
+    /// just created, or the existing one if it matched the upsert key).
+    pub inbox_item_id: String,
+    /// Deterministic canonical group key (R-11).
+    pub group_key: String,
+    /// Human-readable label `"(root) · <type> · <dims>"`.
+    pub group_label: String,
+    /// Authoritative frame type; `None` for the needs-review sentinel bucket.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame_type: Option<String>,
+    /// Number of files belonging to this sub-item after re-split.
+    pub file_count: u32,
+    /// Missing mandatory attributes across the sub-item's files (T070 gate).
+    /// Empty when the sub-item can proceed to confirm.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_mandatory: Vec<String>,
+}
+
+/// Response from `inbox.reclassify` v2 — field-agnostic + bulk (T068).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxReclassifyV2Response {
+    /// Source group that was operated on.
+    pub source_group_id: String,
+    /// Re-materialized single-type sub-items after applying overrides +
+    /// re-running classification + grouping (R-14 re-split loop).
+    pub sub_items: Vec<InboxSubItemSummary>,
+    /// Number of sub-items (or files) that still land in the needs-review
+    /// sentinel bucket (= still have missing mandatory attributes).
+    pub needs_review_count: u32,
 }

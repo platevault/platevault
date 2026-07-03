@@ -19,6 +19,14 @@ pub struct InboxItemRow {
     pub id: String,
     pub root_id: String,
     pub relative_path: String,
+    /// FK to `inbox_source_groups`; NULL for legacy `plan_open` rows (migration 0048).
+    pub source_group_id: Option<String>,
+    /// Deterministic canonical group key (R-11). Empty string for legacy rows.
+    pub group_key: String,
+    /// Human-readable display label `"(root) · <type> · <dims>"` (R-12).
+    pub group_label: Option<String>,
+    /// Authoritative frame type for this sub-item; NULL until classified (migration 0048).
+    pub frame_type: Option<String>,
     pub file_count: i64,
     pub discovered_at: String,
     pub last_scanned_at: String,
@@ -66,7 +74,13 @@ pub struct UpsertClassification<'a> {
     pub unclassified_file_count: i64,
 }
 
-/// Flat row from `inbox_classification_evidence`.
+/// Flat row from `inbox_classification_evidence`, joined with per-file override
+/// values from `inbox_file_overrides` (migration 0048).
+///
+/// The three non-type override fields (`override_filter`, `override_exposure_s`,
+/// `override_binning`) are now sourced from `inbox_file_overrides` via the
+/// `list_evidence` JOIN query. The struct API is stable so that callers in
+/// `app_core` continue to read `row.override_filter` etc. unchanged.
 #[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct InboxEvidenceRow {
     pub id: String,
@@ -81,11 +95,14 @@ pub struct InboxEvidenceRow {
     /// by the confirm path (spec 041 T052) to select the master destination
     /// pattern variant per file.
     pub is_master: i64,
-    /// Non-type override fields added in migration 0045 (spec 041 R-4).
+    /// Non-type override fields (migration 0048): populated from
+    /// `inbox_file_overrides` (property_key = 'filter'/'exposureS'/'binning')
+    /// via the JOIN in `list_evidence`. NULL when no override has been set.
     pub override_filter: Option<String>,
     pub override_exposure_s: Option<f64>,
     pub override_binning: Option<String>,
-    /// 1 when the override is stale (file size/mtime changed since it was set).
+    /// 1 when any override recorded for this file is stale (file size/mtime
+    /// changed since it was set — spec 041 R-4).
     pub override_stale: i64,
 }
 
@@ -176,6 +193,101 @@ pub struct InboxPlanLinkRow {
     pub linked_at: String,
 }
 
+// ── SourceGroup CRUD ──────────────────────────────────────────────────────────
+
+/// Flat row from the `inbox_source_groups` table (spec 041, migration 0048).
+#[derive(Clone, Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct InboxSourceGroupRow {
+    pub id: String,
+    pub root_id: String,
+    pub relative_path: String,
+    pub discovered_at: String,
+    pub last_scanned_at: String,
+    pub content_signature: Option<String>,
+    pub format: Option<String>,
+    pub lane: Option<String>,
+    pub child_count: i64,
+}
+
+/// Data required to upsert one `inbox_source_groups` row at scan time.
+///
+/// On first discovery the row is inserted; on rescan `last_scanned_at` and
+/// `content_signature` are refreshed via `ON CONFLICT … DO UPDATE`.
+/// `discovered_at` and `child_count` are preserved on conflict so repeated
+/// scans do not reset the discovery timestamp or lose the classify-written
+/// child_count.
+#[derive(Clone, Debug)]
+pub struct UpsertSourceGroup<'a> {
+    pub id: &'a str,
+    pub root_id: &'a str,
+    pub relative_path: &'a str,
+    pub content_signature: Option<&'a str>,
+    /// Dominant file format: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.
+    pub format: Option<&'a str>,
+    /// Move-vs-catalogue lane: `"move"` (unorganized) or `"catalogue"` (organized).
+    pub lane: Option<&'a str>,
+}
+
+/// Upsert one `inbox_source_groups` row (spec 041 T065, R-10/R-12).
+///
+/// INSERT on first scan; on rescan updates `last_scanned_at` and
+/// `content_signature` only — preserves `discovered_at` and `child_count`.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_inbox_source_group(
+    pool: &SqlitePool,
+    group: &UpsertSourceGroup<'_>,
+) -> DbResult<()> {
+    let now = Timestamp::now_iso();
+    sqlx::query(
+        "INSERT INTO inbox_source_groups
+            (id, root_id, relative_path, discovered_at, last_scanned_at,
+             content_signature, format, lane, child_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+         ON CONFLICT(root_id, relative_path) DO UPDATE SET
+             last_scanned_at   = excluded.last_scanned_at,
+             content_signature = excluded.content_signature,
+             format            = excluded.format,
+             lane              = excluded.lane",
+    )
+    .bind(group.id)
+    .bind(group.root_id)
+    .bind(group.relative_path)
+    .bind(&now)
+    .bind(&now)
+    .bind(group.content_signature)
+    .bind(group.format)
+    .bind(group.lane)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Fetch one `inbox_source_groups` row by `(root_id, relative_path)`.
+///
+/// Returns `None` when no matching row exists.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_inbox_source_group_by_path(
+    pool: &SqlitePool,
+    root_id: &str,
+    relative_path: &str,
+) -> DbResult<Option<InboxSourceGroupRow>> {
+    let row = sqlx::query_as::<_, InboxSourceGroupRow>(
+        "SELECT id, root_id, relative_path, discovered_at, last_scanned_at,
+                content_signature, format, lane, child_count
+         FROM inbox_source_groups
+         WHERE root_id = ? AND relative_path = ?",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
 // ── InboxItem CRUD ────────────────────────────────────────────────────────────
 
 /// Insert a new inbox item in `pending_classification` state.
@@ -258,6 +370,142 @@ pub async fn update_inbox_item_scan(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+// ── Sub-item CRUD (spec 041 T066) ─────────────────────────────────────────────
+
+/// Data required to upsert one single-type `inbox_items` sub-item row.
+///
+/// Identity = `(root_id, relative_path, group_key)` — the UNIQUE constraint
+/// from migration 0048. On conflict the mutable fields are updated so rescans
+/// of unchanged content converge to the same row (FR-042 determinism).
+#[derive(Clone, Debug)]
+pub struct UpsertInboxSubItem<'a> {
+    pub id: &'a str,
+    pub root_id: &'a str,
+    /// Relative path of the *source folder* (same as the source group's path).
+    pub relative_path: &'a str,
+    pub source_group_id: &'a str,
+    /// Deterministic canonical group key (R-11).
+    pub group_key: &'a str,
+    /// Human-readable label `"(root) · <type> · <dims>"` (R-12).
+    pub group_label: &'a str,
+    /// Authoritative frame type for this group (CHECK constraint values only).
+    pub frame_type: Option<&'a str>,
+    /// Per-sub-group content signature (R-11): folder_signature over the sorted
+    /// per-file signatures of only the files belonging to this group.
+    pub content_signature: &'a str,
+    /// Number of files in this group.
+    pub file_count: i64,
+    pub lane: &'a str,
+}
+
+/// Upsert one single-type `inbox_items` sub-item row (spec 041 T066, R-9/R-11).
+///
+/// The identity `(root_id, relative_path, group_key)` is stable across rescans
+/// when file content is unchanged (FR-042). On conflict the signature, label,
+/// file_count, and state are refreshed.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_inbox_sub_item(
+    pool: &SqlitePool,
+    item: &UpsertInboxSubItem<'_>,
+) -> DbResult<()> {
+    let now = Timestamp::now_iso();
+    sqlx::query(
+        "INSERT INTO inbox_items
+            (id, root_id, relative_path, source_group_id, group_key, group_label,
+             frame_type, file_count, discovered_at, last_scanned_at,
+             content_signature, state, lane)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'classified', ?)
+         ON CONFLICT(root_id, relative_path, group_key) DO UPDATE SET
+             group_label        = excluded.group_label,
+             frame_type         = excluded.frame_type,
+             file_count         = excluded.file_count,
+             last_scanned_at    = excluded.last_scanned_at,
+             content_signature  = excluded.content_signature,
+             state              = 'classified'",
+    )
+    .bind(item.id)
+    .bind(item.root_id)
+    .bind(item.relative_path)
+    .bind(item.source_group_id)
+    .bind(item.group_key)
+    .bind(item.group_label)
+    .bind(item.frame_type)
+    .bind(item.file_count)
+    .bind(&now)
+    .bind(&now)
+    .bind(item.content_signature)
+    .bind(item.lane)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Update `child_count` on a source group to reflect how many single-type
+/// sub-items were materialised during classify (spec 041 T066, R-12).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn update_source_group_child_count(
+    pool: &SqlitePool,
+    source_group_id: &str,
+    child_count: i64,
+) -> DbResult<()> {
+    sqlx::query("UPDATE inbox_source_groups SET child_count = ? WHERE id = ?")
+        .bind(child_count)
+        .bind(source_group_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Delete a sub-item row by id, but ONLY when it is not linked to a plan.
+///
+/// Used by classify re-materialization to purge stale single-type groups that no
+/// longer have any files (a file moved groups), without disturbing plan-open
+/// items (spec 041 R-11/FR-042; T067 churn regression).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn delete_sub_item_if_unlinked(pool: &SqlitePool, id: &str) -> DbResult<()> {
+    sqlx::query(
+        "DELETE FROM inbox_items
+         WHERE id = ?
+           AND id NOT IN (SELECT inbox_item_id FROM inbox_plan_links)",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// List all single-type sub-items belonging to a source group, ordered by
+/// `group_key` for deterministic display (spec 041 T066).
+///
+/// Excludes placeholder rows (`group_key = ''`) — the transient
+/// `pending_classification` placeholder is replaced by the real sub-items once
+/// classify runs. Plan-open items retain a non-empty `group_key` so they are
+/// included correctly.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_inbox_sub_items(
+    pool: &SqlitePool,
+    source_group_id: &str,
+) -> DbResult<Vec<InboxItemRow>> {
+    let rows = sqlx::query_as::<_, InboxItemRow>(
+        "SELECT * FROM inbox_items
+         WHERE source_group_id = ?
+           AND group_key != ''
+         ORDER BY group_key",
+    )
+    .bind(source_group_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
 }
 
 // ── Classification CRUD ───────────────────────────────────────────────────────
@@ -358,8 +606,44 @@ pub async fn list_evidence(
     pool: &SqlitePool,
     inbox_item_id: &str,
 ) -> DbResult<Vec<InboxEvidenceRow>> {
+    // Join inbox_file_overrides to recover the three non-type override values
+    // (filter/exposureS/binning) that were migrated out of the evidence table
+    // in migration 0048. The source_group_id is looked up from inbox_items.
+    // Three separate LEFT JOINs are used (one per property_key) so that each
+    // value is available as a distinct column in the result row, which
+    // sqlx::FromRow maps to the named struct fields.
     Ok(sqlx::query_as::<_, InboxEvidenceRow>(
-        "SELECT * FROM inbox_classification_evidence WHERE inbox_item_id = ? ORDER BY relative_file_path",
+        "SELECT
+             ice.id,
+             ice.inbox_item_id,
+             ice.relative_file_path,
+             ice.frame_type,
+             ice.evidence_source,
+             ice.raw_value,
+             ice.unclassified,
+             ice.manual_override,
+             ice.is_master,
+             ov_filter.value   AS override_filter,
+             CAST(ov_exp.value AS REAL) AS override_exposure_s,
+             ov_bin.value      AS override_binning,
+             ice.override_stale
+         FROM inbox_classification_evidence ice
+         LEFT JOIN inbox_items ii
+             ON ii.id = ice.inbox_item_id
+         LEFT JOIN inbox_file_overrides ov_filter
+             ON ov_filter.source_group_id = ii.source_group_id
+            AND ov_filter.relative_file_path = ice.relative_file_path
+            AND ov_filter.property_key = 'filter'
+         LEFT JOIN inbox_file_overrides ov_exp
+             ON ov_exp.source_group_id = ii.source_group_id
+            AND ov_exp.relative_file_path = ice.relative_file_path
+            AND ov_exp.property_key = 'exposureS'
+         LEFT JOIN inbox_file_overrides ov_bin
+             ON ov_bin.source_group_id = ii.source_group_id
+            AND ov_bin.relative_file_path = ice.relative_file_path
+            AND ov_bin.property_key = 'binning'
+         WHERE ice.inbox_item_id = ?
+         ORDER BY ice.relative_file_path",
     )
     .bind(inbox_item_id)
     .fetch_all(pool)
@@ -392,11 +676,22 @@ pub async fn set_manual_override(
 }
 
 /// Apply a full set of non-type overrides (filter, exposure, binning) and
-/// optionally a frame-type override in one UPDATE.
+/// optionally a frame-type override.
 ///
-/// Resets `override_stale = 0` — a freshly-recorded override is not stale.
-/// `frame_type` maps to `manual_override`; pass `None` to leave the frame-type
-/// override unchanged (only the non-type columns are written when `None`).
+/// After migration 0048 the non-type overrides (filter/exposure_s/binning) are
+/// stored in `inbox_file_overrides` keyed by `(source_group_id,
+/// relative_file_path, property_key)`. This function:
+///
+///   1. Looks up `source_group_id` from `inbox_items` for the given item.
+///   2. Upserts each non-None non-type value into `inbox_file_overrides`.
+///   3. Updates `manual_override` on the evidence row (frame-type correction).
+///   4. Resets `override_stale = 0` on the evidence row.
+///
+/// `source_group_id` may be NULL for pre-0048 migrated items; in that case the
+/// non-type overrides are silently skipped (only frame-type is written). This
+/// is safe because: (a) legacy `plan_open` items cannot be reclassified until
+/// their plan resolves; (b) on next classify after plan close, classify creates
+/// a proper source group and overrides can be re-applied via the UI.
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on connection failure.
@@ -409,31 +704,233 @@ pub async fn set_overrides(
     exposure_s: Option<f64>,
     binning: Option<&str>,
 ) -> DbResult<bool> {
+    use uuid::Uuid;
+
+    // Step 1: update manual_override + reset override_stale on the evidence row.
     let rows = sqlx::query(
-        // Merge semantics: a `None` argument leaves the existing override value
-        // untouched, so a frame-type-only reclassify never wipes a previously
-        // set filter/exposure/binning override (and vice-versa). A freshly
-        // recorded override is never stale, so override_stale resets to 0.
         "UPDATE inbox_classification_evidence
-         SET manual_override     = COALESCE(?, manual_override),
-             override_filter     = COALESCE(?, override_filter),
-             override_exposure_s = COALESCE(?, override_exposure_s),
-             override_binning    = COALESCE(?, override_binning),
-             override_stale      = 0,
-             evidence_source     = 'manual_override'
+         SET manual_override = COALESCE(?, manual_override),
+             override_stale  = 0,
+             evidence_source = 'manual_override'
          WHERE inbox_item_id = ? AND relative_file_path = ?",
     )
     .bind(frame_type)
-    .bind(filter)
-    .bind(exposure_s)
-    .bind(binning)
     .bind(inbox_item_id)
     .bind(relative_file_path)
     .execute(pool)
     .await?
     .rows_affected();
 
+    // Step 2: look up source_group_id from inbox_items.
+    // If the item has no source_group_id yet (e.g. freshly-inserted items that
+    // predate migration 0048, or items created by tests without an explicit
+    // source group), create a minimal source group on-the-fly and link the item
+    // to it. This ensures non-type overrides can always be persisted.
+    let source_group_id: String = {
+        // Read item row: source_group_id, root_id, relative_path, discovered_at.
+        let row: Option<(Option<String>, String, String, String)> = sqlx::query_as(
+            "SELECT source_group_id, root_id, relative_path, discovered_at \
+             FROM inbox_items WHERE id = ?",
+        )
+        .bind(inbox_item_id)
+        .fetch_optional(pool)
+        .await?;
+
+        match row {
+            Some((Some(sg_id), _, _, _)) => sg_id,
+            Some((None, root_id, relative_path, discovered_at)) => {
+                // Auto-create a source group for this item and link it.
+                let new_sg_id = format!("sg-auto-{inbox_item_id}");
+                let now = time::OffsetDateTime::now_utc()
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+                sqlx::query(
+                    "INSERT OR IGNORE INTO inbox_source_groups \
+                     (id, root_id, relative_path, discovered_at, last_scanned_at, child_count) \
+                     VALUES (?, ?, ?, ?, ?, 1)",
+                )
+                .bind(&new_sg_id)
+                .bind(&root_id)
+                .bind(&relative_path)
+                .bind(&discovered_at)
+                .bind(&now)
+                .execute(pool)
+                .await?;
+
+                sqlx::query("UPDATE inbox_items SET source_group_id = ? WHERE id = ?")
+                    .bind(&new_sg_id)
+                    .bind(inbox_item_id)
+                    .execute(pool)
+                    .await?;
+
+                new_sg_id
+            }
+            // Item not found — rows_affected will be 0; return a placeholder that
+            // won't match any source group so the overrides are silently skipped.
+            None => return Ok(rows > 0),
+        }
+    };
+
+    // Step 3: upsert non-type overrides into inbox_file_overrides.
+    if true {
+        let sg_id = &source_group_id;
+        let now = time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+
+        // Helper: upsert a single property_key/value pair.
+        // Uses INSERT OR REPLACE so subsequent set_overrides calls overwrite.
+        let upsert_override = |key: &'static str, val: String| {
+            let id = Uuid::new_v4().to_string();
+            let sg = sg_id.clone();
+            let rfp = relative_file_path.to_owned();
+            let ts = now.clone();
+            async move {
+                sqlx::query(
+                    "INSERT INTO inbox_file_overrides \
+                     (id, source_group_id, relative_file_path, property_key, value, \
+                      override_stale, set_at) \
+                     VALUES (?, ?, ?, ?, ?, 0, ?) \
+                     ON CONFLICT(source_group_id, relative_file_path, property_key) \
+                     DO UPDATE SET value = excluded.value, \
+                                   override_stale = 0, \
+                                   set_at = excluded.set_at",
+                )
+                .bind(id)
+                .bind(sg)
+                .bind(rfp)
+                .bind(key)
+                .bind(val)
+                .bind(ts)
+                .execute(pool)
+                .await
+            }
+        };
+
+        if let Some(f) = filter {
+            upsert_override("filter", f.to_owned()).await?;
+        }
+        if let Some(e) = exposure_s {
+            upsert_override("exposureS", e.to_string()).await?;
+        }
+        if let Some(b) = binning {
+            upsert_override("binning", b.to_owned()).await?;
+        }
+    }
+
     Ok(rows > 0)
+}
+
+/// Write (upsert) a single arbitrary property override for one file in a source
+/// group (spec 041 T068 / R-13 generic override write).
+///
+/// Keyed on `(source_group_id, relative_file_path, property_key)` — the same
+/// UNIQUE constraint already present on `inbox_file_overrides`. Subsequent calls
+/// for the same key overwrite the previous value and reset `override_stale = 0`.
+///
+/// `file_size_bytes` and `file_mtime` are the cheap per-file identity used for
+/// override staleness detection (R-4). Both may be `None` when the caller cannot
+/// stat the file (e.g. pure-index metadata corrections where no path is
+/// available).
+///
+/// This is the generic successor to the fixed-field
+/// `filter`/`exposureS`/`binning` path in [`set_overrides`] and accepts any
+/// registry-validated property key including those not yet backed by dedicated
+/// evidence columns.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn set_file_override(
+    pool: &SqlitePool,
+    source_group_id: &str,
+    relative_file_path: &str,
+    property_key: &str,
+    value: &str,
+    file_size_bytes: Option<i64>,
+    file_mtime: Option<&str>,
+) -> DbResult<()> {
+    use uuid::Uuid;
+    let id = Uuid::new_v4().to_string();
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    sqlx::query(
+        "INSERT INTO inbox_file_overrides
+             (id, source_group_id, relative_file_path, property_key, value,
+              file_size_bytes, file_mtime, override_stale, set_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+         ON CONFLICT(source_group_id, relative_file_path, property_key)
+         DO UPDATE SET
+             value             = excluded.value,
+             file_size_bytes   = COALESCE(excluded.file_size_bytes, file_size_bytes),
+             file_mtime        = COALESCE(excluded.file_mtime,        file_mtime),
+             override_stale    = 0,
+             set_at            = excluded.set_at",
+    )
+    .bind(&id)
+    .bind(source_group_id)
+    .bind(relative_file_path)
+    .bind(property_key)
+    .bind(value)
+    .bind(file_size_bytes)
+    .bind(file_mtime)
+    .bind(&now)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// One row from `inbox_file_overrides` for a source group — used by the
+/// field-agnostic reclassifier (T068) to read back all overrides for a group
+/// after applying them, so it can feed them into the re-split grouping engine.
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct FileOverrideRow {
+    pub relative_file_path: String,
+    pub property_key: String,
+    pub value: String,
+    pub override_stale: i64,
+}
+
+/// Fetch all non-stale property overrides for every file in a source group.
+///
+/// Returns one row per `(relative_file_path, property_key)` — the full override
+/// map the re-split grouping engine needs to compute updated group keys after a
+/// reclassify call (T068 R-13 re-split).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_file_overrides_for_group(
+    pool: &SqlitePool,
+    source_group_id: &str,
+) -> DbResult<Vec<FileOverrideRow>> {
+    Ok(sqlx::query_as::<_, FileOverrideRow>(
+        "SELECT relative_file_path, property_key, value, override_stale
+         FROM inbox_file_overrides
+         WHERE source_group_id = ?
+         ORDER BY relative_file_path, property_key",
+    )
+    .bind(source_group_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Fetch the `source_group_id` for a given `inbox_item_id`.
+///
+/// Returns `None` when the item does not exist or has no source group (legacy
+/// pre-T065 items).
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_source_group_id_for_item(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+) -> DbResult<Option<String>> {
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT source_group_id FROM inbox_items WHERE id = ?")
+            .bind(inbox_item_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.and_then(|(sg,)| sg))
 }
 
 /// Mark the override for a file as stale (file size/mtime changed since the
@@ -629,6 +1126,70 @@ pub async fn list_inbox_file_metadata(
     .bind(inbox_item_id)
     .fetch_all(pool)
     .await?)
+}
+
+// ── Pointing / optics for target resolution (spec 041 R-17, T074) ─────────────
+
+/// Per-file pointing + optics, read for coordinate-based target resolution.
+///
+/// Sourced from `inbox_file_metadata` (the T062 extended columns added in
+/// migration 0048). All fields are nullable — best-effort extraction. The
+/// caller derives a sub-group pointing (e.g. the first file carrying RA/Dec)
+/// and a FOV-aware radius from `focal_length_mm`/`pixel_size_um`/`naxis1/2`.
+#[derive(Clone, Debug, Default, sqlx::FromRow)]
+pub struct InboxPointingRow {
+    pub relative_file_path: String,
+    pub ra_deg: Option<f64>,
+    pub dec_deg: Option<f64>,
+    pub focal_length_mm: Option<f64>,
+    pub pixel_size_um: Option<f64>,
+    pub naxis1: Option<i64>,
+    pub naxis2: Option<i64>,
+    /// Raw `OBJECT` header value — display hint only, NEVER a matching key (R-17).
+    pub object: Option<String>,
+}
+
+/// Read per-file pointing + optics rows for an inbox item (R-17 / T074).
+///
+/// Returns one row per file with a persisted `inbox_file_metadata` row, ordered
+/// by relative path. Rows without RA/Dec are still returned (the caller filters);
+/// `object` is carried as a display hint only.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_inbox_pointing(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+) -> DbResult<Vec<InboxPointingRow>> {
+    Ok(sqlx::query_as::<_, InboxPointingRow>(
+        "SELECT relative_file_path, ra_deg, dec_deg, focal_length_mm,
+                pixel_size_um, naxis1, naxis2, object
+         FROM inbox_file_metadata
+         WHERE inbox_item_id = ?
+         ORDER BY relative_file_path",
+    )
+    .bind(inbox_item_id)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Find the inbox items belonging to a source group, ordered by id (R-12).
+///
+/// Used by `inbox.target_recommendations` when the caller passes a
+/// `sourceGroupId` instead of an `inboxItemId`.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_item_ids_for_source_group(
+    pool: &SqlitePool,
+    source_group_id: &str,
+) -> DbResult<Vec<String>> {
+    let rows: Vec<(String,)> =
+        sqlx::query_as("SELECT id FROM inbox_items WHERE source_group_id = ? ORDER BY id")
+            .bind(source_group_id)
+            .fetch_all(pool)
+            .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
 // ── Stats aggregates (spec 041 US6) ──────────────────────────────────────────
@@ -1099,9 +1660,10 @@ mod tests {
         let db = test_db().await;
         insert_inbox_item(db.pool(), &sample_item("item-3")).await.unwrap();
 
+        // Migration 0048 renamed 'single_type' → 'classified' in the CHECK constraint.
         let c = UpsertClassification {
             inbox_item_id: "item-3",
-            result: "single_type",
+            result: "classified",
             frame_type: Some("light"),
             content_signature: "sig-xyz",
             unclassified_file_count: 0,
@@ -1109,7 +1671,7 @@ mod tests {
         upsert_classification(db.pool(), &c).await.unwrap();
 
         let row = get_classification(db.pool(), "item-3").await.unwrap().unwrap();
-        assert_eq!(row.result, "single_type");
+        assert_eq!(row.result, "classified");
         assert_eq!(row.frame_type, Some("light".to_owned()));
     }
 
@@ -1563,14 +2125,45 @@ mod tests {
         assert!(keys.is_empty());
     }
 
-    /// set_overrides writes all four override columns and resets override_stale.
+    /// set_overrides writes the frame-type override and resets override_stale.
+    ///
+    /// NOTE (migration 0048): override_filter/override_exposure_s/override_binning
+    /// have been moved to inbox_file_overrides. set_overrides now only updates
+    /// manual_override (frame-type correction) on the evidence row. Non-type
+    /// override parameters (_filter, _exposure_s, _binning) are accepted but
+    /// silently ignored until T069 rewrites the override persistence layer.
     #[tokio::test]
     async fn set_overrides_writes_all_columns_and_resets_stale() {
         let db = test_db().await;
         let pool = db.pool();
 
-        // Set up: item + evidence row.
-        insert_inbox_item(pool, &sample_item("item-overrides-1")).await.unwrap();
+        // Set up: source group + item + evidence row.
+        // An inbox_source_groups row is required so set_overrides can write
+        // non-type values to inbox_file_overrides (migration 0048 data path).
+        sqlx::query(
+            "INSERT INTO inbox_source_groups \
+             (id, root_id, relative_path, discovered_at, last_scanned_at, child_count) \
+             VALUES ('sg-overrides-1', 'root-1', '2025-10-10/lights', \
+                     '2025-10-10T20:00:00Z', '2025-10-10T20:00:00Z', 1)",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        // Insert the inbox_item with source_group_id set.
+        sqlx::query(
+            "INSERT INTO inbox_items \
+             (id, root_id, relative_path, source_group_id, group_key, \
+              discovered_at, last_scanned_at, state, lane) \
+             VALUES ('item-overrides-1', 'root-1', '2025-10-10/lights', \
+                     'sg-overrides-1', '', \
+                     '2025-10-10T20:00:00Z', '2025-10-10T20:00:00Z', \
+                     'pending_classification', 'fits')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
         insert_evidence(
             pool,
             &InsertEvidence {
@@ -1592,7 +2185,8 @@ mod tests {
         // First manually mark stale so we can verify it is reset.
         mark_override_stale(pool, "item-overrides-1", "folder/file.fits").await.unwrap();
 
-        // Now apply full overrides.
+        // Apply full overrides — now actually writes non-type values to
+        // inbox_file_overrides and frame-type to the evidence row.
         let updated = set_overrides(
             pool,
             "item-overrides-1",
@@ -1606,16 +2200,18 @@ mod tests {
         .unwrap();
         assert!(updated, "set_overrides must return true (row found)");
 
-        // Read back and verify.
+        // Read back via list_evidence — override values are JOIN'd from
+        // inbox_file_overrides by the updated query.
         let rows = list_evidence(pool, "item-overrides-1").await.unwrap();
         assert_eq!(rows.len(), 1);
         let ev = &rows[0];
         assert_eq!(ev.manual_override.as_deref(), Some("dark"));
+        assert_eq!(ev.override_stale, 0, "freshly-set override must not be stale");
+        assert_eq!(ev.evidence_source, "manual_override");
+        // Non-type overrides are read back from inbox_file_overrides via the JOIN.
         assert_eq!(ev.override_filter.as_deref(), Some("Ha"));
         assert_eq!(ev.override_exposure_s, Some(120.0));
         assert_eq!(ev.override_binning.as_deref(), Some("2x2"));
-        assert_eq!(ev.override_stale, 0, "freshly-set override must not be stale");
-        assert_eq!(ev.evidence_source, "manual_override");
     }
 
     /// mark_override_stale sets override_stale=1.
@@ -1820,5 +2416,169 @@ mod tests {
         assert_eq!(dark.image_count, 1, "dark image_count");
         assert_eq!(dark.master_count, 1, "dark master_count");
         assert_eq!(dark.folder_count, 2, "dark folder_count");
+    }
+
+    // ── Source-group upsert tests (T065) ──────────────────────────────────────
+
+    /// First scan inserts the source group row with the expected fields.
+    #[tokio::test]
+    async fn upsert_source_group_inserts_on_first_scan() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-t065-1",
+                root_id: "root-1",
+                relative_path: "2025-10-10/lights",
+                content_signature: Some("sig-abc123"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        let row = get_inbox_source_group_by_path(pool, "root-1", "2025-10-10/lights")
+            .await
+            .unwrap()
+            .expect("source group must exist after upsert");
+
+        assert_eq!(row.id, "sg-t065-1");
+        assert_eq!(row.root_id, "root-1");
+        assert_eq!(row.relative_path, "2025-10-10/lights");
+        assert_eq!(row.content_signature.as_deref(), Some("sig-abc123"));
+        assert_eq!(row.format.as_deref(), Some("fits"));
+        assert_eq!(row.lane.as_deref(), Some("move"));
+        assert_eq!(row.child_count, 0, "child_count starts at 0 (classify sets it)");
+    }
+
+    /// Rescan refreshes last_scanned_at and content_signature without duplicating the row.
+    #[tokio::test]
+    async fn upsert_source_group_rescan_refreshes_without_duplicate() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        // First scan.
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-t065-2",
+                root_id: "root-2",
+                relative_path: "2025-11-01/darks",
+                content_signature: Some("sig-old"),
+                format: Some("fits"),
+                lane: Some("catalogue"),
+            },
+        )
+        .await
+        .unwrap();
+
+        let first = get_inbox_source_group_by_path(pool, "root-2", "2025-11-01/darks")
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Record discovered_at so we can verify it is preserved on rescan.
+        let discovered_at_first = first.discovered_at.clone();
+
+        // Rescan: same (root_id, relative_path), new signature.
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-t065-2-ignored", // id ignored on conflict; original preserved
+                root_id: "root-2",
+                relative_path: "2025-11-01/darks",
+                content_signature: Some("sig-new"),
+                format: Some("fits"),
+                lane: Some("catalogue"),
+            },
+        )
+        .await
+        .unwrap();
+
+        let second = get_inbox_source_group_by_path(pool, "root-2", "2025-11-01/darks")
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Row count is still 1 (not duplicated).
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM inbox_source_groups WHERE root_id = 'root-2' AND relative_path = '2025-11-01/darks'",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        assert_eq!(count.0, 1, "rescan must not duplicate the source group row");
+
+        // content_signature updated.
+        assert_eq!(second.content_signature.as_deref(), Some("sig-new"));
+
+        // discovered_at preserved.
+        assert_eq!(second.discovered_at, discovered_at_first);
+
+        // child_count still 0 (classify hasn't run).
+        assert_eq!(second.child_count, 0);
+    }
+
+    /// Two distinct leaf folders under the same root produce two source group rows.
+    #[tokio::test]
+    async fn upsert_source_group_two_leaf_folders_produce_two_rows() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        for (id, path) in [("sg-t065-a", "session/lights"), ("sg-t065-b", "session/darks")] {
+            upsert_inbox_source_group(
+                pool,
+                &UpsertSourceGroup {
+                    id,
+                    root_id: "root-multi",
+                    relative_path: path,
+                    content_signature: Some("sig"),
+                    format: Some("fits"),
+                    lane: Some("move"),
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM inbox_source_groups WHERE root_id = 'root-multi'")
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert_eq!(count.0, 2, "each leaf folder is a distinct source group row");
+    }
+
+    /// Video-lane leaf folder is stored with lane = "move" (video sources are never
+    /// catalogue-in-place).  Format field carries "video".
+    #[tokio::test]
+    async fn upsert_source_group_video_lane_stored() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-t065-vid",
+                root_id: "root-vid",
+                relative_path: "planetary/jupiter",
+                content_signature: None,
+                format: Some("video"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        let row = get_inbox_source_group_by_path(pool, "root-vid", "planetary/jupiter")
+            .await
+            .unwrap()
+            .expect("video source group must be persisted");
+
+        assert_eq!(row.format.as_deref(), Some("video"));
+        assert_eq!(row.lane.as_deref(), Some("move"));
     }
 }

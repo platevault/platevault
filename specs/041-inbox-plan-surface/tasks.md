@@ -131,21 +131,23 @@
 
 **Goal**: change the inbox unit of work from one-item-per-leaf-folder to single-type sub-items materialized at classify time (item↔plan 1:1); add extended header extraction; make the reclassifier field-agnostic over a typed property registry; generalize the missing-mandatory gate with a needs-review bucket and a split-before-confirm loop; expose source-group provenance.
 
-**Foundational**: T061 (migration 0046) + T062 (extended extraction) block T063–T073. T072 (contracts/binding regen) precedes the frontend portions of T073.
+**Foundational**: T061 (migration 0048) + T062 (extended extraction) block T063–T073/T080. T072 (contracts/binding regen) precedes the frontend portions of T073.
 
-- [ ] T061 [P] [US10] Migration 0046: `inbox_source_groups`; `inbox_items` +source_group_id/group_key/group_label/frame_type + composite UNIQUE; `inbox_file_overrides`; collapse `inbox_classifications.result` to classified|unclassified; data re-derivation (FR-034/FR-042/FR-046/FR-054).
-- [ ] T062 [P] [US16] Extend FITS+XISF extraction (FR-053): offset/temps/pointing/rotation/readout/focal/observer/local-time + XISF unit conversions.
-- [ ] T063 [US11] Property registry module + `inbox.property_registry` contract (FR-044).
-- [ ] T064 [US10] Grouping engine: per-type recipe + bucketing + tolerances (pointing/rotation/temp) + per-dimension config (FR-035/FR-036/FR-037/FR-038/FR-039/FR-040).
-- [ ] T065 [US10] scan.rs: emit source-group rows, stay lazy (FR-041).
-- [ ] T066 [US10] classify.rs: materialize single-type sub-items (classify-then-split) + per-sub-group signature (FR-041/FR-042).
-- [ ] T067 [P] [US10] Composite identity + signature stability tests (FR-042).
-- [ ] T068 [US11] reclassify.rs: field-agnostic property map + bulk; fill-missing-only; index-only; source-group-scoped; re-split (FR-044/FR-045/FR-049).
-- [ ] T069 [US11] Override persistence (`inbox_file_overrides`) + staleness; migrate old override_* columns (FR-046).
-- [ ] T070 [US12] Generalized missing-mandatory gate + needs-review bucket + split-before-confirm enforcement (FR-047/FR-048/FR-049).
+- [X] T061 [P] [US10] Migration **0048** (`0048_inbox_single_type.sql`; **0046 + 0047 already taken** by `0046_session_canonical_target.sql` + `0047_target_constellation_magnitude.sql` — the latter renamed by PR #317 to resolve the dual-0046): `inbox_source_groups`; `inbox_items` +source_group_id/group_key/group_label/frame_type + composite UNIQUE; `inbox_file_overrides`; collapse `inbox_classifications.result` to classified|unclassified; data re-derivation (FR-034/FR-042/FR-046/FR-054).
+- [X] T062 [P] [US16] Extend FITS+XISF extraction (FR-053): offset/temps/pointing/rotation/readout/focal/**pixel-size (`XPIXSZ`/`PIXSIZE`, XISF `Image:PixelSize`)**/observer/local-time + XISF unit conversions.
+- [X] T063 [US11] Property registry module + `inbox.property_registry` contract (FR-044).
+- [X] T064 [US10] Grouping engine: per-type recipe + bucketing + tolerances (pointing/rotation/temp) + per-dimension config (FR-035/FR-036/FR-037/FR-038/FR-039/FR-040).
+- [X] T065 [US10] scan.rs: emit source-group rows, stay lazy (FR-041).
+- [X] T066 [US10] classify.rs: materialize single-type sub-items (classify-then-split) + per-sub-group signature (FR-041/FR-042).
+- [X] T067 [P] [US10] Composite identity + signature stability tests (FR-042).
+- [X] T068 [US11] reclassify.rs: field-agnostic property map + bulk; fill-missing-only; index-only; source-group-scoped; re-split (FR-044/FR-045/FR-049).
+- [X] T069 [US11] Override persistence (`inbox_file_overrides`) + staleness; migrate old override_* columns (FR-046). Read/write wiring (list_evidence JOINs + set_overrides upsert), old-column→table data migration, and size+mtime staleness on `inbox_file_overrides` all landed; `app_core_inbox` override tests green (57 passed).
+- [X] T070 [US12] Generalized missing-mandatory gate + needs-review bucket + split-before-confirm enforcement (FR-047/FR-048/FR-049). NOTE: the derived mandatory set treats `target` as a hard light key satisfiable by coordinate auto-resolution (T074) OR user pick; a light with no pointing and no set target → needs-review.
 - [ ] T071 [US10] confirm.rs: delete split/mixed branch; one rootId/item; retire per-type grouping (FR-050).
 - [ ] T072 [US13] Contracts + binding regen: inbox.list (groupId/groupKey/groupLabel/frameType/sourceGroup/missingMandatory), inbox.confirm (drop action), inbox.reclassify (property map+bulk), metadata DTO new fields (FR-043/FR-044/FR-050).
 - [ ] T073 [P] [US10] Layer-1 + vitest tests for Phase 12.
+- [X] T080 [US16/US10] Flat↔light rotation matching (FR-040): compare a flat group's `ROTATANG` against the light group's `ROTATANG` (near-exact, float-epsilon), emit the metadata-quality warning on any deviation, honour `flat_rotation_required` (default off) when `ROTATANG` is absent, and surface the warning in the UI. Depends on T062 (extraction) + T064 (grouping). Tests: Layer-1 (match/warn/absent) + vitest (warning surface).
+- [ ] T081 [US10/US16] Wire the extended T062 fields through `build_frame_metadata` into `FrameMetadata` so grouping actually uses them (FR-035–FR-040). FOUND during Wave C: `build_frame_metadata` (classify.rs) hardcodes offset/set-temp/ccd-temp/pointing(ra/dec)/rotation(ROTATANG)/focal-length/date-loc to `None`, so T062's extracted values never reach the grouping engine — every recipe dimension beyond the core falls to the "(unknown)" sentinel. Map RawFileMetadata's T062 fields → FrameMetadata; also map the corresponding `inbox_file_overrides` keys (offset/temperatureC) so reclassify can fill them. Tests: darks at two set-temps → two sub-items; lights at two pointings → two sub-items.
 
 **Checkpoint**: mixed folders materialize as N single-type items; reclassify is field-agnostic; needs-review bucket gates plan creation; provenance + extended metadata surface.
 
@@ -155,7 +157,7 @@
 
 **Depends on Phase 12** (single-type items + extended pointing/focal extraction). T078 (`sync.conflicts`) runs after the spec/data-model/contract artifacts land.
 
-- [ ] T074 [US15] Coordinate target resolution (FOV-aware NN) + `inbox.target_recommendations` op; OBJECT naming-only (FR-052).
+- [X] T074 [US15] Coordinate target resolution (FOV-aware NN) + `inbox.target_recommendations` op; OBJECT naming-only (FR-052). NOTE: the FOV-aware radius uses `FOCALLEN` + pixel size (T062) + `NAXIS1/2`; when pixel size is unavailable, fall back to a configurable fixed radius (R-17).
 - [ ] T075 [US15] Target propagation to projects (FR-052).
 - [ ] T076 [US14] Drop session review lifecycle (states + Confirm/Re-open/Reject); sessions derived; editable metadata view (FR-051).
 - [ ] T077 [US14] Migration handling for plan_open legacy items (FR-054).
@@ -174,13 +176,13 @@
 - **US4 (P2)** depends on Phase 2 (organization_state + catalogue) and composes with **US5 (P3)** in `confirm.rs` (do US4 before/with US5).
 - **US6, US7 (P3)** depend on US1's plan surface / list.
 - **Polish** last.
-- **Phase 12 (Iteration 2026-06-23, foundational)**: T061 (migration 0046) + T062 (extended extraction) are foundational and block T063–T073. T072 (contracts/binding regen) precedes the frontend portions of T073. Phase 12 supersedes the retired US5 auto-split (T036/T037).
+- **Phase 12 (Iteration 2026-06-23, foundational)**: T061 (migration 0048) + T062 (extended extraction) are foundational and block T063–T073/T080. T072 (contracts/binding regen) precedes the frontend portions of T073. T080 (flat↔light rotation match) depends on T062+T064. Phase 12 supersedes the retired US5 auto-split (T036/T037).
 - **Phase 13 (Iteration 2026-06-23)**: depends on Phase 12 (single-type items + pointing/focal extraction). T078 (`sync.conflicts` vs 045/006/035) runs after the spec/data-model/contract artifacts land.
 
 ## Parallel opportunities
 
 - T004/T005 (contracts) parallel; T013/T020/T022 (independent frontend files) parallel; test tasks marked [P] parallel within their story.
-- Phase 12: T061/T062 (migration + extraction, distinct files) parallel; T067/T073 (tests) [P]. T063–T066/T068–T071 follow the two foundational tasks; T072 precedes Phase-12 frontend tests.
+- Phase 12: T061/T062 (migration + extraction, distinct files) parallel; T067/T073 (tests) [P]. T063–T066/T068–T071 follow the two foundational tasks; T072 precedes Phase-12 frontend tests. T080 (flat↔light rotation) follows T062+T064.
 
 ## Implementation strategy
 

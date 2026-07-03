@@ -18,7 +18,12 @@ use camino::Utf8Path;
 use metadata_core::{v1_normalization_table, EvidenceSource, FrameType, MetadataExtractor};
 use metadata_fits::FitsExtractor;
 use metadata_xisf::XisfExtractor;
-use persistence_db::repositories::inbox::{self as repo, InsertEvidence, UpsertClassification};
+
+use super::grouping::{group_file, FrameMetadata, GroupingConfig};
+use super::signature::folder_signature;
+use persistence_db::repositories::inbox::{
+    self as repo, InsertEvidence, UpsertClassification, UpsertInboxSubItem,
+};
 use sqlx::SqlitePool;
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
@@ -42,7 +47,10 @@ pub struct BreakdownEntry {
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct ClassifyResponse {
     pub inbox_item_id: String,
-    /// "single_type" | "mixed" | "unclassified"
+    /// API vocabulary (stable for frontend): "single_type" | "mixed" | "unclassified".
+    /// Note: the DB stores "classified" / "unclassified" (migration 0048 CHECK);
+    /// the API vocabulary is mapped from the DB value so the frontend contract
+    /// stays unchanged until T071/T072 update the contracts.
     pub classification_type: String,
     /// Present when type == "single_type"
     pub frame_type: Option<String>,
@@ -147,6 +155,10 @@ pub async fn classify(
 
     let mut frame_type_files: HashMap<String, Vec<String>> = HashMap::new();
     let mut unclassified_files: Vec<String> = Vec::new();
+    // T066: per-file records for sub-item grouping after the loop.
+    // Each entry: (relative_path, frame_type, raw_meta_for_grouping)
+    let mut file_records: Vec<(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)> =
+        Vec::new();
 
     for abs_path in &file_paths {
         // Lossless path → wire-string conversion (camino). `abs_path` descends
@@ -238,10 +250,12 @@ pub async fn classify(
         persist_file_metadata(pool, &req.inbox_item_id, &rel, abs_path, raw_meta.as_ref()).await;
 
         if is_unclassified {
-            unclassified_files.push(rel);
+            unclassified_files.push(rel.clone());
         } else if let Some(ft) = frame_type {
-            frame_type_files.entry(ft.as_str().to_owned()).or_default().push(rel);
+            frame_type_files.entry(ft.as_str().to_owned()).or_default().push(rel.clone());
         }
+        // T066: collect for sub-item grouping (done after the loop).
+        file_records.push((rel, frame_type, raw_meta));
     }
 
     // spec 041 R-4 / T025: re-apply snapshotted overrides to freshly-inserted
@@ -265,20 +279,59 @@ pub async fn classify(
         }
     }
 
-    // 7. Determine folder-level classification result
+    // 7. Determine folder-level classification result.
+    //
+    // Two distinct string spaces are used:
+    //   db_result    — stored in inbox_classifications.result; must match the
+    //                  CHECK constraint introduced in migration 0048:
+    //                  ('classified', 'unclassified').  'single_type' and
+    //                  'mixed' no longer exist at the DB level. A folder with
+    //                  a single frame type → 'classified'; a folder with
+    //                  multiple frame types → 'unclassified' (the mixed case
+    //                  will be re-split into single-type sub-items in T066).
+    //   api_result   — returned in ClassifyResponse.classification_type; kept
+    //                  on the stable pre-0048 vocabulary ('single_type' /
+    //                  'mixed' / 'unclassified') so the frontend contract and
+    //                  confirm routing remain unchanged until T071/T072 land.
     let distinct_types: Vec<&str> = frame_type_files.keys().map(String::as_str).collect();
-    let (result, single_frame_type) = match distinct_types.len() {
-        0 => ("unclassified", None),
-        1 => ("single_type", Some(distinct_types[0].to_owned())),
-        _ => ("mixed", None),
+    let (db_result, api_result, single_frame_type) = match distinct_types.len() {
+        0 => ("unclassified", "unclassified", None),
+        1 => ("classified", "single_type", Some(distinct_types[0].to_owned())),
+        _ => ("unclassified", "mixed", None),
     };
 
     let unclassified_count = i64::try_from(unclassified_files.len()).unwrap_or(i64::MAX);
 
-    // 8. Persist classification
+    // T066: Materialize single-type sub-items (R-9/R-11).
+    //
+    // For each file we build a FrameMetadata from extracted raw_meta, then call
+    // group_file with the per-type GroupingConfig::default_for to get its
+    // deterministic group_key. Files are partitioned by group_key; unclassifiable
+    // files go into the sentinel __needs_review__ bucket (gate logic is T070).
+    // For each group we upsert one inbox_items row with identity
+    // (root_id, relative_path, group_key) and a per-sub-group content_signature.
+    //
+    // Only runs when the item has a source_group_id (i.e. was discovered via
+    // T065 scan → source group). Legacy items without a source group are
+    // skipped here (they continue to function as single folder-level items
+    // until they are rescanned after T065 is in place).
+    if let Some(ref sg_id) = item.source_group_id {
+        materialize_sub_items(
+            pool,
+            sg_id,
+            &item.root_id,
+            &item.relative_path,
+            &item.lane,
+            &file_paths,
+            &file_records,
+        )
+        .await;
+    }
+
+    // 8. Persist classification (use db_result which satisfies migration 0048 CHECK).
     let classification = UpsertClassification {
         inbox_item_id: &req.inbox_item_id,
-        result,
+        result: db_result,
         frame_type: single_frame_type.as_deref(),
         content_signature: &content_signature,
         unclassified_file_count: unclassified_count,
@@ -311,7 +364,8 @@ pub async fn classify(
 
     Ok(ClassifyResponse {
         inbox_item_id: req.inbox_item_id,
-        classification_type: result.to_owned(),
+        // api_result retains the pre-0048 vocabulary for frontend stability.
+        classification_type: api_result.to_owned(),
         frame_type: single_frame_type,
         content_signature,
         breakdown,
@@ -502,6 +556,277 @@ async fn snapshot_overrides(
     snapshots
 }
 
+/// Sentinel group key used for files that are unclassifiable or missing
+/// grouping-mandatory attributes (T066 / R-14 / T070).
+pub const SENTINEL_NEEDS_REVIEW: &str = "__needs_review__";
+
+// ── Mandatory-attribute gate (T070 / FR-047 / R-14) ──────────────────────────
+
+/// Derive the **mandatory attribute set** for a frame type (R-14).
+///
+/// Returns the registry key names (camelCase, matching `property_registry()`)
+/// that **must** be present for a file of this type to form a valid single-type
+/// destination.  The set is derived from the `GroupingConfig` default dimensions
+/// (enabled grouping dims whose absence is meaningful) plus hard per-type keys
+/// that are always mandatory regardless of pattern tokens:
+///
+/// | frame_type | Hard mandatory keys                   |
+/// |------------|---------------------------------------|
+/// | light      | `frameType`, `target`, `filter`, `exposureS` |
+/// | dark       | `frameType`, `exposureS`, `gain`      |
+/// | bias       | `frameType`, `gain`                   |
+/// | flat       | `frameType`, `filter`                 |
+///
+/// `target` for lights is a special hard key: it is satisfied by coordinate
+/// auto-resolution (R-17) **or** an explicit user pick, but if neither has
+/// produced a value the file routes to needs-review (FR-047 note).
+///
+/// The returned list is deduplicated and stable.
+#[must_use]
+pub fn mandatory_set_for(ft: FrameType) -> Vec<&'static str> {
+    // Hard mandatory keys per R-14 table.
+    let hard: &[&str] = match ft {
+        FrameType::Light => &["frameType", "target", "filter", "exposureS"],
+        FrameType::Dark | FrameType::DarkFlat => &["frameType", "exposureS", "gain"],
+        FrameType::Bias => &["frameType", "gain"],
+        FrameType::Flat => &["frameType", "filter"],
+    };
+    // Deduplicate (preserving order) — grouping dims may overlap with hard keys.
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for &k in hard {
+        if seen.insert(k) {
+            out.push(k);
+        }
+    }
+    out
+}
+
+/// Check which mandatory attributes are absent for a classified file.
+///
+/// `raw_meta` is `None` when FITS extraction failed entirely (→ all mandatory
+/// attributes except `frameType` are considered missing).  `target_resolved`
+/// indicates whether a target has been resolved by coordinate lookup or user
+/// pick for light frames.
+///
+/// Returns the sorted list of registry key names that are missing.
+#[must_use]
+pub fn check_mandatory_missing(
+    ft: FrameType,
+    raw_meta: Option<&metadata_core::RawFileMetadata>,
+    target_resolved: bool,
+) -> Vec<String> {
+    let mandatory = mandatory_set_for(ft);
+    let mut missing = Vec::new();
+
+    for key in mandatory {
+        let absent = match key {
+            "target" => {
+                // light-only: satisfied by coordinate resolution or user pick.
+                !target_resolved
+                    && raw_meta.and_then(|m| m.object.as_deref()).map_or("", str::trim).is_empty()
+            }
+            "filter" => raw_meta.and_then(|m| m.filter.as_deref()).map_or("", str::trim).is_empty(),
+            "exposureS" => !raw_meta
+                .and_then(|m| m.exposure.as_deref())
+                .is_some_and(|s| s.trim().parse::<f64>().is_ok_and(|v| v > 0.0)),
+            "gain" => raw_meta.and_then(|m| m.gain.as_deref()).map_or("", str::trim).is_empty(),
+            // "frameType" is always present when ft is known; unknown keys never absent.
+            _ => false,
+        };
+        if absent {
+            missing.push(key.to_owned());
+        }
+    }
+    missing
+}
+
+/// Build a [`FrameMetadata`] from a [`metadata_core::RawFileMetadata`] for use
+/// with the grouping engine (T066). Only fields that the grouping engine reads
+/// are populated; extended fields (set_temp, pointing, rotation, optic-train,
+/// observing-night) require additional FITS keywords not yet extracted by the
+/// core extractor — they default to `None` so those dimensions gracefully fall
+/// back to the [`crate::grouping::SENTINEL_MISSING`] bucket (R-9 best-effort).
+pub(crate) fn build_frame_metadata(
+    frame_type: FrameType,
+    raw: &metadata_core::RawFileMetadata,
+) -> FrameMetadata {
+    fn parse_f64(s: Option<&String>) -> Option<f64> {
+        s.and_then(|v| v.trim().parse::<f64>().ok())
+    }
+    fn parse_i32(s: Option<&String>) -> Option<i32> {
+        s.and_then(|v| {
+            let t = v.trim();
+            t.parse::<i32>()
+                .ok()
+                .or_else(|| t.strip_suffix(".0").and_then(|i| i.parse::<i32>().ok()))
+        })
+    }
+    FrameMetadata {
+        frame_type,
+        filter: raw.filter.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned),
+        exposure_s: parse_f64(raw.exposure.as_ref()),
+        gain: raw.gain.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned),
+        offset: None, // OFFSET not yet in RawFileMetadata; phase-12 adds it
+        binning_x: parse_i32(raw.x_binning.as_ref()),
+        binning_y: parse_i32(raw.y_binning.as_ref()),
+        set_temp_c: None, // SET-TEMP: phase-12
+        ccd_temp_c: None, // CCD-TEMP: phase-12
+        ra_deg: None,     // RA/DEC: phase-12
+        dec_deg: None,
+        rotator_angle_deg: None, // ROTATANG: phase-12
+        readout_mode: None,      // READOUTM: phase-12
+        telescop: raw
+            .telescop
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned),
+        instrume: raw
+            .instrume
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned),
+        focal_length_mm: None, // FOCALLEN: phase-12
+        date_loc: None,        // DATE-LOC: phase-12
+        date_obs: raw
+            .date_obs
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned),
+    }
+}
+
+/// Materialize one single-type `inbox_items` sub-item per homogeneous group
+/// within a source group (spec 041 T066/T070, R-9/R-10/R-11/R-12/R-14).
+///
+/// # Algorithm
+/// 1. Build a [`FrameMetadata`] for each file from its extracted raw metadata.
+/// 2. Call [`group_file`] with [`GroupingConfig::default_for`] the file's frame
+///    type to get a deterministic `(group_key, group_label)`.
+/// 3. Unclassifiable files (no frame type) **or** files missing a mandatory
+///    attribute (T070 / FR-047/FR-048) go into the sentinel
+///    [`SENTINEL_NEEDS_REVIEW`] bucket.
+/// 4. Per group: compute a per-sub-group `content_signature` =
+///    `folder_signature(sorted per-file sigs of files in that group)`, then
+///    upsert an `inbox_items` row with identity `(root_id, relative_path,
+///    group_key)` — stable across rescans of unchanged content (FR-042).
+/// 5. Update the source group's `child_count`.
+///
+/// Failures are silently ignored — classify's primary evidence/classification
+/// result is unaffected.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn materialize_sub_items(
+    pool: &sqlx::SqlitePool,
+    source_group_id: &str,
+    root_id: &str,
+    relative_path: &str,
+    lane: &str,
+    file_paths: &[PathBuf],
+    file_records: &[(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)],
+) {
+    // Step 1 + 2 + T070 gate: partition files by group_key.
+    // key → (group_label, Vec<abs_path>)
+    let mut groups: std::collections::HashMap<String, (String, Vec<PathBuf>)> =
+        std::collections::HashMap::new();
+
+    for (i, (rel, frame_type_opt, raw_meta_opt)) in file_records.iter().enumerate() {
+        let abs_path = file_paths.get(i).cloned();
+
+        let (group_key, group_label) = if let Some(ft) = *frame_type_opt {
+            // T070 / FR-047: check mandatory attributes before grouping.
+            // target_resolved=false: coordinate resolution (FR-052) is not yet
+            // integrated at classify time; the user's OBJECT header value is
+            // used as the proxy. Lights with no OBJECT go to needs-review.
+            let missing = check_mandatory_missing(ft, raw_meta_opt.as_ref(), false);
+            if missing.is_empty() {
+                // Build effective FrameMetadata for the grouping engine.
+                let meta = raw_meta_opt.as_ref().map_or_else(
+                    || FrameMetadata { frame_type: ft, ..Default::default() },
+                    |r| build_frame_metadata(ft, r),
+                );
+
+                let config = GroupingConfig::default_for(ft);
+                let result = group_file(&meta, &config);
+                (result.key.0, result.label.0)
+            } else {
+                // Missing mandatory attributes — sentinel bucket (FR-048).
+                (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned())
+            }
+        } else {
+            // Unclassifiable (no frame type) — sentinel bucket (FR-048).
+            (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned())
+        };
+
+        let entry = groups.entry(group_key).or_insert_with(|| (group_label, Vec::new()));
+        // Track the absolute path for signature computation.
+        if let Some(p) = abs_path {
+            entry.1.push(p);
+        } else {
+            // If we can't resolve the abs path (shouldn't happen), still create
+            // the group entry so the sub-item is upserted with file_count.
+            let _ = rel; // rel is in scope; abs derivation would need root + rel
+        }
+    }
+
+    // Step 4 + 5: upsert one sub-item per group and update child_count.
+    let child_count = i64::try_from(groups.len()).unwrap_or(i64::MAX);
+
+    for (group_key, (group_label, abs_paths)) in &groups {
+        // Per-sub-group content_signature (R-11).
+        let file_sigs: Vec<[u8; 32]> =
+            abs_paths.iter().filter_map(|p| super::signature::file_signature(p)).collect();
+        let sub_sig = folder_signature(file_sigs);
+
+        // Determine frame_type from the group_key prefix (type=<value>).
+        let frame_type_str: Option<&str> = if group_key == SENTINEL_NEEDS_REVIEW {
+            None
+        } else {
+            // group_key starts with "type=<ft>·..." — extract the type token.
+            group_key
+                .strip_prefix("type=")
+                .and_then(|rest| rest.split('·').next())
+                .filter(|s| !s.is_empty())
+        };
+
+        let file_count = i64::try_from(abs_paths.len()).unwrap_or(i64::MAX);
+        let sub_id = Uuid::new_v4().to_string();
+
+        let sub_item = UpsertInboxSubItem {
+            id: &sub_id,
+            root_id,
+            relative_path,
+            source_group_id,
+            group_key,
+            group_label,
+            frame_type: frame_type_str,
+            content_signature: &sub_sig,
+            file_count,
+            lane,
+        };
+
+        repo::upsert_inbox_sub_item(pool, &sub_item).await.ok();
+    }
+
+    // Purge sub-item rows for groups that no longer exist: when a file's metadata
+    // changes it moves to a different group, leaving its old group empty. The
+    // upsert loop above never touches those orphaned rows, so delete them here
+    // (preserving any plan-linked item). Without this, a rescan after a metadata
+    // change leaves a stale sub-item (spec 041 R-11/FR-042; T067 regression).
+    let current_keys: std::collections::HashSet<&str> = groups.keys().map(String::as_str).collect();
+    if let Ok(existing) = repo::list_inbox_sub_items(pool, source_group_id).await {
+        for row in existing {
+            if !current_keys.contains(row.group_key.as_str()) {
+                repo::delete_sub_item_if_unlinked(pool, &row.id).await.ok();
+            }
+        }
+    }
+
+    repo::update_source_group_child_count(pool, source_group_id, child_count).await.ok();
+}
+
 /// Enumerate FITS/XISF files directly inside a folder (non-recursive).
 fn enumerate_fits_files(folder: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
@@ -644,6 +969,7 @@ async fn build_response_from_cache(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use persistence_db::repositories::inbox as inbox_repo;
     use persistence_db::repositories::inbox::InsertInboxItem;
     use persistence_db::Database;
     use std::io::Write;
@@ -1072,5 +1398,935 @@ mod tests {
         );
         // The override values must also survive the rescan.
         assert_eq!(row.override_filter.as_deref(), Some("Ha"));
+    }
+
+    // ── T066: sub-item materialization tests ─────────────────────────────────
+
+    /// Insert a source group + inbox item with source_group_id set.
+    /// Returns (source_group_id, inbox_item_id).
+    async fn insert_source_group_with_item(
+        db: &Database,
+        sg_id: &str,
+        item_id: &str,
+        root_id: &str,
+        relative_path: &str,
+    ) {
+        let pool = db.pool();
+        // Insert registered_sources row (FK required by inbox_source_groups).
+        sqlx::query(
+            "INSERT OR IGNORE INTO registered_sources \
+             (id, path, kind, scan_depth, organization_state) \
+             VALUES (?, '/test/root', 'inbox', 1, 'unorganized')",
+        )
+        .bind(root_id)
+        .execute(pool)
+        .await
+        .ok();
+
+        // Insert source group.
+        sqlx::query(
+            "INSERT INTO inbox_source_groups \
+             (id, root_id, relative_path, discovered_at, last_scanned_at, child_count) \
+             VALUES (?, ?, ?, '2025-10-10T20:00:00Z', '2025-10-10T20:00:00Z', 0)",
+        )
+        .bind(sg_id)
+        .bind(root_id)
+        .bind(relative_path)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        // Insert inbox_item with source_group_id.
+        sqlx::query(
+            "INSERT INTO inbox_items \
+             (id, root_id, relative_path, source_group_id, group_key, \
+              discovered_at, last_scanned_at, state, lane) \
+             VALUES (?, ?, ?, ?, '', \
+                     '2025-10-10T20:00:00Z', '2025-10-10T20:00:00Z', \
+                     'pending_classification', 'fits')",
+        )
+        .bind(item_id)
+        .bind(root_id)
+        .bind(relative_path)
+        .bind(sg_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn t066_single_type_folder_produces_one_sub_item() {
+        // A folder with only light frames → one single-type sub-item.
+        // T070: lights need OBJECT+FILTER+EXPTIME to pass the mandatory-attr gate.
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_full(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some(300.0),
+            None,
+        );
+        write_fits_full(
+            tmp.path(),
+            "light_002.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some(300.0),
+            None,
+        );
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t066-single", "item-t066-single", "root-sg1", "")
+            .await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t066-single".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Exactly one classified sub-item in the source group.
+        let sub_items =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t066-single").await.unwrap();
+        assert_eq!(sub_items.len(), 1, "single-type folder must produce exactly one sub-item");
+        let si = &sub_items[0];
+        assert_eq!(si.frame_type.as_deref(), Some("light"), "sub-item frame_type must be 'light'");
+        assert!(si.group_key.starts_with("type=light"), "group_key must start with type=light");
+        assert!(si.content_signature.is_some(), "sub-item must have a content_signature");
+        assert_eq!(si.file_count, 2, "sub-item file_count must match files in the group");
+
+        // Source group child_count updated.
+        let sg = inbox_repo::get_inbox_source_group_by_path(db.pool(), "root-sg1", "")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(sg.child_count, 1, "source group child_count must be 1");
+    }
+
+    #[tokio::test]
+    async fn t066_mixed_folder_produces_n_sub_items() {
+        // A folder with lights + darks → two single-type sub-items.
+        // T070: lights need OBJECT+FILTER+EXPTIME; darks need EXPTIME+GAIN.
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_full(
+            tmp.path(),
+            "light_ha.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some(300.0),
+            None,
+        );
+        write_fits_full(
+            tmp.path(),
+            "dark_1.fits",
+            "Dark Frame",
+            None,
+            None,
+            Some(300.0),
+            Some("100"),
+        );
+        write_fits_full(
+            tmp.path(),
+            "dark_2.fits",
+            "Dark Frame",
+            None,
+            None,
+            Some(300.0),
+            Some("100"),
+        );
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t066-mixed", "item-t066-mixed", "root-sg2", "")
+            .await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t066-mixed".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t066-mixed").await.unwrap();
+        assert_eq!(sub_items.len(), 2, "mixed folder must produce one sub-item per frame type");
+
+        let types: Vec<_> = sub_items.iter().filter_map(|s| s.frame_type.as_deref()).collect();
+        assert!(types.contains(&"light"), "must have a light sub-item");
+        assert!(types.contains(&"dark"), "must have a dark sub-item");
+
+        // Each sub-item has its own group_key and content_signature.
+        let keys: std::collections::HashSet<_> =
+            sub_items.iter().map(|s| s.group_key.as_str()).collect();
+        assert_eq!(keys.len(), 2, "each sub-item must have a distinct group_key");
+
+        for si in &sub_items {
+            assert!(si.content_signature.is_some(), "each sub-item must have a content_signature");
+            // file_count per group (1 light, 2 darks).
+            if si.frame_type.as_deref() == Some("light") {
+                assert_eq!(si.file_count, 1);
+            } else {
+                assert_eq!(si.file_count, 2);
+            }
+        }
+
+        // Source group child_count updated.
+        let sg = inbox_repo::get_inbox_source_group_by_path(db.pool(), "root-sg2", "")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(sg.child_count, 2, "source group child_count must be 2");
+    }
+
+    #[tokio::test]
+    async fn t066_rescan_determinism() {
+        // Classifying unchanged content twice must produce identical group keys
+        // and no duplicated sub-items (FR-042).
+        // T070: lights need OBJECT+FILTER+EXPTIME; darks need EXPTIME+GAIN.
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_full(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some(300.0),
+            None,
+        );
+        write_fits_full(
+            tmp.path(),
+            "dark_001.fits",
+            "Dark Frame",
+            None,
+            None,
+            Some(300.0),
+            Some("100"),
+        );
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t066-determ", "item-t066-determ", "root-sg3", "")
+            .await;
+
+        // First classify.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t066-determ".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let items_first =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t066-determ").await.unwrap();
+        let keys_first: Vec<String> = items_first.iter().map(|i| i.group_key.clone()).collect();
+        let sigs_first: Vec<Option<String>> =
+            items_first.iter().map(|i| i.content_signature.clone()).collect();
+
+        // Second classify (force_rescan = true on unchanged content).
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t066-determ".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let items_second =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t066-determ").await.unwrap();
+        let keys_second: Vec<String> = items_second.iter().map(|i| i.group_key.clone()).collect();
+        let sigs_second: Vec<Option<String>> =
+            items_second.iter().map(|i| i.content_signature.clone()).collect();
+
+        // Same group_keys.
+        assert_eq!(
+            keys_first, keys_second,
+            "rescan of unchanged content must produce identical group_keys (FR-042)"
+        );
+        // Same signatures.
+        assert_eq!(
+            sigs_first, sigs_second,
+            "rescan of unchanged content must produce identical content_signatures (FR-042)"
+        );
+        // No duplicates — still exactly 2 sub-items.
+        assert_eq!(items_second.len(), 2, "rescan must not create duplicate sub-items");
+    }
+
+    #[tokio::test]
+    async fn t066_unclassifiable_file_goes_to_sentinel_bucket() {
+        // A file with no IMAGETYP → sentinel __needs_review__ sub-item.
+        let tmp = tempfile::tempdir().unwrap();
+        // No IMAGETYP card.
+        let path = tmp.path().join("mystery.fits");
+        let mut data = vec![b' '; 2880];
+        data[0..3].copy_from_slice(b"END");
+        std::fs::write(&path, &data).unwrap();
+
+        let db = test_db().await;
+        insert_source_group_with_item(
+            &db,
+            "sg-t066-sentinel",
+            "item-t066-sentinel",
+            "root-sg4",
+            "",
+        )
+        .await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t066-sentinel".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t066-sentinel").await.unwrap();
+        assert_eq!(sub_items.len(), 1, "unclassifiable file must produce one sentinel sub-item");
+        let si = &sub_items[0];
+        assert_eq!(
+            si.group_key, SENTINEL_NEEDS_REVIEW,
+            "unclassifiable file must go to __needs_review__ sentinel bucket"
+        );
+        assert!(si.frame_type.is_none(), "sentinel sub-item must have no frame_type");
+    }
+
+    // ── T067: composite identity + signature stability (FR-042) ──────────────
+
+    /// Write a minimal FITS file whose IMAGETYP + FILTER headers are embedded,
+    /// allowing the grouping engine to distinguish the filter dimension.
+    ///
+    /// Unlike `write_fits_with_imagetyp`, this also embeds a FILTER card so that
+    /// two files written with different filter values end up in different sub-groups.
+    fn write_fits_with_filter(dir: &std::path::Path, name: &str, imagetyp: &str, filter: &str) {
+        let path = dir.join(name);
+        let mut data = vec![b' '; 2880];
+        let mut idx = 0usize;
+
+        let mut write_card = |card: &str| {
+            let bytes = card.as_bytes();
+            let len = bytes.len().min(80);
+            data[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+            idx += 1;
+        };
+
+        write_card(&format!("{:<80}", format!("IMAGETYP= '{imagetyp:<8}'")));
+        write_card(&format!("{:<80}", format!("FILTER  = '{filter:<8}'")));
+        data[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
+
+        use std::io::Write as _;
+        let mut f = std::fs::File::create(path).unwrap();
+        f.write_all(&data).unwrap();
+    }
+
+    /// T067-1 — Composite identity uniqueness.
+    ///
+    /// Two flat files that differ ONLY in the `FILTER` header (a grouping
+    /// dimension) must materialise as **two distinct sub-items** with distinct
+    /// `group_key`s. The identity triple `(root_id, relative_path, group_key)`
+    /// must be unique across the pair (R-11).
+    #[tokio::test]
+    async fn t067_composite_identity_differs_by_grouping_dimension() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Two flat files — same folder, same type, but different filters.
+        // The flat recipe includes Filter as a dimension, so they split.
+        write_fits_with_filter(tmp.path(), "flat_ha.fits", "Flat Frame", "Ha");
+        write_fits_with_filter(tmp.path(), "flat_oiii.fits", "Flat Frame", "OIII");
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t067-id", "item-t067-id", "root-t067a", "").await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-id".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-id").await.unwrap();
+
+        // Two files in different filter groups → two sub-items.
+        assert_eq!(
+            sub_items.len(),
+            2,
+            "flat files differing only in FILTER must produce two distinct sub-items; got {sub_items:?}"
+        );
+
+        let keys: std::collections::HashSet<_> =
+            sub_items.iter().map(|s| s.group_key.as_str()).collect();
+        assert_eq!(
+            keys.len(),
+            2,
+            "group_key must differ between the two filter groups — identity is not unique: {sub_items:?}"
+        );
+
+        // Both sub-items share the same (root_id, relative_path) — only group_key differs.
+        for si in &sub_items {
+            assert_eq!(si.root_id, "root-t067a");
+            assert_eq!(si.relative_path, "");
+            assert!(
+                si.group_key.contains("filter="),
+                "group_key must embed the filter dimension: {}",
+                si.group_key
+            );
+        }
+
+        // The two group_keys contain different filter values.
+        let filter_values: Vec<_> = sub_items
+            .iter()
+            .map(|s| {
+                s.group_key
+                    .split('·')
+                    .find(|seg| seg.starts_with("filter="))
+                    .unwrap_or("filter=<missing>")
+                    .to_owned()
+            })
+            .collect();
+        assert_ne!(
+            filter_values[0], filter_values[1],
+            "the two group_keys must embed different filter tokens; both read: {}",
+            filter_values[0]
+        );
+    }
+
+    /// T067-2 — Per-sub-group signature correctness.
+    ///
+    /// Each sub-item's `content_signature` must equal
+    /// `folder_signature(sorted(per-file sigs of only the files in that group))`
+    /// (R-11). Two sub-groups in the same folder must therefore have **different**
+    /// signatures because they cover different file sets.
+    #[tokio::test]
+    async fn t067_per_subgroup_signatures_differ_and_match_formula() {
+        let tmp = tempfile::tempdir().unwrap();
+        // One Ha flat and one OIII flat → two distinct groups.
+        write_fits_with_filter(tmp.path(), "flat_ha.fits", "Flat Frame", "Ha");
+        write_fits_with_filter(tmp.path(), "flat_oiii.fits", "Flat Frame", "OIII");
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t067-sig", "item-t067-sig", "root-t067b", "").await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-sig".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-sig").await.unwrap();
+        assert_eq!(sub_items.len(), 2, "expected two sub-items");
+
+        // Both must have a non-empty content_signature.
+        for si in &sub_items {
+            assert!(
+                si.content_signature.as_deref().map(|s| !s.is_empty()).unwrap_or(false),
+                "sub-item {} must have a non-empty content_signature",
+                si.group_key
+            );
+        }
+
+        // The two sub-groups share the same folder but different file sets →
+        // their per-sub-group signatures must be distinct.
+        let sig_a = sub_items[0].content_signature.as_deref().unwrap_or("");
+        let sig_b = sub_items[1].content_signature.as_deref().unwrap_or("");
+        assert_ne!(
+            sig_a, sig_b,
+            "two sub-groups covering different files must have distinct content_signatures"
+        );
+
+        // Verify each signature matches the formula: folder_signature(sorted per-file sigs).
+        // We can do this by computing the expected signature for each group ourselves
+        // and comparing — we know which file belongs to which group from the group_key.
+        let ha_abs = tmp.path().join("flat_ha.fits");
+        let oiii_abs = tmp.path().join("flat_oiii.fits");
+
+        // Access signature primitives through the crate root (sibling module of classify).
+        let ha_file_sig =
+            crate::signature::file_signature(&ha_abs).expect("flat_ha.fits must be stat-able");
+        let oiii_file_sig =
+            crate::signature::file_signature(&oiii_abs).expect("flat_oiii.fits must be stat-able");
+
+        let expected_ha_sig = crate::signature::folder_signature(vec![ha_file_sig]);
+        let expected_oiii_sig = crate::signature::folder_signature(vec![oiii_file_sig]);
+
+        // Locate which sub-item corresponds to which filter.
+        let ha_item = sub_items
+            .iter()
+            .find(|s| s.group_key.contains("filter=ha"))
+            .expect("must find Ha sub-item by group_key");
+        let oiii_item = sub_items
+            .iter()
+            .find(|s| s.group_key.contains("filter=oiii"))
+            .expect("must find OIII sub-item by group_key");
+
+        assert_eq!(
+            ha_item.content_signature.as_deref().unwrap_or(""),
+            expected_ha_sig,
+            "Ha sub-item signature must equal folder_signature(sorted per-file sigs of Ha group)"
+        );
+        assert_eq!(
+            oiii_item.content_signature.as_deref().unwrap_or(""),
+            expected_oiii_sig,
+            "OIII sub-item signature must equal folder_signature(sorted per-file sigs of OIII group)"
+        );
+    }
+
+    /// T067-3 — Rescan determinism (the key FR-042 property).
+    ///
+    /// Classifying identical content twice must yield:
+    /// - identical `group_key` for every sub-item,
+    /// - identical `content_signature` for every sub-item, and
+    /// - **no new rows** (the UNIQUE constraint absorbs the upsert).
+    ///
+    /// This extends the existing `t066_rescan_determinism` test with an explicit
+    /// filter-split scenario (two sub-items) and asserts the count stays at two.
+    #[tokio::test]
+    async fn t067_rescan_determinism_no_item_churn() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_filter(tmp.path(), "flat_ha.fits", "Flat Frame", "Ha");
+        write_fits_with_filter(tmp.path(), "flat_oiii.fits", "Flat Frame", "OIII");
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t067-redet", "item-t067-redet", "root-t067c", "")
+            .await;
+
+        // First classify.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-redet".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let first = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-redet").await.unwrap();
+        let first_keys: Vec<_> = first.iter().map(|s| s.group_key.clone()).collect();
+        let first_sigs: Vec<_> = first.iter().map(|s| s.content_signature.clone()).collect();
+
+        // Second classify — force rescan, same files on disk.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-redet".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let second = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-redet").await.unwrap();
+        let second_keys: Vec<_> = second.iter().map(|s| s.group_key.clone()).collect();
+        let second_sigs: Vec<_> = second.iter().map(|s| s.content_signature.clone()).collect();
+
+        // Count must not grow.
+        assert_eq!(
+            second.len(),
+            2,
+            "rescan must not create duplicate sub-items; expected 2, got {}",
+            second.len()
+        );
+
+        // Keys and signatures must be bitwise identical.
+        assert_eq!(
+            first_keys, second_keys,
+            "rescan of unchanged content must produce identical group_keys (FR-042)"
+        );
+        assert_eq!(
+            first_sigs, second_sigs,
+            "rescan of unchanged content must produce identical content_signatures (FR-042)"
+        );
+    }
+
+    /// T067-4 — Correct churn on change.
+    ///
+    /// When a file's metadata moves it to a different sub-group (here: we replace
+    /// a file on disk with a different FILTER header so the extractor sees a new
+    /// value), the affected sub-group signatures must change after the next
+    /// classify.  Specifically:
+    ///
+    /// - The old sub-group (Ha) now has zero files → it must be absent from the
+    ///   live sub-item list (not left as a stale row).
+    /// - The new sub-group (SII) appears with the moved file.
+    /// - The untouched group (OIII, flat_b) has a stable signature.
+    ///
+    /// This models the "file whose metadata/override moves it to a different group
+    /// changes both its old and new sub-group signatures" requirement (R-11).
+    ///
+    /// # KNOWN BUG (production code)
+    ///
+    /// `materialize_sub_items` (classify.rs) uses `upsert_inbox_sub_item` which
+    /// runs `ON CONFLICT … DO UPDATE` for groups that still exist after the rescan,
+    /// but **never deletes rows for groups that have become empty**.  After flat_a
+    /// moves from Ha→SII, the Ha row persists in `inbox_items` with its old
+    /// `file_count = 1` — it is never cleaned up.
+    ///
+    /// Expected result: 2 sub-items (OIII + SII) after the rescan.
+    /// Actual result:   3 sub-items (Ha stale + OIII + SII) — the Ha row survives.
+    ///
+    /// The failing assertion below (`ha_after.is_none()`) documents this bug.
+    /// Fix required: after upserting the current groups, delete `inbox_items` rows
+    /// belonging to this `source_group_id` whose `group_key` is NOT in the current
+    /// set (i.e. `DELETE … WHERE source_group_id = ? AND group_key NOT IN (…)`).
+    #[tokio::test]
+    async fn t067_churn_on_metadata_change_updates_group_signatures() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Initial state: Ha flat + OIII flat → two sub-items.
+        write_fits_with_filter(tmp.path(), "flat_a.fits", "Flat Frame", "Ha");
+        write_fits_with_filter(tmp.path(), "flat_b.fits", "Flat Frame", "OIII");
+
+        let db = test_db().await;
+        insert_source_group_with_item(&db, "sg-t067-churn", "item-t067-churn", "root-t067d", "")
+            .await;
+
+        // First classify: Ha group (flat_a) + OIII group (flat_b).
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-churn".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let first = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-churn").await.unwrap();
+        assert_eq!(first.len(), 2, "initial classify: two filter groups");
+
+        let ha_sig_before = first
+            .iter()
+            .find(|s| s.group_key.contains("filter=ha"))
+            .expect("Ha sub-item must exist after first classify")
+            .content_signature
+            .clone();
+
+        // Change flat_a on disk: overwrite with SII filter header so it moves groups.
+        write_fits_with_filter(tmp.path(), "flat_a.fits", "Flat Frame", "SII");
+
+        // Second classify: now Ha is gone, OIII remains, SII appears.
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t067-churn".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let second = inbox_repo::list_inbox_sub_items(db.pool(), "sg-t067-churn").await.unwrap();
+
+        // SII sub-item must now exist (new group from the moved file).
+        let sii_after = second.iter().find(|s| s.group_key.contains("filter=sii"));
+        assert!(
+            sii_after.is_some(),
+            "SII sub-item must appear after flat_a was rewritten with FILTER=SII; \
+             got sub-items: {second:?}"
+        );
+
+        // OIII sub-item must still exist and its signature must be unchanged
+        // (flat_b was not touched).
+        let oiii_before = first
+            .iter()
+            .find(|s| s.group_key.contains("filter=oiii"))
+            .expect("OIII sub-item must exist after first classify");
+        let oiii_after = second
+            .iter()
+            .find(|s| s.group_key.contains("filter=oiii"))
+            .expect("OIII sub-item must still exist after second classify");
+        assert_eq!(
+            oiii_before.content_signature, oiii_after.content_signature,
+            "OIII sub-item signature must be stable when its files are unchanged"
+        );
+
+        // The new SII sub-item's signature must differ from the old Ha signature
+        // because the file was rewritten on disk (different content → different file sig).
+        let sii_sig = sii_after.unwrap().content_signature.as_deref().unwrap_or("");
+        assert_ne!(
+            ha_sig_before.as_deref().unwrap_or(""),
+            sii_sig,
+            "SII sub-item signature must differ from the old Ha signature after the file changed"
+        );
+
+        // ── BUG ASSERTION (will fail until production code is fixed) ───────────
+        //
+        // After flat_a moved from Ha→SII, the Ha row must be purged.
+        // Currently `materialize_sub_items` never deletes stale group rows, so
+        // the Ha row survives.  Expected: 2 sub-items.  Actual (buggy): 3.
+        let ha_after = second.iter().find(|s| s.group_key.contains("filter=ha"));
+        assert!(
+            ha_after.is_none(),
+            "BUG: Ha sub-item must be absent after flat_a moved to SII (R-11 correct churn). \
+             materialize_sub_items must delete inbox_items rows for groups no longer in \
+             the current scan. Got stale row: {ha_after:?}. \
+             All sub-items after rescan: {second:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn t066_no_source_group_does_not_create_sub_items() {
+        // Items without a source_group_id (legacy or pre-T065 scan) must not
+        // have sub-items created — the materialization is skipped gracefully.
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
+
+        let db = test_db().await;
+        // Insert WITHOUT a source_group_id (legacy path via insert_inbox_item).
+        let item_id = "item-t066-legacy";
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-legacy",
+                relative_path: "",
+                file_count: 0,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: item_id.to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        // No source group → no sub-items (can't list, so just verify classify
+        // returned normally without error; no assertion on sub-items needed).
+        // The classify response should still show single_type.
+        let cached = repo::get_classification(db.pool(), item_id).await.unwrap();
+        assert!(cached.is_some(), "classification must be persisted");
+    }
+
+    // ── T070 tests — mandatory-attribute gate ────────────────────────────────
+
+    /// Write a FITS file with optional header cards (imagetyp, object, filter,
+    /// exptime, gain).  Used for the T070 mandatory-attribute gate tests.
+    fn write_fits_full(
+        dir: &Path,
+        name: &str,
+        imagetyp: &str,
+        object: Option<&str>,
+        filter: Option<&str>,
+        exptime: Option<f64>,
+        gain: Option<&str>,
+    ) {
+        let path = dir.join(name);
+        let mut block = vec![b' '; 2880];
+        let mut idx = 0usize;
+        let mut write_card = |card: String| {
+            let bytes = card.as_bytes();
+            let len = bytes.len().min(80);
+            block[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+            idx += 1;
+        };
+        write_card(format!("{:<80}", format!("IMAGETYP= '{imagetyp:<8}'")));
+        if let Some(v) = object {
+            write_card(format!("{:<80}", format!("OBJECT  = '{v}'")));
+        }
+        if let Some(v) = filter {
+            write_card(format!("{:<80}", format!("FILTER  = '{v}'")));
+        }
+        if let Some(v) = exptime {
+            write_card(format!("{:<80}", format!("EXPTIME = {v}")));
+        }
+        if let Some(v) = gain {
+            write_card(format!("{:<80}", format!("GAIN    = {v}")));
+        }
+        block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
+        let mut f = std::fs::File::create(path).unwrap();
+        use std::io::Write as _;
+        f.write_all(&block).unwrap();
+    }
+
+    /// T070/FR-047/FR-048: a light frame missing `target` (no OBJECT header)
+    /// must route to the __needs_review__ sentinel sub-item.
+    #[tokio::test]
+    async fn t070_light_missing_target_goes_to_sentinel() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Light with filter + exptime but NO OBJECT → target is missing.
+        write_fits_full(
+            tmp.path(),
+            "light_no_target.fits",
+            "Light Frame",
+            None, // no OBJECT
+            Some("Ha"),
+            Some(300.0),
+            Some("100"),
+        );
+
+        let db = test_db().await;
+        insert_source_group_with_item(
+            &db,
+            "sg-t070-light-no-target",
+            "item-t070-light-no-target",
+            "root-t070a",
+            "",
+        )
+        .await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t070-light-no-target".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t070-light-no-target").await.unwrap();
+        assert_eq!(sub_items.len(), 1, "light missing target must produce one sentinel sub-item");
+        assert_eq!(
+            sub_items[0].group_key, SENTINEL_NEEDS_REVIEW,
+            "light missing target must go to __needs_review__ sentinel"
+        );
+        assert!(sub_items[0].frame_type.is_none(), "sentinel sub-item must have no frame_type");
+    }
+
+    /// T070/FR-047/FR-048: a dark frame missing `exposureS` must route to the
+    /// __needs_review__ sentinel sub-item.
+    #[tokio::test]
+    async fn t070_dark_missing_exposure_goes_to_sentinel() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Dark with gain but NO EXPTIME → exposureS is missing.
+        write_fits_full(
+            tmp.path(),
+            "dark_no_exp.fits",
+            "Dark Frame",
+            None,
+            None,
+            None, // no EXPTIME
+            Some("100"),
+        );
+
+        let db = test_db().await;
+        insert_source_group_with_item(
+            &db,
+            "sg-t070-dark-no-exp",
+            "item-t070-dark-no-exp",
+            "root-t070b",
+            "",
+        )
+        .await;
+
+        classify(
+            db.pool(),
+            ClassifyRequest {
+                inbox_item_id: "item-t070-dark-no-exp".to_owned(),
+                root_absolute_path: tmp.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        let sub_items =
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-t070-dark-no-exp").await.unwrap();
+        assert_eq!(sub_items.len(), 1, "dark missing exposure must produce one sentinel sub-item");
+        assert_eq!(
+            sub_items[0].group_key, SENTINEL_NEEDS_REVIEW,
+            "dark missing exposure must go to __needs_review__ sentinel"
+        );
+    }
+
+    /// T070: check_mandatory_missing for various frame types.
+    #[test]
+    fn t070_mandatory_set_for_frame_types() {
+        use metadata_core::FrameType;
+
+        // light: frameType + target + filter + exposureS
+        let set = mandatory_set_for(FrameType::Light);
+        assert!(set.contains(&"target"), "light must require target");
+        assert!(set.contains(&"filter"), "light must require filter");
+        assert!(set.contains(&"exposureS"), "light must require exposureS");
+        assert!(set.contains(&"frameType"), "light must require frameType");
+
+        // dark: frameType + exposureS + gain (no target/filter)
+        let set = mandatory_set_for(FrameType::Dark);
+        assert!(set.contains(&"exposureS"), "dark must require exposureS");
+        assert!(set.contains(&"gain"), "dark must require gain");
+        assert!(!set.contains(&"target"), "dark must NOT require target");
+        assert!(!set.contains(&"filter"), "dark must NOT require filter");
+
+        // bias: frameType + gain (no exposure/filter/target)
+        let set = mandatory_set_for(FrameType::Bias);
+        assert!(set.contains(&"gain"), "bias must require gain");
+        assert!(!set.contains(&"exposureS"), "bias must NOT require exposureS");
+
+        // flat: frameType + filter
+        let set = mandatory_set_for(FrameType::Flat);
+        assert!(set.contains(&"filter"), "flat must require filter");
+        assert!(!set.contains(&"gain"), "flat must NOT require gain by default");
+    }
+
+    /// T070: check_mandatory_missing correctly flags absent attributes.
+    #[test]
+    fn t070_check_mandatory_missing_light() {
+        use metadata_core::{FrameType, RawFileMetadata};
+
+        // Light with no OBJECT, no filter, no exposure → target+filter+exposureS missing.
+        let raw = RawFileMetadata::default();
+        let missing = check_mandatory_missing(FrameType::Light, Some(&raw), false);
+        assert!(missing.contains(&"target".to_owned()), "target must be missing: {missing:?}");
+        assert!(missing.contains(&"filter".to_owned()), "filter must be missing: {missing:?}");
+        assert!(
+            missing.contains(&"exposureS".to_owned()),
+            "exposureS must be missing: {missing:?}"
+        );
+        assert!(!missing.contains(&"frameType".to_owned()), "frameType must not be missing");
+
+        // Light with all mandatory attrs present.
+        let raw_full = RawFileMetadata {
+            object: Some("M42".to_owned()),
+            filter: Some("Ha".to_owned()),
+            exposure: Some("300".to_owned()),
+            ..Default::default()
+        };
+        let missing_full = check_mandatory_missing(FrameType::Light, Some(&raw_full), false);
+        assert!(
+            missing_full.is_empty(),
+            "fully-attributed light must have no missing attrs: {missing_full:?}"
+        );
     }
 }

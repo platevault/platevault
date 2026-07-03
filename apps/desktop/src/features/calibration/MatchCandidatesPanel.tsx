@@ -30,6 +30,7 @@ import type {
   MismatchReason,
 } from '@/api/commands';
 import { m } from '@/lib/i18n';
+import { RotationWarningNotice, type RotationWarning } from './RotationWarning';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -95,10 +96,19 @@ function ConfidenceBar({ value }: { value: number }) {
 
 // ── Dimension breakdown (matched + mismatched) ────────────────────────────────
 
-function DimensionBreakdown({ match }: { match: CalibrationMatchDto }) {
+/**
+ * Optional flat↔light rotation warning carried alongside a match (spec 041
+ * T080 / FR-040). The suggest DTO does not yet carry this field; it is read
+ * defensively so a future contract enrichment surfaces automatically.
+ */
+type MatchWithRotation = CalibrationMatchDto & { rotationWarning?: RotationWarning | null };
+
+function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
   const hasMismatches = match.dimensionsMismatched.length > 0;
   return (
     <div className="alm-match-candidates__dim-list">
+      <RotationWarningNotice warning={match.rotationWarning} />
+
       {match.dimensionsMatched.map((d) => (
         <span
           key={d.dimension}
