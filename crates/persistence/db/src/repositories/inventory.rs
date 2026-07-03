@@ -228,6 +228,68 @@ pub async fn list_project_links_for_sessions(
     Ok(rows)
 }
 
+/// Session context enrichment row (spec P9): resolved target/filter/night/
+/// frame-count for a light (`acquisition_session`) row, keyed by session id.
+///
+/// `target_name` prefers the user-owned `display_alias` over
+/// `primary_designation` (same effective-label rule as the Targets surface).
+/// `filter` and `acquisition_night` come from `acquisition_fingerprint`
+/// (absent until the metadata extraction pipeline populates a fingerprint
+/// row). `frame_count` is derived from `json_array_length(frame_ids)` and is
+/// always present for a matched row (the column is `NOT NULL DEFAULT '[]'`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SessionContextRow {
+    pub id: String,
+    pub target_name: Option<String>,
+    pub filter: Option<String>,
+    pub acquisition_night: Option<String>,
+    pub frame_count: i64,
+}
+
+/// Batch-load session context for calibration match-suggest enrichment
+/// (spec P9). One query for the whole `session_ids` set — callers MUST NOT
+/// call this per-row (N+1).
+///
+/// Only `acquisition_session` (light) rows are covered; calibration sessions
+/// have no target/filter/night context to enrich. Ids with no matching row
+/// (unknown session, or a calibration session id) are simply absent from the
+/// returned `Vec` — callers treat a missing id as "no context available".
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_session_context_by_ids(
+    pool: &SqlitePool,
+    session_ids: &[String],
+) -> DbResult<Vec<SessionContextRow>> {
+    if session_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = vec!["?"; session_ids.len()].join(",");
+    let sql = format!(
+        "SELECT
+             acs.id                                              AS id,
+             COALESCE(ct.display_alias, ct.primary_designation)  AS target_name,
+             af.filter_name                                      AS filter,
+             af.observing_night_date                             AS acquisition_night,
+             json_array_length(acs.frame_ids)                    AS frame_count
+         FROM acquisition_session acs
+         LEFT JOIN canonical_target ct ON ct.id = acs.canonical_target_id
+         LEFT JOIN acquisition_fingerprint af ON af.id = acs.id
+         WHERE acs.id IN ({placeholders})"
+    );
+
+    // SQL is built only from a fixed `?` placeholder count (no user strings
+    // in the text); every id flows through `bind`. Same pattern as the
+    // dynamic `IN (?, …)` lists in `inbox.rs` / `lifecycle.rs`.
+    let mut q = sqlx::query_as::<_, SessionContextRow>(sqlx::AssertSqlSafe(sql));
+    for id in session_ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows)
+}
+
 /// Set `root_id` on an `acquisition_session` row (T036, FR-012).
 ///
 /// Called when the inbox confirm pipeline resolves the root for a session.
@@ -348,5 +410,98 @@ mod tests {
             .await
             .unwrap();
         assert!(result.is_none());
+    }
+
+    // ── get_session_context_by_ids (spec P9) ──────────────────────────────────
+
+    #[tokio::test]
+    async fn session_context_empty_ids_returns_empty_without_querying() {
+        let db = setup().await;
+        let rows = get_session_context_by_ids(db.pool(), &[]).await.unwrap();
+        assert!(rows.is_empty());
+    }
+
+    #[tokio::test]
+    async fn session_context_batches_multiple_ids_in_one_call() {
+        let db = setup().await;
+
+        sqlx::query(
+            "INSERT INTO canonical_target
+                (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at, display_alias)
+             VALUES ('t-1', NULL, 'M 31', 'galaxy', 10.68, 41.27, 'seed', '2026-01-01T00:00:00Z', 'Andromeda')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at, canonical_target_id) \
+             VALUES ('acq-1', 'M31/L/2026-03-01', '[\"f1\",\"f2\",\"f3\"]', '2026-03-01T00:00:00Z', 't-1')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_fingerprint (id, filter_name, observing_night_date) \
+             VALUES ('acq-1', 'Ha', '2026-03-01')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // A second session with no fingerprint and no canonical target link —
+        // context fields resolve to None, but frame_count is still derived.
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at) \
+             VALUES ('acq-2', 'unknown/L/2026-03-02', '[\"f4\"]', '2026-03-02T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let ids = vec!["acq-1".to_owned(), "acq-2".to_owned(), "missing-id".to_owned()];
+        let mut rows = get_session_context_by_ids(db.pool(), &ids).await.unwrap();
+        rows.sort_by(|a, b| a.id.cmp(&b.id));
+
+        // Unknown session ids are simply absent — no error, no phantom row.
+        assert_eq!(rows.len(), 2, "missing-id must not produce a row");
+
+        assert_eq!(rows[0].id, "acq-1");
+        assert_eq!(rows[0].target_name.as_deref(), Some("Andromeda"), "display_alias wins");
+        assert_eq!(rows[0].filter.as_deref(), Some("Ha"));
+        assert_eq!(rows[0].acquisition_night.as_deref(), Some("2026-03-01"));
+        assert_eq!(rows[0].frame_count, 3);
+
+        assert_eq!(rows[1].id, "acq-2");
+        assert_eq!(rows[1].target_name, None);
+        assert_eq!(rows[1].filter, None);
+        assert_eq!(rows[1].acquisition_night, None);
+        assert_eq!(rows[1].frame_count, 1);
+    }
+
+    #[tokio::test]
+    async fn session_context_falls_back_to_primary_designation_without_display_alias() {
+        let db = setup().await;
+
+        sqlx::query(
+            "INSERT INTO canonical_target
+                (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
+             VALUES ('t-2', NULL, 'NGC 7000', 'nebula', 20.0, 30.0, 'seed', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at, canonical_target_id) \
+             VALUES ('acq-3', 'NGC7000/L/2026-04-01', '[]', '2026-04-01T00:00:00Z', 't-2')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let rows = get_session_context_by_ids(db.pool(), &["acq-3".to_owned()]).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].target_name.as_deref(), Some("NGC 7000"));
+        assert_eq!(rows[0].frame_count, 0);
     }
 }

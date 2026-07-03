@@ -49,6 +49,9 @@ import type {
   Filter,
   CreateFilter,
   UpdateFilter,
+  CalibrationMatchSuggestResponse,
+  CalibrationMatchBatchResponse,
+  CalibrationMatchDto_Serialize,
 } from '@/bindings/index';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -186,6 +189,46 @@ const mockMatchCandidates: MatchCandidate[] = [
 ];
 
 /**
+ * `calibration.match.suggest` / `.suggest.batch` fixtures (spec P9).
+ *
+ * The second candidate deliberately omits every session-context field to
+ * exercise the real-app "—" fallback (no canonical target link / no
+ * fingerprint row) alongside the first candidate's fully-resolved context.
+ */
+function mockCalibrationMatches(sessionId: string): CalibrationMatchDto_Serialize[] {
+  return [
+    {
+      sessionId,
+      masterId: 'master-001',
+      calibrationType: 'dark',
+      confidence: 0.97,
+      dimensionsMatched: [
+        { dimension: 'gain', observed: { value: 100 }, reference: { value: 100 } },
+        { dimension: 'offset', observed: { value: 10 }, reference: { value: 10 } },
+      ],
+      dimensionsMismatched: [],
+      selectionReason: 'same_night',
+      targetName: 'M 31',
+      filter: 'Ha',
+      acquisitionNight: '2026-05-18',
+      frameCount: 42,
+    },
+    {
+      sessionId,
+      masterId: 'master-002',
+      calibrationType: 'dark',
+      confidence: 0.81,
+      dimensionsMatched: [{ dimension: 'gain', observed: { value: 100 }, reference: { value: 100 } }],
+      dimensionsMismatched: [
+        { dimension: 'temperature', reason: 'out_of_tolerance', delta: 3.5 },
+      ],
+      selectionReason: 'compatible_fallback',
+      // Unresolved session context — every P9 field stays absent.
+    },
+  ];
+}
+
+/**
  * Dispatch a mock IPC response for `cmd`.
  *
  * Returns `Promise<unknown>`: the caller (`invoke<T>` in `ipc.ts` /
@@ -224,6 +267,32 @@ export async function mockInvoke(
     }
     case 'calibration_matches': {
       return mockMatchCandidates;
+    }
+    case 'calibration_match_suggest': {
+      const req = (_args as { req?: { requestId?: string; sessionId?: string } } | undefined)?.req;
+      const sessionId = req?.sessionId ?? 'ses-001';
+      return {
+        status: 'success',
+        contractVersion: '2.0.0',
+        requestId: req?.requestId ?? crypto.randomUUID(),
+        suggestStatus: 'match',
+        matches: mockCalibrationMatches(sessionId),
+      } satisfies CalibrationMatchSuggestResponse;
+    }
+    case 'calibration_match_suggest_batch': {
+      const req = (_args as { req?: { requestId?: string; sessionIds?: string[] } } | undefined)?.req;
+      const sessionIds = req?.sessionIds ?? ['ses-001'];
+      return {
+        status: 'success',
+        contractVersion: '1.0',
+        requestId: req?.requestId ?? crypto.randomUUID(),
+        results: sessionIds.map((sessionId) => ({
+          sessionId,
+          calibrationType: 'dark' as const,
+          status: 'match',
+          candidates: mockCalibrationMatches(sessionId),
+        })),
+      } satisfies CalibrationMatchBatchResponse;
     }
     case 'targets_list': {
       const { targets } = await import('@/data/fixtures/targets');

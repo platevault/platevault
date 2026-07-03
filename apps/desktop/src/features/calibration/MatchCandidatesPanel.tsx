@@ -12,9 +12,12 @@
  *   - Respects `prefillSuggestion` to auto-open confirm prompt on top candidate
  *   - Humanized empty state when no sessions match.
  *
- * Target / Filter / Night / Frames are NOT carried on the suggest DTO
- * (`CalibrationMatchDto` only has sessionId + confidence + dimension breakdown);
- * those cells are marked `// STUB:` until the backend enriches the contract.
+ * Target / Filter / Night / Frames come from the P9 session-context
+ * enrichment on `CalibrationMatchDto` (`targetName` / `filter` /
+ * `acquisitionNight` / `frameCount`, all resolved server-side via a single
+ * batched lookup). Any field the backend could not resolve (e.g. no
+ * canonical target link, no fingerprint row) renders as `—`, matching the
+ * fallback convention used elsewhere (e.g. `SessionsTable.tsx`).
  *
  * No Playwright/visual smoke tests — jsdom unit-tested in MatchCandidatesPanel.test.tsx.
  */
@@ -330,7 +333,7 @@ export function MatchCandidatesPanel({
       );
     }
     const isObserverMissing = code === 'match.observer_location_missing' || response.suggestStatus === 'observer_location_missing';
-     
+
     const isMixedState = response.error?.code === 'session.mixed_state';
     const guardMessage = isObserverMissing
       ? m.calibration_observer_missing_guard()
@@ -407,15 +410,10 @@ export function MatchCandidatesPanel({
               {m.sessionId.length > 12 ? '…' : ''}
             </span>
           ),
-          // STUB: target name not on CalibrationMatchDto (suggest contract).
-          // Backend enrichment needed to resolve sessionId → target.
-          target: <span className="alm-match-candidates__stub-cell">—</span>,
-          // STUB: filter not on CalibrationMatchDto. Backend enrichment needed.
-          filter: <span className="alm-match-candidates__stub-cell">—</span>,
-          // STUB: acquisition night not on CalibrationMatchDto. Backend enrichment needed.
-          night: <span className="alm-match-candidates__stub-cell">—</span>,
-          // STUB: frame count not on CalibrationMatchDto. Backend enrichment needed.
-          frames: <span className="alm-match-candidates__stub-cell">—</span>,
+          target: m.targetName ?? '—',
+          filter: m.filter ?? '—',
+          night: m.acquisitionNight ?? '—',
+          frames: m.frameCount ?? '—',
           confidence: <ConfidenceBar value={m.confidence ?? 0} />,
           dimensions: <DimensionBreakdown match={m} />,
           assign: (
