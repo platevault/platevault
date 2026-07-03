@@ -68,18 +68,20 @@ export function useInvalidateInventory() {
 
 // Mutation hook
 
-export type ReviewAction = "confirm" | "reopen" | "reject";
+export type ReviewAction = "confirm" | "reopen" | "reject" | "ignore";
 
 const REVIEW_NEXT_STATE: Record<ReviewAction, InventorySessionReviewRequest["nextState"]> = {
   confirm: "confirmed",
   reopen: "needs_review",
   reject: "rejected",
+  ignore: "ignored",
 };
 
 const REVIEW_LABEL: Record<ReviewAction, string> = {
   confirm: "Confirmed",
   reopen: "Re-opened review",
   reject: "Rejected session",
+  ignore: "Ignored session",
 };
 
 /**

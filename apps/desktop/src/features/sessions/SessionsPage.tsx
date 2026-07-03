@@ -42,6 +42,7 @@ import {
 } from './store';
 import { addToast } from '@/shared/toast';
 import { m } from '@/lib/i18n';
+import { revealInventoryPath } from '@/api/commands';
 import type { InventorySource } from '@/api/commands';
 import type { ReviewFilter } from '@/lib/route-contract';
 import { REVIEW_FILTERS } from '@/lib/route-contract';
@@ -124,6 +125,13 @@ export function SessionsPage() {
   const allSessions = response?.sources.flatMap((src) => src.sessions) ?? [];
   const selectedSession = selected != null ? allSessions.find((s) => s.id === selected) : undefined;
 
+  // Resolve the selected session's owning source path for the Reveal action
+  // (FR-007) — sessions carry only `sourceId`; the path lives on the source.
+  const selectedSourcePath =
+    selectedSession != null
+      ? response?.sources.find((src) => src.id === selectedSession.sourceId)?.path
+      : undefined;
+
   // Clear stale selection when the session disappears after a filter change.
   const clearSelection = useCallback(
     () =>
@@ -175,6 +183,29 @@ export function SessionsPage() {
     }
   }, [selected, review]);
 
+  // Ignore = valid-but-hidden (distinct from Reject); recoverable via the Cmd+K
+  // "Show ignored items" entry → /sessions?reviewFilter=ignored (FR-010).
+  const handleIgnore = useCallback(async () => {
+    if (!selected) return;
+    const result = await review(selected, 'ignore');
+    if (result.noop) return;
+    if (result.ok) {
+      addToast({ message: m.sessions_toast_ignored(), variant: 'info' });
+    } else {
+      addToast({ message: result.error ?? m.sessions_toast_ignored(), variant: 'error' });
+    }
+  }, [selected, review]);
+
+  // Reveal the session's source location in the OS file browser (FR-007).
+  const handleReveal = useCallback(async () => {
+    if (!selected || !selectedSourcePath) return;
+    try {
+      await revealInventoryPath({ path: selectedSourcePath, sessionId: selected });
+    } catch {
+      addToast({ message: m.sessions_toast_reveal_error(), variant: 'error' });
+    }
+  }, [selected, selectedSourcePath]);
+
   const isPending = pending === selected;
 
   // Action-bound CTAs: visibility driven by selected session's canonical state
@@ -183,9 +214,15 @@ export function SessionsPage() {
     selectedSession != null &&
     ['discovered', 'candidate', 'needs_review'].includes(selectedSession.state);
   const reopenVisible =
-    selectedSession != null && ['confirmed', 'rejected'].includes(selectedSession.state);
+    selectedSession != null && ['confirmed', 'rejected', 'ignored'].includes(selectedSession.state);
   const rejectVisible =
     selectedSession != null && selectedSession.state !== 'rejected';
+  // Ignore is offered for not-yet-resolved sessions (the "needs review" family);
+  // once ignored, Re-open (above) brings it back.
+  const ignoreVisible =
+    selectedSession != null &&
+    ['discovered', 'candidate', 'needs_review'].includes(selectedSession.state);
+  const revealVisible = selectedSourcePath != null;
 
   // Top-bar convention (task #80): NO title + NO summary (the left nav names
   // the page; the count/metadata lives in the bottom status bar) and NO sort
@@ -236,9 +273,13 @@ export function SessionsPage() {
             onConfirm={() => void handleConfirm()}
             onReopen={() => void handleReopen()}
             onReject={() => void handleReject()}
+            onIgnore={() => void handleIgnore()}
+            onReveal={() => void handleReveal()}
             confirmVisible={confirmVisible}
             reopenVisible={reopenVisible}
             rejectVisible={rejectVisible}
+            ignoreVisible={ignoreVisible}
+            revealVisible={revealVisible}
             pending={isPending}
             onOpenProject={() => navigate({ to: '/projects' })}
           />

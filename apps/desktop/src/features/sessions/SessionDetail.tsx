@@ -27,10 +27,16 @@ interface Props {
   onConfirm?: () => void;
   onReopen?: () => void;
   onReject?: () => void;
+  onIgnore?: () => void;
+  /** Open the session's source location in the OS file browser (FR-007). */
+  onReveal?: () => void;
   /** Action visibility — driven by the session's canonical state on the page. */
   confirmVisible?: boolean;
   reopenVisible?: boolean;
   rejectVisible?: boolean;
+  ignoreVisible?: boolean;
+  /** Whether the source path is known so Reveal can be offered (FR-007). */
+  revealVisible?: boolean;
   /** A review mutation is in flight for this session. */
   pending?: boolean;
   /** Open a linked project — wired by the page to navigation. */
@@ -71,9 +77,13 @@ export function SessionDetail({
   onConfirm,
   onReopen,
   onReject,
+  onIgnore,
+  onReveal,
   confirmVisible = false,
   reopenVisible = false,
   rejectVisible = false,
+  ignoreVisible = false,
+  revealVisible = false,
   pending = false,
   onOpenProject,
 }: Props) {
@@ -131,6 +141,16 @@ export function SessionDetail({
       {reopenVisible && (
         <Btn size="sm" onClick={onReopen} disabled={pending}>
           {m.sessions_reopen_btn()}
+        </Btn>
+      )}
+      {revealVisible && (
+        <Btn size="sm" onClick={onReveal} title={m.sessions_reveal_title()}>
+          {m.sessions_reveal_btn()}
+        </Btn>
+      )}
+      {ignoreVisible && (
+        <Btn size="sm" onClick={onIgnore} disabled={pending}>
+          {m.sessions_ignore_btn()}
         </Btn>
       )}
       {rejectVisible && (
