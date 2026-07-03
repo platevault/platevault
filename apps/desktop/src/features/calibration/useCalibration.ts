@@ -8,17 +8,13 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import {
-  listCalibrationMasters,
-  calibrationMatchSuggest,
-  calibrationMatchAssign,
-  getSettings,
-} from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import type {
   CalibrationMatchSuggestResponse,
   CalibrationMatchAssignResponse,
-  CalibrationMatchType,
-} from '@/api/commands';
+  CalibrationType,
+} from '@/bindings/index';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
 
@@ -39,7 +35,9 @@ export function useCalibrationMasters(): UseMastersState {
 
   useEffect(() => {
     let cancelled = false;
-    listCalibrationMasters()
+    commands
+      .calibrationMastersList()
+      .then(unwrap)
       .then((masters) => {
         if (!cancelled) setState({ masters, loading: false, error: undefined });
       })
@@ -65,7 +63,7 @@ export interface UseSuggestState {
 
 export function useCalibrationSuggest(
   sessionId: string | undefined,
-  calibrationTypes?: CalibrationMatchType[],
+  calibrationTypes?: CalibrationType[],
 ): UseSuggestState {
   const [response, setResponse] = useState<CalibrationMatchSuggestResponse | undefined>(undefined);
   const [loading, setLoading] = useState(false);
@@ -83,11 +81,14 @@ export function useCalibrationSuggest(
     let cancelled = false;
     setLoading(true);
     setError(undefined);
-    calibrationMatchSuggest({
-      requestId: `suggest-${sessionId}-${Date.now()}`,
-      sessionId,
-      calibrationTypes,
-    })
+    commands
+      .calibrationMatchSuggest({
+        contractVersion: '2.0.0',
+        requestId: `suggest-${sessionId}-${Date.now()}`,
+        sessionId,
+        calibrationTypes: calibrationTypes ?? null,
+      })
+      .then(unwrap)
       .then((res) => {
         if (!cancelled) {
           setResponse(res);
@@ -124,12 +125,15 @@ export function useCalibrationAssign(): UseAssignState {
     async (sessionId: string, masterId: string, override = false) => {
       setAssigning(true);
       try {
-        const res = await calibrationMatchAssign({
-          requestId: `assign-${sessionId}-${Date.now()}`,
-          sessionId,
-          masterId,
-          override,
-        });
+        const res = unwrap(
+          await commands.calibrationMatchAssign({
+            contractVersion: '2.0.0',
+            requestId: `assign-${sessionId}-${Date.now()}`,
+            sessionId,
+            masterId,
+            override,
+          }),
+        );
         setResult(res);
         return res;
       } finally {
@@ -155,7 +159,9 @@ export function useCalibrationSettings(): {
   const [agingThresholdDays, setAgingThresholdDays] = useState(DEFAULT_AGING_THRESHOLD_DAYS);
 
   useEffect(() => {
-    getSettings({ scope: 'calibration' })
+    commands
+      .settingsGet('calibration')
+      .then(unwrap)
       .then((data) => {
         const v = data.values as Record<string, unknown>;
         if (typeof v['calibrationPrefillSuggestion'] === 'boolean') {

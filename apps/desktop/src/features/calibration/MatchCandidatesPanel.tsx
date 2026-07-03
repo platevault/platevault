@@ -28,7 +28,7 @@ import type {
   CalibrationMatchSuggestResponse,
   SuggestStatus,
   MismatchReason,
-} from '@/api/commands';
+} from '@/bindings/index';
 import { m } from '@/lib/i18n';
 import { RotationWarningNotice, type RotationWarning } from './RotationWarning';
 
@@ -416,7 +416,7 @@ export function MatchCandidatesPanel({
           night: <span className="alm-match-candidates__stub-cell">—</span>,
           // STUB: frame count not on CalibrationMatchDto. Backend enrichment needed.
           frames: <span className="alm-match-candidates__stub-cell">—</span>,
-          confidence: <ConfidenceBar value={m.confidence} />,
+          confidence: <ConfidenceBar value={m.confidence ?? 0} />,
           dimensions: <DimensionBreakdown match={m} />,
           assign: (
             <AssignButton
