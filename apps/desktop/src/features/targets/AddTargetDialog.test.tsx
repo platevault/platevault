@@ -21,19 +21,15 @@ const { mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
   mockResolveTarget: vi.fn(),
 }));
 
-// TargetSearch (a shared component out of this migration's scope) still
-// calls the hand-written wrapper directly — kept mocked here so the child
-// component under test resolves suggestions.
-vi.mock('@/api/commands', () => ({
-  searchTargets: mockSearchTargets,
-  TARGET_SEARCH_CONTRACT_VERSION: '1.0',
-}));
-
 /** Wrap a value in the generated `{ status: 'ok' }` Result envelope. */
 const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
 
+// AddTargetDialog and its TargetSearch child both call the generated bindings
+// now (spec 037): TargetSearch -> commands.targetSearch, AddTargetDialog ->
+// commands.targetResolve. The real unwrap runs against these Result envelopes.
 vi.mock('@/bindings/index', () => ({
   commands: {
+    targetSearch: mockSearchTargets,
     targetResolve: mockResolveTarget,
   },
 }));
@@ -88,11 +84,13 @@ function unresolved(reason = 'unknown') {
 beforeEach(() => {
   vi.clearAllMocks();
   // Default: search returns M31
-  mockSearchTargets.mockResolvedValue({
-    contractVersion: '1.0',
-    requestId: 'r',
-    suggestions: [M31],
-  });
+  mockSearchTargets.mockResolvedValue(
+    ok({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [M31],
+    }),
+  );
   mockResolveTarget.mockResolvedValue(ok(resolved('tgt-m31')));
 });
 

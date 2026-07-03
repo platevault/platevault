@@ -17,13 +17,14 @@ const { mockGet, mockUpdate, mockSettingsGet, mockSettingsUpdate } = vi.hoisted(
   mockSettingsUpdate: vi.fn(),
 }));
 
-// ResolverSettingsControl still reads @/api/commands directly (out of this
-// migration's scope); StepCatalogs itself now calls commands.settingsGet /
-// commands.settingsUpdate + unwrap (spec 037).
-vi.mock('@/api/commands', () => ({
-  getResolverSettings: mockGet,
-  updateResolverSettings: mockUpdate,
-}));
+// ResolverSettingsControl reads getResolverSettings / updateResolverSettings
+// from the settings feature's settingsIpc glue module (spec 037); mock those at
+// that boundary. StepCatalogs itself calls commands.settingsGet /
+// commands.settingsUpdate + unwrap (mocked below).
+vi.mock('@/features/settings/settingsIpc', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/settings/settingsIpc')>();
+  return { ...actual, getResolverSettings: mockGet, updateResolverSettings: mockUpdate };
+});
 
 vi.mock('@/bindings/index', () => ({
   commands: {
