@@ -29,17 +29,20 @@
 //!    unresolved frames still group coherently.
 //! 5. **Upsert `acquisition_session`** by `session_key`: append the file-record
 //!    id to the `frame_ids` JSON array (set-deduped). On insert,
-//!    `state = 'discovered'`, `canonical_target_id` = resolved id or NULL,
-//!    legacy `target_id` left NULL (R10).
+//!    `canonical_target_id` = resolved id or NULL, legacy `target_id` left
+//!    NULL (R10). Sessions are derived, already-confirmed inventory (spec
+//!    041 FR-051) — there is no review-state column to set.
 //! 6. **Propagate to linked projects** (spec 041 R-17/FR-052, T075): whenever a
 //!    session's `canonical_target_id` transitions from unset to resolved (on
 //!    insert, on back-fill-on-append, or via [`backfill_session_targets`]),
 //!    every project linked to that session through `project_sources` has its
-//!    own `canonical_target_id` overwritten to match. This closes spec-035
-//!    project↔target gap #1 for the live-ingest path: `projects.canonical_
-//!    target_id` (migration 0033) was previously only ever set once, manually,
-//!    at project creation; it now tracks whatever the project's lights
-//!    actually resolve to. A session with no linked project is a no-op.
+//!    own `canonical_target_id` set to match — but only if the project does
+//!    not already have one (never overwrites an existing value, manually
+//!    picked or otherwise). This closes spec-035 project↔target gap #1 for
+//!    the live-ingest path: `projects.canonical_target_id` (migration 0033)
+//!    was previously only ever set once, manually, at project creation; it
+//!    now also gets set from whatever the project's lights first resolve to
+//!    when it was unset. A session with no linked project is a no-op.
 //!
 //! ## Idempotency (R12)
 //!
@@ -378,8 +381,8 @@ fn parse_date_obs(raw: Option<&str>) -> OffsetDateTime {
 // ── acquisition_session upsert ────────────────────────────────────────────────
 
 /// Upsert an `acquisition_session` by `session_key`, appending `image_id` to the
-/// `frame_ids` JSON array (set-deduped). On insert: `state = 'discovered'`,
-/// `canonical_target_id` set, legacy `target_id` NULL (R10).
+/// `frame_ids` JSON array (set-deduped). On insert: `canonical_target_id` set,
+/// legacy `target_id` NULL (R10). No review-state column (spec 041 FR-051).
 ///
 /// Idempotent (R12): the SELECT-by-`session_key` lookup keeps grouping
 /// single-row, and a repeat append of the same frame id is dropped (set-dedup).
@@ -439,8 +442,8 @@ async fn upsert_session(
     sqlx::query(
         "INSERT INTO acquisition_session
             (id, session_key, target_id, canonical_target_id, has_observer_location,
-             frame_ids, state, observer_location, created_at)
-         VALUES (?, ?, NULL, ?, ?, ?, 'discovered', NULL, ?)",
+             frame_ids, observer_location, created_at)
+         VALUES (?, ?, NULL, ?, ?, ?, NULL, ?)",
     )
     .bind(&id)
     .bind(key)

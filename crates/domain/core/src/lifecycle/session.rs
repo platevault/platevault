@@ -1,5 +1,12 @@
-//! Acquisition and calibration session lifecycle state model.
+//! Acquisition and calibration session model.
 //! Spec 002 data-model.md §AcquisitionSession, §CalibrationSession.
+//!
+//! Spec 041 FR-051 (T076, Phase 13): the review-state machine formerly
+//! defined here (`SessionState`, `TRANSITIONS`, `is_allowed`) was removed.
+//! Acquisition and calibration sessions are derived, already-confirmed
+//! inventory — like calibration masters — with no review gate. Session
+//! metadata remains editable post-hoc via the inbox per-file
+//! metadata/override tables.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -7,63 +14,6 @@ use specta::Type;
 
 use crate::ids::{EntityId, Timestamp};
 use crate::lifecycle::provenance::ProvenancedValue;
-
-/// Shared lifecycle state for both `AcquisitionSession` and `CalibrationSession`.
-///
-/// 6 variants per spec 002 §SessionState and research.md §2.3.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    Hash,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
-    Deserialize,
-    JsonSchema,
-    Type,
-)]
-#[serde(rename_all = "snake_case")]
-pub enum SessionState {
-    Discovered,
-    Candidate,
-    NeedsReview,
-    Confirmed,
-    Rejected,
-    Ignored,
-}
-
-impl SessionState {
-    /// Soft-terminal states: re-openable to `needs_review`.
-    #[must_use]
-    pub const fn is_soft_terminal(self) -> bool {
-        matches!(self, Self::Confirmed | Self::Rejected)
-    }
-}
-
-/// Canonical allowed `(from, to)` edge list per research.md §2.3. Applies to
-/// both `AcquisitionSession` and `CalibrationSession` — the state family is
-/// shared per data-model.md §CalibrationSession §Lifecycle.
-pub const TRANSITIONS: &[(SessionState, SessionState)] = &[
-    (SessionState::Discovered, SessionState::Candidate),
-    (SessionState::Discovered, SessionState::Ignored),
-    (SessionState::Candidate, SessionState::NeedsReview),
-    (SessionState::Candidate, SessionState::Confirmed),
-    (SessionState::Candidate, SessionState::Rejected),
-    (SessionState::NeedsReview, SessionState::Confirmed),
-    (SessionState::NeedsReview, SessionState::Rejected),
-    (SessionState::Confirmed, SessionState::NeedsReview),
-    (SessionState::Confirmed, SessionState::Rejected),
-    (SessionState::Rejected, SessionState::NeedsReview),
-    (SessionState::Ignored, SessionState::Candidate),
-];
-
-#[must_use]
-pub fn is_allowed(from: SessionState, to: SessionState) -> bool {
-    TRANSITIONS.iter().any(|&(f, t)| f == from && t == to)
-}
 
 /// Calibration frame kind.
 #[derive(
@@ -109,10 +59,8 @@ pub struct AcquisitionSession {
     pub session_key: String,
     pub target_id: Option<EntityId>,
     pub frame_ids: Vec<EntityId>,
-    pub state: SessionState,
     /// Observer location with full provenance trail (R-Obs).
     pub observer_location: Option<ProvenancedValue<ObserverLocation>>,
-    pub review_snapshot_id: Option<EntityId>,
     pub created_at: Timestamp,
 }
 
@@ -123,7 +71,5 @@ pub struct CalibrationSession {
     pub session_key: String,
     pub frame_ids: Vec<EntityId>,
     pub kind: CalibrationKind,
-    pub state: SessionState,
-    pub review_snapshot_id: Option<EntityId>,
     pub created_at: Timestamp,
 }

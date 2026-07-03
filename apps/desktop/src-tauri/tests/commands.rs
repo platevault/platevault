@@ -36,7 +36,6 @@ use desktop_shell::commands::roots::{
 use desktop_shell::commands::search::search_global;
 use desktop_shell::commands::sessions::{
     sessions_calendar, sessions_get, sessions_list, sessions_merge, sessions_split,
-    sessions_transition,
 };
 
 use contracts_core::error_code::ErrorCode;
@@ -89,12 +88,6 @@ async fn stub_sessions_calendar() {
     let res = sessions_calendar("2026-05".to_owned(), "2026-06".to_owned()).await;
     assert!(res.is_ok(), "sessions_calendar failed: {res:?}");
     assert!(!res.unwrap().months.is_empty());
-}
-
-#[tokio::test]
-async fn stub_sessions_transition() {
-    let res = sessions_transition("ses-001".to_owned(), "confirm".to_owned(), None).await;
-    assert!(res.is_ok(), "sessions_transition failed: {res:?}");
 }
 
 #[tokio::test]

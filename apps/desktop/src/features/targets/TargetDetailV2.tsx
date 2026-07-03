@@ -676,7 +676,6 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
                       <span className="alm-planner__link-meta">
                         {m.targets_detail_session_frames({ count: s.frameCount })}
                       </span>
-                      <span className="alm-planner__link-state">{s.state}</span>
                     </button>
                   </li>
                 );

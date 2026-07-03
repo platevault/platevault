@@ -5,12 +5,16 @@
 //!   `sessions_get`  -- backed by `app_core::sessions::get_session` (real DB).
 //!
 //! Remaining stubs (no persistence layer yet):
-//!   `sessions_calendar`, `sessions_transition`, `sessions_split`, `sessions_merge`.
+//!   `sessions_calendar`, `sessions_split`, `sessions_merge`.
+//!
+//! Spec 041 FR-051 (T076, Phase 13): `sessions_transition` — a stub
+//! Confirm/Re-open/Reject-style state transition — was removed. Sessions are
+//! derived, already-confirmed inventory with no review lifecycle.
 
 use app_core::sessions as sessions_uc;
 use contracts_core::sessions::{
     AcquisitionSession, CalendarData, CalendarDay, CalendarMonth, CalendarSessionStub,
-    ConfidenceLevel, MetaValue, ProvenanceOrigin, SessionDetail, SessionKey, SessionState,
+    ConfidenceLevel, MetaValue, ProvenanceOrigin, SessionDetail, SessionKey,
 };
 use contracts_core::ContractError;
 use contracts_core::JsonAny;
@@ -113,28 +117,6 @@ pub async fn sessions_calendar(
     })
 }
 
-/// `sessions.transition` — transition a session to a new state.
-///
-/// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
-#[tauri::command]
-#[specta::specta]
-pub async fn sessions_transition(
-    id: String,
-    action: String,
-    metadata: Option<JsonAny>,
-) -> Result<AcquisitionSession, ContractError> {
-    tracing::debug!("stub: sessions.transition id={id} action={action} metadata={metadata:?}");
-    let mut session = stub_sessions()
-        .into_iter()
-        .next()
-        .ok_or_else(|| ContractError::internal("no stub session available"))?;
-    session.id = id;
-    session.state = SessionState::Confirmed;
-    session.confidence = ConfidenceLevel::Confirmed;
-    Ok(session)
-}
-
 /// `sessions.split` — split a session at a given frame index.
 ///
 /// # Errors
@@ -232,7 +214,6 @@ fn stub_session_ngc7000_ha() -> AcquisitionSession {
     AcquisitionSession {
         id: "550e8400-e29b-41d4-a716-446655440001".to_owned(),
         session_key: key("NGC 7000", "Ha", "1", "100", "2026-04-12"),
-        state: SessionState::Discovered,
         confidence: ConfidenceLevel::Unknown,
         optical_train_id: ids::TRAIN_FSQ106.to_owned(),
         frame_count: 18,
@@ -265,7 +246,6 @@ fn stub_session_ic1396_sii() -> AcquisitionSession {
     AcquisitionSession {
         id: "550e8400-e29b-41d4-a716-446655440002".to_owned(),
         session_key: key("IC 1396", "SII", "1", "100", "2026-04-14"),
-        state: SessionState::Discovered,
         confidence: ConfidenceLevel::Low,
         optical_train_id: ids::TRAIN_FSQ106.to_owned(),
         frame_count: 12,
@@ -292,7 +272,6 @@ fn stub_session_m31_l() -> AcquisitionSession {
     AcquisitionSession {
         id: "550e8400-e29b-41d4-a716-446655440003".to_owned(),
         session_key: key("M31", "L", "1", "0", "2026-03-28"),
-        state: SessionState::NeedsReview,
         confidence: ConfidenceLevel::Medium,
         optical_train_id: ids::TRAIN_GT81.to_owned(),
         frame_count: 60,
@@ -313,7 +292,6 @@ fn stub_session_ngc7000_oiii() -> AcquisitionSession {
     AcquisitionSession {
         id: "550e8400-e29b-41d4-a716-446655440005".to_owned(),
         session_key: key("NGC 7000", "OIII", "1", "100", "2026-04-15"),
-        state: SessionState::Confirmed,
         confidence: ConfidenceLevel::Confirmed,
         optical_train_id: ids::TRAIN_FSQ106.to_owned(),
         frame_count: 15,
@@ -352,7 +330,6 @@ fn stub_session_m42_oiii() -> AcquisitionSession {
     AcquisitionSession {
         id: "550e8400-e29b-41d4-a716-446655440009".to_owned(),
         session_key: key("M42", "OIII", "1", "100", "2026-02-11"),
-        state: SessionState::Rejected,
         confidence: ConfidenceLevel::Rejected,
         optical_train_id: ids::TRAIN_GT81.to_owned(),
         frame_count: 8,

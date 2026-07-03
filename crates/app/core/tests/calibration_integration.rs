@@ -27,8 +27,8 @@ use uuid::Uuid;
 async fn insert_acq_session(pool: &sqlx::SqlitePool, id: &str) {
     sqlx::query(
         "INSERT INTO acquisition_session \
-         (id, session_key, frame_ids, state, created_at) \
-         VALUES (?, ?, '[]', 'confirmed', '2026-05-01T00:00:00Z')",
+         (id, session_key, frame_ids, created_at) \
+         VALUES (?, ?, '[]', '2026-05-01T00:00:00Z')",
     )
     .bind(id)
     .bind(format!("key-{id}"))
@@ -69,8 +69,8 @@ async fn insert_acq_fingerprint(
 async fn insert_cal_session(pool: &sqlx::SqlitePool, id: &str, kind: &str) {
     sqlx::query(
         "INSERT INTO calibration_session \
-         (id, session_key, frame_ids, kind, state, created_at) \
-         VALUES (?, ?, '[]', ?, 'confirmed', '2026-05-01T00:00:00Z')",
+         (id, session_key, frame_ids, kind, created_at) \
+         VALUES (?, ?, '[]', ?, '2026-05-01T00:00:00Z')",
     )
     .bind(id)
     .bind(format!("calkey-{id}"))

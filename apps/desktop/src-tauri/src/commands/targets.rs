@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use contracts_core::lifecycle::ProjectState;
 use contracts_core::sessions::{
-    AcquisitionSession, ConfidenceLevel, MetaValue, ProvenanceOrigin, SessionKey, SessionState,
+    AcquisitionSession, ConfidenceLevel, MetaValue, ProvenanceOrigin, SessionKey,
 };
 use contracts_core::targets::{
     CatalogIds, Coordinates, Target, TargetDetail, TargetKind, TargetProjectStub,
@@ -65,7 +65,6 @@ pub async fn targets_get(id: String) -> Result<TargetDetail, ContractError> {
                 gain: "100".to_owned(),
                 night: "2026-04-12".to_owned(),
             },
-            state: SessionState::Discovered,
             confidence: ConfidenceLevel::Medium,
             optical_train_id: "550e8400-e29b-41d4-a716-446655440101".to_owned(),
             frame_count: 18,

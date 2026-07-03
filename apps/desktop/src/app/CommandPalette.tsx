@@ -120,19 +120,10 @@ export function CommandPalette() {
     [navigate],
   );
 
-  // FR-033 / T077: "Show ignored items" navigates to sessions with ignored review filter.
-  const showIgnoredAction = useCallback(() => {
-    setOpen(false);
-    setQuery('');
-    // Cast needed: TanStack Router search types are route-specific; reviewFilter
-    // is a valid sessions-route param (route-contract.ts REVIEW_FILTERS).
-    void navigate({ to: '/sessions', search: { reviewFilter: 'ignored' } as never });
-  }, [navigate]);
-
-  const ALL_ACTIONS: Array<PaletteAction> = [
-    ...ACTIONS,
-    { label: () => m.cmdk_action_show_ignored(), onSelect: showIgnoredAction },
-  ];
+  // Spec 041 FR-051 (T076): "Show ignored items" was removed along with the
+  // session review-state machine — sessions no longer have an `ignored`
+  // state, so there is nothing left to surface.
+  const ALL_ACTIONS: Array<PaletteAction> = [...ACTIONS];
 
   // All visible pages: standard pages + dev pages when devMode is on.
   const visiblePages = devMode ? [...PAGES, ...DEV_PAGES] : PAGES;

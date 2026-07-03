@@ -108,7 +108,6 @@ fn exports_typescript_bindings() {
         "sessions_list",
         "sessions_get",
         "sessions_calendar",
-        "sessions_transition",
         "sessions_split",
         "sessions_merge",
         // calibration
@@ -233,7 +232,6 @@ fn exports_typescript_bindings() {
         "inbox_confirm",
         "inbox_reclassify",
         "inventory_list",
-        "inventory_session_review",
         "ingestion_settings_get",
         "ingestion_settings_update",
         // tools / artifacts

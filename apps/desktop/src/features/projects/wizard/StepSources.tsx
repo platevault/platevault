@@ -24,13 +24,14 @@ export function StepSources({ data, onChange }: StepSourcesProps) {
   const [filterTarget, setFilterTarget] = useState('');
   const [filterFilter, setFilterFilter] = useState('');
 
+  // Spec 041 FR-051: sessions are derived, already-confirmed inventory — no
+  // review-state filter remains; every session is eligible for selection.
   const filtered = useMemo(() => {
     if (!sessions) return [];
     return sessions.filter((s) => {
       if (filterTarget && !s.sessionKey.target.toLowerCase().includes(filterTarget.toLowerCase())) return false;
       if (filterFilter && !s.sessionKey.filter.toLowerCase().includes(filterFilter.toLowerCase())) return false;
-      // Only show confirmed sessions
-      return s.state === 'confirmed';
+      return true;
     });
   }, [sessions, filterTarget, filterFilter]);
 

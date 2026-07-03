@@ -64,13 +64,6 @@ export const commands = {
 	 */
 	sessionsCalendar: (startMonth: string, endMonth: string) => typedError<CalendarData, ContractError_Serialize>(__TAURI_INVOKE("sessions_calendar", { startMonth, endMonth })),
 	/**
-	 *  `sessions.transition` — transition a session to a new state.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	sessionsTransition: (id: string, action: string, metadata: unknown | null) => typedError<AcquisitionSession_Serialize, ContractError_Serialize>(__TAURI_INVOKE("sessions_transition", { id, action, metadata })),
-	/**
 	 *  `sessions.split` — split a session at a given frame index.
 	 * 
 	 *  # Errors
@@ -1253,16 +1246,6 @@ export const commands = {
 	 */
 	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_list", { req })),
 	/**
-	 *  `inventory.session.review` — apply a session review-state transition.
-	 * 
-	 *  Wraps `lifecycle.transition` for the inventory surface.
-	 *  Returns `status: "success"` | `"noop"` | `"error"`.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on infrastructure failure.
-	 */
-	inventorySessionReview: (req: InventorySessionReviewRequest_Deserialize) => typedError<InventorySessionReviewResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_session_review", { req })),
-	/**
 	 *  `ingestion.settings.get` — returns current ingestion/scan settings.
 	 * 
 	 *  # Errors
@@ -1453,7 +1436,6 @@ export type AcquisitionSession = AcquisitionSession_Serialize | AcquisitionSessi
 export type AcquisitionSession_Deserialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -1474,7 +1456,6 @@ export type AcquisitionSession_Deserialize = {
 export type AcquisitionSession_Serialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -2005,30 +1986,6 @@ export type CalibrationMatchSuggestResponse_Serialize = {
 	suggestStatus?: SuggestStatus | null,
 	matches?: CalibrationMatchDto_Serialize[] | null,
 	error?: SuggestErrorDto | null,
-};
-
-export type CalibrationSessionTransitionRequest = CalibrationSessionTransitionRequest_Serialize | CalibrationSessionTransitionRequest_Deserialize;
-
-export type CalibrationSessionTransitionRequest_Deserialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel: string | null,
-	actor: TransitionActor,
-};
-
-export type CalibrationSessionTransitionRequest_Serialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel?: string | null,
-	actor: TransitionActor,
 };
 
 export type CalibrationTolerances = {
@@ -3724,12 +3681,6 @@ export type InventoryListFilters_Deserialize = {
 	sourceFilter: string | null,
 	/**  When set, limits sessions to the given frame type. */
 	frameFilter: InventoryFrameType | null,
-	/**
-	 *  When set, limits sessions to the given canonical state.
-	 *  `ignored` sessions are excluded from the default ledger.
-	 *  Use `reviewFilter=ignored` to surface them (FR-010).
-	 */
-	reviewFilter: string | null,
 };
 
 /**  Optional filters for `inventory.list`. */
@@ -3738,12 +3689,6 @@ export type InventoryListFilters_Serialize = {
 	sourceFilter?: string | null,
 	/**  When set, limits sessions to the given frame type. */
 	frameFilter?: InventoryFrameType | null,
-	/**
-	 *  When set, limits sessions to the given canonical state.
-	 *  `ignored` sessions are excluded from the default ledger.
-	 *  Use `reviewFilter=ignored` to surface them (FR-010).
-	 */
-	reviewFilter?: string | null,
 };
 
 /**  Request envelope for `inventory.list`. */
@@ -3812,127 +3757,21 @@ export type InventoryProvenanceSummary_Serialize = {
 	confirmedBy?: string | null,
 };
 
-/**  Error payload for `inventory.session.review`. */
-export type InventoryReviewError = InventoryReviewError_Serialize | InventoryReviewError_Deserialize;
-
-/**  Error payload for `inventory.session.review`. */
-export type InventoryReviewError_Deserialize = {
-	code: string,
-	message: string,
-	details: unknown | null,
-};
-
-/**  Error payload for `inventory.session.review`. */
-export type InventoryReviewError_Serialize = {
-	code: string,
-	message: string,
-	details?: unknown | null,
-};
-
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
+ * 
+ *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
+ *  inventory with no review lifecycle.
  */
 export type InventorySession = InventorySession_Serialize | InventorySession_Deserialize;
 
-/**  Request envelope for `inventory.session.review`. */
-export type InventorySessionReviewRequest = InventorySessionReviewRequest_Serialize | InventorySessionReviewRequest_Deserialize;
-
-/**  Request envelope for `inventory.session.review`. */
-export type InventorySessionReviewRequest_Deserialize = {
-	contractVersion: string,
-	requestId: string,
-	sessionId: string,
-	/**  Target canonical state. When equal to current state → noop (no error). */
-	nextState: InventorySessionState,
-	actionLabel: string | null,
-	/**  "user" or "system" */
-	actor: string,
-};
-
-/**  Request envelope for `inventory.session.review`. */
-export type InventorySessionReviewRequest_Serialize = {
-	contractVersion: string,
-	requestId: string,
-	sessionId: string,
-	/**  Target canonical state. When equal to current state → noop (no error). */
-	nextState: InventorySessionState,
-	actionLabel?: string | null,
-	/**  "user" or "system" */
-	actor: string,
-};
-
-/**
- *  Response envelope for `inventory.session.review`.
- *  Status is "success", "noop", or "error".
- */
-export type InventorySessionReviewResponse = InventorySessionReviewResponse_Serialize | InventorySessionReviewResponse_Deserialize;
-
-/**
- *  Response envelope for `inventory.session.review`.
- *  Status is "success", "noop", or "error".
- */
-export type InventorySessionReviewResponse_Deserialize = {
-	status: string,
-	contractVersion: string,
-	requestId: string,
-	appliedAt: string | null,
-	entityType: string | null,
-	priorState: InventorySessionState | null,
-	newState: InventorySessionState | null,
-	auditId: string | null,
-	error: InventoryReviewError_Deserialize | null,
-};
-
-/**
- *  Response envelope for `inventory.session.review`.
- *  Status is "success", "noop", or "error".
- */
-export type InventorySessionReviewResponse_Serialize = {
-	status: string,
-	contractVersion: string,
-	requestId: string,
-	appliedAt?: string | null,
-	entityType?: string | null,
-	priorState?: InventorySessionState | null,
-	newState?: InventorySessionState | null,
-	auditId?: string | null,
-	error?: InventoryReviewError_Serialize | null,
-};
-
-/**
- *  Canonical spec 002 session state. Six values; no presentational projection.
- *  UI maps display labels locally: `discovered` and `candidate` → "Needs review".
- */
-export type InventorySessionState = "discovered" | "candidate" | "needs_review" | "confirmed" | "rejected" | "ignored";
-
-export type InventorySessionTransitionRequest = InventorySessionTransitionRequest_Serialize | InventorySessionTransitionRequest_Deserialize;
-
-export type InventorySessionTransitionRequest_Deserialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel: string | null,
-	actor: TransitionActor,
-};
-
-export type InventorySessionTransitionRequest_Serialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel?: string | null,
-	actor: TransitionActor,
-};
-
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
+ * 
+ *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
+ *  inventory with no review lifecycle.
  */
 export type InventorySession_Deserialize = {
 	id: string,
@@ -3943,7 +3782,6 @@ export type InventorySession_Deserialize = {
 	target: string | null,
 	filter: string | null,
 	exposure: string | null,
-	state: InventorySessionState,
 	camera: string | null,
 	gain: string | null,
 	binning: string | null,
@@ -3956,6 +3794,9 @@ export type InventorySession_Deserialize = {
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
+ * 
+ *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
+ *  inventory with no review lifecycle.
  */
 export type InventorySession_Serialize = {
 	id: string,
@@ -3966,7 +3807,6 @@ export type InventorySession_Serialize = {
 	target: string | null,
 	filter: string | null,
 	exposure: string | null,
-	state: InventorySessionState,
 	camera?: string | null,
 	gain?: string | null,
 	binning?: string | null,
@@ -6197,7 +6037,6 @@ export type SessionDetail = SessionDetail_Serialize | SessionDetail_Deserialize;
 export type SessionDetail_Deserialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -6216,7 +6055,6 @@ export type SessionDetail_Deserialize = {
 export type SessionDetail_Serialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -6265,8 +6103,6 @@ export type SessionSplitResult_Serialize = {
 	original: AcquisitionSession_Serialize,
 	new: AcquisitionSession_Serialize,
 };
-
-export type SessionState = "discovered" | "candidate" | "needs_review" | "confirmed" | "rejected" | "ignored";
 
 /**  Sessions grouping mode. */
 export type SessionsGroupBy = "none" | "target" | "month" | "filter" | "train";
@@ -6956,7 +6792,9 @@ export type TargetSearchResponse_Serialize = {
  *  - `created_at` — RFC 3339 UTC timestamp the row was created.
  *  - `frame_count` — length of the `frame_ids` JSON array (computed via
  *    `json_array_length`; 0 for legacy rows with the default `'[]'`).
- *  - `state` — session lifecycle state string (e.g. `"confirmed"`, `"candidate"`).
+ * 
+ *  Spec 041 FR-051 (T076): no `state` field — sessions are derived,
+ *  already-confirmed inventory with no review lifecycle.
  */
 export type TargetSessionItem = {
 	id: string,
@@ -6966,8 +6804,6 @@ export type TargetSessionItem = {
 	createdAt: string,
 	/**  Number of frames in `frame_ids` JSON array. */
 	frameCount: number,
-	/**  Lifecycle state (e.g. `"confirmed"`, `"candidate"`, `"needs_review"`). */
-	state: string,
 };
 
 /**  Request for `target.sessions.list` (spec 023 US2). */
@@ -7165,40 +7001,32 @@ export type TransitionRequest = TransitionRequest_Serialize | TransitionRequest_
 /**  Discriminated request — one variant per entity family. */
 export type TransitionRequest_Deserialize = ({ project: {
 	entityType: "project",
-} & ProjectTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
+} & ProjectTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
 	entityType: "plan",
-} & PlanTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; prepared_source?: never; project?: never; projection?: never } | ({ inventory_session: {
-	entityType: "inventory_session",
-} & InventorySessionTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ calibration_session: {
-	entityType: "calibration_session",
-} & CalibrationSessionTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
+} & PlanTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
 	entityType: "data_source",
-} & DataSourceTransitionRequest_Deserialize }) & { calibration_session?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
+} & DataSourceTransitionRequest_Deserialize }) & { file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
 	entityType: "prepared_source",
-} & PreparedSourceTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
+} & PreparedSourceTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
 	entityType: "projection",
-} & ProjectionTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
+} & ProjectionTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
 	entityType: "file_record",
-} & FileRecordTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
+} & FileRecordTransitionRequest_Deserialize }) & { data_source?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
 
 /**  Discriminated request — one variant per entity family. */
 export type TransitionRequest_Serialize = ({ project: {
 	entityType: "project",
-} & ProjectTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
+} & ProjectTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
 	entityType: "plan",
-} & PlanTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; prepared_source?: never; project?: never; projection?: never } | ({ inventory_session: {
-	entityType: "inventory_session",
-} & InventorySessionTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ calibration_session: {
-	entityType: "calibration_session",
-} & CalibrationSessionTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
+} & PlanTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
 	entityType: "data_source",
-} & DataSourceTransitionRequest_Serialize }) & { calibration_session?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
+} & DataSourceTransitionRequest_Serialize }) & { file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
 	entityType: "prepared_source",
-} & PreparedSourceTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
+} & PreparedSourceTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
 	entityType: "projection",
-} & ProjectionTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
+} & ProjectionTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
 	entityType: "file_record",
-} & FileRecordTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
+} & FileRecordTransitionRequest_Serialize }) & { data_source?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
 
 export type TransitionResponse = TransitionResponse_Serialize | TransitionResponse_Deserialize;
 

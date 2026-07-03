@@ -1,5 +1,5 @@
 import type { PillVariant } from '@/ui';
-import type { ProjectState, SessionState } from '@/bindings/index';
+import type { ProjectState } from '@/bindings/index';
 
 /**
  * Centralized project lifecycle model — the single source of truth for the
@@ -62,26 +62,7 @@ export function projectStateVariant(state: string): PillVariant {
   return PROJECT_STATE_VARIANTS[state as ProjectState] ?? 'neutral';
 }
 
-// ─── Acquisition session states ──────────────────────────────────────────────
-
-const SESSION_STATE_VARIANTS: Record<SessionState, PillVariant> = {
-  confirmed: 'ok',
-  // discovered / candidate / needs_review all surface as "Needs review" in the
-  // UI — give them one variant so identical labels never render in two colors.
-  needs_review: 'warn',
-  discovered: 'warn',
-  candidate: 'warn',
-  rejected: 'danger',
-  ignored: 'neutral',
-};
-
-export function sessionStateLabel(state: string): string {
-  const s = state.replace(/_/g, ' ');
-  // Title-case the first letter so labels read consistently (e.g. "Needs review",
-  // "Confirmed") regardless of which render path produced them.
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-export function sessionStateVariant(state: string): PillVariant {
-  return SESSION_STATE_VARIANTS[state as SessionState] ?? 'neutral';
-}
+// Spec 041 FR-051 (T076): acquisition/calibration sessions are derived,
+// already-confirmed inventory — the review-state pill/label helpers
+// (sessionStateLabel/sessionStateVariant) were removed along with the
+// review-state machine they rendered.

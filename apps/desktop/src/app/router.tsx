@@ -20,7 +20,6 @@ import {
   INBOX_GROUPS,
   PROJECT_STATES,
   INVENTORY_FRAME_FILTERS,
-  REVIEW_FILTERS,
 } from '@/lib/route-contract';
 
 /** String `selected` redirect for routes where IDs are UUIDs (e.g. sessions). */
@@ -51,7 +50,6 @@ const sessionsRoute = createRoute({
     // Spec 006 inventory filters — applied server-side by inventory.list.
     sourceFilter: parseEnum(['all'] as const),
     frameFilter: parseEnum(INVENTORY_FRAME_FILTERS),
-    reviewFilter: parseEnum(REVIEW_FILTERS),
   }),
   component: lazyRouteComponent(
     () => import('@/features/sessions/SessionsPage'),

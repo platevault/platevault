@@ -22,7 +22,7 @@
  * 17. Display-alias Set/Edit button is visible.
  * 18. Setting display alias updates effectiveLabel.
  * 19. Clearing display alias reverts effectiveLabel to primaryDesignation.
- * 20. (US2) Linked sessions list renders date, frameCount, state.
+ * 20. (US2) Linked sessions list renders date and frameCount.
  * 21. (US2) Clicking session row navigates to /sessions with selected=id.
  * 22. (US3) Linked projects list renders name and lifecycle.
  * 23. (US3) Clicking project row navigates to /projects with search: { selected: id }.
@@ -400,19 +400,17 @@ describe('TargetDetailV2', () => {
     );
   });
 
-  it('21. (US2) linked session rows render date, frameCount, and state', async () => {
+  it('21. (US2) linked session rows render date and frameCount', async () => {
     mockListTargetSessions.mockResolvedValue([
       {
         id: 'sess-1',
         sessionKey: '{}',
         createdAt: '2026-03-15T22:00:00Z',
         frameCount: 42,
-        state: 'confirmed',
       },
     ]);
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => expect(screen.getByText(/42 frames/i)).toBeInTheDocument());
-    expect(screen.getByText(/confirmed/i)).toBeInTheDocument();
   });
 
   it('22. (US2) clicking session row navigates to /sessions with selected=id', async () => {
@@ -422,7 +420,6 @@ describe('TargetDetailV2', () => {
         sessionKey: '{}',
         createdAt: '2026-03-15T22:00:00Z',
         frameCount: 5,
-        state: 'confirmed',
       },
     ]);
     render(<TargetDetailV2 targetId={TARGET_ID} />);

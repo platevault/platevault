@@ -26,7 +26,6 @@ import type {
   ProjectChannelsReinferResult_Serialize,
   ProjectChannelsDismissDriftResult,
   TransitionResponse_Serialize,
-  InventorySessionReviewResponse_Serialize,
   LogRecentResponse_Serialize,
   LogExportResponse_Serialize,
   FirstRunRestartResponse,
@@ -379,10 +378,6 @@ export async function mockInvoke(
       } satisfies TransitionResponse_Serialize;
     }
 
-    case 'sessions_transition': {
-      const { sessions } = await import('@/data/fixtures/sessions');
-      return sessions[0];
-    }
     case 'sessions_split': {
       const { sessions } = await import('@/data/fixtures/sessions');
       return { original: sessions[0], new: sessions[1] };
@@ -676,44 +671,19 @@ export async function mockInvoke(
     }
 
     // ── Inventory commands (spec 006) ─────────────────────────────────────────
+    //
+    // Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
+    // inventory. `inventory_session_review` (the mock for the removed
+    // `inventory.session.review` command) and the `reviewFilter`/`ignored`
+    // session filtering were removed along with the review-state machine.
 
     case 'inventory_list': {
-      const { INVENTORY_LIST_RESPONSE, INVENTORY_SOURCES } = await import(
-        '@/data/fixtures/inventory'
-      );
-      const req = (_args as { req?: { filters?: { reviewFilter?: string } } } | undefined)?.req;
-      const reviewFilter = req?.filters?.reviewFilter;
-      // If reviewFilter=ignored, include ignored sessions; otherwise exclude them.
-      const sources =
-        reviewFilter === 'ignored'
-          ? INVENTORY_SOURCES.map((src) => ({
-              ...src,
-              sessions: src.sessions.filter((s) => s.state === 'ignored'),
-            })).filter((src) => src.sessions.length > 0)
-          : INVENTORY_LIST_RESPONSE.sources;
+      const { INVENTORY_LIST_RESPONSE } = await import('@/data/fixtures/inventory');
+      const req = (_args as { req?: { filters?: unknown } } | undefined)?.req;
       return {
         ...INVENTORY_LIST_RESPONSE,
-        sources,
         requestId: req?.filters ? INVENTORY_LIST_RESPONSE.requestId : INVENTORY_LIST_RESPONSE.requestId,
       };
-    }
-
-    case 'inventory_session_review': {
-      const req = (_args as {
-        req?: { sessionId?: string; nextState?: string; requestId?: string };
-      } | undefined)?.req;
-      const requestId = req?.requestId ?? '00000000-0000-0000-0000-000000000099';
-      // Mock: always succeeds (idempotency handled by noop check in real impl).
-      return {
-        status: 'success',
-        contractVersion: '2.0.0',
-        requestId,
-        appliedAt: new Date().toISOString(),
-        entityType: 'acquisition_session',
-        priorState: 'needs_review',
-        newState: (req?.nextState as 'confirmed') ?? 'confirmed',
-        auditId: `audit-${Date.now()}`,
-      } satisfies InventorySessionReviewResponse_Serialize;
     }
 
     // ── Developer diagnostics (spec 021) ─────────────────────────────────────

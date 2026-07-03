@@ -5,6 +5,10 @@
 //! applied server-side so the wire payload is small.
 //!
 //! No new tables are introduced — inventory is a read-only projection.
+//!
+//! Spec 041 FR-051 (T076, Phase 13): sessions no longer carry a review-state
+//! column — they are derived, already-confirmed inventory. The `state`
+//! projection column and `review_state` filter were removed.
 
 use sqlx::SqlitePool;
 
@@ -33,7 +37,6 @@ pub struct SessionProjectionRow {
     pub frame_type: String,
     /// JSON array of frame ids.
     pub frame_ids: String,
-    pub state: String,
     /// Target id (acquisition sessions only; NULL for calibration).
     pub target_id: Option<String>,
     /// Target primary designation when linked.
@@ -57,9 +60,6 @@ pub struct InventoryFilters {
     /// When `Some`, restrict to sessions with the given frame type.
     /// `"mixed"` matches heterogeneous sessions.
     pub frame_type: Option<String>,
-    /// When `Some`, restrict to sessions in the given canonical state.
-    /// By default (no filter), `ignored` sessions are excluded.
-    pub review_state: Option<String>,
 }
 
 /// List all `LibraryRoot` rows that have at least one session under them.
@@ -114,10 +114,6 @@ pub async fn list_sessions_for_root(
     root_id: &str,
     filters: &InventoryFilters,
 ) -> DbResult<Vec<SessionProjectionRow>> {
-    // Default exclusion: ignored sessions are filtered out unless explicitly
-    // requested (FR-010: Cmd+K "Show ignored items" → reviewFilter=ignored).
-    let exclude_ignored = filters.review_state.as_deref() != Some("ignored");
-    let state_filter = filters.review_state.as_deref();
     let frame_filter = filters.frame_type.as_deref();
 
     // Acquisition sessions — target_name is always NULL (gen-1 `target`
@@ -132,7 +128,6 @@ pub async fn list_sessions_for_root(
             'acquisition'                   AS session_kind,
             'light'                         AS frame_type,
             acs.frame_ids                   AS frame_ids,
-            acs.state                       AS state,
             acs.target_id                   AS target_id,
             NULL                            AS target_name,
             acs.created_at                  AS created_at
@@ -155,7 +150,6 @@ pub async fn list_sessions_for_root(
             'calibration'                   AS session_kind,
             cs.kind                         AS frame_type,
             cs.frame_ids                    AS frame_ids,
-            cs.state                        AS state,
             NULL                            AS target_id,
             NULL                            AS target_name,
             cs.created_at                   AS created_at
@@ -170,30 +164,10 @@ pub async fn list_sessions_for_root(
 
     let all: Vec<SessionProjectionRow> = acq_rows.into_iter().chain(cal_rows).collect();
 
-    // Apply post-fetch filters (state and frame_type) — these cannot be
-    // trivially done in a single UNION query with dynamic placeholders.
-    let filtered = all
-        .into_iter()
-        .filter(|row| {
-            // Exclude ignored sessions unless review_filter=ignored
-            if exclude_ignored && row.state == "ignored" {
-                return false;
-            }
-            // State filter
-            if let Some(sf) = state_filter {
-                if row.state != sf {
-                    return false;
-                }
-            }
-            // Frame type filter
-            if let Some(ff) = frame_filter {
-                if row.frame_type != ff {
-                    return false;
-                }
-            }
-            true
-        })
-        .collect();
+    // Apply post-fetch frame_type filter — cannot be trivially done in a
+    // single UNION query with dynamic placeholders.
+    let filtered =
+        all.into_iter().filter(|row| frame_filter.is_none_or(|ff| row.frame_type == ff)).collect();
 
     Ok(filtered)
 }
@@ -252,42 +226,6 @@ pub async fn list_project_links_for_sessions(
         .collect();
 
     Ok(rows)
-}
-
-/// Look up the current state of an `acquisition_session` row.
-///
-/// Returns `Some((state, root_id))` when found, `None` when not found.
-///
-/// # Errors
-/// Returns [`DbError::Database`] on query failure.
-pub async fn get_acquisition_session_state(
-    pool: &SqlitePool,
-    session_id: &str,
-) -> DbResult<Option<(String, String)>> {
-    let row: Option<(String, String)> =
-        sqlx::query_as("SELECT state, root_id FROM acquisition_session WHERE id = ?")
-            .bind(session_id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(row)
-}
-
-/// Look up the current state of a `calibration_session` row.
-///
-/// Returns `Some((state, root_id))` when found, `None` when not found.
-///
-/// # Errors
-/// Returns [`DbError::Database`] on query failure.
-pub async fn get_calibration_session_state(
-    pool: &SqlitePool,
-    session_id: &str,
-) -> DbResult<Option<(String, String)>> {
-    let row: Option<(String, String)> =
-        sqlx::query_as("SELECT state, root_id FROM calibration_session WHERE id = ?")
-            .bind(session_id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(row)
 }
 
 /// Set `root_id` on an `acquisition_session` row (T036, FR-012).
@@ -401,26 +339,6 @@ mod tests {
         let db = setup().await;
         let links = list_project_links_for_sessions(db.pool(), &[]).await.unwrap();
         assert!(links.is_empty());
-    }
-
-    #[tokio::test]
-    async fn get_acquisition_session_state_returns_none_for_unknown() {
-        let db = setup().await;
-        let result =
-            get_acquisition_session_state(db.pool(), "00000000-0000-0000-0000-000000000000")
-                .await
-                .unwrap();
-        assert!(result.is_none());
-    }
-
-    #[tokio::test]
-    async fn get_calibration_session_state_returns_none_for_unknown() {
-        let db = setup().await;
-        let result =
-            get_calibration_session_state(db.pool(), "00000000-0000-0000-0000-000000000000")
-                .await
-                .unwrap();
-        assert!(result.is_none());
     }
 
     #[tokio::test]
