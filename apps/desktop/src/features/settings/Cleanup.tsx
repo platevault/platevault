@@ -194,10 +194,15 @@ export function Cleanup({ save }: CleanupProps) {
                       </td>
                       <td>
                         <SegControl
-                          options={['Keep', 'Archive', 'Delete']}
+                          options={[
+                            { value: 'Keep', label: m.settings_cleanup_action_keep() },
+                            { value: 'Archive', label: m.settings_cleanup_action_archive() },
+                            { value: 'Delete', label: m.settings_cleanup_action_delete() },
+                          ]}
                           value={current}
                           onChange={(v) => handleTableChange(row.id, v)}
                           danger
+                          dangerValue="Delete"
                         />
                       </td>
                     </tr>

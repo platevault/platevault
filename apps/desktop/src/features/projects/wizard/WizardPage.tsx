@@ -57,20 +57,26 @@ function clearDraft(): void {
   }
 }
 
-const STEP_LABELS = [
-  'Name & profile',
-  'Sources (lights)',
-  'Calibration',
-  'Source views',
-  'Naming & layout',
-  'Review plan & create',
-];
+// Render-time factory so labels re-read the active locale (spec 046 #8).
+function stepLabels(): string[] {
+  return [
+    m.projects_wizard_step_name_profile(),
+    m.projects_wizard_step_sources_lights(),
+    m.projects_wizard_step_calibration(),
+    m.projects_wizard_step_source_views(),
+    m.projects_wizard_step_naming_layout(),
+    m.projects_wizard_step_review_create(),
+  ];
+}
 
-const PROFILE_LABELS: Record<string, string> = {
-  pixinsight: 'PixInsight/WBPP',
-  siril: 'Siril',
-  planetary: 'planetary/lunar',
-};
+function profileLabelFor(profile: string): string | undefined {
+  switch (profile) {
+    case 'pixinsight': return 'PixInsight/WBPP';
+    case 'siril': return 'Siril';
+    case 'planetary': return m.projects_wizard_profile_planetary_lunar();
+    default: return undefined;
+  }
+}
 
 // Map wizard workflowProfile to the ProjectTool enum expected by the backend.
 const PROFILE_TO_TOOL: Record<string, 'PixInsight' | 'Siril'> = {
@@ -84,6 +90,9 @@ export function WizardPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [wizardData, setWizardData] = useState<WizardData>(loadDraft);
   const [creating, setCreating] = useState(false);
+
+  // Render-time so labels re-read the active locale (spec 046 #8).
+  const labels = stepLabels();
 
   // In mock mode, allow skipping all validation to walk through the wizard quickly
   const devSkip = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -113,7 +122,7 @@ export function WizardPage() {
   }
 
   function handleNext() {
-    if (currentStep < STEP_LABELS.length - 1 && canAdvance()) {
+    if (currentStep < labels.length - 1 && canAdvance()) {
       setCurrentStep(currentStep + 1);
     }
   }
@@ -177,7 +186,7 @@ export function WizardPage() {
     }
   }
 
-  const steps: WizardStep[] = STEP_LABELS.map((label, i) => ({
+  const steps: WizardStep[] = labels.map((label, i) => ({
     label,
     completed: i < currentStep,
   }));
@@ -193,7 +202,7 @@ export function WizardPage() {
   };
 
   const projectLabel = wizardData.name.name || m.projects_create_title();
-  const profileLabel = PROFILE_LABELS[wizardData.name.workflowProfile] || wizardData.name.workflowProfile;
+  const profileLabel = profileLabelFor(wizardData.name.workflowProfile) ?? wizardData.name.workflowProfile;
 
   // Computed summary counts
   const flatsMapped = Object.values(wizardData.calibration.flatMappings).filter(Boolean).length;
@@ -201,8 +210,22 @@ export function WizardPage() {
   const biasSelected = wizardData.calibration.sharedBiasId ? 1 : 0;
 
   // Back / Next button labels per wireframe
-  const backLabels = ['', '← Back', '← Back to sources', '← Calibration', '← Source views', '← Back'];
-  const nextLabels = ['Next: sources →', 'Next: calibration →', 'Next: source views →', 'Next: naming →', 'Next: review →', ''];
+  const backLabels = [
+    '',
+    m.projects_wizard_back_default(),
+    m.projects_wizard_back_to_sources(),
+    m.projects_wizard_back_calibration(),
+    m.projects_wizard_back_source_views(),
+    m.projects_wizard_back_default(),
+  ];
+  const nextLabels = [
+    m.projects_wizard_next_sources(),
+    m.projects_wizard_next_calibration(),
+    m.projects_wizard_next_source_views(),
+    m.projects_wizard_next_naming(),
+    m.projects_wizard_next_review(),
+    '',
+  ];
 
   // Summary panel (right rail)
   const summary = (
@@ -233,10 +256,10 @@ export function WizardPage() {
             {m.projects_wizard_summary_coming_up()}
           </div>
           <div className="alm-wizard-page__summary-list">
-            {STEP_LABELS.slice(currentStep + 1).map((label, i) => (
+            {labels.slice(currentStep + 1).map((label, i) => (
               <div
                 key={label}
-                className={'alm-wizard-page__coming-up-item' + (i < STEP_LABELS.length - currentStep - 2 ? ' alm-wizard-page__coming-up-item--sep' : '')}
+                className={'alm-wizard-page__coming-up-item' + (i < labels.length - currentStep - 2 ? ' alm-wizard-page__coming-up-item--sep' : '')}
               >
                 {currentStep + i + 2}. {label}
               </div>
@@ -320,7 +343,7 @@ export function WizardPage() {
         {currentStep < 5 && (
           <div className="alm-wizard-page__step-header">
             <h2 className="alm-wizard-page__step-title">
-              {m.projects_wizard_step_label()} {currentStep + 1} &middot; {STEP_LABELS[currentStep]}
+              {m.projects_wizard_step_label()} {currentStep + 1} &middot; {labels[currentStep]}
             </h2>
           </div>
         )}

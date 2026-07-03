@@ -155,7 +155,7 @@ export function SessionsPage() {
             value: search,
             onChange: setSearch,
             placeholder: m.sessions_search_placeholder(),
-            ariaLabel: 'Search sessions',
+            ariaLabel: m.sessions_search_aria(),
           }}
           grouping={{
             dimensions: SESSION_DIMENSIONS,

@@ -145,15 +145,18 @@ const FRAME_TYPE_CLASSES = [
 ] as const;
 type FrameTypeClass = (typeof FRAME_TYPE_CLASSES)[number];
 
-const FRAME_TYPE_LABELS: Record<FrameTypeClass, string> = {
-	light: "Light",
-	flat: "Flat",
-	dark: "Dark",
-	bias: "Bias",
-	master_flat: "Master Flat",
-	master_dark: "Master Dark",
-	master_bias: "Master Bias",
-};
+/** Render-time factory (spec 046 #8b) so frame-type labels re-read the active locale. */
+function frameTypeLabel(cls: FrameTypeClass): string {
+	switch (cls) {
+		case "light": return m.inbox_kind_light();
+		case "flat": return m.inbox_kind_flat();
+		case "dark": return m.inbox_kind_dark();
+		case "bias": return m.inbox_kind_bias();
+		case "master_flat": return m.settings_naming_frametype_master_flat();
+		case "master_dark": return m.settings_naming_frametype_master_dark();
+		case "master_bias": return m.settings_naming_frametype_master_bias();
+	}
+}
 
 // Built-in defaults shown as the placeholder / reset target per type.
 const FRAME_TYPE_DEFAULT_PATTERNS: Record<FrameTypeClass, string> = {
@@ -684,7 +687,7 @@ function PerTypeDestinationPatterns() {
 					// We cannot tell which class from a single string; flag all classes
 					// that currently fail client-side validation, falling back to a
 					// generic banner keyed on the first overridden class.
-					const message = typeof err === "string" ? err : "Invalid pattern";
+					const message = typeof err === "string" ? err : m.settings_naming_pertype_invalid_pattern();
 					const errs: Partial<Record<FrameTypeClass, string>> = {};
 					let attributed = false;
 					for (const cls of FRAME_TYPE_CLASSES) {
@@ -752,7 +755,7 @@ function PerTypeDestinationPatterns() {
 				return (
 					<SettingsRow
 						key={cls}
-						label={<span id={`${rowId}-label`}>{FRAME_TYPE_LABELS[cls]}</span>}
+						label={<span id={`${rowId}-label`}>{frameTypeLabel(cls)}</span>}
 						info={m.settings_naming_dest_info()}
 					>
 						{/* Editor and its buttons live on separate lines (spec 043 §4). */}

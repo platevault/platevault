@@ -99,11 +99,11 @@ export function ListPageLayout({
   children,
   detail,
   onCloseDetail,
-  detailLabel = 'Details',
+  detailLabel = m.common_details(),
   detailPlacement = 'bottom',
   bottomDetail,
   onCloseBottomDetail,
-  bottomDetailLabel = 'Session details',
+  bottomDetailLabel = m.list_page_layout_bottom_detail_label(),
 }: ListPageLayoutProps) {
   const hasDetail = detail != null;
   const hasBottom = bottomDetail != null;

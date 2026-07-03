@@ -1,5 +1,5 @@
 /**
- * Tool launch store and helpers — spec 011 T010/T011/T012/T017.
+ * Tool launch store and helpers — spec 011 T010/T011/T012/T017/T021.
  *
  * Provides:
  * - `useToolProfiles()` — reactive query over `tools.list`.
@@ -7,6 +7,8 @@
  * - `toolIdFromProjectTool()` — derives the stable `tool_id` from the project's
  *   `tool` string (data-model.md §WorkflowBinding resolution rule).
  * - `toolLaunchDisabledReason()` — derives tooltip copy keyed off configured/available.
+ * - `hasSeenCwdAnchoredHint()` / `markCwdAnchoredHintSeen()` — localStorage-backed
+ *   one-time-per-tool "cwd anchored" hint state (T021, US3 acceptance scenario 3).
  */
 import { useState, useCallback, useEffect } from 'react';
 import {
@@ -53,11 +55,47 @@ export function toolLaunchDisabledReason(
 export function toolLaunchDisabledTooltip(reason: LaunchDisabledReason): string {
   switch (reason) {
     case 'not_configured':
-      return 'Tool path not configured';
+      return m.projects_toollaunch_not_configured();
     case 'not_available':
-      return 'Tool executable missing';
+      return m.projects_toollaunch_not_available();
     default:
       return '';
+  }
+}
+
+// ── one-time "cwd anchored" hint (T021) ────────────────────────────────────────
+
+/**
+ * localStorage key prefix for the per-tool "cwd anchored" hint seen-state
+ * (US3 acceptance scenario 3): tools whose profile declares
+ * `supports_open_folder = false` don't get a folder argument, only a `cwd`.
+ * The first time such a tool is launched, a one-time note explains this so
+ * the user isn't left wondering why no folder chooser opened.
+ */
+const CWD_ANCHORED_HINT_STORAGE_PREFIX = 'alm.toolhint.cwdAnchored.';
+
+function cwdAnchoredHintStorageKey(toolId: string): string {
+  return `${CWD_ANCHORED_HINT_STORAGE_PREFIX}${toolId}`;
+}
+
+/** True when the one-time cwd-anchored hint has already been shown for `toolId`. */
+export function hasSeenCwdAnchoredHint(toolId: string): boolean {
+  try {
+    return window.localStorage.getItem(cwdAnchoredHintStorageKey(toolId)) === '1';
+  } catch {
+    // localStorage unavailable — fail safe by treating the hint as already seen
+    // so we never throw or spam the user in an environment without storage.
+    return true;
+  }
+}
+
+/** Mark the one-time cwd-anchored hint as shown for `toolId`. */
+export function markCwdAnchoredHintSeen(toolId: string): void {
+  try {
+    window.localStorage.setItem(cwdAnchoredHintStorageKey(toolId), '1');
+  } catch {
+    // localStorage unavailable — the hint may reappear on the next launch;
+    // non-critical, so we swallow the error.
   }
 }
 
@@ -95,9 +133,13 @@ export interface UseToolLaunchResult {
 }
 
 /**
- * Mutation hook for launching a tool for a project (T010/T011/T012).
+ * Mutation hook for launching a tool for a project (T010/T011/T012/T021).
  *
- * On success: shows "Launched {tool}" toast.
+ * On success: shows "Launched {tool}" toast. When `supportsOpenFolder` is
+ * `false` and this is the first successful launch of `toolId` in this
+ * browser profile, also shows a one-time "cwd anchored" hint toast (T021,
+ * US3 acceptance scenario 3) explaining that the tool doesn't accept a
+ * folder argument — only the working directory is set.
  * On error: shows failure toast with "Configure path" affordance on not_configured errors.
  * On prior_instance_alive: sets `priorInstanceAlive=true` (caller renders the modal).
  */
@@ -105,6 +147,7 @@ export function useToolLaunch(
   projectId: string,
   toolId: string,
   toolName: string,
+  supportsOpenFolder?: boolean,
 ): UseToolLaunchResult {
   const [state, setState] = useState<LaunchState>({
     working: false,
@@ -125,6 +168,18 @@ export function useToolLaunch(
 
         if (resp.status === 'success') {
           addToast({ message: m.projects_tool_launched({ tool: toolName }), variant: 'success' });
+          if (
+            supportsOpenFolder === false &&
+            toolId &&
+            !hasSeenCwdAnchoredHint(toolId)
+          ) {
+            markCwdAnchoredHintSeen(toolId);
+            addToast({
+              message: m.projects_tool_cwd_anchored_hint({ tool: toolName }),
+              variant: 'info',
+              duration: 0,
+            });
+          }
           setState((s) => ({ ...s, priorInstanceAlive: false }));
           return;
         }
@@ -155,7 +210,7 @@ export function useToolLaunch(
         setState((s) => ({ ...s, working: false }));
       }
     },
-    [projectId, toolId, toolName],
+    [projectId, toolId, toolName, supportsOpenFolder],
   );
 
   const dismissPriorWarning = useCallback(() => {

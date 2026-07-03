@@ -25,7 +25,7 @@
 **Feature Branch**: `006-inventory-library-lifecycle`  
 **Created**: 2026-05-09  
 **Updated**: 2026-07-03  
-**Status**: Core implemented; **reconciliation iteration applied 2026-07-03** (041/043/040) — `mixed` removed, FR-002 filter dropped, FR-007 + FR-010 in scope. Open reconciliation tasks: T430 (remove mixed_state phantom), T410/T411 (FR-007 Reveal-in-OS), T420/T421 (FR-010 Ignore action), T309 (Cmd+K → /sessions), T403 (Layer-1 disabled-source test). Obsolete: T308, T311.  
+**Status**: **Implemented** (closed 2026-07-03). Core lifecycle shipped and the 041/043/040 reconciliation iteration is fully applied — `mixed` removed, FR-002 filter dropped, FR-007 (Reveal-in-OS) + FR-010 (Ignore + Cmd+K) landed (all reconciliation tasks T430/T410/T411/T420/T421/T309/T403 done). The remaining open tasks are all **DEFERRED**, not unstarted: Playwright-in-WSL smoke tests (T107/T205/T306/T307/T310/T405), provenance follow-ups (T203/T204), missing/reconnect-source warnings (T402/T404, additive-contract, out of v1), diagram doc (T500), and the spec-002-blocked CI enum snapshot (T506). Obsolete: T308, T311. See `SPEC_STATUS.md`.  
 **Input**: User description: "Specify the Inventory lifecycle, replacing Library tags/handling ambiguity with clear frame types, review state, source details, and consistent actions."
 
 ## User Scenarios & Testing *(mandatory)*

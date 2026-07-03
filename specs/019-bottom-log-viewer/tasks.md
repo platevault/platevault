@@ -68,11 +68,14 @@ workspace resizes and the selected item remains selected.
 
 ### Tests for User Story 1
 
-- [ ] T006 [P] [US1] Desktop unit test for `LogPanel` expand/collapse,
+- [x] T006 [P] [US1] Desktop unit test for `LogPanel` expand/collapse,
       level filter chip selection, and reduced-motion behavior in
-      `apps/desktop/src/ui/LogPanel.test.tsx`.
-      DEFERRED — covered partially by T017 cross-link tests. Full
-      expand/collapse test deferred (needs Collapsible render in jsdom).
+      `apps/desktop/src/app/LogPanel.test.tsx` (actual component path is
+      `src/app/LogPanel.tsx`, not `src/ui/LogPanel.tsx`).
+      — 3 tests: Collapsible trigger toggles `aria-expanded`/label and panel
+      content mount/unmount, level chip click filters the visible entries,
+      `prefers-reduced-motion` is consulted via a mocked `matchMedia`. All
+      green under real jsdom render (no mocked assertions, no skips).
 
 ### Implementation for User Story 1
 
@@ -110,11 +113,15 @@ resets to `all` (per research R7).
       in `apps/desktop/src/ui/LogPanel.followState.test.tsx`.
       — 4 tests: read on mount, default false, persists on toggle, optimistic
       local update. All green.
-- [ ] T011 [P] [US2] Desktop unit test that follow-tail pauses on manual
+- [x] T011 [P] [US2] Desktop unit test that follow-tail pauses on manual
       scroll-up and resumes on scroll-to-bottom in
-      `apps/desktop/src/ui/LogPanel.followScroll.test.tsx`.
-      DEFERRED — scroll detection requires real scroll DOM events which
-      jsdom does not support reliably. Manual testing confirms behavior.
+      `apps/desktop/src/app/LogPanel.followScroll.test.tsx` (actual component
+      path is `src/app/LogPanel.tsx`, not `src/ui/LogPanel.tsx`).
+      — 2 tests: driven via `Object.defineProperty` on `scrollTop`/
+      `scrollHeight`/`clientHeight` + `fireEvent.scroll`, stubbing jsdom's
+      missing `Element.scrollTo`. Confirms pause past the 20px threshold and
+      resume at scrollTop 0, plus a near-top (10px) case that stays unpaused.
+      All green under real jsdom scroll events, no skips.
 
 ### Implementation for User Story 2
 

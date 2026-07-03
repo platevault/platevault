@@ -14,11 +14,15 @@ import { m } from '@/lib/i18n';
 type Kind = 'dark' | 'flat' | 'bias';
 
 const KIND_ORDER: Kind[] = ['dark', 'flat', 'bias'];
-const GROUP_LABELS: Record<Kind, string> = {
-  dark: 'DARKS',
-  flat: 'FLATS',
-  bias: 'BIAS',
-};
+
+// Render-time function (spec 046 #8) so group headers re-read the active locale.
+function groupLabel(kind: Kind): string {
+  switch (kind) {
+    case 'dark': return m.calibration_group_darks();
+    case 'flat': return m.calibration_group_flats();
+    case 'bias': return m.calibration_group_bias();
+  }
+}
 
 function kindLabel(kind: string): Kind | null {
   if (kind === 'dark' || kind === 'flat' || kind === 'bias') return kind;
@@ -110,7 +114,7 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
     >
       {grouped.map((group) => (
         <div key={group.kind}>
-          <div className="alm-group-header">{GROUP_LABELS[group.kind]}</div>
+          <div className="alm-group-header">{groupLabel(group.kind)}</div>
           {group.items.map((master) => {
             const isAging = master.ageDays > agingThresholdDays;
             // Fingerprint may be absent on real master rows (e.g. metadata not yet

@@ -157,6 +157,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     projectId,
     toolId,
     projectToolStr || 'tool',
+    toolProfile?.supportsOpenFolder,
   );
   const launchDisabledReason = toolLaunchDisabledReason(toolProfile);
 
@@ -233,7 +234,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         });
       } else if (resp.status === 'error') {
         addToast({
-          message: resp.error?.message ?? 'Transition refused.',
+          message: resp.error?.message ?? m.projects_toast_transition_refused(),
           variant: 'error',
         });
       }

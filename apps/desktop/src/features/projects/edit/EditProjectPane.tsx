@@ -287,14 +287,14 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
 function mapUpdateError(code: string): string {
   switch (code) {
-    case 'project.not_found': return 'Project not found.';
-    case 'name.empty':        return 'Name cannot be empty.';
-    case 'name.too_long':     return 'Name must be 120 characters or fewer.';
-    case 'name.duplicate':    return 'A project with this name already exists.';
-    case 'tool.unknown':      return 'Unknown processing tool.';
-    case 'tool.locked':       return 'Tool cannot be changed in the current lifecycle state.';
-    case 'lifecycle.read_only': return 'This project is archived and cannot be edited.';
-    case 'no_op':             return 'No fields were changed.';
-    default:                  return `Update failed (${code}).`;
+    case 'project.not_found': return m.projects_edit_err_not_found();
+    case 'name.empty':        return m.projects_edit_err_name_empty();
+    case 'name.too_long':     return m.projects_edit_err_name_too_long();
+    case 'name.duplicate':    return m.projects_create_name_duplicate();
+    case 'tool.unknown':      return m.projects_edit_err_tool_unknown();
+    case 'tool.locked':       return m.projects_edit_err_tool_locked();
+    case 'lifecycle.read_only': return m.projects_edit_err_read_only();
+    case 'no_op':             return m.projects_edit_err_no_op();
+    default:                  return m.projects_edit_err_generic({ code });
   }
 }

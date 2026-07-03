@@ -6,8 +6,8 @@
 
 **Feature Branch**: `011-processing-tool-launch`
 **Created**: 2026-05-09
-**Last Amended**: 2026-05-22
-**Status**: Draft
+**Last Amended**: 2026-07-03
+**Status**: **Implemented** (closed 2026-07-03). Launch pipeline, per-tool profiles, cwd-containment guard, detach + pid tracking, and UI (launch CTA + relaunch modal in `ProjectDetail.tsx`, launch-history `ToolLaunchesAccordion`) shipped and tested (FakeSpawner unit + integration; migration `0024_tool_launches.sql`). FR-001…FR-011 satisfied. T021 (one-time cwd-anchored first-launch hint) implemented in closeout; doc cross-links (X-1/X-2) done. Remaining open tasks are DEFERRED — env-blocked test infra only: T018 Playwright settings-flow smoke and T022 stub-binary real-spawn tests (both blocked on WSL/sandbox, not missing logic). Satisfies spec 012's dependencies (`launch_id` handle, `tool_launches.completed_at`, accordion surface).
 **Input**: User description: "Specify direct tool launch for project workflows,
 including configured paths for PixInsight, Siril, and future tools, with
 project-level actions."

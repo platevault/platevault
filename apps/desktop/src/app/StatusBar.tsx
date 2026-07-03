@@ -29,10 +29,12 @@ function formatCount(n: number): string {
  */
 export function StatusBar() {
   const { toggle } = useLogPanel();
-  const { statusLabel } = useOperationStatus();
+  const { status: opStatus, statusLabel } = useOperationStatus();
   const status = useStatusSummary();
   const pageStatus = usePageStatus();
-  const isActive = statusLabel !== 'Idle';
+  // Compare the stable `status` enum, not `statusLabel` (a translated,
+  // locale-dependent string — spec 046 #8).
+  const isActive = opStatus !== 'idle';
 
   return (
     <div className="alm-frame__statusbar">

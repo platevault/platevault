@@ -9,6 +9,8 @@
  * Destructive destination is always `archive` (R-026-Dest-Archive).
  */
 
+import { m } from '@/lib/i18n';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** View lifecycle state (spec 026 data-model). */
@@ -118,17 +120,17 @@ export async function regeneratePreparedView(
 export function viewStateLabel(state: ViewState): string {
   switch (state) {
     case 'current':
-      return 'Current';
+      return m.projects_view_state_current();
     case 'stale':
-      return 'Stale';
+      return m.projects_view_state_stale();
     case 'missing':
-      return 'Missing';
+      return m.projects_view_state_missing();
     case 'removed':
-      return 'Removed';
+      return m.projects_view_state_removed();
     case 'failed':
-      return 'Failed';
+      return m.projects_view_state_failed();
     case 'kind_diverged':
-      return 'Kind mismatch — resolve before operating';
+      return m.projects_view_state_kind_diverged();
     default:
       return state;
   }

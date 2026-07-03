@@ -160,16 +160,17 @@ export function SetupWizard() {
       // Deduplication check
       const dedup = checkDeduplication(state.sources, kind, path);
       if (dedup.crossKindConflict) {
+        const conflictKind = dedup.crossKindConflict;
         setErrors((prev) => ({
           ...prev,
-          [state.sources.length]: `This directory is registered under ${dedup.crossKindConflict}`,
+          [state.sources.length]: m.setup_sources_error_registered_under({ kind: conflictKind }),
         }));
         return;
       }
       if (dedup.sameKindDuplicate) {
         setErrors((prev) => ({
           ...prev,
-          [state.sources.length]: 'This directory is already added',
+          [state.sources.length]: m.setup_sources_error_already_added(),
         }));
         return;
       }

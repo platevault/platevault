@@ -123,10 +123,10 @@ export function formatType(objectType: string): string {
 /** Resolve the group key + display headline for a target under `groupBy`. */
 function groupHeadlineOf(t: TargetListItem, groupBy: TargetGroupBy): string {
   if (groupBy === 'type') {
-    return t.objectType ? formatType(t.objectType) : 'Unknown type';
+    return t.objectType ? formatType(t.objectType) : m.targets_table_unknown_type();
   }
   const cat = catalogueOf(t);
-  return cat ? catalogueLabel(cat) : 'Other';
+  return cat ? catalogueLabel(cat) : m.targets_objtype_other();
 }
 
 function compareStr(a: string, b: string): number {
@@ -245,7 +245,7 @@ export const TARGET_ACCESSORS: Readonly<Record<string, DimensionAccessor<TargetL
   type: (t) => t.objectType ? formatType(t.objectType) : null,
   catalogue: (t) => {
     const cat = catalogueOf(t);
-    return cat ? catalogueLabel(cat) : 'Other';
+    return cat ? catalogueLabel(cat) : m.targets_objtype_other();
   },
   // Applicable filters: group by the target's recommended band set (the same
   // mock recommendation the Filter-bands filter uses), e.g. "Ha OIII SII".

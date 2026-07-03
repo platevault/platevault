@@ -65,10 +65,9 @@ type LoadState =
 function kindLabel(kind: string): string {
   switch (kind) {
     case 'designation':
-      return 'desig';
+      return m.targets_alias_kind_designation();
     case 'common_name':
-      return 'name';
-     
+      return m.targets_alias_kind_name();
     case 'user':
       return m.targets_alias_kind_user();
     default:
@@ -101,15 +100,15 @@ function fmtDec(deg: number): string {
 function errorMessage(err: TargetOpError, fallback: string): string {
   switch (err.code) {
     case 'alias.blank':
-      return 'Alias must not be blank.';
+      return m.targets_detail_alias_blank();
     case 'alias.not_found':
-      return 'Alias not found on this target.';
+      return m.targets_detail_alias_not_found();
     case 'alias.not_removable':
-      return 'Only user-added aliases can be removed.';
+      return m.targets_detail_alias_not_removable();
     case 'target.not_found':
-      return 'Target not found.';
+      return m.targets_detail_target_not_found();
     case 'target.invalid_id':
-      return 'Invalid target ID.';
+      return m.targets_detail_invalid_target_id();
     default:
       return fallback;
   }
@@ -380,7 +379,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         setDisplayAliasInput(data.displayAlias ?? '');
       })
       .catch(() => {
-        setLoadState({ status: 'error', message: 'Failed to load target.' });
+        setLoadState({ status: 'error', message: m.targets_detail_load_error() });
       });
   }, [targetId]);
 
@@ -454,7 +453,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       load();
     } catch (err) {
       const e = err as TargetOpError;
-      setAliasError(errorMessage(e, 'Failed to add alias.'));
+      setAliasError(errorMessage(e, m.targets_detail_add_alias_failed()));
     }
   }, [targetId, aliasInput, load]);
 
@@ -467,7 +466,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         load();
       } catch (err) {
         const e = err as TargetOpError;
-        setActionError(errorMessage(e, 'Failed to remove alias.'));
+        setActionError(errorMessage(e, m.targets_detail_remove_alias_failed()));
       }
     },
     [targetId, load],
@@ -483,7 +482,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       setDisplayAliasEditing(false);
     } catch (err) {
       const e = err as TargetOpError;
-      setActionError(errorMessage(e, 'Failed to set display alias.'));
+      setActionError(errorMessage(e, m.targets_detail_set_display_alias_failed()));
     }
   }, [targetId, displayAliasInput]);
 
@@ -497,7 +496,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       setDisplayAliasEditing(false);
     } catch (err) {
       const e = err as TargetOpError;
-      setActionError(errorMessage(e, 'Failed to clear display alias.'));
+      setActionError(errorMessage(e, m.targets_detail_clear_display_alias_failed()));
     }
   }, [targetId]);
 

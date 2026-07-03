@@ -240,7 +240,7 @@ export function InboxDetail({
 	classification,
 	fileMetadata,
 	onConfirm,
-	confirmLabel = "Confirm to inventory",
+	confirmLabel = m.inbox_confirm_to_inventory(),
 	confirmDisabled = false,
 	confirmBusy = false,
 	destinationRoots,

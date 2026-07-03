@@ -281,12 +281,12 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
 function mapErrorCode(code: string): string {
   switch (code) {
-    case 'name.empty':      return 'Project name is required.';
-    case 'name.too_long':   return 'Project name is too long (max 120 characters).';
-    case 'name.duplicate':  return 'A project with this name already exists.';
-    case 'tool.unknown':    return 'Unknown processing tool selected.';
-    case 'path.invalid':    return 'Folder path is required.';
-    case 'path.collision':  return 'Another project already uses this folder path.';
-    default:                return `Could not create project (${code}).`;
+    case 'name.empty':      return m.projects_create_err_name_empty();
+    case 'name.too_long':   return m.projects_create_err_name_too_long();
+    case 'name.duplicate':  return m.projects_create_name_duplicate();
+    case 'tool.unknown':    return m.projects_create_err_tool_unknown();
+    case 'path.invalid':    return m.projects_create_err_path_invalid();
+    case 'path.collision':  return m.projects_create_err_path_collision();
+    default:                return m.projects_create_err_generic({ code });
   }
 }

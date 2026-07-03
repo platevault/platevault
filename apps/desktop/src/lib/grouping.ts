@@ -27,14 +27,15 @@ export interface GroupNode<T> {
   children: GroupNode<T>[];
 }
 
-/** Sentinel key/label for items missing a grouping dimension. */
+/** Sentinel key for items missing a grouping dimension. */
 export const NONE_KEY = '__none__';
-const NONE_LABEL = '(none)';
 
 function keyOf<T>(item: T, accessor: DimensionAccessor<T>): { key: string; label: string } {
   const raw = accessor(item);
   if (raw === null || raw === undefined || raw === '') {
-    return { key: NONE_KEY, label: NONE_LABEL };
+    // Call-time, not a module-level const, so the label re-reads the active
+    // locale (spec 046 #8) instead of freezing it at import.
+    return { key: NONE_KEY, label: m.grouping_none_label() };
   }
   const s = String(raw);
   return { key: s, label: s };

@@ -32,19 +32,19 @@ export interface ProjectLifecycleStepperProps {
 function nextActionText(state: string): string {
   switch (state) {
     case 'ready':
-      return 'Prepare sources and calibration masters before processing.';
+      return m.projects_stepper_next_ready();
     case 'prepared':
-      return 'Open in processing tool to begin integration.';
+      return m.projects_stepper_next_prepared();
     case 'processing':
-      return 'Record an accepted output to complete the project.';
+      return m.projects_stepper_next_processing();
     case 'completed':
-      return 'Review cleanup candidates to reclaim disk space.';
+      return m.projects_stepper_next_completed();
     case 'archived':
-      return 'Project is archived. Unarchive to resume work.';
+      return m.projects_stepper_next_archived();
     case 'setup_incomplete':
     case 'blocked':
     default:
-      return 'Resolve any issues before proceeding.';
+      return m.projects_stepper_next_default();
   }
 }
 

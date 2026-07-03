@@ -89,8 +89,10 @@ function titleCase(s: string): string {
  * "Master" when the base frame type couldn't be inferred.
  */
 function masterLabel(item: InboxItemSummary): string {
-  const ft = item.masterFrameType ? `Master ${titleCase(item.masterFrameType)}` : 'Master';
-  const parts = [ft];
+  const ft: string = item.masterFrameType
+    ? m.setup_scan_master_kind({ kind: titleCase(item.masterFrameType) })
+    : m.setup_scan_master();
+  const parts: string[] = [ft];
   if (item.masterFilter) parts.push(item.masterFilter);
   if (item.masterExposureS != null) parts.push(`${item.masterExposureS}s`);
   return parts.join(' · ');
