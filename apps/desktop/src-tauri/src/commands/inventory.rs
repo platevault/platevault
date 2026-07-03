@@ -1,24 +1,19 @@
 //! Inventory Tauri commands (spec 006).
 //!
-//! Exposes `inventory.list` and `inventory.session.review` to the webview.
-//! Both commands are wired through `app_core::inventory` which in turn
-//! delegates state mutations to the spec-002 lifecycle transition use case.
+//! Exposes `inventory.list` to the webview.
+//!
+//! Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
+//! inventory. The `inventory.session.review` command that wrapped the
+//! spec-002 lifecycle transition use case was removed along with the
+//! review-state machine it mutated.
 
-use app_core::inventory::{list, review_session};
-use contracts_core::inventory::{
-    InventoryListRequest, InventoryListResponse, InventorySessionReviewRequest,
-    InventorySessionReviewResponse,
-};
+use app_core::inventory::list;
+use contracts_core::inventory::{InventoryListRequest, InventoryListResponse};
 use contracts_core::ContractError;
-// Re-exported for tests only.
-#[cfg(test)]
-use contracts_core::inventory::InventorySessionState;
 use sqlx::SqlitePool;
 use tauri::State;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
-
-use crate::commands::lifecycle::AppState;
 
 // ── inventory.list ────────────────────────────────────────────────────────────
 
@@ -49,32 +44,6 @@ pub async fn inventory_list(
     })
 }
 
-// ── inventory.session.review ──────────────────────────────────────────────────
-
-/// `inventory.session.review` — apply a session review-state transition.
-///
-/// Wraps `lifecycle.transition` for the inventory surface.
-/// Returns `status: "success"` | `"noop"` | `"error"`.
-///
-/// # Errors
-/// Returns `Err(String)` on infrastructure failure.
-#[tauri::command]
-#[specta::specta]
-pub async fn inventory_session_review(
-    req: InventorySessionReviewRequest,
-    pool: State<'_, SqlitePool>,
-    app_state: State<'_, AppState>,
-) -> Result<InventorySessionReviewResponse, ContractError> {
-    tracing::debug!(
-        "inventory.session.review session_id={} next_state={:?}",
-        req.session_id,
-        req.next_state
-    );
-
-    let resp = review_session(&pool, app_state.repo.as_ref(), &app_state.bus, req).await;
-    Ok(resp)
-}
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -91,24 +60,10 @@ mod tests {
             filters: Some(InventoryListFilters {
                 source_filter: None,
                 frame_filter: Some(InventoryFrameType::Light),
-                review_filter: Some("needs_review".to_owned()),
             }),
         };
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(json["contractVersion"], "2.0.0");
         assert_eq!(json["filters"]["frameFilter"], "light");
-        assert_eq!(json["filters"]["reviewFilter"], "needs_review");
-    }
-
-    #[test]
-    fn inventory_session_state_serializes_snake_case() {
-        assert_eq!(
-            serde_json::to_value(super::InventorySessionState::NeedsReview).unwrap(),
-            serde_json::json!("needs_review")
-        );
-        assert_eq!(
-            serde_json::to_value(super::InventorySessionState::Confirmed).unwrap(),
-            serde_json::json!("confirmed")
-        );
     }
 }

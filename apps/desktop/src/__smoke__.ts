@@ -100,7 +100,6 @@ import { queryKeys } from '@/data/queryKeys';
 // ─── API Types ───────────────────────────────────────────────────────────────
 
 import type {
-  SessionState,
   ProjectState,
   PlanState,
   ConfidenceLevel,
@@ -203,7 +202,6 @@ export type SmokeCheck = {
     RadioGroupProps: RadioGroupProps;
     RadioOption: RadioOption;
     CoverageBarProps: CoverageBarProps;
-    SessionState: SessionState;
     ProjectState: ProjectState;
     PlanState: PlanState;
     ConfidenceLevel: ConfidenceLevel;

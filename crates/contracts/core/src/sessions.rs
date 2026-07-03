@@ -4,13 +4,17 @@
 //! `apps/desktop/src/api/types.ts` and the fixture data in
 //! `apps/desktop/src/data/fixtures/sessions.ts`. They are the Rust-side
 //! source of truth once tauri-specta generates the typed bindings.
+//!
+//! Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
+//! inventory — the review-state field (`state: SessionState`) that used to
+//! sit on `AcquisitionSession`/`SessionDetail` was removed along with the
+//! rest of the review lifecycle.
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-// Re-use existing enums from sibling contract modules to avoid specta
-// name collisions (`ProvenanceOrigin`, `SessionState`).
-pub use crate::lifecycle::SessionState;
+// Re-use existing enum from a sibling contract module to avoid a specta
+// name collision (`ProvenanceOrigin`).
 pub use crate::provenance::ProvenanceOrigin;
 
 use crate::calibration::CalibrationKind;
@@ -66,7 +70,6 @@ pub struct SessionKey {
 pub struct AcquisitionSession {
     pub id: String,
     pub session_key: SessionKey,
-    pub state: SessionState,
     pub confidence: ConfidenceLevel,
     pub optical_train_id: String,
     pub frame_count: u32,
@@ -115,7 +118,6 @@ pub struct SessionDetail {
     // Flattened base fields from AcquisitionSession.
     pub id: String,
     pub session_key: SessionKey,
-    pub state: SessionState,
     pub confidence: ConfidenceLevel,
     pub optical_train_id: String,
     pub frame_count: u32,

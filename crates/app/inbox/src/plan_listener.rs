@@ -210,8 +210,8 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
 
     sqlx::query(
         "INSERT INTO calibration_session
-            (id, session_key, frame_ids, kind, state, created_at, source_inbox_item_id)
-         VALUES (?, ?, '[]', ?, 'confirmed', datetime('now'), ?)",
+            (id, session_key, frame_ids, kind, created_at, source_inbox_item_id)
+         VALUES (?, ?, '[]', ?, datetime('now'), ?)",
     )
     .bind(&session_id)
     .bind(&session_key)

@@ -76,15 +76,12 @@ fn parse_entity_type(s: &str) -> Option<EntityType> {
     Some(match s {
         "library_root" => EntityType::LibraryRoot,
         "file_record" => EntityType::FileRecord,
-        "acquisition_session" => EntityType::AcquisitionSession,
-        "calibration_session" => EntityType::CalibrationSession,
         "data_source" => EntityType::DataSource,
         "project" => EntityType::Project,
         "prepared_source" => EntityType::PreparedSource,
         "processing_artifact" => EntityType::ProcessingArtifact,
         "projection" => EntityType::Projection,
         "plan" => EntityType::Plan,
-        "inventory_session" => EntityType::InventorySession,
         "filesystem_plan" => EntityType::FilesystemPlan,
         _ => return None,
     })

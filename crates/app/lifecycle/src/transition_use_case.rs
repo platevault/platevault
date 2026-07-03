@@ -28,7 +28,6 @@ use domain_core::lifecycle::provenance::ProvenanceTag;
 use domain_core::lifecycle::{
     action_review_requirement::action_critical_fields, data_source, inventory,
     plan as plan_lifecycle, plan_requirement::requires_plan, prepared_source, project, projection,
-    session,
 };
 use persistence_db::repositories::lifecycle::{
     LifecycleRepository, TransitionRequest as RepoTransitionRequest,
@@ -428,11 +427,6 @@ fn validate_edge(entity_type: EntityType, from: &str, to: &str) -> bool {
         EntityType::Plan | EntityType::FilesystemPlan => parse_plan(from)
             .zip(parse_plan(to))
             .is_some_and(|(f, t)| plan_lifecycle::is_allowed(f, t)),
-        EntityType::AcquisitionSession
-        | EntityType::CalibrationSession
-        | EntityType::InventorySession => parse_session(from)
-            .zip(parse_session(to))
-            .is_some_and(|(f, t)| session::is_allowed(f, t)),
         EntityType::FileRecord => parse_file_record(from)
             .zip(parse_file_record(to))
             .is_some_and(|(f, t)| inventory::is_allowed(f, t)),
@@ -487,18 +481,6 @@ fn parse_plan(s: &str) -> Option<plan_lifecycle::PlanState> {
         "failed" => plan_lifecycle::PlanState::Failed,
         "cancelled" => plan_lifecycle::PlanState::Cancelled,
         "discarded" => plan_lifecycle::PlanState::Discarded,
-        _ => return None,
-    })
-}
-
-fn parse_session(s: &str) -> Option<session::SessionState> {
-    Some(match s {
-        "discovered" => session::SessionState::Discovered,
-        "candidate" => session::SessionState::Candidate,
-        "needs_review" => session::SessionState::NeedsReview,
-        "confirmed" => session::SessionState::Confirmed,
-        "rejected" => session::SessionState::Rejected,
-        "ignored" => session::SessionState::Ignored,
         _ => return None,
     })
 }
@@ -586,8 +568,6 @@ fn parse_request(request: TransitionRequest) -> Result<ParsedRequest, String> {
     match request {
         TransitionRequest::Project(r) => to_command!(r, EntityType::Project),
         TransitionRequest::Plan(r) => to_command!(r, EntityType::Plan),
-        TransitionRequest::InventorySession(r) => to_command!(r, EntityType::InventorySession),
-        TransitionRequest::CalibrationSession(r) => to_command!(r, EntityType::CalibrationSession),
         TransitionRequest::DataSource(r) => to_command!(r, EntityType::DataSource),
         TransitionRequest::PreparedSource(r) => to_command!(r, EntityType::PreparedSource),
         TransitionRequest::Projection(r) => to_command!(r, EntityType::Projection),

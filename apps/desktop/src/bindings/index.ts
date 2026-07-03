@@ -64,13 +64,6 @@ export const commands = {
 	 */
 	sessionsCalendar: (startMonth: string, endMonth: string) => typedError<CalendarData, ContractError_Serialize>(__TAURI_INVOKE("sessions_calendar", { startMonth, endMonth })),
 	/**
-	 *  `sessions.transition` — transition a session to a new state.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	sessionsTransition: (id: string, action: string, metadata: unknown | null) => typedError<AcquisitionSession_Serialize, ContractError_Serialize>(__TAURI_INVOKE("sessions_transition", { id, action, metadata })),
-	/**
 	 *  `sessions.split` — split a session at a given frame index.
 	 * 
 	 *  # Errors
@@ -1201,22 +1194,43 @@ export const commands = {
 	 */
 	inboxPlanListOpen: () => typedError<InboxOpenPlansResponse, string>(__TAURI_INVOKE("inbox_plan_list_open")),
 	/**
+	 *  `inbox.property_registry` — return the typed property registry.
+	 * 
+	 *  The registry lists every per-file property that the field-agnostic
+	 *  reclassifier (spec 041 R-13) understands: its key, value kind, physical
+	 *  unit, source FITS/XISF header(s), whether it is user-overridable, the frame
+	 *  types it applies to, and an optional validation hint.
+	 * 
+	 *  The UI uses this registry to render a generic metadata editor without
+	 *  hard-coding field names, so future properties can be added without frontend
+	 *  changes (FR-044).
+	 * 
+	 *  # Errors
+	 *  Never fails; always returns `Ok`.
+	 */
+	inboxPropertyRegistry: () => typedError<PropertyRegistryEntry_Serialize[], string>(__TAURI_INVOKE("inbox_property_registry")),
+	/**
+	 *  `inbox.target_recommendations` — recommend canonical targets for a light
+	 *  sub-group by sky-coordinate proximity (spec 041 R-17 / FR-052).
+	 * 
+	 *  Ranks catalog targets by great-circle separation from the sub-group's
+	 *  pointing within a FOV-aware (or configurable fixed) radius. The `OBJECT`
+	 *  header is returned only as a display hint, never used for matching. The
+	 *  chosen target is written separately via `inbox.reclassify` (T068).
+	 * 
+	 *  Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
+	 * 
+	 *  # Errors
+	 *  `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
+	 */
+	inboxTargetRecommendations: (req: InboxTargetRecommendationsRequest_Deserialize) => typedError<InboxTargetRecommendationsResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_target_recommendations", { req })),
+	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on database error.
 	 */
 	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_list", { req })),
-	/**
-	 *  `inventory.session.review` — apply a session review-state transition.
-	 * 
-	 *  Wraps `lifecycle.transition` for the inventory surface.
-	 *  Returns `status: "success"` | `"noop"` | `"error"`.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on infrastructure failure.
-	 */
-	inventorySessionReview: (req: InventorySessionReviewRequest_Deserialize) => typedError<InventorySessionReviewResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_session_review", { req })),
 	/**
 	 *  `ingestion.settings.get` — returns current ingestion/scan settings.
 	 * 
@@ -1408,7 +1422,6 @@ export type AcquisitionSession = AcquisitionSession_Serialize | AcquisitionSessi
 export type AcquisitionSession_Deserialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -1429,7 +1442,6 @@ export type AcquisitionSession_Deserialize = {
 export type AcquisitionSession_Serialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -1960,30 +1972,6 @@ export type CalibrationMatchSuggestResponse_Serialize = {
 	suggestStatus?: SuggestStatus | null,
 	matches?: CalibrationMatchDto_Serialize[] | null,
 	error?: SuggestErrorDto | null,
-};
-
-export type CalibrationSessionTransitionRequest = CalibrationSessionTransitionRequest_Serialize | CalibrationSessionTransitionRequest_Deserialize;
-
-export type CalibrationSessionTransitionRequest_Deserialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel: string | null,
-	actor: TransitionActor,
-};
-
-export type CalibrationSessionTransitionRequest_Serialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel?: string | null,
-	actor: TransitionActor,
 };
 
 export type CalibrationTolerances = {
@@ -2723,6 +2711,15 @@ export type InboxFileMetadata_Deserialize = {
 	 *  DATE-OBS). Supplying the value via reclassify clears the gate.
 	 */
 	missingPathAttributes?: string[],
+	/**
+	 *  Registry key names of mandatory attributes that are absent for this file
+	 *  (spec 041 T070 / FR-047 / R-14). Empty when all mandatory attributes are
+	 *  present. The union of mandatory grouping properties and hard per-type keys
+	 *  (e.g. `["target"]` for a light with no OBJECT and no resolved target).
+	 *  Non-empty means this file's sub-item is in the needs-review bucket and
+	 *  blocks plan creation until the value is supplied via reclassify.
+	 */
+	missingMandatory?: string[],
 };
 
 /**
@@ -2767,6 +2764,15 @@ export type InboxFileMetadata_Serialize = {
 	 *  DATE-OBS). Supplying the value via reclassify clears the gate.
 	 */
 	missingPathAttributes?: string[],
+	/**
+	 *  Registry key names of mandatory attributes that are absent for this file
+	 *  (spec 041 T070 / FR-047 / R-14). Empty when all mandatory attributes are
+	 *  present. The union of mandatory grouping properties and hard per-type keys
+	 *  (e.g. `["target"]` for a light with no OBJECT and no resolved target).
+	 *  Non-empty means this file's sub-item is in the needs-review bucket and
+	 *  blocks plan creation until the value is supplied via reclassify.
+	 */
+	missingMandatory?: string[],
 };
 
 /**  Request for `inbox.item.metadata`. */
@@ -2917,6 +2923,14 @@ export type InboxListItem_Deserialize = {
 	groupExposure: string | null,
 	/**  Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree. */
 	groupInstrument: string | null,
+	/**
+	 *  Per-item rollup of missing mandatory attribute keys (spec 041 T070 /
+	 *  FR-047 / R-14). Non-empty when this item is in the needs-review bucket
+	 *  because one or more files are missing a mandatory attribute. The set is
+	 *  the union of all per-file missing-mandatory lists across the item's files.
+	 *  Empty for fully-resolved items. Blocks plan creation (FR-048/SC-015).
+	 */
+	missingMandatory?: string[],
 };
 
 /**
@@ -2969,6 +2983,14 @@ export type InboxListItem_Serialize = {
 	groupExposure?: string | null,
 	/**  Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree. */
 	groupInstrument?: string | null,
+	/**
+	 *  Per-item rollup of missing mandatory attribute keys (spec 041 T070 /
+	 *  FR-047 / R-14). Non-empty when this item is in the needs-review bucket
+	 *  because one or more files are missing a mandatory attribute. The set is
+	 *  the union of all per-file missing-mandatory lists across the item's files.
+	 *  Empty for fully-resolved items. Blocks plan creation (FR-048/SC-015).
+	 */
+	missingMandatory?: string[],
 };
 
 /**  Response from `inbox.list`. */
@@ -3063,6 +3085,14 @@ export type InboxPlanView = {
 	 */
 	stale: boolean,
 	actions: InboxPlanAction[],
+};
+
+/**  The sky pointing a recommendation set was computed from (decimal degrees). */
+export type InboxPointing = {
+	/**  Right ascension, ICRS J2000 decimal degrees. */
+	raDeg: number | null,
+	/**  Declination, ICRS J2000 decimal degrees. */
+	decDeg: number | null,
 };
 
 /**
@@ -3210,6 +3240,94 @@ export type InboxStatsTotals = {
 	images: number,
 };
 
+/**  One ranked target candidate (R-17 coordinate nearest-neighbour). */
+export type InboxTargetCandidate = {
+	/**  Persisted `canonical_target.id` (UUID string). */
+	targetId: string,
+	/**  Effective display name (`display_alias ?? primary_designation`). */
+	name: string,
+	/**  Great-circle angular separation from the sub-group's pointing, in degrees. */
+	separationDeg: number | null,
+};
+
+/**
+ *  Request for `inbox.target_recommendations`.
+ * 
+ *  Identify a light sub-group by **either** its `inboxItemId` **or** its
+ *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+ *  one should be set; if both are present, `inboxItemId` takes precedence.
+ */
+export type InboxTargetRecommendationsRequest = InboxTargetRecommendationsRequest_Serialize | InboxTargetRecommendationsRequest_Deserialize;
+
+/**
+ *  Request for `inbox.target_recommendations`.
+ * 
+ *  Identify a light sub-group by **either** its `inboxItemId` **or** its
+ *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+ *  one should be set; if both are present, `inboxItemId` takes precedence.
+ */
+export type InboxTargetRecommendationsRequest_Deserialize = {
+	/**  The single-type inbox item (light sub-group) to resolve a target for. */
+	inboxItemId?: string | null,
+	/**  Alternatively, the originating source group (R-12 provenance). */
+	sourceGroupId?: string | null,
+};
+
+/**
+ *  Request for `inbox.target_recommendations`.
+ * 
+ *  Identify a light sub-group by **either** its `inboxItemId` **or** its
+ *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+ *  one should be set; if both are present, `inboxItemId` takes precedence.
+ */
+export type InboxTargetRecommendationsRequest_Serialize = {
+	/**  The single-type inbox item (light sub-group) to resolve a target for. */
+	inboxItemId?: string | null,
+	/**  Alternatively, the originating source group (R-12 provenance). */
+	sourceGroupId?: string | null,
+};
+
+/**
+ *  Response from `inbox.target_recommendations`.
+ * 
+ *  `candidates` is ranked ascending by angular separation within the configured
+ *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+ *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+ *  carries the raw `OBJECT` header for **display only** — never used for
+ *  matching/search (R-17).
+ */
+export type InboxTargetRecommendationsResponse = InboxTargetRecommendationsResponse_Serialize | InboxTargetRecommendationsResponse_Deserialize;
+
+/**
+ *  Response from `inbox.target_recommendations`.
+ * 
+ *  `candidates` is ranked ascending by angular separation within the configured
+ *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+ *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+ *  carries the raw `OBJECT` header for **display only** — never used for
+ *  matching/search (R-17).
+ */
+export type InboxTargetRecommendationsResponse_Deserialize = {
+	candidates: InboxTargetCandidate[],
+	pointing: InboxPointing | null,
+	objectHint: string | null,
+};
+
+/**
+ *  Response from `inbox.target_recommendations`.
+ * 
+ *  `candidates` is ranked ascending by angular separation within the configured
+ *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+ *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+ *  carries the raw `OBJECT` header for **display only** — never used for
+ *  matching/search (R-17).
+ */
+export type InboxTargetRecommendationsResponse_Serialize = {
+	candidates: InboxTargetCandidate[],
+	pointing?: InboxPointing | null,
+	objectHint?: string | null,
+};
+
 export type IngestionSettings = {
 	watcherEnabled: boolean,
 	scanOnStartup: boolean,
@@ -3255,12 +3373,6 @@ export type InventoryListFilters_Deserialize = {
 	sourceFilter: string | null,
 	/**  When set, limits sessions to the given frame type. */
 	frameFilter: InventoryFrameType | null,
-	/**
-	 *  When set, limits sessions to the given canonical state.
-	 *  `ignored` sessions are excluded from the default ledger.
-	 *  Use `reviewFilter=ignored` to surface them (FR-010).
-	 */
-	reviewFilter: string | null,
 };
 
 /**  Optional filters for `inventory.list`. */
@@ -3269,12 +3381,6 @@ export type InventoryListFilters_Serialize = {
 	sourceFilter?: string | null,
 	/**  When set, limits sessions to the given frame type. */
 	frameFilter?: InventoryFrameType | null,
-	/**
-	 *  When set, limits sessions to the given canonical state.
-	 *  `ignored` sessions are excluded from the default ledger.
-	 *  Use `reviewFilter=ignored` to surface them (FR-010).
-	 */
-	reviewFilter?: string | null,
 };
 
 /**  Request envelope for `inventory.list`. */
@@ -3343,127 +3449,21 @@ export type InventoryProvenanceSummary_Serialize = {
 	confirmedBy?: string | null,
 };
 
-/**  Error payload for `inventory.session.review`. */
-export type InventoryReviewError = InventoryReviewError_Serialize | InventoryReviewError_Deserialize;
-
-/**  Error payload for `inventory.session.review`. */
-export type InventoryReviewError_Deserialize = {
-	code: string,
-	message: string,
-	details: unknown | null,
-};
-
-/**  Error payload for `inventory.session.review`. */
-export type InventoryReviewError_Serialize = {
-	code: string,
-	message: string,
-	details?: unknown | null,
-};
-
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
+ * 
+ *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
+ *  inventory with no review lifecycle.
  */
 export type InventorySession = InventorySession_Serialize | InventorySession_Deserialize;
 
-/**  Request envelope for `inventory.session.review`. */
-export type InventorySessionReviewRequest = InventorySessionReviewRequest_Serialize | InventorySessionReviewRequest_Deserialize;
-
-/**  Request envelope for `inventory.session.review`. */
-export type InventorySessionReviewRequest_Deserialize = {
-	contractVersion: string,
-	requestId: string,
-	sessionId: string,
-	/**  Target canonical state. When equal to current state → noop (no error). */
-	nextState: InventorySessionState,
-	actionLabel: string | null,
-	/**  "user" or "system" */
-	actor: string,
-};
-
-/**  Request envelope for `inventory.session.review`. */
-export type InventorySessionReviewRequest_Serialize = {
-	contractVersion: string,
-	requestId: string,
-	sessionId: string,
-	/**  Target canonical state. When equal to current state → noop (no error). */
-	nextState: InventorySessionState,
-	actionLabel?: string | null,
-	/**  "user" or "system" */
-	actor: string,
-};
-
-/**
- *  Response envelope for `inventory.session.review`.
- *  Status is "success", "noop", or "error".
- */
-export type InventorySessionReviewResponse = InventorySessionReviewResponse_Serialize | InventorySessionReviewResponse_Deserialize;
-
-/**
- *  Response envelope for `inventory.session.review`.
- *  Status is "success", "noop", or "error".
- */
-export type InventorySessionReviewResponse_Deserialize = {
-	status: string,
-	contractVersion: string,
-	requestId: string,
-	appliedAt: string | null,
-	entityType: string | null,
-	priorState: InventorySessionState | null,
-	newState: InventorySessionState | null,
-	auditId: string | null,
-	error: InventoryReviewError_Deserialize | null,
-};
-
-/**
- *  Response envelope for `inventory.session.review`.
- *  Status is "success", "noop", or "error".
- */
-export type InventorySessionReviewResponse_Serialize = {
-	status: string,
-	contractVersion: string,
-	requestId: string,
-	appliedAt?: string | null,
-	entityType?: string | null,
-	priorState?: InventorySessionState | null,
-	newState?: InventorySessionState | null,
-	auditId?: string | null,
-	error?: InventoryReviewError_Serialize | null,
-};
-
-/**
- *  Canonical spec 002 session state. Six values; no presentational projection.
- *  UI maps display labels locally: `discovered` and `candidate` → "Needs review".
- */
-export type InventorySessionState = "discovered" | "candidate" | "needs_review" | "confirmed" | "rejected" | "ignored";
-
-export type InventorySessionTransitionRequest = InventorySessionTransitionRequest_Serialize | InventorySessionTransitionRequest_Deserialize;
-
-export type InventorySessionTransitionRequest_Deserialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel: string | null,
-	actor: TransitionActor,
-};
-
-export type InventorySessionTransitionRequest_Serialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel?: string | null,
-	actor: TransitionActor,
-};
-
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
+ * 
+ *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
+ *  inventory with no review lifecycle.
  */
 export type InventorySession_Deserialize = {
 	id: string,
@@ -3474,7 +3474,6 @@ export type InventorySession_Deserialize = {
 	target: string | null,
 	filter: string | null,
 	exposure: string | null,
-	state: InventorySessionState,
 	camera: string | null,
 	gain: string | null,
 	binning: string | null,
@@ -3487,6 +3486,9 @@ export type InventorySession_Deserialize = {
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
+ * 
+ *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
+ *  inventory with no review lifecycle.
  */
 export type InventorySession_Serialize = {
 	id: string,
@@ -3497,7 +3499,6 @@ export type InventorySession_Serialize = {
 	target: string | null,
 	filter: string | null,
 	exposure: string | null,
-	state: InventorySessionState,
 	camera?: string | null,
 	gain?: string | null,
 	binning?: string | null,
@@ -5092,6 +5093,144 @@ export type ProjectionTransitionRequest_Serialize = {
 };
 
 /**
+ *  Discriminant for the value kind of a property in the property registry.
+ * 
+ *  Mirrors the `kind` column in the R-13 property table.  The UI uses this to
+ *  select the appropriate editor widget (number input, enum dropdown, etc.).
+ */
+export type PropertyKind = 
+/**  Free-form text (e.g. camera name, filter label). */
+"string" | 
+/**  IEEE-754 double (e.g. exposureS, raDeg). */
+"number" | 
+/**  Whole number (e.g. offset in ADU). */
+"integer" | 
+/**  Either a numeric or text representation (e.g. gain on some cameras). */
+"numberOrString" | 
+/**  One of a fixed set of string values (e.g. frameType). */
+"enum" | 
+/**  Calendar date (`YYYY-MM-DD`). */
+"date" | 
+/**  ISO-8601 date-time (e.g. obsTimeUtc, dateEnd). */
+"datetime";
+
+/**
+ *  One entry in the property registry exposed by `inbox.property_registry`.
+ * 
+ *  Describes a named inbox-file property that the field-agnostic reclassifier
+ *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
+ *  The UI uses this registry to render a generic metadata editor without
+ *  hard-coding field names.
+ * 
+ *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
+ *  during extraction; empty for derived or resolve-only properties.
+ * 
+ *  `overridable` — when `false` the property is informational or derived and
+ *  the reclassify endpoint will reject an explicit override for it.
+ * 
+ *  `appliesTo` — frame types for which this property is meaningful; the UI
+ *  SHOULD hide non-applicable properties rather than blocking on them.
+ * 
+ *  `validation` — optional human-readable constraint description shown in the
+ *  UI tooltip; not a machine-parseable expression (use for display only).
+ */
+export type PropertyRegistryEntry = PropertyRegistryEntry_Serialize | PropertyRegistryEntry_Deserialize;
+
+/**
+ *  One entry in the property registry exposed by `inbox.property_registry`.
+ * 
+ *  Describes a named inbox-file property that the field-agnostic reclassifier
+ *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
+ *  The UI uses this registry to render a generic metadata editor without
+ *  hard-coding field names.
+ * 
+ *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
+ *  during extraction; empty for derived or resolve-only properties.
+ * 
+ *  `overridable` — when `false` the property is informational or derived and
+ *  the reclassify endpoint will reject an explicit override for it.
+ * 
+ *  `appliesTo` — frame types for which this property is meaningful; the UI
+ *  SHOULD hide non-applicable properties rather than blocking on them.
+ * 
+ *  `validation` — optional human-readable constraint description shown in the
+ *  UI tooltip; not a machine-parseable expression (use for display only).
+ */
+export type PropertyRegistryEntry_Deserialize = {
+	/**  Registry key, camelCase (e.g. `"frameType"`, `"exposureS"`). */
+	key: string,
+	/**  Value kind discriminant used by the UI for widget selection. */
+	kind: PropertyKind,
+	/**
+	 *  Physical unit label for display (e.g. `"s"`, `"deg"`, `"ADU"`).  `None`
+	 *  when the property is dimensionless or a free-form string.
+	 */
+	unit: string | null,
+	/**
+	 *  FITS/XISF source header keyword(s), in priority order.  Empty for
+	 *  properties that are derived or resolved from external sources (e.g.
+	 *  `target`, `opticTrain`).
+	 */
+	sourceHeaders: string[],
+	/**  Whether a user override is accepted by the reclassify use case. */
+	overridable: boolean,
+	/**  Frame types for which this property is applicable. */
+	appliesTo: string[],
+	/**
+	 *  Human-readable validation constraint for display in the UI.  `None`
+	 *  means no documented constraint beyond the `kind` type.
+	 */
+	validation: string | null,
+};
+
+/**
+ *  One entry in the property registry exposed by `inbox.property_registry`.
+ * 
+ *  Describes a named inbox-file property that the field-agnostic reclassifier
+ *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
+ *  The UI uses this registry to render a generic metadata editor without
+ *  hard-coding field names.
+ * 
+ *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
+ *  during extraction; empty for derived or resolve-only properties.
+ * 
+ *  `overridable` — when `false` the property is informational or derived and
+ *  the reclassify endpoint will reject an explicit override for it.
+ * 
+ *  `appliesTo` — frame types for which this property is meaningful; the UI
+ *  SHOULD hide non-applicable properties rather than blocking on them.
+ * 
+ *  `validation` — optional human-readable constraint description shown in the
+ *  UI tooltip; not a machine-parseable expression (use for display only).
+ */
+export type PropertyRegistryEntry_Serialize = {
+	/**  Registry key, camelCase (e.g. `"frameType"`, `"exposureS"`). */
+	key: string,
+	/**  Value kind discriminant used by the UI for widget selection. */
+	kind: PropertyKind,
+	/**
+	 *  Physical unit label for display (e.g. `"s"`, `"deg"`, `"ADU"`).  `None`
+	 *  when the property is dimensionless or a free-form string.
+	 */
+	unit?: string | null,
+	/**
+	 *  FITS/XISF source header keyword(s), in priority order.  Empty for
+	 *  properties that are derived or resolved from external sources (e.g.
+	 *  `target`, `opticTrain`).
+	 */
+	sourceHeaders: string[],
+	/**  Whether a user override is accepted by the reclassify use case. */
+	overridable: boolean,
+	/**  Frame types for which this property is applicable. */
+	appliesTo: string[],
+	/**
+	 *  Human-readable validation constraint for display in the UI.  `None`
+	 *  means no documented constraint beyond the `kind` type.
+	 */
+	validation?: string | null,
+};
+
+/**
  *  A single plan item that requires user acknowledgement (spec 016 data-model
  *  §`ProtectedPlanItem`, FR-008: only items requiring acknowledgement are
  *  included; normal/unprotected items appear only in `non_blocking_summary`).
@@ -5590,7 +5729,6 @@ export type SessionDetail = SessionDetail_Serialize | SessionDetail_Deserialize;
 export type SessionDetail_Deserialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -5609,7 +5747,6 @@ export type SessionDetail_Deserialize = {
 export type SessionDetail_Serialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -5658,8 +5795,6 @@ export type SessionSplitResult_Serialize = {
 	original: AcquisitionSession_Serialize,
 	new: AcquisitionSession_Serialize,
 };
-
-export type SessionState = "discovered" | "candidate" | "needs_review" | "confirmed" | "rejected" | "ignored";
 
 /**  Sessions grouping mode. */
 export type SessionsGroupBy = "none" | "target" | "month" | "filter" | "train";
@@ -6349,7 +6484,9 @@ export type TargetSearchResponse_Serialize = {
  *  - `created_at` — RFC 3339 UTC timestamp the row was created.
  *  - `frame_count` — length of the `frame_ids` JSON array (computed via
  *    `json_array_length`; 0 for legacy rows with the default `'[]'`).
- *  - `state` — session lifecycle state string (e.g. `"confirmed"`, `"candidate"`).
+ * 
+ *  Spec 041 FR-051 (T076): no `state` field — sessions are derived,
+ *  already-confirmed inventory with no review lifecycle.
  */
 export type TargetSessionItem = {
 	id: string,
@@ -6359,8 +6496,6 @@ export type TargetSessionItem = {
 	createdAt: string,
 	/**  Number of frames in `frame_ids` JSON array. */
 	frameCount: number,
-	/**  Lifecycle state (e.g. `"confirmed"`, `"candidate"`, `"needs_review"`). */
-	state: string,
 };
 
 /**  Request for `target.sessions.list` (spec 023 US2). */
@@ -6558,40 +6693,32 @@ export type TransitionRequest = TransitionRequest_Serialize | TransitionRequest_
 /**  Discriminated request — one variant per entity family. */
 export type TransitionRequest_Deserialize = ({ project: {
 	entityType: "project",
-} & ProjectTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
+} & ProjectTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
 	entityType: "plan",
-} & PlanTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; prepared_source?: never; project?: never; projection?: never } | ({ inventory_session: {
-	entityType: "inventory_session",
-} & InventorySessionTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ calibration_session: {
-	entityType: "calibration_session",
-} & CalibrationSessionTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
+} & PlanTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
 	entityType: "data_source",
-} & DataSourceTransitionRequest_Deserialize }) & { calibration_session?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
+} & DataSourceTransitionRequest_Deserialize }) & { file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
 	entityType: "prepared_source",
-} & PreparedSourceTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
+} & PreparedSourceTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
 	entityType: "projection",
-} & ProjectionTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
+} & ProjectionTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
 	entityType: "file_record",
-} & FileRecordTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
+} & FileRecordTransitionRequest_Deserialize }) & { data_source?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
 
 /**  Discriminated request — one variant per entity family. */
 export type TransitionRequest_Serialize = ({ project: {
 	entityType: "project",
-} & ProjectTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
+} & ProjectTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
 	entityType: "plan",
-} & PlanTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; prepared_source?: never; project?: never; projection?: never } | ({ inventory_session: {
-	entityType: "inventory_session",
-} & InventorySessionTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ calibration_session: {
-	entityType: "calibration_session",
-} & CalibrationSessionTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
+} & PlanTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
 	entityType: "data_source",
-} & DataSourceTransitionRequest_Serialize }) & { calibration_session?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
+} & DataSourceTransitionRequest_Serialize }) & { file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
 	entityType: "prepared_source",
-} & PreparedSourceTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
+} & PreparedSourceTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
 	entityType: "projection",
-} & ProjectionTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
+} & ProjectionTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
 	entityType: "file_record",
-} & FileRecordTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
+} & FileRecordTransitionRequest_Serialize }) & { data_source?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
 
 export type TransitionResponse = TransitionResponse_Serialize | TransitionResponse_Deserialize;
 

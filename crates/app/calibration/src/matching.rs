@@ -927,8 +927,8 @@ mod masters_tests {
         let db = test_db().await;
 
         sqlx::query(
-            "INSERT INTO calibration_session (id, session_key, kind, state, created_at) \
-             VALUES ('cal-t1', 'dark-300s', 'dark', 'confirmed', '2026-06-01T00:00:00Z')",
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES ('cal-t1', 'dark-300s', 'dark', '2026-06-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await
@@ -965,8 +965,8 @@ mod masters_tests {
         let db = test_db().await;
 
         sqlx::query(
-            "INSERT INTO calibration_session (id, session_key, kind, state, created_at) \
-             VALUES ('cal-t2', 'flat-2s-Ha', 'flat', 'confirmed', '2026-05-15T00:00:00Z')",
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES ('cal-t2', 'flat-2s-Ha', 'flat', '2026-05-15T00:00:00Z')",
         )
         .execute(db.pool())
         .await
@@ -1002,8 +1002,8 @@ mod masters_tests {
 
         // Insert acquisition session + fingerprint.
         sqlx::query(
-            "INSERT INTO acquisition_session (id, session_key, state, created_at) \
-             VALUES ('acq-t1', 'M31/L/2026-03-01/100/1x1', 'confirmed', '2026-03-01T00:00:00Z')",
+            "INSERT INTO acquisition_session (id, session_key, created_at) \
+             VALUES ('acq-t1', 'M31/L/2026-03-01/100/1x1', '2026-03-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await
@@ -1021,8 +1021,8 @@ mod masters_tests {
 
         // Insert calibration master fingerprint.
         sqlx::query(
-            "INSERT INTO calibration_session (id, session_key, kind, state, created_at) \
-             VALUES ('cal-t3', 'dark-300s-gain100', 'dark', 'confirmed', '2026-03-01T00:00:00Z')",
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES ('cal-t3', 'dark-300s-gain100', 'dark', '2026-03-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await

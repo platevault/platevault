@@ -25,7 +25,6 @@ pub struct TargetSessionRow {
     pub session_key: String,
     pub created_at: String,
     pub frame_count: i64,
-    pub state: String,
 }
 
 /// Flat row returned by [`list_projects_for_target`].
@@ -54,8 +53,7 @@ pub async fn list_sessions_for_target(
         "SELECT id,
                 session_key,
                 created_at,
-                json_array_length(frame_ids) AS frame_count,
-                state
+                json_array_length(frame_ids) AS frame_count
          FROM acquisition_session
          WHERE canonical_target_id = ?
          ORDER BY created_at DESC",
@@ -162,9 +160,9 @@ mod tests {
     ) {
         sqlx::query(
             r#"INSERT INTO acquisition_session
-               (id, session_key, frame_ids, state, created_at, canonical_target_id)
+               (id, session_key, frame_ids, created_at, canonical_target_id)
                VALUES (?, '{"target":"T","filter":"Ha","binning":"1","gain":"0","date":"2026-01-01"}',
-                       '[1,2,3]', 'confirmed', ?, ?)"#,
+                       '[1,2,3]', ?, ?)"#,
         )
         .bind(session_id)
         .bind(created_at)
@@ -214,7 +212,6 @@ mod tests {
         assert_eq!(rows[0].id, "s-001", "newest first");
         assert_eq!(rows[1].id, "s-002");
         assert_eq!(rows[0].frame_count, 3, "frame_count from json_array_length");
-        assert_eq!(rows[0].state, "confirmed");
     }
 
     #[tokio::test]

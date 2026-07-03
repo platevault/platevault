@@ -29,8 +29,9 @@
 //!    unresolved frames still group coherently.
 //! 5. **Upsert `acquisition_session`** by `session_key`: append the file-record
 //!    id to the `frame_ids` JSON array (set-deduped). On insert,
-//!    `state = 'discovered'`, `canonical_target_id` = resolved id or NULL,
-//!    legacy `target_id` left NULL (R10).
+//!    `canonical_target_id` = resolved id or NULL, legacy `target_id` left
+//!    NULL (R10). Sessions are derived, already-confirmed inventory (spec
+//!    041 FR-051) — there is no review-state column to set.
 //!
 //! ## Idempotency (R12)
 //!
@@ -368,8 +369,8 @@ fn parse_date_obs(raw: Option<&str>) -> OffsetDateTime {
 // ── acquisition_session upsert ────────────────────────────────────────────────
 
 /// Upsert an `acquisition_session` by `session_key`, appending `image_id` to the
-/// `frame_ids` JSON array (set-deduped). On insert: `state = 'discovered'`,
-/// `canonical_target_id` set, legacy `target_id` NULL (R10).
+/// `frame_ids` JSON array (set-deduped). On insert: `canonical_target_id` set,
+/// legacy `target_id` NULL (R10). No review-state column (spec 041 FR-051).
 ///
 /// Idempotent (R12): the SELECT-by-`session_key` lookup keeps grouping
 /// single-row, and a repeat append of the same frame id is dropped (set-dedup).
@@ -424,8 +425,8 @@ async fn upsert_session(
     sqlx::query(
         "INSERT INTO acquisition_session
             (id, session_key, target_id, canonical_target_id, has_observer_location,
-             frame_ids, state, observer_location, created_at)
-         VALUES (?, ?, NULL, ?, ?, ?, 'discovered', NULL, ?)",
+             frame_ids, observer_location, created_at)
+         VALUES (?, ?, NULL, ?, ?, ?, NULL, ?)",
     )
     .bind(&id)
     .bind(key)

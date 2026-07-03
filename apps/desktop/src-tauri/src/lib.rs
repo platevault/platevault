@@ -50,7 +50,7 @@ use crate::commands::inbox::{
     inbox_target_recommendations,
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
-use crate::commands::inventory::{inventory_list, inventory_session_review};
+use crate::commands::inventory::inventory_list;
 use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
@@ -90,7 +90,6 @@ use crate::commands::roots::{
 use crate::commands::search::search_global;
 use crate::commands::sessions::{
     sessions_calendar, sessions_get, sessions_list, sessions_merge, sessions_split,
-    sessions_transition,
 };
 use crate::commands::settings::{
     settings_get, settings_overridable_keys, settings_restore_defaults,
@@ -169,7 +168,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         sessions_list,
         sessions_get,
         sessions_calendar,
-        sessions_transition,
         sessions_split,
         sessions_merge,
         // calibration (spec 029 stubs)
@@ -325,7 +323,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_target_recommendations,
         // inventory (spec 006)
         inventory_list,
-        inventory_session_review,
         // ingestion settings (spec 030)
         ingestion_settings_get,
         ingestion_settings_update,
@@ -370,7 +367,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         sessions_list,
         sessions_get,
         sessions_calendar,
-        sessions_transition,
         sessions_split,
         sessions_merge,
         // calibration (spec 029 stubs)
@@ -526,7 +522,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_target_recommendations,
         // inventory (spec 006)
         inventory_list,
-        inventory_session_review,
         // ingestion settings (spec 030)
         ingestion_settings_get,
         ingestion_settings_update,

@@ -349,7 +349,6 @@ pub async fn sessions_list(
             session_key: r.session_key,
             created_at: r.created_at,
             frame_count: r.frame_count,
-            state: r.state,
         })
         .collect())
 }
@@ -873,9 +872,9 @@ mod tests {
     async fn insert_session_linked_to(db: &Database, session_id: &str, target_id: Uuid) {
         sqlx::query(
             r#"INSERT INTO acquisition_session
-               (id, session_key, frame_ids, state, created_at, canonical_target_id)
+               (id, session_key, frame_ids, created_at, canonical_target_id)
                VALUES (?, '{"target":"M 31","filter":"Ha","binning":"1","gain":"0","date":"2026-01-01"}',
-                       '[1,2,3]', 'confirmed', '2026-01-01T00:00:00Z', ?)"#,
+                       '[1,2,3]', '2026-01-01T00:00:00Z', ?)"#,
         )
         .bind(session_id)
         .bind(target_id.to_string())
@@ -910,7 +909,6 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, "s-001");
         assert_eq!(items[0].frame_count, 3);
-        assert_eq!(items[0].state, "confirmed");
     }
 
     #[tokio::test]

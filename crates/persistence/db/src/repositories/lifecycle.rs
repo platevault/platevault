@@ -149,9 +149,6 @@ pub trait LifecycleRepository {
 fn table_for(entity_type: EntityType) -> &'static str {
     match entity_type {
         EntityType::FileRecord => "file_record",
-        // InventorySession shares the acquisition_session table
-        EntityType::AcquisitionSession | EntityType::InventorySession => "acquisition_session",
-        EntityType::CalibrationSession => "calibration_session",
         // FR-019 / T052: canonical project lifecycle lives in `projects.lifecycle`
         // (spec-008 table). The legacy spec-002 `project.state` was removed in
         // migration 0036.
@@ -512,9 +509,7 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         entity_type: EntityType,
     ) -> DbResult<HashMap<String, ProvenanceTag>> {
         // Provenance rows are stored under the SQL table's canonical asset
-        // tag (see `table_for`), which can differ from `EntityType::as_str()`
-        // for families that share a table (e.g. `inventory_session` shares
-        // `acquisition_session`). Reuse `load_provenance` so origin
+        // tag (see `table_for`). Reuse `load_provenance` so origin
         // resolution stays in one place (priority + superseded_by rules).
         let asset_type = provenance_asset_type(entity_type);
         let (per_field, _truncated) = load_provenance(&self.pool, entity_id, asset_type).await?;
@@ -526,7 +521,6 @@ impl LifecycleRepository for SqliteLifecycleRepository {
 /// archive rows. Mirrors `table_for` for families that share a storage table.
 fn provenance_asset_type(entity_type: EntityType) -> &'static str {
     match entity_type {
-        EntityType::InventorySession => "acquisition_session",
         EntityType::Plan => "filesystem_plan",
         EntityType::LibraryRoot => "data_source",
         other => other.as_str(),
@@ -536,8 +530,6 @@ fn provenance_asset_type(entity_type: EntityType) -> &'static str {
 fn parse_entity_type(s: &str) -> EntityType {
     match s {
         "file_record" => EntityType::FileRecord,
-        "acquisition_session" | "inventory_session" => EntityType::AcquisitionSession,
-        "calibration_session" => EntityType::CalibrationSession,
         "filesystem_plan" | "plan" => EntityType::FilesystemPlan,
         "prepared_source" => EntityType::PreparedSource,
         "processing_artifact" => EntityType::ProcessingArtifact,

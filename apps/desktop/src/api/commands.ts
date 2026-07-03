@@ -334,16 +334,10 @@ export async function searchGlobal(args: { query: string }): Promise<SearchResul
 }
 
 // ---------- Mutation Commands ----------
-
-export async function transitionSession(args: {
-  id: string;
-  action: string;
-  metadata?: Record<string, unknown>;
-}): Promise<AcquisitionSession> {
-  return unwrap(
-    await commands.sessionsTransition(args.id, args.action, args.metadata ?? null),
-  );
-}
+//
+// Spec 041 FR-051 (T076, Phase 13): `transitionSession` (wrapping the removed
+// `sessions.transition` command) was removed — sessions are derived,
+// already-confirmed inventory with no review-state transition.
 
 export async function splitSession(args: {
   id: string;
@@ -1080,51 +1074,33 @@ export async function calibrationTolerancesUpdate(
 }
 
 // ── Inventory commands (spec 006) ─────────────────────────────────────────────
+//
+// Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
+// inventory. `inventory.session.review` (Confirm / Re-open review / Reject
+// session) was removed along with the review-state machine it mutated.
 
 import type {
   InventoryListRequest,
   InventoryListResponse,
-  InventorySessionReviewRequest,
-  InventorySessionReviewResponse,
 } from '@/data/fixtures/inventory';
 
 export type {
   InventoryListRequest,
   InventoryListResponse,
-  InventorySessionReviewRequest,
-  InventorySessionReviewResponse,
   InventorySource,
   InventorySession,
-  SessionState as InventorySessionState,
   FrameType as InventoryFrameType,
   SourceState as InventorySourceState,
 } from '@/data/fixtures/inventory';
 
 /**
  * `inventory.list` — return the grouped inventory ledger with optional filters.
- * Filters are applied server-side (source, frame type, review state).
+ * Filters are applied server-side (source, frame type).
  */
 export async function inventoryList(req: InventoryListRequest): Promise<InventoryListResponse> {
   return unwrap(
     await commands.inventoryList(req as Parameters<typeof commands.inventoryList>[0]),
   ) as InventoryListResponse;
-}
-
-/**
- * `inventory.session.review` — apply a session review-state transition
- * (Confirm / Re-open review / Reject session).
- *
- * Returns `status: "success"` | `"noop"` (same-state re-application) |
- * `"error"` with a typed error envelope.
- */
-export async function inventorySessionReview(
-  req: InventorySessionReviewRequest,
-): Promise<InventorySessionReviewResponse> {
-  return unwrap(
-    await commands.inventorySessionReview(
-      req as Parameters<typeof commands.inventorySessionReview>[0],
-    ),
-  ) as InventorySessionReviewResponse;
 }
 
 // ── Spec 011: Processing Tool Launch ─────────────────────────────────────────

@@ -12,14 +12,18 @@
 //! # Architecture
 //!
 //! `acquisition_session` stores: id, session_key (JSON), frame_ids (JSON array),
-//! state, target_id, observer_location (JSON), last_action (JSON), created_at.
+//! target_id, observer_location (JSON), created_at.
 //! `acquisition_fingerprint` stores per-session metadata dimensions for
 //! calibration matching (gain, filter, binning, optic_train, etc.).
 //!
 //! Many contract DTO fields (confidence, total_integration_seconds, total_size_bytes,
 //! metadata, warnings, framesets) have no column yet; defaulted with
 //! `// TODO(037):` markers until later columns/views are built.
-
+//!
+//! Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
+//! inventory — the `state` column (and the review lifecycle it backed) was
+//! removed. `confidence` is now a constant `Confirmed` rather than derived
+//! from a review state.
 //!
 //! Extracted from `app_core` into its own crate (spec 042 / T253 O3b) as a pure
 //! leaf: it has zero `crate::` references and nothing else in `app_core`
@@ -30,17 +34,15 @@
 use contracts_core::calibration::CalibrationKind;
 use contracts_core::sessions::{
     AcquisitionSession, ConfidenceLevel, Frameset, SessionCalibrationMatch, SessionDetail,
-    SessionHistoryEntry, SessionKey, SessionState,
+    SessionHistoryEntry, SessionKey,
 };
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 
 /// One `acquisition_session` row joined with its canonical target (spec 035
-/// US4/T044). Columns: id, session_key, state, legacy target_id,
-/// frame_ids (JSON), created_at, canonical_target_id, canonical primary
-/// designation.
-type SessionRow =
-    (String, String, String, Option<String>, String, String, Option<String>, Option<String>);
+/// US4/T044). Columns: id, session_key, legacy target_id, frame_ids (JSON),
+/// created_at, canonical_target_id, canonical primary designation.
+type SessionRow = (String, String, Option<String>, String, String, Option<String>, Option<String>);
 
 // -- Public use-case functions ------------------------------------------------
 
@@ -57,7 +59,7 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
     // `canonical_target_id` (migration 0046) is the spec-035 link; it coexists
     // with the legacy `target_id` (→ old `target` table, left NULL by ingest).
     let rows: Vec<SessionRow> = sqlx::query_as(
-        "SELECT s.id, s.session_key, s.state, s.target_id, s.frame_ids, s.created_at,
+        "SELECT s.id, s.session_key, s.target_id, s.frame_ids, s.created_at,
                 s.canonical_target_id, ct.primary_designation
          FROM acquisition_session s
          LEFT JOIN canonical_target ct ON ct.id = s.canonical_target_id
@@ -71,7 +73,6 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
     for (
         id,
         session_key_json,
-        state,
         target_id,
         frame_ids_json,
         _created_at,
@@ -85,9 +86,9 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
         if let Some(name) = canonical_name.filter(|n| !n.is_empty()) {
             sk.target = name;
         }
-        let st = parse_session_state(&state);
-        // TODO(037): confidence has no column; derive a best-effort value from state.
-        let confidence = confidence_from_state(st);
+        // Spec 041 FR-051: sessions are derived, already-confirmed inventory —
+        // there is no review state left to derive a confidence level from.
+        let confidence = ConfidenceLevel::Confirmed;
         // TODO(037): optical_train_id -- fingerprint stores name, not UUID.
         let optical_train_id = fp.as_ref().and_then(|f| f.optic_train.clone()).unwrap_or_default();
         // frame_count from JSON array length; 0 when frame_ids is malformed.
@@ -102,12 +103,11 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
         // absent — ingested sessions link via canonical_target_id (R10).
         let target_ids = target_id.or(canonical_target_id).into_iter().collect();
         let project_ids = load_project_ids(pool, &id).await?;
-        // TODO(037): warnings -- not stored; derive from state/fingerprint in future.
+        // TODO(037): warnings -- not stored; derive from fingerprint in future.
         let warnings = Vec::new();
         sessions.push(AcquisitionSession {
             id,
             session_key: sk,
-            state: st,
             confidence,
             optical_train_id,
             frame_count,
@@ -131,7 +131,7 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
 /// Returns `Err(String)` on database failure or when the session is absent.
 pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, String> {
     let row: Option<SessionRow> = sqlx::query_as(
-        "SELECT s.id, s.session_key, s.state, s.target_id, s.frame_ids, s.created_at,
+        "SELECT s.id, s.session_key, s.target_id, s.frame_ids, s.created_at,
                 s.canonical_target_id, ct.primary_designation
          FROM acquisition_session s
          LEFT JOIN canonical_target ct ON ct.id = s.canonical_target_id
@@ -145,7 +145,6 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     let (
         id,
         session_key_json,
-        state,
         target_id,
         frame_ids_json,
         _created_at,
@@ -158,9 +157,9 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     if let Some(name) = canonical_name.filter(|n| !n.is_empty()) {
         sk.target = name;
     }
-    let st = parse_session_state(&state);
-    // TODO(037): confidence has no column; derive from state.
-    let confidence = confidence_from_state(st);
+    // Spec 041 FR-051: sessions are derived, already-confirmed inventory —
+    // there is no review state left to derive a confidence level from.
+    let confidence = ConfidenceLevel::Confirmed;
     // TODO(037): optical_train_id -- fingerprint stores name, not UUID.
     let optical_train_id = fp.as_ref().and_then(|f| f.optic_train.clone()).unwrap_or_default();
     let frame_count = count_json_array(&frame_ids_json);
@@ -184,7 +183,6 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     Ok(SessionDetail {
         id,
         session_key: sk,
-        state: st,
         confidence,
         optical_train_id,
         frame_count,
@@ -300,32 +298,6 @@ fn parse_session_key(json: &str, fp: Option<&Fingerprint>) -> SessionKey {
     SessionKey { target, filter, binning, gain, night }
 }
 
-/// Map the `state` TEXT column to the `SessionState` enum.
-fn parse_session_state(state: &str) -> SessionState {
-    match state {
-        "confirmed" => SessionState::Confirmed,
-        "needs_review" => SessionState::NeedsReview,
-        "rejected" => SessionState::Rejected,
-        "ignored" => SessionState::Ignored,
-        "candidate" => SessionState::Candidate,
-        _ => SessionState::Discovered,
-    }
-}
-
-/// Derive a `ConfidenceLevel` from `SessionState`.
-///
-/// TODO(037): confidence should be its own column once metadata extraction
-/// populates it. Until then we derive a coarse level from state.
-fn confidence_from_state(state: SessionState) -> ConfidenceLevel {
-    match state {
-        SessionState::Confirmed => ConfidenceLevel::Confirmed,
-        SessionState::Rejected => ConfidenceLevel::Rejected,
-        SessionState::NeedsReview => ConfidenceLevel::Medium,
-        SessionState::Candidate => ConfidenceLevel::Low,
-        SessionState::Ignored | SessionState::Discovered => ConfidenceLevel::Unknown,
-    }
-}
-
 /// Count elements in a stored JSON array string; returns 0 on parse failure.
 fn count_json_array(json: &str) -> u32 {
     serde_json::from_str::<serde_json::Value>(json)
@@ -417,17 +389,6 @@ mod tests {
         let result = merge_sessions(&pool, &ids).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("not yet implemented"));
-    }
-
-    #[test]
-    fn parse_session_state_maps_all_known_values() {
-        assert!(matches!(parse_session_state("confirmed"), SessionState::Confirmed));
-        assert!(matches!(parse_session_state("needs_review"), SessionState::NeedsReview));
-        assert!(matches!(parse_session_state("rejected"), SessionState::Rejected));
-        assert!(matches!(parse_session_state("ignored"), SessionState::Ignored));
-        assert!(matches!(parse_session_state("candidate"), SessionState::Candidate));
-        assert!(matches!(parse_session_state("discovered"), SessionState::Discovered));
-        assert!(matches!(parse_session_state("unknown_future"), SessionState::Discovered));
     }
 
     #[test]

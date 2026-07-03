@@ -4,17 +4,15 @@
  * Types mirror the `inventory.list` contract from
  * `specs/006-inventory-library-lifecycle/contracts/inventory.list.json`.
  * These are used by the mock invoke path (VITE_USE_MOCKS=true) and vitest.
+ *
+ * Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
+ * inventory. The review-state machine (`SessionState`, `InventorySession.state`,
+ * `InventoryListRequest.filters.reviewFilter`) and the
+ * `InventorySessionReviewRequest`/`InventorySessionReviewResponse` DTOs were
+ * removed along with the `inventory.session.review` command they backed.
  */
 
 // ── Contract DTOs (local inline until bindings are regenerated) ───────────────
-
-export type SessionState =
-  | 'discovered'
-  | 'candidate'
-  | 'needs_review'
-  | 'confirmed'
-  | 'rejected'
-  | 'ignored';
 
 export type FrameType = 'light' | 'dark' | 'flat' | 'bias' | 'mixed';
 export type SourceKind = 'local_disk' | 'external_disk' | 'removable' | 'network_share';
@@ -47,7 +45,6 @@ export interface InventorySession {
   target: string | null;
   filter: string | null;
   exposure: string | null;
-  state: SessionState;
   camera?: string;
   gain?: string;
   binning?: string;
@@ -71,7 +68,6 @@ export interface InventoryListRequest {
   filters?: {
     sourceFilter?: string;
     frameFilter?: FrameType;
-    reviewFilter?: string;
   };
 }
 
@@ -81,31 +77,6 @@ export interface InventoryListResponse {
   requestId: string;
   generatedAt: string;
   sources: InventorySource[];
-}
-
-export interface InventorySessionReviewRequest {
-  contractVersion: string;
-  requestId: string;
-  sessionId: string;
-  nextState: SessionState;
-  actionLabel?: string;
-  actor: 'user' | 'system';
-}
-
-export interface InventorySessionReviewResponse {
-  status: 'success' | 'noop' | 'error';
-  contractVersion: string;
-  requestId: string;
-  appliedAt?: string;
-  entityType?: string;
-  priorState?: SessionState;
-  newState?: SessionState;
-  auditId?: string;
-  error?: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
 }
 
 // ── Fixture constant UUIDs ────────────────────────────────────────────────────
@@ -128,7 +99,6 @@ const LOCAL_SESSIONS: InventorySession[] = [
     target: 'NGC 7000',
     filter: 'Ha',
     exposure: '300s',
-    state: 'confirmed',
     camera: 'ASI2600MM Pro',
     gain: '100',
     binning: '1×1',
@@ -151,7 +121,6 @@ const LOCAL_SESSIONS: InventorySession[] = [
     target: 'NGC 7000',
     filter: 'OIII',
     exposure: '600s',
-    state: 'confirmed',
     camera: 'ASI2600MM Pro',
     gain: '100',
     binning: '1×1',
@@ -171,7 +140,6 @@ const LOCAL_SESSIONS: InventorySession[] = [
     // 360 s exposure; GAIN=125 (narrowband mode), OFFSET=20, BIN=1×1, SET-TEMP=0°C
     // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '360s',
-    state: 'discovered',
     camera: 'Poseidon-C PRO',
     gain: '125',
     binning: '1×1',
@@ -191,7 +159,6 @@ const LOCAL_SESSIONS: InventorySession[] = [
     // 195 s exposure; GAIN=0 (low-noise LUM mode), OFFSET=20, BIN=1×1, SET-TEMP=0°C
     // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '195s',
-    state: 'needs_review',
     camera: 'Poseidon-C PRO',
     gain: '0',
     binning: '1×1',
@@ -211,7 +178,6 @@ const LOCAL_SESSIONS: InventorySession[] = [
     // 100 s exposure; GAIN=0, OFFSET=20, BIN=1×1, SET-TEMP=0°C
     // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '100s',
-    state: 'ignored',
     camera: 'Poseidon-C PRO',
     gain: '0',
     binning: '1×1',
@@ -230,7 +196,6 @@ const LOCAL_SESSIONS: InventorySession[] = [
     // 171 s exposure; GAIN=125 (narrowband mode), OFFSET=20, BIN=1×1, SET-TEMP=0°C
     // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '171s',
-    state: 'rejected',
     camera: 'Poseidon-C PRO',
     gain: '125',
     binning: '1×1',
@@ -249,7 +214,6 @@ const LOCAL_SESSIONS: InventorySession[] = [
     // 300 s exposure; GAIN=125 (narrowband mode), OFFSET=20, BIN=1×1, SET-TEMP=0°C
     // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '300s',
-    state: 'needs_review',
     camera: 'Poseidon-C PRO',
     gain: '125',
     binning: '1×1',
@@ -271,7 +235,6 @@ const EXTERNAL_SESSIONS: InventorySession[] = [
     // 101 s exposure; GAIN=0, OFFSET=20, BIN=1×1, SET-TEMP=0°C
     // from real Poseidon-C PRO / NINA 3.1.2 header (IMAGETYP=LIGHT, XBINNING=1)
     exposure: '101s',
-    state: 'confirmed',
     camera: 'Poseidon-C PRO',
     gain: '0',
     binning: '1×1',
@@ -291,7 +254,6 @@ const EXTERNAL_SESSIONS: InventorySession[] = [
     // 300 s exposure; GAIN=0, OFFSET=50, BIN=1×1, SET-TEMP=0°C
     // from real ZWO ASI2600MM Pro / NINA 3.2.0 header (IMAGETYP=LIGHT, XBINNING=1, FILTER=OIII)
     exposure: '300s',
-    state: 'confirmed',
     camera: 'ZWO ASI2600MM Pro',
     gain: '0',
     binning: '1×1',
@@ -311,7 +273,6 @@ const EXTERNAL_SESSIONS: InventorySession[] = [
     // 300 s exposure; GAIN=60, BIN=1×1 — from real DWARFIII master dark filename
     // dark_exp_300.000000_gain_60_bin_1_44C_stack_10.fits
     exposure: '300s',
-    state: 'confirmed',
     camera: 'DWARFIII',
     gain: '60',
     binning: '1×1',
@@ -340,14 +301,11 @@ export const INVENTORY_SOURCES: InventorySource[] = [
   },
 ];
 
-/** Default mock response for inventory.list (excludes ignored sessions). */
+/** Default mock response for inventory.list. */
 export const INVENTORY_LIST_RESPONSE: InventoryListResponse = {
   status: 'success',
   contractVersion: '2.0.0',
   requestId: '00000000-0000-0000-0000-000000000001',
   generatedAt: '2026-06-11T00:00:00Z',
-  sources: INVENTORY_SOURCES.map((src) => ({
-    ...src,
-    sessions: src.sessions.filter((s) => s.state !== 'ignored'),
-  })),
+  sources: INVENTORY_SOURCES,
 };

@@ -99,24 +99,6 @@ async fn insert_file_record(
     .unwrap();
 }
 
-async fn insert_acquisition_session(
-    pool: &sqlx::SqlitePool,
-    id: &str,
-    state: &str,
-    created_at: &str,
-) {
-    sqlx::query(
-        "INSERT INTO acquisition_session (id, session_key, state, created_at) \
-         VALUES (?, 'sk', ?, ?)",
-    )
-    .bind(id)
-    .bind(state)
-    .bind(created_at)
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
 #[tokio::test]
 async fn ledger_view_unions_all_seeded_entities() {
     let (db, repo) = setup().await;
@@ -126,7 +108,6 @@ async fn ledger_view_unions_all_seeded_entities() {
     let target = new_uuid();
     let project = new_uuid();
     let file = new_uuid();
-    let session = new_uuid();
 
     insert_library_root(pool, &root, "lr-1").await;
     insert_target(pool, &target).await;
@@ -140,11 +121,12 @@ async fn ledger_view_unions_all_seeded_entities() {
         "2026-05-11T00:00:00Z",
     )
     .await;
-    insert_acquisition_session(pool, &session, "discovered", "2026-05-12T00:00:00Z").await;
 
     let rows = repo.list_assets_ledger(LedgerFilter::default()).await.unwrap();
-    // 1 library_root + 1 project + 1 file + 1 session = 4 rows
-    assert_eq!(rows.len(), 4, "rows = {rows:#?}");
+    // 1 library_root + 1 project + 1 file = 3 rows. Spec 041 FR-051 (T076):
+    // acquisition_session/calibration_session were dropped from ledger_view —
+    // sessions no longer carry a review-transitionable lifecycle state.
+    assert_eq!(rows.len(), 3, "rows = {rows:#?}");
 }
 
 #[tokio::test]
@@ -155,12 +137,10 @@ async fn entity_type_filter_restricts_results() {
     let root = new_uuid();
     let target = new_uuid();
     let project = new_uuid();
-    let session = new_uuid();
 
     insert_library_root(pool, &root, "lr").await;
     insert_target(pool, &target).await;
     insert_project(pool, &project, "P", &target, "ready", "2026-05-10T00:00:00Z").await;
-    insert_acquisition_session(pool, &session, "discovered", "2026-05-11T00:00:00Z").await;
 
     let filter = LedgerFilter { entity_types: vec![EntityType::Project], ..Default::default() };
     let rows = repo.list_assets_ledger(filter).await.unwrap();

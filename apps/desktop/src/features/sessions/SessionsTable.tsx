@@ -8,19 +8,21 @@
  * machinery. When `dims` is empty the table renders a flat sorted list (no
  * synthetic "All" header).
  *
- * Columns: Target · Filter · Frames · Integration · Night · Camera · State ·
- * Projects. Sortable column headers call `onSort`. Selecting a row opens the
- * existing SessionDetail in a right-side drawer on SessionsPage.
+ * Columns: Target · Filter · Frames · Integration · Night · Camera · Projects.
+ * Sortable column headers call `onSort`. Selecting a row opens the existing
+ * SessionDetail in a right-side drawer on SessionsPage.
+ *
+ * Spec 041 FR-051 (T076, Phase 13): the State column and the "needs review"
+ * warning icon were removed along with the session review-state machine —
+ * sessions are derived, already-confirmed inventory.
  */
 
 import { useMemo, type ReactNode } from 'react';
-import { AlertTriangle } from 'lucide-react';
 import type { InventorySource, InventorySession } from '@/api/commands';
 import { Table, Pill } from '@/ui';
 import { SortHeader } from '@/components';
 import { m } from '@/lib/i18n';
 import type { TableColumn, TableRow } from '@/ui';
-import { sessionStateLabel, sessionStateVariant } from '@/lib/lifecycle';
 import {
   groupByDimensions,
   flattenVisibleGroups,
@@ -36,8 +38,7 @@ export type SessionSortCol =
   | 'frames'
   | 'exposure'
   | 'night'
-  | 'camera'
-  | 'state';
+  | 'camera';
 export type SortDir = 'asc' | 'desc';
 
 export interface SessionSort {
@@ -84,9 +85,6 @@ function compareSessions(a: InventorySession, b: InventorySession, sort: Session
     case 'camera':
       cmp = compareStr(a.camera, b.camera);
       break;
-    case 'state':
-      cmp = compareStr(a.state, b.state);
-      break;
   }
   return sort.dir === 'asc' ? cmp : -cmp;
 }
@@ -100,7 +98,6 @@ const COLUMNS: Array<{ key: string; label: string; sort?: SessionSortCol; classN
   { key: 'integration', label: m.projects_wizard_col_integration(), sort: 'exposure', className: 'alm-sessions-cell--mono' },
   { key: 'night', label: m.sessions_col_night(), sort: 'night', className: 'alm-sessions-cell--mono' },
   { key: 'camera', label: m.settings_calmatch_camera(), sort: 'camera', className: 'alm-sessions-cell--muted' },
-  { key: 'state', label: m.sessions_col_state(), sort: 'state' },
   { key: 'projects', label: m.common_projects() },
 ];
 
@@ -110,19 +107,10 @@ const EMPTY_CELLS = {
   integration: '' as string | ReactNode,
   night: '' as string | ReactNode,
   camera: '' as string | ReactNode,
-  state: '' as string | ReactNode,
   projects: '' as string | ReactNode,
 };
 
 const INDENT_PER_DEPTH = 12;
-
-function isNeedsReview(state: string): boolean {
-  return state === 'discovered' || state === 'candidate' || state === 'needs_review';
-}
-
-function stateLabel(state: string): string {
-  return isNeedsReview(state) ? m.sessions_needs_review_aria() : sessionStateLabel(state);
-}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -219,38 +207,19 @@ export function SessionsTable({
         // Flat item or grouped leaf.
         const s = row.item;
         const indentPx = grouped ? 8 + row.depth * INDENT_PER_DEPTH : 0;
-        const needsReview = isNeedsReview(s.state);
         const projects = s.linked?.projects ?? [];
         return {
           _rowClassName:
             'alm-sessions-table__row' +
             (selected === s.id ? ' alm-sessions-table__row--selected' : ''),
           _onClick: () => onSelect(s.id),
-          target: needsReview ? (
-            <span
-              className="alm-sessions-cell--muted"
-              // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
-              style={indentPx ? { paddingLeft: indentPx } : undefined}
-            >
-              <AlertTriangle
-                size={11}
-                role="img"
-                aria-label={m.sessions_needs_review_aria()}
-                className="alm-sessions-cell__warn-icon"
-              />
-            </span>
-          ) : (
-            // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
-            indentPx ? <span style={{ paddingLeft: indentPx }} /> : ''
-          ),
+          // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
+          target: indentPx ? <span style={{ paddingLeft: indentPx }} /> : '',
           filter: s.filter ?? '—',
           frames: s.frames,
           integration: s.exposure ?? '—',
           night: s.capturedOn ?? '—',
           camera: s.camera ?? '—',
-          state: (
-            <Pill variant={sessionStateVariant(s.state)}>{stateLabel(s.state)}</Pill>
-          ),
           projects:
             projects.length > 0 ? (
               <span className="alm-sessions-cell__projects">

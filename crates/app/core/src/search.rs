@@ -165,7 +165,6 @@ async fn search_sessions(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>
         "SELECT id, session_key
          FROM acquisition_session
          WHERE LOWER(session_key) LIKE ?
-           AND state NOT IN ('rejected', 'ignored')
          ORDER BY created_at DESC
          LIMIT 10",
     )
@@ -197,7 +196,6 @@ async fn recent_sessions(pool: &SqlitePool) -> Result<Vec<SearchResult>, String>
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT id, session_key
          FROM acquisition_session
-         WHERE state NOT IN ('rejected', 'ignored')
          ORDER BY created_at DESC
          LIMIT 5",
     )
@@ -380,8 +378,8 @@ mod tests {
         let db = test_db().await;
 
         sqlx::query(
-            "INSERT INTO acquisition_session (id, session_key, state, created_at) \
-             VALUES ('ses-001', 'M31/L/2026-03-01/100/1x1', 'confirmed', '2026-03-01T00:00:00Z')",
+            "INSERT INTO acquisition_session (id, session_key, created_at) \
+             VALUES ('ses-001', 'M31/L/2026-03-01/100/1x1', '2026-03-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await

@@ -86,8 +86,7 @@ pub const TABLE: &[PlanRequirementEdge] = &[
 /// Derive `requires_plan` for the given `(entity_type, from, to)` edge.
 ///
 /// Returns `false` for every edge not listed in [`TABLE`], matching the
-/// data-model.md final row group (`inventory_session`, `calibration_session`,
-/// `data_source`, `plan`, `file_record`, `inventory_session`).
+/// data-model.md final row group (`data_source`, `plan`, `file_record`).
 #[must_use]
 pub fn requires_plan(entity_type: EntityType, from: &str, to: &str) -> bool {
     TABLE
@@ -132,11 +131,6 @@ mod tests {
     fn prepared_source_to_retired_requires_plan() {
         assert!(requires_plan(EntityType::PreparedSource, "ready", "retired"));
         assert!(requires_plan(EntityType::PreparedSource, "stale", "retired"));
-    }
-
-    #[test]
-    fn inventory_session_pure_metadata_is_unrestricted() {
-        assert!(!requires_plan(EntityType::InventorySession, "candidate", "confirmed"));
     }
 
     #[test]

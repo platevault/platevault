@@ -3,12 +3,16 @@
  *
  * The session's attributes render as a flat PropertyTable (Property | Value |
  * Source) spread across two columns inside the canonical DetailPanel. Linked
- * projects sit below with a clickable link per project. Review/Confirm actions
- * live in the header.
+ * projects sit below with a clickable link per project.
  *
  * The per-frame frames table + review-state pill were removed: a session is a
  * single frame-type group, so the frames table only duplicated the row data;
  * the freed space lets the attribute table use both columns.
+ *
+ * Spec 041 FR-051 (T076, Phase 13): the Confirm/Re-open/Reject review actions
+ * were removed — sessions are derived, already-confirmed inventory with no
+ * review lifecycle. Session metadata remains editable post-hoc via the inbox
+ * per-file metadata/override tables.
  */
 
 import type { InventorySession } from '@/api/commands';
@@ -18,21 +22,11 @@ import {
   PropertyTable,
   type PropertyDef,
 } from '@/components';
-import { EmptyState, Btn } from '@/ui';
+import { EmptyState } from '@/ui';
 import { m } from '@/lib/i18n';
 
 interface Props {
   session: InventorySession | null;
-  /** Contextual review-action handlers (act on this session). */
-  onConfirm?: () => void;
-  onReopen?: () => void;
-  onReject?: () => void;
-  /** Action visibility — driven by the session's canonical state on the page. */
-  confirmVisible?: boolean;
-  reopenVisible?: boolean;
-  rejectVisible?: boolean;
-  /** A review mutation is in flight for this session. */
-  pending?: boolean;
   /** Open a linked project — wired by the page to navigation. */
   onOpenProject?: (projectId: string) => void;
 }
@@ -66,17 +60,7 @@ function fmtSeconds(totalSec: number): string {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function SessionDetail({
-  session,
-  onConfirm,
-  onReopen,
-  onReject,
-  confirmVisible = false,
-  reopenVisible = false,
-  rejectVisible = false,
-  pending = false,
-  onOpenProject,
-}: Props) {
+export function SessionDetail({ session, onOpenProject }: Props) {
   if (!session) {
     return (
       <DetailPane>
@@ -118,34 +102,10 @@ export function SessionDetail({
   const colA = factProps.slice(0, mid);
   const colB = factProps.slice(mid);
 
-  // Review actions sit inline with the title (left-grouped) so growing the
-  // panel only adds trailing whitespace — it never spreads the title and
-  // buttons apart.
-  const actionButtons = (
-    <span className="alm-session-detail2__actions">
-      {confirmVisible && (
-        <Btn size="sm" variant="primary" onClick={onConfirm} disabled={pending}>
-          {m.setup_step_confirm_label()}
-        </Btn>
-      )}
-      {reopenVisible && (
-        <Btn size="sm" onClick={onReopen} disabled={pending}>
-          {m.sessions_reopen_btn()}
-        </Btn>
-      )}
-      {rejectVisible && (
-        <Btn size="sm" variant="danger" onClick={onReject} disabled={pending}>
-          {m.sessions_reject_btn()}
-        </Btn>
-      )}
-    </span>
-  );
-
   return (
     <DetailPanel
       variant="sessions"
       title={<strong>{session.target ?? session.name}</strong>}
-      titleExtra={actionButtons}
       subtitle={equipmentSubtitle(session) || undefined}
     >
       {/* Left-packed columns: [props A] [props B] [linked projects]. */}

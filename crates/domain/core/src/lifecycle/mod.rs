@@ -24,4 +24,3 @@ pub use prepared_source::{
 pub use project::ProjectState;
 pub use projection::ProjectionState;
 pub use provenance::{ProvenanceEntry, ProvenanceTag, ProvenancedValue};
-pub use session::SessionState;

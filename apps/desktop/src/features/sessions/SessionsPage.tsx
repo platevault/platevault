@@ -3,24 +3,26 @@
  * layout-system adoption (tasks #62/#63/#73).
  *
  * The Sessions page is the inventory ledger and the REFERENCE adoption of the
- * shared list-page system: a pinned `PageTopBar` (title + summary counts +
- * `FilterToolbar` + right-aligned review actions) over a `ListPageLayout` body
- * — a dense full-width sortable table (SessionsTable) on the left and the
- * existing SessionDetail in a bottom detail pane that mounts on selection.
- * Confirm / Re-open / Reject are contextual (they act on the selected session)
- * and live in the SessionDetail header, not the global top bar (task #79).
+ * shared list-page system: a pinned `PageTopBar` (title + `FilterToolbar`)
+ * over a `ListPageLayout` body — a dense full-width sortable table
+ * (SessionsTable) on the left and the existing SessionDetail in a bottom
+ * detail pane that mounts on selection.
  *
- * Toolbar (spec 043 §4): search + review-state filter.
- * The Group-by control (Target / Camera / Filter / Month) has been removed:
- * a session already represents a single target/night/equipment group, so
- * grouping by frame type adds no value — sessions contain 1–few frame types
- * by definition. The table always groups by target (DEFAULT_SESSION_GROUP_BY).
- * The legacy frame-type filter was also removed — sessions are light frames.
+ * Toolbar (spec 043 §4): search only. The Group-by control
+ * (Target / Camera / Filter / Month) has been removed: a session already
+ * represents a single target/night/equipment group, so grouping by frame
+ * type adds no value — sessions contain 1–few frame types by definition. The
+ * table always groups by target (DEFAULT_SESSION_GROUP_BY). The legacy
+ * frame-type filter was also removed — sessions are light frames.
+ *
+ * Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
+ * inventory. The review-state filter (`reviewFilter`) and the contextual
+ * Confirm / Re-open / Reject actions in the SessionDetail header were
+ * removed along with the review-state machine.
  *
  * URL state (extends spec 020):
  *   selected     — string session UUID
  *   sourceFilter — optional LibraryRoot UUID or 'all'
- *   reviewFilter — optional review-state filter including 'all' and 'ignored'
  */
 
 import { useNavigate, useSearch } from '@tanstack/react-router';
@@ -37,15 +39,10 @@ import type { SessionSort, SessionSortCol } from './SessionsTable';
 import { SessionDetail } from './SessionDetail';
 import {
   useInventorySources,
-  useSessionReview,
   type InventoryFilters,
 } from './store';
-import { addToast } from '@/shared/toast';
 import { m } from '@/lib/i18n';
 import type { InventorySource } from '@/api/commands';
-import type { ReviewFilter } from '@/lib/route-contract';
-import { REVIEW_FILTERS } from '@/lib/route-contract';
-import { sessionStateLabel } from '@/lib/lifecycle';
 
 /** Client-side text search across the visible session fields. */
 function filterSourcesBySearch(sources: InventorySource[], query: string): InventorySource[] {
@@ -66,22 +63,8 @@ function filterSourcesBySearch(sources: InventorySource[], query: string): Inven
     .filter((src) => src.sessions.length > 0);
 }
 
-// Toolbar option vocab (label maps live here so the generic FilterToolbar
-// stays presentation-only).
-function reviewFilterLabel(v: string): string {
-  if (v === 'discovered' || v === 'candidate') return `Needs review (${v})`;
-  if (v === 'needs_review') return 'Needs review';
-  if (v === 'all') return 'All states';
-  return sessionStateLabel(v);
-}
-
-const REVIEW_OPTIONS: FilterOption[] = REVIEW_FILTERS.map((rf) => ({
-  value: rf,
-  label: reviewFilterLabel(rf),
-}));
-
 export function SessionsPage() {
-  const { selected, sourceFilter, reviewFilter } = useSearch({
+  const { selected, sourceFilter } = useSearch({
     from: '/shell/sessions',
   });
   const navigate = useNavigate({ from: '/sessions' });
@@ -106,10 +89,8 @@ export function SessionsPage() {
   // Build filters from URL params and pass directly to useInventorySources.
   const filters: InventoryFilters = {};
   if (sourceFilter && sourceFilter !== 'all') filters.sourceFilter = sourceFilter;
-  if (reviewFilter && reviewFilter !== 'all') filters.reviewFilter = reviewFilter;
 
   const { data: response, loading, error } = useInventorySources(filters);
-  const { review, pending } = useSessionReview();
 
   const sources = useMemo(
     () => filterSourcesBySearch(response?.sources ?? [], search),
@@ -141,56 +122,10 @@ export function SessionsPage() {
     );
   }, []);
 
-  // Review action handlers — dispatch to store and surface feedback.
-  const handleConfirm = useCallback(async () => {
-    if (!selected) return;
-    const result = await review(selected, 'confirm');
-    if (result.noop) return;
-    if (result.ok) {
-      addToast({ message: m.sessions_toast_confirmed(), variant: 'success' });
-    } else {
-      addToast({ message: result.error ?? m.sessions_toast_confirmed(), variant: 'error' });
-    }
-  }, [selected, review]);
-
-  const handleReopen = useCallback(async () => {
-    if (!selected) return;
-    const result = await review(selected, 'reopen');
-    if (result.noop) return;
-    if (result.ok) {
-      addToast({ message: m.sessions_toast_reopened(), variant: 'info' });
-    } else {
-      addToast({ message: result.error ?? m.sessions_toast_reopened(), variant: 'error' });
-    }
-  }, [selected, review]);
-
-  const handleReject = useCallback(async () => {
-    if (!selected) return;
-    const result = await review(selected, 'reject');
-    if (result.noop) return;
-    if (result.ok) {
-      addToast({ message: m.sessions_toast_rejected(), variant: 'warn' });
-    } else {
-      addToast({ message: result.error ?? m.sessions_toast_rejected(), variant: 'error' });
-    }
-  }, [selected, review]);
-
-  const isPending = pending === selected;
-
-  // Action-bound CTAs: visibility driven by selected session's canonical state
-  // (spec 006 FR-006, action-bound review pattern).
-  const confirmVisible =
-    selectedSession != null &&
-    ['discovered', 'candidate', 'needs_review'].includes(selectedSession.state);
-  const reopenVisible =
-    selectedSession != null && ['confirmed', 'rejected'].includes(selectedSession.state);
-  const rejectVisible =
-    selectedSession != null && selectedSession.state !== 'rejected';
-
   // Top-bar convention (task #80): NO title + NO summary (the left nav names
   // the page; the count/metadata lives in the bottom status bar) and NO sort
   // control (sorting is driven by the clickable SessionsTable column headers).
-  // The bar carries only search + the Review state filter.
+  // The bar carries only search.
   // Group-by was removed: sessions contain 1–few frame types by definition,
   // making grouping options redundant. The table always groups by target.
   const topBar = (
@@ -203,19 +138,6 @@ export function SessionsPage() {
             placeholder: m.sessions_search_placeholder(),
             ariaLabel: 'Search sessions',
           }}
-          fields={[
-            {
-              key: 'review',
-              label: m.sessions_review_filter_label(),
-              value: reviewFilter ?? '',
-              options: REVIEW_OPTIONS,
-              allLabel: 'Default',
-              onChange: (v) =>
-                navigate({
-                  search: (prev) => ({ ...prev, reviewFilter: (v as ReviewFilter) || undefined }),
-                }),
-            },
-          ]}
           grouping={{
             dimensions: SESSION_DIMENSIONS,
             dims,
@@ -233,13 +155,6 @@ export function SessionsPage() {
         selectedSession != null ? (
           <SessionDetail
             session={selectedSession}
-            onConfirm={() => void handleConfirm()}
-            onReopen={() => void handleReopen()}
-            onReject={() => void handleReject()}
-            confirmVisible={confirmVisible}
-            reopenVisible={reopenVisible}
-            rejectVisible={rejectVisible}
-            pending={isPending}
             onOpenProject={() => navigate({ to: '/projects' })}
           />
         ) : undefined
