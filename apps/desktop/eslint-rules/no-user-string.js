@@ -10,7 +10,11 @@
  *   - A fixed set of user-facing JSX attributes       placeholder="Search…"
  *     (placeholder, title, alt, aria-label, aria-description, aria-placeholder,
  *      aria-roledescription, aria-valuetext, label)
- *   - String-literal first argument to a toast/notify call   toast('Saved')
+ *   - String-literal OR template-literal first argument to a toast/notify
+ *     call                                            toast(`Saved ${n} items`)
+ *   - A prose string/template literal passed directly to a `useState` setter
+ *     whose paired state variable is later rendered   setErrorMsg(`Hard-rule
+ *     mismatch: ${dims.join(', ')}.`) … {errorMsg}
  *
  * What it deliberately ignores (machine strings, not user-facing):
  *   - Any attribute not in the user-facing set (className, id, data-*, key,
@@ -82,6 +86,19 @@ const TOAST_OBJECT_PROPS = new Set(["message", "title", "body", "description"]);
 
 const hasLetter = (s) => /\p{L}/u.test(s);
 
+// True for `useState(...)` / `React.useState(...)` call expressions. Used to
+// pair a destructured `[state, setState]` so a prose string/template handed
+// directly to the setter can be traced to the state variable's later render.
+const isUseStateCall = (node) => {
+  if (!node || node.type !== "CallExpression") return false;
+  const c = node.callee;
+  if (c.type === "Identifier") return c.name === "useState";
+  if (c.type === "MemberExpression" && !c.computed && c.property.type === "Identifier") {
+    return c.property.name === "useState";
+  }
+  return false;
+};
+
 // Distinguishes machine tokens from display prose. Used to gate the
 // variable-tracing check, where the value's role isn't vouched for by an
 // attribute/property name: a string rendered through a variable is only flagged
@@ -97,6 +114,10 @@ const looksMachine = (s) => {
   if (/[{}]/.test(t)) return true; // token/naming pattern, e.g. {target}_{filter}
   if (/^[a-z][\w.-]*$/.test(t)) return true; // lowercase-initial token: pending, no_match, fooBar
   if (/^[A-Z0-9_]+$/.test(t)) return true; // SCREAMING_SNAKE / ALL_CAPS
+  // Path/URL/glob fragment made of word chars, dots, hyphens, and at least one
+  // slash, e.g. `/library/`, `api/v2/`, `mock-${id}/preview` — a machine token
+  // even though it doesn't start with a lowercase letter (a leading `/`).
+  if (/\//.test(t) && /^[\w./-]+$/.test(t)) return true;
   return false;
 };
 
@@ -200,6 +221,13 @@ const rule = {
 
   create(context) {
     const sourceCode = context.sourceCode ?? context.getSourceCode();
+
+    // setterName -> Variable (the paired state variable) for every
+    // `const [state, setState] = useState(...)` seen so far. Populated as
+    // VariableDeclarators are visited; hooks are called unconditionally near
+    // the top of a component, so the pairing is in place before the setter is
+    // ever invoked in the same file.
+    const stateSetterPairs = new Map();
 
     // True when a referenced identifier reaches the screen: as a JSX child
     // expression, or as the value of a user-facing JSX attribute. Forwarding
@@ -482,6 +510,25 @@ const rule = {
       // is actually rendered — variables used purely in machine contexts
       // (className, ids, keys, fn args) are ignored.
       VariableDeclarator(node) {
+        // Record `const [state, setState] = useState(...)` pairs so a prose
+        // string/template handed directly to `setState(...)` can be traced to
+        // `state`'s later render (see the CallExpression handler below).
+        if (
+          node.id.type === "ArrayPattern" &&
+          node.id.elements.length >= 2 &&
+          node.id.elements[0] &&
+          node.id.elements[0].type === "Identifier" &&
+          node.id.elements[1] &&
+          node.id.elements[1].type === "Identifier" &&
+          isUseStateCall(node.init)
+        ) {
+          const stateName = node.id.elements[0].name;
+          const setterName = node.id.elements[1].name;
+          const declared = sourceCode.getDeclaredVariables(node);
+          const stateVar = declared.find((v) => v.name === stateName);
+          if (stateVar) stateSetterPairs.set(setterName, stateVar);
+        }
+
         if (!node.init || !isUserStringExpr(node.init) || !userStringHasProse(node.init)) {
           return;
         }
@@ -512,6 +559,32 @@ const rule = {
         ) {
           calleeName = callee.property.name;
         }
+        // State-setter sink: setX(<prose literal/template>) where `X` is the
+        // state half of a `useState` pair that is later rendered, e.g.
+        //   const [errorMsg, setErrorMsg] = useState<string>();
+        //   setErrorMsg(`Hard-rule mismatch: ${dims.join(', ')}. Confirm to force-assign.`);
+        //   … {errorMsg} …
+        // Gated by the same prose heuristic as the variable-tracing check
+        // above — `setStatus('pending')` (a machine token) is not flagged
+        // even when `status` is rendered.
+        if (calleeName && stateSetterPairs.has(calleeName)) {
+          const arg = node.arguments[0];
+          if (arg && isUserStringExpr(arg) && userStringHasProse(arg)) {
+            const stateVar = stateSetterPairs.get(calleeName);
+            const rendered = stateVar.references.some(
+              (ref) => !ref.init && ref.isRead() && isRenderedUsage(ref.identifier),
+            );
+            if (rendered) {
+              context.report({
+                node: arg,
+                messageId: "variable",
+                data: { name: stateVar.name, text: quote(userStringPreview(arg)) },
+              });
+            }
+          }
+          return;
+        }
+
         if (!calleeName || !TOAST_NAMES.has(calleeName)) return;
         const arg = node.arguments[0];
         // Bare-string form: toast('Saved')
@@ -521,6 +594,15 @@ const rule = {
             node: arg,
             messageId: "toast",
             data: { text: quote(val) },
+          });
+          return;
+        }
+        // Bare-template form: toast(`Saved ${n} items`)
+        if (arg && templateHasLetter(arg)) {
+          context.report({
+            node: arg,
+            messageId: "toast",
+            data: { text: quote(templatePreview(arg)) },
           });
           return;
         }
@@ -540,6 +622,13 @@ const rule = {
                 node: prop.value,
                 messageId: "toast",
                 data: { text: quote(pv) },
+              });
+            } else if (templateHasLetter(prop.value)) {
+              // Template-literal object-prop form: addToast({ message: `Saved ${n} items` })
+              context.report({
+                node: prop.value,
+                messageId: "toast",
+                data: { text: quote(templatePreview(prop.value)) },
               });
             }
           }

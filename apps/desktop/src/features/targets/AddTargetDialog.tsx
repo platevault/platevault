@@ -69,12 +69,12 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
         onAdded(res.target.targetId);
       } else {
         setError(
-          `Could not resolve target "${pending.primaryDesignation}". Try a different name.`,
+          m.targets_add_resolve_failed({ query: pending.primaryDesignation }),
         );
       }
     } catch (err: unknown) {
       const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-      setError(`Failed to add target (${code}).`);
+      setError(m.targets_add_failed({ code }));
     } finally {
       setResolving(false);
     }

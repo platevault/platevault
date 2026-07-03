@@ -178,7 +178,7 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
         const dims = res.error.details?.dimensions ?? [];
         setOverrideDims(dims);
         setPending('override_confirm');
-        setErrorMsg(`Hard-rule mismatch: ${dims.join(', ')}. Confirm to force-assign.`);
+        setErrorMsg(m.calibration_hard_rule_mismatch({ dims: dims.join(', ') }));
       } else {
         setPending('idle');
         setErrorMsg(res.error?.message ?? m.calibration_assignment_failed_fallback());

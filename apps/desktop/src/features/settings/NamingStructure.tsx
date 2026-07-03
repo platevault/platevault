@@ -876,7 +876,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
 			})
 			.catch((err: unknown) => {
 				setPreview(null);
-				setPreviewError(typeof err === "string" ? err : "Preview unavailable");
+				setPreviewError(typeof err === "string" ? err : m.settings_naming_preview_unavailable());
 			});
 	}, []);
 

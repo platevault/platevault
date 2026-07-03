@@ -295,4 +295,101 @@ describe('alm/no-user-string', () => {
     // 'Active row' is prose, but className is not a rendered/user position.
     expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
   });
+
+  // ── State-setter sink + toast template literals (spec 046: prose template
+  // literals passed directly to `setState(...)` or a toast call) ──
+
+  it('flags a prose template literal passed directly to a useState setter and rendered', () => {
+    const out = lint(`
+      function P({ dims }) {
+        const [errorMsg, setErrorMsg] = useState(undefined);
+        const handle = () => {
+          setErrorMsg(\`Hard-rule mismatch: \${dims.join(', ')}. Confirm to force-assign.\`);
+        };
+        return <div onClick={handle}>{errorMsg}</div>;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('variable');
+  });
+
+  it('flags a prose string literal passed directly to a useState setter and rendered', () => {
+    const out = lint(`
+      function P() {
+        const [aliasError, setAliasError] = useState(null);
+        const handle = () => {
+          setAliasError('Alias must not be blank.');
+        };
+        return <span>{aliasError}</span>;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('variable');
+  });
+
+  it('does NOT flag a machine-token string passed to a useState setter (prose gate)', () => {
+    const out = lint(`
+      function P() {
+        const [status, setStatus] = useState('idle');
+        const handle = () => setStatus('pending');
+        return <span title={status}>{handle.name}</span>;
+      }
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  it('does NOT flag a useState setter argument that is never rendered', () => {
+    const out = lint(`
+      function P() {
+        const [msg, setMsg] = useState('');
+        const handle = () => setMsg('Not rendered anywhere');
+        return <div onClick={handle} />;
+      }
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  it('does NOT flag a machine path/id template literal passed to a useState setter', () => {
+    const out = lint(`
+      function P({ id }) {
+        const [path, setPath] = useState('');
+        const handle = () => setPath(\`/library/\${id}/preview\`);
+        return <div title={path} />;
+      }
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  it('flags a prose template literal passed directly to a toast call', () => {
+    const out = lint(`
+      function P({ n }) {
+        return toast(\`Saved \${n} items\`);
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('toast');
+  });
+
+  it('flags a prose template literal in a toast object-form message prop', () => {
+    const out = lint(`
+      function P({ n }) {
+        return addToast({ message: \`Saved \${n} items\`, variant: 'ok' });
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('toast');
+  });
+
+  it('does NOT flag a pure-interpolation (no-letter) template literal passed to a toast call', () => {
+    const out = lint(`
+      function P({ a, b }) {
+        return toast(\`#\${a}-\${b}\`);
+      }
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
 });

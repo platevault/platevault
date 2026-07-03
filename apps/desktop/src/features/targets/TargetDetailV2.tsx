@@ -444,7 +444,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   const handleAliasAdd = useCallback(async () => {
     const alias = aliasInput.trim();
     if (!alias) {
-      setAliasError('Alias must not be blank.');
+      setAliasError(m.targets_detail_alias_blank());
       return;
     }
     setAliasError(null);

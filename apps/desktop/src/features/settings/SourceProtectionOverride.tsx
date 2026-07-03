@@ -89,7 +89,7 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
         onSaved?.(pendingLevel);
       })
       .catch((err: unknown) => {
-        setErrorMsg(typeof err === 'string' ? err : 'Save failed');
+        setErrorMsg(typeof err === 'string' ? err : m.common_save_failed());
         setLoadState('error');
       });
   };

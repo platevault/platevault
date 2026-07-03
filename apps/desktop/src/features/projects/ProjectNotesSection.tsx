@@ -66,7 +66,7 @@ export function ProjectNotesSection({
         const { updatedAt, error } = await saveNote(projectId, content);
         setSaving(false);
         if (error === 'note.content_too_large') {
-          setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
+          setFieldError(m.projects_notes_byte_limit_exceeded({ max: MAX_NOTE_BYTES.toLocaleString() }));
         } else if (error === 'project.read_only') {
           addToast({ message: m.projects_toast_archived_readonly(), variant: 'error' });
         } else if (error) {
@@ -89,7 +89,7 @@ export function ProjectNotesSection({
 
   const handleSave = async () => {
     if (overLimit) {
-      setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
+      setFieldError(m.projects_notes_byte_limit_exceeded({ max: MAX_NOTE_BYTES.toLocaleString() }));
       return;
     }
     triggerSave.cancel();
@@ -97,7 +97,7 @@ export function ProjectNotesSection({
     const { updatedAt, error } = await saveNote(projectId, draft);
     setSaving(false);
     if (error === 'note.content_too_large') {
-      setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
+      setFieldError(m.projects_notes_byte_limit_exceeded({ max: MAX_NOTE_BYTES.toLocaleString() }));
     } else if (error === 'project.read_only') {
       addToast({ message: m.projects_toast_archived_readonly(), variant: 'error' });
       setEditing(false);
