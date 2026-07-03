@@ -137,10 +137,10 @@ counterparts (contract-backed, audited) are tracked as fresh tasks.
   template (validated at T001) and only `cwd` is set.
   _Evidence: `tool_launch.rs::launch` step 6; `profile.supports_open_folder` gates `RenderContext.folder`_
 
-- [ ] **T021**. Surface a one-time hint on first launch of a
+- [x] **T021**. Surface a one-time hint on first launch of a
   `supports_open_folder = false` tool explaining that the cwd is
   anchored to the project (per US3 acceptance scenario 3).
-  _Deferred: first-launch hint requires persistent seen-state storage (no suitable hook in v1). Low-value; deferred._
+  _Evidence: `apps/desktop/src/features/projects/tool-launch.ts` — `hasSeenCwdAnchoredHint`/`markCwdAnchoredHintSeen` (localStorage key `alm.toolhint.cwdAnchored.<toolId>`) gate a one-time info toast (`projects_tool_cwd_anchored_hint`, duration 0) fired from `useToolLaunch` on the first successful launch of a tool with `supportsOpenFolder === false`; wired via `ProjectDetail.tsx` passing `toolProfile?.supportsOpenFolder`. 6 new tests in `tool-launch.test.ts` (seen-state + hook behavior)._
 
 - [ ] **T022**. Tests: stub-binary integration tests asserting the cwd and
   argv match the per-tool expectations from R3 for both
@@ -211,8 +211,6 @@ T019 (needs T007) ─► T020 ─► T021 ─► T022                         �
 
 - **T018 Playwright smoke** (WSL browser unavailable): 14 vitest tests cover
   disabled-state copy matrix. Visual/Playwright smoke deferred per spec constraint.
-- **T021 first-launch hint**: requires persistent seen-state storage (no suitable
-  hook in v1 settings layer without additional migration). Deferred.
 - **T022 stub-binary integration tests** (real spawn): covered by FakeSpawner tests
   for cwd/argv logic. Real-spawn tests require sandbox relaxation; deferred.
 - **T013 stub-binary** (real spawn integration): same as T022.

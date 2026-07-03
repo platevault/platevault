@@ -4,6 +4,10 @@
 
 Last reconciled: **2026-06-23** (full sweep). **2026-07-03**: 043 list-page
 consistency + mock-mode E2E test redo landed (see the 043 row + CI note below).
+**2026-07-03 (later)**: `redesign-ui-platevault` reconciled with its pushed
+remote (041 single-type impl + 046/037/#360 merged); CI re-enabled; verified
+against code — 041 iter-2 is implemented on the branch, 017 has UI. See the
+updated 041 / 017 rows and the CI note.
 
 > The per-spec `Status:` line in each `spec.md` had drifted badly — most still read
 > "Draft" despite shipping. This document is the reconciled source of truth. Status
@@ -31,27 +35,27 @@ consistency + mock-mode E2E test redo landed (see the 043 row + CI note below).
 | 003 first-run-source-setup | ✅ Implemented | 32/32 (via 027/029) |
 | 004 native-filesystem-controls | ✅ Implemented | 32/32 |
 | 005 inbox-mixed-folder-split | 🔴 Superseded by 041 | 0/51; reassigned to 041 single-type model — **not yet implemented** (PR #315 docs-only) |
-| 006 inventory-library-lifecycle | 🟡 Closeout-ready | 28/43; 14/15 open tasks DEFERRED |
-| 007 calibration-matching-rules | 🟡 Closeout-ready | 31/42; all 11 open tasks DEFERRED (JSON-schema test runner absent) |
+| 006 inventory-library-lifecycle | ✅ Implemented (closed 2026-07-03) | Core + 041/043/040 reconciliation landed; 12 open tasks all DEFERRED (Playwright-in-WSL, docs, additive-contract, spec-002-blocked enum snapshot) |
+| 007 calibration-matching-rules | ✅ Implemented (closed 2026-07-03) | Engine + adapters + DTOs shipped; 11 open all DEFERRED — 8 contract-tests (JSON-Schema runner absent), T040 (spec-002 enum), T032/T033 polish. `require_same_offset` **exists** in Rust; only the 043 Settings toggle's persistence is stubbed |
 | 008 project-create-onboard-edit | 🟡 Partial | 28/38; ~6 real-open |
 | 009 project-lifecycle-model | ✅ Implemented | 21/21 |
 | 010 guided-first-project-flow | 🟡 Near-complete | 31/33 |
-| 011 processing-tool-launch | 🟡 Partial | 24/29 |
+| 011 processing-tool-launch | ✅ Implemented (closed 2026-07-03) | Launch pipeline + UI + cwd-guard + detach/pid shipped & tested; T021 hint + X-1/X-2 done in closeout; 2 open (T018 Playwright, T022 real-spawn) DEFERRED (WSL/sandbox-blocked). Unblocks 012 |
 | 012 processing-artifact-observation | 🟡 Partial | 26/36 (follows 011) |
 | 013 target-lookup-from-fits-object | 🟡 Near-complete | 18/21 (largely folded into 035) |
 | 014 catalog-index-licensing | 🔴 Superseded by 035 | download-catalog mechanism abandoned; attribution model retained |
 | 015 token-pattern-builder | 🟡 Mockup only | 0/0 tasks |
 | 016 source-protection-defaults | 🟡 Near-complete | 17/20 (underpins 017) |
-| 017 cleanup-archive-review-plans | 🟠 Backend done, UI open | **19 real-open** |
+| 017 cleanup-archive-review-plans | 🟡 Backend done; Archive UI shipped, cleanup-review UI remainder open | Backend + archive/trash executor done; Archive UI exists (`features/archive/ArchivePage/List/Detail`). Remaining open work is the cleanup-plan *review* UI (contextual per v4), not greenfield — earlier "19 real-open / UI open" overstated it |
 | 018 settings-configuration-model | ✅ Reconciled + implemented (#348) | 42/46; spec reconciled to as-built scope/values architecture; backend + UI shipped & verified (live T034 walkthrough); 4 obsolete (contracts mirror, 014 key); open: FR-006↔043 density tension (cross-spec decision) |
-| 019 bottom-log-viewer | 🟡 Near-complete | 30/34 |
+| 019 bottom-log-viewer | ✅ Implemented (closed 2026-07-03) | Panel + backend + forwarder shipped; closeout added T006/T011 jsdom tests + T029 docs index + fixed dotted `log.recent`→`log_recent` binding bug; 1 open (T028 Playwright quickstart) DEFERRED (needs Tauri runtime host) |
 | 020 router-url-state | ✅ Implemented | 22/23 |
 | 021 developer-contract-diagnostics | 🟡 Partial | 32/37 (behind `dev-tools` feature) |
 | 022 mantine-prototype-design-system | 🔴 Superseded by 027 | |
 | 023 target-identity-history-notes | ✅ Implemented on gen-3 | US1 identity/aliases + US2 linked sessions + US3 linked projects + US4 observing notes shipped (migration 0048 + `target.sessions.list`/`target.projects.list`/`target.note.*`). `target.primary.rename` dropped; gen-2 Foundations obsolete |
 | 024 project-manifests-and-notes | 🟡 Closeout-ready | 32/37; all 5 open tasks DEFERRED |
 | 025 filesystem-plan-application | 🟡 Partial (out-of-spec) | Real apply shipped via 041; rollback + progress UI open |
-| 026 generated-source-view-removal | 🟡 Likely obsolete | 12/23; removal happened |
+| 026 generated-source-view-removal | 🟡 OPEN — core built, POSSIBLY OBSOLETE | 12/23; remove/regenerate feature fully wired but **vestigial** — no live source-view *generation* path after the 041/043 lifecycle-prep drop. Kept **open** (not closed): P3 (T014–T020 stale-detection + audit) deferred; awaiting product decision to restore generation or retire the surface |
 | 027 frontend-implementation | ✅ Implemented | 99/99 |
 | 028 frontend-quality-hardening | 🟡 Placeholder | 9/15 |
 | 029 tauri-backend-wiring | ✅ Implemented | 52/52 |
@@ -66,9 +70,9 @@ consistency + mock-mode E2E test redo landed (see the 043 row + CI note below).
 | 038 wizard-scan-step | ✅ Implemented | merged (no committed tasks.md) |
 | 039 cross-root-inbox | ⚪ Not started | no plan/tasks; 041 base now on main |
 | 040 calibration-masters-detection | ✅ Implemented | validated end-to-end 2026-06-23 |
-| 041 inbox-plan-surface | ✅ iteration-1 / 🔵 iteration-2 in progress | iter-1 (confirm + plan surface + apply + destination model) shipped 59/59. iter-2 (single-type sub-items, T061–T080) is **being implemented by another agent** on `041-single-type-*` branches — docs/task-scaffolding present, no crate schema on `main` yet. Supersedes 005 |
+| 041 inbox-plan-surface | ✅ iteration-1 / 🟡 iteration-2 implemented on `redesign-ui-platevault` (pending merge to main) | iter-1 (confirm + plan surface + apply + destination model) shipped 59/59. **iter-2 (single-type sub-items, T061–T081) is now implemented with tests on `redesign-ui-platevault`** — migration `0049_inbox_single_type.sql`, real missing-mandatory gate (`inbox/confirm.rs` sentinel), field-agnostic `reclassify_v2` (`inbox/reclassify.rs`), `build_frame_metadata` grouping (`inbox/classify.rs`), split/mixed confirm action removed from the contract. **Not yet on `main`** — lands with PR #349. Supersedes 005 |
 | 042 stdlib-adoption | ✅ Implemented | 80/97; reconciled #310 |
-| 043 ui-redesign-platevault | 🔵 Active | Ongoing on `redesign-ui-platevault`. List-page consistency landed (#360): all four list pages (Projects/Targets/Sessions/Calibration) flat-by-default, group headers unified onto shared `.alm-listgroup`, global font enforced (only `reset.css`). Sessions E2E specs redone for the flat table (#364). |
+| 043 ui-redesign-platevault | 🔵 Active (foundation + round-2 done; PR #349 mergeable) | Ongoing on `redesign-ui-platevault`. Foundation + per-page round-2 verified against code: 4-theme tokens + Appearance picker, shared `<SortHeader>`/`.alm-sorth`, flat-by-default `.alm-listgroup` on all 4 list pages (#360), `InfoTip`/`SettingsKit`, Inbox bottom inspector, `eslint no-restricted-syntax` style-ban wired into lint. PENDING: Archive single-column, full Sessions inbox-parity, pill-system unification, resizable splitters, Settings per-pane polish. STUBs (all `// STUB:`-marked, blocked on backend): offset Settings-toggle **persistence** (the Rust `require_same_offset` field already exists in `calibration/core/ranking.rs`; only the settings-key wiring is stubbed), channel model, `altitudeCurve()`@52.1°N, Targets list enrichment (#54), + Outputs/Cleanup, audit-history endpoint. Known gap: Sessions table sortable but `aria-sort` not emitted (a11y follow-up). PR #349 → main is **mergeable** (3 behind main). |
 | 044 targets-planner-astronomy | ⚪ Placeholder | frontend mocked; needs research-led astronomy engine |
 | 045 review-state-real | 🔴 Superseded by 041 | |
 | 046 i18n-error-codes | ✅ Implemented | 36/36 (#311–#314) |
@@ -84,25 +88,25 @@ FOUNDATION (all ✅ — nothing blocked here)
 INBOX CHAIN
   005 mixed-folder 🔴 ─▶ 041 inbox-plan-surface ✅ ─┬─▶ 039 cross-root-inbox ⚪
   038 wizard-scan ✅                                ├─▶ 025 plan-application 🟡 (rollback+progress UI)
-  016 protection 🟡 ─▶ 017 cleanup/archive 🟠 ──────┼─▶ 033 validation-bugfix 🟡 (needs 017 generator)
+  016 protection 🟡 ─▶ 017 cleanup/archive 🟡 ──────┼─▶ 033 validation-bugfix 🟡 (needs 017 generator)
                                                     └───┘
 
 TARGETS CHAIN
   013 fits-lookup 🟡 ┐
   014 catalog 🔴 ────┴─▶ 035 SIMBAD ✅ ─┬─▶ 036 retire-legacy ✅
                                         ├─▶ 023 target-identity ⚪ (tasks not generated)
-                                        └─▶ 006 sessions 🟡 ─▶ 044 planner-astronomy ⚪
+                                        └─▶ 006 sessions ✅ ─▶ 044 planner-astronomy ⚪
 
 CALIBRATION CHAIN
-  006 inventory/sessions 🟡 ─▶ 007 matching-rules 🟡 ─▶ 040 masters ✅
+  006 inventory/sessions ✅ ─▶ 007 matching-rules ✅ ─▶ 040 masters ✅
 
 PROJECTS CHAIN
   006 inventory ─▶ 008 project-create 🟡 ─▶ 009 lifecycle ✅ ─▶ 010 guided-flow 🟡
-                       └─▶ 024 manifests/notes 🟡
-                  011 tool-launch 🟡 ─▶ 012 artifact-observation 🟡
+                       └─▶ 024 manifests/notes ✅
+                  011 tool-launch ✅ ─▶ 012 artifact-observation 🟡
 
 INFRA / CROSS-CUTTING (mostly independent)
-  018 settings ✅   021 dev-diagnostics 🟡   019 log-viewer 🟡
+  018 settings ✅   021 dev-diagnostics 🟡   019 log-viewer ✅
   046 i18n ✅   042 stdlib ✅   043 ui-redesign 🔵
   037 e2e 🟠 ◀── now gated only on sessions.transition + tauri-driver (search/sessions/calibration are real)
   037 ipc-removal 🟡 (~8/15; Phases 1–2 shipped)
@@ -112,12 +116,12 @@ INFRA / CROSS-CUTTING (mostly independent)
 
 | Priority | Spec | Why ready | Size |
 |---|---|---|---|
-| 1 | **017 cleanup/archive review UI** | Backend + plan model (041) done; 016 nearly done | 🟠 Large (19 open) |
+| 1 | **017 cleanup-plan review UI** (remainder) | Backend + plan model (041) done; Archive UI shipped; 016 nearly done | 🟡 Medium (cleanup-review UI remainder) |
 | 2 | **025 plan-application** (rollback + progress UI) | Apply backend already shipped via 041 | 🟡 Medium |
 | 2 | **039 cross-root-inbox** | Greenfield; 041 base on main; needs plan/tasks | 🟡 Medium |
 | 2 | **037 ipc-wrapper-removal** (Phase 3–4) | Phases 1–2 already shipped; finish repointing `@/api/commands` importers | 🟡 Medium (~7 left) |
-| 3 | **011 → 012** tool-launch then artifact-observation | 011 unblocked; 012 follows | 🟡 Medium |
-| 3 | **008 project-create** | 006 inventory closeout-ready | 🟡 Medium |
+| 3 | **012 artifact-observation** | 011 tool-launch now closed; 012's deps (`launch_id`, `completed_at`, accordion) satisfied | 🟡 Medium |
+| 3 | **008 project-create** | 006 inventory closed | 🟡 Medium |
 | 3 | **021 dev-diagnostics** | Independent, behind `dev-tools` flag | 🟡 Small |
 | 3 | **023 target-identity** | 035 done; needs `/speckit.tasks` to generate tasks | ⚪ Plan exists, 0 tasks |
 | active | **043 ui-redesign** | In progress on current branch | 🔵 Ongoing |
@@ -126,7 +130,7 @@ INFRA / CROSS-CUTTING (mostly independent)
 
 ## Closeout-ready (verify pass, not new work)
 
-**006, 007, 024** — open tasks are all DEFERRED, not unstarted. Run `speckit-verify`, then flip `Status:` to Implemented.
+**Closed 2026-07-03:** 006, 007, 011, 019 flipped to Implemented after code-verified closeout (deferred tails documented; 011 T021 + 019 T006/T011/T029 + the `log_recent` bug done this session). 024 was closed earlier via #357. **026** deliberately kept **open** (vestigial/possibly-obsolete — product decision pending). No verify-flip work remains in this group.
 
 ## Blocked / not-yet-actionable
 
@@ -189,9 +193,7 @@ Per-spec review of plan/research/data-model/contracts/tasks vs shipped code.
   pre-redesign `.alm-sessions-table__group` header, but #360 renamed it to `.alm-listgroup` AND made
   Sessions flat-by-default (no group rows unless grouped), so both tests failed. Fixed to assert on
   `.alm-sessions-table__row`; full mock-mode Playwright suite now 9 passed / 1 skipped.
-- **CI test-disable `45f8bb3` is now over-broad + unpushable.** It blanket-disables ALL test jobs
-  ("#356 pending redesign test redo"), but the mock-Playwright E2E now passes (#364), frontend unit
-  tests pass (404), and Real-UI E2E passes — so the disable mostly discards *working* coverage.
-  It also remains **unpushed** because the token lacks the `workflow` scope, which blocks pushing the
-  local `redesign-ui-platevault` branch (44+ commits ahead of origin). Prefer reverting the disable
-  (re-enable CI) over pushing it; needs a `workflow`-scoped push or a web-UI edit.
+- **CI test-disable (#356) — RESOLVED 2026-07-03.** The blanket `if: false` disable of all test
+  jobs was removed and CI re-enabled on `redesign-ui-platevault` (commit `9a6c49a4`); tests are green
+  (974 frontend vitest, `app_core_targets` 79). Pushed via `gh`'s `workflow`-scoped token
+  (`gh auth setup-git` — git's stored OAuth credential lacked the scope).

@@ -7,21 +7,28 @@
 **Feature Branch**: `007-calibration-matching-rules`
 **Created**: 2026-05-09
 **Last Updated**: 2026-06-23
-**Status**: Core implemented (31/42) — matching engine for bias/dark/flat + assign/ranking/candidate shipped (`crates/calibration/core/src/`). The 11 open tasks are all explicitly **DEFERRED** contract-test tasks (JSON-Schema test runner not yet in the workspace; domain guards already covered by unit tests), not unstarted work.
+**Status**: **Implemented** (closed 2026-07-03) — matching engine for bias/dark/flat + assign/ranking/candidate shipped (`crates/calibration/core/src/`), Tauri adapters + app use cases (`crates/app/calibration/`) and DTO mirrors in `contracts_core` in place. The 11 open tasks are all **DEFERRED**, not unstarted: 8 contract-test tasks blocked on the absent JSON-Schema test runner (domain guards already covered by unit tests), T040 blocked on spec-002's canonical `calibration_types` enum artifact, and T032/T033 doc/perf polish.
 **Input**: User description: "Specify configurable calibration matching rules per calibration type, with recommendations and manual override."
 
-## Implementation Status: UI scaffolding only
+## Implementation Status: Implemented (2026-07-03)
 
-The desktop settings page at
-`apps/desktop/src/features/settings/SettingsPage.tsx` currently exposes three
-calibration controls — dark match tolerance, flat matching strategy, and a
-"suggest calibration" toggle — backed by the local settings keys
-`darkMatchTolerance`, `flatMatching`, and `suggestCalibration` in
-`apps/desktop/src/data/settings.ts`. There is no matcher crate, no
-recommendation engine, no contract, and no persistence wiring. The current UI
-edits values that are never read by any matching logic. Everything in this
-specification, plan, research, data model, contracts, and tasks describes
-behavior that does not yet exist.
+Superseding the original "UI scaffolding only" note: the matching engine is
+built and wired end to end. Per-type rule evaluators live in
+`crates/calibration/core/src/rules/{dark,flat,bias}.rs`; ranking/candidate
+scoring in `candidate.rs`/`ranking.rs` (incl. `require_same_offset`,
+same-session/night precedence, confidence clamping); assign/override in
+`assign.rs`. App use cases (`suggest`/`batch_suggest`/`assign`/`load_config`)
+are in `crates/app/calibration/src/matching.rs`, exposed via Tauri commands
+`calibration_match_suggest`/`_assign`/`_suggest_batch`
+(`apps/desktop/src-tauri/src/commands/calibration.rs`) with `contracts_core`
+DTO mirrors. FR-001…FR-012 and SC-001…SC-005 are satisfied by shipped code and
+unit tests. Remaining gaps are JSON-Schema **contract tests** (deferred on the
+absent test runner) and doc/perf polish — no product behavior is missing.
+
+Note: the Settings-page calibration-matching UI (toggleable criteria, offset
+toggle) is owned by the **spec 043 redesign**; its offset toggle persists
+locally pending a settings-key (`STUB-OFFSET-REQUIRED`) — a 043 concern, not a
+007 acceptance item (the backend `require_same_offset` hard rule already exists).
 
 ## User Scenarios & Testing *(mandatory)*
 

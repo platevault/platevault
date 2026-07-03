@@ -2,8 +2,8 @@
  * Log stream subscription (spec 019, T020).
  *
  * Subscribes to the backend log stream in two ways:
- * 1. Initial hydration: calls `log.recent` on first mount to populate the ring
- *    buffer with the most recent 500 entries.
+ * 1. Initial hydration: calls the `logRecent` binding (`log_recent`) on first
+ *    mount to populate the ring buffer with the most recent 500 entries.
  * 2. Live updates: listens for `log:entry` Tauri events forwarded by the
  *    backend bus→Tauri forwarder.
  *
@@ -32,25 +32,25 @@ async function fetchRecentEntries(cursor?: string): Promise<void> {
       return;
     }
 
-    const { invoke } = await import('@tauri-apps/api/core');
-    const response = await invoke<{
-      contractVersion: string;
-      entries: LogEntry[];
-      truncated?: boolean;
-      truncatedCount?: number;
-    }>('log.recent', {
+    // Use the generated `logRecent` binding (registered command `log_recent`)
+    // via the shared wrapper — NOT a raw dotted `invoke('log.recent')`, which
+    // the real backend rejects as "command not found" (silently losing the
+    // on-open history backfill; see spec 019 closeout).
+    const { logRecent } = await import('@/api/commands');
+    const response = await logRecent({
       cursor,
-      levelMin: null,
       includeDiagnostics: true,
-      sourceFilter: null,
       windowSize: 500,
     });
 
     if (response.truncated) {
       markTruncated(response.truncatedCount ?? undefined);
     }
-    if (response.entries.length > 0) {
-      appendLog(response.entries);
+    // Runtime shape is identical to the local LogEntry (the wrapper documents
+    // this); cast to satisfy the ring-buffer's local type.
+    const entries = response.entries as unknown as LogEntry[];
+    if (entries.length > 0) {
+      appendLog(entries);
     }
   } catch (err) {
     // Non-fatal: the log panel shows whatever is in the buffer.
