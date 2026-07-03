@@ -42,8 +42,16 @@ import {
 } from './store';
 import { addToast } from '@/shared/toast';
 import { m } from '@/lib/i18n';
+<<<<<<< HEAD
 import { revealInventoryPath } from '@/api/commands';
 import type { InventorySource } from '@/api/commands';
+=======
+import { revealInventoryPath } from './revealInventory';
+import type { InventorySource } from '@/bindings/index';
+import type { ReviewFilter } from '@/lib/route-contract';
+import { REVIEW_FILTERS } from '@/lib/route-contract';
+import { sessionStateLabel } from '@/lib/lifecycle';
+>>>>>>> origin/redesign-ui-platevault
 
 /** Client-side text search across the visible session fields. */
 function filterSourcesBySearch(sources: InventorySource[], query: string): InventorySource[] {

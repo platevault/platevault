@@ -8,7 +8,7 @@
 // defaults and the locked/unlocked flags. (T061 FR-024)
 import { useState, useEffect, Fragment } from 'react';
 import { Toggle, SegControl, Pill, Banner } from '@/ui';
-import { getSettings } from '@/api/commands';
+import { getSettings } from './settingsIpc';
 import { CLEANUP_TYPES, CLEANUP_STAGE_ORDER, type CleanupTypeFixture } from '@/data/fixtures/settings';
 import { m } from '@/lib/i18n';
 import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';

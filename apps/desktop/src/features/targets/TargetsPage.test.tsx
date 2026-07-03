@@ -31,28 +31,62 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
 
-const { mockListTargets, mockGetTargetDetail, mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
+const {
+  mockListTargets,
+  mockGetTargetDetail,
+  mockSearchTargets,
+  mockResolveTarget,
+  mockAddTargetAlias,
+  mockRemoveTargetAlias,
+  mockSetDisplayAlias,
+  mockClearDisplayAlias,
+  mockListTargetSessions,
+  mockListTargetProjects,
+  mockGetTargetNote,
+  mockUpdateTargetNote,
+} = vi.hoisted(() => ({
   mockListTargets: vi.fn(),
   mockGetTargetDetail: vi.fn(),
   mockSearchTargets: vi.fn(),
   mockResolveTarget: vi.fn(),
+  mockAddTargetAlias: vi.fn(),
+  mockRemoveTargetAlias: vi.fn(),
+  mockSetDisplayAlias: vi.fn(),
+  mockClearDisplayAlias: vi.fn(),
+  mockListTargetSessions: vi.fn(),
+  mockListTargetProjects: vi.fn(),
+  mockGetTargetNote: vi.fn(),
+  mockUpdateTargetNote: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  listTargets: mockListTargets,
-  getTargetDetail: mockGetTargetDetail,
-  searchTargets: mockSearchTargets,
-  resolveTarget: mockResolveTarget,
-  TARGET_SEARCH_CONTRACT_VERSION: '1.0',
-  addTargetAlias: vi.fn().mockResolvedValue({ alias: { id: 'a', alias: 'x', kind: 'user' } }),
-  removeTargetAlias: vi.fn().mockResolvedValue({ removed: true }),
-  setDisplayAlias: vi.fn().mockResolvedValue({}),
-  clearDisplayAlias: vi.fn().mockResolvedValue({}),
-  listTargetSessions: vi.fn().mockResolvedValue([]),
-  listTargetProjects: vi.fn().mockResolvedValue([]),
-  getTargetNote: vi.fn().mockResolvedValue({ notes: null }),
-  updateTargetNote: vi.fn().mockResolvedValue({ notes: null }),
+/** Wrap a value in the generated `{ status: 'ok' }` Result envelope. */
+const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
+
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    targetList: mockListTargets,
+    targetGet: mockGetTargetDetail,
+    targetSearch: mockSearchTargets,
+    targetResolve: mockResolveTarget,
+    targetAliasAdd: mockAddTargetAlias,
+    targetAliasRemove: mockRemoveTargetAlias,
+    targetDisplayAliasSet: mockSetDisplayAlias,
+    targetDisplayAliasClear: mockClearDisplayAlias,
+    targetSessionsList: mockListTargetSessions,
+    targetProjectsList: mockListTargetProjects,
+    targetNoteGet: mockGetTargetNote,
+    targetNoteUpdate: mockUpdateTargetNote,
+  },
 }));
+
+mockAddTargetAlias.mockResolvedValue(ok({ alias: { id: 'a', alias: 'x', kind: 'user' } }));
+mockRemoveTargetAlias.mockResolvedValue(ok({ removed: true }));
+mockSetDisplayAlias.mockResolvedValue(ok({}));
+mockClearDisplayAlias.mockResolvedValue(ok({}));
+mockListTargetSessions.mockResolvedValue(ok([]));
+mockListTargetProjects.mockResolvedValue(ok([]));
+mockGetTargetNote.mockResolvedValue(ok({ notes: null }));
+mockUpdateTargetNote.mockResolvedValue(ok({ notes: null }));
 
 const mockNavigate = vi.fn();
 const mockSelectedId = { current: undefined as string | undefined };
@@ -106,10 +140,10 @@ function makeDetail() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockSelectedId.current = undefined;
-  mockListTargets.mockResolvedValue(listItems);
-  mockGetTargetDetail.mockResolvedValue(makeDetail());
-  mockSearchTargets.mockResolvedValue({ contractVersion: '1.0', requestId: 'r', suggestions: [] });
-  mockResolveTarget.mockResolvedValue({ contractVersion: '1.0', requestId: 'r', status: 'unresolved', target: null, unresolvedReason: 'offline', error: null });
+  mockListTargets.mockResolvedValue(ok(listItems));
+  mockGetTargetDetail.mockResolvedValue(ok(makeDetail()));
+  mockSearchTargets.mockResolvedValue(ok({ contractVersion: '1.0', requestId: 'r', suggestions: [] }));
+  mockResolveTarget.mockResolvedValue(ok({ contractVersion: '1.0', requestId: 'r', status: 'unresolved', target: null, unresolvedReason: 'offline', error: null }));
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -186,12 +220,12 @@ describe('TargetsPage', () => {
   // ── P: My Targets vs Planner filter (task #40, task #91) ────────────────────
 
   it('P1. "All targets" (default) filters to allowed planner catalogs', async () => {
-    mockListTargets.mockResolvedValue([
+    mockListTargets.mockResolvedValue(ok([
       ...listItems,
       // double-star dump entries that must NOT show in the Planner
       { id: 'hd1', effectiveLabel: 'HD 1', primaryDesignation: 'HD 1', objectType: 'double_star' },
       { id: 'wds1', effectiveLabel: 'WDS J1', primaryDesignation: 'WDS J00057+4549', objectType: 'double_star' },
-    ]);
+    ]));
     render(<TargetsPage />);
     await waitFor(() => expect(screen.getByText('NGC 7000')).toBeInTheDocument());
 

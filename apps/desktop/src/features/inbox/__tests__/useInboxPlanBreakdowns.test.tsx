@@ -22,8 +22,8 @@ const { mockInboxClassify } = vi.hoisted(() => ({
   mockInboxClassify: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  inboxClassify: mockInboxClassify,
+vi.mock('@/bindings/index', () => ({
+  commands: { inboxClassify: mockInboxClassify },
 }));
 
 import { useInboxPlanBreakdowns } from '../store';
@@ -58,15 +58,19 @@ describe('useInboxPlanBreakdowns (#98)', () => {
   it('fetches a classify per target and maps the breakdown by item id (incl. an UNSELECTED item)', async () => {
     mockInboxClassify.mockImplementation((req: { inboxItemId: string }) => {
       if (req.inboxItemId === 'a') {
-        return Promise.resolve(
-          classifyResponse('a', [
+        return Promise.resolve({
+          status: 'ok',
+          data: classifyResponse('a', [
             { kind: 'bias', count: 10 },
             { kind: 'dark', count: 16 },
             { kind: 'flat', count: 15 },
           ]),
-        );
+        });
       }
-      return Promise.resolve(classifyResponse('b', [{ kind: 'light', count: 30 }]));
+      return Promise.resolve({
+        status: 'ok',
+        data: classifyResponse('b', [{ kind: 'light', count: 30 }]),
+      });
     });
 
     const targets: InboxBreakdownTarget[] = [
@@ -98,7 +102,7 @@ describe('useInboxPlanBreakdowns (#98)', () => {
   });
 
   it('omits an item whose classify returns an empty breakdown', async () => {
-    mockInboxClassify.mockResolvedValue(classifyResponse('a', []));
+    mockInboxClassify.mockResolvedValue({ status: 'ok', data: classifyResponse('a', []) });
     const targets: InboxBreakdownTarget[] = [
       { inboxItemId: 'a', rootAbsolutePath: '/lib/root-a' },
     ];

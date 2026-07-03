@@ -15,7 +15,7 @@ import {
 	patternPreview,
 	patternValidate,
 	updateSettings,
-} from "@/api/commands";
+} from "./settingsIpc";
 import { Btn } from "@/ui";
 import { m } from "@/lib/i18n";
 import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from "./SettingsKit";
@@ -857,7 +857,7 @@ export function NamingStructure({ save }: NamingStructureProps) {
 				setValidateResult({
 					valid: resp.valid,
 					warnings: resp.warnings,
-					errorCode: resp.errorCode,
+					errorCode: resp.errorCode ?? undefined,
 				});
 			})
 			.catch(() => {

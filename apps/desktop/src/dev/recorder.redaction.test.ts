@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { wrap, getCallSnapshot, resetRecorder, type DispatchFn } from './recorder';
-import type { ContractMeta } from '@/api/commands';
+import type { ContractMeta } from '@/bindings/index';
 
 beforeEach(() => {
   resetRecorder();

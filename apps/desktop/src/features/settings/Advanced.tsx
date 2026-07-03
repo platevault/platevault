@@ -4,7 +4,7 @@
 // spec 010 — Guided flow restart control added (T042).
 import { useState, useEffect } from 'react';
 import { Btn } from '@/ui';
-import { getSettings } from '@/api/commands';
+import { getSettings } from './settingsIpc';
 import { getGuidedState, restartGuidedFlow, type GuidedFlowStateDto } from '@/features/guided/store';
 import { STEP_ORDER } from '@/features/guided/store';
 import { m } from '@/lib/i18n';

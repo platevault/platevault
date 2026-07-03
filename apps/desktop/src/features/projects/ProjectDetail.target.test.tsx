@@ -16,26 +16,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockAddToast } = vi.hoisted(() => ({ mockAddToast: vi.fn() }));
 
-vi.mock('@/api/commands', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/api/commands')>();
-  return {
-    ...original,
-    listManifests: vi.fn().mockResolvedValue({ manifests: [], nextCursor: null }),
-    getProjectNote: vi.fn().mockResolvedValue({ projectId: 'proj-m31', content: null }),
-    applyProjectLifecycleTransition: vi.fn(),
-    getProject008: vi.fn(),
-    reinferProjectChannels: vi.fn(),
-    dismissProjectChannelDrift: vi.fn(),
-    calibrationMatchSuggestBatch: vi.fn().mockResolvedValue({
-      status: 'success',
-      contractVersion: '2.0.0',
-      requestId: 'req-0',
-      results: [],
-    }),
-    listToolProfiles: vi.fn().mockResolvedValue([]),
-  };
-});
-
 vi.mock('./store', async (importOriginal) => {
   const original = await importOriginal<typeof import('./store')>();
   return {

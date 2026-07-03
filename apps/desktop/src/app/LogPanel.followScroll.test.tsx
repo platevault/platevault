@@ -22,20 +22,21 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
 }));
 
-vi.mock('@/api/commands', () => ({
-  getSettings: vi.fn().mockResolvedValue({
-    scope: 'advanced',
-    // Follow-tail on by default so the follow-tail effect is active.
-    values: { logLevel: 'info', rememberFollowLogs: true },
-  }),
-  updateSettings: vi.fn().mockResolvedValue(undefined),
-  logExport: vi.fn().mockResolvedValue({
-    contractVersion: '2.0.0',
-    requestId: 'r',
-    filePath: '/tmp/x.json',
-    count: 0,
-    status: 'success',
-  }),
+// LogPanel / LogPanelContext call commands.settingsGet / settingsUpdate /
+// logExport + unwrap now (spec 037); mock the generated bindings' Result shape.
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    settingsGet: vi.fn().mockResolvedValue({
+      status: 'ok',
+      // Follow-tail on by default so the follow-tail effect is active.
+      data: { scope: 'advanced', values: { logLevel: 'info', rememberFollowLogs: true } },
+    }),
+    settingsUpdate: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    logExport: vi.fn().mockResolvedValue({
+      status: 'ok',
+      data: { contractVersion: '2.0.0', requestId: 'r', filePath: '/tmp/x.json', count: 0, status: 'success' },
+    }),
+  },
 }));
 
 vi.mock('@/data/logSubscription', () => ({

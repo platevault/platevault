@@ -16,7 +16,7 @@ Runs `scripts/setup-speckit.sh`, which is idempotent (safe to re-run).
 
 ## What it does
 
-`scripts/setup-speckit.sh` performs five steps:
+`scripts/setup-speckit.sh` performs six steps:
 
 1. **`specify init --here`** -- scaffolds `.specify/` (constitution, feature dirs, workflow
    state). Defaults to `--integration codex --script sh`; override with `--integration` /
@@ -24,11 +24,18 @@ Runs `scripts/setup-speckit.sh`, which is idempotent (safe to re-run).
    the active feature, so this scaffold is a prerequisite.
 2. **Register the community catalog** -- `specify extension catalog add --name community
    --install-allowed <catalog.community.json>`.
-3. **Install + enable the 26 required extensions** -- `archive`, `brownfield`, `bugfix`,
-   `checkpoint`, `cleanup`, `conduct`, `critique`, `diagram`, `doctor`, `fix-findings`,
-   `fleet`, `github-issues`, `iterate`, `onboard`, `optimize`, `qa`, `reconcile`, `refine`,
-   `retro`, `review`, `security-review`, `status`, `tinyspec`, `verify`, `verify-tasks`,
-   `worktree`.
+3. **Install + enable the 28 required extensions** -- `agent-assign`, `archive`, `brownfield`,
+   `bugfix`, `checkpoint`, `cleanup`, `conduct`, `critique`, `diagram`, `doctor`, `fix-findings`,
+   `fleet`, `github-issues`, `iterate`, `onboard`, `optimize`, `qa`, `reconcile`,
+   `refine`, `retro`, `review`, `roadmap`, `security-review`, `status-report`, `tinyspec`, `verify`,
+   `verify-tasks`, `worktree`. `agent-assign` is mandatory: steering routes implementation
+   through it and the DAG hard-blocks the deprecated `/speckit.implement`. Most install from
+   the community catalog by name. The setup list also supports inline custom sources for
+   extensions whose catalog version lags upstream: `name=<archive-url>` (install a specific
+   archive via `specify extension add NAME --from <url>`) or `name=latest-release:<owner>/<repo>`
+   (resolve the newest GitHub release tag at setup time and install its archive — tracks
+   latest without pinning). Custom-source installs are best-effort: an unreachable source
+   warns and is skipped rather than aborting setup.
 4. **Register extension commands for the requested integration** -- `specify extension add`
    only renders an extension's command files for the integration active at add-time, and
    `specify integration switch` re-registers all extensions only on a *genuine* switch
@@ -38,7 +45,15 @@ Runs `scripts/setup-speckit.sh`, which is idempotent (safe to re-run).
    (re-)registration: one switch if the requested integration isn't active, or a
    bounce-through-another-integration-and-back if it already is. Offline (reads the local
    registry).
-5. **Install workflow definitions** -- `speckit`, `speckit-quality`, `speckit-full`.
+5. **Install workflow definitions** -- `speckit`, `speckit-quality`, `speckit-full`, via
+   `specify workflow add` from this package's local `workflows/<id>/` dirs. Since spec-kit
+   0.11.x, workflows are a first-class primitive, not extensions. The local `speckit` definition
+   overrides the upstream `Full SDD Cycle` that `specify init` bundles, and routes implementation
+   through the agent-assign flow instead of the deprecated `/speckit.implement`.
+6. **Ignore the generated status-report artefact** -- append `specs/**/spec-status.md` to
+   `.gitignore` (idempotent). The `status-report` extension regenerates `specs/spec-status.md`
+   on every `/speckit.status-report.show` run despite its read-only catalog tag; it is a derived
+   report, not a tracked spec artefact, so it stays out of `git status` and commits.
 
 ## How to run
 
@@ -63,8 +78,9 @@ Start the workflow with `/speckit.specify`.
 
 The orchestration layer (shipped by the `speckit-dag` skill) enforces a fixed graph: every
 step is mandatory by default, ordering is fixed, and a hook layer hard-blocks out-of-order or
-precondition-violating moves. Edges and conditions live in `nodes/<step>.pre.md` (predecessors
-+ preconditions) and `nodes/<step>.post.md` (successors + postconditions).
+precondition-violating moves. Edges and conditions live in `speckit-dag-hooks/scripts/nodes.json`
+(each node has a `pre` block with predecessors + preconditions and a `post` block with successors
++ postconditions).
 
 ```mermaid
 flowchart TD
@@ -76,9 +92,9 @@ flowchart TD
     subgraph P1["Phase 1 -- Specification (human-gated)"]
         direction TB
         S1["1 specify"]:::gate --> S2["2 clarify"]:::interactive
-        S2 --> S3["3 checklist"]:::interactive
-        S3 --> S4["4 plan"]:::gate
-        S4 --> S5["5 tasks"]:::gate
+        S2 --> S3["3 plan"]:::gate
+        S3 --> S4["4 tasks"]:::gate
+        S4 --> S5["5 checklist"]:::interactive
         S5 --> S5b["5b critique.run"]:::parallel
         S5 --> S5c["5c security-review"]:::parallel
         S5b --> S6["6 analyze"]:::interactive
@@ -113,7 +129,7 @@ flowchart TD
     ITER["iterate.define -> iterate.apply<br/>(MANDATORY once tasks.md exists)"]:::interactive
     A9c -. "requirements change /<br/>approach won't work" .-> ITER
     P3 -. "scope change" .-> ITER
-    ITER -. "resume at trigger step" .-> S5
+    ITER -. "resume at trigger step" .-> S4
 ```
 
 Legend: yellow = approval gate - blue = interactive (needs user) - green = runs parallel with
@@ -127,17 +143,17 @@ Each row is a `/speckit.<step>` command. "Next (default -> conditions)" reflects
 | Step | What it does | Produces | Next (default -> conditions) |
 |------|-------------|----------|-----------------------------|
 | `specify` | Create spec.md from requirements | `spec.md` | `clarify` - one-paragraph -> `tinyspec.classify`; bug -> `bugfix.report` |
-| `clarify` | Interactive requirements clarification | `clarifications.md` | `checklist` -> `plan` if user skips checklist |
-| `checklist` | Requirements quality gate | (gate result) | `plan` |
+| `clarify` | Interactive requirements clarification | `clarifications.md` | `plan` |
 | `plan` | Architecture & implementation plan | `plan.md` | `tasks` -> `critique.run` if user requests critique first |
-| `tasks` | Task breakdown with dependency graph | `tasks.md` | `critique.run` + `security-review` (parallel) -> `diagram.dependencies` if both skipped |
+| `tasks` | Task breakdown with dependency graph | `tasks.md` | `checklist` |
+| `checklist` | Requirements-quality gate over spec + plan + tasks | `checklist.md` | `critique.run` + `security-review` (parallel) -> `diagram.dependencies` if both skipped |
 | `critique.run` | Plan/task quality critique | critique notes | `analyze` |
 | `security-review` (5c) | Security review of plan/tasks | findings | `analyze` |
 | `analyze` | Risk analysis, resolve gaps | (resolved gaps) | `taskstoissues` |
 | `taskstoissues` | Create GitHub/GitLab issues | issues | `checkpoint.commit` |
 | `checkpoint.commit` (8) | Snapshot before implementation | commit | `agent-assign.assign` |
-| `agent-assign.assign` | Route each task to a specialized subagent | `agent-assignments.md` | `agent-assign.validate` |
-| `agent-assign.validate` | Validate agent assignments | (validated) | `agent-assign.execute` |
+| `agent-assign.assign` | Route each task to a specialized subagent | `agent-assignments.yml` | `agent-assign.validate` |
+| `agent-assign.validate` | Validate agent assignments (read-only) | (no artefact; stdout report) | `agent-assign.execute` |
 | `agent-assign.execute` | Per-task subagent execution, checkpoint each | code + `task-<n>.report.md` | `verify-tasks` -> `verify` if verify-tasks skipped; scope change -> `iterate` |
 | `verify-tasks` | Detect phantom completions (fresh context) | `verify-tasks-report.md` | `verify` |
 | `verify` | Validate code against FR/SC | `verify-report.md` | `review.run` |
@@ -145,17 +161,17 @@ Each row is a `/speckit.<step>` command. "Next (default -> conditions)" reflects
 | `qa.run` (11c) | QA retest of the implementation | QA results | `code-review` + `security-review` (parallel) -> `fix-findings` if failed |
 | `code-review` (12) | General code-quality review | findings | `cleanup` (with 13 clean) |
 | `security-review` (13) | Security/compliance review | findings | `cleanup` (with 12 clean) |
-| `cleanup` | Auto-fix small issues, file issues for large | `cleanup-report.md` | `memory-md.capture` -> `sync.analyze` if no lessons |
+| `cleanup` | Auto-fix small issues, file issues for large | `cleanup-report.md` | `sync.analyze` |
 | `sync.analyze` | Detect spec<->code drift | `sync-report.md` | `sync.conflicts` |
 | `sync.conflicts` | Detect inter-spec contradictions | findings | `retro.run` |
 | `retro.run` | Retrospective (needs full session context) | retro notes | docs update |
 | `checkpoint.commit` (19) | Final commit | commit | (done) |
 | `iterate.define` / `iterate.apply` | Scope change (MANDATORY once tasks.md exists) | `pending-iteration.md`, updated spec/plan/tasks | resume at the step where the change was triggered |
 
-This table covers the default workflow path. The node store guards ~86 commands
-in total, including optional/diagnostic ones (`status.*`, `doctor`, `diagram.*`,
-`memory-md.*`, `tinyspec.*`, `bugfix.*`, `worktree.*`, ...). Run
-`/speckit.status.show` for the current state, or see the steering-speckit
+This table covers the default workflow path. The node store guards ~74 commands
+in total, including optional/diagnostic ones (`status-report.*`, `doctor`, `diagram.*`,
+`tinyspec.*`, `bugfix.*`, `worktree.*`, ...). Run
+`/speckit.status-report.show` for the current state, or see the steering-speckit
 Command Reference for the full list.
 
 ## Rules

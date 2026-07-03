@@ -3,7 +3,8 @@ import { m } from '@/lib/i18n';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { Command } from 'cmdk';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
-import { searchGlobal, getSettings } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import { openInNewWindow } from '@/lib/window';
 import { useHotkeys } from '@/lib/useHotkeys';
 import type { SearchResult } from '@/bindings/types';
@@ -52,7 +53,9 @@ export function CommandPalette() {
   // Load devMode from backend settings on mount (spec 021 T013).
   useEffect(() => {
     let cancelled = false;
-    getSettings({ scope: 'advanced' })
+    commands
+      .settingsGet('advanced')
+      .then(unwrap)
       .then((data) => {
         if (cancelled) return;
         const vals = data.values as Record<string, unknown>;
@@ -88,9 +91,12 @@ export function CommandPalette() {
     const controller = new AbortController();
     // Debounce search by 200ms to avoid excessive API calls
     const timeoutId = setTimeout(() => {
-      void searchGlobal({ query }).then((r) => {
-        if (!controller.signal.aborted) setResults(r);
-      });
+      void commands
+        .searchGlobal(query)
+        .then(unwrap)
+        .then((r) => {
+          if (!controller.signal.aborted) setResults(r);
+        });
     }, 200);
     return () => {
       clearTimeout(timeoutId);

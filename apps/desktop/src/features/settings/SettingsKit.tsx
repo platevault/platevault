@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Btn, InfoTip } from '@/ui';
-import { settingsRestoreDefaults, getSettings } from '@/api/commands';
+import { settingsRestoreDefaults, getSettings } from './settingsIpc';
 import { m } from '@/lib/i18n';
 
 /**

@@ -16,20 +16,26 @@
 
 import { render as rtlRender, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { InboxListItem } from "@/api/commands";
+import type { InboxListItem } from "@/bindings/index";
 
 import { InboxList } from "../InboxList";
 
 // ── Mock reclassify (still imported transitively via InboxList store) ─────────
 
-vi.mock("@/api/commands", async (importOriginal) => {
-	const mod = await importOriginal<typeof import("@/api/commands")>();
+vi.mock("@/bindings/index", async (importOriginal) => {
+	const mod = await importOriginal<typeof import("@/bindings/index")>();
 	return {
 		...mod,
-		inboxReclassify: vi.fn().mockResolvedValue({
-			inboxItemId: "item-001",
-			remainingUnclassified: 0,
-		}),
+		commands: {
+			...mod.commands,
+			inboxReclassify: vi.fn().mockResolvedValue({
+				status: "ok",
+				data: {
+					inboxItemId: "item-001",
+					remainingUnclassified: 0,
+				},
+			}),
+		},
 	};
 });
 

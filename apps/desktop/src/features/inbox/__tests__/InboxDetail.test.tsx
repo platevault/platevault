@@ -7,7 +7,7 @@
  * InboxDetail never fetches — it renders the data it receives.
  *
  * InboxFileMetadata is the generated Specta type (camelCase), re-exported via
- * '@/api/commands' (spec 041 US2/FR-010 — wired in T019):
+ * '@/bindings/index' (spec 041 US2/FR-010 — wired in T019):
  *   relativeFilePath, frameTypeEffective, imageTyp, filter, exposureS, binningX,
  *   binningY, gain (string), temperatureC, object, dateObs, instrume, telescop,
  *   naxis1, naxis2, stackCount, isMaster, overrideStale
@@ -17,8 +17,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render as rtlRender, screen } from "@testing-library/react";
 import type React from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { InboxFileMetadata } from "@/api/commands";
 import type {
+	InboxFileMetadata_Serialize as InboxFileMetadata,
 	InboxClassifyResponse_Serialize as InboxClassifyResponse,
 	InboxItemSummary_Serialize as InboxItemSummary,
 } from "@/bindings";
@@ -37,14 +37,20 @@ function render(ui: React.ReactElement) {
 }
 
 // ── Mock reclassify hook ─────────────────────────────────────────────────────
-vi.mock("@/api/commands", async (importOriginal) => {
-	const mod = await importOriginal<typeof import("@/api/commands")>();
+vi.mock("@/bindings/index", async (importOriginal) => {
+	const mod = await importOriginal<typeof import("@/bindings/index")>();
 	return {
 		...mod,
-		inboxReclassify: vi.fn().mockResolvedValue({
-			inboxItemId: "item-001",
-			remainingUnclassified: 0,
-		}),
+		commands: {
+			...mod.commands,
+			inboxReclassify: vi.fn().mockResolvedValue({
+				status: "ok",
+				data: {
+					inboxItemId: "item-001",
+					remainingUnclassified: 0,
+				},
+			}),
+		},
 	};
 });
 

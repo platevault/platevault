@@ -62,7 +62,7 @@
 
 import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { TargetListItem } from '@/api/commands';
+import type { TargetListItem } from '@/bindings/index';
 import { Pill } from '@/ui';
 import { SortHeader } from '@/components';
 import { catalogueOf, catalogueLabel } from './planner-catalog';

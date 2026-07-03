@@ -13,15 +13,46 @@
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/data/queryKeys";
+<<<<<<< HEAD
 import { inventoryList } from "@/api/commands";
+=======
+import { commands } from "@/bindings/index";
+import { unwrap } from "@/api/ipc";
+>>>>>>> origin/redesign-ui-platevault
 import type {
   InventoryListResponse,
   InventoryListRequest,
   InventoryFrameType,
+<<<<<<< HEAD
 } from "@/api/commands";
 
 export type { InventoryListResponse };
 export type { InventorySource, InventorySession } from "@/api/commands";
+=======
+} from "@/bindings/index";
+import { errMessage } from '@/lib/errors';
+import { m } from '@/lib/i18n';
+
+export type { InventoryListResponse, InventorySessionReviewResponse };
+export type { InventorySource, InventorySession } from "@/bindings/index";
+
+// Local IPC helpers — migrated off the hand-written @/api/commands wrappers
+// (spec 037) onto the generated bindings. unwrap() turns the generated Result
+// into the throw-on-error contract the hooks below rely on.
+async function inventoryList(req: InventoryListRequest): Promise<InventoryListResponse> {
+  return unwrap(await commands.inventoryList(req as Parameters<typeof commands.inventoryList>[0]));
+}
+
+async function inventorySessionReview(
+  req: InventorySessionReviewRequest,
+): Promise<InventorySessionReviewResponse> {
+  return unwrap(
+    await commands.inventorySessionReview(
+      req as Parameters<typeof commands.inventorySessionReview>[0],
+    ),
+  );
+}
+>>>>>>> origin/redesign-ui-platevault
 
 // Filters shape
 

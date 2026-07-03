@@ -18,7 +18,7 @@
 
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import type { TargetListItem } from '@/api/commands';
+import type { TargetListItem } from '@/bindings/index';
 import { TargetsTable, DEFAULT_TARGET_SORT } from './TargetsTable';
 
 function item(primaryDesignation: string, objectType = 'other'): TargetListItem {

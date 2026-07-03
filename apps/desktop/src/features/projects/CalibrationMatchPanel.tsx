@@ -20,8 +20,9 @@
 import { useState, useEffect } from 'react';
 import { Section, Pill, EmptyState } from '@/ui';
 import type { PillVariant } from '@/ui';
-import { calibrationMatchSuggestBatch } from '@/api/commands';
-import type { BatchSessionResultDto, CalibrationMatchType } from '@/api/commands';
+import { calibrationMatchSuggestBatch } from './calibrationMatch';
+import type { CalibrationMatchType } from './calibrationMatch';
+import type { BatchSessionResultDto } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
 

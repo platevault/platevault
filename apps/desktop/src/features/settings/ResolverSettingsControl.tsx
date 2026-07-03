@@ -18,7 +18,7 @@ import {
   getResolverSettings,
   updateResolverSettings,
   type ResolverSettings,
-} from '@/api/commands';
+} from './settingsIpc';
 import { m } from '@/lib/i18n';
 import { SettingsRow } from './SettingsKit';
 

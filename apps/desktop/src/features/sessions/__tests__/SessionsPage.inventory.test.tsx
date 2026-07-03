@@ -14,7 +14,7 @@
  * Ignore action tests were removed along with the review-state machine. The
  * Reveal action (FR-007) is unrelated to the review lifecycle and is retained.
  *
- * Tests (jsdom, mock @/api/commands and @/features/sessions/store):
+ * Tests (jsdom, mock @/features/sessions/store):
  *
  * 1. SessionsTable renders a target group header for each distinct target.
  * 2. SessionsTable renders session rows with filter content.
@@ -28,11 +28,19 @@
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
+<<<<<<< HEAD
 import { describe, it, expect, vi } from 'vitest';
 import type { InventorySource, InventorySession } from '@/api/commands';
+=======
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { InventorySource, InventorySession } from '@/bindings/index';
+>>>>>>> origin/redesign-ui-platevault
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
+// The store hook is fully mocked below, so the real IPC layer never runs; we
+// only need the toast spy here (spec 037: no @/api/commands mock required).
 
+<<<<<<< HEAD
 const { mockInventoryList } = vi.hoisted(() => ({
   mockInventoryList: vi.fn(),
 }));
@@ -41,6 +49,12 @@ vi.mock('@/api/commands', () => ({
   inventoryList: mockInventoryList,
 }));
 
+=======
+const { mockAddToast } = vi.hoisted(() => ({
+  mockAddToast: vi.fn(),
+}));
+
+>>>>>>> origin/redesign-ui-platevault
 vi.mock('@/shared/toast', () => ({
   addToast: vi.fn(),
   useToasts: () => ({ toasts: [], dismiss: vi.fn() }),

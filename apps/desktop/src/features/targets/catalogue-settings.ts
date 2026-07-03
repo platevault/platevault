@@ -3,14 +3,16 @@
  *
  * Which catalogues are enabled by default in the Planner is a user setting,
  * persisted through the generic settings backend under the `'catalogues'`
- * scope (`getSettings` / `updateSettings`), value shape `{ enabled: string[] }`.
+ * scope (`commands.settingsGet` / `commands.settingsUpdate`), value shape
+ * `{ enabled: string[] }`.
  *
  * The Planner top bar initializes its catalogue multi-select from this setting;
  * the Settings → Target Resolution pane edits it. Sensible default ON subset is
  * Messier + NGC + IC + Sharpless; the rest (LBN/LDN/Caldwell/Barnard) are off.
  */
 
-import { getSettings, updateSettings } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import { PLANNER_CATALOGS, type CatalogueId } from './planner-catalog';
 
 /** Settings scope for the default-enabled planner catalogues. */
@@ -42,7 +44,7 @@ function coerce(value: unknown): CatalogueId[] {
  */
 export async function loadDefaultCatalogues(): Promise<CatalogueId[]> {
   try {
-    const data = await getSettings({ scope: CATALOGUES_SCOPE });
+    const data = unwrap(await commands.settingsGet(CATALOGUES_SCOPE));
     return coerce(data.values);
   } catch {
     return [...DEFAULT_ENABLED_CATALOGUES];
@@ -51,5 +53,5 @@ export async function loadDefaultCatalogues(): Promise<CatalogueId[]> {
 
 /** Persist the default-enabled catalogues. */
 export async function saveDefaultCatalogues(enabled: readonly CatalogueId[]): Promise<void> {
-  await updateSettings({ scope: CATALOGUES_SCOPE, values: { enabled: [...enabled] } });
+  unwrap(await commands.settingsUpdate(CATALOGUES_SCOPE, { enabled: [...enabled] }));
 }

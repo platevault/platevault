@@ -10,18 +10,27 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGet, mockUpdate, mockGetSettings, mockUpdateSettings } = vi.hoisted(() => ({
+const { mockGet, mockUpdate, mockSettingsGet, mockSettingsUpdate } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockUpdate: vi.fn(),
-  mockGetSettings: vi.fn(),
-  mockUpdateSettings: vi.fn(),
+  mockSettingsGet: vi.fn(),
+  mockSettingsUpdate: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  getResolverSettings: mockGet,
-  updateResolverSettings: mockUpdate,
-  getSettings: mockGetSettings,
-  updateSettings: mockUpdateSettings,
+// ResolverSettingsControl reads getResolverSettings / updateResolverSettings
+// from the settings feature's settingsIpc glue module (spec 037); mock those at
+// that boundary. StepCatalogs itself calls commands.settingsGet /
+// commands.settingsUpdate + unwrap (mocked below).
+vi.mock('@/features/settings/settingsIpc', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/settings/settingsIpc')>();
+  return { ...actual, getResolverSettings: mockGet, updateResolverSettings: mockUpdate };
+});
+
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    settingsGet: mockSettingsGet,
+    settingsUpdate: mockSettingsUpdate,
+  },
 }));
 
 import { StepCatalogs, DEFAULT_CATALOG_SETTINGS } from './StepCatalogs';
@@ -29,8 +38,8 @@ import { StepCatalogs, DEFAULT_CATALOG_SETTINGS } from './StepCatalogs';
 beforeEach(() => {
   mockGet.mockReset();
   mockUpdate.mockReset();
-  mockGetSettings.mockReset();
-  mockUpdateSettings.mockReset();
+  mockSettingsGet.mockReset();
+  mockSettingsUpdate.mockReset();
   mockGet.mockResolvedValue({
     contractVersion: '1.0',
     requestId: 'r',
@@ -41,8 +50,8 @@ beforeEach(() => {
       requestTimeoutSecs: 10,
     },
   });
-  mockGetSettings.mockResolvedValue({ values: { defaultProtection: 'protected' } });
-  mockUpdateSettings.mockResolvedValue(undefined);
+  mockSettingsGet.mockResolvedValue({ status: 'ok', data: { values: { defaultProtection: 'protected' } } });
+  mockSettingsUpdate.mockResolvedValue({ status: 'ok', data: null });
 });
 
 function renderStep() {
@@ -60,7 +69,7 @@ describe('StepCatalogs (Configuration)', () => {
 
   it('renders the display density, protection, and scan-depth controls', async () => {
     renderStep();
-    await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+    await waitFor(() => expect(mockSettingsGet).toHaveBeenCalled());
     expect(screen.getByLabelText('Default source protection')).toBeInTheDocument();
     expect(screen.getByLabelText('Display density')).toBeInTheDocument();
   });

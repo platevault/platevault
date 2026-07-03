@@ -6,12 +6,14 @@
  * the two new command wrappers settingsRestoreDefaults / settingsSourceOverrideSet.
  *
  * Mock pattern mirrors ResolverSettingsControl.test.tsx: vi.hoisted() + vi.mock().
+ * Mocks the generated bindings surface (spec 037) so the real `settingsIpc`
+ * wrappers run and their arg-shaping is exercised.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
-// ── Mock @/api/commands before any module imports it ─────────────────────────
+// ── Mock the generated bindings surface before any module imports it ─────────
 
 const { mockUpdateSettings, mockSettingsRestoreDefaults, mockSettingsSourceOverrideSet } =
   vi.hoisted(() => ({
@@ -20,21 +22,23 @@ const { mockUpdateSettings, mockSettingsRestoreDefaults, mockSettingsSourceOverr
     mockSettingsSourceOverrideSet: vi.fn(),
   }));
 
-vi.mock('@/api/commands', () => ({
-  updateSettings: mockUpdateSettings,
-  settingsRestoreDefaults: mockSettingsRestoreDefaults,
-  settingsSourceOverrideSet: mockSettingsSourceOverrideSet,
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    settingsUpdate: mockUpdateSettings,
+    settingsRestoreDefaults: mockSettingsRestoreDefaults,
+    settingsSourceOverrideSet: mockSettingsSourceOverrideSet,
+  },
 }));
 
 import { useAutoSave } from './useAutoSave';
-import { settingsRestoreDefaults, settingsSourceOverrideSet } from '@/api/commands';
+import { settingsRestoreDefaults, settingsSourceOverrideSet } from './settingsIpc';
 
 // ── useAutoSave ───────────────────────────────────────────────────────────────
 
 describe('useAutoSave', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    mockUpdateSettings.mockResolvedValue(undefined);
+    mockUpdateSettings.mockResolvedValue({ status: 'ok', data: null });
   });
 
   afterEach(() => {
@@ -63,7 +67,7 @@ describe('useAutoSave', () => {
 
     // Only one call — the last value in the burst.
     expect(mockUpdateSettings).toHaveBeenCalledTimes(1);
-    expect(mockUpdateSettings).toHaveBeenCalledWith({ scope: 'advanced', values: { logLevel: 'warn' } });
+    expect(mockUpdateSettings).toHaveBeenCalledWith('advanced', { logLevel: 'warn' });
   });
 
   it('does not fire updateSettings before the 300ms window elapses', () => {
@@ -114,7 +118,7 @@ describe('useAutoSave', () => {
       await Promise.resolve();
     });
 
-    expect(mockUpdateSettings).toHaveBeenCalledWith({ scope: 'cleanup', values });
+    expect(mockUpdateSettings).toHaveBeenCalledWith('cleanup', values);
   });
 });
 
@@ -123,9 +127,12 @@ describe('useAutoSave', () => {
 describe('settingsRestoreDefaults', () => {
   beforeEach(() => {
     mockSettingsRestoreDefaults.mockResolvedValue({
-      status: 'success',
-      restored: ['logLevel'],
-      alreadyAtDefault: [],
+      status: 'ok',
+      data: {
+        status: 'success',
+        restored: ['logLevel'],
+        alreadyAtDefault: [],
+      },
     });
   });
 
@@ -135,12 +142,14 @@ describe('settingsRestoreDefaults', () => {
 
   it('calls the generated command with a { keys } object', async () => {
     await settingsRestoreDefaults(['logLevel', 'rememberFollowLogs']);
-    expect(mockSettingsRestoreDefaults).toHaveBeenCalledWith(['logLevel', 'rememberFollowLogs']);
+    expect(mockSettingsRestoreDefaults).toHaveBeenCalledWith({
+      keys: ['logLevel', 'rememberFollowLogs'],
+    });
   });
 
   it('passes an empty array to restore all keys', async () => {
     await settingsRestoreDefaults([]);
-    expect(mockSettingsRestoreDefaults).toHaveBeenCalledWith([]);
+    expect(mockSettingsRestoreDefaults).toHaveBeenCalledWith({ keys: [] });
   });
 
   it('returns the RestoreDefaultsResponse from the backend', async () => {
@@ -158,8 +167,11 @@ describe('settingsRestoreDefaults', () => {
 describe('settingsSourceOverrideSet', () => {
   beforeEach(() => {
     mockSettingsSourceOverrideSet.mockResolvedValue({
-      sourceId: 'root-uuid-1',
-      key: 'hashOnScan',
+      status: 'ok',
+      data: {
+        sourceId: 'root-uuid-1',
+        key: 'hashOnScan',
+      },
     });
   });
 

@@ -17,7 +17,7 @@
  * grouping, and so Settings can persist a default-enabled catalogue subset.
  */
 
-import type { TargetListItem } from '@/api/commands';
+import type { TargetListItem } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 
 /** Stable id for each planner catalogue (persisted in Settings + used as group key). */

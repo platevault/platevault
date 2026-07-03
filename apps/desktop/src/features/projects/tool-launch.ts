@@ -11,15 +11,27 @@
  *   one-time-per-tool "cwd anchored" hint state (T021, US3 acceptance scenario 3).
  */
 import { useState, useCallback, useEffect } from 'react';
-import {
-  toolProfileList,
-  toolLaunch,
-  type ToolProfileSummary,
-  type ToolLaunchRequest,
-  type ToolLaunchResponse,
-} from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type {
+  ToolProfileSummary,
+  ToolProfileListResponse,
+  ToolLaunchRequest,
+  ToolLaunchResponse,
+} from '@/bindings/index';
 import { addToast } from '@/shared/toast';
 import { m } from '@/lib/i18n';
+
+// Local IPC helpers — migrated off the hand-written @/api/commands wrappers
+// (spec 037) onto the generated bindings.
+
+async function toolProfileList(): Promise<ToolProfileListResponse> {
+  return unwrap(await commands.toolsList());
+}
+
+async function toolLaunch(request: ToolLaunchRequest): Promise<ToolLaunchResponse> {
+  return unwrap(await commands.toolsLaunch(request));
+}
 
 // ── tool_id derivation ────────────────────────────────────────────────────────
 

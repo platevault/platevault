@@ -12,7 +12,8 @@ import { ResolverSettingsControl } from '@/features/settings/ResolverSettingsCon
 import { usePreference } from '@/data/preferences';
 import { m } from '@/lib/i18n';
 import type { Density } from '@/bindings/types';
-import { getSettings, updateSettings } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 //
@@ -42,7 +43,8 @@ function DefaultProtectionControl() {
 
   useEffect(() => {
     let cancelled = false;
-    getSettings({ scope: 'cleanup' })
+    commands.settingsGet('cleanup')
+      .then((r) => unwrap(r))
       .then((data) => {
         const vals = data?.values as Record<string, unknown> | undefined;
         const v = vals?.defaultProtection;
@@ -58,7 +60,9 @@ function DefaultProtectionControl() {
 
   const onChange = (v: DefaultProtection) => {
     setValue(v);
-    void updateSettings({ scope: 'cleanup', values: { defaultProtection: v } }).catch(() => {});
+    void commands.settingsUpdate('cleanup', { defaultProtection: v })
+      .then((r) => unwrap(r))
+      .catch(() => {});
   };
 
   return (

@@ -42,9 +42,9 @@ updated 041 / 017 rows and the CI note.
 | 010 guided-first-project-flow | 🟡 Near-complete | 31/33 |
 | 011 processing-tool-launch | ✅ Implemented (closed 2026-07-03) | Launch pipeline + UI + cwd-guard + detach/pid shipped & tested; T021 hint + X-1/X-2 done in closeout; 2 open (T018 Playwright, T022 real-spawn) DEFERRED (WSL/sandbox-blocked). Unblocks 012 |
 | 012 processing-artifact-observation | 🟡 Partial | 26/36 (follows 011) |
-| 013 target-lookup-from-fits-object | 🟡 Near-complete | 18/21 (largely folded into 035) |
+| 013 target-lookup-from-fits-object | 🔴 Superseded by 035 | Fully subsumed by 035 — every FR/US covered by SIMBAD resolve-on-demand, or its one unique feature (fuzzy variant matching + confidence tiers) deliberately reversed (035 clarification Q4: exact-match only). 3 open tasks are obsolete stubs (spec-014 download pipeline / removed `catalog_equivalences`). Target-identity model retained in `crates/targeting/` |
 | 014 catalog-index-licensing | 🔴 Superseded by 035 | download-catalog mechanism abandoned; attribution model retained |
-| 015 token-pattern-builder | 🟡 Mockup only | 0/0 tasks |
+| 015 token-pattern-builder | ✅ Implemented | Chip-based naming-pattern builder shipped: `crates/patterns/` (registry/resolver/validator/sanitize, ~64 tests) + contracts + Tauri `pattern_validate`/`resolve`/`preview` + live `PatternChipsEditor` in `NamingStructure.tsx` (validate + preview). Full SpecKit artifact set exists (~30 tasks, not "0/0"). Deferred downstream scope (per-source overrides, session-backed preview) handed to spec 018 |
 | 016 source-protection-defaults | 🟡 Near-complete | 17/20 (underpins 017) |
 | 017 cleanup-archive-review-plans | 🟡 Backend done; Archive UI shipped, cleanup-review UI remainder open | Backend + archive/trash executor done; Archive UI exists (`features/archive/ArchivePage/List/Detail`). Remaining open work is the cleanup-plan *review* UI (contextual per v4), not greenfield — earlier "19 real-open / UI open" overstated it |
 | 018 settings-configuration-model | ✅ Reconciled + implemented (#348) | 42/46; spec reconciled to as-built scope/values architecture; backend + UI shipped & verified (live T034 walkthrough); 4 obsolete (contracts mirror, 014 key); open: FR-006↔043 density tension (cross-spec decision) |
@@ -66,7 +66,7 @@ updated 041 / 017 rows and the CI note.
 | 035 simbad-target-resolution | ✅ Implemented | validated end-to-end 2026-06-23 |
 | 036 retire-legacy-targets | ✅ Implemented | PR #255 |
 | 037 e2e-integration-testing | 🟠 Partial / gated | 24/39; Layer-1 + CI Stage A done. Gate note is now stale — `search.global`/`sessions.list`/`calibration.masters` graduated to real backends; only `sessions.transition` + tauri-driver wiring remain |
-| 037 ipc-wrapper-removal | 🟡 In progress (~8/15) | tasks.md says 2/15 but Phases 1–2 shipped: `api/ipc.ts` switcher exists, `commands.ts` has 0 invoke literals. Phase 3–4 (repoint 99 `@/api/commands` importers) open |
+| 037 ipc-wrapper-removal | 🟢 Phase 1–3 done / Phase 4 pending | All caller areas migrated + merged 2026-07-03 (sessions #369, shell #372, settings #373, setup #374, targets #375, inbox #376, projects #377, dev #378, + fix `ad3497e1`); **0 live `@/api/commands` imports**. dev-tools commands generated under `--features dev-tools` (option C). Phase-4 teardown open: delete `commands.ts` (0 importers now), remove 3 dead `vi.mock('@/api/commands')` (LogPanel.test / CreateProjectDialog.test / SetupWizard.test), add CI grep guards SC-001 + SC-005, reconcile tasks.md |
 | 038 wizard-scan-step | ✅ Implemented | merged (no committed tasks.md) |
 | 039 cross-root-inbox | 🔴 Superseded by 041 | Scope fully implemented via 041 — cross-root `inbox_list`, inbox optional (`REQUIRED_KINDS`), rescan-all, bounded/virtualized. All 3 US + 7 FR + 5 SC verified in code 2026-07-03. No plan/tasks.md authored |
 | 040 calibration-masters-detection | ✅ Implemented | validated end-to-end 2026-06-23 |
@@ -109,7 +109,7 @@ INFRA / CROSS-CUTTING (mostly independent)
   018 settings ✅   021 dev-diagnostics 🟡   019 log-viewer ✅
   046 i18n ✅   042 stdlib ✅   043 ui-redesign 🔵
   037 e2e 🟠 ◀── now gated only on sessions.transition + tauri-driver (search/sessions/calibration are real)
-  037 ipc-removal 🟡 (~8/15; Phases 1–2 shipped)
+  037 ipc-removal 🟢 (Phase 1–3 done+merged; Phase 4 teardown pending)
 ```
 
 ## Actionable frontier — what can be worked on now (unblocked)
@@ -119,7 +119,7 @@ INFRA / CROSS-CUTTING (mostly independent)
 | 1 | **017 cleanup-plan review UI** (remainder) | Backend + plan model (041) done; Archive UI shipped; 016 nearly done | 🟡 Medium (cleanup-review UI remainder) |
 | 2 | **025 plan-application** (rollback + progress UI) | Apply backend already shipped via 041 | 🟡 Medium |
 | 2 | **039 cross-root-inbox** | Greenfield; 041 base on main; needs plan/tasks | 🟡 Medium |
-| 2 | **037 ipc-wrapper-removal** (Phase 3–4) | Phases 1–2 already shipped; finish repointing `@/api/commands` importers | 🟡 Medium (~7 left) |
+| 2 | **037 ipc-wrapper-removal** (Phase 4 teardown) | Phases 1–3 done+merged (0 live importers); delete `commands.ts` + 3 dead mocks, add SC-001/SC-005 CI guards, reconcile tasks.md | 🟢 Small |
 | 3 | **012 artifact-observation** | 011 tool-launch now closed; 012's deps (`launch_id`, `completed_at`, accordion) satisfied | 🟡 Medium |
 | 3 | **008 project-create** | 006 inventory closed | 🟡 Medium |
 | 3 | **021 dev-diagnostics** | Independent, behind `dev-tools` flag | 🟡 Small |

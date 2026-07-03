@@ -22,7 +22,7 @@ import { InboxList } from '../InboxList';
 import { FilterToolbar } from '@/components';
 import { useGrouping } from '@/lib/use-grouping';
 import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from '../InboxControls';
-import type { InboxListItem } from '@/api/commands';
+import type { InboxListItem } from '@/bindings/index';
 
 // ── Harness ───────────────────────────────────────────────────────────────────
 // Mirrors InboxPage's wiring: useGrouping owns the grouping state,

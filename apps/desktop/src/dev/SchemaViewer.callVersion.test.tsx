@@ -9,12 +9,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { SchemaViewer } from './SchemaViewer';
 
-vi.mock('@/api/commands', () => ({
-  devSchemaGet: vi.fn(),
-}));
+const { mockDevSchemaGet } = vi.hoisted(() => ({ mockDevSchemaGet: vi.fn() }));
 
-import { devSchemaGet } from '@/api/commands';
-const mockDevSchemaGet = vi.mocked(devSchemaGet);
+// Adapt the raw payload into the generated `{ status: 'ok', data }` Result the
+// real `unwrap` consumes (spec 037).
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    devSchemaGet: (...a: unknown[]) =>
+      Promise.resolve(mockDevSchemaGet(...a)).then((data) => ({ status: 'ok', data })),
+  },
+}));
 
 const SCHEMA_CONTENT = JSON.stringify({ title: 'mock' }, null, 2);
 
@@ -57,7 +61,7 @@ describe('SchemaViewer call-version pinning (T025)', () => {
     );
 
     await waitFor(() => screen.getByTestId('schema-content'));
-    expect(mockDevSchemaGet).toHaveBeenCalledWith(pinned);
+    expect(mockDevSchemaGet).toHaveBeenCalledWith({ schemaPath: pinned });
   });
 
   it('re-fetches when schemaPath changes (different call version)', async () => {
@@ -71,7 +75,7 @@ describe('SchemaViewer call-version pinning (T025)', () => {
     );
 
     await waitFor(() => screen.getByTestId('schema-content'));
-    expect(mockDevSchemaGet).toHaveBeenCalledWith('/v1/schema.json');
+    expect(mockDevSchemaGet).toHaveBeenCalledWith({ schemaPath: '/v1/schema.json' });
 
     rerender(
       <SchemaViewer
@@ -83,7 +87,7 @@ describe('SchemaViewer call-version pinning (T025)', () => {
     );
 
     await waitFor(() => {
-      expect(mockDevSchemaGet).toHaveBeenCalledWith('/v2/schema.json');
+      expect(mockDevSchemaGet).toHaveBeenCalledWith({ schemaPath: '/v2/schema.json' });
     });
     expect(mockDevSchemaGet).toHaveBeenCalledTimes(2);
   });

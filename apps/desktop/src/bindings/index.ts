@@ -1416,6 +1416,43 @@ export const commands = {
 	 *  - `lifecycle.read_only`    — owning project is `archived`.
 	 */
 	preparedviewRegenerate: (viewId: string) => typedError<PreparedViewRegenerateResponse, ContractError_Serialize>(__TAURI_INVOKE("preparedview_regenerate", { viewId })),
+	/**
+	 *  `dev.contracts.list` — list all registered contracts (spec 021 US1).
+	 * 
+	 *  Returns `dev_mode.disabled` when the runtime `devMode` setting is off.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database failure or when `devMode` is disabled.
+	 */
+	devContractsList: (request: DevContractsListRequest_Deserialize) => typedError<DevContractsListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_contracts_list", { request })),
+	/**
+	 *  `dev.calls.list` — return recent recorded calls (spec 021 US2).
+	 * 
+	 *  Reads from the in-memory `CallBuffer` Tauri state.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` when `devMode` is disabled or on database failure.
+	 */
+	devCallsList: (request: DevCallsListRequest_Deserialize) => typedError<DevCallsListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_calls_list", { request })),
+	/**
+	 *  `dev.export` — dump contract registry + calls to a JSON file (spec 021 US4).
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` when `devMode` is disabled, the path is outside the
+	 *  allowed write envelope, or the file cannot be written.
+	 */
+	devExport: (request: DevExportRequest_Deserialize) => typedError<DevExportResponse, ContractError_Serialize>(__TAURI_INVOKE("dev_export", { request })),
+	/**
+	 *  `dev.schema.get` — read a JSON Schema file server-side (spec 021 US3).
+	 * 
+	 *  Reads `request.schema_path` from disk and returns the pretty-printed
+	 *  content. Returns `found: false` when the file is absent or unreadable,
+	 *  avoiding any client-side filesystem dependency.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` when `devMode` is disabled.
+	 */
+	devSchemaGet: (request: DevSchemaGetRequest) => typedError<DevSchemaGetResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_schema_get", { request })),
 };
 
 /* Types */
@@ -2070,6 +2107,65 @@ export type CompatibleSessionEntry = {
 /**  Confidence level for inferred or reviewed metadata. */
 export type ConfidenceLevel = "unknown" | "low" | "medium" | "high" | "confirmed" | "rejected";
 
+/**  A single request/response pair captured by the recording proxy (spec 021, US2). */
+export type ContractCall = ContractCall_Serialize | ContractCall_Deserialize;
+
+/**  Error details stored on a failed call. */
+export type ContractCallError = {
+	code: string,
+	message: string,
+};
+
+/**  A single request/response pair captured by the recording proxy (spec 021, US2). */
+export type ContractCall_Deserialize = {
+	/**  Monotonic session-scoped id. Used as the row key. */
+	id: string,
+	/**  Operation name at call time. */
+	contract: string,
+	/**  Operation version at call time (pinned per call). */
+	contractVersion: string,
+	/**  Sanitized request payload. Sensitive fields and filesystem paths redacted. */
+	request: unknown,
+	/**  Response payload on success. Absent when the call errored. */
+	response: unknown | null,
+	/**  Error envelope on failure. Absent on success. */
+	error: ContractCallError | null,
+	/**  Wall-clock UTC start time (ISO-8601). */
+	startedAt: string,
+	/**  Monotonic elapsed time in milliseconds from dispatch to response or error. */
+	durationMs: number | null,
+	/**
+	 *  `true` when the recorder truncated the stored request or response above
+	 *  the 64 KB threshold.
+	 */
+	payloadTruncated: boolean,
+};
+
+/**  A single request/response pair captured by the recording proxy (spec 021, US2). */
+export type ContractCall_Serialize = {
+	/**  Monotonic session-scoped id. Used as the row key. */
+	id: string,
+	/**  Operation name at call time. */
+	contract: string,
+	/**  Operation version at call time (pinned per call). */
+	contractVersion: string,
+	/**  Sanitized request payload. Sensitive fields and filesystem paths redacted. */
+	request: unknown,
+	/**  Response payload on success. Absent when the call errored. */
+	response?: unknown | null,
+	/**  Error envelope on failure. Absent on success. */
+	error?: ContractCallError | null,
+	/**  Wall-clock UTC start time (ISO-8601). */
+	startedAt: string,
+	/**  Monotonic elapsed time in milliseconds from dispatch to response or error. */
+	durationMs: number | null,
+	/**
+	 *  `true` when the recorder truncated the stored request or response above
+	 *  the 64 KB threshold.
+	 */
+	payloadTruncated: boolean,
+};
+
 export type ContractError = ContractError_Serialize | ContractError_Deserialize;
 
 export type ContractError_Deserialize = {
@@ -2090,6 +2186,53 @@ export type ContractError_Serialize = {
 	details: unknown,
 	fieldErrors?: FieldError[],
 	recoveryActions?: RecoveryAction_Serialize[],
+};
+
+/**  Metadata for a single registered contract (spec 021, US1). */
+export type ContractMeta = ContractMeta_Serialize | ContractMeta_Deserialize;
+
+/**  Metadata for a single registered contract (spec 021, US1). */
+export type ContractMeta_Deserialize = {
+	/**  Operation name, e.g. `plan.create`. */
+	name: string,
+	/**  Semantic version of the contract shape. */
+	version: string,
+	/**  Absolute path to the JSON Schema file backing this contract. */
+	schemaPath: string,
+	/**  `"ui-to-core"` or `"core-to-ui"`. */
+	direction: string,
+	/**  `true` only for read-only contracts that opt in. Default `false`. */
+	replaySafe: boolean,
+	/**  JSON Pointer paths whose values are redacted before storage. */
+	sensitiveFields?: string[],
+	/**  SHA-256 of the TypeScript-side schema declaration (absent when unknown). */
+	tsHash: string | null,
+	/**  SHA-256 of the Rust-side schema declaration (absent when unknown). */
+	rustHash: string | null,
+	/**  `true` when both hashes are present and differ. */
+	mismatch: boolean | null,
+};
+
+/**  Metadata for a single registered contract (spec 021, US1). */
+export type ContractMeta_Serialize = {
+	/**  Operation name, e.g. `plan.create`. */
+	name: string,
+	/**  Semantic version of the contract shape. */
+	version: string,
+	/**  Absolute path to the JSON Schema file backing this contract. */
+	schemaPath: string,
+	/**  `"ui-to-core"` or `"core-to-ui"`. */
+	direction: string,
+	/**  `true` only for read-only contracts that opt in. Default `false`. */
+	replaySafe: boolean,
+	/**  JSON Pointer paths whose values are redacted before storage. */
+	sensitiveFields?: string[],
+	/**  SHA-256 of the TypeScript-side schema declaration (absent when unknown). */
+	tsHash?: string | null,
+	/**  SHA-256 of the Rust-side schema declaration (absent when unknown). */
+	rustHash?: string | null,
+	/**  `true` when both hashes are present and differ. */
+	mismatch?: boolean | null,
 };
 
 /**  Equatorial coordinates (J2000). */
@@ -2161,6 +2304,134 @@ export type Density = "compact" | "comfortable" | "spacious";
 
 /**  Per-plan destination for destructive items (R-Trash-1). */
 export type DestructiveDestination = "archive" | "os_trash";
+
+/**  Request for `dev.calls.list`. */
+export type DevCallsListRequest = DevCallsListRequest_Serialize | DevCallsListRequest_Deserialize;
+
+/**  Request for `dev.calls.list`. */
+export type DevCallsListRequest_Deserialize = {
+	requestId: string | null,
+	/**  Max rows to return. Defaults to the full buffer (100). Clamped to 100. */
+	limit: number | null,
+};
+
+/**  Request for `dev.calls.list`. */
+export type DevCallsListRequest_Serialize = {
+	requestId?: string | null,
+	/**  Max rows to return. Defaults to the full buffer (100). Clamped to 100. */
+	limit?: number | null,
+};
+
+/**  Response for `dev.calls.list`. */
+export type DevCallsListResponse = DevCallsListResponse_Serialize | DevCallsListResponse_Deserialize;
+
+/**  Response for `dev.calls.list`. */
+export type DevCallsListResponse_Deserialize = {
+	/**  Newest-first list of recorded calls. */
+	calls: ContractCall_Deserialize[],
+};
+
+/**  Response for `dev.calls.list`. */
+export type DevCallsListResponse_Serialize = {
+	/**  Newest-first list of recorded calls. */
+	calls: ContractCall_Serialize[],
+};
+
+/**  Request for `dev.contracts.list`. */
+export type DevContractsListRequest = DevContractsListRequest_Serialize | DevContractsListRequest_Deserialize;
+
+/**  Request for `dev.contracts.list`. */
+export type DevContractsListRequest_Deserialize = {
+	requestId: string | null,
+};
+
+/**  Request for `dev.contracts.list`. */
+export type DevContractsListRequest_Serialize = {
+	requestId?: string | null,
+};
+
+/**  Response for `dev.contracts.list`. */
+export type DevContractsListResponse = DevContractsListResponse_Serialize | DevContractsListResponse_Deserialize;
+
+/**  Response for `dev.contracts.list`. */
+export type DevContractsListResponse_Deserialize = {
+	contracts: ContractMeta_Deserialize[],
+};
+
+/**  Response for `dev.contracts.list`. */
+export type DevContractsListResponse_Serialize = {
+	contracts: ContractMeta_Serialize[],
+};
+
+/**  Request for `dev.export`. */
+export type DevExportRequest = DevExportRequest_Serialize | DevExportRequest_Deserialize;
+
+/**  Request for `dev.export`. */
+export type DevExportRequest_Deserialize = {
+	requestId: string | null,
+	/**  Absolute filesystem path where the JSON export should be written. */
+	outputPath: string,
+	/**
+	 *  When `false` (default), filesystem paths in the export are replaced with
+	 *  `${LIBRARY_ROOT}/...` placeholders. When `true`, verbatim paths are included.
+	 */
+	includeVerbatimPaths?: boolean,
+	/**  Include the full contract registry list in the export (default `true`). */
+	includeContracts?: boolean,
+	/**  Include the recent-calls buffer in the export (default `true`). */
+	includeCalls?: boolean,
+};
+
+/**  Request for `dev.export`. */
+export type DevExportRequest_Serialize = {
+	requestId?: string | null,
+	/**  Absolute filesystem path where the JSON export should be written. */
+	outputPath: string,
+	/**
+	 *  When `false` (default), filesystem paths in the export are replaced with
+	 *  `${LIBRARY_ROOT}/...` placeholders. When `true`, verbatim paths are included.
+	 */
+	includeVerbatimPaths: boolean,
+	/**  Include the full contract registry list in the export (default `true`). */
+	includeContracts: boolean,
+	/**  Include the recent-calls buffer in the export (default `true`). */
+	includeCalls: boolean,
+};
+
+/**  Response for `dev.export`. */
+export type DevExportResponse = {
+	/**  Absolute path of the written export file. */
+	writtenPath: string,
+	/**  Number of call records included in the export. */
+	callCount: number,
+	/**  Number of contract records included in the export. */
+	contractCount: number,
+};
+
+/**  Request for `dev.schema.get` — read a JSON Schema file by path. */
+export type DevSchemaGetRequest = {
+	/**  Absolute filesystem path to the JSON Schema file. */
+	schemaPath: string,
+};
+
+/**  Response for `dev.schema.get`. */
+export type DevSchemaGetResponse = DevSchemaGetResponse_Serialize | DevSchemaGetResponse_Deserialize;
+
+/**  Response for `dev.schema.get`. */
+export type DevSchemaGetResponse_Deserialize = {
+	/**  `true` when the file was found and read successfully. */
+	found: boolean,
+	/**  Pretty-printed JSON Schema content (two-space indent). Absent when `found` is false. */
+	content: string | null,
+};
+
+/**  Response for `dev.schema.get`. */
+export type DevSchemaGetResponse_Serialize = {
+	/**  `true` when the file was found and read successfully. */
+	found: boolean,
+	/**  Pretty-printed JSON Schema content (two-space indent). Absent when `found` is false. */
+	content?: string | null,
+};
 
 /**  Request payload for `native.directory.pick`. */
 export type DirectoryPickRequest = DirectoryPickRequest_Serialize | DirectoryPickRequest_Deserialize;

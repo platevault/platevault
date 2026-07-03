@@ -4,50 +4,162 @@
 # command files for the requested integration, and install the workflow
 # definitions. Idempotent -- safe to re-run.
 #
-# Prereqs: `specify` CLI on PATH (uv tool install specify-cli) and `apm`.
-# The APM speckit orchestration bundle (agents, DAG, hooks) is installed
-# separately via `apm install speckit@<marketplace>`; this script wires the
-# upstream spec-kit side that the bundle's DAG keys off.
+# This is the single source of truth for the spec-kit side of SpecKit setup.
+# The global `project-setup` skill delegates here (after `apm install speckit`)
+# rather than carrying its own copy.
 #
-# Usage: setup-speckit.sh [--integration <name>] [--script <sh|ps>] [--force]
-#   --integration   coding-agent integration for `specify init` (default: codex)
+# Prereqs: `specify` CLI on PATH (uv tool install specify-cli).
+# The APM speckit orchestration bundle (agents, DAG, hooks) carries this script;
+# the bundle's DAG keys off the `.specify/` scaffold this produces.
+#
+# Usage: setup-speckit.sh [--integration <name>] [--render-for <csv>] [--script <sh|ps>] [--force]
+#   --integration   PRIMARY coding-agent integration -- the one `specify init` records as
+#                   default_integration and the one this script lands on at the end.
+#                   DEFAULT: auto-detected from the agent running this script (see below);
+#                   falls back to codex with a warning only when undetectable. The agent
+#                   invoking the skill SHOULD pass this explicitly (it knows what it is).
+#   --render-for    Comma-separated integrations to render extension command files for, so
+#                   /speckit.* exists in every agent the project compiles steering for (e.g.
+#                   "claude,codex"). The primary is always included. DEFAULT: just --integration.
 #   --script        script flavor for `specify init` (default: sh)
 #   --force         pass --force to `specify init` (skip dir-not-empty prompt)
+#
+# WHY auto-detect the primary: `specify extension add` renders an extension's command files
+# ONLY for the integration active at add-time. If `specify init` records the wrong primary
+# (historically a hardcoded `codex`), every extension renders for codex even when a Claude Code
+# session is driving setup -- and a naive re-run repeats the mistake. Detecting the running
+# agent makes the default correct; the explicit --integration parameter lets the agent decide.
 
 set -euo pipefail
 
-INTEGRATION="codex"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WORKFLOW_ROOT="$SCRIPT_DIR/workflows"
+
+INTEGRATION=""        # empty => auto-detect (resolve_primary_integration below)
+RENDER_FOR=""         # empty => render for the primary only
 SCRIPT_FLAVOR="sh"
 FORCE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --integration) INTEGRATION="${2:?--integration needs a value}"; shift 2 ;;
+    --render-for)  RENDER_FOR="${2:?--render-for needs a value}"; shift 2 ;;
     --script)      SCRIPT_FLAVOR="${2:?--script needs a value}"; shift 2 ;;
     --force)       FORCE="--force"; shift ;;
-    -h|--help)     sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help)     sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
+
+# Detect which coding agent is running this script from its environment. Returns the
+# spec-kit integration name (claude|codex) or empty if undetectable (plain shell / CI).
+# Ordered most-specific-first; AI_AGENT is the normalized cross-agent marker, then each
+# agent's own native env vars as a fallback.
+detect_agent() {
+  case "${AI_AGENT:-}" in
+    *claude*) echo claude; return ;;
+    *codex*)  echo codex;  return ;;
+  esac
+  if [ -n "${CLAUDECODE:-}" ] || [ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ] || [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    echo claude; return
+  fi
+  if [ -n "${CODEX_SANDBOX:-}" ] || [ -n "${CODEX_HOME:-}" ] || [ -n "${CODEX_SANDBOX_NETWORK_DISABLED:-}" ]; then
+    echo codex; return
+  fi
+  echo ""
+}
+
+# Built-in integration to bounce through when forcing a re-registration switch onto an
+# already-active integration (switch-to-self is a no-op and renders nothing).
+other_builtin() { [ "$1" = "codex" ] && echo claude || echo codex; }
+
+# Resolve the primary integration: explicit flag wins; else detect; else codex + warn.
+if [ -z "$INTEGRATION" ]; then
+  INTEGRATION="$(detect_agent)"
+  if [ -n "$INTEGRATION" ]; then
+    echo "==> auto-detected primary integration: $INTEGRATION (pass --integration to override)"
+  else
+    INTEGRATION="codex"
+    echo "WARNING: could not detect the running agent; defaulting primary integration to '$INTEGRATION'." >&2
+    echo "         Pass --integration <claude|codex> explicitly to be sure." >&2
+  fi
+fi
+
+# Build the ordered, de-duplicated render list: every requested integration with the
+# primary forced LAST, so the script lands on the primary after rendering the others.
+RENDER_LIST=()
+_add_render() {
+  local want="$1" have
+  [ -z "$want" ] && return
+  # Guard the array expansion: bash 3.2 (macOS default) under `set -u` errors on
+  # "${arr[@]}" when arr is empty, so only iterate when there is something to compare.
+  if [ "${#RENDER_LIST[@]}" -gt 0 ]; then
+    for have in "${RENDER_LIST[@]}"; do [ "$have" = "$want" ] && return; done
+  fi
+  RENDER_LIST+=("$want")
+}
+# Split --render-for on commas (bash 3.2-safe), excluding the primary for now.
+_old_ifs="$IFS"; IFS=','
+for _r in $RENDER_FOR; do
+  _r="${_r#"${_r%%[![:space:]]*}"}"; _r="${_r%"${_r##*[![:space:]]}"}"  # trim
+  [ "$_r" = "$INTEGRATION" ] && continue
+  _add_render "$_r"
+done
+IFS="$_old_ifs"
+_add_render "$INTEGRATION"   # primary always last
 
 CATALOG_NAME="community"
 CATALOG_URL="https://raw.githubusercontent.com/github/spec-kit/main/extensions/catalog.community.json"
 
 # The required extension set the DAG depends on. Keep in sync with the README
 # "Setting up a SpecKit project" list and the speckit-dag node coverage.
+# agent-assign is mandatory: steering routes implementation through the
+# agent-assign flow and the DAG hard-blocks the deprecated /speckit.implement.
+#
+# Entries are either a bare extension name (resolved from the community catalog)
+# or `name=source-url` for a first-party extension not yet in the catalog, which
+# installs via `specify extension add --from <url>`. Custom-source installs are
+# best-effort: an unreachable/unpublished source warns and is skipped rather than
+# aborting setup. One list, one source of truth; bash 3.2-safe (no associative arrays).
+#   roadmap -- the spec-roadmap extension (srobroek/speckit-roadmap); accepted into the
+#   community catalog 2026-06, so it resolves by name like the rest.
+#
+# An entry's source value (after `=`) takes one of two forms:
+#   * a direct archive URL              -> installed via `specify extension add NAME --from <url>`
+#   * `latest-release:<owner>/<repo>`   -> the latest published GitHub release tag is resolved
+#                                          at setup time and its .zip archive is installed
+# `specify extension add --from` requires a real archive URL (a bare repo URL is fetched as a
+# zip and fails); `latest-release:` exists so we track newest WITHOUT pinning a version.
+#   status-report -- the Open-Agent-Tools/spec-kit-status extension (catalog id
+#   `status-report`), NOT the single-commit KhawarHabibKhan `status` extension it
+#   replaced. Both ship a read-only progress command; status-report is the more
+#   maintained one (script-driven JSON, cross-platform). It provides
+#   `/speckit.status-report.show`. NOTE: despite its read-only catalog tag it
+#   writes `specs/spec-status.md` on every run -- gitignored in the scaffold.
+#   Installed via `latest-release:` (newest GitHub release tag resolved at setup
+#   time) rather than the community catalog, which lags behind upstream.
 EXTENSIONS=(
+  agent-assign
   archive brownfield bugfix checkpoint cleanup conduct critique diagram doctor
-  fix-findings fleet github-issues iterate onboard optimize qa reconcile refine
-  retro review security-review status tinyspec verify verify-tasks worktree
+  fix-findings fleet github-issues iterate onboard optimize qa reconcile
+  refine retro review roadmap security-review
+  status-report=latest-release:Open-Agent-Tools/spec-kit-status
+  tinyspec verify verify-tasks worktree
 )
 
-# Workflow definitions (multi-step command bundles) shipped by spec-kit.
+# Workflow definitions, installed via the `workflow` primitive (since spec-kit
+# 0.11.x workflows are a first-class primitive, NOT extensions -- they do not
+# resolve through `extension add`). All three ship in this package under
+# workflows/<id>/workflow.yml and are installed from those local dirs:
+#   speckit          -- our gated override of the upstream Full SDD Cycle
+#   speckit-quality  -- post-implementation QA cycle
+#   speckit-full     -- spec -> implement -> QA in one run
 WORKFLOWS=(speckit speckit-quality speckit-full)
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: '$1' not found on PATH" >&2; exit 1; }; }
 need specify
 
-echo "==> 1/5 specify init (.specify/ scaffold) -- integration=$INTEGRATION script=$SCRIPT_FLAVOR"
+echo "==> 1/6 specify init (.specify/ scaffold) -- integration=$INTEGRATION script=$SCRIPT_FLAVOR"
 if [ -d .specify ] && [ -z "$FORCE" ]; then
   echo "    .specify/ already present -- skipping init (pass --force to re-run)"
 else
@@ -57,31 +169,106 @@ else
   specify init --here --integration "$INTEGRATION" --script "$SCRIPT_FLAVOR" $FORCE </dev/null
 fi
 
-echo "==> 2/5 register community extension catalog"
+echo "==> 2/6 register community extension catalog"
 # Match on URL, not just name: a default catalog (e.g. 'custom' from
 # SPECKIT_CATALOG_URL) may already point at this community URL.
+#
+# Two failure modes this guards against (both make re-runs non-deterministic):
+#   1. `specify ... catalog list` WRAPS the URL across terminal lines even in
+#      captured (non-TTY) output, so a single-line `grep -F "$CATALOG_URL"`
+#      never matches a wrapped URL. Collapse all whitespace before matching.
+#   2. When SPECKIT_CATALOG_URL is set, `catalog list` shows only the env-var
+#      'custom' catalog and MASKS a persistent same-URL 'community' catalog from
+#      an earlier run. The name guard then misses it, we fall through to
+#      `catalog add --name community`, specify rejects the duplicate, and
+#      `set -e` aborts before extensions install. So treat a failing add whose
+#      cause is "already exists" as success -- the desired end state (a catalog
+#      for this URL is registered) is already true.
 catalogs="$(specify extension catalog list 2>/dev/null || true)"
-if printf '%s\n' "$catalogs" | grep -qF "$CATALOG_URL"; then
+# Whitespace-collapsed haystack so a line-wrapped URL still matches.
+catalogs_flat="$(printf '%s' "$catalogs" | tr -s '[:space:]' ' ')"
+if printf '%s' "$catalogs_flat" | grep -qF "$CATALOG_URL"; then
   echo "    a catalog for this URL is already registered -- skipping"
 elif printf '%s\n' "$catalogs" | grep -qw "$CATALOG_NAME"; then
   echo "    catalog '$CATALOG_NAME' already registered -- skipping"
 else
-  specify extension catalog add --name "$CATALOG_NAME" --install-allowed "$CATALOG_URL" </dev/null
+  # Disable -e around the add so an "already exists" rejection (masked catalog,
+  # mode 2 above) does not abort the whole setup; surface any other failure.
+  set +e
+  add_out="$(specify extension catalog add --name "$CATALOG_NAME" --install-allowed "$CATALOG_URL" </dev/null 2>&1)"
+  add_rc=$?
+  set -e
+  if [ "$add_rc" -ne 0 ]; then
+    if printf '%s' "$add_out" | grep -qi 'already exists'; then
+      echo "    catalog '$CATALOG_NAME' already exists (masked from list) -- skipping"
+    else
+      printf '%s\n' "$add_out" >&2
+      echo "ERROR: failed to register catalog '$CATALOG_NAME' ($CATALOG_URL)" >&2
+      exit 1
+    fi
+  fi
 fi
 
-echo "==> 3/5 install + enable ${#EXTENSIONS[@]} extensions"
+echo "==> 3/6 install + enable ${#EXTENSIONS[@]} extensions"
 installed="$(specify extension list 2>/dev/null || true)"
-for ext in "${EXTENSIONS[@]}"; do
+for entry in "${EXTENSIONS[@]}"; do
+  # Split "name=source" (custom source) from a bare "name" (community catalog).
+  ext="${entry%%=*}"
+  src="${entry#*=}"
+  [ "$src" = "$entry" ] && src=""   # no '=' present -> no custom source
   if printf '%s\n' "$installed" | grep -qw "$ext"; then
     echo "    = $ext (already installed)"
+  elif [ -n "$src" ]; then
+    # Custom-source extension (not in the community catalog). Best-effort:
+    # an unreachable/unpublished source warns and continues, leaving the rest
+    # of the required catalog set intact.
+    case "$src" in
+      latest-release:*)
+        repo="${src#latest-release:}"
+        # Resolve the latest published release tag via the GitHub API (no auth needed
+        # for public repos), then install that tag's source archive. Tracks newest
+        # without pinning a version in this file.
+        tag="$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null \
+                 | grep -m1 '"tag_name"' | sed 's/.*"tag_name"[^"]*"\([^"]*\)".*/\1/')"
+        if [ -z "$tag" ]; then
+          echo "    WARNING: could not resolve latest release of '$repo' for '$ext' -- skipping" >&2
+          continue
+        fi
+        url="https://github.com/${repo}/archive/refs/tags/${tag}.zip"
+        echo "    + $ext (latest release $tag of $repo)"
+        ;;
+      *)
+        url="$src"
+        echo "    + $ext (from $url)"
+        ;;
+    esac
+    if ! specify extension add "$ext" --from "$url" </dev/null; then
+      echo "    WARNING: could not install '$ext' from $url -- skipping (publish it or check access)" >&2
+      continue
+    fi
   else
     echo "    + $ext"
-    specify extension add "$ext" </dev/null
+    # Best-effort, matching the custom-source branch above: a single broken
+    # upstream (e.g. an extension whose tagged release archive 404s/400s) must
+    # NOT abort the whole required-extension install under set -e. Warn, record,
+    # and continue so the remaining catalog extensions still install.
+    if ! specify extension add "$ext" </dev/null; then
+      echo "    WARNING: could not install '$ext' from the '$CATALOG_NAME' catalog -- skipping" >&2
+      FAILED_EXTENSIONS="$FAILED_EXTENSIONS $ext"
+      continue
+    fi
   fi
   specify extension enable "$ext" </dev/null >/dev/null 2>&1 || true
 done
 
-echo "==> 4/5 register extension commands for integration=$INTEGRATION"
+# Surface any skipped extensions as a single end-of-step summary so a partial
+# install is visible without scrolling back through the per-extension output.
+if [ -n "${FAILED_EXTENSIONS# }" ]; then
+  echo "    NOTE: these extensions were skipped (upstream unavailable):${FAILED_EXTENSIONS}" >&2
+  echo "          re-run setup-speckit.sh later to retry them once upstream is fixed." >&2
+fi
+
+echo "==> 4/6 register extension commands for: ${RENDER_LIST[*]} (primary=$INTEGRATION)"
 # `specify extension add` only renders an extension's command files for the
 # integration that is ACTIVE at add-time, and `specify integration switch`
 # re-registers all installed+enabled extensions ONLY on a genuine switch
@@ -90,47 +277,80 @@ echo "==> 4/5 register extension commands for integration=$INTEGRATION"
 # default `codex` init, then later using `claude`), their command files are never
 # rendered for the requested agent -- and re-running this script does not fix it,
 # because the extensions are already "installed" and the install loop skips them.
-# Force a (re-)registration of every enabled extension for "$INTEGRATION":
-#   - requested integration is NOT active -> one genuine switch re-registers all.
-#   - requested integration IS active     -> bounce through another built-in
-#     integration and back to force re-registration (switch-to-self is a no-op).
+#
+# We render for EVERY integration in RENDER_LIST so /speckit.* exists in each agent
+# the project compiles steering for, walking the list in order (primary last so we
+# land on it). For each target:
+#   - target is NOT the active integration -> one genuine switch re-registers all.
+#   - target IS already active             -> bounce through the other built-in and
+#     back to force a re-registration (switch-to-self is a no-op).
 # Switching built-in integrations (claude/codex) is offline; only the local
 # extension registry is read to re-render command files.
-current_integration="$(
+read_active_integration() {
   grep -o '"default_integration"[[:space:]]*:[[:space:]]*"[^"]*"' .specify/integration.json 2>/dev/null \
     | sed 's/.*"\([^"]*\)".*/\1/' | head -n1
-)"
-if [ -n "$current_integration" ] && [ "$current_integration" != "$INTEGRATION" ]; then
-  specify integration switch "$INTEGRATION" </dev/null
-  echo "    switched $current_integration -> $INTEGRATION (extensions re-registered)"
-else
-  if [ "$INTEGRATION" = "codex" ]; then BOUNCE="claude"; else BOUNCE="codex"; fi
-  echo "    $INTEGRATION already active -- bouncing via $BOUNCE to force re-registration"
-  # Disable -e around the bounce so a mid-bounce failure cannot leave the project
-  # stranded on the bounce integration; always attempt to land back on "$INTEGRATION".
-  set +e
-  specify integration switch "$BOUNCE" </dev/null && specify integration switch "$INTEGRATION" </dev/null
-  bounce_rc=$?
-  set -e
-  if [ "$bounce_rc" -ne 0 ]; then
-    echo "    WARNING: re-registration bounce failed; ensuring active integration is $INTEGRATION" >&2
-    specify integration switch "$INTEGRATION" </dev/null || true
-  fi
-fi
-
-echo "==> 5/5 install workflow definitions: ${WORKFLOWS[*]}"
-for wf in "${WORKFLOWS[@]}"; do
-  if specify extension add "$wf" </dev/null >/dev/null 2>&1; then
-    echo "    + $wf"
+}
+current_integration="$(read_active_integration)"
+for target in "${RENDER_LIST[@]}"; do
+  if [ -n "$current_integration" ] && [ "$current_integration" != "$target" ]; then
+    specify integration switch "$target" </dev/null
+    echo "    switched $current_integration -> $target (extensions re-registered)"
+    current_integration="$target"
   else
-    echo "    = $wf (present or bundled)"
+    bounce="$(other_builtin "$target")"
+    echo "    $target already active -- bouncing via $bounce to force re-registration"
+    # Disable -e around the bounce so a mid-bounce failure cannot leave the project
+    # stranded on the bounce integration; always attempt to land back on "$target".
+    set +e
+    specify integration switch "$bounce" </dev/null && specify integration switch "$target" </dev/null
+    bounce_rc=$?
+    set -e
+    if [ "$bounce_rc" -ne 0 ]; then
+      echo "    WARNING: re-registration bounce failed; ensuring active integration is $target" >&2
+      specify integration switch "$target" </dev/null || true
+    fi
+    current_integration="$target"
   fi
 done
 
+echo "==> 5/6 install workflow definitions from local dirs: ${WORKFLOWS[*]}"
+for wf in "${WORKFLOWS[@]}"; do
+  wf_dir="$WORKFLOW_ROOT/$wf"
+  if [ ! -f "$wf_dir/workflow.yml" ]; then
+    echo "    WARN: workflow asset missing for $wf at $wf_dir -- skipping" >&2
+    continue
+  fi
+  # Replace any existing definition so our opinionated overrides win over the
+  # version spec-kit bundles at init (e.g. the upstream `speckit` workflow).
+  if specify workflow list 2>/dev/null | grep -qw "$wf"; then
+    echo "    ~ $wf (replacing existing)"
+    specify workflow remove "$wf" </dev/null >/dev/null 2>&1 || true
+  else
+    echo "    + $wf"
+  fi
+  specify workflow add "$wf_dir" </dev/null
+done
+
+echo "==> 6/6 ignore generated status-report artefact"
+# The status-report extension (/speckit.status-report.show) regenerates
+# specs/spec-status.md on every run despite its read-only catalog tag. It is a
+# derived report, not a tracked spec artefact (spec.md/plan.md/tasks.md ARE
+# tracked), so ignore just that one file to keep it out of `git status` and
+# accidental commits. Idempotent: append the entry only if absent.
+GITIGNORE_ENTRY="specs/**/spec-status.md"
+if [ -f .gitignore ] && grep -qxF "$GITIGNORE_ENTRY" .gitignore; then
+  echo "    = $GITIGNORE_ENTRY (already ignored)"
+else
+  echo "    + $GITIGNORE_ENTRY"
+  # Ensure a trailing newline before appending so we never glue onto a last
+  # line that lacks one.
+  [ -f .gitignore ] && [ -n "$(tail -c1 .gitignore 2>/dev/null)" ] && printf '\n' >> .gitignore
+  printf '# SpecKit status-report generated artefact (regenerated each run)\n%s\n' "$GITIGNORE_ENTRY" >> .gitignore
+fi
+
 echo ""
 echo "==> SpecKit setup complete."
-echo "    Next: ensure the APM speckit bundle is installed for the orchestration"
-echo "    layer (agents + DAG hooks):"
-echo "      apm install speckit@<marketplace> --target claude,codex,agent-skills"
+echo "    The speckit orchestration layer (agents + DAG hooks) ships in the same"
+echo "    package as this script. If steering is not yet compiled, run:"
 echo "      apm compile --target codex,claude --no-constitution"
 echo "    Then start the workflow with /speckit.specify."

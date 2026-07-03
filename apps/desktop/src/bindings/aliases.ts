@@ -24,12 +24,15 @@ export type {
   TargetOpError_Serialize as TargetOpError,
 
   // ── SIMBAD resolution (spec 035) ──────────────────────────────────────────
-  TargetSearchRequest_Serialize as TargetSearchRequest,
-  TargetSearchResponse_Deserialize as TargetSearchResponse,
-  TargetSuggestion_Deserialize as TargetSuggestion,
-  TargetResolveSimbadRequest_Serialize as TargetResolveSimbadRequest,
-  TargetResolveSimbadResponse_Deserialize as TargetResolveSimbadResponse,
-  ResolvedTarget_Deserialize as ResolvedTarget,
+  // Request params → _Deserialize (what the backend deserializes from us);
+  // response payloads → _Serialize (what the backend serializes back to us).
+  // These 6 were inverted (spec 037 fix): see command signatures in ./index.
+  TargetSearchRequest_Deserialize as TargetSearchRequest,
+  TargetSearchResponse_Serialize as TargetSearchResponse,
+  TargetSuggestion_Serialize as TargetSuggestion,
+  TargetResolveSimbadRequest_Deserialize as TargetResolveSimbadRequest,
+  TargetResolveSimbadResponse_Serialize as TargetResolveSimbadResponse,
+  ResolvedTarget_Serialize as ResolvedTarget,
 
   // ── Manifests (spec 026 / 008) ─────────────────────────────────────────────
   ManifestListRequest_Deserialize as ManifestListRequest,

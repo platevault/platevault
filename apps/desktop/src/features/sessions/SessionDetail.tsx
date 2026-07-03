@@ -16,7 +16,7 @@
  * unrelated to the review lifecycle and is retained.
  */
 
-import type { InventorySession } from '@/api/commands';
+import type { InventorySession } from '@/bindings/index';
 import {
   DetailPane,
   DetailPanel,

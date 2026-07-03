@@ -13,7 +13,7 @@
 import { useCallback } from 'react';
 import { basename } from 'pathe';
 import { m } from '@/lib/i18n';
-import type { ArtifactSummary } from '@/api/commands';
+import type { ArtifactSummary } from '@/bindings/index';
 import {
   groupArtifactsByLaunch,
   useArtifacts,
