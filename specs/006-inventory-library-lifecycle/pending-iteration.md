@@ -1,6 +1,7 @@
 ---
-status: pending
+status: applied
 created: 2026-07-03
+applied: 2026-07-03
 change_request: "Reconcile spec 006 (inventory-library-lifecycle) to the current design after the 041 inbox single-type split and the 043 UI redesign deprecated several pieces. Five dispositions: (1) drop session.mixed_state + the `mixed` frame-type entirely (deprecated by 041 single-type ingest); (2) drop the FR-002 frame-type filter (lights-centric Inventory; dark/flat/bias filtering lives on the Calibration page per 040); (3) keep + implement FR-007 per-row Reveal-in-OS via the spec-004 native command; (4) reconcile FR-010 — keep the distinct `ignored` state, ADD an Ignore action to the redesigned Sessions UI, and reroute the Cmd+K \"Show ignored\" entry to /sessions?reviewFilter=ignored; (5) add a Layer-1 test for the T403 disabled-source guard. Reconciliation to as-built + shipped-redesign design, not new scope."
 scope: "Feature-wide (reconciliation: 1 subtraction + 2 amendments + 2 additions)"
 ---

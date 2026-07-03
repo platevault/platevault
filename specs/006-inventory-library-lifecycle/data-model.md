@@ -66,7 +66,7 @@ One row in the inventory ledger. Projects one `AcquisitionSession` OR one
 | `name` | string | yes | Display name derived from target + capture date, or a calibration-set descriptor. Not user-editable from this surface in v1. |
 | `source_id` | uuid | yes | FK → `InventorySource.id` (= `LibraryRoot.id`). |
 | `frames` | u32 | yes | Count of `FileRecord` rows linked to the underlying session. |
-| `type` | enum(`light`,`dark`,`flat`,`bias`,`mixed`) | yes | See research.md §2. `dark_flat` is reserved but not stored or returned in v1. `mixed` is a server-derived sentinel (Rust + SQL) for post-promotion regressions. |
+| `type` | enum(`light`,`dark`,`flat`,`bias`) | yes | See research.md §2. `dark_flat` is reserved but not stored or returned in v1. *(`mixed` removed 2026-07-03: Inbox single-type ingest, spec 041, splits mixed folders at ingest so a session is never mixed.)* |
 | `target` | string \| null | yes | `Target.primary_designation` when linked; `null` for calibration sessions or unlinked acquisition sessions. |
 | `filter` | string \| null | yes | Effective filter (`reviewed > inferred > observed`). |
 | `exposure` | string \| null | yes | Effective exposure in human form (e.g. "300s"). |
@@ -87,10 +87,9 @@ One row in the inventory ledger. Projects one `AcquisitionSession` OR one
   default ledger and surfaced only via `reviewFilter=ignored` (FR-010).
   Sessions with `state ∈ {discovered, candidate}` display as "Needs review"
   in the UI via local label mapping; the API returns the canonical value.
-- `type == "mixed"` is detected server-side (Rust + SQL) when member frames
-  disagree on kind after promotion. The underlying session never stores
-  `mixed`; it is a derived field in the contract response only (D2 — covered
-  by integration test, not JSON Schema fixture).
+- `type` is always a single concrete kind. Mixed folders are split into
+  single-type items at Inbox ingest (spec 041), so no server-derived `mixed`
+  sentinel exists. *(The pre-041 `mixed` detection was removed 2026-07-03.)*
 - `type` NEVER returns `dark_flat` in v1. Files with dark_flat IMAGETYP
   values land as `unclassified` at the inbox level (spec 005 ripple).
 - `provenance` MUST NOT carry confidence/evidence detail; those live in
@@ -160,10 +159,11 @@ re-applying the current state returns `status: "noop"` (no audit entry,
 no error). The `state.unchanged` error code is NOT used; the noop pattern
 is the canonical response for idempotent re-application (A2).
 
-**Mixed-session assign guard** (E5): If `session.state == "mixed"`, the
-`inventory.session.review` use case rejects with error code
-`session.mixed_state`. The user must split the session first using
-spec 005's reclassify workflow before a review state transition is accepted.
+**Mixed-session assign guard** (E5): *Removed 2026-07-03.* This guard rejected
+a review transition when `session.state == "mixed"` with `session.mixed_state`.
+It is obsolete: spec 041's Inbox single-type ingest splits mixed folders into
+single-type items at ingest, so a session can never be `mixed` and the guard can
+never fire. No `session.mixed_state` error code is emitted.
 
 ## Notes for Implementers
 

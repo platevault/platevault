@@ -9,14 +9,23 @@
 > enum change + existing-session-row migration are tracked as 041 tasks **T076/T077**. Treat US2's
 > review-state requirements as superseded by 041.
 
+> **AMENDED (2026-07-03) — reconciliation to 041 inbox split + 043 redesign + 040 Calibration.**
+> The `mixed` session/frame-type concept is **removed** (041 splits mixed folders
+> into single-type items at Inbox ingest, so a session can never be "mixed"). The
+> Inventory **frame-type filter is dropped** (FR-002): the Sessions/Inventory view
+> is lights-centric; dark/flat/bias filtering lives on the Calibration page (spec
+> 040). **FR-007** (per-row Reveal in OS) and **FR-010** (Ignore action + Cmd+K
+> "Show ignored") are implemented against the 043-redesigned **Sessions** surface;
+> the FR-010 route is `/sessions?reviewFilter=ignored`. See `pending-iteration.md`.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.
 
 **Feature Branch**: `006-inventory-library-lifecycle`  
 **Created**: 2026-05-09  
-**Updated**: 2026-06-23  
-**Status**: Core implemented (28/43) — 14 of the 15 open tasks are explicitly DEFERRED (not unstarted). Closeout-ready pending a verify pass on the deferred set.  
+**Updated**: 2026-07-03  
+**Status**: Core implemented; **reconciliation iteration applied 2026-07-03** (041/043/040) — `mixed` removed, FR-002 filter dropped, FR-007 + FR-010 in scope. Open reconciliation tasks: T430 (remove mixed_state phantom), T410/T411 (FR-007 Reveal-in-OS), T420/T421 (FR-010 Ignore action), T309 (Cmd+K → /sessions), T403 (Layer-1 disabled-source test). Obsolete: T308, T311.  
 **Input**: User description: "Specify the Inventory lifecycle, replacing Library tags/handling ambiguity with clear frame types, review state, source details, and consistent actions."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -32,7 +41,7 @@ As a user, I want Inbox items to become Inventory items through a clear move act
 **Acceptance Scenarios**:
 
 1. **Given** an Inbox item has a single frame type, **When** the user moves it to Inventory, **Then** the Inventory item records frame type, source, session, and lifecycle event.
-2. **Given** a mixed folder is selected, **When** the user tries to move it to Inventory, **Then** the app blocks the move and directs the user to split the folder in Inbox first.
+2. **Given** a folder held mixed frame types, **When** the user reaches Inventory, **Then** the items arrive already split into single-type entries by the Inbox ingest gate (spec 041); Inventory never receives a "mixed" item.
 3. **Given** an Inventory item is selected, **When** the detail pane opens, **Then** it shows selected item data only, in structured rows.
 
 ---
@@ -54,7 +63,7 @@ As a user, I want to review and confirm Inventory metadata before using it in pr
 ### Edge Cases
 
 - Duplicate physical files discovered through different sources.
-- Folder contains mixed lights and calibration frames.
+- Folder that held mixed lights and calibration frames (already resolved into single-type items at Inbox ingest per spec 041 — never surfaces as a "mixed" Inventory item).
 - Inventory item source root is missing or moved.
 - Metadata is incomplete, contradictory, or unavailable.
 - User needs to open the item location in the native file browser.
@@ -69,15 +78,15 @@ As a user, I want to review and confirm Inventory metadata before using it in pr
 ### Functional Requirements
 
 - **FR-001**: The product name for the stable library surface MUST be "Inventory".
-- **FR-002**: Inventory rows MUST include frame type filtering for light, dark, flat, and bias (dark flat is reserved and not exposed in v1).
+- **FR-002**: The Inventory/Sessions view is lights-centric and MUST NOT expose a frame-type filter. Dark/flat/bias inventory is filtered on the Calibration page (spec 040), and Inbox single-type ingest (spec 041) means the Inventory ledger is already single-type. *(Superseded 2026-07-03: the original light/dark/flat/bias row filter was removed by the 043 redesign + 040 Calibration surface.)*
 - **FR-003**: Inventory MUST NOT use ambiguous "tags" or "handling" fields as primary workflow controls.
 - **FR-004**: Inventory MUST show review state as plain text or structured data, not as decorative state bubbles.
 - **FR-005**: Inventory detail panes MUST show selected item details only.
 - **FR-006**: Inventory actions MUST use the same primary action plus small More menu pattern as Inbox and Projects.
-- **FR-007**: Open location MUST use the native OS file browser when the Tauri integration is available.
+- **FR-007**: Each Inventory/Sessions row MUST offer an "Open location / Reveal in OS" action that opens the item's source location in the native OS file browser, wired to the existing native reveal command (spec 004) when the Tauri integration is available.
 - **FR-008**: Inventory MUST preserve lifecycle references back to Inbox/source observations.
-- **FR-009**: Mixed folders MUST be split before they can become Inventory items.
-- **FR-010**: A Cmd+K palette entry "Show ignored items" MUST navigate to `/inventory?reviewFilter=ignored`, surfacing sessions in the `ignored` canonical state that are otherwise excluded from the default ledger.
+- **FR-009**: Mixed folders MUST be split before they can become Inventory items. This is enforced upstream by the Inbox single-type ingest gate (spec 041); Inventory therefore only ever receives single-type items.
+- **FR-010**: The redesigned Sessions UI MUST expose an **Ignore** action (distinct from Reject) on a row/drawer so a discovered or needs-review session can be set to the `ignored` canonical state. A Cmd+K palette entry "Show ignored items" MUST navigate to `/sessions?reviewFilter=ignored`, surfacing `ignored` sessions that are otherwise excluded from the default ledger, from which they can be recovered (re-open). *(Reject = discard as not a usable session; Ignore = valid but hidden and recoverable.)*
 
 ### Key Entities
 
@@ -91,7 +100,7 @@ As a user, I want to review and confirm Inventory metadata before using it in pr
 
 ### Measurable Outcomes
 
-- **SC-001**: A user can filter Inventory by frame type in one interaction.
+- **SC-001**: A user can filter the Inventory/Sessions ledger by source and review state in one interaction. *(Superseded 2026-07-03: frame-type filtering was removed from Inventory per FR-002; frame-type filtering now lives on the Calibration page, spec 040.)*
 - **SC-002**: A selected Inventory item can be understood from the detail pane without reading row descriptions.
 - **SC-003**: Confirming sample dark, bias, flat, and light items supports the guided first-project flow.
 - **SC-004**: No Inventory table column is named Tags or Handling.
@@ -123,26 +132,30 @@ visual contract this spec ratifies:
   source `state` as meta text. This satisfies FR-005's "details only in
   the detail pane" constraint while exposing source identity at the group
   level instead of as a row column.
-- **Frame-type filter**: A `Frame type` Select offers `light | dark | flat |
-  bias | mixed` (FR-002). `mixed` is rendered in the filter to surface
-  unclassifiable inputs without forcing premature split; the move-to-Inventory
-  flow still blocks mixed folders per FR-009.
-- **Review-state filter**: A `Review` Select offers the six canonical states
+- **No frame-type filter**: Per FR-002 (amended 2026-07-03) the Inventory/Sessions
+  view is lights-centric and exposes no frame-type Select. Dark/flat/bias
+  filtering lives on the Calibration page (spec 040); Inbox single-type ingest
+  (spec 041) keeps the ledger single-type. (The backend projection retains an
+  inert `frame_filter` parameter for contract stability; the UI does not surface it.)
+- **Review-state filter**: A `Review` Select offers the canonical states
   `discovered | candidate | needs_review | confirmed | rejected | ignored`,
   sourced from `InventorySession.state`. The UI maps display labels locally:
-  `discovered` and `candidate` display as "Needs review"; `ignored` is
-  accessible via the Cmd+K "Show ignored items" action (FR-010). State
-  surfaces as a `StateLabel` row cell and a `State` fact in the drawer; no
-  badge bubble shows alongside row content (FR-004).
+  `discovered` and `candidate` display as "Needs review"; `ignored` is set via
+  the **Ignore** action and reachable via the Cmd+K "Show ignored items" action
+  navigating to `/sessions?reviewFilter=ignored` (FR-010). State surfaces as a
+  `StateLabel` row cell and a `State` fact in the drawer; no badge bubble shows
+  alongside row content (FR-004).
 - **Action-bound primary CTA**: The drawer's primary `Confirm` button only
   renders when the selected session is in `needs_review`. This is the
   action-bound review pattern defined in spec 002 — the CTA exists because
   the action is available, not as decoration.
 - **Action-bound overflow**: `Re-open review` appears in the row/drawer
-  overflow Menu only when the session is NOT in `needs_review`. `Reject
-  session` is grouped in a separate Menu section with `tone: "danger"`. Both
-  call `setSessionReviewState`, which is idempotent (re-applying the same
-  state is a no-op in the store).
+  overflow Menu only when the session is NOT in `needs_review`. `Ignore` (set
+  `ignored`) and `Reject session` (`tone: "danger"`) are grouped in a separate
+  Menu section — Ignore hides a valid-but-not-now session recoverably, Reject
+  discards it. All call `setSessionReviewState`, which is idempotent
+  (re-applying the same state is a no-op in the store). Open location / Reveal
+  in OS (FR-007) is also available per row.
 - **Source-state surfacing**: `InventorySource.state` (`active | missing |
   disabled | reconnect_required`) is rendered in the group meta line. The
   spec keeps "stale source" semantics aligned with `LibraryRoot.state` from

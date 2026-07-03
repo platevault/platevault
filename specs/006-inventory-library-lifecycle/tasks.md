@@ -111,10 +111,10 @@ visible/hidden. Trigger each action and assert the session's
 - [x] T305 [P] [US3] Contract test: `transition.refused` is returned with `details.allowed_next_states` populated. — `transition.refused error has correct code` test in `inventory.commands.test.ts`.
 - [ ] T306 [P] [US3] Playwright MCP: confirm a `needs_review` session. — DEFERRED (no GUI runtime).
 - [ ] T307 [P] [US3] Playwright MCP: reject a `confirmed` session. — DEFERRED (no GUI runtime).
-- [x] T308 [P] [US3] Contract test: `session.mixed_state` error is returned. — `session.mixed_state error has correct code` test in `inventory.commands.test.ts`.
-- [ ] T309 [US3] Implement Cmd+K "Show ignored items" palette action. — DEFERRED; `reviewFilter=ignored` is wired at the API/mock level; Cmd+K palette wiring is spec 020 router work.
+- [~] T308 [P] [US3] ~~Contract test: `session.mixed_state` error is returned.~~ — **OBSOLETE (2026-07-03)**: deprecated by 041 inbox single-type split. The `session.mixed_state` guard can never fire; the fixture test that hand-built the error is removed (T430).
+- [ ] T309 [US3] Implement Cmd+K "Show ignored items" palette action → navigates to `/sessions?reviewFilter=ignored`. Wire against the redesigned Sessions surface (043); `reviewFilter=ignored` already exists at API/route level. — was DEFERRED; now in scope for this iteration.
 - [ ] T310 [P] [US3] Playwright MCP: trigger Cmd+K palette. — DEFERRED (no GUI runtime).
-- [ ] T311 [P] [US3] Integration test: server-side `mixed` type detection. — DEFERRED; mixed detection requires seeded heterogeneous session data; flagged for follow-up integration test.
+- [~] T311 [P] [US3] ~~Integration test: server-side `mixed` type detection.~~ — **OBSOLETE (2026-07-03)**: deprecated by 041 inbox single-type split; there is no server-side `mixed` detection to test.
 
 **Checkpoint**: P3 deliverable complete — all three review actions flow through the contract and emit audit entries.
 
@@ -135,11 +135,43 @@ review actions on its sessions are refused with
 - [x] T400 [US4] Ensure `inventory.list` projection emits the live `state` for each `InventorySource` rather than a cached value. — `list_roots_with_sessions()` reads `library_root.state` from SQLite on every call.
 - [x] T401 [US4] Implement source-state effects from data-model.md §Source-State Effects: refuse review transitions on `disabled` sources. — source-state guard in `review_session()` using `get_library_root_state()`.
 - [ ] T402 [P] [US4] Implement warning surfacing for `missing` and `reconnect_required` sources. — DEFERRED; contract is additive-bump and not required for v1.
-- [ ] T403 [P] [US4] Contract test: review request on a session under a `disabled` source returns `transition.refused`. — PARTIAL: guard implemented in `review_session()`; DB integration test deferred.
+- [ ] T403 [P] [US4] **Layer-1 test** (executed, no longer deferred): review request on a session under a `disabled` source returns `transition.refused`. Guard already implemented in `review_session()`; this closes the zero-coverage gap flagged at verify.
 - [ ] T404 [P] [US4] Contract test: review request on a session under a `missing` source still succeeds (best-effort). — DEFERRED.
 - [ ] T405 [P] [US4] Playwright MCP: toggle a fixture source to `missing`. — DEFERRED (no GUI runtime).
 
 **Checkpoint**: P4 deliverable complete — source state is honest, end to end.
+
+---
+
+## Phase 6.5: Reconciliation — 041 split + 043 redesign + 040 Calibration (2026-07-03)
+
+**Goal**: Reconcile spec 006 to the shipped design — remove the dead `mixed`
+concept, and implement the two requirements the 043 redesign left as unimplemented
+spec (FR-007 Reveal-in-OS, FR-010 Ignore action + Cmd+K).
+
+- [ ] T430 [US3] Remove the `session.mixed_state` phantom: delete the guard doc
+  comments in `crates/app/core/src/inventory.rs` (module header + `review_session`
+  contract note), the `InventoryFrameType::Mixed` enum arm + `map_frame_type("mixed")`
+  handling + its unit test, and the fake `session.mixed_state` fixture test in
+  `apps/desktop/src/features/sessions/__tests__/inventory.commands.test.ts`.
+  (Supersedes obsolete T308/T311.)
+- [ ] T410 [US1] FR-007: add a per-row "Open location / Reveal in OS" action on the
+  Sessions/Inventory rows (and drawer overflow), wired to the existing spec-004
+  native reveal command (the same command projects use, e.g. `reveal_in_os` /
+  `revealManifestInOs`). Pass the session's source path.
+- [ ] T411 [P] [US1] Layer-1/contract test for T410: the Reveal action invokes the
+  native reveal command with the row's resolved path (mock the command, assert the
+  call + argument).
+- [ ] T420 [US3] FR-010: add an **Ignore** action (row/drawer overflow, distinct
+  from Reject) that calls `review_session(id, "ignored")` via the existing
+  `useSessionReview` hook; idempotent, toast feedback, and the row leaves the
+  default ledger. Keep Reject as the danger action.
+- [ ] T421 [P] [US3] Layer-1 test for T420: triggering Ignore sets `ignored`, the
+  row is excluded from the default ledger, and `reviewFilter=ignored` (via the
+  Cmd+K entry / route) surfaces it; re-open recovers it.
+
+**Checkpoint**: 006 matches as-built + shipped-redesign; no phantom guards, FR-007
+and FR-010 are real, T403 covered.
 
 ---
 
@@ -183,7 +215,9 @@ T103 ──> T400 ─> T401 ─> T403,T404,T405
             │
             └─> T402
 
-T308,T309,T310,T311 follow T301.
+T309,T310 follow T301.  (T308, T311 OBSOLETE — 041 split.)
+T430,T410,T411,T420,T421 (Phase 6.5 reconciliation) follow T301/T302/T106.
+T403 (Layer-1 disabled-source test) follows T401.
 T500..T503,T506 run after the per-story checkpoints.
 ```
 
