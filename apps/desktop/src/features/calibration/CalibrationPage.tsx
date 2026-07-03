@@ -4,7 +4,8 @@
  *
  * Adopts the Sessions REFERENCE layout: a pinned `PageTopBar` over a
  * `ListPageLayout` body — a dense FULL-WIDTH sortable masters table
- * (MastersTable, grouped by Kind) as primary, with the existing MasterDetail
+ * (MastersTable, flat by default, groupable via the top-bar Group-by control)
+ * as primary, with the existing MasterDetail
  * (fingerprint rail + compatible-sessions match table) hosted in the right-side
  * detail pane that mounts on selection.
  *
@@ -35,7 +36,8 @@ import { useCalibrationMasters, useCalibrationSettings } from './useCalibration'
 
 // ── Toolbar vocab ─────────────────────────────────────────────────────────────
 
-const CALIB_DIMENSIONS: FilterOption[] = [
+// Render-time factory (spec 046 #8b) so dimension labels re-read the active locale.
+const CALIB_DIMENSIONS = (): FilterOption[] => [
   { value: 'kind', label: m.calibration_fp_kind() },
   { value: 'camera', label: m.settings_calmatch_camera() },
   { value: 'instrument', label: m.calibration_dim_instrument() },
@@ -137,7 +139,7 @@ export function CalibrationPage() {
               : undefined
           }
           grouping={{
-            dimensions: CALIB_DIMENSIONS,
+            dimensions: CALIB_DIMENSIONS(),
             dims,
             setSlot,
           }}

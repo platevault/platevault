@@ -3,16 +3,17 @@
  * MastersTable tests — spec 043 §4 shared-layout adoption (#73).
  *
  * The Calibration page moved from the narrow `MastersList` sidebar to a dense
- * full-width `MastersTable` (shared `@/ui` Table) grouped by kind. These tests
+ * full-width `MastersTable` (shared `@/ui` Table). Like every list page it is
+ * FLAT by default; grouping (incl. by kind) is opt-in via `dims`. These tests
  * pin the behaviour + testids carried over from the old MastersList suite:
  *
  * 1. Loading state renders loading indicator (testid masters-loading).
  * 2. Error state renders error state (testid masters-error).
  * 3. Empty state when masters=[] (testid masters-empty).
- * 4. Masters render grouped by kind (DARKS / FLATS / BIAS).
+ * 4. Masters render flat by default; grouping by kind is opt-in (dims).
  * 5. Aging pill renders for masters with age_days > agingThresholdDays.
  * 6. Clicking a master row calls onSelect with its id.
- * 7. dark_flat kind is not shown (FR-001).
+ * 7. dark_flat kind is never shown, flat or grouped (FR-001).
  * 8. Usage count renders on rows (real usedBy* fields) (testid master-usage-*).
  * 9. Column headers + sort callback fire.
  */
@@ -87,18 +88,25 @@ describe('MastersTable (spec 043 §4)', () => {
     expect(screen.getByTestId('masters-empty')).toBeInTheDocument();
   });
 
-  it('4. Masters render grouped by kind with header rows (DARKS, FLATS, BIAS)', () => {
+  it('4. Masters render FLAT by default (no spanning group-header rows)', () => {
     const { container } = render(<MastersTable {...baseProps} masters={masters} />);
-    // Group-header rows carry the spanning class + a count marker; collect their
-    // headlines. (The plain text "BIAS" also appears as the bias-row kind pill,
-    // so we read the group rows specifically rather than by raw text.)
-    const groupHeadlines = Array.from(
-      container.querySelectorAll('.alm-calib-table__group'),
-    ).map((row) => row.textContent ?? '');
-    expect(groupHeadlines.some((t) => t.startsWith('DARKS'))).toBe(true);
-    expect(groupHeadlines.some((t) => t.startsWith('FLATS'))).toBe(true);
-    expect(groupHeadlines.some((t) => t.startsWith('BIAS'))).toBe(true);
-    expect(groupHeadlines).toHaveLength(3);
+    // No group-header rows when ungrouped…
+    expect(container.querySelectorAll('.alm-listgroup')).toHaveLength(0);
+    // …but every master still renders as a row.
+    expect(screen.getByTestId('master-usage-dark-1')).toBeInTheDocument();
+    expect(screen.getByTestId('master-usage-flat-1')).toBeInTheDocument();
+    expect(screen.getByTestId('master-usage-bias-1')).toBeInTheDocument();
+  });
+
+  it('4b. Grouping by kind (dims=["kind"]) renders spanning group-header rows', () => {
+    const { container } = render(
+      <MastersTable {...baseProps} masters={masters} dims={['kind']} />,
+    );
+    // One shared group-header row per present kind, each collapsible via testid.
+    expect(container.querySelectorAll('.alm-listgroup')).toHaveLength(3);
+    expect(screen.getByTestId('calibration-group-kind-dark')).toBeInTheDocument();
+    expect(screen.getByTestId('calibration-group-kind-flat')).toBeInTheDocument();
+    expect(screen.getByTestId('calibration-group-kind-bias')).toBeInTheDocument();
   });
 
   it('5. Aging pill renders for age_days > agingThresholdDays (default 90)', () => {
@@ -126,11 +134,17 @@ describe('MastersTable (spec 043 §4)', () => {
     expect(onSelect).toHaveBeenCalledWith('dark-1');
   });
 
-  it('7. dark_flat kind is not shown in the grouped table (FR-001)', () => {
+  it('7. dark_flat kind is never shown, flat or grouped (FR-001)', () => {
     const darkFlatMaster = makeMaster({ id: 'df-1', kind: 'dark_flat', ageDays: 5 });
-    render(<MastersTable {...baseProps} masters={[...masters, darkFlatMaster]} />);
-    expect(screen.queryByText('DARK FLATS')).not.toBeInTheDocument();
-    expect(screen.queryByText('DARK_FLATS')).not.toBeInTheDocument();
+    const { rerender } = render(
+      <MastersTable {...baseProps} masters={[...masters, darkFlatMaster]} />,
+    );
+    // Filtered out at the data level → no row for it in the flat default view.
+    expect(screen.queryByTestId('master-usage-df-1')).not.toBeInTheDocument();
+    // …and still absent when grouped by kind (no dark_flat group).
+    rerender(<MastersTable {...baseProps} masters={[...masters, darkFlatMaster]} dims={['kind']} />);
+    expect(screen.queryByTestId('calibration-group-kind-dark_flat')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('master-usage-df-1')).not.toBeInTheDocument();
   });
 
   it('8. usage count renders on rows (real usedBy* fields)', () => {
@@ -159,7 +173,7 @@ describe('MastersTable (spec 043 §4)', () => {
     // Simulate backend rows with no fingerprint populated.
     (nullFp as { fingerprint: unknown }).fingerprint = null;
     expect(() => render(<MastersTable {...baseProps} masters={[nullFp]} />)).not.toThrow();
-    expect(screen.getByText('DARKS')).toBeInTheDocument();
+    expect(screen.getByTestId('master-usage-null-fp')).toBeInTheDocument();
     const allText = document.body.textContent ?? '';
     expect(allText).not.toContain('undefined');
     expect(allText).not.toContain('NaN');

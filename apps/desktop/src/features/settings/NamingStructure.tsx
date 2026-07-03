@@ -753,7 +753,7 @@ function PerTypeDestinationPatterns() {
 					<SettingsRow
 						key={cls}
 						label={<span id={`${rowId}-label`}>{FRAME_TYPE_LABELS[cls]}</span>}
-						info="Destination folder pattern for this frame type, applied when confirming inbox items. Empty = use the built-in default (shown as placeholder)."
+						info={m.settings_naming_dest_info()}
 					>
 						{/* Editor and its buttons live on separate lines (spec 043 §4). */}
 						<div className="alm-naming__pertype-stack">

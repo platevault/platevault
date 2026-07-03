@@ -14,9 +14,10 @@ export interface StepConfirmProps {
   isSubmitting: boolean;
 }
 
-const TOOL_LABELS: Record<keyof ToolsState, string> = {
-  pixinsight: m.setup_tools_pixinsight_name(),
-  siril: m.setup_tools_siril_name(),
+// Values are render-time thunks so labels re-read the active locale (spec 046 #8).
+const TOOL_LABELS: Record<keyof ToolsState, () => string> = {
+  pixinsight: () => m.setup_tools_pixinsight_name(),
+  siril: () => m.setup_tools_siril_name(),
 };
 
 // A titled section, matching the Configuration step's layout (no card chrome).
@@ -67,7 +68,7 @@ export function StepConfirm({
                 className="alm-setup-confirm__kind-group"
               >
                 <div className="alm-setup-confirm__kind-label">
-                  {SOURCE_KIND_LABELS[kind]}
+                  {SOURCE_KIND_LABELS[kind]()}
                 </div>
                 {getSourcesByKind(sources, kind).map((entry, j) => (
                   <div
@@ -104,7 +105,7 @@ export function StepConfirm({
                 key={key}
                 className="alm-setup-confirm__row"
               >
-                <span className="alm-setup-confirm__tool-name">{TOOL_LABELS[key]}</span>
+                <span className="alm-setup-confirm__tool-name">{TOOL_LABELS[key]()}</span>
                 {tools[key].path ? (
                   <span className="alm-setup-confirm__tool-path-wrap">
                     <span className="alm-mono alm-setup-confirm__tool-path">
@@ -138,7 +139,7 @@ export function StepConfirm({
 
       {missingKinds.length > 0 && (
         <div className="alm-step-confirm__blocked" role="alert">
-          {m.setup_confirm_blocked({ kinds: missingKinds.map((k) => SOURCE_KIND_LABELS[k]).join(', ') })}
+          {m.setup_confirm_blocked({ kinds: missingKinds.map((k) => SOURCE_KIND_LABELS[k]()).join(', ') })}
         </div>
       )}
 

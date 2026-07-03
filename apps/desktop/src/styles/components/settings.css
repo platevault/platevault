@@ -11,7 +11,7 @@
   padding: 7px var(--alm-sp-4);
   font-size: var(--alm-text-sm); color: var(--alm-text-secondary);
   cursor: pointer; border: none; background: none; text-align: left;
-  font-family: var(--alm-font-sans); font-weight: var(--alm-weight-medium);
+font-weight: var(--alm-weight-medium);
   transition: all var(--alm-transition-fast);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -162,7 +162,7 @@
 .alm-seg__btn {
   padding: var(--alm-sp-0) var(--alm-sp-2); font-size: var(--alm-text-2xs);
   border: none; background: var(--alm-bg); color: var(--alm-text-muted);
-  cursor: pointer; font-family: var(--alm-font-sans); font-weight: var(--alm-weight-medium);
+  cursor: pointer;font-weight: var(--alm-weight-medium);
   border-right: 1px solid var(--alm-border);
   transition: all var(--alm-transition-fast);
 }
@@ -192,7 +192,7 @@
 .alm-token-chip {
   display: inline-flex; align-items: center; gap: var(--alm-sp-1);
   padding: var(--alm-sp-0) var(--alm-sp-2); border-radius: var(--alm-radius-sm);
-  font-size: var(--alm-text-xs); font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
   background: var(--alm-accent-bg); color: var(--alm-accent-text);
   border: 1px solid var(--alm-info-border);
 }
@@ -201,7 +201,7 @@
 .alm-sep-chip {
   display: inline-flex; align-items: center;
   padding: var(--alm-sp-0) var(--alm-sp-2); border-radius: var(--alm-radius-sm);
-  font-size: var(--alm-text-xs); font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
   background: var(--alm-chip); color: var(--alm-text-secondary);
   border: 1px solid var(--alm-border);
 }
@@ -209,7 +209,7 @@
 .alm-literal-chip {
   display: inline-flex; align-items: center; gap: var(--alm-sp-1);
   padding: var(--alm-sp-0) var(--alm-sp-2); border-radius: var(--alm-radius-sm);
-  font-size: var(--alm-text-xs); font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
   background: var(--alm-success-bg, var(--alm-surface-raised)); color: var(--alm-text);
   border: 1px solid var(--alm-border);
 }

@@ -132,8 +132,8 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 				? (fp.filter ?? "")
 				: "";
 	const masterTitle = masterDisc
-		? `Master ${kindCap} · ${masterDisc}`
-		: `Master ${kindCap}`;
+		? m.calibration_master_title_disc({ kind: kindCap, disc: masterDisc })
+		: m.calibration_master_title({ kind: kindCap });
 
 	// Fingerprint as flat PropertyTable rows — split across two columns like
 	// SessionDetail's factProps.

@@ -98,7 +98,8 @@ const MY_TARGETS_VALUE = 'my';
 const MY_TARGETS_EMPTY: TargetListItem[] = [];
 
 /** Multi-level grouping dimensions for the Planner top bar. */
-const TARGETS_DIMENSIONS: FilterOption[] = [
+// Render-time factory (spec 046 #8b) so labels re-read the active locale.
+const TARGETS_DIMENSIONS = (): FilterOption[] => [
   { value: 'catalogue', label: m.cmp_target_search_catalogue_label() },
   { value: 'type', label: m.targets_groupby_object_type() },
   { value: 'constellation', label: m.targets_dim_constellation() },
@@ -108,7 +109,7 @@ const TARGETS_DIMENSIONS: FilterOption[] = [
 /** Catalogue multi-select options, in canonical display order. */
 const CATALOGUE_OPTIONS: FilterOption[] = PLANNER_CATALOGS.map((c) => ({
   value: c.id,
-  label: c.label,
+  label: c.label(),
 }));
 
 /**
@@ -156,7 +157,8 @@ export function matchesSearch(t: TargetListItem, query: string): boolean {
 }
 
 /** My Targets filter options for the FilterToolbar single-select (#91). */
-const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
+// Render-time factory (spec 046 #8b) so the label re-reads the active locale.
+const MY_TARGETS_FILTER_OPTIONS = (): FilterOption[] => [
   { value: MY_TARGETS_VALUE, label: m.nav_my_targets() },
 ];
 
@@ -169,7 +171,8 @@ const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
  * shows only rows where both are recommended — which in the simple mock means
  * any narrowband-possible target. MOCK — not astronomy.
  */
-const FILTER_BAND_OPTIONS: FilterOption[] = [
+// Render-time factory (spec 046 #8b) so band labels re-read the active locale.
+const FILTER_BAND_OPTIONS = (): FilterOption[] => [
   { value: 'L', label: m.targets_band_l_lum() },
   { value: 'R', label: m.targets_band_r() },
   { value: 'G', label: m.targets_band_g() },
@@ -334,7 +337,7 @@ export function TargetsPage() {
               key: 'myTargets',
               label: m.targets_filter_show_label(),
               value: myTargetsFilter,
-              options: MY_TARGETS_FILTER_OPTIONS,
+              options: MY_TARGETS_FILTER_OPTIONS(),
               onChange: setMyTargetsFilter,
               allLabel: m.targets_page_filter_all_targets(),
             },
@@ -358,12 +361,12 @@ export function TargetsPage() {
               key: 'filterBands',
               label: m.common_filters(),
               value: filterBands,
-              options: FILTER_BAND_OPTIONS,
+              options: FILTER_BAND_OPTIONS(),
               onChange: (v) => setFilterBands(v as FilterBand[]),
             },
           ]}
           grouping={{
-            dimensions: TARGETS_DIMENSIONS,
+            dimensions: TARGETS_DIMENSIONS(),
             dims,
             setSlot,
           }}

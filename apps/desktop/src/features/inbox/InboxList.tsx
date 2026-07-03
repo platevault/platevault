@@ -23,7 +23,7 @@ import type { InboxListItem } from '@/api/commands';
 import { Table, type TableColumn, type TableRow } from '@/ui';
 import { SortHeader } from '@/components';
 import { groupByDimensions, type GroupNode } from './grouping';
-import { ACCESSORS, DIM_LABELS } from './InboxControls';
+import { ACCESSORS, dimLabel } from './InboxControls';
 import { m } from '@/lib/i18n';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
@@ -334,7 +334,7 @@ export function InboxList({
           detection: (
             <span
               className="alm-inbox-cell__path"
-              title={item.relativePath || '(root)'}
+              title={item.relativePath || m.inbox_list_root_label()}
               // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
               style={indent ? { paddingLeft: indent } : undefined}
             >
@@ -348,7 +348,7 @@ export function InboxList({
               {classificationLabel(item)}
             </span>
           ),
-          count: `${item.fileCount} ${item.fileCount !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular()}`,
+          count: m.inbox_list_file_count({ count: item.fileCount }),
           format: item.isMaster
             ? `${item.masterFrameType ?? 'master'} master`
             : formatTag(item),
@@ -358,7 +358,7 @@ export function InboxList({
   );
 
   const groupingHint = grouped
-    ? `Grouped by ${dims.map((d) => DIM_LABELS[d]).join(' › ')}`
+    ? m.inbox_grouping_hint({ dims: dims.map((d) => dimLabel(d)).join(' › ') })
     : null;
 
   return (

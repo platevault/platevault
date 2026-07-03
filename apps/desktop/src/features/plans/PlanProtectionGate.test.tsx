@@ -8,37 +8,44 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PlanProtectionGate } from './PlanProtectionGate';
-import type { PlanProtectionCheckResponse } from '@/api/commands';
+import type { PlanProtectionCheckResponse } from '@/bindings/index';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
+//
+// The component calls the generated bindings (`commands.*`) directly (spec 037),
+// so we mock at the dispatch layer (`@/bindings/index`) and return generated
+// `Result`-shaped values that the real `unwrap` in the component translates.
 
-vi.mock('@/api/commands', () => ({
-  planProtectionCheck: vi.fn(),
-  protectionPlanAcknowledged: vi.fn(),
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    planProtectionCheckCmd: vi.fn(),
+    protectionPlanAcknowledged: vi.fn(),
+  },
 }));
 
-import { planProtectionCheck, protectionPlanAcknowledged } from '@/api/commands';
+import { commands } from '@/bindings/index';
 
-const mockCheck = vi.mocked(planProtectionCheck);
-const mockAck = vi.mocked(protectionPlanAcknowledged);
+const mockCheck = vi.mocked(commands.planProtectionCheckCmd);
+const mockAck = vi.mocked(commands.protectionPlanAcknowledged);
+
+/** Wrap a value in the generated `{ status: 'ok' }` Result envelope. */
+const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeCheckResponse(
-  overrides: Partial<PlanProtectionCheckResponse> = {},
-): PlanProtectionCheckResponse {
-  return {
+function makeCheckResponse(overrides: Partial<PlanProtectionCheckResponse> = {}) {
+  return ok<PlanProtectionCheckResponse>({
     planId: 'plan-1',
     hasProtectedItems: false,
     protectedItems: [],
     nonBlockingSummary: { normalCount: 0, unprotectedCount: 0 },
     ...overrides,
-  };
+  });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockAck.mockResolvedValue('audit-id-1');
+  mockAck.mockResolvedValue(ok('audit-id-1'));
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

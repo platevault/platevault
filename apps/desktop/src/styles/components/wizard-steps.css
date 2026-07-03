@@ -465,7 +465,7 @@
 
 /* Train ID cell — mono + truncate */
 .alm-wizard-sources__train-id {
-  font-family: var(--alm-font-mono);
+
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -522,7 +522,7 @@
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-sm);
   font-size: var(--alm-text-xs);
-  font-family: inherit;
+
   background: var(--alm-bg);
   color: var(--alm-text);
   transition: border-color var(--alm-transition-fast);
@@ -637,7 +637,7 @@
   border: none;
   background: none;
   cursor: pointer;
-  font-family: inherit;
+
   font-size: var(--alm-text-xs);
   color: var(--alm-accent);
   text-decoration: underline;
@@ -680,7 +680,7 @@
 /* View name input in table cell */
 .alm-wizard-views__name-input {
   width: 160px;
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
   padding: 3px 6px;
   border: 1px solid var(--alm-border);
@@ -765,7 +765,7 @@
   border: 1px solid var(--alm-border);
   border-radius: 4px;
   font-size: var(--alm-text-sm);
-  font-family: var(--alm-font-mono);
+
   background: var(--alm-surface);
   color: var(--alm-text);
   outline: none;
@@ -796,7 +796,7 @@
   border: 1px solid var(--alm-border);
   border-radius: 4px;
   font-size: var(--alm-text-2xs);
-  font-family: var(--alm-font-mono);
+
   color: var(--alm-text-muted);
   cursor: help;
 }
@@ -807,7 +807,7 @@
   background: var(--alm-surface);
   border: 1px solid var(--alm-border);
   border-radius: 6px;
-  font-family: var(--alm-font-mono);
+
   font-size: var(--alm-text-xs);
   line-height: 1.8;
   overflow: auto;

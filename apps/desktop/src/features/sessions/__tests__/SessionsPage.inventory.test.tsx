@@ -306,6 +306,40 @@ describe('SessionDetail — contextual header actions (task #79)', () => {
     // Disabled button does not fire its handler.
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  // T420/T421 (spec 006 FR-010): Ignore is a distinct action from Reject.
+  it('11f. renders Ignore when ignoreVisible; clicking dispatches onIgnore', () => {
+    const onIgnore = vi.fn();
+    renderDetail(makeSession({ state: 'needs_review' }), {
+      ignoreVisible: true,
+      onIgnore,
+    });
+    const btn = screen.getByRole('button', { name: /^ignore$/i });
+    fireEvent.click(btn);
+    expect(onIgnore).toHaveBeenCalledTimes(1);
+  });
+
+  it('11f2. Ignore is absent when ignoreVisible is not set', () => {
+    renderDetail(makeSession({ state: 'confirmed' }), { reopenVisible: true, onReopen: noop });
+    expect(screen.queryByRole('button', { name: /^ignore$/i })).toBeNull();
+  });
+
+  // T410/T411 (spec 006 FR-007): per-row Reveal in OS.
+  it('11g. renders Reveal when revealVisible; clicking dispatches onReveal', () => {
+    const onReveal = vi.fn();
+    renderDetail(makeSession({ state: 'needs_review' }), {
+      revealVisible: true,
+      onReveal,
+    });
+    const btn = screen.getByRole('button', { name: /reveal in os/i });
+    fireEvent.click(btn);
+    expect(onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it('11g2. Reveal is absent when revealVisible is not set (no source path)', () => {
+    renderDetail(makeSession({ state: 'needs_review' }), { confirmVisible: true, onConfirm: noop });
+    expect(screen.queryByRole('button', { name: /reveal in os/i })).toBeNull();
+  });
 });
 
 describe('SessionDetail — Facts section (spec 006 FR-005; task #79 provenance merge)', () => {
@@ -392,6 +426,14 @@ describe('useSessionReview — action dispatch contract (spec 006 FR-006)', () =
     const { review } = useSessionReview();
     await review('session-1', 'reject');
     expect(mockReview).toHaveBeenCalledWith('session-1', 'reject');
+  });
+
+  it('18b. ignore action dispatches review(id, "ignore") to store (FR-010)', async () => {
+    mockReview.mockResolvedValue({ ok: true, noop: false });
+    const { useSessionReview } = await import('../store');
+    const { review } = useSessionReview();
+    await review('session-1', 'ignore');
+    expect(mockReview).toHaveBeenCalledWith('session-1', 'ignore');
   });
 });
 

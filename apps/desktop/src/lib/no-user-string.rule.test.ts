@@ -172,6 +172,46 @@ describe('alm/no-user-string', () => {
     expect(run("const a = n === 1 ? 'item' : 'items';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
   });
 
+  it('alm/no-js-plural flags suffix template-literal ternaries and short-circuit suffixes', () => {
+    const linter = new Linter();
+    const run = (code: string) =>
+      linter.verify(code, {
+        plugins: { alm: plugin },
+        languageOptions: { parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } },
+        rules: { 'alm/no-js-plural': 'error' },
+      });
+    // template-literal suffix/empty branches (no interpolation) → flagged
+    expect(run('const a = n === 1 ? `` : `s`;').filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    // short-circuit suffix → flagged
+    expect(run("const a = `${n}${n !== 1 && 's'}`;").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    // non-suffix logical-AND → NOT flagged
+    expect(run("const a = ok && 'Save';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
+  });
+
+  it('alm/no-js-plural flags a ternary picking between paired m.*_plural()/m.*_singular() catalog calls', () => {
+    const linter = new Linter();
+    const run = (code: string) =>
+      linter.verify(code, {
+        plugins: { alm: plugin },
+        languageOptions: { parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } },
+        rules: { 'alm/no-js-plural': 'error' },
+      });
+    const out = run("const a = n !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular();");
+    const hits = out.filter((m) => m.ruleId === 'alm/no-js-plural');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('jsPluralPairedCall');
+    // reversed branch order → still flagged
+    expect(
+      run("const b = n === 1 ? m.inbox_list_file_singular() : m.inbox_list_file_plural();").filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(1);
+    // ternary between two unrelated catalog calls → NOT flagged
+    expect(
+      run("const c = ok ? m.common_save() : m.common_cancel();").filter((m) => m.ruleId === 'alm/no-js-plural'),
+    ).toHaveLength(0);
+  });
+
   it('ignores pure-interpolation / machine template literals (no letters)', () => {
     const out = lint(`
       function P({ a, b, id }) {
@@ -180,6 +220,79 @@ describe('alm/no-user-string', () => {
     `);
     // aria-label \`\${a}-\${b}\` has no letters in its static chunks → not flagged;
     // className/key are not user-facing attrs anyway.
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  // ── Enhancements (spec 046 #4: variable-assigned blind spot + attr/key gaps) ──
+
+  it('flags the component-prop attrs heading and info', () => {
+    const out = lint(`
+      function P() {
+        return (
+          <div>
+            <Group heading="Results" />
+            <Row info="Controls how scans run." />
+          </div>
+        );
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(2);
+    expect(hits.every((m) => m.messageId === 'attr')).toBe(true);
+  });
+
+  it('flags a logical (??/||) string fallback in a user-facing attribute', () => {
+    const out = lint(`
+      function P({ groupBy, sort }) {
+        return <div label={groupBy.label ?? 'Group by'} title={sort.title || 'Sort'} />;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(2);
+    expect(hits.every((m) => m.messageId === 'attr')).toBe(true);
+  });
+
+  it('flags title/desc/description/body object-literal keys', () => {
+    const out = lint(`
+      const META = { title: 'Data Sources', desc: 'Library roots indexed.' };
+      const CARD = { description: 'On-demand resolution.', body: 'A longer note.' };
+      export { META, CARD };
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(4);
+  });
+
+  it('flags a user string assigned to a variable and then rendered', () => {
+    const out = lint(`
+      function P({ n, len }) {
+        const summary = n === 0 ? 'None' : n === len ? 'All' : \`\${n} selected\`;
+        return <span>{summary}</span>;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('variable');
+  });
+
+  it('does NOT flag machine-token variables even when rendered (prose gate)', () => {
+    const out = lint(`
+      function P({ ok }) {
+        const status = ok ? 'pending' : 'no_match';
+        const pattern = '{target}_{filter}';
+        return <span title={status}>{pattern}</span>;
+      }
+    `);
+    // 'pending'/'no_match' are lowercase/snake tokens; '{target}_{filter}' has braces.
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  it('does NOT flag a prose variable used only in a machine context', () => {
+    const out = lint(`
+      function P({ ok }) {
+        const cls = ok ? 'Active row' : 'Idle row';
+        return <div className={cls} />;
+      }
+    `);
+    // 'Active row' is prose, but className is not a rendered/user position.
     expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
   });
 });

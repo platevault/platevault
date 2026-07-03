@@ -2,7 +2,8 @@
 
 **Living index of SpecKit feature status, dependencies, and the actionable frontier.**
 
-Last reconciled: **2026-06-23** (after the 035 / 040 / 041 / 046 iteration waves).
+Last reconciled: **2026-06-23** (full sweep). **2026-07-03**: 043 list-page
+consistency + mock-mode E2E test redo landed (see the 043 row + CI note below).
 
 > The per-spec `Status:` line in each `spec.md` had drifted badly — most still read
 > "Draft" despite shipping. This document is the reconciled source of truth. Status
@@ -67,7 +68,7 @@ Last reconciled: **2026-06-23** (after the 035 / 040 / 041 / 046 iteration waves
 | 040 calibration-masters-detection | ✅ Implemented | validated end-to-end 2026-06-23 |
 | 041 inbox-plan-surface | ✅ iteration-1 / 🔵 iteration-2 in progress | iter-1 (confirm + plan surface + apply + destination model) shipped 59/59. iter-2 (single-type sub-items, T061–T080) is **being implemented by another agent** on `041-single-type-*` branches — docs/task-scaffolding present, no crate schema on `main` yet. Supersedes 005 |
 | 042 stdlib-adoption | ✅ Implemented | 80/97; reconciled #310 |
-| 043 ui-redesign-platevault | 🔵 Active | current branch `redesign-ui-platevault` |
+| 043 ui-redesign-platevault | 🔵 Active | Ongoing on `redesign-ui-platevault`. List-page consistency landed (#360): all four list pages (Projects/Targets/Sessions/Calibration) flat-by-default, group headers unified onto shared `.alm-listgroup`, global font enforced (only `reset.css`). Sessions E2E specs redone for the flat table (#364). |
 | 044 targets-planner-astronomy | ⚪ Placeholder | frontend mocked; needs research-led astronomy engine |
 | 045 review-state-real | 🔴 Superseded by 041 | |
 | 046 i18n-error-codes | ✅ Implemented | 36/36 (#311–#314) |
@@ -183,5 +184,14 @@ Per-spec review of plan/research/data-model/contracts/tasks vs shipped code.
 - 024 — author the two deferred JSON contracts (low priority).
 - 041 `contracts/operations.md:60` `os_trash` prose — left to the active single-type agent.
 - The live confirm path is `crates/app/inbox`; an earlier duplicate in `app_core` was removed — watch for
-- The live confirm path is `crates/app/inbox`; an earlier duplicate in `app_core` was removed — watch for
   other dead pre-042-split copies if similar drift appears.
+- **2026-07-03 — mock-mode E2E green again (PR #364):** `lifecycle_detail.spec.ts` asserted on the
+  pre-redesign `.alm-sessions-table__group` header, but #360 renamed it to `.alm-listgroup` AND made
+  Sessions flat-by-default (no group rows unless grouped), so both tests failed. Fixed to assert on
+  `.alm-sessions-table__row`; full mock-mode Playwright suite now 9 passed / 1 skipped.
+- **CI test-disable `45f8bb3` is now over-broad + unpushable.** It blanket-disables ALL test jobs
+  ("#356 pending redesign test redo"), but the mock-Playwright E2E now passes (#364), frontend unit
+  tests pass (404), and Real-UI E2E passes — so the disable mostly discards *working* coverage.
+  It also remains **unpushed** because the token lacks the `workflow` scope, which blocks pushing the
+  local `redesign-ui-platevault` branch (44+ commits ahead of origin). Prefer reverting the disable
+  (re-enable CI) over pushing it; needs a `workflow`-scoped push or a web-UI edit.

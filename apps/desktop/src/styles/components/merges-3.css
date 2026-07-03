@@ -593,7 +593,7 @@
 .alm-targets-spark__axis-label {
   font-size: var(--alm-text-2xs);
   fill: var(--alm-text-faint);
-  font-family: var(--alm-font-sans);
+
 }
 
 /* task 19: hover tooltip title — pointer-events on the SVG so browser shows
@@ -727,7 +727,7 @@
   gap: var(--alm-sp-1);
   padding: 1px var(--alm-sp-2);
   font-size: var(--alm-text-sm);
-  font-family: inherit;
+
   color: var(--alm-text);
   background: none;
   border: 1px solid var(--alm-border);
@@ -761,7 +761,7 @@
   box-sizing: border-box;
   padding: var(--alm-sp-2) var(--alm-sp-3);
   font-size: var(--alm-text-sm);
-  font-family: inherit;
+
   color: var(--alm-text);
   background: transparent;
   border: none;
@@ -815,7 +815,7 @@
   margin-top: var(--alm-sp-3);
   padding: 1px var(--alm-sp-2);
   font-size: var(--alm-text-sm);
-  font-family: inherit;
+
   color: var(--alm-text);
   background: none;
   border: 1px solid var(--alm-border);

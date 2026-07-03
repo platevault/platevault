@@ -792,7 +792,7 @@ export function InboxPage() {
 					grouping={{
 						dimensions: GROUPING_DIMENSIONS.map((d) => ({
 							value: d.id,
-							label: d.label,
+							label: d.label(),
 						})),
 						dims,
 						setSlot,

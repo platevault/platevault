@@ -281,27 +281,28 @@ function flattenGroups(groups: TargetGroup[]): FlatRow[] {
 // Sessions: linked-session count not on TargetListItem yet (#57). Renders '—'.
 // All non-text columns are sortable on their mock value.
 
+// `label`/`title` are render-time thunks (spec 046 #8b) so headers re-read the active locale.
 const COLUMNS: Array<{
   key: string;
-  label: string;
+  label: () => string;
   sort?: TargetSortCol;
   className?: string;
-  title?: string;
+  title?: () => string;
 }> = [
   // task #18: star column (no label — icon-only header)
-  { key: 'star', label: '★', className: 'alm-targets-cell--center', title: m.targets_col_favourite() },
-  { key: 'designation', label: m.targets_col_designation(), sort: 'designation' },
-  { key: 'type', label: m.cmp_target_search_type_label(), sort: 'type' },
-  { key: 'maxAlt', label: m.targets_col_max_alt(), sort: 'maxAlt', className: 'alm-targets-cell--num', title: m.targets_table_approx_max_alt() },
-  { key: 'spark', label: m.targets_col_tonight(), className: 'alm-targets-cell--spark' },
-  { key: 'visible', label: m.targets_col_visible(), sort: 'visible', className: 'alm-targets-cell--center', title: m.targets_col_visible_title() },
-  { key: 'opposition', label: m.targets_col_opposition(), sort: 'opposition', className: 'alm-targets-cell--opposition', title: m.targets_table_next_opposition() },
+  { key: 'star', label: () => '★', className: 'alm-targets-cell--center', title: () => m.targets_col_favourite() },
+  { key: 'designation', label: () => m.targets_col_designation(), sort: 'designation' },
+  { key: 'type', label: () => m.cmp_target_search_type_label(), sort: 'type' },
+  { key: 'maxAlt', label: () => m.targets_col_max_alt(), sort: 'maxAlt', className: 'alm-targets-cell--num', title: () => m.targets_table_approx_max_alt() },
+  { key: 'spark', label: () => m.targets_col_tonight(), className: 'alm-targets-cell--spark' },
+  { key: 'visible', label: () => m.targets_col_visible(), sort: 'visible', className: 'alm-targets-cell--center', title: () => m.targets_col_visible_title() },
+  { key: 'opposition', label: () => m.targets_col_opposition(), sort: 'opposition', className: 'alm-targets-cell--opposition', title: () => m.targets_table_next_opposition() },
   // task #5: abbreviated header "Lunar" fits the widened 80px column without clipping
-  { key: 'lunarDist', label: m.targets_col_lunar(), sort: 'lunarDist', className: 'alm-targets-cell--num', title: m.targets_col_lunar_title() },
-  { key: 'filters', label: m.common_filters(), className: 'alm-targets-cell--filters', title: m.targets_col_filters_title() },
+  { key: 'lunarDist', label: () => m.targets_col_lunar(), sort: 'lunarDist', className: 'alm-targets-cell--num', title: () => m.targets_col_lunar_title() },
+  { key: 'filters', label: () => m.common_filters(), className: 'alm-targets-cell--filters', title: () => m.targets_col_filters_title() },
   // task #5: abbreviated header "Img time" fits the widened 100px column without clipping
-  { key: 'imagingTime', label: m.targets_col_img_time(), sort: 'imagingTime', className: 'alm-targets-cell--num', title: m.targets_col_img_time_title() },
-  { key: 'sessions', label: m.common_sessions(), sort: 'sessions', className: 'alm-targets-cell--num', title: m.targets_col_sessions_title() },
+  { key: 'imagingTime', label: () => m.targets_col_img_time(), sort: 'imagingTime', className: 'alm-targets-cell--num', title: () => m.targets_col_img_time_title() },
+  { key: 'sessions', label: () => m.common_sessions(), sort: 'sessions', className: 'alm-targets-cell--num', title: () => m.targets_col_sessions_title() },
 ];
 
 // COL_COUNT is derived from COLUMNS so adding/removing a column stays in sync.
@@ -477,18 +478,18 @@ export function TargetsTable({
   const columns = COLUMNS.map((c) => ({
     key: c.key,
     className: c.className,
-    title: c.title,
+    title: c.title?.(),
     header: c.sort ? (
       <SortHeader
-        label={c.label}
+        label={c.label()}
         active={sort.col === c.sort}
         dir={sort.dir}
         onClick={() => onSort(c.sort as TargetSortCol)}
-        ariaLabel={m.targets_table_sort_by_aria({ col: c.label })}
-        title={c.title}
+        ariaLabel={m.targets_table_sort_by_aria({ col: c.label() })}
+        title={c.title?.()}
       />
     ) : (
-      c.label
+      c.label()
     ),
   }));
 
@@ -553,12 +554,12 @@ export function TargetsTable({
                     <tr
                       key={row.key}
                       data-index={index}
-                      className="alm-targets-table__group"
+                      className="alm-listgroup"
                     >
                       <td colSpan={COL_COUNT}>
                         <button
                           type="button"
-                          className="alm-targets-table__group-cell"
+                          className="alm-listgroup__cell"
                           data-testid={`targets-group-${row.key}`}
                           aria-expanded={!row.collapsed}
                           aria-label={row.label}
@@ -566,11 +567,11 @@ export function TargetsTable({
                           // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
                           style={{ paddingLeft: 8 + depthIndent }}
                         >
-                          <span className="alm-targets-list__group-caret" aria-hidden="true">
+                          <span className="alm-listgroup__caret" aria-hidden="true">
                             {row.collapsed ? '▸' : '▾'}
                           </span>
-                          <span className="alm-targets-list__group-label">{row.label}</span>
-                          <span className="alm-targets-table__group-count">
+                          <span className="alm-listgroup__label">{row.label}</span>
+                          <span className="alm-listgroup__count">
                             {m.targets_table_target_count({ count: row.count })}
                           </span>
                         </button>
@@ -583,11 +584,11 @@ export function TargetsTable({
                   <tr
                     key={row.key}
                     data-index={index}
-                    className="alm-targets-table__group"
+                    className="alm-listgroup"
                   >
                     <td colSpan={COL_COUNT}>
                       {row.label}
-                      <span className="alm-targets-table__group-count">
+                      <span className="alm-listgroup__count">
                         {m.targets_table_target_count({ count: row.count })}
                       </span>
                     </td>

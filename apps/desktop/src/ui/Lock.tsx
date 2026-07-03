@@ -1,12 +1,13 @@
 import type { HTMLAttributes } from 'react';
 import { Tooltip } from '@base-ui-components/react/tooltip';
+import { m } from '@/lib/i18n';
 
 export interface LockProps extends HTMLAttributes<HTMLSpanElement> {
   reason?: string;
 }
 
 export function Lock({ reason, className, ...rest }: LockProps) {
-  const label = reason ?? 'Protected';
+  const label = reason ?? m.settings_cleanup_protection_protected();
   const cls = ['alm-lock', className].filter(Boolean).join(' ');
   return (
     <Tooltip.Provider>
