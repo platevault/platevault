@@ -22,50 +22,6 @@ export const DATA_SOURCES: DataSourceRoot[] = [
   { id: 6, path: 'E:\\AstroOverflow', type: 'Raw', online: true, files: 7931, size: '180 GB', lastScan: '2h ago' },
 ];
 
-// ─── Equipment ───────────────────────────────────────────────────────────────
-
-export interface OpticalTrainFixture {
-  id: number;
-  name: string;
-  camera: string;
-  telescope: string;
-  focalLength: string;
-  pixelScale: string;
-}
-
-export interface CameraFixture {
-  id: number;
-  model: string;
-  sensor: string;
-  pixelSize: string;
-  resolution: string;
-  cooled: boolean;
-  color: boolean;
-}
-
-export interface TelescopeFixture {
-  id: number;
-  model: string;
-  aperture: string;
-  focalLength: string;
-  fRatio: string;
-}
-
-export const OPTICAL_TRAINS: OpticalTrainFixture[] = [
-  { id: 1, name: 'FSQ-106 + ASI2600MM', camera: 'ASI2600MM Pro', telescope: 'Takahashi FSQ-106EDX4', focalLength: '530 mm', pixelScale: '1.74″/px' },
-  { id: 2, name: 'GT81 + ASI533MC', camera: 'ASI533MC Pro', telescope: 'William Optics GT81', focalLength: '478 mm', pixelScale: '2.20″/px' },
-];
-
-export const CAMERAS: CameraFixture[] = [
-  { id: 1, model: 'ZWO ASI2600MM Pro', sensor: 'Sony IMX571', pixelSize: '3.76 μm', resolution: '6248 × 4176', cooled: true, color: false },
-  { id: 2, model: 'ZWO ASI533MC Pro', sensor: 'Sony IMX533', pixelSize: '3.76 μm', resolution: '3008 × 3008', cooled: true, color: true },
-];
-
-export const TELESCOPES: TelescopeFixture[] = [
-  { id: 1, model: 'Takahashi FSQ-106EDX4', aperture: '106 mm', focalLength: '530 mm', fRatio: 'f/5' },
-  { id: 2, model: 'William Optics GT81', aperture: '81 mm', focalLength: '478 mm', fRatio: 'f/5.9' },
-];
-
 // ─── Processing Tools ─────────────────────────────────────────────────────────
 
 export interface ProcessingToolFixture {
