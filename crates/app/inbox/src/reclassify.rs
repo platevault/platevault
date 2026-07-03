@@ -1008,9 +1008,7 @@ mod tests {
     use contracts_core::inbox::{
         InboxReclassifyBulk, InboxReclassifyFileOverride, InboxReclassifyV2Request,
     };
-    use persistence_db::repositories::inbox::{
-        upsert_inbox_source_group, upsert_inbox_sub_item, UpsertInboxSubItem, UpsertSourceGroup,
-    };
+    use persistence_db::repositories::inbox::{upsert_inbox_source_group, UpsertSourceGroup};
 
     /// Set up a minimal source group with two evidence files (both unclassified).
     /// Returns (source_group_id, item_id).

@@ -293,7 +293,7 @@ pub async fn inbox_scan_folder(
     // organization_state (spec 041 R-12, data-model §lane column).
     // organized → "catalogue" (files are already in place; no move needed).
     // unorganized / unknown → "move" (default for inbox sources).
-    let org_state = get_source_organization_state(&*pool, &req.root_id)
+    let org_state = get_source_organization_state(&pool, &req.root_id)
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?;
     let group_lane = match org_state {
@@ -312,7 +312,7 @@ pub async fn inbox_scan_folder(
         // already computed by scan_root (Constitution §I, lazy hashing).
         let sg_id = Uuid::new_v4().to_string();
         upsert_inbox_source_group(
-            &*pool,
+            &pool,
             &UpsertSourceGroup {
                 id: &sg_id,
                 root_id: &req.root_id,

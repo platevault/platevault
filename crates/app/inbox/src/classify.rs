@@ -1754,6 +1754,8 @@ mod tests {
     /// Unlike `write_fits_with_imagetyp`, this also embeds a FILTER card so that
     /// two files written with different filter values end up in different sub-groups.
     fn write_fits_with_filter(dir: &std::path::Path, name: &str, imagetyp: &str, filter: &str) {
+        use std::io::Write as _;
+
         let path = dir.join(name);
         let mut data = vec![b' '; 2880];
         let mut idx = 0usize;
@@ -1769,7 +1771,6 @@ mod tests {
         write_card(&format!("{:<80}", format!("FILTER  = '{filter:<8}'")));
         data[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
 
-        use std::io::Write as _;
         let mut f = std::fs::File::create(path).unwrap();
         f.write_all(&data).unwrap();
     }
@@ -1881,7 +1882,7 @@ mod tests {
         // Both must have a non-empty content_signature.
         for si in &sub_items {
             assert!(
-                si.content_signature.as_deref().map(|s| !s.is_empty()).unwrap_or(false),
+                si.content_signature.as_deref().is_some_and(|s| !s.is_empty()),
                 "sub-item {} must have a non-empty content_signature",
                 si.group_key
             );
@@ -2185,6 +2186,8 @@ mod tests {
         exptime: Option<f64>,
         gain: Option<&str>,
     ) {
+        use std::io::Write as _;
+
         let path = dir.join(name);
         let mut block = vec![b' '; 2880];
         let mut idx = 0usize;
@@ -2209,7 +2212,6 @@ mod tests {
         }
         block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
         let mut f = std::fs::File::create(path).unwrap();
-        use std::io::Write as _;
         f.write_all(&block).unwrap();
     }
 
