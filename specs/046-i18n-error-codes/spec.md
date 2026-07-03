@@ -214,8 +214,11 @@ post-implementation; does not change scope.
   (Paraglide / `@inlang/plugin-message-format`), compiled to type-safe
   `m.<key>()` accessors. Plurals use inlang **variant** messages
   (`declarations`/`selectors`/`match` → `Intl.PluralRules`), **not** inline ICU
-  (`{count, plural, …}`), which this plugin does not support. The
-  `alm/no-js-plural` rule blocks JS-side suffix pluralization.
+  (`{count, plural, …}`), which this plugin does not support — inline ICU
+  syntax mis-parses into a bogus variable rather than a plural selector.
+  `@inlang/plugin-icu1` is the separate plugin that would add inline-ICU
+  support; it is not installed and not used. The `alm/no-js-plural` rule blocks
+  JS-side suffix pluralization.
 - **The lint gate is the enforcing mechanism for SC-001/SC-002**, not
   speckit-verify. `alm/no-user-string` runs at ERROR on `src/**` and in CI
   (`pnpm --filter @astro-plan/desktop run lint:eslint`). It catches: JSX text,
@@ -224,7 +227,10 @@ post-implementation; does not change scope.
   attribute & child ternaries, `??`/`||` literal fallbacks, template literals,
   and — via limited single-function data-flow — user strings **assigned to a
   variable and then rendered** (gated by a machine-token/prose heuristic to
-  avoid flagging enum values). `eslint-plugin-jsx-a11y` is enforced at ERROR.
+  avoid flagging enum values). This closed the original SC-001 false-green
+  where CI never actually ran the frontend lint step. `eslint-plugin-jsx-a11y`
+  was promoted from `warn` to `error` (all resulting violations remediated) as
+  part of the same lint-gate hardening.
 - **Render-time thunks (locale re-read).** Module-level config objects whose
   labels call `m.*()` evaluate once at import, freezing the locale. Such configs
   expose labels as render-time thunks (`label: () => m.key()`, called
