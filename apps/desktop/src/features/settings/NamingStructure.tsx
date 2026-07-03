@@ -22,6 +22,7 @@ import {
 } from "./settingsIpc";
 import { Btn } from "@/ui";
 import { m } from "@/lib/i18n";
+import { errMessage } from "@/lib/errors";
 import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from "./SettingsKit";
 
 const NAMING_KEYS = ['pattern', 'autoApplyPattern', 'patternsByType'];
@@ -626,9 +627,9 @@ function PerTypeDestinationPatterns() {
 	const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	// Per-class live preview, resolved by the real backend `pattern.path_preview`
-	// command (package P11) — keyed by class, `null` while loading/unavailable.
+	// command (package P11) — keyed by class, absent while loading/unavailable.
 	const [previewsByClass, setPreviewsByClass] = useState<
-		Partial<Record<FrameTypeClass, string>>
+		Partial<Record<FrameTypeClass, { path: string; missingTokens: string[] }>>
 	>({});
 	const [previewErrorsByClass, setPreviewErrorsByClass] = useState<
 		Partial<Record<FrameTypeClass, string>>
@@ -669,7 +670,9 @@ function PerTypeDestinationPatterns() {
 		let cancelled = false;
 
 		void (async () => {
-			const nextPreviews: Partial<Record<FrameTypeClass, string>> = {};
+			const nextPreviews: Partial<
+				Record<FrameTypeClass, { path: string; missingTokens: string[] }>
+			> = {};
 			const nextErrors: Partial<Record<FrameTypeClass, string>> = {};
 
 			await Promise.all(
@@ -686,10 +689,15 @@ function PerTypeDestinationPatterns() {
 						: FRAME_TYPE_DEFAULT_PATTERNS[cls];
 					try {
 						const resp = await patternPathPreview(effectivePattern, PER_TYPE_SAMPLE_METADATA);
-						nextPreviews[cls] = resp.resolvedPath;
+						nextPreviews[cls] = {
+							path: resp.resolvedPath,
+							missingTokens: resp.missingTokens,
+						};
 					} catch (err: unknown) {
-						nextErrors[cls] =
-							typeof err === "string" ? err : m.settings_naming_preview_unavailable();
+						// `errMessage` resolves a ContractError code (pattern.empty,
+						// token.unknown, path.traversal, …) to its translated catalog
+						// entry; anything unrecognisable gets the safe generic fallback.
+						nextErrors[cls] = errMessage(err);
 					}
 				}),
 			);
@@ -726,10 +734,11 @@ function PerTypeDestinationPatterns() {
 				},
 				(err: unknown) => {
 					// Backend rejected at least one pattern (error code value.invalid).
-					// We cannot tell which class from a single string; flag all classes
+					// We cannot tell which class from a single payload; flag all classes
 					// that currently fail client-side validation, falling back to a
-					// generic banner keyed on the first overridden class.
-					const message = typeof err === "string" ? err : m.settings_naming_pertype_invalid_pattern();
+					// banner keyed on the first overridden class. `errMessage` resolves
+					// the ContractError code to its translated catalog entry.
+					const message = errMessage(err);
 					const errs: Partial<Record<FrameTypeClass, string>> = {};
 					let attributed = false;
 					for (const cls of FRAME_TYPE_CLASSES) {
@@ -789,7 +798,7 @@ function PerTypeDestinationPatterns() {
 				// Live preview: resolved by the real backend `pattern.path_preview`
 				// command (package P11) against representative sample metadata. Only
 				// shown when the pattern is free of validation errors.
-				const previewPath = error == null ? (previewsByClass[cls] ?? "") : "";
+				const preview = error == null ? previewsByClass[cls] : undefined;
 				const previewUnavailable = error == null && previewErrorsByClass[cls];
 				return (
 					<SettingsRow
@@ -814,18 +823,27 @@ function PerTypeDestinationPatterns() {
 								/>
 							</div>
 
-							{/* Working live preview of the resolved sample path. */}
-							{previewPath !== "" && (
+							{/* Working live preview of the resolved sample path. Announced
+							    politely so screen-reader users hear updates while editing. */}
+							{preview && preview.path !== "" && (
 								<div
 									className="alm-naming__pertype-preview"
+									aria-live="polite"
 									data-testid={`${rowId}-preview`}
 								>
 									<span className="alm-naming__pertype-preview-label">
 										{m.settings_naming_preview_label()}
 									</span>{" "}
 									<code className="alm-mono alm-naming__pertype-preview-code">
-										{previewPath}
+										{preview.path}
 									</code>
+									{preview.missingTokens.length > 0 && (
+										<span className="alm-naming__preview-fallback">
+											{m.settings_naming_fallback_used({
+												tokens: preview.missingTokens.join(", "),
+											})}
+										</span>
+									)}
 									{!isOverridden && (
 										<span className="alm-naming__pertype-preview-default">
 											{m.settings_naming_preview_default()}
@@ -836,6 +854,7 @@ function PerTypeDestinationPatterns() {
 							{previewUnavailable && (
 								<div
 									className="alm-naming__preview-error"
+									role="alert"
 									data-testid={`${rowId}-preview-error`}
 								>
 									{previewUnavailable}

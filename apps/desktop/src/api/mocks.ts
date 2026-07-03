@@ -1182,13 +1182,22 @@ export async function mockInvoke(
     // Mirrors the real resolver's token-substitution + missing-token report
     // for the mock/dev environment. `{token}` names are the v1 registry
     // token names (snake_case); `sampleMetadata` carries the camelCase DTO
-    // field names, so PATH_PREVIEW_TOKEN_FIELDS bridges the two.
+    // field names, so PATH_PREVIEW_TOKEN_FIELDS bridges the two. Errors are
+    // thrown as full ContractError envelopes (code + message + severity +
+    // retryable), matching the real backend, so mock mode exercises the same
+    // `errMessage()` catalog-resolution path as production.
     case 'pattern_path_preview': {
       const req = (_args as { request?: { pattern?: string; sampleMetadata?: Record<string, string | null | undefined> } } | undefined)?.request;
       const pattern = req?.pattern ?? '';
       const sample = req?.sampleMetadata ?? {};
       if (pattern.trim() === '') {
-        throw 'pattern.empty';
+        throw {
+          code: 'pattern.empty',
+          message: 'Pattern is empty.',
+          severity: 'blocking',
+          retryable: false,
+          details: null,
+        };
       }
       const missingTokens: string[] = [];
       const segments = pattern
@@ -1197,7 +1206,17 @@ export async function mockInvoke(
         .map((seg) =>
           seg.replace(/\{([^}]*)\}/g, (_match, token: string) => {
             const field = PATH_PREVIEW_TOKEN_FIELDS[token];
-            const value = field ? sample[field] : undefined;
+            if (!field) {
+              // The real resolver rejects unregistered tokens outright.
+              throw {
+                code: 'token.unknown',
+                message: `Unknown token: ${token}`,
+                severity: 'blocking',
+                retryable: false,
+                details: { token },
+              };
+            }
+            const value = sample[field];
             if (value == null || value === '') {
               missingTokens.push(token);
               return PATH_PREVIEW_TOKEN_FALLBACKS[token] ?? token;
