@@ -11,7 +11,7 @@ import { m } from '@/lib/i18n';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type { InboxItemSummary } from '@/bindings/index';
-import type { InboxClassifyResponse_Serialize as InboxClassifyResponse } from '@/bindings/index';
+import type { InboxClassifyResponse } from '@/bindings/aliases';
 import type { SourceEntry } from '../sources-store';
 import type { FlushResult } from '../sources-store';
 import { errMessage } from '@/lib/errors';
