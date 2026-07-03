@@ -21,21 +21,26 @@ import {
 } from './source-views';
 import type { PreparedViewSummary } from './source-views';
 
-// ── Mock Tauri invoke ─────────────────────────────────────────────────────────
+// ── Mock generated bindings (spec 037) ────────────────────────────────────────
+// source-views now calls commands.preparedview* + unwrap; mock the bindings'
+// Result envelope and let the real unwrap run.
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
+const { mockList, mockRemove, mockRegenerate } = vi.hoisted(() => ({
+  mockList: vi.fn(),
+  mockRemove: vi.fn(),
+  mockRegenerate: vi.fn(),
 }));
 
-import { invoke as tauriInvoke } from '@tauri-apps/api/core';
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    preparedviewList: mockList,
+    preparedviewRemove: mockRemove,
+    preparedviewRegenerate: mockRegenerate,
+  },
+}));
 
-const mockInvoke = tauriInvoke as ReturnType<typeof vi.fn>;
-
-// Ensure tests never use VITE_USE_MOCKS
 beforeEach(() => {
   vi.resetAllMocks();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (import.meta as any).env = { VITE_USE_MOCKS: 'false' };
 });
 
 // ── viewStateLabel ────────────────────────────────────────────────────────────
@@ -162,19 +167,21 @@ const sampleView: PreparedViewSummary = {
   items: [],
 };
 
+const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
+
 describe('listPreparedViews', () => {
   it('calls preparedview.list with projectId and returns views', async () => {
-    mockInvoke.mockResolvedValueOnce({ views: [sampleView] });
+    mockList.mockResolvedValueOnce(ok({ views: [sampleView] }));
 
     const result = await listPreparedViews('proj-1');
 
-    expect(mockInvoke).toHaveBeenCalledWith('preparedview_list', { projectId: 'proj-1' });
+    expect(mockList).toHaveBeenCalledWith('proj-1');
     expect(result.views).toHaveLength(1);
     expect(result.views[0].id).toBe('view-1');
   });
 
   it('returns empty views array when no views exist', async () => {
-    mockInvoke.mockResolvedValueOnce({ views: [] });
+    mockList.mockResolvedValueOnce(ok({ views: [] }));
 
     const result = await listPreparedViews('proj-empty');
     expect(result.views).toHaveLength(0);
@@ -183,16 +190,16 @@ describe('listPreparedViews', () => {
 
 describe('removePreparedView', () => {
   it('calls preparedview.remove with viewId and returns planId', async () => {
-    mockInvoke.mockResolvedValueOnce({ planId: 'plan-abc' });
+    mockRemove.mockResolvedValueOnce(ok({ planId: 'plan-abc' }));
 
     const result = await removePreparedView('view-1');
 
-    expect(mockInvoke).toHaveBeenCalledWith('preparedview_remove', { viewId: 'view-1' });
+    expect(mockRemove).toHaveBeenCalledWith('view-1');
     expect(result.planId).toBe('plan-abc');
   });
 
   it('propagates errors from the backend', async () => {
-    mockInvoke.mockRejectedValueOnce({ code: 'lifecycle.read_only', message: 'archived' });
+    mockRemove.mockRejectedValueOnce({ code: 'lifecycle.read_only', message: 'archived' });
 
     await expect(removePreparedView('view-arch')).rejects.toMatchObject({
       code: 'lifecycle.read_only',
@@ -202,19 +209,17 @@ describe('removePreparedView', () => {
 
 describe('regeneratePreparedView', () => {
   it('calls preparedview.regenerate with viewId and returns planId + unresolvedCount', async () => {
-    mockInvoke.mockResolvedValueOnce({ planId: 'plan-xyz', unresolvedItemCount: 2 });
+    mockRegenerate.mockResolvedValueOnce(ok({ planId: 'plan-xyz', unresolvedItemCount: 2 }));
 
     const result = await regeneratePreparedView('view-removed');
 
-    expect(mockInvoke).toHaveBeenCalledWith('preparedview_regenerate', {
-      viewId: 'view-removed',
-    });
+    expect(mockRegenerate).toHaveBeenCalledWith('view-removed');
     expect(result.planId).toBe('plan-xyz');
     expect(result.unresolvedItemCount).toBe(2);
   });
 
   it('surfaces view.not_found error', async () => {
-    mockInvoke.mockRejectedValueOnce({ code: 'view.not_found', message: 'missing' });
+    mockRegenerate.mockRejectedValueOnce({ code: 'view.not_found', message: 'missing' });
 
     await expect(regeneratePreparedView('gone')).rejects.toMatchObject({
       code: 'view.not_found',
