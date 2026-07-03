@@ -48,16 +48,24 @@ Dependency: none (independent of A/C/D)
   `components.css`, raw `ms` in `components.css`, or legacy/non-ALM token refs
   (`--mantine-*`, `--alm-color-*`, `--alm-error`) in TSX source.
   Wired as `check:tokens` npm script in `apps/desktop/package.json`.
-- [ ] **B4** TypeScript token type generation (`tokens.d.ts`)
-  — DEFERRED to post-v1. Spec 022 already deferred this; no new urgency.
+- [i] **B4** TypeScript token type generation (`tokens.d.ts`)
+  — `apps/desktop/scripts/gen-token-types.mjs` parses `tokens.css` for every
+  `--alm-*` custom-property declaration and emits a sorted, deterministic
+  `AlmTokenName` union (+ `AlmTokenVar` template-literal helper) to
+  `src/styles/tokens.d.ts`. Wired as `pnpm tokens:types`. Generated file
+  committed (79 token names as of this run).
 - [x] **B5** Primitive prop audit: every `ui/` primitive accepts `className` and spreads
   remaining props onto root element
   — DONE-BY-PRIOR-WORK: `Btn`, `Pill`, `Box`, `Section`, `KV`, `EmptyState`,
   `Banner`, `Toggle`, `SegControl`, `RadioGroup`, `CoverageBar`, `Lock`,
   `DirPicker`, `WizardShell`, `Table` — all inspected and confirmed.
-- [ ] **B6** `DESIGN.md` sync: update root `/DESIGN.md` with current token taxonomy
-  — DEFERRED. Spec 028 note: superseded by spec 030 (UI Audit & Revision).
-  Spec 030 owns design documentation updates.
+- [i] **B6** `DESIGN.md` sync: update root `/DESIGN.md` with current token taxonomy
+  — Updated §3 "Color tokens" / "Token & class conventions" / "Spacing" only
+  (rest of the doc untouched): documents the 4 themes (Warm Clay, Warm Slate,
+  Observatory Dark, Espresso Dark) + System, the semantic aliases (`--alm-text`,
+  `--alm-border`, `--alm-link`, `--alm-focus-ring`), and the `--alm-sp-*`
+  base-4 spacing scale (2/4/8/12/16/24/32/48). Added a note pointing at
+  `tokens.css` / `tokens.d.ts` as source of truth.
 
 ---
 
@@ -66,11 +74,13 @@ Dependency: none (independent of A/C/D)
 Dependency: none
 
 - [ ] **C1** Fix React setState-during-render warning in `ProjectDetailPane`
-  — DEFERRED/NOT-APPLICABLE. Investigation found no setState-during-render
-  violation in the current codebase. The spec 027 note referred to an earlier
-  iteration; post-rewrite `ProjectsPage` uses `useStaleSelectionCleanup` (which
-  wraps the navigate call in `useEffect`) and `ProjectDetailContent` has no
-  render-phase state updates. No fix needed.
+  — NOT-APPLICABLE / OBSOLETE. `ProjectDetailPane` no longer exists — it was
+  removed in the spec 043 UI redesign (superseded by `ProjectDetailContent` /
+  `ProjectsPage` + `ProjectDetail.tsx`). Re-checked on the current tree: no
+  setState-during-render violation exists anywhere in the projects feature.
+  `ProjectsPage` uses `useStaleSelectionCleanup` (wraps `navigate` in
+  `useEffect`) and `ProjectDetailContent` has no render-phase state updates.
+  No fix needed; task is obsolete rather than deferred.
 - [i] **C2** Add `AppErrorBoundary` class component at the app shell root
   — Wraps `RouterProvider` in `main.tsx`. Shows a recoverable fallback (reload
   button) on uncaught render errors. Also usable per-route.
@@ -95,15 +105,29 @@ Dependency: B2 must pass before B3 guard is meaningful
   — see B3. Fails on: raw hex in `components.css`, raw `ms` in `components.css`,
   legacy token namespaces in TSX source.
 - [i] **D2** Wire `check:tokens` npm script in `apps/desktop/package.json`
-- [ ] **D3** Unused export detection with `knip`
-  — DEFERRED. `knip` not in pnpm lockfile or PATH. Adding it requires
-  `pnpm add -D knip` and configuration; out of scope for this autonomous run
-  without network sandbox install. Document as next step.
-- [ ] **D4** Circular import detection with `madge`
-  — DEFERRED. `madge` not in pnpm lockfile or PATH. Same reason as D3.
-- [ ] **D5** Bundle size baseline and regression guard
-  — DEFERRED. Requires a bundler output step (Tauri build) and a size-tracking
-  mechanism (e.g. `size-limit`). Not critical path for this spec.
+- [i] **D3** Unused export detection with `knip`
+  — `knip@6.24.0` added as devDependency. `apps/desktop/knip.json` scopes
+  `project` to `src/**/*.{ts,tsx}`, ignores `src/bindings/**` (generated Tauri
+  bindings) and the `@tauri-apps/cli` dependency (used only via the `tauri`
+  CLI, not imported). Wired as `pnpm knip`. Baseline on this run (NOT acted
+  on — the 037 IPC migration is mid-flight and deletions would collide):
+  19 unused files, 4 unused dependencies, 1 unresolved import, 135 unused
+  exports, 198 unused exported types.
+- [i] **D4** Circular import detection with `madge`
+  — `madge@8.0.0` added as devDependency. Wired as
+  `pnpm madge:circular` (`madge --circular --extensions ts,tsx src`). Run
+  result: **no circular dependencies found** (340 files processed).
+- [i] **D5** Bundle size baseline and regression guard
+  — `size-limit@12.1.0` + `@size-limit/file@12.1.0` added as devDependencies
+  (switched from `@size-limit/preset-app` because its Chrome-timing check
+  fails to launch headless Chrome in this sandboxed env; `@size-limit/file`
+  does pure gzip file-size measurement against the built `dist/` output,
+  which is the right fit for a pre-built Vite bundle). Config in
+  `apps/desktop/.size-limit.json`, wired as `pnpm size`. Real `vite build`
+  baseline captured (`pnpm build`, no Tauri/cargo build involved):
+  - all `dist/assets/*.js`, gzip: **393.58 kB** (limit set to 480 KB, ~22% headroom)
+  - largest chunk `dist/assets/index-*.js`, gzip: **218.14 kB** (limit set to
+    260 KB, ~19% headroom)
 - [i] **D6** ESLint flat config for `apps/desktop/` (TypeScript + React rules)
   — `eslint.config.js` with `@eslint/js`, `typescript-eslint`,
   `eslint-plugin-react-hooks`. Wire `lint:eslint` script. Fix any errors found
@@ -121,13 +145,13 @@ Dependency: B2 must pass before B3 guard is meaningful
 
 ---
 
-## Deferred items summary
+## Deferred / not-applicable items summary
 
-| ID | Item | Reason |
+| ID | Item | Status |
 |----|------|--------|
-| B4 | TypeScript token types | Already deferred in spec 022; post-v1 |
-| B6 | DESIGN.md sync | Superseded by spec 030 |
-| C1 | setState-during-render fix | No violation found post-rewrite |
-| D3 | knip unused exports | Not in lockfile; needs install |
-| D4 | madge circular imports | Not in lockfile; needs install |
-| D5 | Bundle size baseline | Needs Tauri build + size-limit setup |
+| C1 | setState-during-render fix | NOT-APPLICABLE/OBSOLETE — `ProjectDetailPane` removed in spec 043 redesign; no violation found on current tree |
+
+B4, B6, D3, D4, D5 were implemented in this pass (see entries above); they are
+no longer deferred. D3's `knip` and D4's `madge` findings are established as a
+baseline only — no unused-export/file deletions were made, since the spec 037
+IPC migration is mid-flight and deletions could collide with in-progress work.

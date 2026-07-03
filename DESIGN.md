@@ -51,24 +51,50 @@ Sidebar nav (collapsible, sticky)
 
 ## 3. Visual system
 
-### Color tokens (grayscale; status hues are utility-only)
+### Color tokens — 4 themes + System (PlateVault redesign)
+
+Raw palette tokens (`--alm-ink`, `--alm-rule`, `--alm-bg`, `--alm-ok`, `--alm-warn`,
+`--alm-danger`, `--alm-info`, `--alm-accent`, …) are declared once on `:root`
+(Warm Slate values as the baseline) and then **overridden per theme** on a
+`[data-theme="…"]` attribute selector. Four themes ship, plus a "System" mode
+that follows the OS light/dark preference (light → Warm Slate, dark →
+Observatory Dark):
+
+| Theme | `data-theme` value | Character |
+|---|---|---|
+| Warm Slate | `warm-slate` | Calm light — default light + OS-light |
+| Warm Clay | `warm-clay` | Warm light, terracotta accent |
+| Observatory Dark | `observatory-dark` | Warm charcoal, amber accent — default dark + OS-dark |
+| Espresso Dark | `espresso-dark` | Deep near-black, caramel accent |
+
+Each theme block overrides only the raw palette tokens (ink/rule/bg family,
+status colors + their `-bg`/`-border` pairs, accent family, hover/selected
+backgrounds, shadow). Type scale, spacing, radius, and layout tokens are
+**theme-invariant** — they never change between themes.
+
+Status backgrounds are tinted but desaturated — never bright, in any theme.
+Don't use color alone to convey state; always pair with text labels
+(`needs review`, `accepted`, `DELETE`).
+
+### Semantic aliases
+
+Components should reference **semantic** tokens, not raw palette tokens
+directly, so they repaint correctly across all four themes automatically:
+
 ```
-ink         #1a1a1a    primary text, headings, active borders
-ink2        #3a3a3a    secondary text
-ink3        #6a6a6a    muted text, captions, table headers
-ink4        #9a9a9a    placeholders, separators
-rule        #d4d4d2    primary borders
-rule2       #e4e3e0    subtle dividers (table rows)
-bg          #fafaf8    primary background
-bg2         #f3f2ee    panel / toolbar backgrounds
-bg3         #ebeae5    active row, deeper panels
-chip        #ebeae5    neutral pill background
-warn        #7a5a1a    warning text + accents (with #f8f1d8 bg)
-danger      #8a2a1a    destructive text + accents (with #f0d8d2 bg)
-ok          #1f5a3a    confirmed text + accents (with #e6efe2 bg)
+--alm-text              → --alm-ink            primary text
+--alm-text-secondary    → --alm-ink2           secondary text
+--alm-text-muted        → --alm-ink3           muted text, captions, table headers
+--alm-text-faint        → --alm-ink4           placeholders, faint labels
+--alm-border            → --alm-rule           primary borders
+--alm-border-subtle     → --alm-rule2          subtle dividers (table rows)
+--alm-link              → --alm-accent-text    inline links
+--alm-focus-ring                                 focus outline (box-shadow value, uses --alm-accent)
 ```
 
-Status backgrounds are tinted but desaturated — never bright. Don't use color alone to convey state; always pair with text labels (`needs review`, `accepted`, `DELETE`).
+Because the alias resolves at use-site via `var()`, a component styled with
+`color: var(--alm-text)` automatically tracks whichever theme is active —
+never hardcode `--alm-ink` (or a hex value) directly in component CSS.
 
 ### Typography
 - **UI**: `Inter` 400/500/600 — body 11.5–12 px, headings 13–22 px, table headers 10.5 px uppercase tracked +.04em
@@ -80,17 +106,29 @@ Status backgrounds are tinted but desaturated — never bright. Don't use color 
 - Three modes: compact (24 px row), comfortable (32 px row, default), spacious (40 px row)
 - Per-user setting in Appearance; per-page override via the density toggle in the toolbar
 
-### Spacing
-- 4 / 6 / 8 / 10 / 12 / 14 / 16 / 18 px scale
-- Section padding 14 px, box padding 10–12 px
-- Toolbars: 6 px vertical, 12 px horizontal
+### Spacing — geometric base-4 scale (`--alm-sp-*`)
+```
+--alm-sp-0   2px
+--alm-sp-1   4px
+--alm-sp-2   8px
+--alm-sp-3   12px
+--alm-sp-4   16px
+--alm-sp-5   24px
+--alm-sp-6   32px
+--alm-sp-7   48px
+```
+- Section padding `--alm-sp-3` (12px), box padding `--alm-sp-2`–`--alm-sp-3`
+- Toolbars: `--alm-sp-2` vertical, `--alm-sp-3` horizontal
+- Spacing tokens are theme-invariant — identical across all four themes.
 
-### Token & class conventions (spec 022)
+### Token & class conventions
 
-- **Source of truth**: `apps/desktop/src/styles/tokens.css` is the canonical token
-  set. The color/typography/spacing values listed above are *illustrative*; when
-  they drift, `tokens.css` wins. The full token taxonomy (categories, light/dark
-  scopes) is documented in `specs/022-mantine-prototype-design-system/data-model.md`.
+- **Design tokens are the source of truth** — see `apps/desktop/src/styles/tokens.css`
+  (raw values, theme overrides, semantic aliases) and the generated
+  `apps/desktop/src/styles/tokens.d.ts` (the `AlmTokenName` / `AlmTokenVar` TS
+  types, regenerated via `pnpm tokens:types`). The color/typography/spacing
+  values summarized in this document are *illustrative*; when they drift,
+  `tokens.css` wins.
 - **`--alm-` prefix**: every design token is a CSS custom property named
   `--alm-<category>-<name>` (e.g. `--alm-ink`, `--alm-sp-4`, `--alm-radius-md`,
   `--alm-shadow-sm`). Component CSS lives in `components.css` and uses `alm-`
@@ -99,7 +137,12 @@ Status backgrounds are tinted but desaturated — never bright. Don't use color 
   shadow, and motion duration — no raw hex/rgb/named colors or `ms` literals.
   Component-intrinsic pixel geometry (icon/badge sizes, 1px hairlines, fixed
   panel widths) is exempt — it is geometry, not spacing-scale. (See the policy
-  comment at the top of `components.css`.)
+  comment at the top of `components.css`, enforced by `scripts/check-tokens.sh`
+  / `pnpm check:tokens`.)
+- **Prefer semantic aliases** (`--alm-text`, `--alm-border`, `--alm-link`,
+  `--alm-focus-ring`, …) over raw palette tokens (`--alm-ink`, `--alm-rule`, …)
+  in component CSS/inline styles, so components repaint correctly across all
+  four themes without per-theme overrides.
 - **Headless-library policy**: interactive primitives wrap a headless library —
   Base UI (`@base-ui-components/react`) for menu/dialog/tooltip/select/switch,
   `cmdk` for the command palette, `react-resizable-panels` for docked drawers,
@@ -107,10 +150,12 @@ Status backgrounds are tinted but desaturated — never bright. Don't use color 
   layer only; accessibility/interaction comes from the headless library.
 - **Density**: `.density-compact` (24px row), default comfortable (32px), and
   `.density-spacious` (40px) toggle `--alm-row-height`; set on a container.
-- **Adding a token**: add the variable to `tokens.css` (all relevant scopes),
-  reference it from `components.css`, and update this section + `data-model.md`
-  if it introduces a new category. Primitives must forward `className` and spread
-  remaining props onto their root element so callers can extend them.
+- **Adding a token**: add the variable to `tokens.css` (`:root` plus every
+  `[data-theme="…"]` block if it's a themed color), reference it from
+  `components.css`, run `pnpm tokens:types` to regenerate `tokens.d.ts`, and
+  update this section if it introduces a new category. Primitives must forward
+  `className` and spread remaining props onto their root element so callers can
+  extend them.
 
 ---
 
