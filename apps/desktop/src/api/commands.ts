@@ -141,7 +141,7 @@ import type {
 // IPC dispatch + the dev-tools recording override live in the shared switcher
 // (spec 037, api/ipc.ts) so these wrappers and the generated bindings use one
 // dispatcher. Re-exported to keep the `@/api/commands` public surface stable.
-import { invoke, unwrap, setInvokeOverride } from './ipc';
+import { unwrap, setInvokeOverride } from './ipc';
 export { setInvokeOverride };
 
 import { commands } from '@/bindings';
