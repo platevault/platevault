@@ -622,6 +622,9 @@ pub async fn reclassify_v2(
                 meta_map.get(fp).and_then(|m| m.naxis2.map(|v| v.to_string()));
             let base_stack_count: Option<u32> =
                 meta_map.get(fp).and_then(|m| m.stack_count.and_then(|v| u32::try_from(v).ok()));
+            // SET-TEMP is the only temperature persisted to inbox_file_metadata
+            // (R-18 default dark-grouping source); CCD-TEMP has no base column.
+            let base_set_temp_c: Option<f64> = meta_map.get(fp).and_then(|m| m.temperature_c);
 
             // Apply overrides on top: generic override table wins.
             // image_typ: manual_override > 'frameType' override > header frame_type.
@@ -656,6 +659,18 @@ pub async fn reclassify_v2(
             // object (target): 'target' override > metadata row
             let effective_object =
                 overrides_index.get(&(fp, "target")).copied().map(str::to_owned).or(base_object);
+            // offset (T081/R-13): 'offset' override; no base column exists yet
+            // (inbox_file_metadata does not persist OFFSET), so an override is
+            // the only way this reaches the grouping engine via reclassify.
+            let effective_offset: Option<i64> =
+                overrides_index.get(&(fp, "offset")).and_then(|v| v.trim().parse::<i64>().ok());
+            // temperatureC (T081/R-13/R-18): 'temperatureC' override > metadata
+            // row (SET-TEMP). Governs the dark-grouping temperature dimension
+            // (grouping::TempSource::SetTemp is the default source).
+            let effective_set_temp_c: Option<f64> = overrides_index
+                .get(&(fp, "temperatureC"))
+                .and_then(|v| v.trim().parse::<f64>().ok())
+                .or(base_set_temp_c);
 
             let raw_meta = metadata_core::RawFileMetadata {
                 image_typ: effective_image_typ,
@@ -671,6 +686,8 @@ pub async fn reclassify_v2(
                 naxis1: base_naxis1,
                 naxis2: base_naxis2,
                 stack_count: base_stack_count,
+                offset: effective_offset,
+                set_temp_c: effective_set_temp_c,
                 ..Default::default()
             };
 
@@ -1303,6 +1320,78 @@ mod tests {
         let dark_item = resp.sub_items.iter().find(|s| s.frame_type.as_deref() == Some("dark"));
         assert!(dark_item.is_some(), "must have a dark sub-item after re-split");
         assert_eq!(resp.needs_review_count, 0, "no needs-review files after full override");
+    }
+
+    /// T081 (spec 041 FR-035–FR-040): `offset` and `temperatureC` overrides
+    /// must reach the grouping engine on re-split, not just get persisted to
+    /// `inbox_file_overrides`. Two dark files with identical header-derived
+    /// metadata but different `offset`/`temperatureC` overrides must land in
+    /// two distinct sub-items (Offset and SetTemp are both default dark
+    /// grouping dimensions — see `grouping::GroupingConfig::default_for`).
+    #[tokio::test]
+    async fn v2_offset_and_temperature_overrides_reach_grouping() {
+        let db = test_db().await;
+        setup_source_group(&db, "sg-offset-temp", "item-offset-temp").await;
+
+        let resp = reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                source_group_id: Some("sg-offset-temp".to_owned()),
+                inbox_item_id: None,
+                overrides: vec![
+                    InboxReclassifyFileOverride {
+                        file_path: "inbox_folder/frame_001.fits".to_owned(),
+                        properties: {
+                            let mut m = std::collections::HashMap::new();
+                            m.insert("frameType".to_owned(), serde_json::json!("dark"));
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
+                            m.insert("gain".to_owned(), serde_json::json!(100));
+                            m.insert("offset".to_owned(), serde_json::json!(50));
+                            m.insert("temperatureC".to_owned(), serde_json::json!(-10.0));
+                            m
+                        },
+                    },
+                    InboxReclassifyFileOverride {
+                        file_path: "inbox_folder/frame_002.fits".to_owned(),
+                        properties: {
+                            let mut m = std::collections::HashMap::new();
+                            m.insert("frameType".to_owned(), serde_json::json!("dark"));
+                            m.insert("exposureS".to_owned(), serde_json::json!(300.0));
+                            m.insert("gain".to_owned(), serde_json::json!(100));
+                            m.insert("offset".to_owned(), serde_json::json!(500));
+                            m.insert("temperatureC".to_owned(), serde_json::json!(-20.0));
+                            m
+                        },
+                    },
+                ],
+                bulk: vec![],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(resp.needs_review_count, 0, "no needs-review files after full override");
+        assert_eq!(
+            resp.sub_items.len(),
+            2,
+            "offset/temperatureC overrides must split into two distinct sub-items: {:?}",
+            resp.sub_items
+        );
+        let keys: std::collections::HashSet<_> =
+            resp.sub_items.iter().map(|s| s.group_key.as_str()).collect();
+        assert_eq!(
+            keys.len(),
+            2,
+            "group_key must differ between the two offset/temperature overrides: {:?}",
+            resp.sub_items
+        );
+        for si in &resp.sub_items {
+            assert!(
+                si.group_key.contains("offset=") && si.group_key.contains("set_temp="),
+                "group_key must embed both offset and set_temp dimensions: {}",
+                si.group_key
+            );
+        }
     }
 
     /// T068: unknown property key is rejected.
