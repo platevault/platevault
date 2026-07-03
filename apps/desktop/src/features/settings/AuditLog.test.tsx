@@ -5,7 +5,8 @@
  *
  * Covers:
  *   1. Loads and renders audit entries via `commands.auditList`.
- *   2. The search box maps to `filters.search` on the next `auditList` call.
+ *   2. The search box is debounced (no per-keystroke IPC), then maps to
+ *      `filters.search` on the next `auditList` call.
  *   3. Date-range inputs map to `filters.from` / `filters.to`.
  *   4. Pagination (Next) advances `pagination.offset` by the page size.
  *   5. A load failure surfaces via the load-error banner (errMessage).
@@ -75,14 +76,19 @@ describe('AuditLog', () => {
     expect(mockList).toHaveBeenCalledWith(null, { limit: 8, offset: 0 });
   });
 
-  it('maps the search box to filters.search on the next call', async () => {
+  it('debounces the search box, then maps it to filters.search', async () => {
     render(<AuditLog />);
     await waitFor(() => expect(mockList).toHaveBeenCalled());
+    const callsBeforeTyping = mockList.mock.calls.length;
 
     fireEvent.change(screen.getByLabelText('Search audit events'), {
       target: { value: 'plan.approved' },
     });
 
+    // Debounced: the keystroke does not fire an immediate IPC round-trip.
+    expect(mockList).toHaveBeenCalledTimes(callsBeforeTyping);
+
+    // After the 300ms debounce the query lands as filters.search.
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
         { search: 'plan.approved' },

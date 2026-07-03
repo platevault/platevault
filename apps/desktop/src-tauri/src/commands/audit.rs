@@ -105,6 +105,14 @@ fn parse_actor(s: &str) -> AuditActor {
 /// resolution rows; `NULL` for successful transitions). Prefer a refusal
 /// message when present, otherwise fall back to the `trigger` text itself
 /// (the closest analogue to a human-readable summary the row carries).
+///
+/// **i18n (decision D23, 2026-07-03):** the strings composed here (refusal
+/// messages from `payload`, `trigger` labels written by the backend) are
+/// backend-composed English and are intentionally displayed untranslated —
+/// audit detail is technical/diagnostic display, not catalog-translated UI
+/// copy. The upgrade path (routing refusals through a
+/// `TransitionErrorCode`-keyed catalog display on the frontend) is tracked as
+/// a follow-up task; do not translate or catalog these strings here.
 fn derive_detail(trigger: &str, payload: Option<&str>) -> String {
     if let Some(raw) = payload {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) {

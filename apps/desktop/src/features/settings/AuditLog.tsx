@@ -1,4 +1,5 @@
 import { useState, useMemo, useId, useCallback, useEffect } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 import { Btn, Pill, Table } from '@/ui';
 import { auditList, auditExport } from './settingsIpc';
 import type { AuditEntry, AuditFilterDto, AuditOutcome } from '@/bindings/index';
@@ -8,6 +9,9 @@ import { m } from '@/lib/i18n';
 import { SettingsSection } from './SettingsKit';
 
 const ITEMS_PER_PAGE = 8;
+
+/** Debounce for the free-text search box (matches TargetSearch's DEBOUNCE_MS). */
+const SEARCH_DEBOUNCE_MS = 300;
 
 function outcomeVariant(outcome: AuditOutcome): 'ok' | 'danger' | 'warn' | 'neutral' {
   switch (outcome) {
@@ -21,6 +25,17 @@ function outcomeVariant(outcome: AuditOutcome): 'ok' | 'danger' | 'warn' | 'neut
       return 'danger';
     default:
       return 'neutral';
+  }
+}
+
+/** Render-time factory (spec 046 #8b) so outcome labels re-read the active locale. */
+function outcomeLabel(outcome: AuditOutcome): string {
+  switch (outcome) {
+    case 'applied': return m.settings_auditlog_outcome_applied();
+    case 'ok': return m.settings_auditlog_outcome_ok();
+    case 'refused': return m.settings_auditlog_outcome_refused();
+    case 'failed': return m.settings_auditlog_outcome_failed();
+    case 'paused': return m.settings_auditlog_outcome_paused();
   }
 }
 
@@ -52,12 +67,25 @@ export function AuditLog() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
+  // `searchInput` mirrors the text box on every keystroke; `search` (which
+  // drives the IPC filter) lags behind it by SEARCH_DEBOUNCE_MS so we don't
+  // fire an `audit.list` round-trip per keystroke (same pattern as
+  // TargetSearch's debounced typeahead).
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(0);
   const dateFromId = useId();
   const dateToId = useId();
+
+  const applySearch = useDebouncedCallback((value: string) => {
+    setSearch(value);
+    setPage(0);
+  }, SEARCH_DEBOUNCE_MS);
+
+  // Cancel any pending debounced search on unmount.
+  useEffect(() => () => applySearch.cancel(), [applySearch]);
 
   const filters = useMemo(
     () => buildFilters(search, dateFrom, dateTo),
@@ -131,8 +159,8 @@ export function AuditLog() {
             type="text"
             className="alm-input alm-audit-log__search"
             placeholder={m.settings_auditlog_search_placeholder()}
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            value={searchInput}
+            onChange={(e) => { setSearchInput(e.target.value); applySearch(e.target.value); }}
             aria-label={m.settings_auditlog_search_aria()}
           />
           <label className="alm-audit-log__date-label" htmlFor={dateFromId}>
@@ -202,7 +230,7 @@ export function AuditLog() {
                   {e.entityType} · {e.entityId}
                 </span>
               ),
-              outcome: <Pill variant={outcomeVariant(e.outcome)}>{e.outcome}</Pill>,
+              outcome: <Pill variant={outcomeVariant(e.outcome)}>{outcomeLabel(e.outcome)}</Pill>,
               actor: (
                 <span className="alm-audit-log__actor">
                   {e.actor}
@@ -221,8 +249,8 @@ export function AuditLog() {
         {/* Pagination */}
         <div className="alm-audit-log__pagination">
           <span className="alm-audit-log__page-count">
-            {/* eslint-disable-next-line alm/no-user-string -- pagination separator fragments "· page X of Y" are structural, not translatable copy */}
-            {m.settings_auditlog_event_count({ count: total })} &middot; page {page + 1} of {totalPages}
+            {m.settings_auditlog_event_count({ count: total })} &middot;{' '}
+            {m.settings_auditlog_page_of({ current: page + 1, total: totalPages })}
           </span>
           <div className="alm-audit-log__page-btns">
             <Btn size="sm" variant="ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>

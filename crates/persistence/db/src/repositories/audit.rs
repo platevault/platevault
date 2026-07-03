@@ -66,6 +66,14 @@ pub struct AuditLogFilter {
     pub offset: Option<u32>,
 }
 
+/// Escape SQLite `LIKE` metacharacters (`%`, `_`) and the escape character
+/// itself in user-supplied search text, so a search for an astro name like
+/// `M31_L` matches literally instead of `_` acting as a single-char wildcard.
+/// Pairs with `ESCAPE '\'` on the `LIKE` clauses in `build_where`.
+fn escape_like(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+}
+
 /// Shared WHERE-clause builder for `list_audit_entries` / `count_audit_entries`
 /// so the filter semantics can never drift between the two queries.
 ///
@@ -101,11 +109,11 @@ fn build_where(filter: &AuditLogFilter) -> (String, Vec<String>) {
     }
     if let Some(ref v) = filter.search {
         clauses.push(
-            "(LOWER(entity_type) LIKE ? OR LOWER(entity_id) LIKE ? \
-              OR LOWER(trigger) LIKE ? OR LOWER(actor) LIKE ?)"
+            "(LOWER(entity_type) LIKE ? ESCAPE '\\' OR LOWER(entity_id) LIKE ? ESCAPE '\\' \
+              OR LOWER(trigger) LIKE ? ESCAPE '\\' OR LOWER(actor) LIKE ? ESCAPE '\\')"
                 .to_owned(),
         );
-        let pattern = format!("%{}%", v.to_lowercase());
+        let pattern = format!("%{}%", escape_like(&v.to_lowercase()));
         for _ in 0..4 {
             binds.push(pattern.clone());
         }
@@ -516,6 +524,82 @@ mod tests {
         .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].audit_id, "a2");
+    }
+
+    #[tokio::test]
+    async fn search_escapes_like_wildcards() {
+        let pool = make_pool().await;
+        // Astro names commonly contain `_` (e.g. `M31_L`); it must match
+        // literally, not as a single-char LIKE wildcard (which would also
+        // match `M31xL`). Same for `%`.
+        insert(
+            &pool,
+            "a1",
+            "session",
+            "M31_L",
+            "Confirm session",
+            "user",
+            "applied",
+            "workflow",
+            "2026-01-01T00:00:00Z",
+            None,
+        )
+        .await;
+        insert(
+            &pool,
+            "a2",
+            "session",
+            "M31xL",
+            "Confirm session",
+            "user",
+            "applied",
+            "workflow",
+            "2026-01-01T00:00:00Z",
+            None,
+        )
+        .await;
+        insert(
+            &pool,
+            "a3",
+            "session",
+            "gain 100%",
+            "Confirm session",
+            "user",
+            "applied",
+            "workflow",
+            "2026-01-01T00:00:00Z",
+            None,
+        )
+        .await;
+
+        // `_` is literal: only the underscore row matches, not `M31xL`.
+        let rows = list_audit_entries(
+            &pool,
+            &AuditLogFilter { search: Some("M31_L".to_owned()), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].audit_id, "a1");
+
+        // `%` is literal: matches the percent row, not everything.
+        let rows = list_audit_entries(
+            &pool,
+            &AuditLogFilter { search: Some("100%".to_owned()), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].audit_id, "a3");
+
+        // Count agrees with list under the same escaped filter.
+        let total = count_audit_entries(
+            &pool,
+            &AuditLogFilter { search: Some("M31_L".to_owned()), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert_eq!(total, 1);
     }
 
     #[tokio::test]
