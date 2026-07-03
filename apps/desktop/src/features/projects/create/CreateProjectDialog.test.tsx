@@ -24,28 +24,23 @@ const { mockCreateProject, mockListProjects, mockSearchTargets, mockResolveTarge
   mockResolveTarget: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  createProject: mockCreateProject,
-  updateProject: vi.fn(),
-  addProjectSource: vi.fn(),
-  removeProjectSource: vi.fn(),
-  reinferProjectChannels: vi.fn(),
-  dismissProjectChannelDrift: vi.fn(),
-  getProject008: vi.fn(),
-  // TargetSearch (spec 035) is embedded in the dialog.
-  searchTargets: mockSearchTargets,
-  resolveTarget: mockResolveTarget,
-  TARGET_SEARCH_CONTRACT_VERSION: '1.0',
-}));
-
-// CreateProjectDialog's live duplicate-name check now calls
-// commands.projectsList directly (spec 037 caller migration) instead of the
-// old @/api/commands wrapper.
+// CreateProjectDialog's live duplicate-name check calls commands.projectsList,
+// and its embedded TargetSearch (spec 035) child calls commands.targetSearch /
+// commands.targetResolve — all via the generated bindings + unwrap (spec 037).
+// The target-* mocks adapt the raw payload into the `{ status: 'ok' }` Result
+// so the mockResolvedValue sites below stay unchanged.
 vi.mock('@/bindings/index', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/bindings/index')>();
   return {
     ...original,
-    commands: { ...original.commands, projectsList: mockListProjects },
+    commands: {
+      ...original.commands,
+      projectsList: mockListProjects,
+      targetSearch: (req: unknown) =>
+        Promise.resolve(mockSearchTargets(req)).then((data) => ({ status: 'ok', data })),
+      targetResolve: (req: unknown) =>
+        Promise.resolve(mockResolveTarget(req)).then((data) => ({ status: 'ok', data })),
+    },
   };
 });
 

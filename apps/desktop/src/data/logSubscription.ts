@@ -14,6 +14,8 @@
  */
 
 import { appendLog, getLogSnapshot, markTruncated, type LogEntry } from './logStore';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 
 const IS_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
 
@@ -33,15 +35,12 @@ async function fetchRecentEntries(cursor?: string): Promise<void> {
     }
 
     // Use the generated `logRecent` binding (registered command `log_recent`)
-    // via the shared wrapper — NOT a raw dotted `invoke('log.recent')`, which
+    // via the shared switcher — NOT a raw dotted `invoke('log.recent')`, which
     // the real backend rejects as "command not found" (silently losing the
     // on-open history backfill; see spec 019 closeout).
-    const { logRecent } = await import('@/api/commands');
-    const response = await logRecent({
-      cursor,
-      includeDiagnostics: true,
-      windowSize: 500,
-    });
+    const response = unwrap(
+      await commands.logRecent(cursor ?? null, null, true, null, 500),
+    );
 
     if (response.truncated) {
       markTruncated(response.truncatedCount ?? undefined);

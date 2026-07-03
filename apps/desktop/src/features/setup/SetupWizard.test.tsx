@@ -52,24 +52,27 @@ vi.mock('@tanstack/react-router', () => ({
 // graceful unavailable state in these gating tests (download flow is covered
 // in StepCatalogs.test.tsx).
 //
-// StepCatalogs' ResolverSettingsControl still reads @/api/commands directly
-// (out of this migration's scope), so those two mocks stay here.
-vi.mock('@/api/commands', () => ({
-  // Repurposed "Target resolution" step reads/writes resolver settings.
-  getResolverSettings: vi.fn().mockResolvedValue({
-    contractVersion: '1.0',
-    requestId: 'r',
-    settings: {
-      onlineEnabled: true,
-      simbadEndpoint: 'https://simbad.example/tap',
-      debounceMs: 300,
-      requestTimeoutSecs: 10,
-    },
-  }),
-  updateResolverSettings: vi.fn().mockImplementation((settings) =>
-    Promise.resolve({ contractVersion: '1.0', requestId: 'r', settings }),
-  ),
-}));
+// StepCatalogs' ResolverSettingsControl reads resolver settings from the
+// settings feature's settingsIpc glue module (spec 037); mock those two there.
+vi.mock('@/features/settings/settingsIpc', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/settings/settingsIpc')>();
+  return {
+    ...actual,
+    getResolverSettings: vi.fn().mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      settings: {
+        onlineEnabled: true,
+        simbadEndpoint: 'https://simbad.example/tap',
+        debounceMs: 300,
+        requestTimeoutSecs: 10,
+      },
+    }),
+    updateResolverSettings: vi.fn().mockImplementation((settings) =>
+      Promise.resolve({ contractVersion: '1.0', requestId: 'r', settings }),
+    ),
+  };
+});
 
 // spec 037: the wizard, sources-store, StepCatalogs, and StepScan now call
 // generated commands.* bindings + unwrap directly. Mock the bindings surface

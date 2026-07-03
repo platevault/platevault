@@ -10,6 +10,8 @@
  */
 
 import { m } from '@/lib/i18n';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -69,17 +71,9 @@ export interface PreparedViewRegenerateResponse {
 }
 
 // ── Command wrappers ──────────────────────────────────────────────────────────
-
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
-  if (useMocks) {
-    const { mockInvoke } = await import('@/api/mocks');
-    // `mockInvoke` returns `Promise<unknown>`; narrow to the caller's `T` here.
-    return mockInvoke(cmd, args) as Promise<T>;
-  }
-  const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
-  return tauriInvoke<T>(cmd, args);
-}
+// Migrated off the hand-rolled local `invoke` onto the generated bindings +
+// unwrap (spec 037 SC-001). Runtime shapes match the local DTOs above, so the
+// unwrapped generated Result is cast to the module's public interface.
 
 /**
  * `preparedview.list` — list all prepared source views for a project.
@@ -87,7 +81,7 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 export async function listPreparedViews(
   projectId: string,
 ): Promise<PreparedViewListResponse> {
-  return invoke<PreparedViewListResponse>('preparedview_list', { projectId });
+  return unwrap(await commands.preparedviewList(projectId)) as PreparedViewListResponse;
 }
 
 /**
@@ -99,7 +93,7 @@ export async function listPreparedViews(
 export async function removePreparedView(
   viewId: string,
 ): Promise<PreparedViewRemoveResponse> {
-  return invoke<PreparedViewRemoveResponse>('preparedview_remove', { viewId });
+  return unwrap(await commands.preparedviewRemove(viewId)) as PreparedViewRemoveResponse;
 }
 
 /**
@@ -111,7 +105,7 @@ export async function removePreparedView(
 export async function regeneratePreparedView(
   viewId: string,
 ): Promise<PreparedViewRegenerateResponse> {
-  return invoke<PreparedViewRegenerateResponse>('preparedview_regenerate', { viewId });
+  return unwrap(await commands.preparedviewRegenerate(viewId)) as PreparedViewRegenerateResponse;
 }
 
 // ── Display helpers ───────────────────────────────────────────────────────────
