@@ -21,10 +21,21 @@ const { mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
   mockResolveTarget: vi.fn(),
 }));
 
+// TargetSearch (a shared component out of this migration's scope) still
+// calls the hand-written wrapper directly — kept mocked here so the child
+// component under test resolves suggestions.
 vi.mock('@/api/commands', () => ({
   searchTargets: mockSearchTargets,
-  resolveTarget: mockResolveTarget,
   TARGET_SEARCH_CONTRACT_VERSION: '1.0',
+}));
+
+/** Wrap a value in the generated `{ status: 'ok' }` Result envelope. */
+const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
+
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    targetResolve: mockResolveTarget,
+  },
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -32,7 +43,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 import { AddTargetDialog } from './AddTargetDialog';
-import type { TargetSuggestion } from '@/api/commands';
+import type { TargetSuggestion } from '@/bindings/index';
 
 const M31: TargetSuggestion = {
   targetId: 'tgt-m31',
@@ -82,7 +93,7 @@ beforeEach(() => {
     requestId: 'r',
     suggestions: [M31],
   });
-  mockResolveTarget.mockResolvedValue(resolved('tgt-m31'));
+  mockResolveTarget.mockResolvedValue(ok(resolved('tgt-m31')));
 });
 
 describe('AddTargetDialog', () => {
@@ -151,7 +162,7 @@ describe('AddTargetDialog', () => {
   it('4. resolved status calls onAdded with the target id', async () => {
     const onAdded = vi.fn();
     const onClose = vi.fn();
-    mockResolveTarget.mockResolvedValue(resolved('tgt-m31-persisted'));
+    mockResolveTarget.mockResolvedValue(ok(resolved('tgt-m31-persisted')));
 
     render(<AddTargetDialog open onClose={onClose} onAdded={onAdded} />);
 
@@ -175,7 +186,7 @@ describe('AddTargetDialog', () => {
 
   it('5. unresolved status shows error and does not call onAdded', async () => {
     const onAdded = vi.fn();
-    mockResolveTarget.mockResolvedValue(unresolved('unknown'));
+    mockResolveTarget.mockResolvedValue(ok(unresolved('unknown')));
 
     render(<AddTargetDialog open onClose={vi.fn()} onAdded={onAdded} />);
 

@@ -60,16 +60,21 @@ const {
   mockUpdateTargetNote: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  getTargetDetail: mockGetTargetDetail,
-  addTargetAlias: mockAddTargetAlias,
-  removeTargetAlias: mockRemoveTargetAlias,
-  setDisplayAlias: mockSetDisplayAlias,
-  clearDisplayAlias: mockClearDisplayAlias,
-  listTargetSessions: mockListTargetSessions,
-  listTargetProjects: mockListTargetProjects,
-  getTargetNote: mockGetTargetNote,
-  updateTargetNote: mockUpdateTargetNote,
+/** Wrap a value in the generated `{ status: 'ok' }` Result envelope. */
+const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
+
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    targetGet: mockGetTargetDetail,
+    targetAliasAdd: mockAddTargetAlias,
+    targetAliasRemove: mockRemoveTargetAlias,
+    targetDisplayAliasSet: mockSetDisplayAlias,
+    targetDisplayAliasClear: mockClearDisplayAlias,
+    targetSessionsList: mockListTargetSessions,
+    targetProjectsList: mockListTargetProjects,
+    targetNoteGet: mockGetTargetNote,
+    targetNoteUpdate: mockUpdateTargetNote,
+  },
 }));
 
 const mockNavigate = vi.fn();
@@ -116,18 +121,18 @@ function makeDetail(overrides?: {
 beforeEach(() => {
   vi.clearAllMocks();
   mockNavigate.mockResolvedValue(undefined);
-  mockGetTargetDetail.mockResolvedValue(makeDetail());
-  mockAddTargetAlias.mockResolvedValue({
+  mockGetTargetDetail.mockResolvedValue(ok(makeDetail()));
+  mockAddTargetAlias.mockResolvedValue(ok({
     alias: { id: 'alias-user-new', alias: 'New Alias', kind: 'user' },
-  });
-  mockRemoveTargetAlias.mockResolvedValue({ removed: true });
-  mockSetDisplayAlias.mockResolvedValue(makeDetail({ displayAlias: 'My NGC 7000' }));
-  mockClearDisplayAlias.mockResolvedValue(makeDetail({ displayAlias: null }));
+  }));
+  mockRemoveTargetAlias.mockResolvedValue(ok({ removed: true }));
+  mockSetDisplayAlias.mockResolvedValue(ok(makeDetail({ displayAlias: 'My NGC 7000' })));
+  mockClearDisplayAlias.mockResolvedValue(ok(makeDetail({ displayAlias: null })));
   // US2/US3/US4 defaults: empty lists, no notes.
-  mockListTargetSessions.mockResolvedValue([]);
-  mockListTargetProjects.mockResolvedValue([]);
-  mockGetTargetNote.mockResolvedValue({ notes: null });
-  mockUpdateTargetNote.mockResolvedValue({ notes: null });
+  mockListTargetSessions.mockResolvedValue(ok([]));
+  mockListTargetProjects.mockResolvedValue(ok([]));
+  mockGetTargetNote.mockResolvedValue(ok({ notes: null }));
+  mockUpdateTargetNote.mockResolvedValue(ok({ notes: null }));
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -149,7 +154,7 @@ describe('TargetDetailV2', () => {
   });
 
   it('2b. when displayAlias is set, effectiveLabel shows it', async () => {
-    mockGetTargetDetail.mockResolvedValue(makeDetail({ displayAlias: 'My NGC 7000' }));
+    mockGetTargetDetail.mockResolvedValue(ok(makeDetail({ displayAlias: 'My NGC 7000' })));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => {
       const els = screen.getAllByText('My NGC 7000');
@@ -304,7 +309,7 @@ describe('TargetDetailV2', () => {
         { id: 'alias-user-new', alias: 'New Alias', kind: 'user' },
       ],
     });
-    mockGetTargetDetail.mockResolvedValueOnce(makeDetail()).mockResolvedValueOnce(updated);
+    mockGetTargetDetail.mockResolvedValueOnce(ok(makeDetail())).mockResolvedValueOnce(ok(updated));
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByRole('textbox', { name: /new alias/i }));
@@ -325,7 +330,7 @@ describe('TargetDetailV2', () => {
         { id: 'alias-cn-1', alias: 'North America Nebula', kind: 'common_name' },
       ],
     });
-    mockGetTargetDetail.mockResolvedValueOnce(makeDetail()).mockResolvedValueOnce(updated);
+    mockGetTargetDetail.mockResolvedValueOnce(ok(makeDetail())).mockResolvedValueOnce(ok(updated));
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByLabelText('Remove alias My Nebula'));
@@ -347,8 +352,8 @@ describe('TargetDetailV2', () => {
 
   it('18. setting display alias updates effectiveLabel', async () => {
     mockGetTargetDetail
-      .mockResolvedValueOnce(makeDetail())
-      .mockResolvedValueOnce(makeDetail({ displayAlias: 'My NGC 7000' }));
+      .mockResolvedValueOnce(ok(makeDetail()))
+      .mockResolvedValueOnce(ok(makeDetail({ displayAlias: 'My NGC 7000' })));
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByRole('button', { name: /^set$/i }));
@@ -370,8 +375,8 @@ describe('TargetDetailV2', () => {
   });
 
   it('19. clearing display alias reverts effectiveLabel to primaryDesignation', async () => {
-    mockGetTargetDetail.mockResolvedValue(makeDetail({ displayAlias: 'My NGC 7000' }));
-    mockClearDisplayAlias.mockResolvedValue(makeDetail({ displayAlias: null }));
+    mockGetTargetDetail.mockResolvedValue(ok(makeDetail({ displayAlias: 'My NGC 7000' })));
+    mockClearDisplayAlias.mockResolvedValue(ok(makeDetail({ displayAlias: null })));
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     // Wait for at least one Edit button (display-alias + notes may both show Edit)
@@ -393,7 +398,7 @@ describe('TargetDetailV2', () => {
   // ── US2: Linked sessions ───────────────────────────────────────────────────
 
   it('20. (US2) sessions empty-state renders "No linked sessions yet."', async () => {
-    mockListTargetSessions.mockResolvedValue([]);
+    mockListTargetSessions.mockResolvedValue(ok([]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getByText(/No linked sessions yet/i)).toBeInTheDocument(),
@@ -401,7 +406,7 @@ describe('TargetDetailV2', () => {
   });
 
   it('21. (US2) linked session rows render date, frameCount, and state', async () => {
-    mockListTargetSessions.mockResolvedValue([
+    mockListTargetSessions.mockResolvedValue(ok([
       {
         id: 'sess-1',
         sessionKey: '{}',
@@ -409,14 +414,14 @@ describe('TargetDetailV2', () => {
         frameCount: 42,
         state: 'confirmed',
       },
-    ]);
+    ]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => expect(screen.getByText(/42 frames/i)).toBeInTheDocument());
     expect(screen.getByText(/confirmed/i)).toBeInTheDocument();
   });
 
   it('22. (US2) clicking session row navigates to /sessions with selected=id', async () => {
-    mockListTargetSessions.mockResolvedValue([
+    mockListTargetSessions.mockResolvedValue(ok([
       {
         id: 'sess-abc',
         sessionKey: '{}',
@@ -424,7 +429,7 @@ describe('TargetDetailV2', () => {
         frameCount: 5,
         state: 'confirmed',
       },
-    ]);
+    ]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => expect(screen.getByText(/5 frames/i)).toBeInTheDocument());
 
@@ -441,7 +446,7 @@ describe('TargetDetailV2', () => {
   // ── US3: Linked projects ───────────────────────────────────────────────────
 
   it('23. (US3) projects empty-state renders "No projects linked."', async () => {
-    mockListTargetProjects.mockResolvedValue([]);
+    mockListTargetProjects.mockResolvedValue(ok([]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getAllByText(/No projects linked/i).length).toBeGreaterThanOrEqual(1),
@@ -449,9 +454,9 @@ describe('TargetDetailV2', () => {
   });
 
   it('24. (US3) linked project rows render name and lifecycle', async () => {
-    mockListTargetProjects.mockResolvedValue([
+    mockListTargetProjects.mockResolvedValue(ok([
       { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
-    ]);
+    ]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getAllByText('Horsehead 2026').length).toBeGreaterThanOrEqual(1),
@@ -460,9 +465,9 @@ describe('TargetDetailV2', () => {
   });
 
   it('25. (US3) clicking project row navigates to /projects with selected=id (mid-page link row)', async () => {
-    mockListTargetProjects.mockResolvedValue([
+    mockListTargetProjects.mockResolvedValue(ok([
       { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
-    ]);
+    ]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getAllByText('Horsehead 2026').length).toBeGreaterThanOrEqual(1),
@@ -480,9 +485,9 @@ describe('TargetDetailV2', () => {
   });
 
   it('25b. (US3) clicking project row in bottom section navigates to /projects with selected=id', async () => {
-    mockListTargetProjects.mockResolvedValue([
+    mockListTargetProjects.mockResolvedValue(ok([
       { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
-    ]);
+    ]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getAllByText('Horsehead 2026').length).toBeGreaterThanOrEqual(1),
@@ -503,7 +508,7 @@ describe('TargetDetailV2', () => {
   // ── US4: Observing notes ───────────────────────────────────────────────────
 
   it('26. (US4) notes empty placeholder renders when no notes', async () => {
-    mockGetTargetNote.mockResolvedValue({ notes: null });
+    mockGetTargetNote.mockResolvedValue(ok({ notes: null }));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getByTestId('target-notes-empty')).toBeInTheDocument(),
@@ -512,7 +517,7 @@ describe('TargetDetailV2', () => {
   });
 
   it('27. (US4) existing notes body renders', async () => {
-    mockGetTargetNote.mockResolvedValue({ notes: 'Great transparency last night.' });
+    mockGetTargetNote.mockResolvedValue(ok({ notes: 'Great transparency last night.' }));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getByTestId('target-notes-body')).toHaveTextContent(
@@ -522,8 +527,8 @@ describe('TargetDetailV2', () => {
   });
 
   it('28. (US4) edit → save calls updateTargetNote and reflects result', async () => {
-    mockGetTargetNote.mockResolvedValue({ notes: 'Old note' });
-    mockUpdateTargetNote.mockResolvedValue({ notes: 'Updated note' });
+    mockGetTargetNote.mockResolvedValue(ok({ notes: 'Old note' }));
+    mockUpdateTargetNote.mockResolvedValue(ok({ notes: 'Updated note' }));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByTestId('target-notes-body'));
 
@@ -548,7 +553,7 @@ describe('TargetDetailV2', () => {
   });
 
   it('29. (US4) edit → cancel restores original notes without calling update', async () => {
-    mockGetTargetNote.mockResolvedValue({ notes: 'Original note' });
+    mockGetTargetNote.mockResolvedValue(ok({ notes: 'Original note' }));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByTestId('target-notes-body'));
 
@@ -567,7 +572,7 @@ describe('TargetDetailV2', () => {
   });
 
   it('30. (US4) save error shows banner message', async () => {
-    mockGetTargetNote.mockResolvedValue({ notes: null });
+    mockGetTargetNote.mockResolvedValue(ok({ notes: null }));
     mockUpdateTargetNote.mockRejectedValue(new Error('db error'));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByTestId('target-notes-empty'));

@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { TargetListItem } from '@/api/commands';
+import type { TargetListItem } from '@/bindings/index';
 import { filterPlannerCatalog, isPlannerCatalogTarget } from './planner-catalog';
 
 function item(primaryDesignation: string, objectType = 'other'): TargetListItem {
