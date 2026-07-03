@@ -139,6 +139,25 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
     expect(screen.queryByText('All good')).not.toBeInTheDocument();
   });
 
+  it('interpolates the source into the event-source modifier className', async () => {
+    seedEntries();
+    renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('All good')).toBeInTheDocument();
+    });
+
+    const sourceSpans = screen.getAllByText('audit');
+    expect(sourceSpans.length).toBeGreaterThan(0);
+    for (const span of sourceSpans) {
+      expect(span).toHaveClass('alm-logpanel__event-source');
+      expect(span).toHaveClass('alm-logpanel__event-source--audit');
+      // Regression guard: must not render the un-interpolated literal template.
+      expect(span.className).not.toContain('{entry.source}');
+    }
+  });
+
   it('does not animate scroll when prefers-reduced-motion is set', async () => {
     // Mock matchMedia to report reduced motion.
     vi.stubGlobal(

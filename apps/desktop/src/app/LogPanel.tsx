@@ -448,7 +448,7 @@ function LogEntryRow({
       >
         {entry.level}
       </span>
-      <span className="alm-logpanel__event-source alm-logpanel__event-source--{entry.source}">
+      <span className={`alm-logpanel__event-source alm-logpanel__event-source--${entry.source}`}>
         {entry.source}
       </span>
       <span className="alm-logpanel__event-msg">{entry.message}</span>
