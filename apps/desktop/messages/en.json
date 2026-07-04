@@ -785,6 +785,13 @@
   "settings_planner_altitude_label": "Usable altitude threshold (°)",
   "settings_planner_altitude_title": "ALTITUDE THRESHOLD",
   "settings_planner_altitude_unit": "degrees above horizon",
+  "settings_planner_moon_avoidance_title": "MOON AVOIDANCE (PER BAND)",
+  "settings_planner_moon_avoidance_info": "Per-band Moon-avoidance thresholds that drive the Planner's filter guidance pills tonight. A band is viable when the target's lunar distance is at least Distance ÷ (1 + (Moon age from full ÷ Width)²). Higher distance/width = more Moon-sensitive.",
+  "settings_planner_moon_avoidance_band_col": "Band",
+  "settings_planner_moon_avoidance_distance_col": "Distance at full (°)",
+  "settings_planner_moon_avoidance_width_col": "Half-width (days)",
+  "settings_planner_moon_avoidance_distance_aria": "{band} required separation at full Moon, in degrees",
+  "settings_planner_moon_avoidance_width_aria": "{band} half-width, in days",
   "settings_resolver_catalogues_title": "DEFAULT CATALOGUES",
   "settings_resolver_debounce_label": "Typeahead debounce (ms)",
   "settings_resolver_endpoint_label": "SIMBAD endpoint",
@@ -1028,6 +1035,37 @@
   "targets_page_search_placeholder": "Search targets...",
   "targets_table_approx_max_alt": "Approximate max altitude tonight",
   "targets_table_next_opposition": "Next opposition date",
+  "targets_opposition_unknown_title": "Opposition date unknown — this target has no coordinates.",
+  "targets_opposition_in_days": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "in {count} day",
+        "countPlural=other": "in {count} days"
+      }
+    }
+  ],
+  "targets_opposition_in_months": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "in {count} month",
+        "countPlural=other": "in {count} months"
+      }
+    }
+  ],
   "targets_table_no_match": "No targets match the current filters.",
   "targets_table_target_count": "{count} targets",
   "targets_table_visible_low": "low",
@@ -1375,7 +1413,35 @@
   "targets_detail_alias_kind_title": "kind: {kind}",
   "targets_detail_alias_remove_aria": "Remove alias {alias}",
   "targets_filters_narrowband_only": "Narrowband only",
-  "targets_filters_broadband_nb": "Broadband + NB",
+  "targets_filters_broadband_nb": "Broadband OK",
+  "targets_filters_avoid_tonight": "Avoid tonight",
+  "targets_recommendation_unknown": "Unknown",
+  "targets_filter_badge_viable_aria": "{band}: viable tonight",
+  "targets_filter_badge_not_viable_aria": "{band}: not viable tonight",
+  "targets_guidance_unknown_title": "Filter guidance unavailable — this target has no catalogued coordinates.",
+  "targets_guidance_explain_title": "Why this guidance",
+  "targets_guidance_explain_moon": "Moon tonight: {phase}, {pct}% illuminated, {age} days from full",
+  "targets_guidance_explain_separation": "This target: {deg}° from the Moon tonight",
+  "targets_guidance_explain_band_row": "{band}: needs ≥ {deg}°",
+  "targets_guidance_state_viable": "viable",
+  "targets_guidance_state_not_viable": "not viable",
+  "targets_guidance_explain_unknown": "No catalogued coordinates for this target — filter guidance cannot be computed.",
+  "targets_planner_site_prompt_title": "Set up your observing site",
+  "targets_planner_site_prompt_desc": "Add a default observing location so the planner can compute the Moon, lunar distances, and the best imaging season for tonight.",
+  "targets_moon_phase_new": "New Moon",
+  "targets_moon_phase_waxing_crescent": "Waxing crescent",
+  "targets_moon_phase_first_quarter": "First quarter",
+  "targets_moon_phase_waxing_gibbous": "Waxing gibbous",
+  "targets_moon_phase_full": "Full Moon",
+  "targets_moon_phase_waning_gibbous": "Waning gibbous",
+  "targets_moon_phase_last_quarter": "Last quarter",
+  "targets_moon_phase_waning_crescent": "Waning crescent",
+  "targets_moon_waxing": "waxing",
+  "targets_moon_waning": "waning",
+  "targets_moon_summary_title": "Moon tonight",
+  "targets_moon_illumination": "{pct}% illuminated",
+  "targets_moon_summary_aria": "Moon tonight: {phase}, {pct} percent illuminated, {direction}.",
+  "targets_lunar_unknown_title": "Lunar distance unknown — this target has no coordinates.",
   "targets_catalog_ngc": "NGC",
   "targets_catalog_sharpless": "Sharpless",
   "targets_catalog_lbn": "LBN",

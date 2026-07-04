@@ -46,7 +46,8 @@
                   "calibrationBiasOverridePenalty",
                   "calibrationAgingThresholdDays",
                   "imagetypNormalizationUserMappings",
-                  "patternsByType"
+                  "patternsByType",
+                  "plannerMoonAvoidance"
                 ]
               },
               {

@@ -66,6 +66,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibrationAgingThresholdDays",
         ],
         "plans" => &["plansListDefaultAgeCutoffDays"],
+        "planner" => &["plannerMoonAvoidance"],
         // Empty scope or "global" returns every stable key.
         _ => &[
             "logLevel",
@@ -91,6 +92,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibrationAgingThresholdDays",
             "plansListDefaultAgeCutoffDays",
             "currentLibraryId",
+            "plannerMoonAvoidance",
         ],
     }
 }

@@ -67,9 +67,16 @@ import {
   DEFAULT_TARGET_SORT,
 } from './TargetsTable';
 import type { TargetSort, TargetSortCol } from './TargetsTable';
-import { rowAltitudeFor, type FilterBand } from './planner-altitude';
 import { useAltitudeThreshold } from './altitude-settings';
 import { useFavourites } from './useFavourites';
+import { useObservingNight } from './astro/observing-night';
+import { computeObservingNight, type ObservingNight } from './astro/moon-state';
+import { useObserverSiteExists } from './site-gate';
+import { MoonSummary } from './MoonSummary';
+import { useGuidanceParams, loadGuidanceParams } from './guidance-settings';
+import { deriveRowMoonPlanning } from './astro/row-planning';
+import { recommendationLabel } from './FilterBadges';
+import type { Recommendation } from './astro/moon-avoidance';
 
 type ListState =
   | { status: 'loading' }
@@ -164,23 +171,17 @@ const MY_TARGETS_FILTER_OPTIONS = (): FilterOption[] => [
 ];
 
 /**
- * Filter-by-filter options (spec 044, MOCK): all individual bands the user can
- * filter on. Broadband (LRGB) first, then narrowband (Ha/OIII/SII).
- *
- * Selecting one or more bands keeps only rows whose mock `filtersFor`
- * recommendation includes ALL selected bands. Example: selecting "Ha" + "OIII"
- * shows only rows where both are recommended — which in the simple mock means
- * any narrowband-possible target. MOCK — not astronomy.
+ * Filter-by-recommendation options (spec 047 US3, FR-011): the real derived
+ * recommendation categories. Selecting one or more keeps only rows whose
+ * REAL `deriveRowMoonPlanning` recommendation matches a selected category —
+ * replaces the former spec 044 mock per-band filter.
  */
-// Render-time factory (spec 046 #8b) so band labels re-read the active locale.
-const FILTER_BAND_OPTIONS = (): FilterOption[] => [
-  { value: 'L', label: m.targets_band_l_lum() },
-  { value: 'R', label: m.targets_band_r() },
-  { value: 'G', label: m.targets_band_g() },
-  { value: 'B', label: m.targets_band_b() },
-  { value: 'Ha', label: m.targets_band_ha() },
-  { value: 'OIII', label: m.targets_band_oiii() },
-  { value: 'SII', label: m.targets_band_sii() },
+// Render-time factory (spec 046 #8b) so labels re-read the active locale.
+const RECOMMENDATION_FILTER_OPTIONS = (): FilterOption[] => [
+  { value: 'broadband-ok', label: recommendationLabel('broadband-ok') },
+  { value: 'narrowband-only', label: recommendationLabel('narrowband-only') },
+  { value: 'avoid-tonight', label: recommendationLabel('avoid-tonight') },
+  { value: 'unknown', label: recommendationLabel('unknown') },
 ];
 
 export function TargetsPage() {
@@ -207,17 +208,44 @@ export function TargetsPage() {
     () => [...DEFAULT_ENABLED_CATALOGUES],
   );
   /**
-   * Filter-by-filter (spec 044, MOCK): selected bands. Empty = no band filter.
-   * When non-empty, only targets whose mock filter recommendation includes ALL
-   * selected bands are shown. NOT astronomy — mock per spec 044 §3.
+   * Filter-by-recommendation (spec 047 US3, FR-011): selected recommendation
+   * categories. Empty = no filter. When non-empty, only targets whose REAL
+   * derived recommendation matches one of the selected categories are shown.
    */
-  const [filterBands, setFilterBands] = useState<FilterBand[]>([]);
+  const [filterRecommendations, setFilterRecommendations] = useState<Recommendation[]>([]);
   /**
    * User-configured usable-altitude threshold from Settings → Target Planner.
    * Subscribes to localStorage so updates in the Settings pane immediately
    * re-derive imaging-time and visible-tonight for every row.
    */
   const usableAltDeg = useAltitudeThreshold();
+
+  /**
+   * Site gate (spec 047 D7): the planner renders no astronomy until a default
+   * observing site exists. Track B (spec 044/048) owns the ObserverSite key;
+   * until it lands `useObserverSiteExists()` returns false and the planner bar
+   * shows the "set up your observing site" prompt instead of the Moon summary.
+   */
+  const siteExists = useObserverSiteExists();
+  /**
+   * The observing-night anchor, re-checked on focus / hourly (spec 047 D1).
+   * Memoized to one `ObservingNight` per `nightKey` so the Moon state is
+   * computed once per night and reused by the table rows (US2/US3), and nothing
+   * flips at local midnight mid-session (FR-005, SC-007).
+   */
+  const nightAnchor = useObservingNight();
+  const night = useMemo<ObservingNight | null>(
+    () => (siteExists ? computeObservingNight(nightAnchor) : null),
+    // nightAnchor identity is stable per nightKey; guard on the key + gate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nightAnchor.nightKey, siteExists],
+  );
+  /**
+   * Live per-band Moon-avoidance params (spec 047 US3, Settings → Target
+   * Planner). Subscribes so filter-by-recommendation and the table's pills
+   * recompute immediately on a settings change (SC-008).
+   */
+  const guidanceParams = useGuidanceParams();
 
   /**
    * task #18: client-side favourite set.
@@ -238,6 +266,15 @@ export function TargetsPage() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // spec 047 T017: hydrate the live per-band Moon-avoidance params cache from
+  // the backend on mount (Settings → Target Planner writes update the same
+  // cache live via useGuidanceParams — SC-008). Without this the planner would
+  // silently keep showing shipped defaults after a restart until the user
+  // re-saved a value.
+  useEffect(() => {
+    void loadGuidanceParams();
   }, []);
 
   const load = useCallback(() => {
@@ -302,19 +339,21 @@ export function TargetsPage() {
     const q = search.trim();
     let result = q ? tabTargets.filter((t) => matchesSearch(t, q)) : tabTargets;
 
-    // Filter-by-filter (spec 044, MOCK): keep only targets whose mock filter
-    // recommendation includes ALL selected bands. Each band check calls
-    // rowAltitudeFor which is O(1) per target (no side effects, no fetch).
-    // usableAltDeg is included in deps so threshold changes re-filter too.
-    if (filterBands.length > 0) {
+    // Filter-by-recommendation (spec 047 US3, FR-011): keep only targets whose
+    // REAL derived recommendation is one of the selected categories.
+    // deriveRowMoonPlanning is O(1) per target (pure, no fetch); night/params
+    // are included in deps so a settings change or the nightly Moon state
+    // re-filters too.
+    if (filterRecommendations.length > 0) {
+      const selected = new Set(filterRecommendations);
       result = result.filter((t) => {
-        const { filters } = rowAltitudeFor(t, usableAltDeg);
-        return filterBands.every((band) => filters.bands.includes(band));
+        const { recommendation } = deriveRowMoonPlanning(t, night, guidanceParams);
+        return selected.has(recommendation);
       });
     }
 
     return result;
-  }, [tabTargets, search, filterBands, usableAltDeg]);
+  }, [tabTargets, search, filterRecommendations, night, guidanceParams]);
 
   // Per the top-bar convention (task #80/#91): no title/summary in the bar —
   // the left nav names the page and per-page counts move to the status bar.
@@ -358,14 +397,14 @@ export function TargetsPage() {
               onChange: (v) => setEnabledCatalogues(v as CatalogueId[]),
             },
             {
-              // Filter-by-filter (spec 044, MOCK): narrow to targets whose
-              // mock-recommended filter set includes ALL selected bands.
-              // NOT astronomy — see planner-altitude.ts for the mock rule.
-              key: 'filterBands',
+              // Filter-by-recommendation (spec 047 US3, FR-011): narrow to
+              // targets whose REAL derived recommendation category is
+              // selected — includes an explicit "unknown" choice (FR-013).
+              key: 'filterRecommendations',
               label: m.common_filters(),
-              value: filterBands,
-              options: FILTER_BAND_OPTIONS(),
-              onChange: (v) => setFilterBands(v as FilterBand[]),
+              value: filterRecommendations,
+              options: RECOMMENDATION_FILTER_OPTIONS(),
+              onChange: (v) => setFilterRecommendations(v as Recommendation[]),
             },
           ]}
           grouping={{
@@ -379,7 +418,28 @@ export function TargetsPage() {
         // "Add target" is a page-level action (creates a new catalog object).
         // Per-item actions ("+ New project here") live in TargetDetailV2's
         // detail body, not the top bar.
-        <Btn size="sm" onClick={() => setAddOpen(true)}>{m.targets_add_target()}</Btn>
+        //
+        // Planner astronomy (spec 047): tonight's Moon summary sits left of the
+        // action, gated behind a default observing site (D7). Until a site
+        // exists the slot shows the set-up-your-site prompt.
+        <>
+          {night ? (
+            <MoonSummary night={night} />
+          ) : (
+            <div
+              className="alm-planner-site-prompt"
+              data-testid="planner-site-prompt"
+            >
+              <span className="alm-planner-site-prompt__title">
+                {m.targets_planner_site_prompt_title()}
+              </span>
+              <span className="alm-planner-site-prompt__desc">
+                {m.targets_planner_site_prompt_desc()}
+              </span>
+            </div>
+          )}
+          <Btn size="sm" onClick={() => setAddOpen(true)}>{m.targets_add_target()}</Btn>
+        </>
       }
     />
   );
@@ -399,6 +459,7 @@ export function TargetsPage() {
               targetId={selected}
               item={plannerTargets.find((t) => t.id === selected) ?? null}
               usableAltDeg={usableAltDeg}
+              night={night}
             />
           ) : undefined
         }
@@ -417,6 +478,13 @@ export function TargetsPage() {
             onSort={handleSort}
             dims={dims}
             usableAltDeg={usableAltDeg}
+            // spec 047: the memoized observing night (null when no site) drives
+            // real per-row lunar distance / filter guidance / opposition (US2+).
+            night={night}
+            // Live per-band Moon-avoidance params (US3, SC-008): edits in
+            // Settings → Target Planner recompute pills/recommendation here
+            // without a restart.
+            guidanceParams={guidanceParams}
             // task #18: pass the local favourite set down so the star column renders correctly.
             // STUB: localStorage only until task #54 backend linkage lands.
             favouriteIds={favouriteIds}
