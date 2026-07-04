@@ -156,6 +156,11 @@ pub enum ErrorCode {
     PlanApprovalRequired,
     #[serde(rename = "plan.approval.stale")]
     PlanApprovalStale,
+    /// Concurrent apply rejected: the plan's (source ∪ destination ∪ archive)
+    /// path set overlaps an active apply run's path set (spec 025 FR-017,
+    /// R-Concur-1).
+    #[serde(rename = "plan.conflict.overlap")]
+    PlanConflictOverlap,
     #[serde(rename = "plan.invalid_state")]
     PlanInvalidState,
     #[serde(rename = "plan.not_found")]

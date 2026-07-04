@@ -67,6 +67,11 @@ pub mod inbox_plan;
 pub mod inventory;
 pub mod log_stream;
 pub mod native;
+/// Path-set overlap comparison for the cross-plan concurrency guard
+/// (spec 025 FR-017 / R-Concur-1). Pure, camino-only helper consumed by
+/// [`plan_apply`]; relocated here after the vestigial `fs/planner` crate was
+/// removed (task #26 / #402).
+pub mod path_set;
 pub mod patterns;
 pub mod plan_apply;
 pub mod plans;

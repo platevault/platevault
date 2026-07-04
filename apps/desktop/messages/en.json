@@ -260,6 +260,7 @@
   "err_plan_approval_required": "Approve the plan before applying it.",
   "err_plan_approval_stale": "The plan changed since you reviewed it. Review it again.",
   "err_plan_blocked_by_protection": "This plan is blocked by a protected item. Resolve the protection first.",
+  "err_plan_conflict_overlap": "Another plan is currently working on the same files or folders. Wait for it to finish, then try again.",
   "err_plan_in_progress": "This plan is already running.",
   "err_plan_invalid_state": "This plan can't be used in its current state.",
   "err_plan_items_empty": "This plan has no items to apply.",
