@@ -16,6 +16,7 @@
 //!   (FR-021a).
 
 use app_core_projects::source_view_generate::generate_source_view;
+use camino::Utf8PathBuf;
 use contracts_core::source_view_generate::SourceViewGenerateRequest;
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::Database;
@@ -184,19 +185,27 @@ async fn builder_emits_link_and_mkdir_actions_scoped_to_destination() {
     assert!(!mkdir_items.is_empty(), "expected at least one mkdir action");
     assert_eq!(link_items.len(), 2, "one light + one matched calibration item");
 
-    let destination_root = format!("{project_path}/source-views/{}", resp.plan_id);
+    // Build the expected destination root the same way the production code
+    // does (`Utf8PathBuf::join`), so the comparison is platform-separator
+    // agnostic instead of assuming forward slashes (production uses the
+    // platform's native separator, which is `\` on Windows).
+    let destination_root =
+        Utf8PathBuf::from(&project_path).join("source-views").join(&resp.plan_id);
     for item in &link_items {
+        let dest = Utf8PathBuf::from(&item.to_relative_path);
         assert!(
-            item.to_relative_path.starts_with(&destination_root),
+            dest.starts_with(&destination_root),
             "link destination '{}' must be under the plan's own destination root '{destination_root}'",
             item.to_relative_path
         );
         // No action targets an inventory (canonical source) path on the
         // destination side — the destination is always inside the generated
         // view tree, never the source library root.
-        assert!(!item.to_relative_path.starts_with(src_dir.path().to_str().unwrap()));
+        let source_root = Utf8PathBuf::from(src_dir.path().to_str().unwrap());
+        assert!(!dest.starts_with(&source_root));
     }
     for item in &mkdir_items {
-        assert!(item.to_relative_path.starts_with(&destination_root));
+        let dest = Utf8PathBuf::from(&item.to_relative_path);
+        assert!(dest.starts_with(&destination_root));
     }
 }
