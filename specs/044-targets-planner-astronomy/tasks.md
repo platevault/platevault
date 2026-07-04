@@ -40,22 +40,37 @@ user is grilled on the pre-implementation decisions (orchestrator handover §8).
 
 **⚠️ Blocks US1/US2/US3/US4/US5/US6 — every story reads the active site and/or the usable-altitude threshold.**
 
-- [ ] T004 [US3] Extend `SettingsState` in `crates/domain/core/src/settings.rs` with the `observing.*` values:
-      `observing.sites: Vec<ObserverSite>`, `observing.default_site_id: Option<String>`,
-      `observing.active_site_id: Option<String>`, `observing.usable_altitude_deg: f64` (default 30). Add the
-      `ObserverSite` struct + validation (data-model.md §1) with serde.
-- [ ] T005 [US3] Add migration `crates/persistence/db/migrations/00NN_observer_sites.sql` seeding the four
-      keys with defaults. **Choose `00NN` = next free number AT IMPL TIME after checking open PRs** (latest
-      committed `0050`; convoy reservations 0052 in flight, 0056–0059). Touch `crates/persistence/db/.../lib.rs`
-      to force sqlx re-embed on Windows dev.
-- [ ] T006 [US3] Register the four `observing.*` keys in the settings key enum + value sub-schemas
-      (`packages/contracts` `settings.state.v1.json` + the settings command key list in
-      `apps/desktop/src-tauri/src/commands/settings.rs`), per `contracts/settings.observing.json`. No new command.
-- [ ] T007 [US3] Wire read/write through the use-case (`crates/app/settings/src/lib.rs`) + persistence
-      (`crates/persistence/db/src/repositories/settings.rs`) so `observing.*` round-trips like existing
-      structured keys. Regenerate TS bindings.
-- [ ] T008 [P] [US3] Backend test: `observing.*` get/update round-trip incl. `ObserverSite[]`, default/active
-      validity invariants, and fresh-DB migrate (`crates/app/settings` or persistence integration test).
+- [X] T004 [US3] Extend `SettingsState` in `crates/domain/core/src/settings.rs` with the `observing.*` values.
+      DONE: added `ObserverSite` struct (serde camelCase) + `observing_sites`/`observing_default_site_id`/
+      `observing_active_site_id`/`usable_altitude_deg` (default 30) fields to `SettingsState` + defaults.
+      Keys use camelCase (`observingSites`, `observingDefaultSiteId`, `observingActiveSiteId`,
+      `usableAltitudeDeg`) per the codebase's canonical-key convention (`descriptor_keys_are_canonical_
+      camel_case_wire_names` guard) — the spec's dotted `observing.*` labels are conceptual, realised as
+      camelCase wire keys exactly like 047's `plannerMoonAvoidance`.
+- [X] T005 [US3] Migration — **VERDICT: NO MIGRATION NEEDED**. The spec-018 settings store persists each key
+      as its own row hydrated/defaulted in code (`default_value_for_key`/`apply_value_to_state`); adding a
+      static `SettingsState` field needs no SQL. Spec 047 added `plannerMoonAvoidance` the same way with zero
+      migrations — matches the user's "prefer NO migration if the settings KV table suffices" decision. Fresh-DB
+      round-trip is covered by the new `observing_sites_round_trip_through_db` test (which calls `db.migrate()`).
+      No migration file created; migration-numbering coordination therefore moot for this lane.
+- [X] T006 [US3] Register the four keys in the settings descriptor registry + command key list.
+      DONE: `descriptors.rs` — added `ValidationRule::ObserverSites` (+ `check_observer_sites` helper: required
+      fields, ranges, unique ids, optional elevation), `NullableString` for the two id pointers,
+      `NumberRangeInclusive [0,90]` for `usableAltitudeDeg`; 4 `Descriptor` entries. `commands/settings.rs` —
+      new `"observing"` scope + catch-all entries. (No `packages/contracts/settings.state.v1.json` exists in
+      the repo; the settings transport is JsonAny scope/values, so `SettingsState` is not in the specta export
+      graph — `contracts/settings.observing.json` remains the documentary schema.)
+- [X] T007 [US3] Wire read/write through the use-case + persistence; regenerate TS bindings.
+      DONE: `app/settings/lib.rs` — `apply_value_to_state` + `default_value_for_key` cases for all 4 keys;
+      updated the `descriptor_keys_match_state_defaults` guard's nullable-key set. Persistence needs no change
+      (generic key/value rows). Bindings regenerated (`cargo test -p desktop_shell --features dev-tools --test
+      bindings`) — **no diff**: `SettingsState`/`ObserverSite` are not part of the exported command surface.
+- [X] T008 [P] [US3] Backend test: `observing.*` round-trip + invariants + fresh-DB migrate.
+      DONE: `observing_sites_round_trip_through_db` (defaults → persist 2 sites + pointers + threshold → read
+      back incl. full ObserverSite[] hydration; runs on a freshly-migrated in-memory DB),
+      `observing_settings_reject_invalid_values`, plus ~20 `validate_value` accept/reject cases (ranges, invalid
+      twilight, duplicate ids, missing fields). `cargo test -p app_core_settings` → 153 passed; clippy `-D
+      warnings` clean; fmt clean.
 
 **Checkpoint**: settings store carries observing sites + threshold end-to-end.
 

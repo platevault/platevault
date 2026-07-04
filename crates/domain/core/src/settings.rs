@@ -42,6 +42,37 @@ pub struct ImageTypMapping {
     pub frame_type: String,
 }
 
+// ── ObserverSite (spec 044 Track B, data-model.md §1) ─────────────────────
+
+/// One named observing location the planner computes observability against.
+///
+/// Persisted in the spec-018 settings store (frontend astronomy consumes these
+/// values, ADR-0001). `latitude_deg`/`longitude_deg` are manual entry (no online
+/// lookup); `timezone` is an IANA id drawn from a bundled offline list and drives
+/// local-time rendering + DST. `elevation_m` is optional.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ObserverSite {
+    /// Stable, immutable identity; referenced by default/active site pointers.
+    pub id: String,
+    /// User label (e.g. "Home", "Dark site"); non-empty.
+    pub name: String,
+    /// Latitude in decimal degrees, `[-90, 90]`.
+    pub latitude_deg: f64,
+    /// Longitude in decimal degrees, `[-180, 180]`; east-positive.
+    pub longitude_deg: f64,
+    /// Elevation in metres; optional.
+    #[serde(default)]
+    pub elevation_m: Option<f64>,
+    /// IANA timezone id (e.g. `Europe/Amsterdam`).
+    pub timezone: String,
+    /// Per-site night definition: `"astronomical"` (Sun −18°) or `"nautical"` (−12°).
+    pub twilight: String,
+    /// Local-obstruction floor in degrees, `[0, 90]`; standard refraction still
+    /// applied at the true horizon.
+    pub min_horizon_alt_deg: f64,
+}
+
 // ── SettingsState v1 ──────────────────────────────────────────────────────
 
 /// Complete v1 settings bag (data-model.md §`SettingsState` v1).
@@ -143,6 +174,25 @@ pub struct SettingsState {
     /// Hours after a tool launch during which output files are attributed to
     /// that session (spec 018 T043). Default: 6.0 hours.
     pub tool_attribution_window_hours: f64,
+
+    // ── Observing sites (spec 044 Track B, data-model.md §1) ─────────────
+    /// Named observing-site collection. Empty = no-site state (US6). Site ids
+    /// MUST be unique. Consumed frontend-only by the planner astronomy engine
+    /// (ADR-0001); persisted so the user's sites survive relaunch.
+    pub observing_sites: Vec<ObserverSite>,
+
+    /// Which site is the default (referenced `ObserverSite.id` or `null`). At
+    /// most one default; must stay valid across edits/deletes.
+    pub observing_default_site_id: Option<String>,
+
+    /// Which site the planner currently computes for (referenced
+    /// `ObserverSite.id` or `null`); **persists across relaunch**.
+    pub observing_active_site_id: Option<String>,
+
+    /// Global lowest-worthwhile altitude in degrees, `[0, 90]`. Default 30.
+    /// Replaces the localStorage `ALTITUDE_THRESHOLD_KEY` / `USABLE_ALT_DEG`
+    /// constant (spec 044 FR-004); durable so it survives relaunch.
+    pub usable_altitude_deg: f64,
 }
 
 impl Default for SettingsState {
@@ -188,6 +238,10 @@ impl Default for SettingsState {
                 ".avi".to_owned(),
             ],
             tool_attribution_window_hours: 6.0,
+            observing_sites: vec![],
+            observing_default_site_id: None,
+            observing_active_site_id: None,
+            usable_altitude_deg: 30.0,
         }
     }
 }
