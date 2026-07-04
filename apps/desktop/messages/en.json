@@ -79,11 +79,13 @@
   "archive_restore_project_btn": "Restore project",
   "archive_restore_session_btn": "Restore session",
   "archive_search_placeholder": "Search archive…",
-  "archive_select_item_desc": "Choose an item from the list to view its details.",
-  "archive_select_item_title": "Select an archived item",
   "archive_status_pill": "archived",
   "archive_subtitle_no_path": "No original path recorded",
-  "archive_item_archived_on": "Archived {date}",
+  "archive_col_name": "Name",
+  "archive_col_type": "Type",
+  "archive_sort_by_aria": "Sort by {col}",
+  "archive_no_match": "No archived items match the current filters.",
+  "archive_reveal_unavailable_title": "Reveal isn't available yet — the archive location isn't exposed by the backend.",
   "archive_send_to_trash_btn": "Send to trash",
   "archive_load_error": "Could not load archived items.",
   "archive_empty_title": "No archived projects yet",
@@ -1901,21 +1903,6 @@
       "match": {
         "pp=one": "{count} item",
         "pp=other": "{count} items"
-      }
-    }
-  ],
-  "archive_subtitle_item_count": [
-    {
-      "declarations": [
-        "input count",
-        "local pp = count: plural"
-      ],
-      "selectors": [
-        "pp"
-      ],
-      "match": {
-        "pp=one": "{count} archived item",
-        "pp=other": "{count} archived items"
       }
     }
   ],

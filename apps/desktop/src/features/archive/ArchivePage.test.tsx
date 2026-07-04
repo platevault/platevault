@@ -19,6 +19,11 @@
  * 6. Send to trash calls the mutation with the plan id.
  * 7. Delete permanently opens a confirm modal; the confirm button stays
  *    disabled until "DELETE" is typed, then calls the mutation.
+ *
+ * Spec 043 single-column alignment (8–13): ONE search box (no sidebar
+ * duplicate), full-width sortable table with per-row testids + th aria-sort,
+ * wired search filtering, detail docked only on selection, and the Reveal
+ * stub disabled instead of the old enabled no-op button.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -135,5 +140,63 @@ describe('ArchivePage (spec 017 WP-B)', () => {
       'plan-001',
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
+  });
+});
+
+describe('ArchivePage — spec 043 single-column layout', () => {
+  it('8. exactly one search box (the top-bar FilterToolbar; no sidebar duplicate)', () => {
+    archiveListState.data = [makeEntry({ id: 'proj-1' })];
+    render(<ArchivePage />);
+    expect(screen.getAllByRole('searchbox')).toHaveLength(1);
+  });
+
+  it('9. rows carry archive-row-<id> testids in the full-width table', () => {
+    archiveListState.data = [
+      makeEntry({ id: 'proj-1' }),
+      makeEntry({ id: 'proj-2', name: 'M31 · LRGB' }),
+    ];
+    render(<ArchivePage />);
+    expect(screen.getByTestId('archive-row-proj-1')).toBeInTheDocument();
+    expect(screen.getByTestId('archive-row-proj-2')).toBeInTheDocument();
+  });
+
+  it('10. the active sort column th emits aria-sort (Archived desc by default)', () => {
+    archiveListState.data = [makeEntry({ id: 'proj-1' })];
+    const { container } = render(<ArchivePage />);
+    const marked = container.querySelectorAll('th[aria-sort]');
+    expect(marked).toHaveLength(1);
+    expect(marked[0].getAttribute('aria-sort')).toBe('descending');
+    expect(marked[0].textContent).toMatch(/Archived/);
+  });
+
+  it('11. the search box FILTERS the table rows', () => {
+    archiveListState.data = [
+      makeEntry({ id: 'proj-1', name: 'NGC 7000 · HOO (v1)' }),
+      makeEntry({ id: 'proj-2', name: 'M31 · LRGB' }),
+    ];
+    render(<ArchivePage />);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'M31' } });
+    expect(screen.queryByTestId('archive-row-proj-1')).toBeNull();
+    expect(screen.getByTestId('archive-row-proj-2')).toBeInTheDocument();
+  });
+
+  it('12. the detail panel mounts ONLY when an entry is selected (no empty dashboard)', () => {
+    archiveListState.data = [makeEntry({ id: 'proj-1' })];
+    const { unmount } = render(<ArchivePage />);
+    expect(screen.queryByText('Audit history')).toBeNull();
+    unmount();
+
+    mockSelectedId.current = 'proj-1';
+    render(<ArchivePage />);
+    expect(screen.getByText('Audit history')).toBeInTheDocument();
+  });
+
+  it('13. Reveal is a DISABLED stub (archive location not in the contract yet)', () => {
+    archiveListState.data = [makeEntry({ id: 'proj-1' })];
+    mockSelectedId.current = 'proj-1';
+    render(<ArchivePage />);
+    const reveal = screen.getByText('Reveal in Explorer').closest('button');
+    expect(reveal).toBeDisabled();
+    expect(reveal).toHaveAttribute('title');
   });
 });

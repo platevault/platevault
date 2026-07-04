@@ -1,17 +1,39 @@
+/**
+ * ArchivePage — spec 017 WP-B (real archive backend) on the spec 043
+ * SINGLE-COLUMN list-page layout.
+ *
+ * Alignment pass over the #401-shipped page (which used the deprecated
+ * two-pane `ListDetailLayout` + `ListSidebar`): the page now follows the
+ * shared list-page system every other list page uses —
+ *
+ *   - pinned `PageTopBar`: search (wired) + the selected entry's actions on
+ *     the right. NO title / NO summary / NO duplicated counts (top-bar
+ *     convention, task #80 — the sidebar footer count + subtitle count of the
+ *     old layout are gone).
+ *   - full-width sortable `ArchiveTable` (shared Table + SortHeader).
+ *   - single-column `ArchiveDetail` docked BELOW on selection (spec 043 §4
+ *     Archive: no rail; the panel mounts only when an entry is selected — no
+ *     empty centered dashboard).
+ *
+ * Management actions stay in the top bar per spec 043 §4 Archive (Send to
+ * trash / Delete permanently / Reveal). Delete permanently keeps the typed
+ * "DELETE" confirmation modal gating `archive.permanently_delete`.
+ */
+
 import { useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import {
-  PageShell,
-  ListDetailLayout,
-  TopActionBar,
-  ListSidebar,
-  ListItem,
+  ListPageLayout,
+  PageTopBar,
+  FilterToolbar,
   Modal,
 } from '@/components';
-import { Btn, Pill, EmptyState } from '@/ui';
+import { Btn, EmptyState } from '@/ui';
 import { m } from '@/lib/i18n';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { ArchiveDetail } from './ArchiveDetail';
+import { ArchiveTable, DEFAULT_ARCHIVE_SORT } from './ArchiveTable';
+import type { ArchiveSort, ArchiveSortCol } from './ArchiveTable';
 import { useArchiveList, useSendToTrash, usePermanentlyDelete } from './store';
 import type { ArchiveEntry } from '@/bindings/index';
 
@@ -20,10 +42,27 @@ import type { ArchiveEntry } from '@/bindings/index';
 // unlocks.
 const DELETE_CONFIRM_TEXT = 'DELETE';
 
+/** Client-side text search across name / reason / original path. */
+function filterEntries(entries: ArchiveEntry[], query: string): ArchiveEntry[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return entries;
+  return entries.filter(
+    (a) =>
+      a.name.toLowerCase().includes(q) ||
+      a.reason.toLowerCase().includes(q) ||
+      a.originalPath.toLowerCase().includes(q),
+  );
+}
+
 export function ArchivePage() {
   const { selected } = useSearch({ from: '/shell/archive' });
   const navigate = useNavigate({ from: '/archive' });
   const { data: entries = [], loading, error } = useArchiveList();
+
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<ArchiveSort>(DEFAULT_ARCHIVE_SORT);
+  const filtered = filterEntries(entries, search);
+
   const item: ArchiveEntry | null = entries.find((a) => a.id === selected) ?? null;
 
   const sendToTrash = useSendToTrash();
@@ -36,6 +75,13 @@ export function ArchivePage() {
   });
 
   const onSelect = (id: string) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
+  const clearSelection = () =>
+    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true });
+
+  const handleSort = (col: ArchiveSortCol) =>
+    setSort((prev) =>
+      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+    );
 
   const closeDeleteModal = () => {
     setDeleteModalOpen(false);
@@ -52,69 +98,78 @@ export function ArchivePage() {
     permanentlyDelete.mutate(item.archivedViaPlanId, { onSuccess: closeDeleteModal });
   };
 
+  // Top bar: search + the selected entry's management actions (spec 043 §4
+  // Archive keeps these in the TOP BAR, unlike Sessions' detail-header set).
+  const topBar = (
+    <PageTopBar
+      filters={
+        <FilterToolbar
+          search={{
+            value: search,
+            onChange: setSearch,
+            placeholder: m.archive_search_placeholder(),
+            ariaLabel: m.archive_search_placeholder(),
+          }}
+        />
+      }
+      actions={
+        item && (
+          <>
+            <Btn
+              size="sm"
+              variant="danger"
+              disabled={!item.archivedViaPlanId || sendToTrash.isPending}
+              onClick={handleSendToTrash}
+            >
+              {m.archive_send_to_trash_btn()}
+            </Btn>
+            <Btn
+              size="sm"
+              variant="danger"
+              disabled={!item.archivedViaPlanId}
+              onClick={() => setDeleteModalOpen(true)}
+            >
+              {m.archive_delete_permanently_btn()}
+            </Btn>
+            {/* STUB: Reveal needs the app-managed archive location
+                (.astro-plan-archive/<planId>/, D24) which the ArchiveEntry
+                contract does not expose yet — disabled, no fake IPC. The old
+                layout shipped this button ENABLED with no handler. */}
+            <Btn size="sm" disabled title={m.archive_reveal_unavailable_title()}>
+              {m.projects_detail_reveal_btn()}
+            </Btn>
+          </>
+        )
+      }
+    />
+  );
+
   return (
-    <PageShell>
-      <ListDetailLayout
-        topBar={
-          <TopActionBar
-            title={m.verb_archive()}
-            subtitle={m.archive_subtitle_item_count({ count: entries.length })}
-            right={
-              item && (
-                <>
-                  <Btn
-                    size="sm"
-                    variant="danger"
-                    disabled={!item.archivedViaPlanId || sendToTrash.isPending}
-                    onClick={handleSendToTrash}
-                  >
-                    {m.archive_send_to_trash_btn()}
-                  </Btn>
-                  <Btn
-                    size="sm"
-                    variant="danger"
-                    disabled={!item.archivedViaPlanId}
-                    onClick={() => setDeleteModalOpen(true)}
-                  >
-                    {m.archive_delete_permanently_btn()}
-                  </Btn>
-                  <Btn size="sm">{m.projects_detail_reveal_btn()}</Btn>
-                </>
-              )
-            }
+    <>
+      <ListPageLayout
+        topBar={topBar}
+        detailLabel={m.common_details()}
+        detail={item != null ? <ArchiveDetail item={item} /> : undefined}
+        onCloseDetail={item != null ? () => void clearSelection() : undefined}
+      >
+        {loading ? (
+          <EmptyState title={m.common_loading()} />
+        ) : error ? (
+          <EmptyState title={m.archive_load_error()} />
+        ) : entries.length === 0 ? (
+          <EmptyState title={m.archive_empty_title()} desc={m.archive_empty_desc()} />
+        ) : filtered.length === 0 ? (
+          <EmptyState title={m.archive_no_match()} />
+        ) : (
+          <ArchiveTable
+            entries={filtered}
+            selected={selected ?? null}
+            onSelect={onSelect}
+            sort={sort}
+            onSort={handleSort}
           />
-        }
-        list={
-          <ListSidebar
-            placeholder={m.archive_search_placeholder()}
-            footer={m.common_item_count({ count: entries.length })}
-          >
-            {loading ? (
-              <EmptyState title={m.common_loading()} />
-            ) : error ? (
-              <EmptyState title={m.archive_load_error()} />
-            ) : entries.length === 0 ? (
-              <EmptyState title={m.archive_empty_title()} desc={m.archive_empty_desc()} />
-            ) : (
-              entries.map((a) => (
-                <ListItem
-                  key={a.id}
-                  selected={selected === a.id}
-                  onClick={() => onSelect(a.id)}
-                  title={
-                    <>
-                      <strong>{a.name}</strong>
-                      <Pill variant="ghost">{a.entityType}</Pill>
-                    </>
-                  }
-                  meta={m.archive_item_archived_on({ date: a.archivedAt })}
-                />
-              ))
-            )}
-          </ListSidebar>
-        }
-        detail={<ArchiveDetail item={item} />}
-      />
+        )}
+      </ListPageLayout>
 
       {item && (
         <Modal
@@ -151,6 +206,6 @@ export function ArchivePage() {
           />
         </Modal>
       )}
-    </PageShell>
+    </>
   );
 }

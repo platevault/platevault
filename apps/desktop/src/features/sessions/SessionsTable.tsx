@@ -118,10 +118,10 @@ function compareSessions(a: InventorySession, b: InventorySession, sort: Session
 const COLUMNS: Array<{ key: string; label: () => string; sort?: SessionSortCol; className?: string }> = [
   { key: 'target', label: () => m.projects_create_target_label(), sort: 'target' },
   { key: 'filter', label: () => m.common_filter(), sort: 'filter' },
-  { key: 'frames', label: () => m.projects_wizard_col_frames(), sort: 'frames', className: 'alm-sessions-cell--num' },
-  { key: 'integration', label: () => m.projects_wizard_col_integration(), sort: 'exposure', className: 'alm-sessions-cell--mono' },
-  { key: 'night', label: () => m.sessions_col_night(), sort: 'night', className: 'alm-sessions-cell--mono' },
-  { key: 'camera', label: () => m.settings_calmatch_camera(), sort: 'camera', className: 'alm-sessions-cell--muted' },
+  { key: 'frames', label: () => m.projects_wizard_col_frames(), sort: 'frames', className: 'alm-cell--num' },
+  { key: 'integration', label: () => m.projects_wizard_col_integration(), sort: 'exposure', className: 'alm-cell--mono' },
+  { key: 'night', label: () => m.sessions_col_night(), sort: 'night', className: 'alm-cell--mono' },
+  { key: 'camera', label: () => m.settings_calmatch_camera(), sort: 'camera', className: 'alm-cell--muted' },
   { key: 'projects', label: () => m.common_projects() },
 ];
 
@@ -272,7 +272,7 @@ export function SessionsTable({
                 ))}
               </span>
             ) : (
-              <span className="alm-sessions-cell--muted">—</span>
+              <span className="alm-cell--muted">—</span>
             ),
         };
       }),
