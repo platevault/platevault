@@ -31,3 +31,5 @@ ot = "ot"
 mis = "mis"
 # accepted spelling in a test description
 unparseable = "unparseable"
+# UI abbreviation for "designation" (targets alias kind label)
+desig = "desig"

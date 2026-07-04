@@ -339,15 +339,18 @@ frame appears in the flame chart.
       import gating (so the module file is never parsed) requires a Vite
       `define` constant (see T036 TODO); that level of tree-shaking is
       deferred._
-- [ ] T032 [US4] Add the hidden settings page that toggles `devMode`
+- [x] T032 [US4] Add the hidden settings page that toggles `devMode`
       (reachable by typing the full URL only) and document the URL in
       `docs/research/`. This page is rendered ONLY when the `dev-tools`
       Cargo feature is compiled in (gated at the component level via a
       compile-time constant injected by the build). (A-021-2, R-DevFeature)
-      _Deferred: `devMode` is already toggleable via Settings › Advanced
-      (spec 018 scope). A dedicated hidden URL page adds discoverability
-      but is not required for the core diagnostics surface to function.
-      Follow-up iteration._
+      _Evidence: `apps/desktop/src/dev/DevSettingsPage.tsx` (+ unit tests
+      in `DevSettingsPage.test.tsx`), `devSettingsRoute` registered in
+      `apps/desktop/src/app/router.tsx` behind the same `DEV_TOOLS_ENABLED`
+      compile-time constant as `devContractsRoute` (mirrors the `dev-tools`
+      Cargo feature); deliberately absent from `DEV_PAGES` and Settings
+      navigation. URL documented in `docs/research/index.md`
+      ("Developer-mode entry point (spec 021)")._
 - [ ] T033 [US4] Quickstart pass: enable `devMode`, open Cmd+K, navigate
       to `/dev/contracts`, trigger five calls of mixed outcomes, view a
       schema, replay a read-only call, then disable `devMode` and
@@ -371,10 +374,12 @@ frame appears in the flame chart.
       _Evidence: `dev_export` Tauri command in `commands/dev.rs`;
       `packages/contracts/dev/dev.export.json` mirrored; `devExport` in
       `api/commands.ts`; export button wired in `ContractsPage.tsx`._
-- [ ] T035 Update `docs/research/` index to point at this feature's
+- [x] T035 Update `docs/research/` index to point at this feature's
       `research.md`.
-      _Deferred: docs/research/ index update is a documentation task;
-      leaving for main thread post-implementation._
+      _Evidence: `docs/research/index.md` links
+      `specs/021-developer-contract-diagnostics/research.md` under
+      "Feature research decisions" and documents the hidden `/dev/settings`
+      entry point._
 
 ## Phase 8: Compile-Time Feature Flag Tasks (R-DevFeature)
 
