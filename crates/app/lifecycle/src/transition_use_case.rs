@@ -88,14 +88,22 @@ where
             "edge ({}, {} -> {}) not in canonical transition table",
             command.entity_type, command.from_state, command.to_state
         );
+        let params = serde_json::json!({
+            "entityType": command.entity_type.as_str(),
+            "fromState": command.from_state,
+            "toState": command.to_state,
+        });
         return record_refused(
             repo,
             &command,
             request_id,
-            TransitionErrorCode::TransitionRefused,
-            "transition.refused",
-            message,
-            None,
+            Refusal {
+                code: TransitionErrorCode::TransitionRefused,
+                code_str: "transition.refused",
+                message,
+                details: None,
+                detail_params: Some(params),
+            },
         )
         .await;
     }
@@ -109,10 +117,14 @@ where
             repo,
             &command,
             request_id,
-            TransitionErrorCode::ActorNotAuthorised,
-            "actor.not_authorised",
-            "actor=system is only permitted on edges entering or leaving `blocked`, or on the setup_incomplete → ready invariant transition".to_owned(),
-            None,
+            Refusal {
+                code: TransitionErrorCode::ActorNotAuthorised,
+                code_str: "actor.not_authorised",
+                message: "actor=system is only permitted on edges entering or leaving `blocked`, or on the setup_incomplete → ready invariant transition".to_owned(),
+                details: None,
+                // Static template — no params, but the code alone is unambiguous.
+                detail_params: Some(serde_json::json!({})),
+            },
         )
         .await;
     }
@@ -133,14 +145,22 @@ where
             "edge ({}, {} -> {}) requires an approved FilesystemPlan",
             command.entity_type, command.from_state, command.to_state
         );
+        let params = serde_json::json!({
+            "entityType": command.entity_type.as_str(),
+            "fromState": command.from_state,
+            "toState": command.to_state,
+        });
         return record_refused(
             repo,
             &command,
             request_id,
-            TransitionErrorCode::PlanRequired,
-            "plan.required",
-            message,
-            None,
+            Refusal {
+                code: TransitionErrorCode::PlanRequired,
+                code_str: "plan.required",
+                message,
+                details: None,
+                detail_params: Some(params),
+            },
         )
         .await;
     }
@@ -190,14 +210,18 @@ where
         // operation. The entity_id in the audit row points at a missing
         // entity, which is fine (audit_log_entry has no FK).
         Err(LifecycleError::NotFound { entity_id }) => {
+            let params = serde_json::json!({ "entityId": entity_id.to_string() });
             record_refused(
                 repo,
                 &command_for_refusal,
                 request_id,
-                TransitionErrorCode::EntityNotFound,
-                "entity.not_found",
-                format!("entity {entity_id} not found"),
-                None,
+                Refusal {
+                    code: TransitionErrorCode::EntityNotFound,
+                    code_str: "entity.not_found",
+                    message: format!("entity {entity_id} not found"),
+                    details: None,
+                    detail_params: Some(params),
+                },
             )
             .await
         }
@@ -206,10 +230,15 @@ where
                 repo,
                 &command_for_refusal,
                 request_id,
-                TransitionErrorCode::TransitionRefused,
-                "transition.refused",
-                reason,
-                None,
+                Refusal {
+                    code: TransitionErrorCode::TransitionRefused,
+                    code_str: "transition.refused",
+                    message: reason,
+                    details: None,
+                    // Free-form reason — no template params; frontend falls
+                    // back to the stored English message.
+                    detail_params: None,
+                },
             )
             .await
         }
@@ -252,10 +281,15 @@ where
                     repo,
                     command,
                     request_id,
-                    TransitionErrorCode::TransitionRefused,
-                    "transition.refused",
-                    err.to_string(),
-                    None,
+                    Refusal {
+                        code: TransitionErrorCode::TransitionRefused,
+                        code_str: "transition.refused",
+                        message: err.to_string(),
+                        details: None,
+                        // Wrapped persistence error — heterogeneous message,
+                        // no template params (English fallback).
+                        detail_params: None,
+                    },
                 )
                 .await,
             );
@@ -277,18 +311,36 @@ where
         command.to_state,
         blocking.len()
     );
+    let params = serde_json::json!({ "count": blocking.len().to_string() });
     Some(
         record_refused(
             repo,
             command,
             request_id,
-            TransitionErrorCode::ProvenanceUnreviewed,
-            "provenance.unreviewed",
-            message,
-            Some(serde_json::json!({ "blockingFields": blocking })),
+            Refusal {
+                code: TransitionErrorCode::ProvenanceUnreviewed,
+                code_str: "provenance.unreviewed",
+                message,
+                details: Some(serde_json::json!({ "blockingFields": blocking })),
+                detail_params: Some(params),
+            },
         )
         .await,
     )
+}
+
+/// Everything [`record_refused`] needs to persist and surface one refusal.
+///
+/// - `details` goes into the response envelope only (`TransitionError.details`,
+///   e.g. `blockingFields`).
+/// - `detail_params` is persisted as `payload.refusal.params` (see
+///   [`LifecycleRepository::record_refused_transition`]).
+struct Refusal {
+    code: TransitionErrorCode,
+    code_str: &'static str,
+    message: String,
+    details: Option<serde_json::Value>,
+    detail_params: Option<serde_json::Value>,
 }
 
 /// Helper for all refusal paths in [`apply_transition`]. Writes a `refused`
@@ -300,18 +352,24 @@ where
 /// Audit-write failures are surfaced via `tracing::error!` so an external
 /// watchdog can alert on gap rates — silently dropping them would defeat the
 /// "reviewable mutation" principle (Constitution §II).
+///
+/// `detail_params` (D23 upgrade): structured display parameters persisted as
+/// `payload.refusal.params`. Pass `Some(...)` ONLY when the `(code_str,
+/// params)` pair unambiguously identifies the message template — the Audit
+/// Log frontend uses their presence to select a localized catalog message
+/// instead of the stored English `message`. Heterogeneous refusal messages
+/// (e.g. wrapped persistence errors under `transition.refused`) MUST pass
+/// `None` so they keep rendering the stored English fallback.
 async fn record_refused<R>(
     repo: &R,
     command: &TransitionCommand,
     request_id: Uuid,
-    code: TransitionErrorCode,
-    code_str: &'static str,
-    message: String,
-    details: Option<serde_json::Value>,
+    refusal: Refusal,
 ) -> TransitionResponse
 where
     R: LifecycleRepository + Sync,
 {
+    let Refusal { code, code_str, message, details, detail_params } = refusal;
     if let Err(err) = repo
         .record_refused_transition(
             RepoTransitionRequest {
@@ -325,6 +383,7 @@ where
             },
             code_str,
             &message,
+            detail_params,
         )
         .await
     {
