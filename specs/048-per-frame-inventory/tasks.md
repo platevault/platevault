@@ -142,6 +142,7 @@ description: "Task list for 048-per-frame-inventory"
 - [ ] T041 `just lint` / per-crate `cargo test` / `just typecheck` green; regenerate + commit bindings.
 - [ ] T042 `speckit-verify` against FR-001..FR-025 and SC-001..SC-006; `speckit-verify-tasks` to catch phantom completions.
 - [ ] T043 `verify-on-windows` scenario for Scenarios 1/2/4/5 on the real Tauri app; add the matching tauri-driver Layer-2 journey + coverage-matrix update.
+- [ ] T043a [US2] Performance verification for SC-005: reconcile a synthetic ≥10,000-frame root and assert it completes without blocking the UI thread and reports progress throughout (integration/bench under `tests/`).
 
 ---
 
