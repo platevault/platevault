@@ -603,3 +603,48 @@ describe('TargetDetailV2', () => {
     );
   });
 });
+
+// ── spec 044 Track B: US6/T015 no-site prompt, T018 tests ──────────────────────
+
+describe('TargetDetailV2 — no-site prompt (US6/T015/T018)', () => {
+  beforeEach(async () => {
+    const { __setObservingStateForTest } = await import('./observing-sites/site-store');
+    __setObservingStateForTest({});
+  });
+
+  it('31. shows a no-site prompt in the Tonight column when there is no active site', async () => {
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => {
+      const els = screen.getAllByText(/Add an observing site.*see tonight's real altitude/i);
+      expect(els.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('32. hides the no-site prompt and shows real tonight stats once a site is active', async () => {
+    const { __setObservingStateForTest } = await import('./observing-sites/site-store');
+    __setObservingStateForTest({
+      sites: [
+        {
+          id: 'site-1',
+          name: 'Test Site',
+          latitudeDeg: 52.37,
+          longitudeDeg: 4.9,
+          elevationM: 0,
+          timezone: 'Europe/Amsterdam',
+          twilight: 'astronomical',
+          minHorizonAltDeg: 0,
+        },
+      ],
+      activeSiteId: 'site-1',
+      defaultSiteId: 'site-1',
+    });
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/Add an observing site.*see tonight's real altitude/i),
+      ).not.toBeInTheDocument();
+      // Real max-alt stat renders once a site is active.
+      expect(screen.getByText(/^Max alt/)).toBeInTheDocument();
+    });
+  });
+});
