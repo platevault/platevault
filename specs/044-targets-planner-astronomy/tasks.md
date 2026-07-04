@@ -21,12 +21,18 @@ user is grilled on the pre-implementation decisions (orchestrator handover §8).
 
 ## Phase 1: Setup (shared)
 
-- [ ] T001 [P] Add `astronomy-engine@2.1.19` to `apps/desktop/package.json` (mcp-package-version check first;
+- [X] T001 [P] Add `astronomy-engine@2.1.19` to `apps/desktop/package.json` (mcp-package-version check first;
       spec 047 imports the SAME dep — add ONCE, coordinate so it isn't added twice).
-- [ ] T002 [P] Add `@visx/scale`, `@visx/shape`, `@visx/group`, `@visx/threshold` (`^4.0.0`) to
+      DONE: added `astronomy-engine@2.1.19` (verified latest via mcp-package-version). 047 has NOT merged
+      into the base at impl time, so the dep is NOT yet present — added here. COORDINATION: whoever merges
+      047+044 second must dedupe this single line (identical pin).
+- [X] T002 [P] Add `@visx/scale`, `@visx/shape`, `@visx/group`, `@visx/threshold` (`^4.0.0`) to
       `apps/desktop/package.json`. Do NOT add `@visx/gradient`, `@visx/axis`, or `@visx/xychart`.
-- [ ] T003 [P] Bundle a static IANA-timezone list asset for the offline site picker (research R7);
+      DONE: all four at `^4.0.0` (verified latest); lockfile updated.
+- [X] T003 [P] Bundle a static IANA-timezone list asset for the offline site picker (research R7);
       place under `apps/desktop/src/features/targets/observing-sites/`.
+      DONE: `observing-sites/iana-timezones.ts` — offline list from `Intl.supportedValuesOf('timeZone')`
+      (stays current with the OS tz db, no stale asset) + curated fallback so the picker is never empty.
 
 ---
 
