@@ -29,6 +29,11 @@ pub struct UpdateProcessingTool {
     pub id: String,
     pub path: Option<String>,
     pub enabled: bool,
+    /// Custom artifact-watch extension allow-list (spec 012 T007b, R-ExtAllow).
+    /// `None` leaves the existing setting (or default) unchanged. Entries MUST
+    /// start with `.` (e.g. `.xisf`).
+    #[serde(default)]
+    pub watch_extensions: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -61,6 +66,10 @@ pub struct ToolProfileSummary {
     pub auto_detected: bool,
     /// Current executable path (from Settings). `None` when not configured.
     pub executable_path: Option<String>,
+    /// Effective artifact-watch extension allow-list (spec 012 T007b): the
+    /// per-tool Settings override when configured, else
+    /// `workflow_artifacts::DEFAULT_WATCH_EXTENSIONS`.
+    pub watch_extensions: Vec<String>,
 }
 
 // ── tool.launch ───────────────────────────────────────────────────────────────
@@ -230,5 +239,14 @@ pub struct ArtifactClassifyResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ArtifactMarkResolvedRequest {
     pub artifact_id: String,
+    pub project_id: String,
+}
+
+/// Request DTO for `artifact.watcher.attach` / `artifact.watcher.detach`
+/// (spec 012 T008): wires the filesystem watcher to the project drawer
+/// open/close lifecycle.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactWatcherRequest {
     pub project_id: String,
 }

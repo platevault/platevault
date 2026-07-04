@@ -67,6 +67,28 @@ fn key_auto_detected(tool_id: &str) -> String {
     format!("tools.{tool_id}.auto_detected")
 }
 
+/// Settings key for `tools.<tool_id>.watch_extensions` (spec 012 T007b).
+fn key_watch_extensions(tool_id: &str) -> String {
+    format!("tools.{tool_id}.watch_extensions")
+}
+
+/// Read the configured artifact-watch extension allow-list for a tool
+/// (spec 012 T007b / R-ExtAllow).
+///
+/// Falls back to `workflow_artifacts::DEFAULT_WATCH_EXTENSIONS` when unset,
+/// empty, or malformed.
+pub async fn read_watch_extensions(pool: &SqlitePool, tool_id: &str) -> Vec<String> {
+    let raw = settings_repo::get_raw(pool, &key_watch_extensions(tool_id)).await.ok().flatten();
+    let configured: Option<Vec<String>> = raw.and_then(|v| {
+        let arr = v.as_array()?;
+        let exts: Vec<String> = arr.iter().filter_map(|e| e.as_str().map(str::to_owned)).collect();
+        (!exts.is_empty()).then_some(exts)
+    });
+    configured.unwrap_or_else(|| {
+        workflow_artifacts::DEFAULT_WATCH_EXTENSIONS.iter().map(|s| (*s).to_owned()).collect()
+    })
+}
+
 /// Read a nullable string setting value.
 async fn read_string_setting(pool: &SqlitePool, key: &str) -> Option<String> {
     settings_repo::get_raw(pool, key)
@@ -373,6 +395,7 @@ pub async fn list_profiles(pool: &SqlitePool) -> Result<ToolProfileListResponse,
             && executable_path.as_deref().is_some_and(|p| std::path::Path::new(p).exists());
         let enabled = read_bool_setting(pool, &key_enabled(profile.id), true).await;
         let auto_detected = read_bool_setting(pool, &key_auto_detected(profile.id), false).await;
+        let watch_extensions = read_watch_extensions(pool, profile.id).await;
 
         tools.push(ToolProfileSummary {
             id: profile.id.to_owned(),
@@ -383,6 +406,7 @@ pub async fn list_profiles(pool: &SqlitePool) -> Result<ToolProfileListResponse,
             enabled,
             auto_detected,
             executable_path,
+            watch_extensions,
         });
     }
     Ok(ToolProfileListResponse { tools })
@@ -424,6 +448,24 @@ pub async fn update_tool(
         .await
         .map_err(|e| format!("{e}"))?;
 
+    // spec 012 T007b: persist a custom watch-extensions allow-list, when supplied.
+    if let Some(ref extensions) = req.watch_extensions {
+        for ext in extensions {
+            if !ext.starts_with('.') {
+                return Err(format!(
+                    "watch_extensions entries must start with '.'; got '{ext}' for tool '{}'",
+                    req.id
+                ));
+            }
+        }
+        let value = serde_json::Value::Array(
+            extensions.iter().cloned().map(serde_json::Value::String).collect(),
+        );
+        settings_repo::set_raw(pool, &key_watch_extensions(&req.id), &value)
+            .await
+            .map_err(|e| format!("{e}"))?;
+    }
+
     // Return updated summary
     let executable_path = read_string_setting(pool, &key_executable_path(&req.id)).await;
     let configured = executable_path.as_deref().is_some_and(|p| !p.trim().is_empty());
@@ -432,6 +474,7 @@ pub async fn update_tool(
     let auto_detected = read_bool_setting(pool, &key_auto_detected(&req.id), false).await;
     let name = seed::find(&req.id).map_or_else(|| req.id.clone(), |p| p.name.to_owned());
     let supports_open_folder = seed::find(&req.id).is_some_and(|p| p.supports_open_folder);
+    let watch_extensions = read_watch_extensions(pool, &req.id).await;
 
     Ok(ToolProfileSummary {
         id: req.id,
@@ -442,6 +485,7 @@ pub async fn update_tool(
         enabled: req.enabled,
         auto_detected,
         executable_path,
+        watch_extensions,
     })
 }
 
@@ -713,6 +757,7 @@ mod tests {
                 id: "pixinsight".to_owned(),
                 path: Some(exe.to_owned()),
                 enabled: true,
+                watch_extensions: None,
             },
         )
         .await

@@ -106,6 +106,7 @@ async fn list_profiles_round_trips_through_real_db() {
             id: first_id.clone(),
             path: Some(fake_exe_str.clone()),
             enabled: true,
+            watch_extensions: None,
         },
     )
     .await
@@ -139,7 +140,12 @@ async fn update_tool_persists_disabled_state() {
     // Disable it (no path change).
     let summary = tool_launch::update_tool(
         pool,
-        UpdateProcessingTool { id: tool_id.clone(), path: None, enabled: false },
+        UpdateProcessingTool {
+            id: tool_id.clone(),
+            path: None,
+            enabled: false,
+            watch_extensions: None,
+        },
     )
     .await
     .expect("update_tool disable");
@@ -244,6 +250,7 @@ async fn launch_wiring_with_fake_spawner_persists_row() {
             id: "pixinsight".to_owned(),
             path: Some(fake_exe_str.clone()),
             enabled: true,
+            watch_extensions: None,
         },
     )
     .await

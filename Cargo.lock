@@ -92,6 +92,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workflow_artifacts",
  "workflow_profiles",
 ]
 
@@ -1294,6 +1295,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workflow_artifacts",
  "workflow_profiles",
 ]
 
