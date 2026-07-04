@@ -1853,7 +1853,24 @@ export type AuditEntry_Deserialize = {
 	toState: string | null,
 	actor: AuditActor,
 	outcome: AuditOutcome,
+	/**
+	 *  Backend-composed English detail. Durable fallback rendering for rows
+	 *  without `detail_code` / usable `detail_params` (D23 upgrade).
+	 */
 	detail: string,
+	/**
+	 *  Stable detail code (e.g. `plan.required`, `provenance.unreviewed`,
+	 *  `target.resolved`) identifying a frontend catalog message template.
+	 *  Derived at read time from the durable `audit_log_entry.payload` JSON;
+	 *  absent for rows written before the D23 upgrade or whose detail has no
+	 *  template.
+	 */
+	detailCode: string | null,
+	/**
+	 *  Structured display parameters for `detail_code` (flat string map,
+	 *  e.g. `{ "entityType": "project", "fromState": "ready", ... }`).
+	 */
+	detailParams: { [key in string]: string } | null,
 };
 
 /**  A single audit log entry. */
@@ -1867,7 +1884,24 @@ export type AuditEntry_Serialize = {
 	toState?: string | null,
 	actor: AuditActor,
 	outcome: AuditOutcome,
+	/**
+	 *  Backend-composed English detail. Durable fallback rendering for rows
+	 *  without `detail_code` / usable `detail_params` (D23 upgrade).
+	 */
 	detail: string,
+	/**
+	 *  Stable detail code (e.g. `plan.required`, `provenance.unreviewed`,
+	 *  `target.resolved`) identifying a frontend catalog message template.
+	 *  Derived at read time from the durable `audit_log_entry.payload` JSON;
+	 *  absent for rows written before the D23 upgrade or whose detail has no
+	 *  template.
+	 */
+	detailCode?: string | null,
+	/**
+	 *  Structured display parameters for `detail_code` (flat string map,
+	 *  e.g. `{ "entityType": "project", "fromState": "ready", ... }`).
+	 */
+	detailParams?: { [key in string]: string } | null,
 };
 
 /**
