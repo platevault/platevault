@@ -12,8 +12,14 @@ repos:
       - id: check-toml
       - id: check-yaml
       - id: detect-private-key
+      # Generated outputs (specta bindings, seed catalog) must keep their
+      # generator-emitted bytes — CI's `just check-generated` drift gate
+      # regenerates and `git diff --exit-code`s them, so whitespace "fixes"
+      # here would fail CI.
       - id: end-of-file-fixer
+        exclude: '^(apps/desktop/src/bindings/|assets/seed/)'
       - id: trailing-whitespace
+        exclude: '^(apps/desktop/src/bindings/|assets/seed/)'
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.24.3

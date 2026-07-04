@@ -266,8 +266,12 @@ async fn build_folder_plan(
 /// links any `initial_sources`, infers channels, checks the auto-ready trigger,
 /// and emits a `project.created` audit event.
 ///
-/// Constitution II: folder structure creation is deferred to a FilesystemPlan;
-/// `plan_id` is currently `None`. The caller drives folder creation via spec 025.
+/// Constitution II: folder structure creation goes through a persisted,
+/// auditable FilesystemPlan returned as `plan_id`. Application is driven by
+/// the caller: the app_core `project_create` orchestration auto-applies the
+/// plan when every action is directory creation (user decision 2026-07-04,
+/// supersedes handover D16) and falls back to the manual review flow
+/// otherwise.
 ///
 /// # Errors
 ///
@@ -450,6 +454,10 @@ pub async fn create(
         channels: channel_dtos,
         audit_id,
         created_at: now,
+        // Set by the app_core `project_create` orchestration when the
+        // scaffolding plan qualifies for mkdir-only auto-apply (user decision
+        // 2026-07-04). This module only persists the reviewable plan.
+        scaffold_applied: None,
     })
 }
 

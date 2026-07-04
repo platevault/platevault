@@ -1075,6 +1075,8 @@
   "projects_toast_save_notes_failed": "Failed to save notes: {error}",
   "projects_notes_byte_limit_exceeded": "Note exceeds the {max}-byte limit.",
   "projects_wizard_toast_created": "Project \"{name}\" created.",
+  "projects_wizard_toast_created_folders": "Project \"{name}\" created — project folders created on disk.",
+  "projects_wizard_toast_folders_failed": "Project \"{name}\" created, but folder creation failed. The folder plan remains available for review.",
   "projects_source_views_removal_toast": "Removal plan created. Review and apply plan to complete removal.",
   "projects_source_views_removal_failed": "Could not create removal plan: {code}",
   "projects_source_views_regen_unresolved": " ({count} unresolved references — review plan before applying)",
@@ -1974,5 +1976,13 @@
   "settings_cleanup_action_archive": "Archive",
   "settings_cleanup_action_delete": "Delete",
   "targets_legacy_density_dense": "Dense",
-  "targets_legacy_density_rich": "Rich"
+  "targets_legacy_density_rich": "Rich",
+  "dev_settings_title": "Developer Mode",
+  "dev_settings_intro": "This page is intentionally unreachable from Settings or the command palette. It exists so a developer can turn on the diagnostics surface before anything else becomes visible.",
+  "dev_settings_section_title": "Developer Surface",
+  "dev_settings_toggle_label": "Developer mode",
+  "dev_settings_toggle_info": "When on, the recording proxy captures contract calls and Developer / Contracts becomes reachable from the command palette (Cmd+K / Ctrl+K).",
+  "dev_settings_restart_hint": "Turning developer mode off here stops new contract calls from being recorded immediately, but the recording proxy itself is only fully removed after the app restarts.",
+  "dev_settings_saving": "Saving…",
+  "dev_settings_error": "Could not update developer mode: {message}"
 }

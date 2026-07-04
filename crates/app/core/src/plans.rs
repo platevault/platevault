@@ -374,6 +374,74 @@ pub async fn approve_plan(
     })
 }
 
+// ── mkdir-only auto-apply (user decision 2026-07-04) ─────────────────────────
+
+/// Actor recorded on the `plan.approved` audit event when a plan is
+/// auto-approved by the mkdir-only auto-apply path.
+pub const AUTO_APPLY_MKDIR_ACTOR: &str = "auto.mkdir_only";
+
+/// Returns `true` when a plan's actions qualify for mkdir-only auto-apply.
+///
+/// Constitution II nuance (user decision 2026-07-04, supersedes handover D16):
+/// the reviewable plan record and the full per-action audit trail are STILL
+/// written — only the approval *click* is skipped, and only when the plan
+/// creates app-owned structure and touches no user file:
+///
+/// - every action is `mkdir` (directory creation) or `write_manifest` (the
+///   app-owned project-marker record item that accompanies the scaffolding
+///   mkdirs; the executor performs no user-file mutation for it), and
+/// - at least one action is `mkdir`.
+///
+/// Any user-file action — `move`, `copy`, `link`, `delete`, `archive`,
+/// `trash`, `catalogue`, or anything unrecognised — disables auto-apply and
+/// the plan goes through the normal review flow unchanged.
+pub fn plan_qualifies_for_mkdir_auto_apply<'a, I>(actions: I) -> bool
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let mut saw_mkdir = false;
+    for action in actions {
+        match action {
+            "mkdir" => saw_mkdir = true,
+            "write_manifest" => {}
+            _ => return false,
+        }
+    }
+    saw_mkdir
+}
+
+/// Auto-approve and start applying a freshly persisted plan when (and only
+/// when) it qualifies under [`plan_qualifies_for_mkdir_auto_apply`].
+///
+/// Returns `Ok(None)` when the plan does not qualify — the normal review flow
+/// is untouched. When it qualifies, this drives the SAME [`approve_plan`] and
+/// [`crate::plan_apply::apply_plan`] use-cases as the manual path (mirroring
+/// the Inbox pipeline in `crate::inbox_plan::apply_inbox_plan`), so the plan
+/// row, the `plan.approved` audit event (actor [`AUTO_APPLY_MKDIR_ACTOR`]),
+/// the per-item apply audit records, and the failure handling are identical
+/// to a user-clicked apply. A failed auto-apply surfaces exactly like a
+/// failed manual apply and leaves the plan reviewable.
+///
+/// # Errors
+///
+/// Propagates `ContractError` from the approve or apply use-cases; the plan
+/// remains in its current (reviewable) state when this errors.
+pub async fn auto_apply_mkdir_only_plan(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    plan_id: &str,
+) -> Result<Option<contracts_core::plan_apply::PlanApplyResponse>, ContractError> {
+    let items = repo::list_plan_items(pool, plan_id).await.map_err(db_err)?;
+    if !plan_qualifies_for_mkdir_auto_apply(items.iter().map(|i| i.action.as_str())) {
+        return Ok(None);
+    }
+
+    let approve = approve_plan(pool, bus, plan_id, AUTO_APPLY_MKDIR_ACTOR).await?;
+    let resp =
+        crate::plan_apply::apply_plan(pool, bus, plan_id, &approve.approval_token, None).await?;
+    Ok(Some(resp))
+}
+
 // ── discard_plan ──────────────────────────────────────────────────────────────
 
 /// Discard (soft-delete) a plan (US4, T030).
@@ -968,5 +1036,159 @@ mod tests {
         let err =
             permanently_delete_archive(db.pool(), &bus, "p1", "DELETE", true).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PlanBlockedByProtection);
+    }
+
+    // ── mkdir-only auto-apply predicate (user decision 2026-07-04) ────────────
+
+    #[test]
+    fn predicate_accepts_mkdir_only_plan() {
+        assert!(plan_qualifies_for_mkdir_auto_apply(["mkdir", "mkdir", "mkdir"]));
+    }
+
+    #[test]
+    fn predicate_accepts_scaffolding_shape_mkdir_plus_write_manifest() {
+        // The project scaffolding plan: N mkdir folders + 1 app-owned marker.
+        assert!(plan_qualifies_for_mkdir_auto_apply(["mkdir", "mkdir", "write_manifest"]));
+    }
+
+    #[test]
+    fn predicate_rejects_single_user_file_action_among_mkdirs() {
+        for user_action in ["move", "copy", "link", "delete", "archive", "trash", "catalogue"] {
+            assert!(
+                !plan_qualifies_for_mkdir_auto_apply(["mkdir", user_action, "mkdir"]),
+                "one '{user_action}' action must disable auto-apply"
+            );
+        }
+    }
+
+    #[test]
+    fn predicate_rejects_unknown_actions() {
+        assert!(!plan_qualifies_for_mkdir_auto_apply(["mkdir", "junction"]));
+        assert!(!plan_qualifies_for_mkdir_auto_apply(["frobnicate"]));
+    }
+
+    #[test]
+    fn predicate_rejects_empty_plan() {
+        assert!(!plan_qualifies_for_mkdir_auto_apply([]));
+    }
+
+    #[test]
+    fn predicate_rejects_write_manifest_only_plan() {
+        // No directory creation → nothing to auto-apply; keep review flow.
+        assert!(!plan_qualifies_for_mkdir_auto_apply(["write_manifest"]));
+    }
+
+    // ── mkdir-only auto-apply use-case ─────────────────────────────────────────
+
+    /// Insert a `ready_for_review` plan with the given item actions and
+    /// per-item destination paths.
+    async fn insert_review_plan(db: &Database, id: &str, actions: &[(&str, &str)]) {
+        insert_draft(db, id).await;
+        for (idx, (action, dest)) in actions.iter().enumerate() {
+            repo::insert_plan_item(
+                db.pool(),
+                &repo::InsertPlanItem {
+                    id: &format!("{id}-item-{idx}"),
+                    plan_id: id,
+                    item_index: i64::try_from(idx).unwrap(),
+                    name: "entry",
+                    action,
+                    from_root_id: None,
+                    from_relative_path: "",
+                    to_root_id: None,
+                    to_relative_path: dest,
+                    reason: "test",
+                    protection: "normal",
+                    linked_entity: None,
+                    provenance_json: None,
+                    archive_path: None,
+                    source_id: None,
+                    category: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+        repo::update_plan_state(db.pool(), id, "ready_for_review").await.unwrap();
+    }
+
+    /// Poll until the plan reaches a terminal state (bounded).
+    async fn wait_terminal(db: &Database, plan_id: &str) -> String {
+        for _ in 0..200 {
+            let row = repo::get_plan(db.pool(), plan_id, false).await.unwrap();
+            match row.state.as_str() {
+                "applied" | "partially_applied" | "failed" | "cancelled" | "paused" | "stale" => {
+                    return row.state;
+                }
+                _ => tokio::time::sleep(std::time::Duration::from_millis(10)).await,
+            }
+        }
+        panic!("plan {plan_id} never reached a terminal state");
+    }
+
+    /// A qualifying mkdir-only plan is approved + applied and the directories
+    /// really exist on disk afterwards (same executor as manual apply).
+    #[tokio::test]
+    async fn auto_apply_creates_directories_for_mkdir_only_plan() {
+        let (db, bus) = setup().await;
+        let root = tempfile::tempdir().unwrap();
+        let base = root.path().to_str().unwrap().to_owned();
+
+        insert_review_plan(
+            &db,
+            "p-auto",
+            &[
+                ("mkdir", &format!("{base}/proj/lights")),
+                ("mkdir", &format!("{base}/proj/darks")),
+                ("write_manifest", &format!("{base}/proj/.marker.json")),
+            ],
+        )
+        .await;
+
+        let resp = auto_apply_mkdir_only_plan(db.pool(), &bus, "p-auto").await.unwrap();
+        assert!(resp.is_some(), "qualifying plan must be auto-applied");
+
+        let terminal = wait_terminal(&db, "p-auto").await;
+        assert_eq!(terminal, "applied");
+        assert!(std::path::Path::new(&format!("{base}/proj/lights")).is_dir());
+        assert!(std::path::Path::new(&format!("{base}/proj/darks")).is_dir());
+    }
+
+    /// A plan containing a user-file action is left untouched in
+    /// `ready_for_review` (normal review flow).
+    #[tokio::test]
+    async fn auto_apply_skips_plan_with_user_file_action() {
+        let (db, bus) = setup().await;
+        insert_review_plan(&db, "p-mixed", &[("mkdir", "/tmp/x"), ("move", "/tmp/y")]).await;
+
+        let resp = auto_apply_mkdir_only_plan(db.pool(), &bus, "p-mixed").await.unwrap();
+        assert!(resp.is_none(), "non-qualifying plan must not be auto-applied");
+
+        let row = repo::get_plan(db.pool(), "p-mixed", false).await.unwrap();
+        assert_eq!(row.state, "ready_for_review", "plan must remain reviewable");
+        assert!(row.approval_token.is_none(), "no approval may be recorded");
+    }
+
+    /// A failed auto-apply surfaces like a failed manual apply: the plan ends
+    /// in a terminal failure state and remains visible/reviewable.
+    #[tokio::test]
+    async fn auto_apply_failure_leaves_plan_reviewable() {
+        let (db, bus) = setup().await;
+        let root = tempfile::tempdir().unwrap();
+        let base = root.path().to_str().unwrap().to_owned();
+        // Destination exists as a FILE → mkdir fails with
+        // conflict.destination_exists (never overwrite silently).
+        let blocker = format!("{base}/blocked");
+        std::fs::write(&blocker, b"file in the way").unwrap();
+
+        insert_review_plan(&db, "p-fail", &[("mkdir", &blocker)]).await;
+
+        let resp = auto_apply_mkdir_only_plan(db.pool(), &bus, "p-fail").await.unwrap();
+        assert!(resp.is_some(), "the apply run must start");
+
+        let terminal = wait_terminal(&db, "p-fail").await;
+        assert_eq!(terminal, "failed", "failed apply must land in the failed state");
+        // The blocking file was not overwritten.
+        assert_eq!(std::fs::read(&blocker).unwrap(), b"file in the way");
     }
 }

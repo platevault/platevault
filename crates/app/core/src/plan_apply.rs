@@ -337,6 +337,10 @@ fn item_row_to_executor_item(
         "delete" => ExecutorItemAction::Delete,
         // spec 041: catalogue = record-in-place, no filesystem mutation.
         "catalogue" => ExecutorItemAction::Catalogue,
+        // spec 008 scaffolding: create the destination directory for real
+        // (previously fell through to NoOp, so applied mkdir plans never
+        // created anything on disk).
+        "mkdir" => ExecutorItemAction::Mkdir,
         _ => ExecutorItemAction::NoOp,
     };
 

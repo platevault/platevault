@@ -65,7 +65,9 @@ use crate::commands::manifests::{
     manifest_get, manifest_list, manifest_reveal_in_os, note_get, note_update,
 };
 use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
-use crate::commands::patterns::{pattern_preview, pattern_resolve, pattern_validate};
+use crate::commands::patterns::{
+    pattern_path_preview, pattern_preview, pattern_resolve, pattern_validate,
+};
 use crate::commands::plan_apply::{
     plans_apply_real, plans_apply_status, plans_cancel, plans_item_retry, plans_item_skip,
     plans_resume,
@@ -257,6 +259,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         pattern_validate,
         pattern_resolve,
         pattern_preview,
+        pattern_path_preview,
         // source protection (spec 016 US2–US4)
         source_protection_get,
         source_protection_set,
@@ -462,6 +465,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         pattern_validate,
         pattern_resolve,
         pattern_preview,
+        pattern_path_preview,
         // source protection (spec 016 US2–US4)
         source_protection_get,
         source_protection_set,
@@ -727,6 +731,28 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
     // project drawer opens/closes. No watcher runs until a project is attached.
     let artifact_watcher_registry = crate::watcher::new_artifact_watcher_registry();
     app.manage(artifact_watcher_registry);
+    // spec 012 (WP-012-A): one-time, idempotent fix-up for `processing_artifacts`
+    // rows the retired global root watcher (pre-#400) keyed by a library-root id
+    // instead of the owning project's id. Runs once per app start, before any
+    // per-project watcher attaches and records new (correctly-attributed) rows.
+    {
+        let fixup_pool = pool.clone();
+        tokio::spawn(async move {
+            match app_core::artifact::reattribute_root_keyed_artifacts(&fixup_pool).await {
+                Ok((fixed, unmatched)) => {
+                    if fixed > 0 || unmatched > 0 {
+                        tracing::info!(
+                            "artifact re-attribution fix-up: {fixed} row(s) corrected, \
+                             {unmatched} row(s) left flagged (no matching project)"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("artifact re-attribution fix-up failed: {e:?}");
+                }
+            }
+        });
+    }
 
     // spec 018 T020: emit a settings.snapshot at session start, then every 5 minutes.
     // This gives the audit log a durable record of the active configuration even when

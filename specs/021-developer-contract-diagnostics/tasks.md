@@ -204,17 +204,31 @@ correct fields.
       `MAX_PAYLOAD_BYTES=64*1024`, monotonic `state.seq` counter,
       `redactPayload()` with always-sensitive set + per-contract
       sensitiveFields. JSON-length check for truncation._
-- [ ] T021 [US2] Install the wrapped dispatcher at app boot only when
+- [x] T021 [US2] Install the wrapped dispatcher at app boot only when
       `devMode = true`; bypass at module load otherwise. Wire in
       `apps/desktop/src/data/tauriDispatch.ts` (or current dispatcher
       module).
-      _Deferred: The existing `commands.ts` `invoke()` function is a private
-      module-scoped function — wrapping it at boot requires either exposing it
-      or restructuring the API layer. The ring buffer and recorder are fully
-      implemented and tested; wiring at boot dispatch is a follow-up.
-      `ContractsPage` calls `devCallsList` directly (reading from the
-      Rust-side `CallBuffer` state) so the page works without T021. T021
-      would enable auto-capture of all calls._
+      _Evidence (audit 2026-07-04, impl-021-tail): superseded by spec 037's
+      IPC migration (PR #378, `9ab16f46`/`eea705a0` "feat(037): migrate
+      dev-tools area to generated IPC bindings"), which replaced the old
+      `commands.ts` with the generated `bindings/index.ts` + `api/ipc.ts`
+      dispatcher and added the exact boot-wiring this task called for.
+      `apps/desktop/src/dev/bootRecorder.ts` `installRecorder()` reads the
+      backend `devMode` setting, and when true builds the real Tauri
+      `invoke` as the base dispatch, wraps it via `recorder.wrap()`, and
+      installs it via `setInvokeOverride()` in `apps/desktop/src/api/ipc.ts`.
+      Wired at boot in `apps/desktop/src/main.tsx`:
+      `if (import.meta.env.VITE_DEV_TOOLS === 'true') { import('./dev/bootRecorder')... }`
+      — statically false (and tree-shaken) in release builds. Covered by
+      `apps/desktop/src/dev/devSurface.capture.test.ts` (T073, 5 tests: wrap
+      captures calls, no-op when devMode=false, ordering, setInvokeOverride
+      wiring, absolute-path requirement) and
+      `apps/desktop/src/dev/devSurface.release.test.ts` (T072, 4 tests:
+      DEV_TOOLS_ENABLED false by default, wrap no-op, setInvokeOverride(null)
+      safe, route not registered). Full suite green: `pnpm test` — 107 files,
+      1023 tests passed. This was a stale not-implemented claim; the previous
+      deferral note (about `commands.ts` being a private module-scoped
+      function) no longer applies post-037._
 - [x] T022 [US2] Implement `list_calls` use case to read the buffer over a
       Tauri state handle and the Tauri command `dev_calls_list`.
       _Evidence: `list_calls` in `dev_contracts.rs`; `dev_calls_list` Tauri
@@ -325,15 +339,18 @@ frame appears in the flame chart.
       import gating (so the module file is never parsed) requires a Vite
       `define` constant (see T036 TODO); that level of tree-shaking is
       deferred._
-- [ ] T032 [US4] Add the hidden settings page that toggles `devMode`
+- [x] T032 [US4] Add the hidden settings page that toggles `devMode`
       (reachable by typing the full URL only) and document the URL in
       `docs/research/`. This page is rendered ONLY when the `dev-tools`
       Cargo feature is compiled in (gated at the component level via a
       compile-time constant injected by the build). (A-021-2, R-DevFeature)
-      _Deferred: `devMode` is already toggleable via Settings › Advanced
-      (spec 018 scope). A dedicated hidden URL page adds discoverability
-      but is not required for the core diagnostics surface to function.
-      Follow-up iteration._
+      _Evidence: `apps/desktop/src/dev/DevSettingsPage.tsx` (+ unit tests
+      in `DevSettingsPage.test.tsx`), `devSettingsRoute` registered in
+      `apps/desktop/src/app/router.tsx` behind the same `DEV_TOOLS_ENABLED`
+      compile-time constant as `devContractsRoute` (mirrors the `dev-tools`
+      Cargo feature); deliberately absent from `DEV_PAGES` and Settings
+      navigation. URL documented in `docs/research/index.md`
+      ("Developer-mode entry point (spec 021)")._
 - [ ] T033 [US4] Quickstart pass: enable `devMode`, open Cmd+K, navigate
       to `/dev/contracts`, trigger five calls of mixed outcomes, view a
       schema, replay a read-only call, then disable `devMode` and
@@ -357,10 +374,12 @@ frame appears in the flame chart.
       _Evidence: `dev_export` Tauri command in `commands/dev.rs`;
       `packages/contracts/dev/dev.export.json` mirrored; `devExport` in
       `api/commands.ts`; export button wired in `ContractsPage.tsx`._
-- [ ] T035 Update `docs/research/` index to point at this feature's
+- [x] T035 Update `docs/research/` index to point at this feature's
       `research.md`.
-      _Deferred: docs/research/ index update is a documentation task;
-      leaving for main thread post-implementation._
+      _Evidence: `docs/research/index.md` links
+      `specs/021-developer-contract-diagnostics/research.md` under
+      "Feature research decisions" and documents the hidden `/dev/settings`
+      entry point._
 
 ## Phase 8: Compile-Time Feature Flag Tasks (R-DevFeature)
 

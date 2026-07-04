@@ -751,4 +751,91 @@ mod tests {
         let err = resolve_pattern_str("masters/../x/", &bundle).unwrap_err();
         assert!(matches!(err, ResolveError::PathTraversal { .. }));
     }
+
+    // ── resolve_pattern_str: weird separators (spec 041 P11 hardening) ─────
+
+    #[test]
+    fn pattern_str_leading_slash_is_dropped() {
+        // A leading `/` produces one empty leading segment, which is skipped
+        // rather than emitting a leading slash in relative_path.
+        let bundle = meta(&[("filter", "Ha")]);
+        let r = resolve_pattern_str("/flats/{filter}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "flats/Ha");
+        assert!(!r.relative_path.starts_with('/'));
+    }
+
+    #[test]
+    fn pattern_str_double_slash_collapses_empty_segment() {
+        let bundle = meta(&[("filter", "Ha")]);
+        let r = resolve_pattern_str("flats//{filter}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "flats/Ha");
+    }
+
+    #[test]
+    fn pattern_str_only_slashes_is_empty_path() {
+        let bundle = meta(&[]);
+        let r = resolve_pattern_str("///", &bundle).unwrap();
+        assert_eq!(r.relative_path, "");
+        assert!(r.missing_tokens.is_empty());
+    }
+
+    // ── resolve_pattern_str: invalid chars in literal segments ─────────────
+
+    #[test]
+    fn pattern_str_literal_windows_reserved_char_substituted() {
+        // Colon in a literal segment goes through the same sanitize pipeline
+        // as token values: substituted with `_`, not rejected.
+        let bundle = meta(&[]);
+        let r = resolve_pattern_str("weird:name/{exposure}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "weird_name/unknown-exposure");
+    }
+
+    #[test]
+    fn pattern_str_literal_reserved_device_name_rejected() {
+        // A literal path segment matching a Windows reserved device name is
+        // rejected exactly like a resolved token value would be.
+        let bundle = meta(&[]);
+        let err = resolve_pattern_str("masters/CON/", &bundle).unwrap_err();
+        assert!(matches!(err, ResolveError::ReservedName { .. }));
+    }
+
+    #[test]
+    fn pattern_str_literal_unicode_confusable_rejected() {
+        // A mixed-script literal segment (Latin + Cyrillic lookalike) is
+        // rejected by the same confusables check used for token values.
+        let bundle = meta(&[]);
+        // "аbc" — Cyrillic а (U+0430) mixed with Latin "bc".
+        let err = resolve_pattern_str("m\u{0430}sters/bc/", &bundle).unwrap_err();
+        assert!(matches!(err, ResolveError::UnicodeConfusable { .. }));
+    }
+
+    #[test]
+    fn pattern_str_literal_all_dots_segment_dropped() {
+        // A literal segment made entirely of dots is not `.`/`..` (so it
+        // passes the traversal check) but step2's dot-trim collapses it to
+        // empty — it is dropped rather than producing an empty path
+        // component, mirroring the "sanitizes to empty" fallback rule used
+        // for tokens.
+        let bundle = meta(&[("exposure", "300s")]);
+        let r = resolve_pattern_str("masters/.../{exposure}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "masters/300s");
+    }
+
+    #[test]
+    fn pattern_str_literal_dot_or_dotdot_segment_rejected() {
+        // Unlike a run of dots, an exact `.`/`..` literal segment IS caught
+        // by the traversal check (run before the dot-trim so it cannot be
+        // laundered into an empty, silently-dropped segment).
+        let bundle = meta(&[]);
+        let err = resolve_pattern_str("masters/./x/", &bundle).unwrap_err();
+        assert!(matches!(err, ResolveError::PathTraversal { .. }));
+    }
+
+    #[test]
+    fn pattern_str_mixed_literal_and_token_with_invalid_chars() {
+        // A segment interleaving literal text with reserved chars and a token.
+        let bundle = meta(&[("gain", "100")]);
+        let r = resolve_pattern_str("cam:era-{gain}/", &bundle).unwrap();
+        assert_eq!(r.relative_path, "cam_era-100");
+    }
 }

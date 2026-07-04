@@ -463,7 +463,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                   key={ch.label}
                   className={`alm-channel-chip alm-channel-chip--${ch.source}`}
                   title={
-                     
+
                     ch.source === 'inferred'
                       ? m.projects_edit_inferred_title()
                       : m.projects_edit_manual_title()

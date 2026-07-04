@@ -7,6 +7,8 @@
 //! - `watcher`      — stable-size debounce and extension pre-filter logic.
 //! - `reconciler`   — on-attach rescan comparing disk vs DB rows.
 //! - `attribution`  — tool-launch attribution by app-clock window.
+//! - `project_mapping` — path→project attribution (WP-012-A): longest-prefix
+//!   match of a detected path against known project root paths.
 //!
 //! All filesystem I/O and clock calls are injected via closures/traits so
 //! every module is unit-testable without real fs events or sleeps.
@@ -18,6 +20,7 @@
 pub mod attribution;
 pub mod classifier;
 pub mod default_rules;
+pub mod project_mapping;
 pub mod reconciler;
 pub mod rules;
 pub mod watcher;
@@ -26,6 +29,7 @@ pub mod watcher;
 pub use attribution::{attribute, reattribute_candidates, LaunchRef, DEFAULT_ATTRIBUTION_WINDOW};
 pub use classifier::{classify, ClassificationResult, ClassificationSource};
 pub use default_rules::all as default_artifact_rules;
+pub use project_mapping::{resolve_project_for_path, ProjectPathRef};
 pub use reconciler::{reconcile, NewDetection, ReconcileOutcome, ReconcileReport};
 pub use rules::{ArtifactKind, ArtifactRule, MatchKind};
 pub use watcher::{

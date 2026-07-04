@@ -102,8 +102,9 @@ describe('Ingestion', () => {
       data: { ...SETTINGS, followSymlinks: true, hashingMode: 'eager' },
     });
     render(<Ingestion save={vi.fn()} />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
-    expect(screen.getByLabelText('Follow symbolic links')).toBeChecked();
+    // Wait for the fetched (non-default) value to be applied, not merely for
+    // the get call to fire — asserting right after the call races hydration.
+    await waitFor(() => expect(screen.getByLabelText('Follow symbolic links')).toBeChecked());
 
     const restoreBtn = screen.getByText('Restore defaults');
     await act(async () => {
