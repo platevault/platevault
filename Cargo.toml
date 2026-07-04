@@ -18,7 +18,6 @@ members = [
   "crates/domain/core",
   "crates/fs/executor",
   "crates/fs/inventory",
-  "crates/fs/planner",
   "crates/metadata/core",
   "crates/metadata/fits",
   "crates/metadata/video",
