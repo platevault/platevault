@@ -243,7 +243,15 @@ async fn ingest_light_frame(
 ///    `library_root` row (same id, `current_path = registered_sources.path`),
 ///    and return that path.
 /// 3. Neither → `None` (caller skips the frame).
-async fn ensure_library_root(
+///
+/// `pub` (spec 048 T012) so calibration-frame apply
+/// (`app_core_inbox::plan_listener`) can resolve the same root path before
+/// writing a `file_record` via `crate::frame_writer`.
+///
+/// # Errors
+///
+/// Returns [`ContractError`] (`internal.database`) on a query/insert failure.
+pub async fn ensure_library_root(
     pool: &SqlitePool,
     root_id: &str,
 ) -> Result<Option<String>, ContractError> {
