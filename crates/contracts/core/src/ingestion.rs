@@ -11,7 +11,12 @@ pub struct IngestionSettings {
     pub scan_on_startup: bool,
     pub follow_symlinks: bool,
     pub follow_junctions: bool,
-    pub eager_hashing: bool,
+    /// Hashing strategy: `"lazy"` | `"eager"` | `"off"` — same vocabulary as
+    /// the spec-018 `hashOnScan` settings key (data-sources scope). This is a
+    /// distinct, ingestion-scoped setting (not a read of `hashOnScan`); the
+    /// package-P12 UI wiring intentionally keeps them independent per-scope
+    /// values rather than aliasing one to the other.
+    pub hashing_mode: String,
     pub metadata_extraction: bool,
     pub exposure_grouping_tolerance_s: f64,
     pub temperature_grouping_tolerance_c: f64,
@@ -26,7 +31,8 @@ pub struct UpdateIngestionSettings {
     pub scan_on_startup: bool,
     pub follow_symlinks: bool,
     pub follow_junctions: bool,
-    pub eager_hashing: bool,
+    /// See [`IngestionSettings::hashing_mode`].
+    pub hashing_mode: String,
     pub metadata_extraction: bool,
     pub exposure_grouping_tolerance_s: f64,
     pub temperature_grouping_tolerance_c: f64,

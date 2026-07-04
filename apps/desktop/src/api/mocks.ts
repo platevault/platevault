@@ -52,6 +52,8 @@ import type {
   CalibrationMatchSuggestResponse,
   CalibrationMatchBatchResponse,
   CalibrationMatchDto_Serialize,
+  IngestionSettings,
+  UpdateIngestionSettings,
 } from '@/bindings/index';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -78,6 +80,22 @@ const mockSettingsData: SettingsData = {
     default_source_view_strategy: 'symlink',
     calibration_age_warning_days: 90,
   },
+};
+
+// Mutable so `ingestion_settings_update` round-trips through `_get` in mock
+// mode (spec 030, package P12) — mirrors real persistence closely enough for
+// the Ingestion settings pane's load/save flow to be exercised without a
+// backend.
+let mockIngestionSettings: IngestionSettings = {
+  watcherEnabled: true,
+  scanOnStartup: true,
+  followSymlinks: false,
+  followJunctions: false,
+  hashingMode: 'lazy',
+  metadataExtraction: true,
+  exposureGroupingToleranceS: 2,
+  temperatureGroupingToleranceC: 5,
+  defaultFilter: null,
 };
 
 const mockRoots: LibraryRoot[] = [
@@ -466,6 +484,9 @@ export async function mockInvoke(
     case 'settings_get': {
       return mockSettingsData;
     }
+    case 'ingestion_settings_get': {
+      return mockIngestionSettings;
+    }
     case 'roots_list': {
       return mockRoots;
     }
@@ -575,6 +596,13 @@ export async function mockInvoke(
     }
     case 'settings_update': {
       return null;
+    }
+    case 'ingestion_settings_update': {
+      const req = (_args as { request?: UpdateIngestionSettings } | undefined)?.request;
+      if (req) {
+        mockIngestionSettings = { ...req };
+      }
+      return mockIngestionSettings;
     }
     case 'roots_register': {
       return mockRoots[0];

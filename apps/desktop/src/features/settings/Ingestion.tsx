@@ -1,41 +1,106 @@
-// TODO(spec 030 (ingestion settings)): wire to backend when owning spec implements its command.
-import { useState } from 'react';
+// spec 030 (ingestion settings) — package P12: real backend persistence.
+//
+// Owned backend keys (IngestionSettings / UpdateIngestionSettings, its own
+// dedicated `ingestion.settings.get` / `ingestion.settings.update` commands —
+// NOT the generic settings.get/update scope mechanism):
+//   - scanOnStartup  — "Scan on startup" toggle
+//   - followSymlinks — "Follow symbolic links" toggle
+//   - followJunctions — "Follow NTFS junctions" toggle
+//   - hashingMode ("lazy" | "eager" | "off") — "File hashing" selector
+//
+// The contract also carries watcherEnabled, metadataExtraction, the
+// exposure/temperature grouping tolerances, and defaultFilter — none of which
+// this pane renders (matching the authoritative design,
+// docs/design/screenshots/09-settings-ingestion.png). `persist()` round-trips
+// those unrendered fields from loaded state so saving a rendered toggle never
+// clobbers them, the same pattern CalibrationMatching.tsx uses for its
+// backend-unsupported fields.
+//
+// CONSUMER STATUS (P12): no scan/watch/ingest pipeline reads these values yet
+// — this pane makes them durable, not yet enforced. Toggling e.g. "Follow NTFS
+// junctions" does not change scan behaviour until a scan-pipeline consumer is
+// wired to read it.
+import { useState, useEffect } from 'react';
 import { Toggle } from '@/ui';
 import { m } from '@/lib/i18n';
-import { SettingsSection, SettingsRow } from './SettingsKit';
+import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
+import {
+  ingestionSettingsGet,
+  ingestionSettingsUpdate,
+  type IngestionSettings,
+  type UpdateIngestionSettings,
+} from './settingsIpc';
 
 interface IngestionProps {
+  /** Unused in this pane — ingestion settings use their own IPC commands
+   *  (settingsIpc.ingestionSettingsGet/Update), not the scope-based
+   *  save(scope, values) mechanism. Kept for prop-shape consistency with
+   *  sibling settings panes. */
   save: (scope: string, values: Record<string, unknown>) => void;
 }
 
 type HashingMode = 'lazy' | 'eager' | 'off';
 
-export function Ingestion({ save }: IngestionProps) {
-  const [followSymlinks, setFollowSymlinks] = useState(false);
-  const [followJunctions, setFollowJunctions] = useState(false);
-  const [scanOnStartup, setScanOnStartup] = useState(true);
-  const [hashingMode, setHashingMode] = useState<HashingMode>('lazy');
+const DEFAULTS: UpdateIngestionSettings = {
+  watcherEnabled: true,
+  scanOnStartup: true,
+  followSymlinks: false,
+  followJunctions: false,
+  hashingMode: 'lazy',
+  metadataExtraction: true,
+  exposureGroupingToleranceS: 2,
+  temperatureGroupingToleranceC: 5,
+  defaultFilter: null,
+};
 
-  const persist = (patch: Record<string, unknown>) => {
-    save('ingestion', {
-      follow_symlinks: followSymlinks,
-      follow_junctions: followJunctions,
-      scan_on_startup: scanOnStartup,
-      hashing_mode: hashingMode,
-      ...patch,
+export function Ingestion(_props: IngestionProps) {
+  // Full persisted state, including fields this pane doesn't render — needed
+  // so `persist()` can send a complete `UpdateIngestionSettings` without
+  // clobbering them.
+  const [settings, setSettings] = useState<UpdateIngestionSettings>(DEFAULTS);
+
+  useEffect(() => {
+    let cancelled = false;
+    ingestionSettingsGet()
+      .then((loaded: IngestionSettings) => {
+        if (cancelled) return;
+        setSettings(loaded);
+      })
+      .catch(() => {
+        // Backend unavailable — stay with in-code defaults.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function persist(patch: Partial<UpdateIngestionSettings>) {
+    const next: UpdateIngestionSettings = { ...settings, ...patch };
+    setSettings(next);
+    ingestionSettingsUpdate(next).catch(() => {
+      // Best-effort persist; UI already reflects the change.
     });
+  }
+
+  const handleRestoreDefaults = async () => {
+    const persisted = await ingestionSettingsUpdate(DEFAULTS);
+    setSettings(persisted);
   };
 
   return (
     <>
-      <SettingsSection title={m.settings_ingestion_scan_title()}>
+      <SettingsSection
+        title={m.settings_ingestion_scan_title()}
+        action={<RestoreDefaultsBtn onRestore={handleRestoreDefaults} />}
+      >
         <SettingsRow
           label={m.settings_ingestion_scan_startup()}
           info={m.settings_ingestion_scan_info()}
         >
           <Toggle
-            checked={scanOnStartup}
-            onChange={(v) => { setScanOnStartup(v); persist({ scan_on_startup: v }); }}
+            aria-label={m.settings_ingestion_scan_startup()}
+            checked={settings.scanOnStartup}
+            onChange={(v) => persist({ scanOnStartup: v })}
           />
         </SettingsRow>
 
@@ -44,8 +109,9 @@ export function Ingestion({ save }: IngestionProps) {
           info={m.settings_ingestion_symlinks_info()}
         >
           <Toggle
-            checked={followSymlinks}
-            onChange={(v) => { setFollowSymlinks(v); persist({ follow_symlinks: v }); }}
+            aria-label={m.settings_ingestion_follow_symlinks()}
+            checked={settings.followSymlinks}
+            onChange={(v) => persist({ followSymlinks: v })}
           />
         </SettingsRow>
 
@@ -54,8 +120,9 @@ export function Ingestion({ save }: IngestionProps) {
           info={m.settings_ingestion_junctions_info()}
         >
           <Toggle
-            checked={followJunctions}
-            onChange={(v) => { setFollowJunctions(v); persist({ follow_junctions: v }); }}
+            aria-label={m.settings_ingestion_follow_junctions()}
+            checked={settings.followJunctions}
+            onChange={(v) => persist({ followJunctions: v })}
           />
         </SettingsRow>
       </SettingsSection>
@@ -67,11 +134,11 @@ export function Ingestion({ save }: IngestionProps) {
         >
           <select
             className="alm-select"
-            value={hashingMode}
+            aria-label={m.settings_ingestion_hashing_mode()}
+            value={settings.hashingMode}
             onChange={(e) => {
               const v = e.target.value as HashingMode;
-              setHashingMode(v);
-              persist({ hashing_mode: v });
+              persist({ hashingMode: v });
             }}
           >
             <option value="lazy">{m.settings_ingestion_hashing_lazy()}</option>
