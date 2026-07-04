@@ -1,4 +1,4 @@
--- Migration 0051: add `active` column to registered_sources (P6b — Data
+-- Migration 0052: add `active` column to registered_sources (P6b — Data
 -- Sources Disable/Enable).
 --
 -- Disabled roots are excluded from scan/ingest surfaces but their history
