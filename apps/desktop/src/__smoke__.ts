@@ -78,7 +78,6 @@ import { MastersList } from '@/features/calibration/MastersList';
 import { MasterDetail } from '@/features/calibration/MasterDetail';
 
 import { TargetsPage } from '@/features/targets/TargetsPage';
-import { TargetDetail } from '@/features/targets/TargetDetail';
 import { TargetDetailPane } from '@/features/targets/TargetDetailPane';
 import { TargetList } from '@/features/targets/TargetList';
 import { CoverageChart } from '@/features/targets/CoverageChart';
@@ -163,7 +162,6 @@ export type SmokeCheck = {
   mastersList: typeof MastersList;
   masterDetail: typeof MasterDetail;
   targetsPage: typeof TargetsPage;
-  targetDetail: typeof TargetDetail;
   targetDetailPane: typeof TargetDetailPane;
   targetList: typeof TargetList;
   coverageChart: typeof CoverageChart;

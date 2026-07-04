@@ -12,6 +12,10 @@
  *   5. A load failure surfaces via the load-error banner (errMessage).
  *   6. Export calls `commands.auditExport` with the current filters and
  *      triggers a file download.
+ *   7. Detail localization (D23 upgrade): entries carrying a stable
+ *      `detailCode` + `detailParams` render a catalog message in the entity
+ *      tooltip; entries without a code (or without the params the template
+ *      needs) fall back to the stored English `detail`.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -141,6 +145,88 @@ describe('AuditLog', () => {
     await waitFor(() =>
       expect(screen.getByText(/Could not load audit events/)).toBeInTheDocument(),
     );
+  });
+
+  it('localizes detail tooltips from detailCode + detailParams, with English fallback', async () => {
+    mockList.mockResolvedValue({
+      status: 'ok',
+      data: {
+        entries: [
+          {
+            id: 'audit-101',
+            timestamp: '2026-07-01T10:00:00Z',
+            eventType: 'project: ready -> prepared',
+            entityType: 'project',
+            entityId: 'proj-001',
+            fromState: 'ready',
+            toState: null,
+            actor: 'user',
+            outcome: 'refused',
+            detail: 'edge (project, ready -> prepared) requires an approved FilesystemPlan',
+            detailCode: 'plan.required',
+            detailParams: { entityType: 'project', fromState: 'ready', toState: 'prepared' },
+          },
+          {
+            id: 'audit-102',
+            timestamp: '2026-07-01T11:00:00Z',
+            eventType: 'project: prepared -> processing',
+            entityType: 'project',
+            entityId: 'proj-002',
+            fromState: 'prepared',
+            toState: null,
+            actor: 'user',
+            outcome: 'refused',
+            detail: 'edge (project, prepared -> processing) requires reviewed provenance on 2 field(s)',
+            detailCode: 'provenance.unreviewed',
+            detailParams: { count: '2' },
+          },
+          {
+            id: 'audit-103',
+            timestamp: '2026-07-01T12:00:00Z',
+            eventType: 'target.resolved',
+            entityType: 'canonical_target',
+            entityId: 'tgt-001',
+            fromState: null,
+            toState: null,
+            actor: 'user',
+            outcome: 'applied',
+            detail: 'target.resolved (M 31)',
+            detailCode: 'target.resolved',
+            detailParams: { query: 'M 31' },
+          },
+          {
+            // Old row (pre-D23-upgrade): ambiguous code, no params → the
+            // stored English message must render unchanged.
+            id: 'audit-104',
+            timestamp: '2026-07-01T13:00:00Z',
+            eventType: 'project: processing -> completed',
+            entityType: 'project',
+            entityId: 'proj-003',
+            fromState: 'processing',
+            toState: null,
+            actor: 'user',
+            outcome: 'refused',
+            detail: 'some legacy free-form refusal reason',
+            detailCode: 'transition.refused',
+            detailParams: null,
+          },
+        ],
+        total: 4,
+      },
+    });
+
+    render(<AuditLog />);
+    await waitFor(() => expect(mockList).toHaveBeenCalled());
+
+    expect(screen.getByTitle(
+      'Transition ready → prepared for project requires an approved filesystem plan',
+    )).toBeInTheDocument();
+    expect(screen.getByTitle(
+      '2 fields require review before this transition',
+    )).toBeInTheDocument();
+    expect(screen.getByTitle('Target resolved from query “M 31”')).toBeInTheDocument();
+    // Fallback: no usable template → stored English detail, byte-identical.
+    expect(screen.getByTitle('some legacy free-form refusal reason')).toBeInTheDocument();
   });
 
   it('exports via auditExport with the current filters and triggers a download', async () => {
