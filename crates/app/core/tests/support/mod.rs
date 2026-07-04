@@ -20,6 +20,32 @@ pub async fn setup() -> (Database, SqliteLifecycleRepository, EventBus) {
     (db, repo, bus)
 }
 
+/// Platform-absolute path of the project folder registered by
+/// [`register_project_root`]. Tests submit project paths RELATIVE to this
+/// root: a leading-slash path like `/library/...` is absolute on Unix but NOT
+/// on Windows (no drive letter), so it would fall into the relative-anchoring
+/// branch of `project_setup::create` and be rejected there. Registering a
+/// project root and using relative request paths is portable.
+#[cfg(windows)]
+pub const TEST_PROJECT_ROOT: &str = "C:/library/projects-root";
+#[cfg(not(windows))]
+pub const TEST_PROJECT_ROOT: &str = "/library/projects-root";
+
+/// Register a project-kind source so relative project request paths have an
+/// anchor (mirrors the first-run wizard registering a project folder).
+pub async fn register_project_root(pool: &sqlx::SqlitePool, path: &str) {
+    sqlx::query(
+        "INSERT INTO registered_sources \
+         (id, kind, path, scan_depth, created_at, created_via, organization_state) \
+         VALUES (?, 'project', ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run', 'organized')",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(path)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 /// Seed a minimal `target` row.
 pub async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
     sqlx::query(

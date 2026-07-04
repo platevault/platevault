@@ -5,6 +5,8 @@
 //! T048: auto block / ready / unarchive write audit rows; `project.unarchived`
 //!       emitted (FR-021).
 
+mod support;
+
 use std::sync::{Arc, Mutex};
 
 use app_core::lifecycle_use_case::build_edge_table;
@@ -26,38 +28,16 @@ use uuid::Uuid;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Absolute path of the project folder registered by [`setup`].
-///
-/// A relative request path is anchored to the registered project folder at
-/// creation (Constitution I). Registering a root here — rather than passing a
-/// leading-slash path — keeps the fixtures cross-platform: `/library/...` is
-/// absolute on Unix but NOT on Windows (no drive letter), so a leading-slash
-/// path would fall into the relative-anchoring branch and be rejected on
-/// Windows. Registering a project root and using a relative path is portable.
-const TEST_PROJECT_ROOT: &str = "/library/projects-root";
-
+/// In-memory DB + bus with a registered project folder, so relative request
+/// paths anchor portably on every platform (see [`support::TEST_PROJECT_ROOT`]
+/// for why leading-slash paths are not used).
 async fn setup() -> (SqlitePool, EventBus) {
     let db = Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let bus = EventBus::with_pool(db.pool().clone());
     let pool = db.pool().clone();
-    register_project_root(&pool, TEST_PROJECT_ROOT).await;
+    support::register_project_root(&pool, support::TEST_PROJECT_ROOT).await;
     (pool, bus)
-}
-
-/// Register a project-kind source so relative request paths have an anchor
-/// (mirrors the first-run wizard registering a project folder).
-async fn register_project_root(pool: &SqlitePool, path: &str) {
-    sqlx::query(
-        "INSERT INTO registered_sources \
-         (id, kind, path, scan_depth, created_at, created_via, organization_state) \
-         VALUES (?, 'project', ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run', 'organized')",
-    )
-    .bind(new_id())
-    .bind(path)
-    .execute(pool)
-    .await
-    .unwrap();
 }
 
 fn new_id() -> String {

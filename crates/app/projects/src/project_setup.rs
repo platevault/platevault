@@ -1139,10 +1139,8 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ProjectDetailDto, Contra
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{abs, register_project_root, TEST_PROJECT_ROOT};
     use persistence_db::Database;
-
-    /// Absolute path of the project folder registered by [`setup`].
-    const TEST_PROJECT_ROOT: &str = "/library/projects-root";
 
     async fn setup() -> (SqlitePool, EventBus) {
         let db = Database::in_memory().await.unwrap();
@@ -1153,19 +1151,6 @@ mod tests {
         // anchor (mirrors the first-run wizard registering a project folder).
         register_project_root(&pool, TEST_PROJECT_ROOT).await;
         (pool, bus)
-    }
-
-    async fn register_project_root(pool: &SqlitePool, path: &str) {
-        sqlx::query(
-            "INSERT INTO registered_sources \
-             (id, kind, path, scan_depth, created_at, created_via, organization_state) \
-             VALUES (?, 'project', ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run', 'organized')",
-        )
-        .bind(new_id())
-        .bind(path)
-        .execute(pool)
-        .await
-        .unwrap();
     }
 
     // ── P7: exposure parsing + channel aggregation (pure helpers) ─────────────
@@ -1335,13 +1320,15 @@ mod tests {
     #[tokio::test]
     async fn create_absolute_path_stored_as_is() {
         let (pool, bus) = setup().await;
+        // Platform-absolute: "/elsewhere/m101" alone is not absolute on
+        // Windows and would be anchored instead of stored as-is.
         let req = ProjectCreateRequest {
-            path: "/elsewhere/m101".to_owned(),
+            path: abs("/elsewhere/m101"),
             ..make_create_req("M101 Abs", ProjectTool::PixInsight)
         };
         let result = create(&pool, &bus, &req).await.unwrap();
         let detail = get(&pool, &result.project_id).await.unwrap();
-        assert_eq!(detail.path, "/elsewhere/m101");
+        assert_eq!(detail.path, abs("/elsewhere/m101"));
     }
 
     #[tokio::test]
