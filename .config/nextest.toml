@@ -32,3 +32,33 @@ fail-fast = false
 
 # Print failures immediately and again at the end for easy scanning.
 failure-output = "immediate-final"
+
+# ---------------------------------------------------------------------------
+# CI profile for the Layer-1 workspace test run (spec: build/adopt-nextest).
+#
+# Used by CI via `cargo nextest run --workspace --profile ci`. Local `just test`
+# uses the built-in "default" profile (fail-fast on, no retries, no JUnit).
+# ---------------------------------------------------------------------------
+[profile.ci]
+# Report every failing test in one run instead of stopping at the first, so a
+# broken CI matrix leg shows the full failure set (matches the workspace
+# `cargo test` behaviour this profile replaces, which ran all test binaries).
+fail-fast = false
+
+# Print failures immediately and again in a trailing summary for easy scanning
+# of long CI logs.
+failure-output = "immediate-final"
+
+# Machine-readable results for CI test reporters. Written to
+# `target/nextest/ci/junit.xml`.
+[profile.ci.junit]
+path = "junit.xml"
+
+# Retry ONLY the real-SQLite integration-test binaries. These live in the
+# `tests/` dirs (kind(test)) of the DB-touching crates and can flake under
+# parallel SQLite file/pool access on loaded CI runners. Unit tests
+# (kind(lib)) are deliberately NOT retried — a red unit test is a real failure
+# and must not be masked by re-running.
+[[profile.ci.overrides]]
+filter = 'kind(test) & (package(persistence_db) | package(app_core) | package(targeting_resolver))'
+retries = 2
