@@ -17,9 +17,11 @@
  */
 
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TargetListItem } from '@/bindings/index';
 import { TargetsTable, DEFAULT_TARGET_SORT } from './TargetsTable';
+import { __setObservingStateForTest } from './observing-sites/site-store';
+import type { ObserverSite } from './observing-sites/observer-site';
 
 function item(primaryDesignation: string, objectType = 'other'): TargetListItem {
   return {
@@ -157,5 +159,80 @@ describe('TargetsTable (#84/#85)', () => {
   it('shows the loading footer while loading', () => {
     renderTable({ loading: true });
     expect(screen.getByText('Loading…')).toBeInTheDocument();
+  });
+});
+
+// ── spec 044 Track B: US6/T015 no-site prompt, T018 tests ──────────────────────
+
+const SITE: ObserverSite = {
+  id: 'site-test',
+  name: 'Test Site',
+  latitudeDeg: 52.37,
+  longitudeDeg: 4.9,
+  elevationM: 0,
+  timezone: 'Europe/Amsterdam',
+  twilight: 'astronomical',
+  minHorizonAltDeg: 0,
+};
+
+describe('TargetsTable — no-site prompt (US6/T015/T018)', () => {
+  beforeEach(() => {
+    __setObservingStateForTest({});
+  });
+
+  it('shows a no-site prompt banner when there is no active observing site', () => {
+    renderTable();
+    expect(
+      screen.getByText(/Add an observing site.*see tonight's real altitude/i),
+    ).toBeInTheDocument();
+  });
+
+  it('degrades lunar-distance cells to "—" (no throw) when there is no active site', () => {
+    renderTable();
+    // Every row's lunar-distance cell shows the null-degrade placeholder.
+    expect(screen.queryAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('hides the no-site banner once an active site is set', () => {
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+    renderTable();
+    expect(
+      screen.queryByText(/Add an observing site.*see tonight's real altitude/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('computes real (non-degraded) astronomy for a circumpolar target once a site is active', () => {
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+    const circumpolar: TargetListItem = {
+      id: 'circumpolar',
+      effectiveLabel: 'Circumpolar Target',
+      primaryDesignation: 'Circumpolar Target',
+      objectType: 'other',
+      raDeg: 0,
+      decDeg: 85, // circumpolar at 52°N regardless of date/time
+      aliases: [],
+    };
+    // Pin "now" to a winter night: mid-summer at 52°N never reaches
+    // astronomical twilight, so visibleTonight would be false regardless of
+    // altitude (FR-017) — not a useful test of the real-astronomy wiring.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-15T20:00:00Z'));
+    try {
+      renderTable({ targets: [circumpolar] });
+      // A circumpolar target is visible-tonight (real astronomy, not the
+      // needsSite degrade state).
+      expect(document.querySelector('.alm-targets-vis--yes')).not.toBeNull();
+      expect(document.querySelector('.alm-targets-vis--no')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
