@@ -7,7 +7,7 @@ import { Channel } from "@tauri-apps/api/core";
 export const commands = {
 	/**
 	 *  `provenance.read` Tauri command — returns the contract response shape.
-	 * 
+	 *
 	 *  # Errors
 	 *  Never returns `Err`; persistence failures are folded into
 	 *  `ProvenanceReadResponse::error(...)`. The `Result` shape exists so the
@@ -16,7 +16,7 @@ export const commands = {
 	provenanceRead: (request: ProvenanceReadRequest_Deserialize) => typedError<ProvenanceReadResponse_Serialize, string>(__TAURI_INVOKE("provenance_read", { request })),
 	/**
 	 *  `lifecycle.transition.apply` Tauri command.
-	 * 
+	 *
 	 *  # Errors
 	 *  Never returns `Err`; refusal / persistence errors fold into
 	 *  `TransitionResponse::error(...)` per the contract.
@@ -24,14 +24,14 @@ export const commands = {
 	lifecycleTransitionApply: (request: TransitionRequest_Deserialize) => typedError<TransitionResponse_Serialize, string>(__TAURI_INVOKE("lifecycle_transition_apply", { request })),
 	/**
 	 *  `lifecycle.transition.preview` — read-only dry-run for UI button enabling.
-	 * 
+	 *
 	 *  # Errors
 	 *  Never returns `Err`; refusal codes fold into `TransitionResponse::error(...)`.
 	 */
 	lifecycleTransitionPreview: (request: TransitionRequest_Deserialize) => typedError<TransitionResponse_Serialize, string>(__TAURI_INVOKE("lifecycle_transition_preview", { request })),
 	/**
 	 *  `lifecycle.ledger.list` Tauri command.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a stringified persistence error when the repository query fails
 	 *  (e.g. transient DB unavailability). Successful empty results are `Ok(vec![])`.
@@ -39,220 +39,220 @@ export const commands = {
 	lifecycleLedgerList: (filter: LedgerFilterDto) => typedError<LedgerRowDto[], string>(__TAURI_INVOKE("lifecycle_ledger_list", { filter })),
 	/**
 	 *  `sessions.list` -- returns all acquisition sessions from real DB rows.
-	 * 
+	 *
 	 *  Backed by `acquisition_session` table (migration 0002). Returns an empty
 	 *  list when no sessions exist (not fixtures).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	sessionsList: () => typedError<AcquisitionSession_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("sessions_list")),
 	/**
 	 *  `sessions.get` -- returns a single session detail from real DB rows.
-	 * 
+	 *
 	 *  Returns `Err("session.not_found: <id>")` when the session does not exist.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure or when the session is absent.
 	 */
 	sessionsGet: (id: string) => typedError<SessionDetail_Serialize, ContractError_Serialize>(__TAURI_INVOKE("sessions_get", { id })),
 	/**
 	 *  `sessions.calendar` — returns calendar data for a month range.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsCalendar: (startMonth: string, endMonth: string) => typedError<CalendarData, ContractError_Serialize>(__TAURI_INVOKE("sessions_calendar", { startMonth, endMonth })),
 	/**
 	 *  `sessions.split` — split a session at a given frame index.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsSplit: (id: string, splitAtIndex: number) => typedError<SessionSplitResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("sessions_split", { id, splitAtIndex })),
 	/**
 	 *  `sessions.merge` — merge multiple sessions into one.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	sessionsMerge: (ids: string[]) => typedError<AcquisitionSession_Serialize, ContractError_Serialize>(__TAURI_INVOKE("sessions_merge", { ids })),
 	/**
 	 *  `calibration.masters.list` — returns all calibration masters from real DB rows.
-	 * 
+	 *
 	 *  Backed by `calibration_master_view` (migration 0033) which joins
 	 *  `calibration_session` with `calibration_fingerprint`. Returns an empty list
 	 *  when no calibration sessions with fingerprints exist (not fixtures).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	calibrationMastersList: () => typedError<CalibrationMaster_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("calibration_masters_list")),
 	/**
 	 *  `calibration.masters.get` — returns a single calibration master detail.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` with `"master.not_found: <id>"` when not found.
 	 */
 	calibrationMastersGet: (id: string) => typedError<MasterDetail_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_masters_get", { id })),
 	/**
 	 *  `calibration.matches` — returns calibration match candidates for a session.
-	 * 
+	 *
 	 *  Still returns fixture data for the scored candidate list (requires per-session
 	 *  scoring pass via spec 007 `calibration.match.suggest`). Use
 	 *  `calibration.match.suggest` for real scored results.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	calibrationMatches: (sessionId: string) => typedError<MatchCandidate_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("calibration_matches", { sessionId })),
 	/**
 	 *  `calibration.match.suggest` — suggest ranked calibration masters for a session.
-	 * 
+	 *
 	 *  Read-only; never persists state. Returns ranked candidates with confidence
 	 *  and dimension breakdown per spec 007 contract.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database error.
 	 */
 	calibrationMatchSuggest: (req: CalibrationMatchSuggestRequest_Deserialize) => typedError<CalibrationMatchSuggestResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_match_suggest", { req })),
 	/**
 	 *  `calibration.match.assign` — persist a calibration master assignment.
-	 * 
+	 *
 	 *  Hard-rule mismatches require `override: true`. Emits audit event on success.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database error.
 	 */
 	calibrationMatchAssign: (req: CalibrationMatchAssignRequest) => typedError<CalibrationMatchAssignResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_match_assign", { req })),
 	/**
 	 *  `calibration.match.suggest.batch` — suggest calibration masters for multiple sessions.
-	 * 
+	 *
 	 *  Supports partial success: sessions with `observer_location_missing` or
 	 *  `session.mixed_state` return per-item status, not a top-level error.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database error.
 	 */
 	calibrationMatchSuggestBatch: (req: CalibrationMatchBatchRequest_Deserialize) => typedError<CalibrationMatchBatchResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("calibration_match_suggest_batch", { req })),
 	/**
 	 *  `targets.list` — returns all targets, optionally filtered by search.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	targetsList: (search: string | null) => typedError<Target_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("targets_list", { search })),
 	/**
 	 *  `targets.get` — returns a single target detail.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	targetsGet: (id: string) => typedError<TargetDetail_Serialize, ContractError_Serialize>(__TAURI_INVOKE("targets_get", { id })),
 	/**
 	 *  `target.get` — return full detail for a canonical target (gen-3).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
 	targetGet: (req: TargetGetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_get", { req })),
 	/**
 	 *  `target.list` — list all canonical targets ordered by primary designation.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(TargetOpError)` with code `internal.database`.
 	 */
 	targetList: () => typedError<TargetListItem_Serialize[], TargetOpError_Serialize>(__TAURI_INVOKE("target_list")),
 	/**
 	 *  `target.alias.add` — add a user alias to a canonical target (gen-3).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`, `alias.blank`,
 	 *  or `internal.database`.
 	 */
 	targetAliasAdd: (req: TargetAliasAddRequest) => typedError<TargetAliasAddResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_alias_add", { req })),
 	/**
 	 *  `target.alias.remove` — remove a user alias from a canonical target (gen-3).
-	 * 
+	 *
 	 *  Only aliases with `kind='user'` are removable; returns `alias.not_removable`
 	 *  for SIMBAD designations/common names.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(TargetOpError)` with code `alias.not_found`,
 	 *  `alias.not_removable`, or `internal.database`.
 	 */
 	targetAliasRemove: (req: TargetAliasRemoveRequest) => typedError<TargetAliasRemoveResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_alias_remove", { req })),
 	/**
 	 *  `target.display_alias.set` — set the user presentation label (FR-012).
-	 * 
+	 *
 	 *  Blank/empty input is stored as NULL (treated as a clear). Returns the
 	 *  updated full detail.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
 	targetDisplayAliasSet: (req: TargetDisplayAliasSetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_display_alias_set", { req })),
 	/**
 	 *  `target.display_alias.clear` — clear the user presentation label (FR-012).
-	 * 
+	 *
 	 *  Sets `display_alias = NULL`; `effectiveLabel` reverts to `primaryDesignation`.
 	 *  Returns the updated full detail.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
 	targetDisplayAliasClear: (req: TargetDisplayAliasClearRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_display_alias_clear", { req })),
 	/**
 	 *  `target.sessions.list` — list acquisition sessions linked to a canonical target.
-	 * 
+	 *
 	 *  Returns sessions ordered newest first (by `created_at`).  Returns an empty
 	 *  list when the target exists but has no linked sessions.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
 	targetSessionsList: (req: TargetSessionsListRequest) => typedError<TargetSessionItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target_sessions_list", { req })),
 	/**
 	 *  `target.projects.list` — list projects linked to a canonical target.
-	 * 
+	 *
 	 *  Returns projects ordered alphabetically by name.  Returns an empty list
 	 *  when the target exists but has no linked projects.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
 	targetProjectsList: (req: TargetProjectsListRequest) => typedError<TargetProjectItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target_projects_list", { req })),
 	/**
 	 *  `target.note.get` — read observing notes for a canonical target.
-	 * 
+	 *
 	 *  Returns `notes: null` when no notes are stored.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
 	targetNoteGet: (req: TargetNoteGetRequest) => typedError<TargetNoteGetResult_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_note_get", { req })),
 	/**
 	 *  `target.note.update` — write observing notes for a canonical target.
-	 * 
+	 *
 	 *  Empty or whitespace-only `notes` clears the field (stores NULL).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
@@ -261,61 +261,61 @@ export const commands = {
 	 *  `target.resolve` — cache-first resolution of a designation / common name (or
 	 *  FITS OBJECT value) against the local cache + bundled seed, falling back to
 	 *  SIMBAD on a miss when online resolution is enabled (spec 035).
-	 * 
+	 *
 	 *  The live `SimbadResolver` is built on demand from the persisted
 	 *  `resolver_settings` (endpoint + timeout). Cache hits never re-query SIMBAD
 	 *  (FR-006); offline / unknown / ambiguous outcomes return `unresolved` and
 	 *  never fabricate coordinates (FR-009). The manual `override` write path is
 	 *  T032.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` only on a local database failure. Resolver outcomes
 	 *  (offline / unknown / ambiguous) are encoded in the response status.
 	 */
 	targetResolve: (req: TargetResolveSimbadRequest_Deserialize) => typedError<TargetResolveSimbadResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_resolve", { req })),
 	/**
 	 *  `target.search` — as-you-type target suggestions from local seed + cache.
-	 * 
+	 *
 	 *  Served purely from the local resolution cache / bundled seed (no network);
 	 *  long-tail SIMBAD enrichment is a separate `target.resolve` call. Returns
 	 *  ranked, de-duplicated [`TargetSuggestion`]s for the project-creation /
 	 *  target-selection typeahead (spec 035 FR-005).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` on an unexpected internal (database) failure.
 	 */
 	targetSearch: (req: TargetSearchRequest_Deserialize) => typedError<TargetSearchResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_search", { req })),
 	/**
 	 *  `target.resolution.settings` — read the SIMBAD resolver settings.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` on a local database failure.
 	 */
 	targetResolutionSettings: (req: ResolverSettingsGetRequest) => typedError<ResolverSettingsResponse, ContractError_Serialize>(__TAURI_INVOKE("target_resolution_settings", { req })),
 	/**
 	 *  `target.resolution.settings.update` — persist new resolver settings.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` on a local database failure.
 	 */
 	targetResolutionSettingsUpdate: (req: ResolverSettingsUpdateRequest) => typedError<ResolverSettingsResponse, ContractError_Serialize>(__TAURI_INVOKE("target_resolution_settings_update", { req })),
 	/**
 	 *  `projects.list` — list all projects from the database.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` on database failure.
 	 */
 	projectsList: (filters: unknown | null) => typedError<ProjectSummaryDto_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("projects_list", { filters })),
 	/**
 	 *  `projects.get` — get a single project with sources and channels.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with `"project.not_found"` when the project does not
 	 *  exist.
 	 */
@@ -329,123 +329,123 @@ export const commands = {
 	 *  are still written either way (constitution II).
 	 * 
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with the error code on validation or database failure.
 	 */
 	projectsCreate: (req: ProjectCreateRequest_Deserialize) => typedError<ProjectCreateResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_create", { req })),
 	/**
 	 *  `projects.update` — update name, tool, or notes on an existing project.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` on validation failure or when the project is not found.
 	 */
 	projectsUpdate: (req: ProjectUpdateRequest_Deserialize) => typedError<ProjectUpdateResult, ContractError_Serialize>(__TAURI_INVOKE("projects_update", { req })),
 	/**
 	 *  `projects.source.add` — link an Inventory session to a project.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` on validation failure or duplicate link.
 	 */
 	projectsSourceAdd: (req: ProjectSourceAddRequest) => typedError<ProjectSourceAddResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_source_add", { req })),
 	/**
 	 *  `projects.source.remove` — unlink a source from a project.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` when lifecycle is locked or source not found.
 	 */
 	projectsSourceRemove: (req: ProjectSourceRemoveRequest) => typedError<ProjectSourceRemoveResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_source_remove", { req })),
 	/**
 	 *  `projects.channels.reinfer` — re-infer channels from all linked sources.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` when the project is not found or archived.
 	 */
 	projectsChannelsReinfer: (req: ProjectChannelsReinferRequest) => typedError<ProjectChannelsReinferResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_channels_reinfer", { req })),
 	/**
 	 *  `projects.channels.dismiss_drift` — dismiss the channel drift banner.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` when the project is not found.
 	 */
 	projectsChannelsDismissDrift: (req: ProjectChannelsDismissDriftRequest) => typedError<ProjectChannelsDismissDriftResult, ContractError_Serialize>(__TAURI_INVOKE("projects_channels_dismiss_drift", { req })),
 	/**
 	 *  `projects.create_plan` — create a filesystem plan from wizard state.
-	 * 
+	 *
 	 *  This stub is retained for UI compatibility until spec 025 folder-plan
 	 *  integration is wired into `project_setup::create`. The real flow will
 	 *  build on `domain_core::lifecycle::plan::FilesystemPlan` +
 	 *  `persistence_db::repositories::plans` and return a live `PlanDetail`.
 	 * 
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	projectsCreatePlan: (wizardState: unknown) => typedError<PlanDetail_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_create_plan", { wizardState })),
 	/**
 	 *  `plans.list` — list reviewable plans, failed-first ordering (US1, T014).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with the contract error code on failure.
 	 */
 	plansList: (stateFilter: string[] | null, originFilter: string[] | null, createdAfter: string | null, limit: number | null) => typedError<PlanListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_list", { stateFilter, originFilter, createdAfter, limit })),
 	/**
 	 *  `plans.get` — fetch a plan with all its items (US1, T014).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 	 */
 	plansGet: (id: string) => typedError<PlanDetail_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_get", { id })),
 	/**
 	 *  `plans.approve` — move a plan to `approved`; snapshot item FS metadata (US3, T025).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with `"plan.not_found"`, `"plan.invalid_state"`, or
 	 *  `"plan.items.empty"` on failure.
 	 */
 	plansApprove: (id: string) => typedError<PlanApproveResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_approve", { id })),
 	/**
 	 *  `plans.discard` — soft-delete a plan (US4, T030).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with `"plan.not_found"` or `"plan.in_progress"` on failure.
 	 */
 	plansDiscard: (id: string) => typedError<PlanDiscardResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_discard", { id })),
 	/**
 	 *  `plans.retry` — create a new plan from failed/cancelled/all items of a
 	 *  terminal parent (US5, T035).
-	 * 
+	 *
 	 *  `items_filter` must be one of `"failed"`, `"cancelled"`, or `"all"` (R-Retry-1).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with `"parent.not_found"`, `"parent.not_terminal"`,
 	 *  `"no.items.to.retry"`, or `"value.invalid"` on failure.
 	 */
 	plansRetry: (parentPlanId: string, itemsFilter: string) => typedError<PlanRetryResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_retry", { parentPlanId, itemsFilter })),
 	/**
 	 *  `archive.send_to_trash` — send the archive subtree to OS trash (US6, T045).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with `"plan.not_found"` or `"archive.empty"` on failure.
 	 */
 	archiveSendToTrash: (planId: string) => typedError<ArchiveSendToTrashResponse, ContractError_Serialize>(__TAURI_INVOKE("archive_send_to_trash", { planId })),
 	/**
 	 *  `archive.permanently_delete` — permanently remove archive subtree (US6, T046).
-	 * 
+	 *
 	 *  Requires `confirm_text == "DELETE"`. Blocked if spec-016 `blockPermanentDelete` is true.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with `"confirm.text.mismatch"`, `"plan.blocked_by_protection"`,
 	 *  `"plan.not_found"`, or `"archive.empty"` on failure.
 	 */
@@ -472,9 +472,9 @@ export const commands = {
 	archivePlanGenerate: (projectId: string, title: string | null) => typedError<GenerateArchivePlanResult, ContractError_Serialize>(__TAURI_INVOKE("archive_plan_generate", { projectId, title })),
 	/**
 	 *  `plans.apply` — start applying an approved plan (US1, T019; spec 042 US16 T240).
-	 * 
+	 *
 	 *  Returns immediately with the run id and new state (`"applying"`).
-	 * 
+	 *
 	 *  Live progress is streamed over the additive `on_event`
 	 *  `tauri::ipc::Channel<OperationEvent>` (spec 042 US16): the backend emits a
 	 *  `Started` event carrying the running `OperationHandle`, per-item
@@ -483,9 +483,9 @@ export const commands = {
 	 *  **live UI projection** — the durable audit trail (`plan_apply_events`) and
 	 *  the audit bus topics (`plan.item.progress`, `plan.applying.completed`) are
 	 *  retained unchanged (constitution §II).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(ContractError)` with:
 	 *  - `"plan.not_found"` — plan not found.
 	 *  - `"plan.invalid_state"` — plan is not approved or CAS race.
@@ -495,12 +495,12 @@ export const commands = {
 	plansApplyReal: (planId: string, approvalToken: string, onEvent: Channel<OperationEvent>) => typedError<PlanApplyResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_apply_real", { planId, approvalToken, onEvent })),
 	/**
 	 *  `plans.cancel` — cancel an in-flight apply (US3, T033).
-	 * 
+	 *
 	 *  Signals the cancellation token; the executor finishes its current item
 	 *  and stops. Remaining pending items are batch-transitioned to `cancelled`.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with:
 	 *  - `"plan.not_found"` — plan not found.
 	 *  - `"plan.not_in_apply"` — plan is not in applying or paused state.
@@ -508,9 +508,9 @@ export const commands = {
 	plansCancel: (planId: string) => typedError<PlanCancelResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_cancel", { planId })),
 	/**
 	 *  `plans.resume` — resume a paused apply run (R-Pause-1, T053).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with:
 	 *  - `"plan.not_found"` — plan not found.
 	 *  - `"run.not_paused"` — plan is not in paused state.
@@ -519,11 +519,11 @@ export const commands = {
 	plansResume: (planId: string, runId: string) => typedError<PlanResumeResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_resume", { planId, runId })),
 	/**
 	 *  `plans.item.skip` — skip a pending item during an active apply (US4, T041).
-	 * 
+	 *
 	 *  The item must be `pending` and the plan must be `applying`.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with:
 	 *  - `"plan.not_found"` — plan not found.
 	 *  - `"plan.not_in_apply"` — plan is not applying.
@@ -533,12 +533,12 @@ export const commands = {
 	plansItemSkip: (planId: string, itemId: string) => typedError<PlanItemSkipResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_item_skip", { planId, itemId })),
 	/**
 	 *  `plans.item.retry` — retry a failed item within a running apply (US4, T041).
-	 * 
+	 *
 	 *  The item must be `failed` and the plan must be `applying`.
 	 *  Use `plans.retry` for plan-level retry after a terminal plan.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with:
 	 *  - `"plan.not_found"` — plan not found.
 	 *  - `"plan.not_in_apply"` — plan is not applying (use plans.retry for terminal).
@@ -548,15 +548,15 @@ export const commands = {
 	plansItemRetry: (planId: string, itemId: string) => typedError<PlanItemRetryResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_item_retry", { planId, itemId })),
 	/**
 	 *  `plans.apply.status` — fetch current apply progress for a plan.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 	 */
 	plansApplyStatus: (planId: string) => typedError<PlanApplyStatus_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_apply_status", { planId })),
 	/**
 	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ContractError)` on database failure.
 	 */
@@ -579,7 +579,7 @@ export const commands = {
 	 *  `audit.export` — export the filtered audit entries as newline-delimited
 	 *  JSON (one `AuditEntry` per line, matching `audit.list`'s entry shape).
 	 *  Ignores pagination — export is always the full filtered set.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ContractError)` on database failure.
 	 */
@@ -597,17 +597,17 @@ export const commands = {
 } | null) => typedError<string, ContractError_Serialize>(__TAURI_INVOKE("audit_export", { filters })),
 	/**
 	 *  `log.recent` — return the most-recent log entries (initial hydration window).
-	 * 
+	 *
 	 *  Accepts optional `cursor`, `level_min`, `include_diagnostics`, and
 	 *  `source_filter` parameters.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	logRecent: (cursor: string | null, levelMin: "debug" | "info" | "warn" | "error" | null, includeDiagnostics: boolean | null, sourceFilter: LogEntrySource[] | null, windowSize: number | null) => typedError<LogRecentResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("log_recent", { cursor, levelMin, includeDiagnostics, sourceFilter, windowSize })),
 	/**
 	 *  `log.export` — export filtered log entries to a JSON file.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` with code `"path.parent.missing"`, `"path.write.denied"`,
 	 *  `"range.invalid"`, or `"format.unsupported"`.
@@ -615,48 +615,48 @@ export const commands = {
 	logExport: (requestId: string, filePath: string, format: string | null, levelMin: "debug" | "info" | "warn" | "error" | null, since: string | null, until: string | null, includeDiagnostics: boolean | null) => typedError<LogExportResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("log_export", { requestId, filePath, format, levelMin, since, until, includeDiagnostics })),
 	/**
 	 *  `review.queue` — returns items awaiting user review.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	reviewQueue: (filter: string | null) => typedError<ReviewItem_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("review_queue", { filter })),
 	/**
 	 *  `roots.list` — returns all registered library roots from the database.
-	 * 
+	 *
 	 *  Each root's `online` flag reflects whether the path is currently accessible.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	rootsList: () => typedError<LibraryRoot_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("roots_list")),
 	/**
 	 *  `roots.register` — register a new library root.
-	 * 
+	 *
 	 *  Delegates to `app_core::first_run::register_source` for path validation,
 	 *  duplicate detection, and persistence. The `scan_settings` parameter is
 	 *  reserved for future scan configuration; currently only `scanDepth` is
 	 *  extracted.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on path validation failure, duplicate, or DB error.
 	 */
 	rootsRegister: (path: string, category: string, scanSettings: unknown) => typedError<RegisterSourceResponse, ContractError_Serialize>(__TAURI_INVOKE("roots_register", { path, category, scanSettings })),
 	/**
 	 *  `roots.register.batch` — register multiple source directories at once.
-	 * 
+	 *
 	 *  Enforces that `inbox` kind sources are always `unorganized`, overriding
 	 *  any value supplied by the frontend (spec 041 R-7).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on catastrophic failure; per-item errors are in the response.
 	 */
 	rootsRegisterBatch: (request: RegisterSourceBatchRequest_Deserialize) => typedError<RegisterSourceBatchResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("roots_register_batch", { request })),
 	/**
 	 *  `roots.remap` — preview a root path remap (P6a).
-	 * 
+	 *
 	 *  Delegates to `app_core::first_run::remap_root` for path validation and
 	 *  sample-path verification against the real `registered_sources` row.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `ContractError` (`source.not_found`, `path.not_exists`,
 	 *  `path.not_directory`, `path.permission_denied`, or `internal.database`).
@@ -664,11 +664,11 @@ export const commands = {
 	rootsRemap: (rootId: string, newPath: string) => typedError<RemapVerification, ContractError_Serialize>(__TAURI_INVOKE("roots_remap", { rootId, newPath })),
 	/**
 	 *  `roots.remap.apply` — apply a previously previewed root remap (P6a).
-	 * 
+	 *
 	 *  Delegates to `app_core::first_run::apply_root_remap`, which updates the
 	 *  root's stored path in `registered_sources` and publishes a `root.remapped`
 	 *  audit event.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `ContractError` (`source.not_found`, `path.not_exists`,
 	 *  `path.not_directory`, `path.permission_denied`, or `internal.database`).
@@ -689,14 +689,14 @@ export const commands = {
 	rootsDelete: (rootId: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("roots_delete", { rootId })),
 	/**
 	 *  `scan.start` — start a filesystem scan, optionally for specific roots.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	scanStart: (rootIds: string[] | null) => typedError<IpcOperationHandle, ContractError_Serialize>(__TAURI_INVOKE("scan_start", { rootIds })),
 	/**
 	 *  `equipment.list` — returns all registered equipment.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
@@ -705,7 +705,7 @@ export const commands = {
 	 *  `sources.set_organization_state` — change a source's organization state
 	 *  (spec 041, T030). Affects only future confirms; inbox sources may not be
 	 *  set to `organized`.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on `source.invalid_organization_state`,
 	 *  `source.not_found`, or DB error.
@@ -724,58 +724,58 @@ export const commands = {
 	sourcesSetActive: (rootId: string, active: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("sources_set_active", { rootId, active })),
 	/**
 	 *  `firstrun.state` — get the current first-run wizard state.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	firstrunState: () => typedError<FirstRunStateResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("firstrun_state")),
 	/**
 	 *  `firstrun.complete` — mark the first-run wizard as complete.
-	 * 
+	 *
 	 *  Requires at least one raw source and one project source to be registered.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if preconditions are not met or on database failure.
 	 */
 	firstrunComplete: () => typedError<FirstRunCompleteResponse, ContractError_Serialize>(__TAURI_INVOKE("firstrun_complete")),
 	/**
 	 *  `firstrun.restart` — restart the first-run wizard, returning existing sources.
-	 * 
+	 *
 	 *  Requires `confirm: true` in the request to prevent accidental restarts.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if `confirm` is not `true` or on database failure.
 	 */
 	firstrunRestart: (request: FirstRunRestartRequest) => typedError<FirstRunRestartResponse, ContractError_Serialize>(__TAURI_INVOKE("firstrun_restart", { request })),
 	/**
 	 *  `pattern.validate` — structural validation without resolving against metadata.
-	 * 
+	 *
 	 *  Returns `PatternValidateResponse { valid, warnings, error_code?, ... }`.
 	 *  Never returns `Err`; all error states are encoded in the response body so the
 	 *  frontend can call this unconditionally.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` on internal failure (none expected in v1).
 	 */
 	patternValidate: (request: PatternValidateRequest) => typedError<PatternValidateResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("pattern_validate", { request })),
 	/**
 	 *  `pattern.resolve` — resolve a pattern against a metadata bundle.
-	 * 
+	 *
 	 *  Returns `PatternResolveResponse { relative_path, missing_tokens, warnings }`.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
 	 */
 	patternResolve: (request: PatternResolveRequest_Deserialize) => typedError<PatternResolveResponse, ContractError_Serialize>(__TAURI_INVOKE("pattern_resolve", { request })),
 	/**
 	 *  `pattern.preview` — resolve a pattern against sample metadata for the UI.
-	 * 
+	 *
 	 *  Returns `PatternPreviewResponse { resolved_path, missing_tokens, warnings }`.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
 	 */
 	patternPreview: (request: PatternPreviewRequest_Deserialize) => typedError<PatternPreviewResponse, ContractError_Serialize>(__TAURI_INVOKE("pattern_preview", { request })),
@@ -793,78 +793,78 @@ export const commands = {
 	patternPathPreview: (request: PathPatternPreviewRequest_Deserialize) => typedError<PathPatternPreviewResponse, ContractError_Serialize>(__TAURI_INVOKE("pattern_path_preview", { request })),
 	/**
 	 *  `source.protection.get` — resolve effective protection for a source (US2, T012).
-	 * 
+	 *
 	 *  If `source_id` is `None`, returns the global defaults.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with the contract error code on failure.
 	 */
 	sourceProtectionGet: (sourceId: string | null) => typedError<SourceProtectionGetResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("source_protection_get", { sourceId })),
 	/**
 	 *  `source.protection.set` — set or replace the protection override for a source
 	 *  (US2, T013, T016).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with the contract error code on failure.
 	 */
 	sourceProtectionSet: (request: SourceProtectionSetRequest_Deserialize) => typedError<SourceProtectionSetResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("source_protection_set", { request })),
 	/**
 	 *  `plan.protection.check` — return protection-affected plan items (US3, T023).
-	 * 
+	 *
 	 *  Only items requiring acknowledgement are returned in `protected_items`.
 	 *  Normal and unprotected items appear only as summary counts.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 	 */
 	planProtectionCheckCmd: (planId: string) => typedError<PlanProtectionCheckResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plan_protection_check_cmd", { planId })),
 	/**
 	 *  `protection.plan.acknowledged` — record user acknowledgement of a protected
 	 *  plan item (US3, T025).
-	 * 
+	 *
 	 *  Returns the audit event id.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(String)` on audit failure.
 	 */
 	protectionPlanAcknowledged: (planId: string, itemId: string, sourceId: string | null, resolvedLevel: string, reason: string) => typedError<string, ContractError_Serialize>(__TAURI_INVOKE("protection_plan_acknowledged", { planId, itemId, sourceId, resolvedLevel, reason })),
 	/**
 	 *  `settings.get` — returns settings for a given scope.
-	 * 
+	 *
 	 *  Accepts `{ scope: string }` and returns `SettingsData { scope, values }`.
 	 *  Each key that belongs to the scope is resolved via the persistence layer
 	 *  (hydrating the in-code default when no stored row exists).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	settingsGet: (scope: string) => typedError<SettingsData, ContractError_Serialize>(__TAURI_INVOKE("settings_get", { scope })),
 	/**
 	 *  `settings.update` — persists settings values for a given scope.
-	 * 
+	 *
 	 *  Accepts `{ scope: string, values: Record<string, unknown> }`. Each entry in
 	 *  `values` is persisted as an individual settings key if it is a known valid
 	 *  key. Unknown keys (from fixture-driven panes) are silently skipped so the
 	 *  frontend does not need to filter its payload.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database or audit failure.
 	 */
 	settingsUpdate: (scope: string, values: unknown) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("settings_update", { scope, values })),
 	/**
 	 *  `settings.restore-defaults` — restore one, several, or all keys to defaults.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` with code `"key.unknown"` for unknown keys.
 	 */
 	settingsRestoreDefaults: (request: RestoreDefaultsRequest) => typedError<RestoreDefaultsResponse, ContractError_Serialize>(__TAURI_INVOKE("settings_restore_defaults", { request })),
 	/**
 	 *  `settings.source-override.set` — set a per-source override for an overridable key.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` with code `"key.unoverridable"` or `"value.invalid"`.
 	 */
@@ -872,300 +872,300 @@ export const commands = {
 	/**
 	 *  `settings.overridable-keys` — return the list of stable settings keys that
 	 *  can be overridden per source root (spec 018 T025).
-	 * 
+	 *
 	 *  The frontend uses this to populate the key selector in the source override
 	 *  panel without hardcoding key names.
-	 * 
+	 *
 	 *  # Errors
 	 *  Never errors in practice; returns `Ok` always.
 	 */
 	settingsOverridableKeys: () => typedError<string[], ContractError_Serialize>(__TAURI_INVOKE("settings_overridable_keys")),
 	/**
 	 *  `preferences.get` — returns current application preferences.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	preferencesGet: () => typedError<AppPreferences, ContractError_Serialize>(__TAURI_INVOKE("preferences_get")),
 	/**
 	 *  `preferences.set` — update a single preference key.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	preferencesSet: (key: string, value: unknown) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("preferences_set", { key, value })),
 	/**
 	 *  `search.global` — performs a global search across all entity types.
-	 * 
+	 *
 	 *  Returns results ranked by relevance to `query`. The result set always
 	 *  reflects the query string — an empty query returns recent suggestions.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	searchGlobal: (query: string) => typedError<SearchResult_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("search_global", { query })),
 	/**
 	 *  `tour.complete_step` — mark a tour step as completed.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; the stub never fails.
 	 */
 	tourCompleteStep: (step: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("tour_complete_step", { step })),
 	/**
 	 *  `guided.state.get` — read current coach state for UI hydration.
-	 * 
+	 *
 	 *  Returns the current `GuidedFlowStateDto`.  On the first call after a
 	 *  corruption reset, returns `Err` with code `state_corrupted`; the row has
 	 *  already been reset to Idle server-side.  Retry to get the fresh state.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on corruption (informational) or database failure.
 	 */
 	guidedStateGet: () => typedError<GuidedStateGetResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_state_get")),
 	/**
 	 *  `guided.step.complete` — mark a step complete and advance the coach.
-	 * 
+	 *
 	 *  The step must be a known registry id (e.g. `inbox.confirm_first`).
 	 *  If the flow is dismissed, returns an error.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on unknown step id, dismissed flow, or database failure.
 	 */
 	guidedStepComplete: (request: GuidedStepCompleteRequest) => typedError<GuidedStepCompleteResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_step_complete", { request })),
 	/**
 	 *  `guided.dismiss` — dismiss the coach, hiding all hints.
-	 * 
+	 *
 	 *  Idempotent: calling again on an already-dismissed flow returns the
 	 *  original `dismissedAt` timestamp.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	guidedDismiss: () => typedError<GuidedDismissResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_dismiss")),
 	/**
 	 *  `guided.restart` — restart the coach from Settings.
-	 * 
+	 *
 	 *  - `Dismissed → Active(lowest uncompleted step)`: retains completed steps.
 	 *  - `Completed → Idle`: resets all progress (A1 ratified 2026-05-22).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	guidedRestart: () => typedError<GuidedRestartResponse, ContractError_Serialize>(__TAURI_INVOKE("guided_restart")),
 	/**
 	 *  `guided.activate` — activate the flow after first-run setup completes.
-	 * 
+	 *
 	 *  If the flow is Idle, transitions to `Active(first uncompleted step)`.
 	 *  Idempotent when already active or dismissed.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	guidedActivate: () => typedError<GuidedFlowStateDto, ContractError_Serialize>(__TAURI_INVOKE("guided_activate")),
 	/**
 	 *  `native.directory.pick` — open the OS directory picker.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on validation failure or if the dialog cannot be shown.
 	 */
 	nativeDirectoryPick: (request: DirectoryPickRequest_Deserialize) => typedError<DirectoryPickResponse, ContractError_Serialize>(__TAURI_INVOKE("native_directory_pick", { request })),
 	/**
 	 *  `native.file.pick` — open the OS file picker with type filters.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on filter validation failure or if the dialog cannot be shown.
 	 */
 	nativeFilePick: (request: FilePickRequest_Deserialize) => typedError<FilePickResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("native_file_pick", { request })),
 	/**
 	 *  `native.reveal` — reveal a path in the OS file browser.
-	 * 
+	 *
 	 *  Uses `tauri_plugin_opener::reveal_item_in_dir`. On Linux, if the opener
 	 *  plugin fails, falls back to `xdg-open` on the parent directory and
 	 *  returns `selection: "directory_only"`.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if the path does not exist or the OS command fails.
 	 */
 	nativeReveal: (request: RevealRequest_Deserialize) => typedError<RevealResponse, ContractError_Serialize>(__TAURI_INVOKE("native_reveal", { request })),
 	/**
 	 *  `equipment.cameras.list` — list all cameras.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	equipmentCamerasList: () => typedError<Camera[], ContractError_Serialize>(__TAURI_INVOKE("equipment_cameras_list")),
 	/**
 	 *  `equipment.cameras.create` — create a new camera.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on duplicate or database failure.
 	 */
 	equipmentCamerasCreate: (request: CreateCamera) => typedError<Camera, ContractError_Serialize>(__TAURI_INVOKE("equipment_cameras_create", { request })),
 	/**
 	 *  `equipment.cameras.update` — update an existing camera.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if the camera is not found.
 	 */
 	equipmentCamerasUpdate: (request: UpdateCamera) => typedError<Camera, ContractError_Serialize>(__TAURI_INVOKE("equipment_cameras_update", { request })),
 	/**
 	 *  `equipment.cameras.delete` — delete a camera by ID.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if the camera is not found.
 	 */
 	equipmentCamerasDelete: (id: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("equipment_cameras_delete", { id })),
 	/**
 	 *  `equipment.telescopes.list` — list all telescopes.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	equipmentTelescopesList: () => typedError<Telescope[], ContractError_Serialize>(__TAURI_INVOKE("equipment_telescopes_list")),
 	/**
 	 *  `equipment.telescopes.create` — create a new telescope.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on duplicate or database failure.
 	 */
 	equipmentTelescopesCreate: (request: CreateTelescope) => typedError<Telescope, ContractError_Serialize>(__TAURI_INVOKE("equipment_telescopes_create", { request })),
 	/**
 	 *  `equipment.telescopes.update` — update an existing telescope.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if the telescope is not found.
 	 */
 	equipmentTelescopesUpdate: (request: UpdateTelescope) => typedError<Telescope, ContractError_Serialize>(__TAURI_INVOKE("equipment_telescopes_update", { request })),
 	/**
 	 *  `equipment.telescopes.delete` — delete a telescope by ID.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if the telescope is not found.
 	 */
 	equipmentTelescopesDelete: (id: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("equipment_telescopes_delete", { id })),
 	/**
 	 *  `equipment.trains.list` — list all optical trains.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	equipmentTrainsList: () => typedError<OpticalTrain[], ContractError_Serialize>(__TAURI_INVOKE("equipment_trains_list")),
 	/**
 	 *  `equipment.trains.create` — create a new optical train.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	equipmentTrainsCreate: (request: CreateOpticalTrain) => typedError<OpticalTrain, ContractError_Serialize>(__TAURI_INVOKE("equipment_trains_create", { request })),
 	/**
 	 *  `equipment.trains.update` — update an existing optical train.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if the optical train is not found.
 	 */
 	equipmentTrainsUpdate: (request: UpdateOpticalTrain) => typedError<OpticalTrain, ContractError_Serialize>(__TAURI_INVOKE("equipment_trains_update", { request })),
 	/**
 	 *  `equipment.trains.delete` — delete an optical train by ID.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if the optical train is not found.
 	 */
 	equipmentTrainsDelete: (id: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("equipment_trains_delete", { id })),
 	/**
 	 *  `equipment.filters.list` — list all filters.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	equipmentFiltersList: () => typedError<Filter[], ContractError_Serialize>(__TAURI_INVOKE("equipment_filters_list")),
 	/**
 	 *  `equipment.filters.create` — create a new filter.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on duplicate name or database failure.
 	 */
 	equipmentFiltersCreate: (request: CreateFilter) => typedError<Filter, ContractError_Serialize>(__TAURI_INVOKE("equipment_filters_create", { request })),
 	/**
 	 *  `equipment.filters.update` — update an existing filter.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if the filter is not found.
 	 */
 	equipmentFiltersUpdate: (request: UpdateFilter) => typedError<Filter, ContractError_Serialize>(__TAURI_INVOKE("equipment_filters_update", { request })),
 	/**
 	 *  `equipment.filters.delete` — delete a filter by ID.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` if the filter is not found.
 	 */
 	equipmentFiltersDelete: (id: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("equipment_filters_delete", { id })),
 	/**
 	 *  `status.summary` — returns current library status overview.
-	 * 
+	 *
 	 *  Roots are fetched from `registered_sources`; each root's `online` flag is
 	 *  set by testing whether its path is currently accessible on the filesystem.
 	 *  `inbox_count` reflects the real number of unacknowledged inbox items
 	 *  (`pending_classification` or `classified`) across all registered sources.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
 	statusSummary: () => typedError<StatusSummary, ContractError_Serialize>(__TAURI_INVOKE("status_summary")),
 	/**
 	 *  `cleanup.policy.get` — returns the persisted cleanup policy (or the default).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `ContractError` on database failure.
 	 */
 	cleanupPolicyGet: () => typedError<CleanupPolicy, ContractError_Serialize>(__TAURI_INVOKE("cleanup_policy_get")),
 	/**
 	 *  `cleanup.policy.update` — persist the cleanup policy.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `ContractError` on serialisation or database failure.
 	 */
 	cleanupPolicyUpdate: (request: UpdateCleanupPolicy) => typedError<CleanupPolicy, ContractError_Serialize>(__TAURI_INVOKE("cleanup_policy_update", { request })),
 	/**
 	 *  `cleanup.scan` — pure, read-only cleanup preview for a project (D11 step 1).
-	 * 
+	 *
 	 *  Enumerates the project's observed processing artifacts, classifies them,
 	 *  applies the persisted policy, and returns candidate files plus reclaimable
 	 *  bytes. Creates NO plan and performs NO filesystem mutation.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `ContractError` on database failure.
 	 */
 	cleanupScan: (projectId: string) => typedError<CleanupScanResult, ContractError_Serialize>(__TAURI_INVOKE("cleanup_scan", { projectId })),
 	/**
 	 *  `cleanup.plan.generate` — materialise a reviewable cleanup plan (D11 step 2).
-	 * 
+	 *
 	 *  Builds plan items from the current cleanup candidates and delegates to the
 	 *  spec-016 protection generator, which resolves per-item protection and gates
 	 *  approval. Generating the plan performs NO filesystem mutation (FR-002).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `ContractError` on database failure.
 	 */
 	cleanupPlanGenerate: (request: GenerateCleanupPlanRequest) => typedError<GenerateCleanupPlanResult, ContractError_Serialize>(__TAURI_INVOKE("cleanup_plan_generate", { request })),
 	/**
 	 *  `calibration.tolerances.get` — returns current calibration matching tolerances.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ContractError)` on database failure.
 	 */
 	calibrationTolerancesGet: () => typedError<CalibrationTolerances, ContractError_Serialize>(__TAURI_INVOKE("calibration_tolerances_get")),
 	/**
 	 *  `calibration.tolerances.update` — update calibration matching tolerances.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ContractError)` on database failure.
 	 */
 	calibrationTolerancesUpdate: (request: UpdateCalibrationTolerances) => typedError<CalibrationTolerances, ContractError_Serialize>(__TAURI_INVOKE("calibration_tolerances_update", { request })),
 	/**
 	 *  `inbox.scan` — legacy stub returning fixture data.
-	 * 
+	 *
 	 *  Kept for backward compat; real scanning uses `inbox.scan.folder`.
-	 * 
+	 *
 	 *  # Errors
 	 *  Never fails; always returns `Ok`.
 	 */
@@ -1173,7 +1173,7 @@ export const commands = {
 	/**
 	 *  `inbox.scan.folder` — recursively scan a root directory, discover leaf
 	 *  FITS/video folders, upsert `InboxItem`s, and return a summary list.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a string error if the root is not accessible.
 	 */
@@ -1182,14 +1182,14 @@ export const commands = {
 	 *  `inbox.classify` — classify an Inbox folder using IMAGETYP-only evidence.
 	 *  Idempotent unless `force_rescan: true`. Returns `contentSignature` for use
 	 *  with `inbox.confirm`.
-	 * 
+	 *
 	 *  # Errors
 	 *  `inbox.item.not_found` | `metadata.unreadable`
 	 */
 	inboxClassify: (req: InboxClassifyRequest) => typedError<InboxClassifyResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_classify", { req })),
 	/**
 	 *  `inbox.confirm` — generate a reviewable plan from a classified Inbox item.
-	 * 
+	 *
 	 *  # Errors
 	 *  `inbox.item.not_found` | `inbox.has.open.plan` | `classification.ambiguous`
 	 *  | `classification.stale` | `pattern.unset`
@@ -1197,7 +1197,7 @@ export const commands = {
 	inboxConfirm: (req: InboxConfirmRequest_Deserialize) => typedError<InboxConfirmResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_confirm", { req })),
 	/**
 	 *  `inbox.reclassify` — write manual frame-type overrides and re-aggregate.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
 	 */
@@ -1205,12 +1205,12 @@ export const commands = {
 	/**
 	 *  `inbox.reclassify` v2 — field-agnostic property-map + bulk reclassify,
 	 *  scoped to a source group (spec 041 T068/T072 / FR-044/FR-045/FR-049).
-	 * 
+	 *
 	 *  Unlike [`inbox_reclassify`] (fixed `frame_type`/`filter`/`exposure_s`/`binning`,
 	 *  single item), this accepts an open property map validated against
 	 *  `inbox.property_registry`, plus bulk "set all" entries, and re-splits the
 	 *  source group's files into re-materialized single-type sub-items.
-	 * 
+	 *
 	 *  # Errors
 	 *  `inbox.item.not_found` | `inbox.has.open.plan` | `file.not_found` |
 	 *  `inbox.reclassify.unknown_property` | `inbox.reclassify.non_overridable_property`
@@ -1219,7 +1219,7 @@ export const commands = {
 	/**
 	 *  `inbox.item.metadata` — assemble per-file extracted metadata for an inbox
 	 *  item (spec 041 US2/FR-010).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a string error if the item is missing or a query fails.
 	 */
@@ -1227,20 +1227,20 @@ export const commands = {
 	/**
 	 *  `inbox.list` — return all unacknowledged inbox items across all registered
 	 *  roots (states `pending_classification` and `classified`).
-	 * 
+	 *
 	 *  Results are capped at 500 items (FR-006). Each item carries its root's
 	 *  absolute path so the UI can group/label by root without a second call.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a string error on database failure.
 	 */
 	inboxList: () => typedError<InboxListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_list")),
 	/**
 	 *  `inbox.plan` — fetch the open plan for an inbox item.
-	 * 
+	 *
 	 *  Returns the [`InboxPlanView`] when a plan link exists for this item, or an
 	 *  error with code `inbox.item.no_plan` when the item has no open plan.
-	 * 
+	 *
 	 *  # Errors
 	 *  - `inbox.item.not_found` — item does not exist.
 	 *  - `inbox.item.no_plan`   — item exists but has no linked plan.
@@ -1249,11 +1249,11 @@ export const commands = {
 	inboxPlan: (inboxItemId: string) => typedError<InboxPlanView, string>(__TAURI_INVOKE("inbox_plan", { inboxItemId })),
 	/**
 	 *  `inbox.plan.apply` — approve + apply the plan for a single inbox item.
-	 * 
+	 *
 	 *  The use-case auto-approves the plan (which `inbox.confirm` leaves at
 	 *  `ready_for_review`) before calling `apply_plan`.  The plan listener
 	 *  transitions the inbox item state once the executor completes.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a string error on failure, including `plan.stale` when per-item
 	 *  CAS detects a file changed since the plan was created.
@@ -1261,10 +1261,10 @@ export const commands = {
 	inboxPlanApply: (inboxItemId: string) => typedError<PlanApplyResponse, string>(__TAURI_INVOKE("inbox_plan_apply", { inboxItemId })),
 	/**
 	 *  `inbox.plan.apply_all` — apply all plans currently in `plan_open` state.
-	 * 
+	 *
 	 *  Iterates items in `plan_open` state and applies each sequentially.
 	 *  Returns a per-item result list so the UI can report partial failures.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a string error only if the list query itself fails; per-plan
 	 *  errors are captured inside `InboxApplyAllResponse.results`.
@@ -1273,12 +1273,12 @@ export const commands = {
 	/**
 	 *  `inbox.plan.apply_selected` — apply a caller-chosen subset of inbox plans
 	 *  (spec 041, US2).
-	 * 
+	 *
 	 *  Selection is plan-level (per inbox item / ingestion group). Returns a
 	 *  per-item result list so the UI can report partial failures; ids that are not
 	 *  in `plan_open` state are reported as per-item errors rather than failing the
 	 *  whole call.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a string error only if the membership query itself fails; per-plan
 	 *  errors are captured inside `InboxApplyAllResponse.results`.
@@ -1286,10 +1286,10 @@ export const commands = {
 	inboxPlanApplySelected: (request: InboxApplySelectedRequest) => typedError<InboxApplyAllResponse, string>(__TAURI_INVOKE("inbox_plan_apply_selected", { request })),
 	/**
 	 *  `inbox.plan.cancel` — discard the open plan and reset the item to `classified`.
-	 * 
+	 *
 	 *  The plan listener handles async cleanup; the use-case also eagerly resets
 	 *  the inbox item state so the UI can reflect the change immediately.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a string error on database failure.
 	 */
@@ -1297,37 +1297,37 @@ export const commands = {
 	/**
 	 *  `inbox.stats` — aggregate per-type frame counts across all active inbox items
 	 *  (spec 041, US6 T038).
-	 * 
+	 *
 	 *  Returns counts of folders, masters, and images broken down by effective frame
 	 *  type. The effective type is `manual_override` when set, otherwise
 	 *  `frame_type` from classification evidence.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a string error on database failure.
 	 */
 	inboxStats: () => typedError<InboxStatsResponse, string>(__TAURI_INVOKE("inbox_stats")),
 	/**
 	 *  `inbox.plan.list_open` — return every open plan across all roots (spec 041, US2).
-	 * 
+	 *
 	 *  Aggregate surface so the UI can show every active planned action at once,
 	 *  each with its actions, without selecting inbox items one at a time.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns a string error only if the underlying list/plan queries fail.
 	 */
 	inboxPlanListOpen: () => typedError<InboxOpenPlansResponse, string>(__TAURI_INVOKE("inbox_plan_list_open")),
 	/**
 	 *  `inbox.property_registry` — return the typed property registry.
-	 * 
+	 *
 	 *  The registry lists every per-file property that the field-agnostic
 	 *  reclassifier (spec 041 R-13) understands: its key, value kind, physical
 	 *  unit, source FITS/XISF header(s), whether it is user-overridable, the frame
 	 *  types it applies to, and an optional validation hint.
-	 * 
+	 *
 	 *  The UI uses this registry to render a generic metadata editor without
 	 *  hard-coding field names, so future properties can be added without frontend
 	 *  changes (FR-044).
-	 * 
+	 *
 	 *  # Errors
 	 *  Never fails; always returns `Ok`.
 	 */
@@ -1335,21 +1335,21 @@ export const commands = {
 	/**
 	 *  `inbox.target_recommendations` — recommend canonical targets for a light
 	 *  sub-group by sky-coordinate proximity (spec 041 R-17 / FR-052).
-	 * 
+	 *
 	 *  Ranks catalog targets by great-circle separation from the sub-group's
 	 *  pointing within a FOV-aware (or configurable fixed) radius. The `OBJECT`
 	 *  header is returned only as a display hint, never used for matching. The
 	 *  chosen target is written separately via `inbox.reclassify` (T068).
-	 * 
+	 *
 	 *  Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
-	 * 
+	 *
 	 *  # Errors
 	 *  `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
 	 */
 	inboxTargetRecommendations: (req: InboxTargetRecommendationsRequest_Deserialize) => typedError<InboxTargetRecommendationsResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_target_recommendations", { req })),
 	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database error.
 	 */
@@ -1357,7 +1357,7 @@ export const commands = {
 	/**
 	 *  `ingestion.settings.get` — returns current ingestion/scan settings,
 	 *  merging any persisted overrides with in-code defaults.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ContractError)` on database failure.
 	 */
@@ -1365,7 +1365,7 @@ export const commands = {
 	/**
 	 *  `ingestion.settings.update` — validates, persists, and returns the
 	 *  persisted ingestion/scan settings.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ContractError)` with code `"value.invalid"` for a negative
 	 *  tolerance, or on database failure.
@@ -1373,63 +1373,63 @@ export const commands = {
 	ingestionSettingsUpdate: (request: UpdateIngestionSettings) => typedError<IngestionSettings, ContractError_Serialize>(__TAURI_INVOKE("ingestion_settings_update", { request })),
 	/**
 	 *  `tools.launch` — launch the configured processing tool for a project.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on infrastructure failure.
 	 */
 	toolsLaunch: (request: ToolLaunchRequest) => typedError<ToolLaunchResponse, ContractError_Serialize>(__TAURI_INVOKE("tools_launch", { request })),
 	/**
 	 *  `tools.list` — list all tool profiles joined with settings state.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure.
 	 */
 	toolsList: () => typedError<ToolProfileListResponse, ContractError_Serialize>(__TAURI_INVOKE("tools_list")),
 	/**
 	 *  `tools.update` — save `executable_path` / enabled for a tool.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure.
 	 */
 	toolsUpdate: (request: UpdateProcessingTool) => typedError<ToolProfileSummary, ContractError_Serialize>(__TAURI_INVOKE("tools_update", { request })),
 	/**
 	 *  `tools.validate_path` — validate an executable path without spawning.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on failure; this command never fails in practice.
 	 */
 	toolsValidatePath: (path: string) => typedError<ToolPathValidation, ContractError_Serialize>(__TAURI_INVOKE("tools_validate_path", { path })),
 	/**
 	 *  `tools.discover` — auto-detect installed tool executables for the current OS.
-	 * 
+	 *
 	 *  Returns detected paths; the user must explicitly save to activate them.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on unexpected failure.
 	 */
 	toolsDiscover: (request: ToolDiscoverRequest) => typedError<ToolDiscoverResponse, ContractError_Serialize>(__TAURI_INVOKE("tools_discover", { request })),
 	/**
 	 *  `artifact.list` — list processing artifacts for a project.
-	 * 
+	 *
 	 *  Returns artifacts grouped for the Tool Launches drawer accordion.
 	 *  Defaults to `["present","missing"]` states when `include_states` is empty.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure.
 	 */
 	artifactList: (request: ArtifactListRequest) => typedError<ArtifactListResponse, ContractError_Serialize>(__TAURI_INVOKE("artifact_list", { request })),
 	/**
 	 *  `artifact.classify` — apply or clear a manual classification override.
-	 * 
+	 *
 	 *  Pass `kind: null` to clear the override and re-apply workflow-profile rules (A6).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure or if the artifact is not found.
 	 */
 	artifactClassify: (request: ArtifactClassifyRequest) => typedError<ArtifactClassifyResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("artifact_classify", { request })),
 	/**
 	 *  `artifact.mark_resolved` — mark a `missing` artifact as user-resolved.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on DB failure.
 	 */
@@ -1437,11 +1437,11 @@ export const commands = {
 	/**
 	 *  `artifact.watcher.attach` — attach the live filesystem watcher for a
 	 *  project's output folder (spec 012 T008: project drawer open lifecycle).
-	 * 
+	 *
 	 *  Idempotent: attaching an already-attached project is a no-op. Runs an
 	 *  on-attach reconciliation pass first so files written while detached are
 	 *  still detected.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ContractError)` on DB failure or if the watcher cannot be
 	 *  started. An unavailable output folder (e.g. a removed drive) is NOT an
@@ -1451,26 +1451,26 @@ export const commands = {
 	/**
 	 *  `artifact.watcher.detach` — detach the live filesystem watcher for a
 	 *  project (spec 012 T008: project drawer close lifecycle).
-	 * 
+	 *
 	 *  Idempotent: detaching an unattached project is a silent no-op.
-	 * 
+	 *
 	 *  # Errors
 	 *  Never fails; the `Result` return type matches the shared command shape.
 	 */
 	artifactWatcherDetach: (request: ArtifactWatcherRequest) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("artifact_watcher_detach", { request })),
 	/**
 	 *  `project.manifest.list` — list manifest snapshots for a project.
-	 * 
+	 *
 	 *  Returns summaries ordered newest first, with cursor-based pagination.
 	 *  Default limit 50, max 200 (A6).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ManifestOpError)` on database failure.
 	 */
 	manifestList: (request: ManifestListRequest_Deserialize) => typedError<ManifestListResponse_Serialize, ManifestOpError_Serialize>(__TAURI_INVOKE("manifest_list", { request })),
 	/**
 	 *  `project.manifest.get` — fetch one manifest with its full structured body.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ManifestOpError)` with code `"manifest.not_found"` when the
 	 *  manifest does not exist.
@@ -1478,20 +1478,20 @@ export const commands = {
 	manifestGet: (request: ManifestGetRequest) => typedError<ManifestGetResponse_Serialize, ManifestOpError_Serialize>(__TAURI_INVOKE("manifest_get", { request })),
 	/**
 	 *  `project.note.get` — fetch the current notes body for a project.
-	 * 
+	 *
 	 *  Returns `content: null` when no note has been saved yet (project never had
 	 *  notes written via `project.note.update`).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ManifestOpError)` with code `"internal"` on database failure.
 	 */
 	noteGet: (req: ProjectNoteGetRequest) => typedError<ProjectNoteGetResult, ManifestOpError_Serialize>(__TAURI_INVOKE("note_get", { req })),
 	/**
 	 *  `project.note.update` — replace the project's notes body.
-	 * 
+	 *
 	 *  - Max 16 384 UTF-8 bytes (A5).
 	 *  - `project.read_only` when lifecycle is `"archived"` (R-NotesEdit).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(ManifestOpError)` with codes: `"project.not_found"`,
 	 *  `"project.read_only"`, `"note.content_too_large"`.
@@ -1500,20 +1500,20 @@ export const commands = {
 	/**
 	 *  `project.manifest.reveal_in_os` — open the manifest file's folder in the
 	 *  OS file manager.
-	 * 
+	 *
 	 *  Delegates to `tauri-plugin-opener::reveal_item_in_dir`. On Linux, if the
 	 *  opener plugin fails, falls back to `xdg-open` on the parent directory
 	 *  (matching the pattern from `native.reveal`).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` when the path does not exist or the OS open fails.
 	 */
 	manifestRevealInOs: (request: ManifestRevealRequest) => typedError<null, string>(__TAURI_INVOKE("manifest_reveal_in_os", { request })),
 	/**
 	 *  `preparedview.list` — list all prepared source views for a project.
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(ContractError)` on database failure or if the project does not
 	 *  exist.
 	 */
@@ -1521,14 +1521,14 @@ export const commands = {
 	/**
 	 *  `preparedview.remove` — create a `ViewRemovalPlan` for a prepared source
 	 *  view.
-	 * 
+	 *
 	 *  The response `planId` should be routed through `plans.approve` then
 	 *  `plan.apply` to physically remove the view links/copies.
-	 * 
+	 *
 	 *  Destructive destination is always `archive` (R-026-Dest-Archive).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(ContractError)` with codes:
 	 *  - `view.not_found`         — view does not exist.
 	 *  - `view.in_use`            — another plan is applying against this view.
@@ -1540,11 +1540,11 @@ export const commands = {
 	/**
 	 *  `preparedview.regenerate` — create a `ViewRegenerationPlan` for a
 	 *  previously prepared (possibly removed) source view.
-	 * 
+	 *
 	 *  Removed views have an indefinite regenerable lifetime (A4).
-	 * 
+	 *
 	 *  # Errors
-	 * 
+	 *
 	 *  Returns `Err(ContractError)` with codes:
 	 *  - `view.not_found`         — view does not exist.
 	 *  - `view.mixed_kind`        — view is in `kind_diverged` state.
@@ -1554,25 +1554,25 @@ export const commands = {
 	preparedviewRegenerate: (viewId: string) => typedError<PreparedViewRegenerateResponse, ContractError_Serialize>(__TAURI_INVOKE("preparedview_regenerate", { viewId })),
 	/**
 	 *  `dev.contracts.list` — list all registered contracts (spec 021 US1).
-	 * 
+	 *
 	 *  Returns `dev_mode.disabled` when the runtime `devMode` setting is off.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure or when `devMode` is disabled.
 	 */
 	devContractsList: (request: DevContractsListRequest_Deserialize) => typedError<DevContractsListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_contracts_list", { request })),
 	/**
 	 *  `dev.calls.list` — return recent recorded calls (spec 021 US2).
-	 * 
+	 *
 	 *  Reads from the in-memory `CallBuffer` Tauri state.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` when `devMode` is disabled or on database failure.
 	 */
 	devCallsList: (request: DevCallsListRequest_Deserialize) => typedError<DevCallsListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_calls_list", { request })),
 	/**
 	 *  `dev.export` — dump contract registry + calls to a JSON file (spec 021 US4).
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` when `devMode` is disabled, the path is outside the
 	 *  allowed write envelope, or the file cannot be written.
@@ -1580,11 +1580,11 @@ export const commands = {
 	devExport: (request: DevExportRequest_Deserialize) => typedError<DevExportResponse, ContractError_Serialize>(__TAURI_INVOKE("dev_export", { request })),
 	/**
 	 *  `dev.schema.get` — read a JSON Schema file server-side (spec 021 US3).
-	 * 
+	 *
 	 *  Reads `request.schema_path` from disk and returns the pretty-printed
 	 *  content. Returns `found: false` when the file is absent or unreadable,
 	 *  avoiding any client-side filesystem dependency.
-	 * 
+	 *
 	 *  # Errors
 	 *  Returns `Err(String)` when `devMode` is disabled.
 	 */
@@ -1594,7 +1594,7 @@ export const commands = {
 /* Types */
 /**
  *  An acquisition session as seen through the IPC boundary.
- * 
+ *
  *  This is the list-level representation returned by `sessions.list`. It
  *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
  */
@@ -1602,7 +1602,7 @@ export type AcquisitionSession = AcquisitionSession_Serialize | AcquisitionSessi
 
 /**
  *  An acquisition session as seen through the IPC boundary.
- * 
+ *
  *  This is the list-level representation returned by `sessions.list`. It
  *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
  */
@@ -1622,7 +1622,7 @@ export type AcquisitionSession_Deserialize = {
 
 /**
  *  An acquisition session as seen through the IPC boundary.
- * 
+ *
  *  This is the list-level representation returned by `sessions.list`. It
  *  matches the frontend's `AcquisitionSession` interface in `types.ts`.
  */
@@ -1642,7 +1642,7 @@ export type AcquisitionSession_Serialize = {
 
 /**
  *  Kind of a target alias (gen-3).
- * 
+ *
  *  - `"designation"` — a SIMBAD catalog designation (read-only, not removable).
  *  - `"common_name"` — a SIMBAD curated common name (read-only, not removable).
  *  - `"user"` — a user-added alias (removable via `target.alias.remove`).
@@ -1709,7 +1709,7 @@ export type ArchiveSendToTrashResponse = {
 
 /**
  *  Request DTO for `artifact.classify` (spec 012 T014/TX01).
- * 
+ *
  *  `kind = None` clears the manual override and triggers rule re-classification (A6).
  */
 export type ArtifactClassifyRequest = {
@@ -1722,7 +1722,7 @@ export type ArtifactClassifyRequest = {
 
 /**
  *  Response DTO for `artifact.classify` (flat contract shape, spec 033 T028).
- * 
+ *
  *  Canonical shape is flat fields matching the published contract.
  *  The prior nested `{ artifact: ArtifactSummary }` envelope is replaced
  *  so the response matches `artifact-events.md`.
@@ -1731,7 +1731,7 @@ export type ArtifactClassifyResponse = ArtifactClassifyResponse_Serialize | Arti
 
 /**
  *  Response DTO for `artifact.classify` (flat contract shape, spec 033 T028).
- * 
+ *
  *  Canonical shape is flat fields matching the published contract.
  *  The prior nested `{ artifact: ArtifactSummary }` envelope is replaced
  *  so the response matches `artifact-events.md`.
@@ -1745,7 +1745,7 @@ export type ArtifactClassifyResponse_Deserialize = {
 
 /**
  *  Response DTO for `artifact.classify` (flat contract shape, spec 033 T028).
- * 
+ *
  *  Canonical shape is flat fields matching the published contract.
  *  The prior nested `{ artifact: ArtifactSummary }` envelope is replaced
  *  so the response matches `artifact-events.md`.
@@ -1777,7 +1777,7 @@ export type ArtifactMarkResolvedRequest = {
 
 /**
  *  Summary of a single observed `ProcessingArtifact` row (spec 012, artifact.list).
- * 
+ *
  *  Matches the `Artifact` shape from `specs/012-processing-artifact-observation/contracts/artifact.list.json`.
  */
 export type ArtifactSummary = {
@@ -1810,7 +1810,7 @@ export type ArtifactWatcherRequest = {
 	projectId: string,
 };
 
-export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" | 
+export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" |
 /**  target: alias and primaryDesignation provenance tracking (R-3.2). */
 "target";
 
@@ -1931,7 +1931,7 @@ export type AuditEntry_Serialize = {
 
 /**
  *  Filter args for `audit.list` / `audit.export`.
- * 
+ *
  *  `entity_type` + `entity_id` are the key fields a future per-entity history
  *  view (e.g. an archive-detail audit trail) would reuse — kept as plain
  *  equality filters rather than something bespoke to the settings screen.
@@ -2303,7 +2303,7 @@ export type CalibrationTolerances = {
 
 /**
  *  Calibration type exposed in v1 contracts.
- * 
+ *
  *  `dark_flat` is intentionally absent per FR-001 (R-DarkFlat-Reserved).
  */
 export type CalibrationType = "dark" | "flat" | "bias";
@@ -2736,12 +2736,12 @@ export type Equipment = {
 
 /**
  *  Exhaustive set of `ContractError.code` wire strings.
- * 
+ *
  *  Every variant carries an explicit `#[serde(rename = "exact.wire.string")]`
  *  so round-trips are byte-exact regardless of derive rename rules.
- * 
+ *
  *  ## Verification
- * 
+ *
  *  ```rust
  *  use contracts_core::error_code::ErrorCode;
  *  assert_eq!(
@@ -2754,7 +2754,7 @@ export type Equipment = {
  *  );
  *  ```
  */
-export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
+export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" |
 /**  Plan approval is outstanding (sent as `ContractError`, not `TransitionError`). */
 "plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
 /**
@@ -2764,25 +2764,25 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  */
 "root.has_dependents" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
 /**  Used in `ContractError` tests in lib.rs; also may appear via plan-apply. */
-"filesystem.destination_exists" | 
+"filesystem.destination_exists" |
 /**
  *  `transition.refused` appears in `ContractError` payloads in
  *  `transition_use_case.rs` (passed as a String literal alongside
  *  `TransitionErrorCode`).  Included here for completeness.
  */
-"transition.refused" | 
+"transition.refused" |
 /**  `plan.required` appears in `ContractError` in `transition_use_case.rs`. */
-"plan.required" | 
+"plan.required" |
 /**
  *  Appears in `TargetOpError.code: String` (`target_management.rs`).
  *  Included per task instruction ("include when unsure — superset is safe").
  */
-"alias.duplicate" | "alias.blank" | "alias.not_found" | "alias.not_removable" | "target.not_found" | "target.invalid_id" | 
+"alias.duplicate" | "alias.blank" | "alias.not_found" | "alias.not_removable" | "target.not_found" | "target.invalid_id" |
 /**
  *  Appears in `ToolLaunchError.code: String` (`tool_launch.rs`).
  *  Included per task instruction.
  */
-"launch.failed" | "macos.quarantine.detected" | "filters.invalid" | "os.command_failed" | "picker.unavailable" | "format.unsupported" | "range.invalid" | "path.write.denied" | "path.parent.missing" | "database.error" | "serialise.error" | "io.error" | 
+"launch.failed" | "macos.quarantine.detected" | "filters.invalid" | "os.command_failed" | "picker.unavailable" | "format.unsupported" | "range.invalid" | "path.write.denied" | "path.parent.missing" | "database.error" | "serialise.error" | "io.error" |
 /**  Used when a legacy `String` error is wrapped into `ContractError`. */
 "internal.error";
 
@@ -2995,7 +2995,7 @@ export type GuidedFlowStateDto = {
 
 /**
  *  Response from `guided.restart`.
- * 
+ *
  *  - If flow was `Dismissed`: resumes at the lowest uncompleted step; previously
  *    completed steps retained.
  *  - If flow was `Completed`: resets all progress to Idle (replay from step 1).
@@ -3007,7 +3007,7 @@ export type GuidedRestartResponse = {
 
 /**
  *  Response from `guided.state.get`.
- * 
+ *
  *  On `state_corrupted` the row has already been reset to Idle server-side;
  *  the caller should display a non-blocking notice and retry.
  */
@@ -3106,7 +3106,7 @@ export type InboxClassifyResponse_Serialize = {
 
 /**
  *  Summary of plan actions split by type (spec 041 US4/US5/FR-020).
- * 
+ *
  *  Lets the UI show "N move / M catalogue" without iterating plan items.
  */
 export type InboxConfirmActionsSummary = {
@@ -3119,7 +3119,7 @@ export type InboxConfirmActionsSummary = {
 /**
  *  Resolved destination preview for one confirmed plan action (spec 041
  *  US8/FR-031).
- * 
+ *
  *  Carries the **absolute** destination (chosen root path + resolved relative
  *  path) so the UI can show the full on-disk path without re-resolving roots.
  */
@@ -3154,7 +3154,7 @@ export type InboxConfirmRequest_Deserialize = {
 	rootAbsolutePath: string,
 	/**
 	 *  Caller-selected destination library root (spec 041 US8/FR-029).
-	 * 
+	 *
 	 *  Only consulted for inbox sources whose frame-type category has more than
 	 *  one candidate library root. When exactly one candidate exists it is
 	 *  auto-selected and this field is ignored; for non-inbox sources the file
@@ -3177,7 +3177,7 @@ export type InboxConfirmRequest_Serialize = {
 	rootAbsolutePath: string,
 	/**
 	 *  Caller-selected destination library root (spec 041 US8/FR-029).
-	 * 
+	 *
 	 *  Only consulted for inbox sources whose frame-type category has more than
 	 *  one candidate library root. When exactly one candidate exists it is
 	 *  auto-selected and this field is ignored; for non-inbox sources the file
@@ -3264,7 +3264,7 @@ export type InboxFileEntry = {
 
 /**
  *  Per-file metadata entry for one file within an inbox item.
- * 
+ *
  *  All header fields are nullable — not every file type carries all headers.
  *  `frame_type_effective` reflects override-if-present-else-extracted.
  *  `override_stale` is true when the file was changed (size/mtime) since the
@@ -3274,7 +3274,7 @@ export type InboxFileMetadata = InboxFileMetadata_Serialize | InboxFileMetadata_
 
 /**
  *  Per-file metadata entry for one file within an inbox item.
- * 
+ *
  *  All header fields are nullable — not every file type carries all headers.
  *  `frame_type_effective` reflects override-if-present-else-extracted.
  *  `override_stale` is true when the file was changed (size/mtime) since the
@@ -3345,7 +3345,7 @@ export type InboxFileMetadata_Deserialize = {
 
 /**
  *  Per-file metadata entry for one file within an inbox item.
- * 
+ *
  *  All header fields are nullable — not every file type carries all headers.
  *  `frame_type_effective` reflects override-if-present-else-extracted.
  *  `override_stale` is true when the file was changed (size/mtime) since the
@@ -3445,7 +3445,7 @@ export type InboxItemSummary_Deserialize = {
 	lane: string,
 	/**
 	 *  Real file format for this item: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.
-	 * 
+	 *
 	 *  Unlike `lane` (which only distinguishes FITS vs video), `format` tells
 	 *  the UI whether the item contains FITS files, XISF files, a mix of both,
 	 *  or video files.  Spec 040 FR-006.
@@ -3477,7 +3477,7 @@ export type InboxItemSummary_Serialize = {
 	lane: string,
 	/**
 	 *  Real file format for this item: `"fits"` | `"xisf"` | `"video"` | `"mixed"`.
-	 * 
+	 *
 	 *  Unlike `lane` (which only distinguishes FITS vs video), `format` tells
 	 *  the UI whether the item contains FITS files, XISF files, a mix of both,
 	 *  or video files.  Spec 040 FR-006.
@@ -3503,10 +3503,10 @@ export type InboxItemSummary_Serialize = {
 
 /**
  *  One unacknowledged inbox item returned by `inbox.list`.
- * 
+ *
  *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
  *  can group/label items by root without a second call.
- * 
+ *
  *  Spec 041: gains `organization_state` so the list can show
  *  move-vs-catalogue intent per item without a separate source lookup.
  */
@@ -3514,10 +3514,10 @@ export type InboxListItem = InboxListItem_Serialize | InboxListItem_Deserialize;
 
 /**
  *  One unacknowledged inbox item returned by `inbox.list`.
- * 
+ *
  *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
  *  can group/label items by root without a second call.
- * 
+ *
  *  Spec 041: gains `organization_state` so the list can show
  *  move-vs-catalogue intent per item without a separate source lookup.
  */
@@ -3603,10 +3603,10 @@ export type InboxListItem_Deserialize = {
 
 /**
  *  One unacknowledged inbox item returned by `inbox.list`.
- * 
+ *
  *  Extends `InboxItemSummary` with the root's id and absolute path so the UI
  *  can group/label items by root without a second call.
- * 
+ *
  *  Spec 041: gains `organization_state` so the list can show
  *  move-vs-catalogue intent per item without a separate source lookup.
  */
@@ -3731,7 +3731,7 @@ export type InboxOpenPlansResponse = {
 
 /**
  *  One plan action entry in the in-context plan panel.
- * 
+ *
  *  `action` is `"move"` | `"catalogue"` | `"archive"` | `"trash"`.
  */
 export type InboxPlanAction = {
@@ -3767,7 +3767,7 @@ export type InboxPlanCancelResponse = {
 
 /**
  *  Response from `inbox.plan` — plan(s) linked to an inbox item (spec 041).
- * 
+ *
  *  Read via `inbox_plan_links` so the inbox surface can show plan detail
  *  without navigating to the Archive page (FR-004).
  */
@@ -3794,7 +3794,7 @@ export type InboxPointing = {
 
 /**
  *  One bulk "set all" entry: apply one value to many files at once.
- * 
+ *
  *  `file_paths` is optional: when absent the value is applied to **all** files
  *  in the source group (the "set all" affordance). When present only the listed
  *  paths are updated.
@@ -3803,7 +3803,7 @@ export type InboxReclassifyBulk = InboxReclassifyBulk_Serialize | InboxReclassif
 
 /**
  *  One bulk "set all" entry: apply one value to many files at once.
- * 
+ *
  *  `file_paths` is optional: when absent the value is applied to **all** files
  *  in the source group (the "set all" affordance). When present only the listed
  *  paths are updated.
@@ -3822,7 +3822,7 @@ export type InboxReclassifyBulk_Deserialize = {
 
 /**
  *  One bulk "set all" entry: apply one value to many files at once.
- * 
+ *
  *  `file_paths` is optional: when absent the value is applied to **all** files
  *  in the source group (the "set all" affordance). When present only the listed
  *  paths are updated.
@@ -3842,7 +3842,7 @@ export type InboxReclassifyBulk_Serialize = {
 /**
  *  One per-file property override entry in the field-agnostic reclassify request
  *  (T068).
- * 
+ *
  *  `properties` is an open map of registry-validated property keys (camelCase,
  *  as in `inbox.property_registry`) to their JSON values. Unknown or
  *  non-overridable keys are rejected by the use case. Only MISSING / unreadable
@@ -3861,7 +3861,7 @@ export type InboxReclassifyFileOverride = {
 
 /**
  *  A single file override in a reclassify request.
- * 
+ *
  *  Extended by spec 041 (R-3) to carry optional filter/exposure/binning
  *  overrides alongside frame type. Any subset of fields may be set per file;
  *  omitted fields leave the existing persisted override unchanged.
@@ -3870,7 +3870,7 @@ export type InboxReclassifyOverride = InboxReclassifyOverride_Serialize | InboxR
 
 /**
  *  A single file override in a reclassify request.
- * 
+ *
  *  Extended by spec 041 (R-3) to carry optional filter/exposure/binning
  *  overrides alongside frame type. Any subset of fields may be set per file;
  *  omitted fields leave the existing persisted override unchanged.
@@ -3889,7 +3889,7 @@ export type InboxReclassifyOverride_Deserialize = {
 
 /**
  *  A single file override in a reclassify request.
- * 
+ *
  *  Extended by spec 041 (R-3) to carry optional filter/exposure/binning
  *  overrides alongside frame type. Any subset of fields may be set per file;
  *  omitted fields leave the existing persisted override unchanged.
@@ -3952,7 +3952,7 @@ export type InboxReclassifyResponse_Serialize = {
 
 /**
  *  Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
- * 
+ *
  *  Scope is the **source group** (R-13): a reclassify may re-partition files
  *  across sub-items, so operating at sub-item scope is unsafe. Identify the
  *  group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
@@ -3962,7 +3962,7 @@ export type InboxReclassifyV2Request = InboxReclassifyV2Request_Serialize | Inbo
 
 /**
  *  Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
- * 
+ *
  *  Scope is the **source group** (R-13): a reclassify may re-partition files
  *  across sub-items, so operating at sub-item scope is unsafe. Identify the
  *  group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
@@ -3984,7 +3984,7 @@ export type InboxReclassifyV2Request_Deserialize = {
 
 /**
  *  Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
- * 
+ *
  *  Scope is the **source group** (R-13): a reclassify may re-partition files
  *  across sub-items, so operating at sub-item scope is unsafe. Identify the
  *  group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
@@ -4152,7 +4152,7 @@ export type InboxTargetCandidate = {
 
 /**
  *  Request for `inbox.target_recommendations`.
- * 
+ *
  *  Identify a light sub-group by **either** its `inboxItemId` **or** its
  *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
  *  one should be set; if both are present, `inboxItemId` takes precedence.
@@ -4161,7 +4161,7 @@ export type InboxTargetRecommendationsRequest = InboxTargetRecommendationsReques
 
 /**
  *  Request for `inbox.target_recommendations`.
- * 
+ *
  *  Identify a light sub-group by **either** its `inboxItemId` **or** its
  *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
  *  one should be set; if both are present, `inboxItemId` takes precedence.
@@ -4175,7 +4175,7 @@ export type InboxTargetRecommendationsRequest_Deserialize = {
 
 /**
  *  Request for `inbox.target_recommendations`.
- * 
+ *
  *  Identify a light sub-group by **either** its `inboxItemId` **or** its
  *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
  *  one should be set; if both are present, `inboxItemId` takes precedence.
@@ -4189,7 +4189,7 @@ export type InboxTargetRecommendationsRequest_Serialize = {
 
 /**
  *  Response from `inbox.target_recommendations`.
- * 
+ *
  *  `candidates` is ranked ascending by angular separation within the configured
  *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
  *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
@@ -4200,7 +4200,7 @@ export type InboxTargetRecommendationsResponse = InboxTargetRecommendationsRespo
 
 /**
  *  Response from `inbox.target_recommendations`.
- * 
+ *
  *  `candidates` is ranked ascending by angular separation within the configured
  *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
  *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
@@ -4215,7 +4215,7 @@ export type InboxTargetRecommendationsResponse_Deserialize = {
 
 /**
  *  Response from `inbox.target_recommendations`.
- * 
+ *
  *  `candidates` is ranked ascending by angular separation within the configured
  *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
  *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
@@ -4360,7 +4360,7 @@ export type InventoryProvenanceSummary_Serialize = {
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
- * 
+ *
  *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
  *  inventory with no review lifecycle.
  */
@@ -4369,7 +4369,7 @@ export type InventorySession = InventorySession_Serialize | InventorySession_Des
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
- * 
+ *
  *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
  *  inventory with no review lifecycle.
  */
@@ -4394,7 +4394,7 @@ export type InventorySession_Deserialize = {
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
- * 
+ *
  *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
  *  inventory with no review lifecycle.
  */
@@ -4474,7 +4474,7 @@ export type LedgerFilterDto = {
 
 /**
  *  camelCase wire shape mirroring [`LedgerRow`] for the typed Tauri surface.
- * 
+ *
  *  `LedgerRow` itself doesn't derive `specta::Type` (the persistence layer
  *  stays language-internal). This DTO is the IPC projection.
  */
@@ -4538,14 +4538,14 @@ export type LinkedProjectRef = {
 
 /**
  *  A projected log entry sent to the frontend.
- * 
+ *
  *  Stable shape; `contractVersion` is always `"2.0.0"` for this spec version (H1).
  */
 export type LogEntry = LogEntry_Serialize | LogEntry_Deserialize;
 
 /**
  *  Source of a log entry: derived from the spec 002 event-bus topic prefix.
- * 
+ *
  *  Closed enum aligned to the `source` field in `log.stream.json`
  *  (R-SourceEnum). `Diagnostic` entries bypass audit and are never persisted.
  */
@@ -4553,7 +4553,7 @@ export type LogEntrySource = "audit" | "diagnostic" | "catalog" | "plan" | "work
 
 /**
  *  A projected log entry sent to the frontend.
- * 
+ *
  *  Stable shape; `contractVersion` is always `"2.0.0"` for this spec version (H1).
  */
 export type LogEntry_Deserialize = {
@@ -4586,7 +4586,7 @@ export type LogEntry_Deserialize = {
 
 /**
  *  A projected log entry sent to the frontend.
- * 
+ *
  *  Stable shape; `contractVersion` is always `"2.0.0"` for this spec version (H1).
  */
 export type LogEntry_Serialize = {
@@ -4929,7 +4929,7 @@ export type MetaValue_Serialize = {
 
 /**
  *  Flat metadata map for resolution / preview (data-model.md §MetadataBundle).
- * 
+ *
  *  All fields are optional; absent keys cause fallback substitution. The
  *  `frame_type` field accepts the closed enum
  *  `["light","dark","flat","bias","dark_flat"]`.
@@ -4938,7 +4938,7 @@ export type MetadataBundleDto = MetadataBundleDto_Serialize | MetadataBundleDto_
 
 /**
  *  Flat metadata map for resolution / preview (data-model.md §MetadataBundle).
- * 
+ *
  *  All fields are optional; absent keys cause fallback substitution. The
  *  `frame_type` field accepts the closed enum
  *  `["light","dark","flat","bias","dark_flat"]`.
@@ -4959,7 +4959,7 @@ export type MetadataBundleDto_Deserialize = {
 
 /**
  *  Flat metadata map for resolution / preview (data-model.md §MetadataBundle).
- * 
+ *
  *  All fields are optional; absent keys cause fallback substitution. The
  *  `frame_type` field accepts the closed enum
  *  `["light","dark","flat","bias","dark_flat"]`.
@@ -5026,13 +5026,13 @@ export type OpticalTrain = {
 
 /**
  *  Organization state of a registered source (spec 041, R-7).
- * 
+ *
  *  `Organized` — files are already in their final location; confirm produces
  *  only `catalogue` (record-in-place) plan actions; no file moves.
- * 
+ *
  *  `Unorganized` — files should be moved to pattern-resolved destinations on
  *  confirm. `Inbox` sources are always `Unorganized`.
- * 
+ *
  *  Serializes as `"organized"` / `"unorganized"` (lowercase) to match the
  *  DB CHECK constraint and the IPC camelCase surface.
  */
@@ -5097,7 +5097,7 @@ export type PathPatternPreviewResponse = {
 
 /**
  *  One element of an ordered token pattern (data-model.md §PatternPart).
- * 
+ *
  *  Re-exported from `crates/contracts/core` so the Tauri command layer can
  *  reference it without importing `crates/patterns` directly. The shape matches
  *  [`patterns::PatternPart`] exactly.
@@ -5378,9 +5378,9 @@ export type PlanListResponse_Serialize = {
 };
 
 /**  Plan origin — which generator created this plan. */
-export type PlanOrigin = "inbox" | "restructure" | "cleanup" | "archive" | "project" | 
+export type PlanOrigin = "inbox" | "restructure" | "cleanup" | "archive" | "project" |
 /**  Spec 026 — generated source view removal plan. */
-"prepared_view_removal" | 
+"prepared_view_removal" |
 /**  Spec 026 — generated source view regeneration plan. */
 "prepared_view_regeneration";
 
@@ -5425,7 +5425,7 @@ export type PlanRetryResponse = {
  *  Ten-state plan lifecycle (spec 017 data-model.md `PlanState`).
  *  `paused` is surfaced here so the list/detail contracts can filter on it (R-Pause-1).
  */
-export type PlanState = "draft" | "ready_for_review" | "approved" | "applying" | 
+export type PlanState = "draft" | "ready_for_review" | "approved" | "applying" |
 /**  Mid-apply suspension (R-Pause-1). Written only by spec 025's executor. */
 "paused" | "applied" | "partially_applied" | "failed" | "cancelled" | "discarded";
 
@@ -5501,11 +5501,11 @@ export type PlanTransitionRequest_Serialize = {
 };
 
 /**  Execution shape of a plan. */
-export type PlanType = "split" | "restructure" | "cleanup" | "archive" | "source_map" | 
+export type PlanType = "split" | "restructure" | "cleanup" | "archive" | "source_map" |
 /**  Folder structure + project marker write plan (spec 008, Constitution II). */
-"project_create" | 
+"project_create" |
 /**  Spec 026 — removes generated source view links/copies. */
-"source_view_removal" | 
+"source_view_removal" |
 /**  Spec 026 — re-creates previously removed source view. */
 "source_view_regeneration";
 
@@ -5867,7 +5867,7 @@ export type ProjectNoteGetRequest = {
 
 /**
  *  Response for `project.note.get`.
- * 
+ *
  *  `content` is `None` when no note has been saved for this project yet.
  */
 export type ProjectNoteGetResult = {
@@ -5920,7 +5920,7 @@ export type ProjectSourceAddResult_Serialize = {
 
 /**
  *  A project source (Inventory session link with snapshot fields).
- * 
+ *
  *  `role` and `selection` are present in the spec 008 data model
  *  (data-model.md §`ProjectSource`). They are spec 008's canonical definition
  *  and ensure `SourceRole` + `SourceSelection` are emitted by specta.
@@ -5929,7 +5929,7 @@ export type ProjectSourceDto = ProjectSourceDto_Serialize | ProjectSourceDto_Des
 
 /**
  *  A project source (Inventory session link with snapshot fields).
- * 
+ *
  *  `role` and `selection` are present in the spec 008 data model
  *  (data-model.md §`ProjectSource`). They are spec 008's canonical definition
  *  and ensure `SourceRole` + `SourceSelection` are emitted by specta.
@@ -5949,7 +5949,7 @@ export type ProjectSourceDto_Deserialize = {
 
 /**
  *  A project source (Inventory session link with snapshot fields).
- * 
+ *
  *  `role` and `selection` are present in the spec 008 data model
  *  (data-model.md §`ProjectSource`). They are spec 008's canonical definition
  *  and ensure `SourceRole` + `SourceSelection` are emitted by specta.
@@ -6038,7 +6038,7 @@ export type ProjectSummaryDto_Serialize = {
 
 /**
  *  Processing tool selection for a project (canonical list from data-model.md).
- * 
+ *
  *  Renamed `ProjectTool` to avoid collision with `contracts_core::tools::ProcessingTool`
  *  (the tool-detection/registration struct). Same three values; different purpose.
  */
@@ -6125,43 +6125,43 @@ export type ProjectionTransitionRequest_Serialize = {
 
 /**
  *  Discriminant for the value kind of a property in the property registry.
- * 
+ *
  *  Mirrors the `kind` column in the R-13 property table.  The UI uses this to
  *  select the appropriate editor widget (number input, enum dropdown, etc.).
  */
-export type PropertyKind = 
+export type PropertyKind =
 /**  Free-form text (e.g. camera name, filter label). */
-"string" | 
+"string" |
 /**  IEEE-754 double (e.g. exposureS, raDeg). */
-"number" | 
+"number" |
 /**  Whole number (e.g. offset in ADU). */
-"integer" | 
+"integer" |
 /**  Either a numeric or text representation (e.g. gain on some cameras). */
-"numberOrString" | 
+"numberOrString" |
 /**  One of a fixed set of string values (e.g. frameType). */
-"enum" | 
+"enum" |
 /**  Calendar date (`YYYY-MM-DD`). */
-"date" | 
+"date" |
 /**  ISO-8601 date-time (e.g. obsTimeUtc, dateEnd). */
 "datetime";
 
 /**
  *  One entry in the property registry exposed by `inbox.property_registry`.
- * 
+ *
  *  Describes a named inbox-file property that the field-agnostic reclassifier
  *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
  *  The UI uses this registry to render a generic metadata editor without
  *  hard-coding field names.
- * 
+ *
  *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
  *  during extraction; empty for derived or resolve-only properties.
- * 
+ *
  *  `overridable` — when `false` the property is informational or derived and
  *  the reclassify endpoint will reject an explicit override for it.
- * 
+ *
  *  `appliesTo` — frame types for which this property is meaningful; the UI
  *  SHOULD hide non-applicable properties rather than blocking on them.
- * 
+ *
  *  `validation` — optional human-readable constraint description shown in the
  *  UI tooltip; not a machine-parseable expression (use for display only).
  */
@@ -6169,21 +6169,21 @@ export type PropertyRegistryEntry = PropertyRegistryEntry_Serialize | PropertyRe
 
 /**
  *  One entry in the property registry exposed by `inbox.property_registry`.
- * 
+ *
  *  Describes a named inbox-file property that the field-agnostic reclassifier
  *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
  *  The UI uses this registry to render a generic metadata editor without
  *  hard-coding field names.
- * 
+ *
  *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
  *  during extraction; empty for derived or resolve-only properties.
- * 
+ *
  *  `overridable` — when `false` the property is informational or derived and
  *  the reclassify endpoint will reject an explicit override for it.
- * 
+ *
  *  `appliesTo` — frame types for which this property is meaningful; the UI
  *  SHOULD hide non-applicable properties rather than blocking on them.
- * 
+ *
  *  `validation` — optional human-readable constraint description shown in the
  *  UI tooltip; not a machine-parseable expression (use for display only).
  */
@@ -6216,21 +6216,21 @@ export type PropertyRegistryEntry_Deserialize = {
 
 /**
  *  One entry in the property registry exposed by `inbox.property_registry`.
- * 
+ *
  *  Describes a named inbox-file property that the field-agnostic reclassifier
  *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
  *  The UI uses this registry to render a generic metadata editor without
  *  hard-coding field names.
- * 
+ *
  *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
  *  during extraction; empty for derived or resolve-only properties.
- * 
+ *
  *  `overridable` — when `false` the property is informational or derived and
  *  the reclassify endpoint will reject an explicit override for it.
- * 
+ *
  *  `appliesTo` — frame types for which this property is meaningful; the UI
  *  SHOULD hide non-applicable properties rather than blocking on them.
- * 
+ *
  *  `validation` — optional human-readable constraint description shown in the
  *  UI tooltip; not a machine-parseable expression (use for display only).
  */
@@ -6457,7 +6457,7 @@ export type RegisterSourceBatchResponse_Serialize = {
 
 /**
  *  Request payload for `roots.register`.
- * 
+ *
  *  `organization_state` is required for non-inbox sources (the UI forces an
  *  explicit choice). For `inbox` kind the value MUST be `unorganized`;
  *  supplying `organized` returns `source.invalid_organization_state`.
@@ -6466,7 +6466,7 @@ export type RegisterSourceRequest = RegisterSourceRequest_Serialize | RegisterSo
 
 /**
  *  Request payload for `roots.register`.
- * 
+ *
  *  `organization_state` is required for non-inbox sources (the UI forces an
  *  explicit choice). For `inbox` kind the value MUST be `unorganized`;
  *  supplying `organized` returns `source.invalid_organization_state`.
@@ -6485,7 +6485,7 @@ export type RegisterSourceRequest_Deserialize = {
 
 /**
  *  Request payload for `roots.register`.
- * 
+ *
  *  `organization_state` is required for non-inbox sources (the UI forces an
  *  explicit choice). For `inbox` kind the value MUST be `unorganized`;
  *  supplying `organized` returns `source.invalid_organization_state`.
@@ -6600,7 +6600,7 @@ export type ResolverSettingsUpdateRequest = {
 
 /**
  *  Request DTO for `settings.restore-defaults`.
- * 
+ *
  *  Pass an empty `keys` slice to restore every v1 key.
  */
 export type RestoreDefaultsRequest = {
@@ -6618,9 +6618,9 @@ export type RestoreDefaultsResponse = {
 };
 
 /**  Status returned by `settings.restore-defaults`. */
-export type RestoreDefaultsStatus = 
+export type RestoreDefaultsStatus =
 /**  At least one key was restored to its default. */
-"success" | 
+"success" |
 /**  All requested keys were already at their defaults; nothing written. */
 "noop";
 
@@ -6658,11 +6658,11 @@ export type RevealResponse = {
 };
 
 /**  How the target was highlighted in the OS file browser after a reveal. */
-export type RevealSelection = 
+export type RevealSelection =
 /**  The item was selected in the file browser (macOS, Windows, Linux freedesktop). */
-"target" | 
+"target" |
 /**  Only the parent directory opened (Linux xdg-open fallback). */
-"directory_only" | 
+"directory_only" |
 /**  No UI hint was applied. */
 "none";
 
@@ -6710,7 +6710,7 @@ export type RootHealth = {
 
 /**
  *  Scan depth strategy for a registered source.
- * 
+ *
  *  `strum` `serialize_all` mirrors the serde `rename_all` (`recursive`,
  *  `single`).
  */
@@ -6866,12 +6866,12 @@ export type Severity = "workflow" | "diagnostic";
 
 /**
  *  Kind of a registered source directory.
- * 
+ *
  *  `Calibration` replaces the former `Dark`, `Flat`, and `Bias` variants.
  *  Per-image frame type (light / dark / flat / bias) is detected from image
  *  metadata (FITS `IMAGETYP` header) during scan/ingest — the source-folder
  *  kind is only a user-facing folder category.
- * 
+ *
  *  The `strum` `serialize_all` mirrors the serde `rename_all`, so the
  *  `FromStr` / `Into<&'static str>` conversions produce byte-identical persisted
  *  strings (`light_frames`, `calibration`, `project`, `inbox`).
@@ -6983,7 +6983,7 @@ export type SourceProtectionSetResponse_Serialize = {
 
 /**
  *  Role of a linked source within a project (spec 008 data-model.md §`ProjectSource`).
- * 
+ *
  *  Canonical definition for this spec. Re-exported from `projects.rs` so existing
  *  command code that imports from that module continues to compile.
  */
@@ -6991,7 +6991,7 @@ export type SourceRole = "light" | "dark" | "flat" | "bias";
 
 /**
  *  Selection state for a linked source within a project (spec 008).
- * 
+ *
  *  Canonical definition for this spec. Re-exported from `projects.rs`.
  */
 export type SourceSelection = "selected" | "candidate";
@@ -7011,7 +7011,7 @@ export type SuggestErrorDto = {
 };
 
 /**  Result status for a suggest call. */
-export type SuggestStatus = "match" | "ambiguous" | "no_match" | 
+export type SuggestStatus = "match" | "ambiguous" | "no_match" |
 /**  Session lacks `observer_location` or `exposure_start_utc` (A6). */
 "observer_location_missing";
 
@@ -7058,14 +7058,14 @@ export type TargetDetail = TargetDetail_Serialize | TargetDetail_Deserialize;
 
 /**
  *  Full target detail returned by `target.get` (gen-3).
- * 
+ *
  *  `effectiveLabel` = `displayAlias ?? primaryDesignation`.
  */
 export type TargetDetailV3 = TargetDetailV3_Serialize | TargetDetailV3_Deserialize;
 
 /**
  *  Full target detail returned by `target.get` (gen-3).
- * 
+ *
  *  `effectiveLabel` = `displayAlias ?? primaryDesignation`.
  */
 export type TargetDetailV3_Deserialize = {
@@ -7092,7 +7092,7 @@ export type TargetDetailV3_Deserialize = {
 
 /**
  *  Full target detail returned by `target.get` (gen-3).
- * 
+ *
  *  `effectiveLabel` = `displayAlias ?? primaryDesignation`.
  */
 export type TargetDetailV3_Serialize = {
@@ -7173,7 +7173,7 @@ export type TargetKind = "deep_sky" | "planetary" | "lunar" | "solar" | "landsca
 
 /**
  *  A single row in the target list returned by `target.list` (gen-3).
- * 
+ *
  *  `raDeg` and `decDeg` are always populated (sourced from `canonical_target`).
  *  `constellation` and `magnitude` are optional because those columns were not
  *  in the original schema; they are populated from `canonical_target.constellation`
@@ -7186,7 +7186,7 @@ export type TargetListItem = TargetListItem_Serialize | TargetListItem_Deseriali
 
 /**
  *  A single row in the target list returned by `target.list` (gen-3).
- * 
+ *
  *  `raDeg` and `decDeg` are always populated (sourced from `canonical_target`).
  *  `constellation` and `magnitude` are optional because those columns were not
  *  in the original schema; they are populated from `canonical_target.constellation`
@@ -7221,7 +7221,7 @@ export type TargetListItem_Deserialize = {
 
 /**
  *  A single row in the target list returned by `target.list` (gen-3).
- * 
+ *
  *  `raDeg` and `decDeg` are always populated (sourced from `canonical_target`).
  *  `constellation` and `magnitude` are optional because those columns were not
  *  in the original schema; they are populated from `canonical_target.constellation`
@@ -7298,7 +7298,7 @@ export type TargetNoteUpdateResult_Serialize = {
 
 /**
  *  Closed astronomical object classification (spec 035 `ObjectType`).
- * 
+ *
  *  Mapped uniformly from SIMBAD `otype`; unknown values map to `Other`.
  */
 export type TargetObjectType = "galaxy" | "planetary_nebula" | "emission_nebula" | "reflection_nebula" | "dark_nebula" | "open_cluster" | "globular_cluster" | "supernova_remnant" | "galaxy_cluster" | "double_star" | "asterism" | "other";
@@ -7324,7 +7324,7 @@ export type TargetOpError_Serialize = {
 
 /**
  *  A linked project returned by `target.projects.list` (spec 023 US3).
- * 
+ *
  *  Columns sourced from the `projects` table:
  *  - `id` — row UUID.
  *  - `name` — human-visible project name.
@@ -7360,7 +7360,7 @@ export type TargetResolveErrorCode = "resolver.unreachable" | "resolver.disabled
 
 /**
  *  Manual user-override directive (`target.resolve.json` §`Request.override`).
- * 
+ *
  *  When present, binds `query` to this canonical target; persisted as
  *  `source=user-override` and wins over future SIMBAD results (FR-014).
  */
@@ -7393,7 +7393,7 @@ export type TargetResolveSimbadRequest_Serialize = {
 
 /**
  *  Response for `target.resolve` (`target.resolve.json` §`Response`).
- * 
+ *
  *  `target` is present when `status = Resolved`; `unresolvedReason` is present
  *  when `status = Unresolved`.
  */
@@ -7401,7 +7401,7 @@ export type TargetResolveSimbadResponse = TargetResolveSimbadResponse_Serialize 
 
 /**
  *  Response for `target.resolve` (`target.resolve.json` §`Response`).
- * 
+ *
  *  `target` is present when `status = Resolved`; `unresolvedReason` is present
  *  when `status = Unresolved`.
  */
@@ -7420,7 +7420,7 @@ export type TargetResolveSimbadResponse_Deserialize = {
 
 /**
  *  Response for `target.resolve` (`target.resolve.json` §`Response`).
- * 
+ *
  *  `target` is present when `status = Resolved`; `unresolvedReason` is present
  *  when `status = Unresolved`.
  */
@@ -7438,9 +7438,9 @@ export type TargetResolveSimbadResponse_Serialize = {
 };
 
 /**  Discriminated status for `target.resolve` (`target.resolve.json` §`ResolveStatus`). */
-export type TargetResolveStatus = 
+export type TargetResolveStatus =
 /**  A canonical target was determined (from cache or SIMBAD). */
-"resolved" | 
+"resolved" |
 /**
  *  Unknown/garbled, or SIMBAD unreachable with no cached entry — marked
  *  pending, retryable; coordinates never fabricated.
@@ -7478,7 +7478,7 @@ export type TargetSearchRequest_Serialize = {
 
 /**
  *  Response for `target.search` (`target.search.json` §`Response`).
- * 
+ *
  *  Local matches only; ordered by match quality. Long-tail/SIMBAD results
  *  arrive via `target.resolve`.
  */
@@ -7486,7 +7486,7 @@ export type TargetSearchResponse = TargetSearchResponse_Serialize | TargetSearch
 
 /**
  *  Response for `target.search` (`target.search.json` §`Response`).
- * 
+ *
  *  Local matches only; ordered by match quality. Long-tail/SIMBAD results
  *  arrive via `target.resolve`.
  */
@@ -7498,7 +7498,7 @@ export type TargetSearchResponse_Deserialize = {
 
 /**
  *  Response for `target.search` (`target.search.json` §`Response`).
- * 
+ *
  *  Local matches only; ordered by match quality. Long-tail/SIMBAD results
  *  arrive via `target.resolve`.
  */
@@ -7510,7 +7510,7 @@ export type TargetSearchResponse_Serialize = {
 
 /**
  *  A linked acquisition session returned by `target.sessions.list` (spec 023 US2).
- * 
+ *
  *  Only columns reliably present in `acquisition_session` are surfaced:
  *  - `id` — row UUID.
  *  - `session_key` — raw JSON string (matches the `session_key` column, which
@@ -7518,7 +7518,7 @@ export type TargetSearchResponse_Serialize = {
  *  - `created_at` — RFC 3339 UTC timestamp the row was created.
  *  - `frame_count` — length of the `frame_ids` JSON array (computed via
  *    `json_array_length`; 0 for legacy rows with the default `'[]'`).
- * 
+ *
  *  Spec 041 FR-051 (T076): no `state` field — sessions are derived,
  *  already-confirmed inventory with no review lifecycle.
  */
@@ -7539,7 +7539,7 @@ export type TargetSessionsListRequest = {
 
 /**
  *  Provenance of a canonical target identity (spec 035).
- * 
+ *
  *  `UserOverride` serializes as the hyphenated wire form `user-override`
  *  (DTO↔wire parity, T009); the other variants are lower-case words.
  */
@@ -7662,7 +7662,7 @@ export type ToolLaunchResponse = {
 	priorInstanceAlive: boolean,
 };
 
-export type ToolLaunchStatus = "success" | "error" | 
+export type ToolLaunchStatus = "success" | "error" |
 /**  Prior instance alive; client should confirm and resend with `force=true`. */
 "prior_instance_alive";
 
@@ -7875,4 +7875,3 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
         return { status: "error", error: e as any };
     }
 }
-

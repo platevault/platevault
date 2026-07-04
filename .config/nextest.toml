@@ -14,11 +14,18 @@
 # One test at a time — a single app instance, driver session, and database.
 test-threads = 1
 
-# Allow up to 60 s per slow-test period; terminate after 3 consecutive periods.
-slow-timeout = { period = "60s", terminate-after = 3 }
+# Warn every 60 s; terminate after 5 periods (300 s). Must exceed the
+# harness's LAUNCH_TIMEOUT (120 s — slow debug-build app boot on CI runners,
+# see crates/e2e-tests/tests/common/mod.rs) plus in-journey polling.
+slow-timeout = { period = "60s", terminate-after = 5 }
 
 # Retry once to guard against transient driver/startup flakes.
 retries = 1
+
+# Run every journey even when one fails: with fail-fast (the default) a single
+# failure cancels the remaining serial tests, hiding their results from CI
+# (run 28694907445 reported "1/6 tests run" with no signal for the other 5).
+fail-fast = false
 
 # Print failures immediately and again at the end for easy scanning.
 failure-output = "immediate-final"

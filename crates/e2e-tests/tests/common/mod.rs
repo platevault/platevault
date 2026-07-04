@@ -52,6 +52,14 @@ pub const TAURI_WEBDRIVER_URL: &str = "http://127.0.0.1:4444";
 /// journeys that need to assert the current URL or navigate within the SPA.
 pub const APP_URL: &str = "http://127.0.0.1:5173";
 
+/// Overall deadline for WebDriver session creation in [`E2eApp::launch`].
+///
+/// Must comfortably cover a debug-build app boot on a cold CI runner: DB
+/// connect + migrations + the ~13k-row bundled target-seed load all happen
+/// BEFORE the window exists (observed ~30 s on ubuntu-latest, CI run
+/// 28694907445), and the plugin's own per-attempt window-wait is only 10 s.
+pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(120);
+
 // ---------------------------------------------------------------------------
 // Private deserialization target for invoke() responses
 // ---------------------------------------------------------------------------
@@ -93,9 +101,28 @@ pub struct E2eApp {
 
 impl E2eApp {
     /// Launch a full E2E session: preflight → reset DB → spawn the
-    /// `tauri-webdriver` CLI proxy → connect WebDriver with the
-    /// `tauri:options.application` capability pointing at the built
-    /// `desktop_shell` binary.
+    /// `tauri-webdriver` CLI proxy → create the WebDriver session with a
+    /// deadline-bounded retry loop.
+    ///
+    /// Why the retry loop (CI evidence: run 28694907445, ubuntu):
+    /// `desktop_shell` initialises the webdriver **plugin** in `build_app()`
+    /// but only creates its **window** when `run_app()` starts the event loop
+    /// — after DB connect, migrations, and the ~13k-row bundled-seed load
+    /// (`apps/desktop/src-tauri/src/main.rs`). A debug build on a CI runner
+    /// spends tens of seconds in that gap. The `tauri-webdriver` CLI's
+    /// session handler only waits for the plugin *port* (30 s), then forwards
+    /// session-create to the plugin, whose own window-wait is 10 s — so a
+    /// slow boot yields `no such window` (404) even though the app is healthy
+    /// and seconds away from ready.
+    ///
+    /// The CLI relaunches the app on every `POST /session` that carries a
+    /// non-empty `tauri:options.application` (killing the prior instance),
+    /// but **skips the relaunch when the path is empty** and just forwards to
+    /// the already-running app. So: attempt 1 sends the real path (launch);
+    /// retries send an empty path (reuse the booting instance) until the
+    /// window exists or [`LAUNCH_TIMEOUT`] elapses. Connection-level errors
+    /// (`RequestFailed`) mean the CLI never received the POST — the app was
+    /// not launched — so the real path is kept for the next attempt.
     ///
     /// The app auto-loads its frontend from the Tauri `devUrl` on launch, so
     /// no `driver.goto(...)` call is needed here (see module docs).
@@ -103,21 +130,54 @@ impl E2eApp {
         preflight()?;
         reset_database()?;
 
-        let driver_proc = spawn_tauri_webdriver()
+        let mut driver_proc = spawn_tauri_webdriver()
             .context("failed to spawn the tauri-webdriver CLI on port 4444")?;
 
         let app_binary = app_binary_path()?;
-        let mut caps = Capabilities::new();
-        caps.set("tauri:options", json!({ "application": app_binary.to_string_lossy() }))
-            .context("failed to set the tauri:options.application capability")?;
+        let deadline = Instant::now() + LAUNCH_TIMEOUT;
+        let mut launched = false;
 
-        let driver = WebDriver::new(TAURI_WEBDRIVER_URL, caps).await.with_context(|| {
-            format!(
-                "WebDriver::new failed against {TAURI_WEBDRIVER_URL} — is `tauri-webdriver` \
-                 running, and was {} built with `--features e2e`?",
-                app_binary.display()
-            )
-        })?;
+        let driver = loop {
+            let application =
+                if launched { String::new() } else { app_binary.to_string_lossy().into_owned() };
+            let mut caps = Capabilities::new();
+            if let Err(e) = caps.set("tauri:options", json!({ "application": application })) {
+                kill_driver_proc(&mut driver_proc);
+                return Err(e).context("failed to set the tauri:options.application capability");
+            }
+
+            match WebDriver::new(TAURI_WEBDRIVER_URL, caps).await {
+                Ok(driver) => break driver,
+                Err(e) => {
+                    // Any typed WebDriver response means the CLI handled the
+                    // POST — and therefore already spawned the app process.
+                    // Only a transport-level RequestFailed means it didn't.
+                    use thirtyfour::error::WebDriverErrorInner;
+                    if !matches!(e.as_inner(), WebDriverErrorInner::RequestFailed(_)) {
+                        launched = true;
+                    }
+                    if Instant::now() >= deadline {
+                        // Ask the CLI to kill the app it launched (any
+                        // DELETE /session/{id} triggers that), then kill the
+                        // CLI itself — otherwise the leaked pair holds ports
+                        // 4444/4445 and poisons every subsequent test in the
+                        // serial run (exactly what CI's TRY-2 "can not
+                        // listen to address" failure was).
+                        blocking_session_delete();
+                        kill_driver_proc(&mut driver_proc);
+                        return Err(e).with_context(|| {
+                            format!(
+                                "WebDriver session not created within {LAUNCH_TIMEOUT:?} \
+                                 against {TAURI_WEBDRIVER_URL} — is `tauri-webdriver` \
+                                 running, and was {} built with `--features e2e`?",
+                                app_binary.display()
+                            )
+                        });
+                    }
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                }
+            }
+        };
 
         Ok(Self { driver, driver_proc: Some(driver_proc) })
     }
@@ -280,20 +340,83 @@ impl E2eApp {
     }
 
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
-    /// if present. Quitting the session already terminates the app process
-    /// that `tauri-webdriver` launched on our behalf.
+    /// if present. Quitting the session (a `DELETE /session/{id}` through the
+    /// CLI) makes the CLI terminate the app process it launched on our
+    /// behalf; killing the CLI afterwards frees port 4444.
     pub async fn shutdown(mut self) -> Result<()> {
-        let _ = self.driver.quit().await;
+        // `quit()` consumes the WebDriver, which can't be moved out of a
+        // Drop-implementing type; WebDriver is a cheap Arc-backed handle, so
+        // quitting a clone quits the same underlying session.
+        let _ = self.driver.clone().quit().await;
         if let Some(mut child) = self.driver_proc.take() {
-            let _ = child.kill();
+            kill_driver_proc(&mut child);
         }
         Ok(())
+    }
+}
+
+impl Drop for E2eApp {
+    /// Best-effort teardown for journeys that bail mid-way with `?` and never
+    /// reach [`E2eApp::shutdown`]. Without this, the failed test leaks the
+    /// `tauri-webdriver` CLI (port 4444) AND the app it launched (port 4445),
+    /// which poisons every subsequent test in the serial run — this is
+    /// exactly what CI run 28694907445's TRY-2 `can not listen to address:
+    /// 127.0.0.1:4444` / `Plugin server not ready after timeout` cascade was.
+    ///
+    /// `driver.quit()` is async and cannot be awaited here, so the app-kill
+    /// is requested with a synchronous raw-HTTP `DELETE /session/…` instead:
+    /// the CLI kills its app process after ANY session-delete round trip,
+    /// regardless of the session id being real.
+    fn drop(&mut self) {
+        if let Some(mut child) = self.driver_proc.take() {
+            blocking_session_delete();
+            kill_driver_proc(&mut child);
+        }
     }
 }
 
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
+
+/// Kill and reap the `tauri-webdriver` CLI child process (best-effort).
+///
+/// `std::process::Child` does NOT kill on drop — letting it fall out of scope
+/// leaves the CLI alive and port 4444 occupied (the CI TRY-2 leak).
+fn kill_driver_proc(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Synchronously send `DELETE /session/e2e-cleanup` to the `tauri-webdriver`
+/// CLI over a raw std TCP socket (best-effort, short timeouts, no async and
+/// no extra HTTP-client dependency — this must be callable from `Drop`).
+///
+/// The CLI kills the app process it launched after ANY `/session/{id}` DELETE
+/// round trip (it does not validate the id) — this is the only handle we have
+/// on the app's lifetime, since the CLI spawned it, not the harness.
+fn blocking_session_delete() {
+    let attempt = || -> std::io::Result<()> {
+        let addr = "127.0.0.1:4444";
+        let timeout = Duration::from_secs(5);
+        let mut stream = std::net::TcpStream::connect_timeout(&addr.parse().unwrap(), timeout)?;
+        stream.set_read_timeout(Some(timeout))?;
+        stream.set_write_timeout(Some(timeout))?;
+        use std::io::{Read, Write};
+        stream.write_all(
+            b"DELETE /session/e2e-cleanup HTTP/1.1\r\n\
+              Host: 127.0.0.1:4444\r\n\
+              Content-Length: 0\r\n\
+              Connection: close\r\n\r\n",
+        )?;
+        // Wait for the response (the CLI kills the app only AFTER the
+        // forwarded round trip completes); the body content is irrelevant.
+        let mut buf = Vec::new();
+        let _ = stream.read_to_end(&mut buf);
+        Ok(())
+    };
+    let _ = attempt();
+}
 
 /// Pre-flight check: verify the `tauri-webdriver` CLI is on `$PATH` and the
 /// `desktop_shell` binary has been built, with a named, actionable error for
