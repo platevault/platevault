@@ -153,21 +153,49 @@ supersedes an earlier recorded default of not publishing the seed):
   `domain_core` id-kernel work), but it is the stack's third layer, not an
   unrelated candidate.
 
+**Composition model** (user design decision, 2026-07-04 — how the layers tie
+together):
+
+- The kernel (`astro-target-id`) defines the integration **contract**: a
+  `CatalogSource` trait (lookup of a normalized query → candidates; coordinate
+  rows for ranking) and a `LiveResolver` trait (async-capable,
+  resolve-on-miss), plus a `ChainedSource` combinator implementing the
+  canonical pipeline: local catalog first → live resolver on miss → the
+  resolved result is handed back for the **consumer** to persist into their
+  catalog. The kernel keeps **zero I/O** — it owns the interfaces and the
+  chaining logic only; every implementation lives in a higher layer or in
+  consumer code.
+- `astro-seed-catalog` implements `CatalogSource` over the published seed
+  format. `simbad-resolver` implements `LiveResolver`.
+- **Facade via dependency direction** (tight coupling for consumers, achieved
+  safely): `simbad-resolver` depends on BOTH lower layers and **re-exports**
+  them (a prelude), so one dependency gives consumers the fully-wired stack —
+  kernel + seed + live resolve. Kernel-only consumers add just the kernel.
+  The dependency direction is unchanged: kernel ← seed ← resolver.
+- **Explicitly rejected: a single crate with feature flags.** Rationale on
+  record: (a) the seed DATA's licensing (SIMBAD/CDS/OpenNGC) must not
+  contaminate the pure-MIT kernel; (b) the resolver's HTTP/async dependencies
+  must never reach the kernel; (c) seed-data refresh releases must not bump
+  kernel versions.
+
 **Resolution story** (explicit, so nobody mistakes the kernel for a resolver):
 `astro-target-id` alone does NOT resolve names. Full resolution =
-normalize (kernel) → look up in a catalog (seed or consumer-supplied) → on
-miss, live resolve (`simbad-resolver`) → persist to a local cache. Consumers
-pick layers: kernel-only (bring your own rows), kernel + seed (offline
-resolution of common objects), or all three (full PlateVault-equivalent
-resolution). This mirrors the in-tree reality today: `targeting_resolver`
-supplies rows from seed + SIMBAD + user overrides into the SQLite cache, and
-the app feeds them to `coords::rank_candidates` as `TargetCoord`s.
+normalize (kernel) → look up in a `CatalogSource` (seed or consumer-supplied)
+→ on miss, live resolve via a `LiveResolver` (`simbad-resolver`) → resolved
+result handed back for the consumer to persist. `ChainedSource` is the
+canonical composition of that pipeline, mirroring PlateVault's own
+seed → cache → SIMBAD → persist flow: in-tree, `targeting_resolver` supplies
+rows from seed + SIMBAD + user overrides into the SQLite cache, and the app
+feeds them to `coords::rank_candidates` as `TargetCoord`s. Consumers pick
+layers: kernel-only (bring your own rows), kernel + seed (offline resolution
+of common objects), or all three via the resolver facade
+(full PlateVault-equivalent resolution).
 
 **Dependency direction** (unchanged, restated): kernel ← seed-catalog ←
 resolver — `astro-target-id` depends on nothing in the stack;
-`astro-seed-catalog` may depend on the kernel's types; `simbad-resolver` may
-depend on both. Never inverted (this is already the in-tree direction:
-`targeting_resolver` depends on `targeting`).
+`astro-seed-catalog` may depend on the kernel's types; `simbad-resolver`
+depends on both (and re-exports them as the facade). Never inverted (this is
+already the in-tree direction: `targeting_resolver` depends on `targeting`).
 
 **Effort**: Small — mostly documentation and API-surface polish on
 already-decoupled code.
