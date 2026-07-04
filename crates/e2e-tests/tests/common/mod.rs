@@ -79,8 +79,11 @@ struct InvokeOutcome {
 impl InvokeOutcome {
     fn into_result<T: DeserializeOwned>(self) -> Result<T> {
         if self.ok {
-            let raw =
-                self.value.ok_or_else(|| anyhow!("invoke succeeded but returned no value"))?;
+            // Unit-returning commands (`Result<(), _>` — e.g.
+            // `artifact_watcher_attach`) legitimately resolve with `null`/
+            // `undefined`; `Option<Value>` deserialises JSON null to `None`, so
+            // treat an absent value as `Value::Null` rather than an error.
+            let raw = self.value.unwrap_or(Value::Null);
             serde_json::from_value(raw).context("failed to deserialise invoke value into T")
         } else {
             Err(anyhow!("invoke error: {}", self.error.unwrap_or_else(|| "unknown error".into())))

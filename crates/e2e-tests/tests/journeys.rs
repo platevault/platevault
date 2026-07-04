@@ -514,7 +514,11 @@ async fn lifecycle_integrity() -> anyhow::Result<()> {
                 "request": {
                     "entityType": "project",
                     "contractVersion": "2.0.0",
-                    "requestId": "e2e-lifecycle-transition",
+                    // `TransitionRequest.request_id` is a real `Uuid` on the
+                    // wire (crates/contracts/core/src/lifecycle.rs), unlike the
+                    // free-form String requestIds elsewhere — a slug here fails
+                    // arg deserialisation before the command runs.
+                    "requestId": "e2e00000-0000-4000-8000-000000000001",
                     "entityId": project_id,
                     "currentState": "setup_incomplete",
                     "nextState": "ready",
