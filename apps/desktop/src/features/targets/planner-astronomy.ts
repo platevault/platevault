@@ -22,6 +22,7 @@
  */
 
 import {
+  AngleBetween,
   Body,
   DefineStar,
   Equator,
@@ -192,11 +193,43 @@ export function computeNightObservability(
   }
 
   // Exact rise/set relative to the night (search from 6h before night start).
+  // IMPORTANT: `set` must be searched forward FROM the rise instant, not
+  // independently from the same `searchStartMs` — searching both directions
+  // from the same anchor can pair a `rise` that starts the pass containing the
+  // night with a `set` that is the tail end of the PREVIOUS pass (already
+  // above the horizon at `searchStartMs`), producing a `set` that precedes
+  // `rise` for periodic sources. Anchoring `set`'s search on `rise` guarantees
+  // both bracket the same above-horizon pass.
   const searchStartMs = startMs - 6 * MS_PER_HOUR;
   const rise = riseSetFor(observer, site, +1, searchStartMs);
-  const set = riseSetFor(observer, site, -1, searchStartMs);
+  const set = riseSetFor(observer, site, -1, rise ? rise.tMs : searchStartMs);
 
   const darkWindow = darkWindowFor(observer, site, startMs);
 
   return { nightStartMs: startMs, nightEndMs: endMs, samples, transit, rise, set, darkWindow };
+}
+
+/**
+ * Real (non-mock) instantaneous angular separation between a fixed J2000
+ * target and the Moon, at a single instant.
+ *
+ * This is deliberately a single-scalar, single-instant helper — the full
+ * Moon-geometry surface (illumination fraction, Moon-up windows intersected
+ * with the dark window, per-filter-band moon-free time) is US5 (Phase 7,
+ * T027/T028) and is NOT implemented here. This only replaces the mock
+ * angular-distance placeholder used by the US1 "lunar distance" display
+ * value with a real `AngleBetween` computation.
+ */
+export function angularSeparationFromMoonDeg(
+  raDegJ2000: number,
+  decDegJ2000: number,
+  site: ObserverSite,
+  dateMs: number,
+): number {
+  const observer = observerFor(site);
+  const date = new Date(dateMs);
+  DefineStar(Body.Star1, raDegJ2000 / 15, decDegJ2000, STAR_DISTANCE_LY);
+  const targetEq = Equator(Body.Star1, date, observer, /*ofdate*/ false, /*aberration*/ false);
+  const moonEq = Equator(Body.Moon, date, observer, /*ofdate*/ false, /*aberration*/ false);
+  return AngleBetween(targetEq.vec, moonEq.vec);
 }
