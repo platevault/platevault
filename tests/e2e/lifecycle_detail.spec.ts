@@ -1,27 +1,21 @@
 /**
- * T025 — Playwright smoke: Sessions page inventory detail + provenance section.
+ * Playwright smoke: Sessions page grouped table + detail provenance surface.
  *
- * Originally tested a DataTable + data-provenance-* attribute UI that was
- * replaced during the spec 006 / design-v4 redesign. Updated 2026-06-17 to
- * match the current SessionsList + SessionDetail architecture.
+ * Updated for the spec-043 redesign: SessionsList (`.alm-list-item` rows) was
+ * replaced by a SessionsTable of `.alm-sessions-table__row` rows. The list is
+ * FLAT by default (spec 043 §4 / PR #360 — grouping is opt-in via the top-bar
+ * Group-by control, and group headers now use the shared `.alm-listgroup`
+ * class), and the standalone "Provenance" <Section> in SessionDetail was folded
+ * into a single PropertyTable whose Source column tags each fact (FITS /
+ * Inferred / User).
  *
  * What this test proves:
- *  1. The Sessions page at /#/sessions renders session rows (as .alm-list-item
- *     divs from the ListItem component) without crashing.
- *  2. The first session in the fixture ("NGC 7000 · Ha — 2026-04-12") is
- *     visible by its target text and filter pill.
- *  3. Session rows do NOT render a Provenance section — that is reserved for
- *     the detail pane.
- *  4. Clicking the session row opens the detail pane, which renders a
- *     "Provenance" section heading (via <Section title="Provenance">).
- *  5. The detail pane shows at least one provenance fact row rendered by
- *     PropertyTable (identifiable by role="row" cells).
- *
- * Fixture data used (apps/desktop/src/data/fixtures/inventory.ts):
- *   - Session id: 550e8400-e29b-41d4-a716-446655440001
- *   - name: "NGC 7000 · Ha — 2026-04-12"
- *   - target: "NGC 7000", filter: "Ha"
- *   - provenance: { target: "NGC 7000", filter: "Ha", confirmedBy: "user" }
+ *  1. The Sessions page at /#/sessions renders the flat table without
+ *     crashing (session rows).
+ *  2. Clicking a session row opens the detail pane, which renders a
+ *     PropertyTable with source-tagged facts (the redesigned provenance surface).
+ *  3. With no selection, the detail pane shows the "Select a session" empty
+ *     state (sessions are selected by id; no row is auto-selected on load).
  *
  * First-run seeding:
  *   The desktop shell reads `alm-preferences.setupCompleted` from localStorage.
@@ -38,75 +32,51 @@ function seedSetupComplete(page: import("@playwright/test").Page): void {
   });
 }
 
-test.describe("lifecycle detail · sessions page + provenance UI (spec 006)", () => {
-  test("session rows render in the list; clicking opens detail pane with Provenance section", async ({
+test.describe("lifecycle detail · sessions page + provenance UI (spec 006 / spec 043)", () => {
+  test("session rows render; clicking opens detail with source-tagged facts", async ({
     page,
   }) => {
     seedSetupComplete(page);
     await page.goto("/#/sessions");
 
     // ── 1. Page renders without error boundary ────────────────────────────────
-    const errorBoundary = page.getByTestId("app-error-boundary-fallback");
-    await expect(errorBoundary).not.toBeVisible();
+    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
 
-    // ── 2. Session row is visible ─────────────────────────────────────────────
-    // SessionsList renders each session as a `div.alm-list-item`.
-    // The title shows the target name ("NGC 7000") and a filter pill ("Ha").
-    // We locate by the target text which is the strongest rendered text.
-    const sessionRow = page
-      .locator(".alm-list-item")
-      .filter({ hasText: "NGC 7000" })
-      .filter({ hasText: "Ha" })
-      .first();
-    await expect(sessionRow).toBeVisible({ timeout: 8_000 });
+    // ── 2. Flat table renders session rows (spec 043 §4: the list is FLAT by
+    //       default — grouping is opt-in via the top-bar Group-by control) ─────
+    const rows = page.locator(".alm-sessions-table__row");
+    await expect(rows.first()).toBeVisible({ timeout: 8_000 });
 
-    // ── 3. Session row does NOT contain a Provenance section heading ──────────
-    // Provenance is only shown in the detail pane, not in the list row.
-    const provenanceInRow = sessionRow.getByText("Provenance");
-    await expect(provenanceInRow).not.toBeVisible();
+    // ── 3. Click a session row → detail pane opens ────────────────────────────
+    // Sessions are selected by id; no row is auto-selected, so a click is needed.
+    await rows.first().click();
 
-    // ── 4. Click row → detail pane renders with "Provenance" section ─────────
-    await sessionRow.click();
-
-    // The detail pane is mounted to the right of the list. SessionDetail
-    // renders a <Section title="Provenance"> when provenance facts are present.
-    // Section uses `.alm-section__title` for the heading text.
-    const provenanceHeading = page
-      .locator(".alm-section__title")
-      .filter({ hasText: "Provenance" });
-    await expect(provenanceHeading).toBeVisible({ timeout: 5_000 });
-
-    // ── 5. At least one provenance fact row is rendered ───────────────────────
-    // PropertyTable renders rows with role="row". Find the table inside the
-    // provenance section. The fixture has target + filter + confirmedBy facts.
-    // We just assert at least one row is present and contains the target text.
-    const provenanceSection = page
-      .locator(".alm-section")
-      .filter({ has: provenanceHeading });
-
-    // The target fact row should show "NGC 7000"
-    await expect(provenanceSection.getByText("NGC 7000")).toBeVisible();
+    // ── 4. Detail shows a PropertyTable with a source-tagged fact ─────────────
+    // The redesigned SessionDetail folds provenance into the fact PropertyTable;
+    // each fact carries a Source badge (FITS / Inferred / User).
+    const propTable = page.locator(".alm-property-table").first();
+    await expect(propTable).toBeVisible({ timeout: 5_000 });
+    await expect(
+      propTable.getByText(/^(FITS|Inferred|User)$/).first(),
+    ).toBeVisible();
   });
 
-  test("navigating to /#/sessions without a selection shows empty-state in detail pane", async ({
+  test("navigating to /#/sessions without a selection renders the table with no detail pane", async ({
     page,
   }) => {
     seedSetupComplete(page);
-    // Navigate with no `selected` param — detail pane shows an empty state.
     await page.goto("/#/sessions");
 
-    const errorBoundary = page.getByTestId("app-error-boundary-fallback");
-    await expect(errorBoundary).not.toBeVisible();
+    await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
 
-    // The SessionsList should render some items.
-    const items = page.locator(".alm-list-item");
-    await expect(items.first()).toBeVisible({ timeout: 8_000 });
+    // The flat sessions table renders its rows.
+    await expect(
+      page.locator(".alm-sessions-table__row").first(),
+    ).toBeVisible({ timeout: 8_000 });
 
-    // Without a selection, the detail pane shows "Select a session".
-    // (SessionDetail renders <EmptyState title="Select a session" ...>)
-    // This is visible as long as no row is auto-selected.
-    // NOTE: the page starts with no selection so we check the detail area.
-    const emptyState = page.getByText("Select a session");
-    await expect(emptyState).toBeVisible({ timeout: 5_000 });
+    // The redesigned SessionsPage mounts the bottom SessionDetail pane ONLY when
+    // a session is selected (`detail={selectedSession != null ? … : undefined}`),
+    // so with no selection the detail's PropertyTable must be absent.
+    await expect(page.locator(".alm-property-table")).toHaveCount(0);
   });
 });
