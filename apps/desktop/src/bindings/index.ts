@@ -674,6 +674,19 @@ export const commands = {
 	 */
 	rootsRemapApply: (rootId: string, newPath: string, verified: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("roots_remap_apply", { rootId, newPath, verified })),
 	/**
+	 *  `roots.delete` — permanently remove a root's registration (P6b, decision D8).
+	 * 
+	 *  Delegates to `app_core::first_run::delete_source`, which blocks with
+	 *  `root.has_dependents` when dependent records (inbox items, plan items,
+	 *  file records, sessions) still reference the root — no cascade-nullify.
+	 *  Files on disk are never touched (constitution §I).
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` (`source.not_found`, `root.has_dependents`, or
+	 *  `internal.database`).
+	 */
+	rootsDelete: (rootId: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("roots_delete", { rootId })),
+	/**
 	 *  `scan.start` — start a filesystem scan, optionally for specific roots.
 	 * 
 	 *  # Errors
@@ -697,6 +710,17 @@ export const commands = {
 	 *  `source.not_found`, or DB error.
 	 */
 	sourcesSetOrganizationState: (sourceId: string, organizationState: OrganizationState) => typedError<SetSourceOrganizationStateResponse, string>(__TAURI_INVOKE("sources_set_organization_state", { sourceId, organizationState })),
+	/**
+	 *  `sources.set_active` — enable or disable a registered source (P6b).
+	 * 
+	 *  Delegates to `app_core::first_run::set_source_active`. Disabled roots are
+	 *  excluded from scan/ingest surfaces but retain their full history; this is
+	 *  a visibility flag, not a deletion.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` (`source.not_found` or `internal.database`).
+	 */
+	sourcesSetActive: (rootId: string, active: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("sources_set_active", { rootId, active })),
 	/**
 	 *  `firstrun.state` — get the current first-run wizard state.
 	 * 
@@ -2697,7 +2721,13 @@ export type Equipment = {
  */
 export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
 /**  Plan approval is outstanding (sent as `ContractError`, not `TransitionError`). */
-"plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
+"plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
+/**
+ *  Returned by `roots.delete` (P6b, decision D8) when dependent records
+ *  (inbox items, plan items, file records, sessions) still reference the
+ *  root; deletion is blocked rather than cascade-nullified.
+ */
+"root.has_dependents" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
 /**  Used in `ContractError` tests in lib.rs; also may appear via plan-apply. */
 "filesystem.destination_exists" | 
 /**
@@ -4434,6 +4464,12 @@ export type LibraryRoot_Deserialize = {
 	online: boolean,
 	fileCount: number,
 	lastScanned: string | null,
+	/**
+	 *  Whether this root is enabled for scan/ingest (P6b — Data Sources
+	 *  Disable/Enable). Disabled roots are excluded from scans/ingest but
+	 *  their history is retained; this is a visibility flag, not a deletion.
+	 */
+	active: boolean,
 };
 
 /**  A registered library root directory. */
@@ -4444,6 +4480,12 @@ export type LibraryRoot_Serialize = {
 	online: boolean,
 	fileCount: number,
 	lastScanned?: string | null,
+	/**
+	 *  Whether this root is enabled for scan/ingest (P6b — Data Sources
+	 *  Disable/Enable). Disabled roots are excluded from scans/ingest but
+	 *  their history is retained; this is a visibility flag, not a deletion.
+	 */
+	active: boolean,
 };
 
 export type LibraryStats = {
