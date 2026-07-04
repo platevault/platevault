@@ -215,6 +215,22 @@ fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbR
             state.tool_attribution_window_hours =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
+        // Spec 049 T006: these two keys were wired into `crates/app/settings`
+        // (the `settings.update` command path) but missed here — `load_settings`
+        // (which `sourceview.generate` calls directly, not through the Tauri
+        // command layer) silently ignored a stored override and always
+        // returned the in-code default. Found while writing the spec 049 US3
+        // regeneration integration test, which needs a non-default link kind
+        // to exercise the "hardlink unsupported" refusal path in
+        // `preparedview.regenerate`.
+        "sourceViewLinkKindIntraDrive" => {
+            state.source_view_link_kind_intra_drive =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
+        "sourceViewLinkKindCrossDrive" => {
+            state.source_view_link_kind_cross_drive =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
         _ => {
             // Structured-path keys (tools.*, workflow_profile.*) are not in the
             // static SettingsState bag; they are readable via resolve_setting.
@@ -435,6 +451,27 @@ mod tests {
         set_raw(db.pool(), "logLevel", &serde_json::json!("debug")).await.unwrap();
         let loaded = get_raw(db.pool(), "logLevel").await.unwrap();
         assert_eq!(loaded, Some(serde_json::json!("debug")));
+    }
+
+    #[tokio::test]
+    async fn load_settings_honors_stored_source_view_link_kind_overrides() {
+        // Spec 049 T006/US2 regression: `load_settings` (used directly by
+        // `sourceview.generate`, not just the `settings.update` Tauri command
+        // path) must apply a stored override for these two keys instead of
+        // silently keeping the in-code default (found via the US3
+        // regeneration integration test, which needs a non-default kind to
+        // exercise the "hardlink unsupported" refusal path).
+        let db = setup().await;
+        set_raw(db.pool(), "sourceViewLinkKindIntraDrive", &serde_json::json!("symlink"))
+            .await
+            .unwrap();
+        set_raw(db.pool(), "sourceViewLinkKindCrossDrive", &serde_json::json!("junction"))
+            .await
+            .unwrap();
+
+        let loaded = load_settings(db.pool()).await.unwrap();
+        assert_eq!(loaded.source_view_link_kind_intra_drive, "symlink");
+        assert_eq!(loaded.source_view_link_kind_cross_drive, "junction");
     }
 
     #[tokio::test]
