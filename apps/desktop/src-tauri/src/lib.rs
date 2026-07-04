@@ -65,7 +65,9 @@ use crate::commands::manifests::{
     manifest_get, manifest_list, manifest_reveal_in_os, note_get, note_update,
 };
 use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
-use crate::commands::patterns::{pattern_preview, pattern_resolve, pattern_validate};
+use crate::commands::patterns::{
+    pattern_path_preview, pattern_preview, pattern_resolve, pattern_validate,
+};
 use crate::commands::plan_apply::{
     plans_apply_real, plans_apply_status, plans_cancel, plans_item_retry, plans_item_skip,
     plans_resume,
@@ -257,6 +259,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         pattern_validate,
         pattern_resolve,
         pattern_preview,
+        pattern_path_preview,
         // source protection (spec 016 US2–US4)
         source_protection_get,
         source_protection_set,
@@ -462,6 +465,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         pattern_validate,
         pattern_resolve,
         pattern_preview,
+        pattern_path_preview,
         // source protection (spec 016 US2–US4)
         source_protection_get,
         source_protection_set,

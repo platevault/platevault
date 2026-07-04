@@ -40,6 +40,7 @@ import type {
   MetadataBundleDto_Serialize as MetadataBundleDto,
   PatternValidateResponse_Serialize as PatternValidateResponse,
   PatternPreviewResponse,
+  PathPatternPreviewResponse,
   ResolverSettings,
   ResolverSettingsResponse,
   FirstRunRestartResponse,
@@ -86,7 +87,7 @@ export type {
   RemapVerification,
 };
 export type { PatternPartDto as PatternPart };
-export type { PatternValidateResponse, PatternPreviewResponse };
+export type { PatternValidateResponse, PatternPreviewResponse, PathPatternPreviewResponse };
 export type { CalibrationTolerances, UpdateCalibrationTolerances };
 export type { IngestionSettings, UpdateIngestionSettings };
 
@@ -313,6 +314,26 @@ export async function patternPreview(
   return unwrap(
     await commands.patternPreview(
       { pattern, sampleMetadata } as Parameters<typeof commands.patternPreview>[0],
+    ),
+  );
+}
+
+/**
+ * Preview a per-type destination **path-string** pattern (e.g.
+ * `masters/flats/{filter}/`) against sample metadata, for the per-frame-type
+ * destination pattern editor's live preview (spec 041, package P11).
+ *
+ * Unlike `patternPreview` (which resolves the `PatternPart[]` token/separator
+ * model), `pattern` here is a raw path string that may interleave `{token}`
+ * placeholders with literal directory segments.
+ */
+export async function patternPathPreview(
+  pattern: string,
+  sampleMetadata: MetadataBundleDto,
+): Promise<PathPatternPreviewResponse> {
+  return unwrap(
+    await commands.patternPathPreview(
+      { pattern, sampleMetadata } as Parameters<typeof commands.patternPathPreview>[0],
     ),
   );
 }

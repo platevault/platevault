@@ -750,6 +750,18 @@ export const commands = {
 	 */
 	patternPreview: (request: PatternPreviewRequest_Deserialize) => typedError<PatternPreviewResponse, ContractError_Serialize>(__TAURI_INVOKE("pattern_preview", { request })),
 	/**
+	 *  `pattern.path_preview` — resolve a per-type destination **path-string**
+	 *  pattern against sample metadata, for the Settings per-frame-type
+	 *  destination pattern editor's live preview (spec 041, package P11).
+	 * 
+	 *  Returns `PathPatternPreviewResponse { resolved_path, missing_tokens, warnings }`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
+	 */
+	patternPathPreview: (request: PathPatternPreviewRequest_Deserialize) => typedError<PathPatternPreviewResponse, ContractError_Serialize>(__TAURI_INVOKE("pattern_path_preview", { request })),
+	/**
 	 *  `source.protection.get` — resolve effective protection for a source (US2, T012).
 	 * 
 	 *  If `source_id` is `None`, returns the global defaults.
@@ -4943,6 +4955,63 @@ export type OpticalTrain = {
  *  DB CHECK constraint and the IPC camelCase surface.
  */
 export type OrganizationState = "organized" | "unorganized";
+
+/**
+ *  Request for `pattern.path_preview` — preview a per-type destination
+ *  **path-string** pattern (e.g. `masters/flats/{filter}/`) against sample
+ *  metadata, for the Settings per-frame-type destination pattern editor.
+ * 
+ *  Unlike [`PatternPreviewRequest`] (which carries the `PatternPart[]`
+ *  token/separator model), `pattern` here is a raw path string that may
+ *  interleave `{token}` placeholders with literal directory segments — the
+ *  form produced by [`crate::patterns`] (this module) is not applicable;
+ *  resolution is delegated to `crates/patterns::resolver::resolve_pattern_str`,
+ *  which reuses the v1 token registry as the single token-name authority.
+ */
+export type PathPatternPreviewRequest = PathPatternPreviewRequest_Serialize | PathPatternPreviewRequest_Deserialize;
+
+/**
+ *  Request for `pattern.path_preview` — preview a per-type destination
+ *  **path-string** pattern (e.g. `masters/flats/{filter}/`) against sample
+ *  metadata, for the Settings per-frame-type destination pattern editor.
+ * 
+ *  Unlike [`PatternPreviewRequest`] (which carries the `PatternPart[]`
+ *  token/separator model), `pattern` here is a raw path string that may
+ *  interleave `{token}` placeholders with literal directory segments — the
+ *  form produced by [`crate::patterns`] (this module) is not applicable;
+ *  resolution is delegated to `crates/patterns::resolver::resolve_pattern_str`,
+ *  which reuses the v1 token registry as the single token-name authority.
+ */
+export type PathPatternPreviewRequest_Deserialize = {
+	pattern: string,
+	sampleMetadata: MetadataBundleDto_Deserialize,
+};
+
+/**
+ *  Request for `pattern.path_preview` — preview a per-type destination
+ *  **path-string** pattern (e.g. `masters/flats/{filter}/`) against sample
+ *  metadata, for the Settings per-frame-type destination pattern editor.
+ * 
+ *  Unlike [`PatternPreviewRequest`] (which carries the `PatternPart[]`
+ *  token/separator model), `pattern` here is a raw path string that may
+ *  interleave `{token}` placeholders with literal directory segments — the
+ *  form produced by [`crate::patterns`] (this module) is not applicable;
+ *  resolution is delegated to `crates/patterns::resolver::resolve_pattern_str`,
+ *  which reuses the v1 token registry as the single token-name authority.
+ */
+export type PathPatternPreviewRequest_Serialize = {
+	pattern: string,
+	sampleMetadata: MetadataBundleDto_Serialize,
+};
+
+/**  Successful response for `pattern.path_preview`. */
+export type PathPatternPreviewResponse = {
+	/**  The resolved relative path for display. */
+	resolvedPath: string,
+	/**  Token names resolved via fallback (shown as dim segments in the UI). */
+	missingTokens: string[],
+	warnings: string[],
+};
 
 /**
  *  One element of an ordered token pattern (data-model.md §PatternPart).
