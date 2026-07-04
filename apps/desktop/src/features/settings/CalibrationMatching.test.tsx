@@ -50,6 +50,18 @@ function offsetToggleInput(): HTMLElement {
   return within(row).getByRole('checkbox');
 }
 
+/** The Camera row's toggle checkbox — used as a hydration marker: tests mock
+ *  `requireSameCamera: false` (differing from the in-code default `true`) so
+ *  waiting for this toggle to become unchecked proves the fetched tolerances
+ *  have been applied. Waiting on the Offset toggle alone is racy, because the
+ *  in-code default (`requireSameOffset: true`) already satisfies "checked"
+ *  before hydration lands. */
+function cameraToggleInput(): HTMLElement {
+  const row = screen.getByText('Camera').closest('tr');
+  if (!row) throw new Error('Camera row not found');
+  return within(row).getByRole('checkbox');
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -67,11 +79,17 @@ describe('CalibrationMatching — offset match-required persistence', () => {
   });
 
   it('persists the offset toggle via calibration.tolerances.update, not just local state', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeTolerances({ requireSameOffset: true }) });
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeTolerances({ requireSameCamera: false, requireSameOffset: true }),
+    });
     mockUpdate.mockResolvedValue({ status: 'ok', data: makeTolerances({ requireSameOffset: false }) });
 
     render(<CalibrationMatching save={vi.fn()} />);
-    await waitFor(() => expect(offsetToggleInput()).toBeChecked());
+    // Wait for hydration (camera flips to the fetched non-default value), not
+    // just the offset toggle — the in-code default already renders it checked.
+    await waitFor(() => expect(cameraToggleInput()).not.toBeChecked());
+    expect(offsetToggleInput()).toBeChecked();
 
     fireEvent.click(offsetToggleInput());
 
@@ -89,7 +107,11 @@ describe('CalibrationMatching — offset match-required persistence', () => {
     mockUpdate.mockResolvedValue({ status: 'ok', data: makeTolerances() });
 
     render(<CalibrationMatching save={vi.fn()} />);
-    await waitFor(() => expect(offsetToggleInput()).toBeChecked());
+    // Hydration marker: camera arrives as false (non-default). Waiting on the
+    // offset toggle alone races the fetch — its in-code default is already
+    // checked, so an early click would persist the *default* camera value.
+    await waitFor(() => expect(cameraToggleInput()).not.toBeChecked());
+    expect(offsetToggleInput()).toBeChecked();
 
     fireEvent.click(offsetToggleInput());
 
