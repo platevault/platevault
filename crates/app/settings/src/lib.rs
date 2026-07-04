@@ -78,6 +78,9 @@ pub mod ingestion;
 // ── Settings schema migration harness (spec 018 US5, T030 / T031) ────────────
 pub mod migrate;
 
+// ── Per-root reconcile/detection configuration (spec 048 T005) ──────────────
+pub mod root_config;
+
 // ── Error mapping ──────────────────────────────────────────────────────────
 //
 // Canonical mappers live in `app_core_errors` (US11 T142). `db_err` now routes
