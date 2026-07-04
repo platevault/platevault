@@ -18,7 +18,7 @@ US4 opposition P3), then polish. All paths repo-root-relative.
 
 ## Phase 1: Setup
 
-- [ ] T001 Add `astronomy-engine@2.1.19` to `apps/desktop/package.json`
+- [X] T001 Add `astronomy-engine@2.1.19` to `apps/desktop/package.json`
       (pnpm; version re-verified at plan time). FIRST check whether the
       044 Track B lane already added it — if present, verify version and
       skip. Confirm Vite dev + build succeed with a trivial import.
@@ -27,18 +27,18 @@ US4 opposition P3), then polish. All paths repo-root-relative.
 
 ## Phase 2: Foundational (blocks all user stories)
 
-- [ ] T002 [P] Create `apps/desktop/src/features/targets/astro/observing-night.ts`
+- [X] T002 [P] Create `apps/desktop/src/features/targets/astro/observing-night.ts`
       — night anchor per plan D1 (`nightKey`, midnight instant, rollover at
       local noon boundary, focus/interval re-check hook) + unit tests
       `astro/observing-night.test.ts` covering midnight-span (no 00:00 flip),
       DST transition, clock/timezone change (edge cases; FR-005). Depends: —.
-- [ ] T003 [P] Create `apps/desktop/src/features/targets/astro/moon-state.ts`
+- [X] T003 [P] Create `apps/desktop/src/features/targets/astro/moon-state.ts`
       — phase name (8-phase), waxing/waning, illumination fraction, Moon age
       from full, geocentric Moon vector via astronomy-engine (plan D2;
       FR-001..004) + fixture tests `astro/moon-state.test.ts` against
       published almanac values for ≥6 dates across 2000–2050 incl. new/full/
       both quarters (SC-001 tolerance ±3 pp; extreme-date sanity). Depends: T001.
-- [ ] T004 [P] Create `apps/desktop/src/features/targets/astro/moon-avoidance.ts`
+- [X] T004 [P] Create `apps/desktop/src/features/targets/astro/moon-avoidance.ts`
       — SHARED Lorentzian rule module (plan D4): `Band` type,
       `MoonAvoidanceParams`, `DEFAULT_MOON_AVOIDANCE`, `minSeparationDeg`,
       `bandViability`, `deriveRecommendation` (broadband-ok · narrowband-only
@@ -46,7 +46,7 @@ US4 opposition P3), then polish. All paths repo-root-relative.
       `astro/moon-avoidance.test.ts` (boundary `>=` viable determinism,
       full/new-moon extremes, param extremes 180°/min-width; FR-009/009a).
       Depends: — (pure math; no engine import).
-- [ ] T005 Backend settings key `plannerMoonAvoidance` (data-model.md,
+- [X] T005 Backend settings key `plannerMoonAvoidance` (data-model.md,
       contracts delta): descriptor + `ValidationRule::MoonAvoidanceBands` in
       `crates/app/settings/src/descriptors.rs`; default/hydration arms +
       `SettingsState` field (serde default) in `crates/app/settings/src/lib.rs`
