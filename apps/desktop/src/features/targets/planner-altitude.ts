@@ -1,35 +1,34 @@
 /**
- * planner-altitude.ts — per-row tonight observability MOCK for the Planner
- * table (tasks #84/#85, spec 044).
+ * planner-altitude.ts — per-row tonight observability PLACEHOLDER for the
+ * Planner table (tasks #84/#85, spec 044; Track B per spec 047 boundary).
  *
- * MOCK (real values arrive with ephemeris + observer location, #58/#57): the
- * list endpoint (`target.list` → TargetListItem) carries NO coordinates — only
- * id/effectiveLabel/primaryDesignation/objectType. The detail pane
- * (TargetDetailV2.altitudeCurve) computes an approximate sinusoidal curve from
- * real RA/Dec at a placeholder 52.1°N latitude; rows do not have RA/Dec, so
- * here we derive DETERMINISTIC pseudo-values from the designation string.
+ * Track B placeholder (real values arrive with ephemeris + observer location,
+ * spec 044/048): the list endpoint (`target.list` → TargetListItem) carries NO
+ * coordinates — only id/effectiveLabel/primaryDesignation/objectType. The
+ * detail pane (TargetDetailV2.altitudeCurve) computes an approximate
+ * sinusoidal curve from real RA/Dec at a placeholder 52.1°N latitude; rows do
+ * not have RA/Dec, so here we derive DETERMINISTIC pseudo-values from the
+ * designation string.
  *
- * ALL values in this module are NOT astronomy — they are stable per-designation
- * placeholders so the UI layout, sorting, and filter controls are real and
- * testable while the real computation is deferred. Replace this module with
- * real ephemeris when #58 lands.
+ * ALL altitude/imaging-time values in this module are NOT astronomy — they
+ * are stable per-designation placeholders so the UI layout, sorting, and
+ * threshold controls are real and testable while the real observer-location
+ * computation is deferred to Track B (spec 044). Per spec 047 FR-015/016,
+ * Track A MUST NOT alter this module's semantics.
  *
- * Spec 044 additions (MOCK per spec 044 §3, NOT astronomy):
- *   - `lunarDistanceDeg` — mock 0–180° angular separation from the Moon, keyed
- *     off a second hash of the designation. Replaces on real Moon ephemeris + #57.
- *   - `mockMoonPhaseFrac` — module-level fake Moon brightness (0=new, 1=full),
- *     deterministic for the current session. Replaces on Moon-phase ephemeris.
- *   - `filtersFor` — simple bracketing rule: bright moon + close target →
- *     narrowband (Ha/OIII/SII); dim/distant → broadband ok (L/R/G/B +
- *     narrowband). Research §5 of spec 044 will replace this with the
- *     Telescopius-based model.
- *   - `rowAltitudeFor` now accepts a configurable `usableAltDeg` threshold
- *     (user setting, default USABLE_ALT_DEG) so imaging-time and visible-tonight
- *     recompute from the Settings → Target Planner control.
+ * Spec 047 mock retirement (FR-017, SC-004): the former spec 044 §3 mock
+ * `lunarDistanceDeg`/`mockMoonPhaseFrac`/`filtersFor` (Moon/filter placeholders
+ * hash-derived from the designation string) have been REMOVED. Real lunar
+ * distance, filter guidance, and opposition now live in `astro/row-planning.ts`
+ * (`RowMoonPlanning`, computed from the shared `ObservingNight` + catalogued
+ * RA/Dec), not in this module.
+ *
+ * `rowAltitudeFor` accepts a configurable `usableAltDeg` threshold (user
+ * setting, default USABLE_ALT_DEG) so imaging-time and visible-tonight
+ * recompute from the Settings → Target Planner control.
  */
 
 import type { TargetListItem } from '@/bindings/index';
-import { m } from '@/lib/i18n';
 
 /** Placeholder observer latitude — mirrors TargetDetailV2.STUB_OBSERVER_LAT_DEG. */
 export const STUB_OBSERVER_LAT_DEG = 52.1; // ~Netherlands latitude
@@ -40,33 +39,6 @@ export const STUB_OBSERVER_LAT_DEG = 52.1; // ~Netherlands latitude
  * user-configured value from `altitude-settings.ts` over this constant.
  */
 export const USABLE_ALT_DEG = 30;
-
-// ── Mock filter types (spec 044, NOT astronomy) ────────────────────────────────
-
-/** Compact filter-band identifier. Broadband: L/R/G/B. Narrowband: Ha/OIII/SII. */
-export type FilterBand = 'L' | 'R' | 'G' | 'B' | 'Ha' | 'OIII' | 'SII';
-
-/** A mock filter-recommendation result. */
-export interface FiltersRecommendation {
-  /** Which filter bands are recommended given the mock moon/separation. */
-  bands: FilterBand[];
-  /**
-   * Short label for display (e.g. "Broadband + NB" or "Narrowband only").
-   * NOT derived from real astronomy — see spec 044 §5.
-   */
-  label: string;
-}
-
-/**
- * MOCK module-level Moon phase fraction (0 = new moon, 1 = full moon).
- *
- * In reality this is a nightly calculation tied to real lunar ephemeris.
- * Here we use a fixed deterministic value so every test/render is stable.
- * Replace with real Moon-phase calculation when spec 044 is promoted (#57).
- *
- * NOT astronomy — mock per spec 044 §3.
- */
-export const MOCK_MOON_PHASE_FRAC = 0.55; // ~gibbous — a realistic mid-range value
 
 /** One sampled point of the night's altitude curve. */
 export interface AltPoint {
@@ -88,65 +60,6 @@ export interface RowAltitude {
   hoursAboveUsable: number;
   /** True when the target reaches usable altitude at any sample tonight. */
   visibleTonight: boolean;
-  /** Mock angular separation from the Moon (0–180°). NOT astronomy. */
-  lunarDistanceDeg: number;
-  /** Mock filter recommendation given mock Moon phase + lunar distance. */
-  filters: FiltersRecommendation;
-}
-
-// ── Mock lunar distance helpers (spec 044, NOT astronomy) ─────────────────────
-
-/**
- * FNV-1a-ish 32-bit hash over a string. Used for several independent mock
- * values from the same designation so they don't correlate with each other.
- * Seed offset lets callers produce independent hash streams from the same input.
- */
-function fnv1aHash(s: string, seed = 2166136261): number {
-  let h = seed;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0; // unsigned 32-bit
-}
-
-/**
- * MOCK: deterministic angular separation (0–180°) between the target and the
- * Moon, keyed off a secondary hash of the designation.
- *
- * NOT astronomy — mock per spec 044 §3. Replace with real Moon-position
- * ephemeris + angular-separation calc when #57 lands.
- */
-export function mockLunarDistanceDegFor(designation: string): number {
-  const h = fnv1aHash(designation, 0x811c9dc5 ^ 0xdeadbeef); // second seed
-  return (h / 0xffffffff) * 180; // 0…180°
-}
-
-/**
- * MOCK: derive a recommended filter set from the mock Moon phase and mock
- * lunar distance.
- *
- * Rule (placeholder — real model is research §5 of spec 044):
- *   - Moon is "bright" when MOCK_MOON_PHASE_FRAC ≥ 0.4
- *   - Target is "close" when lunarDistanceDeg < 60
- *   - Bright moon AND close target → narrowband only (Ha/OIII/SII)
- *   - Otherwise → broadband OK (L/R/G/B + narrowband)
- *
- * NOT astronomy.
- */
-export function filtersFor(lunarDistanceDeg: number): FiltersRecommendation {
-  const brightMoon = MOCK_MOON_PHASE_FRAC >= 0.4;
-  const close = lunarDistanceDeg < 60;
-  if (brightMoon && close) {
-    return {
-      bands: ['Ha', 'OIII', 'SII'],
-      label: m.targets_filters_narrowband_only(),
-    };
-  }
-  return {
-    bands: ['L', 'R', 'G', 'B', 'Ha', 'OIII', 'SII'],
-    label: m.targets_filters_broadband_nb(),
-  };
 }
 
 // ── Core altitude sampling (unchanged model) ───────────────────────────────────
@@ -224,15 +137,10 @@ export function rowAltitudeFor(
   // above-threshold samples to an hour estimate.
   const hoursAboveUsable = (aboveSamples / SAMPLES) * NIGHT_HOURS;
 
-  const lunarDistanceDeg = mockLunarDistanceDegFor(desig);
-  const filters = filtersFor(lunarDistanceDeg);
-
   return {
     points,
     maxAltDeg,
     hoursAboveUsable,
     visibleTonight: maxAltDeg >= usableAltDeg,
-    lunarDistanceDeg,
-    filters,
   };
 }

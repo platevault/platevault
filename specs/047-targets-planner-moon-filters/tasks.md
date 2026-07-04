@@ -137,33 +137,33 @@ tunable per-band params in Settings. **Independent test**: near-full-moon
 date shows close targets narrowband-only / distant all-viable; changing
 params in Settings updates pills live; reset restores defaults.
 
-- [ ] T015 [P] [US3] Settings UI: compact per-band (distance, width) table
+- [X] T015 [P] [US3] Settings UI: compact per-band (distance, width) table
       in `apps/desktop/src/features/settings/PlannerSettings.tsx` under
       Settings → Target Planner — 7 rows × 2 constrained numeric inputs
       (ranges per data-model.md), reset-to-defaults action, i18n labels,
       keyboard operable; writes via existing `settings.update`; tests
       `PlannerSettings.test.tsx` (validation clamps, reset, persistence
       round-trip) (FR-010, SC-008). Depends: T005, T006.
-- [ ] T016 [US3] Parameterise `apps/desktop/src/features/targets/FilterBadges.tsx`
+- [X] T016 [US3] Parameterise `apps/desktop/src/features/targets/FilterBadges.tsx`
       into per-band viability pills (ONE shared component — no clones):
       renders all seven bands with viable/not-viable state + derived
       recommendation label + unknown state; reuse/extend existing `.alm-*`
       pill classes (FR-009a, FR-013). Depends: T004, T008.
-- [ ] T017 [US3] Wire guidance into `TargetsTable.tsx` rows: `bandViability`
+- [X] T017 [US3] Wire guidance into `TargetsTable.tsx` rows: `bandViability`
       + `recommendation` from shared rule + live params
       (`guidance-settings.ts`); replace mock `filtersFor` usage; guidance
       recomputes on settings change without restart (SC-008). Depends:
       T013, T015, T016.
-- [ ] T018 [US3] Explanation affordance (FR-012, SC-006): hover/focus
+- [X] T018 [US3] Explanation affordance (FR-012, SC-006): hover/focus
       popover on the guidance cell listing tonight's illumination + Moon
       age, this row's separation, and each band's required minimum
       separation from active params; keyboard-reachable, i18n. Depends: T017.
-- [ ] T019 [US3] Recommendation filtering + grouping (FR-011, FR-013):
+- [X] T019 [US3] Recommendation filtering + grouping (FR-011, FR-013):
       existing planner filter control + group-by-recommendation rewired to
       real derived categories incl. explicit "unknown" choice; tests in
       `TargetsTable.test.tsx` (filter set, group counts, unknown exclusion
       rule). Depends: T017.
-- [ ] T020 [US3] US3 test sweep: boundary determinism at exact
+- [X] T020 [US3] US3 test sweep: boundary determinism at exact
       `min_separation` (viable), bright/close vs dim/far scenario fixtures,
       live param-change re-render, avoid-tonight state rendering. Depends:
       T017–T019.
@@ -178,16 +178,16 @@ params in Settings updates pills live; reset restores defaults.
 **Independent test**: Orion-region targets → ~December, Sagittarius-region →
 ~June/July, within ±7 days; sort orders by soonest.
 
-- [ ] T021 [P] [US4] Create `apps/desktop/src/features/targets/astro/opposition.ts`
+- [X] T021 [P] [US4] Create `apps/desktop/src/features/targets/astro/opposition.ts`
       — next anti-solar date from target RA via daily solar-RA scan (plan
       D6) + fixture tests `astro/opposition.test.ts`: seasonal anchors
       (M42, M31, M8/M20, M13, M45 …) within ±7 days (SC-003); wrap-around
       year boundary; null coords. Depends: T001, T002.
-- [ ] T022 [US4] Wire the opposition column in `TargetsTable.tsx`: replace
+- [X] T022 [US4] Wire the opposition column in `TargetsTable.tsx`: replace
       the "—" stub with date-level value + relative "in N days/months"
       (i18n plural rules), keep the **"Opposition"** column name; unknown
       state for null coords (FR-014). Depends: T013 (row derivation), T021.
-- [ ] T023 [US4] Opposition sort: soonest-next comparator (targets at/near
+- [X] T023 [US4] Opposition sort: soonest-next comparator (targets at/near
       opposition first), unknowns last, deterministic ties; replace the
       no-op sort; tests in `TargetsTable.test.tsx`. Depends: T022.
 
@@ -195,7 +195,7 @@ params in Settings updates pills live; reset restores defaults.
 
 ## Phase 7: Polish & cross-cutting
 
-- [ ] T024 Mock retirement audit (FR-015, FR-017, SC-004): delete
+- [X] T024 Mock retirement audit (FR-015, FR-017, SC-004): delete
       `MOCK_MOON_PHASE_FRAC`, `mockLunarDistanceDegFor`, mock `filtersFor`
       and their tests from
       `apps/desktop/src/features/targets/planner-altitude.ts` /
@@ -203,20 +203,20 @@ params in Settings updates pills live; reset restores defaults.
       sampling + `usableAltDeg` path (Track B placeholders, FR-015/016)
       with updated header comments; repo-wide grep proves no moon/filter/
       opposition value derives from hash sources. Depends: US1–US4 done.
-- [ ] T025 [P] A11y + i18n audit (FR-018): new columns/controls keyboard
+- [X] T025 [P] A11y + i18n audit (FR-018): new columns/controls keyboard
       operable, `SortHeader` announces sort state for lunarDist/opposition,
       pills/popover have AT text, zero literal strings (catalog only).
       Depends: US1–US4.
-- [ ] T026 [P] Performance check (SC-007): 5,000-row planner fixture —
+- [X] T026 [P] Performance check (SC-007): 5,000-row planner fixture —
       per-night memoization verified (one `ObservingNight` per night),
       row derivation O(1), sorting without visible stall. Depends: US1–US4.
-- [ ] T027 Full gates: `just lint`, `just test`, `just typecheck`; fix
+- [X] T027 Full gates: `just lint`, `just test`, `just typecheck`; fix
       fallout. Depends: T024–T026.
 - [ ] T028 verify-on-windows scenario for the real Tauri app: site-gate
       prompt, moon summary vs almanac for the current date, lunar-distance
       sort, Settings per-band table live update + reset, opposition column.
       Depends: T027.
-- [ ] T029 [P] Update `specs/SPEC_STATUS.md` row for 047 (and 044's Track A
+- [X] T029 [P] Update `specs/SPEC_STATUS.md` row for 047 (and 044's Track A
       pointer if listed). Depends: T027.
 
 ---
