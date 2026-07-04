@@ -7,7 +7,8 @@
 //! paths relative to the registered [`TEST_PROJECT_ROOT`], or build
 //! platform-absolute paths with [`abs`].
 
-use domain_core::ids::new_id;
+use domain_core::first_run::{OrganizationState, RegisterSourceRequest, ScanDepth, SourceKind};
+use persistence_db::repositories::first_run as first_run_repo;
 use sqlx::SqlitePool;
 
 /// Platform-absolute path of the project folder registered by test setups.
@@ -26,16 +27,20 @@ pub(crate) fn abs(path: &str) -> String {
 }
 
 /// Register a project-kind source so relative request paths have an anchor
-/// (mirrors the first-run wizard registering a project folder).
+/// (mirrors the first-run wizard registering a project folder). Goes through
+/// the sanctioned `first_run` repository (DB-boundary rule: no raw SQL outside
+/// `crates/persistence/db`).
 pub(crate) async fn register_project_root(pool: &SqlitePool, path: &str) {
-    sqlx::query(
-        "INSERT INTO registered_sources \
-         (id, kind, path, scan_depth, created_at, created_via, organization_state) \
-         VALUES (?, 'project', ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run', 'organized')",
+    first_run_repo::register_source(
+        pool,
+        &RegisterSourceRequest {
+            kind: SourceKind::Project,
+            path: path.to_owned(),
+            kind_subtype: None,
+            scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        },
     )
-    .bind(new_id())
-    .bind(path)
-    .execute(pool)
     .await
     .unwrap();
 }
