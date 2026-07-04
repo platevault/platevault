@@ -65,6 +65,7 @@ instant threshold updates. **Independent test**: spec.md US1 Independent Test.
       10-min altitude/az grid via `Horizon()` with **J2000→date precession** (`DefineStar`/`Rotation_EQJ_EQD`,
       research R6/FR-026), exact transit via `SearchHourAngle(0)`, exact rise/set via `SearchRiseSet`
       (respecting `minHorizonAltDeg` + refraction), dark window via `SearchAltitude` at the site twilight.
+      All computation is offline/local — no network (FR-027).
 - [ ] T010 [US1] `apps/desktop/src/features/targets/planner-derive.ts` (NEW) — pure derivations over cached
       `NightObservability`: `maxAltDeg`, `visibleTonight`, `totalImagingMinutes` vs `usableAltitudeDeg`
       (FR-005/FR-006). Memoize positions per `(target, activeSiteId, dateMs)`; derivations recompute WITHOUT
@@ -76,11 +77,19 @@ instant threshold updates. **Independent test**: spec.md US1 Independent Test.
 - [ ] T012 [US1] Update consumers to the real data: `AltitudeSparkline.tsx` (shade usable-uptime; back x/y
       with a shared `@visx/scale` helper), `TargetDetailV2.tsx` (`altitudeCurve()` → real), `TargetsTable.tsx`
       columns (max-alt, visible-tonight, imaging time, transit) — FR-007.
+- [ ] T012b [US1] Read `usableAltitudeDeg` from `observing.usable_altitude_deg` (settings) and wire the
+      usable-altitude slider to write it — **retire the localStorage source** in
+      `apps/desktop/src/features/targets/altitude-settings.ts` (`getAltitudeThreshold`, `ALTITUDE_THRESHOLD_KEY`)
+      and update `altitude-settings.test.ts` (FR-004). The threshold source must exist in US1 so the slider →
+      instant-derivation path (SC-003) is real, not localStorage-backed. (Depends on Phase 2 T004–T008.)
 - [ ] T013 [US1] Handle the un-plannable target (null RA/Dec) + never-usable target as spec edge cases (no
-      error; "needs coordinates" / not-visible zero imaging time).
+      error; "needs coordinates" / not-visible zero imaging time). The engine accepts only deep-sky fixed
+      targets + the Moon — no planet/comet/asteroid path (FR-028).
 - [ ] T014 [P] [US1] Tests: engine max-alt/transit/curve vs an independent reference ephemeris to planning
-      grade (SC-001); instant-derivation on threshold change with no position recompute (SC-003); never-visible
-      target → not-visible/zero (edge case). `apps/desktop/src/features/targets/*.test.ts`.
+      grade (SC-001); **rise/set times vs reference to ≈±1 min, and circumpolar / never-rising targets reported
+      as having none, with no error (SC-002)**; instant-derivation on threshold change with no position
+      recompute (SC-003); never-visible target → not-visible/zero (edge case).
+      `apps/desktop/src/features/targets/*.test.ts`.
 
 **Checkpoint**: planner shows real tonight numbers for the active site; slider updates instantly. MVP.
 
@@ -114,9 +123,9 @@ instant threshold updates. **Independent test**: spec.md US1 Independent Test.
       (FR-011/FR-012). Keep `.alm-*` markup.
 - [ ] T020 [US3] Enforce default/active validity across edits/deletes (delete active → reselect default/none;
       delete default → valid/empty) — FR-013; wire into the settings write path.
-- [ ] T021 [US3] Retire the localStorage usable-altitude: replace
-      `apps/desktop/src/features/targets/altitude-settings.ts` (`getAltitudeThreshold`, `ALTITUDE_THRESHOLD_KEY`)
-      with the settings-backed `observing.usable_altitude_deg`; update `altitude-settings.test.ts` (FR-004).
+- [ ] T021 [US3] Expose the usable-altitude threshold (settings-backed, wired in US1 T012b) on the
+      settings/observing surface and verify it **persists across relaunch** (durability aspect of FR-004,
+      SC-006), alongside per-site twilight/min-horizon persistence.
 - [ ] T022 [US3] Switching active site recomputes all observability for the new coordinates; active site
       persists across relaunch (SC-005).
 - [ ] T023 [P] [US3] Tests: two sites give different numbers; switch/relaunch persistence; delete keeps
@@ -153,7 +162,7 @@ instant threshold updates. **Independent test**: spec.md US1 Independent Test.
       `alt ≥ usable ∧ ¬(MoonUp ∧ sep(t) < lorentzianMinSep(band, moonAge))`, importing `lorentzianMinSep` from
       **047's shared module** (FR-022/FR-023). Recompute on band-param change without position recompute (SC-003).
 - [ ] T029 [US5] Display: per-band moon-free hours (e.g. "Ha 4.2h · OIII 2.1h · LRGB 0h"); sparkline shades the
-      chosen band's interference intervals (default: band with most moon-free time) — FR-007/FR-152 note.
+      chosen band's interference intervals (default: band with most moon-free time) — FR-007.
 - [ ] T030 [P] [US5] Tests: three separations vs reference (SC-009); per-band moon-free equals the summed
       intervals and a tolerant band ≥ a stricter band (SC-010); Moon-below-all-night → moon-free == total
       imaging time (edge case).
@@ -169,7 +178,8 @@ instant threshold updates. **Independent test**: spec.md US1 Independent Test.
 - [ ] T031 [US4] Per-site twilight drives the dark window used for imaging-time (total + per-band) and the graph
       night shading (FR-015/FR-016); switching astronomical↔nautical widens/narrows the window.
 - [ ] T032 [US4] Minimum-horizon altitude affects rise/set, visibility, usable time, and Moon-up (FR-018);
-      standard refraction at the true horizon.
+      standard refraction at the true horizon. **Depends on US5 T027** (needs the Moon-up windows to apply the
+      horizon to Moon-up determination).
 - [ ] T033 [US4] Empty-dark-window (high-lat summer): report "no dark window", zero total + per-band imaging
       time, no fabrication/error (FR-017/SC-008).
 - [ ] T034 [P] [US4] Tests: nautical vs astronomical changes the window + imaging time (SC-007); raised horizon
@@ -186,12 +196,14 @@ instant threshold updates. **Independent test**: spec.md US1 Independent Test.
       sparkline.
 - [ ] T036 [P] Wire the already-installed `@tanstack/react-table` into `TargetsTable.tsx` (sort/filter/group)
       replacing the hand-rolled `[...rows].sort()`/`useMemo`; keep `.alm-*` markup (net-zero dep).
-- [ ] T037 [P] Hand-roll the moon-phase SVG fed by `Illumination`/`MoonPhase` (do not add a second astro lib).
-- [ ] T038 `just lint` + `just test` + `just typecheck` green.
-- [ ] T039 **verify-on-windows**: real Tauri app — wizard site step, site CRUD + active switch, date picker,
+- [ ] T037 `just lint` + `just test` + `just typecheck` green.
+- [ ] T038 **verify-on-windows**: real Tauri app — wizard site step, site CRUD + active switch, date picker,
       threshold slider instant update, per-band moon-free display; spot-check M31/M42 vs Stellarium/Telescopius
       within planning tolerance. (Use the `verify-on-windows` skill.)
-- [ ] T040 Update `specs/SPEC_STATUS.md` 044 row (placeholder → implemented) after merge.
+- [ ] T039 Update `specs/SPEC_STATUS.md` 044 row (placeholder → implemented) after merge.
+
+> **Not here (Track A / spec 047):** the moon-phase widget and Moon phase/illumination presentation are
+> owned by 047 (spec Out-of-Scope; FR-023). Track B supplies `moonIllumination` data only.
 
 ---
 
@@ -201,27 +213,28 @@ instant threshold updates. **Independent test**: spec.md US1 Independent Test.
 Setup T001,T002,T003
    └─> Foundational (Phase 2) T004 ─> T005 ─> T006 ─> T007 ─> T008
           │  (BLOCKS every user story — active site + threshold)
-          ├─> US1 (Phase 3) T009 ─> T010 ─> T011 ─> T012 ─> T013 ; T014[P]
+          ├─> US1 (Phase 3) T009 ─> T010 ─> T011 ─> T012 ─> T012b ─> T013 ; T014[P]
           │        │
           │        ├─> US2 (Phase 6) T024 ─> T025 ; T026[P]
           │        ├─> US5 (Phase 7) T027 ─> T028 ─> T029 ; T030[P]   (consumes spec 047 module)
-          │        └─> US4 (Phase 8) T031 ─> T032 ─> T033 ; T034[P]   (US4 also uses US5 Moon-up for horizon)
+          │        └─> US4 (Phase 8) T031 ; T032 (needs US5 T027) ─> T033 ; T034[P]
           ├─> US6 (Phase 4) T015 ─> T016 ─> T017 ; T018[P]           (co-P1 w/ US1; needs settings)
           └─> US3 (Phase 5) T019 ─> T020 ; T021 ; T022 ; T023[P]
-   Polish (Phase 9) T035[P],T036[P],T037[P] after their consumer stories; T038 ─> T039 ─> T040 last
+   Polish (Phase 9) T035[P],T036[P] after their consumer stories; T037 ─> T038 ─> T039 last
 ```
 
-**Critical path (MVP)**: T001/T002 → T004→T008 → T009→T012 → (seed one site or T016) → usable planner.
+**Critical path (MVP)**: T001/T002 → T004→T008 → T009→T012b → (seed one site or T016) → usable planner.
 
-**Parallelizable**: T001–T003; all `[P]` test tasks vs their story code; T035/T036/T037 across different files.
+**Parallelizable**: T001–T003; all `[P]` test tasks vs their story code; T035/T036 across different files.
 US2, US3, US5 can proceed in parallel once US1 (Phase 3) lands, on disjoint files. **US5 is gated on spec 047's
-shared Lorentzian module existing** — coordinate with the 047 lane.
+shared Lorentzian module existing** — coordinate with the 047 lane. **US4 T032 must follow US5 T027** (Moon-up
+windows), so US4 is not fully independent of US5.
 
 ## Independent test criteria (per story → SC)
 
 | Story | Independent test | SCs |
 |-------|------------------|-----|
-| US1 | tonight numbers match reference; slider instant | SC-001, SC-003 |
+| US1 | tonight numbers match reference; rise/set ±1 min + circumpolar reported none; slider instant | SC-001, SC-002, SC-003 |
 | US2 | future date changes values; best-date=midnight transit | SC-004, SC-012 |
 | US3 | two sites differ; persist/relaunch; delete keeps valid | SC-005, SC-006 |
 | US4 | twilight widens window; horizon shrinks usable; no-dark | SC-007, SC-008 |
