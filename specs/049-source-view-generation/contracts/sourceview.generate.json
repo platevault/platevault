@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan.local/contracts/sourceview.generate.json",
+  "title": "sourceview.generate",
+  "description": "Create a reviewable filesystem plan that generates (first-materializes) a WBPP/PixInsight-ready project source view: the project's selected light frames plus their matched calibration, laid out per the selected workflow profile, as per-item link actions (copy only with explicit opt-in). The response planId enters the standard spec 017/025 pipeline (approve → apply); nothing is written to disk before apply. The PreparedSourceView record (spec 026) is written on successful apply. Link kind is resolved deterministically per drive-scope from the settings pair (source_view_link_kind_intra_drive / source_view_link_kind_cross_drive) and recorded per item. Allowed only when the owning project lifecycle is setup_incomplete|ready|prepared|processing|blocked|completed; refused on archived with lifecycle.read_only (spec 026 FR-012).",
+  "type": "object",
+  "properties": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "requestId", "projectId"],
+      "properties": {
+        "contractVersion": { "type": "string" },
+        "requestId": { "type": "string", "format": "uuid" },
+        "projectId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Project whose selected lights + matched calibration are materialized."
+        },
+        "profileId": {
+          "type": "string",
+          "description": "Workflow/processing profile selecting the tree layout (spec 011). Defaults to the project's active profile (WBPP first). Layout is profile-driven, never hardcoded."
+        },
+        "destinationOverride": {
+          "type": "string",
+          "description": "Optional per-generation destination path. Default is the project envelope subfolder <project>/source-views/<view>/ (spec 024). A persisted per-project override is applied when set and no per-generation override is provided."
+        },
+        "copyOptIn": {
+          "type": "boolean",
+          "default": false,
+          "description": "Explicit opt-in to copy materialization when no link kind is achievable. Default false — the app never silently copies (FR-003)."
+        },
+        "strict": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, any missing/unresolved source fails the whole plan; when false (default), unresolved sources are skipped and flagged as warnings (FR-019)."
+        }
+      }
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "planId"],
+          "properties": {
+            "status": { "const": "success" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "planId": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Identifier of the produced generation plan (a FilesystemPlan with origin prepared_view_generation, plan_type source_view_generation). Enters the standard spec 017/025 pipeline: approve then apply."
+            },
+            "warnings": {
+              "type": "array",
+              "description": "Non-blocking review warnings surfaced with the plan.",
+              "items": { "$ref": "#/$defs/Warning" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "contractVersion", "requestId", "errors"],
+          "properties": {
+            "status": { "const": "failure" },
+            "contractVersion": { "type": "string" },
+            "requestId": { "type": "string", "format": "uuid" },
+            "errors": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/Error" }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "required": ["request", "response"],
+  "$defs": {
+    "Warning": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "no_calibration_applied",
+            "unresolved_source",
+            "capability_drift",
+            "long_path"
+          ],
+          "description": "no_calibration_applied: light view generated without matched calibration, unmatched groups listed (FR-010a). unresolved_source: a source is missing/unresolved and was skipped/flagged (FR-019). capability_drift: a saved link kind was not achievable for a drive-scope and a documented fallback was applied (FR-004b). long_path: a destination path exceeds the Windows 260-char limit (FR-018)."
+        },
+        "message": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Affected source references / group identifiers."
+        }
+      }
+    },
+    "Error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "project.not_found",
+            "no_selection",
+            "lifecycle.read_only",
+            "no_link_kind",
+            "destination.collision",
+            "destination.exists",
+            "profile.not_found"
+          ],
+          "description": "no_link_kind: no achievable link kind and copyOptIn=false (FR-003/FR-004b). destination.collision: two sources resolve to the same destination path — refused, points at the offending pattern (FR-009a/FR-017). destination.exists: destination path is an existing user-owned file/folder — never silently overwritten (FR-016). lifecycle.read_only: project is archived (spec 026 FR-012)."
+        },
+        "message": { "type": "string" },
+        "details": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "description": "For destination.collision: the layout pattern that produced the collision (missing session/night/setup token)."
+            },
+            "allowedLifecycleStates": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
