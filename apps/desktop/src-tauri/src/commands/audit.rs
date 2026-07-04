@@ -100,37 +100,77 @@ fn parse_actor(s: &str) -> AuditActor {
     }
 }
 
-/// Derive a human-readable `detail` string. `audit_log_entry` has no `detail`
-/// column — only a nullable JSON `payload` (present for refusals and target
-/// resolution rows; `NULL` for successful transitions). Prefer a refusal
-/// message when present, otherwise fall back to the `trigger` text itself
-/// (the closest analogue to a human-readable summary the row carries).
+/// Detail rendering data derived from a row's `trigger` + JSON `payload`.
 ///
-/// **i18n (decision D23, 2026-07-03):** the strings composed here (refusal
-/// messages from `payload`, `trigger` labels written by the backend) are
-/// backend-composed English and are intentionally displayed untranslated —
-/// audit detail is technical/diagnostic display, not catalog-translated UI
-/// copy. The upgrade path (routing refusals through a
-/// `TransitionErrorCode`-keyed catalog display on the frontend) is tracked as
-/// a follow-up task; do not translate or catalog these strings here.
-fn derive_detail(trigger: &str, payload: Option<&str>) -> String {
+/// `audit_log_entry` has no `detail` column — only a nullable JSON `payload`
+/// (present for refusals and target resolution rows; `NULL` for successful
+/// transitions).
+///
+/// **i18n (decision D23, upgraded 2026-07-04 — campaign task #45):** `text`
+/// is the backend-composed English detail (refusal message from `payload`,
+/// or the `trigger` label) and stays byte-stable in storage and export.
+/// `code` + `params` are the STABLE identifiers the Audit Log frontend maps
+/// to a Paraglide catalog message at DISPLAY time:
+/// - refusal rows: `code = payload.refusal.code`,
+///   `params = payload.refusal.params` (written by
+///   `transition_use_case::record_refused` only when the pair unambiguously
+///   identifies a message template);
+/// - target-resolution rows: `code = trigger`
+///   (`target.resolved` / `target.user_override`), `params = { query }`.
+///
+/// Rows without a code (or without the params their template needs) keep
+/// rendering the stored English `text` — old rows are unchanged.
+struct DerivedDetail {
+    text: String,
+    code: Option<String>,
+    params: Option<std::collections::HashMap<String, String>>,
+}
+
+/// Convert a `payload.refusal.params`-style JSON object into the flat
+/// string map the `AuditEntry` contract carries. Non-string values are
+/// rendered via `to_string()` (defensive — the writer only stores strings).
+fn params_map(value: &serde_json::Value) -> Option<std::collections::HashMap<String, String>> {
+    let obj = value.as_object()?;
+    Some(
+        obj.iter()
+            .map(|(k, v)| {
+                let s = v.as_str().map_or_else(|| v.to_string(), str::to_owned);
+                (k.clone(), s)
+            })
+            .collect(),
+    )
+}
+
+fn derive_detail(trigger: &str, payload: Option<&str>) -> DerivedDetail {
     if let Some(raw) = payload {
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw) {
-            if let Some(msg) =
-                value.get("refusal").and_then(|r| r.get("message")).and_then(|m| m.as_str())
-            {
-                return msg.to_owned();
+            if let Some(refusal) = value.get("refusal") {
+                let text = refusal
+                    .get("message")
+                    .and_then(serde_json::Value::as_str)
+                    .map_or_else(|| trigger.to_owned(), str::to_owned);
+                let code =
+                    refusal.get("code").and_then(serde_json::Value::as_str).map(str::to_owned);
+                let params = refusal.get("params").and_then(params_map);
+                return DerivedDetail { text, code, params };
             }
-            if let Some(query) = value.get("query").and_then(|q| q.as_str()) {
-                return format!("{trigger} ({query})");
+            if let Some(query) = value.get("query").and_then(serde_json::Value::as_str) {
+                return DerivedDetail {
+                    text: format!("{trigger} ({query})"),
+                    code: Some(trigger.to_owned()),
+                    params: Some(std::collections::HashMap::from([(
+                        "query".to_owned(),
+                        query.to_owned(),
+                    )])),
+                };
             }
         }
     }
-    trigger.to_owned()
+    DerivedDetail { text: trigger.to_owned(), code: None, params: None }
 }
 
 fn row_to_entry(row: AuditLogRow) -> AuditEntry {
-    let detail = derive_detail(&row.trigger, row.payload.as_deref());
+    let derived = derive_detail(&row.trigger, row.payload.as_deref());
     AuditEntry {
         id: row.audit_id,
         timestamp: row.at,
@@ -141,7 +181,52 @@ fn row_to_entry(row: AuditLogRow) -> AuditEntry {
         to_state: row.to_state,
         actor: parse_actor(&row.actor),
         outcome: parse_outcome(&row.outcome),
-        detail,
+        detail: derived.text,
+        detail_code: derived.code,
+        detail_params: derived.params,
+    }
+}
+
+#[cfg(test)]
+mod detail_tests {
+    use super::derive_detail;
+
+    #[test]
+    fn refusal_payload_yields_code_params_and_english_fallback() {
+        let payload = r#"{"refusal":{"code":"plan.required","message":"edge (project, ready -> prepared) requires an approved FilesystemPlan","params":{"entityType":"project","fromState":"ready","toState":"prepared"}},"attempted_to_state":"prepared"}"#;
+        let d = derive_detail("project: ready -> prepared", Some(payload));
+        assert_eq!(d.text, "edge (project, ready -> prepared) requires an approved FilesystemPlan");
+        assert_eq!(d.code.as_deref(), Some("plan.required"));
+        let params = d.params.expect("params present");
+        assert_eq!(params.get("entityType").map(String::as_str), Some("project"));
+        assert_eq!(params.get("fromState").map(String::as_str), Some("ready"));
+        assert_eq!(params.get("toState").map(String::as_str), Some("prepared"));
+    }
+
+    #[test]
+    fn legacy_refusal_payload_without_params_keeps_code_and_message() {
+        // Rows written before the D23 upgrade: code + message, no params.
+        let payload = r#"{"refusal":{"code":"transition.refused","message":"some legacy reason"}}"#;
+        let d = derive_detail("trigger", Some(payload));
+        assert_eq!(d.text, "some legacy reason");
+        assert_eq!(d.code.as_deref(), Some("transition.refused"));
+        assert!(d.params.is_none());
+    }
+
+    #[test]
+    fn query_payload_yields_trigger_code_and_query_param() {
+        let d = derive_detail("target.resolved", Some(r#"{"query":"M 31"}"#));
+        assert_eq!(d.text, "target.resolved (M 31)");
+        assert_eq!(d.code.as_deref(), Some("target.resolved"));
+        assert_eq!(d.params.expect("params").get("query").map(String::as_str), Some("M 31"));
+    }
+
+    #[test]
+    fn null_payload_falls_back_to_trigger_with_no_code() {
+        let d = derive_detail("project: ready -> processing", None);
+        assert_eq!(d.text, "project: ready -> processing");
+        assert!(d.code.is_none());
+        assert!(d.params.is_none());
     }
 }
 

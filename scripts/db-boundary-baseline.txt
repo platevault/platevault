@@ -9,7 +9,7 @@
 2	apps/desktop/src-tauri/src/lib.rs
 6	crates/app/calibration/src/equipment.rs
 16	crates/app/calibration/src/matching.rs
-10	crates/app/core/src/log_stream.rs
+11	crates/app/core/src/log_stream.rs
 12	crates/app/core/src/search.rs
 12	crates/app/core/src/sessions.rs
 2	crates/app/inbox/src/confirm.rs

@@ -3,7 +3,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Btn, Pill } from '@/ui';
 import { DirPicker } from '@/ui/DirPicker';
-import { listRoots, registerRoot, rescanRoot, settingsSourceOverrideSet, settingsOverridableKeys } from './settingsIpc';
+import {
+  listRoots,
+  registerRoot,
+  rescanRoot,
+  setRootActive,
+  deleteRoot,
+  settingsSourceOverrideSet,
+  settingsOverridableKeys,
+} from './settingsIpc';
 import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
@@ -11,6 +19,7 @@ import { m } from '@/lib/i18n';
 import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
 import { RemapRootDialog } from './RemapRootDialog';
+import { ConfirmOverlay } from '@/components';
 
 const SOURCES_KEYS = ['followSymlinks', 'hashOnScan', 'alwaysPreviewBeforePlan'];
 
@@ -51,6 +60,16 @@ export function DataSources({ save: _save }: DataSourcesProps) {
 
   // ── Remap dialog (P6a) ────────────────────────────────────────────────────
   const [remapRoot, setRemapRoot] = useState<LibraryRoot | null>(null);
+
+  // ── Disable/Enable (P6b) ──────────────────────────────────────────────────
+  const [disableTarget, setDisableTarget] = useState<LibraryRoot | null>(null);
+  const [togglingActiveId, setTogglingActiveId] = useState<string | null>(null);
+  const [toggleActiveError, setToggleActiveError] = useState<string | null>(null);
+
+  // ── Delete (P6b) ───────────────────────────────────────────────────────────
+  const [deleteTarget, setDeleteTarget] = useState<LibraryRoot | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // ── Overridable keys — fetched from backend (T025) ──────────────────────────
   const [overridableKeys, setOverridableKeys] = useState<string[]>([...OVERRIDABLE_KEYS_FALLBACK]);
@@ -133,6 +152,63 @@ export function DataSources({ save: _save }: DataSourcesProps) {
       console.error('Rescan failed:', errMessage(err));
     } finally {
       setRescanningId(null);
+    }
+  };
+
+  // ── Disable/Enable (P6b) ──────────────────────────────────────────────────
+  //
+  // Disabling stops the root from being scanned/ingested but keeps its full
+  // history intact, so it is gated by a lightweight confirm. Re-enabling is
+  // restorative (non-destructive) and applies immediately, no confirm needed.
+  const requestToggleActive = (root: LibraryRoot) => {
+    if (root.active) {
+      setToggleActiveError(null);
+      setDisableTarget(root);
+    } else {
+      void applyToggleActive(root, true);
+    }
+  };
+
+  const applyToggleActive = async (root: LibraryRoot, active: boolean) => {
+    setTogglingActiveId(root.id);
+    setToggleActiveError(null);
+    try {
+      await setRootActive({ rootId: root.id, active });
+      loadRoots();
+    } catch (err: unknown) {
+      setToggleActiveError(errMessage(err));
+    } finally {
+      setTogglingActiveId(null);
+    }
+  };
+
+  const handleConfirmDisable = async () => {
+    if (!disableTarget) return;
+    await applyToggleActive(disableTarget, false);
+    setDisableTarget(null);
+  };
+
+  // ── Delete (P6b, decision D8) ─────────────────────────────────────────────
+  //
+  // Blocks server-side when dependent records exist (root.has_dependents);
+  // the block reason is surfaced in the confirm dialog rather than closing it.
+  const requestDelete = (root: LibraryRoot) => {
+    setDeleteError(null);
+    setDeleteTarget(root);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.id);
+    setDeleteError(null);
+    try {
+      await deleteRoot({ rootId: deleteTarget.id });
+      setDeleteTarget(null);
+      loadRoots();
+    } catch (err: unknown) {
+      setDeleteError(errMessage(err));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -228,6 +304,10 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               onRescan={handleRescan}
               rescanning={rescanningId === root.id}
               onRemap={setRemapRoot}
+              onToggleActive={requestToggleActive}
+              togglingActive={togglingActiveId === root.id}
+              onDelete={requestDelete}
+              deleting={deletingId === root.id}
             />
           ))}
         </div>
@@ -239,6 +319,41 @@ export function DataSources({ save: _save }: DataSourcesProps) {
       onClose={() => setRemapRoot(null)}
       onApplied={loadRoots}
     />
+
+    {/* Disable confirm (P6b) — re-enable applies immediately, no confirm needed. */}
+    <ConfirmOverlay
+      open={disableTarget != null}
+      onClose={() => {
+        if (togglingActiveId) return;
+        setDisableTarget(null);
+        setToggleActiveError(null);
+      }}
+      onConfirm={() => void handleConfirmDisable()}
+      title={m.settings_datasources_disable_confirm_title()}
+      description={m.settings_datasources_disable_confirm_desc()}
+      confirmLabel={togglingActiveId ? m.common_disabling() : m.settings_datasources_disable()}
+      confirmVariant="danger"
+    >
+      {toggleActiveError && <span className="alm-field-error">{toggleActiveError}</span>}
+    </ConfirmOverlay>
+
+    {/* Delete confirm (P6b, decision D8) — surfaces the block reason inline
+        (e.g. root.has_dependents) instead of closing the dialog on failure. */}
+    <ConfirmOverlay
+      open={deleteTarget != null}
+      onClose={() => {
+        if (deletingId) return;
+        setDeleteTarget(null);
+        setDeleteError(null);
+      }}
+      onConfirm={() => void handleConfirmDelete()}
+      title={m.settings_datasources_delete_confirm_title()}
+      description={m.settings_datasources_delete_confirm_desc({ path: deleteTarget?.path ?? '' })}
+      confirmLabel={deletingId ? m.common_deleting() : m.settings_datasources_delete()}
+      confirmVariant="danger"
+    >
+      {deleteError && <span className="alm-field-error">{deleteError}</span>}
+    </ConfirmOverlay>
 
     {/* Per-source setting override (spec 018 T025) */}
     {roots.length > 0 && (
@@ -327,9 +442,22 @@ interface RootCardProps {
   onRescan: (root: LibraryRoot) => void;
   rescanning: boolean;
   onRemap: (root: LibraryRoot) => void;
+  onToggleActive: (root: LibraryRoot) => void;
+  togglingActive: boolean;
+  onDelete: (root: LibraryRoot) => void;
+  deleting: boolean;
 }
 
-function RootCard({ root, onRescan, rescanning, onRemap }: RootCardProps) {
+function RootCard({
+  root,
+  onRescan,
+  rescanning,
+  onRemap,
+  onToggleActive,
+  togglingActive,
+  onDelete,
+  deleting,
+}: RootCardProps) {
   const isOffline = !root.online;
 
   const metaParts: string[] = [];
@@ -347,10 +475,11 @@ function RootCard({ root, onRescan, rescanning, onRemap }: RootCardProps) {
     <div
       className={
         'alm-data-sources__root-card' +
-        (isOffline ? ' alm-data-sources__root-card--offline' : '')
+        (isOffline ? ' alm-data-sources__root-card--offline' : '') +
+        (root.active ? '' : ' alm-data-sources__root-card--disabled')
       }
     >
-      {/* Left: path + offline pill + meta */}
+      {/* Left: path + offline/disabled pills + meta */}
       <div className="alm-data-sources__root-info">
         <div className="alm-data-sources__root-path-row">
           <code className="alm-mono alm-data-sources__root-path">
@@ -359,6 +488,11 @@ function RootCard({ root, onRescan, rescanning, onRemap }: RootCardProps) {
           {isOffline && (
             <Pill variant="warn" className="alm-data-sources__offline-pill">
               {m.nav_roots_offline_suffix()}
+            </Pill>
+          )}
+          {!root.active && (
+            <Pill variant="neutral" className="alm-data-sources__disabled-pill">
+              {m.settings_datasources_disabled_pill()}
             </Pill>
           )}
         </div>
@@ -378,12 +512,12 @@ function RootCard({ root, onRescan, rescanning, onRemap }: RootCardProps) {
         {!isOffline && (
           <Btn
             size="sm"
-            onClick={() => {
-              // STUB: disable backend command pending
-              console.log('STUB: disable backend command pending', root.id);
-            }}
+            onClick={() => onToggleActive(root)}
+            disabled={togglingActive}
           >
-            {m.settings_datasources_disable()}
+            {root.active
+              ? (togglingActive ? m.common_disabling() : m.settings_datasources_disable())
+              : (togglingActive ? m.common_enabling() : m.settings_datasources_enable())}
           </Btn>
         )}
         <Btn size="sm" onClick={() => onRemap(root)}>
@@ -393,12 +527,10 @@ function RootCard({ root, onRescan, rescanning, onRemap }: RootCardProps) {
           <Btn
             size="sm"
             variant="danger"
-            onClick={() => {
-              // STUB: delete-root backend command pending
-              console.log('STUB: delete-root backend command pending', root.id);
-            }}
+            onClick={() => onDelete(root)}
+            disabled={deleting}
           >
-            {m.settings_datasources_delete()}
+            {deleting ? m.common_deleting() : m.settings_datasources_delete()}
           </Btn>
         )}
       </div>

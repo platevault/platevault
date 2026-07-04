@@ -95,8 +95,8 @@ function makeProject(overrides: Partial<ProjectDetailDto> = {}): ProjectDetailDt
     channelDrift: { hasNewSources: false, suggestedAction: 'dismiss' },
     sources: [],
     channels: [
-      { label: 'Ha', source: 'inferred', addedAt: '2026-06-01T00:00:00Z' },
-      { label: 'OIII', source: 'inferred', addedAt: '2026-06-01T00:00:00Z' },
+      { label: 'Ha', source: 'inferred', addedAt: '2026-06-01T00:00:00Z', subFrames: 0, totalIntegrationS: 0 },
+      { label: 'OIII', source: 'inferred', addedAt: '2026-06-01T00:00:00Z', subFrames: 0, totalIntegrationS: 0 },
     ],
     createdAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-01T00:00:00Z',
