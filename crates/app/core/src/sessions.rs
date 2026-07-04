@@ -90,12 +90,12 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
         let confidence = confidence_from_state(st);
         // TODO(037): optical_train_id -- fingerprint stores name, not UUID.
         let optical_train_id = fp.as_ref().and_then(|f| f.optic_train.clone()).unwrap_or_default();
-        // frame_count from JSON array length; 0 when frame_ids is malformed.
-        let frame_count = count_json_array(&frame_ids_json);
+        // spec 048 US1: frame_count/total_size_bytes are the ACTIVE (non-missing)
+        // file_record members — honest counts/totals, not the raw array length
+        // (which may retain `missing` ids in flag-missing mode).
+        let (frame_count, total_size_bytes) = active_frame_summary(pool, &frame_ids_json).await?;
         // TODO(037): total_integration_seconds -- not stored; requires frame-level data.
         let total_integration_seconds = 0.0_f64;
-        // TODO(037): total_size_bytes -- not stored; requires frame-level data.
-        let total_size_bytes = 0_u64;
         // TODO(037): metadata -- not stored as structured provenance rows yet.
         let metadata = HashMap::new();
         // Surface the canonical target id (spec 035) when the legacy target_id is
@@ -163,11 +163,10 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     let confidence = confidence_from_state(st);
     // TODO(037): optical_train_id -- fingerprint stores name, not UUID.
     let optical_train_id = fp.as_ref().and_then(|f| f.optic_train.clone()).unwrap_or_default();
-    let frame_count = count_json_array(&frame_ids_json);
+    // spec 048 US1: active (non-missing) frame_count/total_size_bytes.
+    let (frame_count, total_size_bytes) = active_frame_summary(pool, &frame_ids_json).await?;
     // TODO(037): total_integration_seconds -- not stored.
     let total_integration_seconds = 0.0_f64;
-    // TODO(037): total_size_bytes -- not stored.
-    let total_size_bytes = 0_u64;
     // TODO(037): metadata -- not stored as structured provenance rows yet.
     let metadata = HashMap::new();
     let target_ids = target_id.or(canonical_target_id).into_iter().collect();
@@ -326,13 +325,34 @@ fn confidence_from_state(state: SessionState) -> ConfidenceLevel {
     }
 }
 
-/// Count elements in a stored JSON array string; returns 0 on parse failure.
-fn count_json_array(json: &str) -> u32 {
-    serde_json::from_str::<serde_json::Value>(json)
-        .ok()
-        .and_then(|v| v.as_array().map(Vec::len))
-        .and_then(|n| u32::try_from(n).ok())
-        .unwrap_or(0)
+/// Active `(frame_count, total_size_bytes)` for a session's `frame_ids` JSON
+/// array (spec 048 US1, INV-5): only `file_record` rows whose `state !=
+/// 'missing'` count toward membership/totals. A `frame_ids` entry with no
+/// matching `file_record` (never written, or a future hard-delete) is simply
+/// excluded rather than erroring — sessions must never fail to load.
+///
+/// # Errors
+///
+/// Returns `Err(String)` on database failure.
+async fn active_frame_summary(
+    pool: &SqlitePool,
+    frame_ids_json: &str,
+) -> Result<(u32, u64), String> {
+    let ids: Vec<String> = serde_json::from_str(frame_ids_json).unwrap_or_default();
+    if ids.is_empty() {
+        return Ok((0, 0));
+    }
+    let mut builder = sqlx::QueryBuilder::new(
+        "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM file_record WHERE state != 'missing' AND id IN (",
+    );
+    let mut separated = builder.separated(", ");
+    for id in &ids {
+        separated.push_bind(id);
+    }
+    separated.push_unseparated(")");
+    let (count, total): (i64, i64) =
+        builder.build_query_as().fetch_one(pool).await.map_err(|e| e.to_string())?;
+    Ok((u32::try_from(count.max(0)).unwrap_or(0), u64::try_from(total.max(0)).unwrap_or(0)))
 }
 
 /// Load project ids linked to a session via `project_sources`.
@@ -428,14 +448,6 @@ mod tests {
         assert!(matches!(parse_session_state("candidate"), SessionState::Candidate));
         assert!(matches!(parse_session_state("discovered"), SessionState::Discovered));
         assert!(matches!(parse_session_state("unknown_future"), SessionState::Discovered));
-    }
-
-    #[test]
-    fn count_json_array_handles_edge_cases() {
-        assert_eq!(count_json_array("[]"), 0);
-        assert_eq!(count_json_array(r#"["a","b"]"#), 2);
-        assert_eq!(count_json_array("not json"), 0);
-        assert_eq!(count_json_array("{}"), 0);
     }
 
     #[test]
