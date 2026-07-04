@@ -30,7 +30,7 @@ import { ProjectNotesSection } from './ProjectNotesSection';
 import { ManifestsAccordion } from './ManifestsAccordion';
 import { CalibrationMatchPanel } from './CalibrationMatchPanel';
 import { SourceViewsSection } from './SourceViewsSection';
-import { OutputsSection, CleanupPreviewSection } from './OutputsCleanupSections';
+import { OutputsSection, CleanupSection } from './OutputsCleanupSections';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -96,9 +96,9 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
           <OutputsSection defaultOpen={true} />
         </div>
 
-        {/* ── Cleanup preview — stub; no per-project projection yet ────── */}
+        {/* ── Cleanup — live two-step scan → plan → review flow (017 WP-E) ── */}
         <div className="alm-project-bottom__cell">
-          <CleanupPreviewSection defaultOpen={true} />
+          <CleanupSection projectId={projectId} defaultOpen={true} />
         </div>
       </div>
     </div>
