@@ -11,11 +11,13 @@ Six journeys run against the real app + real SQLite + real filesystem:
 `first_run_resolve_create_project`, `plan_review_apply_with_audit`,
 `ingestion_sessions_search`, `lifecycle_integrity`, `cleanup_plan_review`
 (`tests/journeys.rs`), and `all_top_level_screens_load`
-(`tests/smoke.rs`). None are `#[ignore]`d. `audit.list`/`audit.export` are
-still fixture stubs (unrelated in-flight PR #388) — journeys needing a
-durable-record proof use `plans.apply.status` (`plan_apply_events`) or
-`lifecycle.ledger.list` instead. See each journey's doc comment for exactly
-which real commands it drives and why.
+(`tests/smoke.rs`). None are `#[ignore]`d. Durable-record proofs use
+`plans.apply.status` (`plan_apply_events`) and `lifecycle.ledger.list` — the
+read paths closest to the mutations being proved. (`audit.list`/
+`audit.export` were stubs when these were authored; PR #388 wired them to
+the real `audit_log_entry` table, #401 adds entity-filtered reads — they're
+now available as complementary assertion surfaces.) See each journey's doc
+comment for exactly which real commands it drives and why.
 
 Cannot run in the WSL dev sandbox (no webview/display) — CI (`e2e.yml`, 3-OS
 matrix) is the first real verification point; iterate there.

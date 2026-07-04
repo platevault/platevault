@@ -120,13 +120,17 @@ prose"):
 - `sessions.transition` is NOT exercised by any journey — spec 041 FR-051
   (T076) deliberately deleted the command; the original `lifecycle_integrity`
   stub's mention of it is struck (D22).
-- `audit.list`/`audit.export` are STILL fixture stubs returning hardcoded,
-  unrelated data (`apps/desktop/src-tauri/src/commands/audit.rs`) — an
-  in-flight, unrelated PR (#388) is wiring the real read path. No journey
-  asserts through `audit.list`; durable-record proofs instead use
-  `plans.apply.status` (reads the real `plan_apply_events` table) or
-  `lifecycle.ledger.list` (real). The original stubs' references to
-  `events.recent` were aspirational — that command does not exist.
+- `audit.list`/`audit.export` were fixture stubs when the journeys were
+  authored; **PR #388 (merged) wired them to the real `audit_log_entry`
+  table** (`apps/desktop/src-tauri/src/commands/audit.rs` now reads via
+  `persistence_db::repositories::audit`), and PR #401 (in flight) adds
+  entity-filtered audit reads. No journey asserts through `audit.list`;
+  durable-record proofs use `plans.apply.status` (reads the real
+  `plan_apply_events` table) and `lifecycle.ledger.list` — the read paths
+  closest to the mutations being proved, kept as the primary assertion
+  surfaces by choice (more robust than the general audit feed). The original
+  stubs' references to `events.recent` were aspirational — that command does
+  not exist.
 - **`cleanup_plan_review`'s known, documented gap**: applying the generated
   plan needs `plans.apply_real`, which takes a `tauri::ipc::Channel` progress
   argument with no channel-free equivalent for archive/cleanup plans (unlike

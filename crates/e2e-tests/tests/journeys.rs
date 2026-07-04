@@ -14,10 +14,12 @@
 //!
 //! Per research D9/D22: `sessions.transition` was deliberately deleted by
 //! spec 041 FR-051 (T076) and is NOT exercised here. `audit.list`/
-//! `audit.export` are STILL fixture stubs (unrelated in-flight PR #388) —
-//! journeys that need a durable-record proof use the real
-//! `plan_apply_events` trail (surfaced via `plans.apply.status`) or the real
-//! `lifecycle_ledger_list` read path instead of the stubbed audit surface.
+//! `audit.export` were fixture stubs when these journeys were first authored;
+//! PR #388 has since wired them to the real `audit_log_entry` table (with
+//! #401 adding entity-filtered reads). The journeys keep their durable-record
+//! proofs on `plans.apply.status` (the plan executor's own `plan_apply_events`
+//! trail) and `lifecycle_ledger_list` — those read paths sit closest to the
+//! mutations being proved, which stays the more robust assertion regardless.
 //!
 //! Run (CI): `cargo nextest run -p e2e_tests --profile e2e` (serial,
 //! `.config/nextest.toml`). Locally: build `desktop_shell --features e2e`,
@@ -252,8 +254,9 @@ async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
     );
 
     // 4. Poll the real, durable apply status until the executor finishes —
-    // `plans.apply.status` reads `plan_apply_events`, the durable audit trail
-    // for filesystem mutation (FR-016), avoiding the stubbed `audit.list`.
+    // `plans.apply.status` reads `plan_apply_events`, the plan executor's own
+    // durable audit trail for filesystem mutation (FR-016) and the read path
+    // closest to the mutation being proved.
     let status: serde_json::Value = app
         .invoke_until(
             "plans_apply_status",
@@ -443,9 +446,11 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
 }
 
 /// Lifecycle integrity: a real refusal/blocked `TransitionResponse`, and a
-/// real ledger read — no stubbed `audit.list`/`events.recent` (neither of
-/// which are real commands; the original scaffold's mention of
-/// `events.recent` was aspirational, not a real command name).
+/// real ledger read. The original scaffold's `events.recent` mention was
+/// aspirational (no such command exists); `lifecycle.ledger.list` is the
+/// real durable read path for lifecycle state (and `audit.list` — a stub
+/// when this was authored, wired to `audit_log_entry` by PR #388 since —
+/// remains available as a future complementary assertion surface).
 ///
 /// Backend REAL: `projects.create`, `lifecycle.transition.apply`,
 /// `lifecycle.ledger.list`.
@@ -519,7 +524,7 @@ async fn lifecycle_integrity() -> anyhow::Result<()> {
     }
 
     // 3. Real read: the ledger carries a row for this project (durable
-    // record proof, in place of the stubbed `audit.list`).
+    // record proof via the lifecycle-owned read path).
     let ledger: serde_json::Value = app
         .invoke(
             "lifecycle_ledger_list",
