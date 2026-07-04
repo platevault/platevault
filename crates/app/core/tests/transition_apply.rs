@@ -72,7 +72,6 @@ fn project_request(
     TransitionRequest::Project(ProjectTransitionRequest {
         contract_version: "2.0.0".to_owned(),
         request_id: Uuid::new_v4(),
-        entity_type: "project".to_owned(),
         entity_id: id,
         current_state: from,
         next_state: to,

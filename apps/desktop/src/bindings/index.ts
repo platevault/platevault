@@ -2547,7 +2547,6 @@ export type DataSourceTransitionRequest = DataSourceTransitionRequest_Serialize 
 export type DataSourceTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: DataSourceState,
 	nextState: DataSourceState,
@@ -2558,7 +2557,6 @@ export type DataSourceTransitionRequest_Deserialize = {
 export type DataSourceTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: DataSourceState,
 	nextState: DataSourceState,
@@ -2756,7 +2754,13 @@ export type Equipment = {
  */
 export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
 /**  Plan approval is outstanding (sent as `ContractError`, not `TransitionError`). */
-"plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
+"plan.approval_required" | "plan.approval.stale" | 
+/**
+ *  Concurrent apply rejected: the plan's (source ∪ destination ∪ archive)
+ *  path set overlaps an active apply run's path set (spec 025 FR-017,
+ *  R-Concur-1).
+ */
+"plan.conflict.overlap" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
 /**
  *  Returned by `roots.delete` (P6b, decision D8) when dependent records
  *  (inbox items, plan items, file records, sessions) still reference the
@@ -2851,7 +2855,6 @@ export type FileRecordTransitionRequest = FileRecordTransitionRequest_Serialize 
 export type FileRecordTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: FileRecordState,
 	nextState: FileRecordState,
@@ -2862,7 +2865,6 @@ export type FileRecordTransitionRequest_Deserialize = {
 export type FileRecordTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: FileRecordState,
 	nextState: FileRecordState,
@@ -5481,7 +5483,6 @@ export type PlanTransitionRequest = PlanTransitionRequest_Serialize | PlanTransi
 export type PlanTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PlanState,
 	nextState: PlanState,
@@ -5492,7 +5493,6 @@ export type PlanTransitionRequest_Deserialize = {
 export type PlanTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PlanState,
 	nextState: PlanState,
@@ -5516,7 +5516,6 @@ export type PreparedSourceTransitionRequest = PreparedSourceTransitionRequest_Se
 export type PreparedSourceTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PreparedSourceState,
 	nextState: PreparedSourceState,
@@ -5527,7 +5526,6 @@ export type PreparedSourceTransitionRequest_Deserialize = {
 export type PreparedSourceTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PreparedSourceState,
 	nextState: PreparedSourceState,
@@ -6049,7 +6047,6 @@ export type ProjectTransitionRequest = ProjectTransitionRequest_Serialize | Proj
 export type ProjectTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectState,
 	nextState: ProjectState,
@@ -6060,7 +6057,6 @@ export type ProjectTransitionRequest_Deserialize = {
 export type ProjectTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectState,
 	nextState: ProjectState,
@@ -6104,7 +6100,6 @@ export type ProjectionTransitionRequest = ProjectionTransitionRequest_Serialize 
 export type ProjectionTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectionState,
 	nextState: ProjectionState,
@@ -6115,7 +6110,6 @@ export type ProjectionTransitionRequest_Deserialize = {
 export type ProjectionTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectionState,
 	nextState: ProjectionState,

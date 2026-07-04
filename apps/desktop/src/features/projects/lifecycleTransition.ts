@@ -3,11 +3,15 @@
  *
  * Moves the `applyProjectLifecycleTransition` glue off the hand-written
  * `@/api/commands` wrapper onto the generated `commands.lifecycleTransitionApply`
- * binding (FR-004: the behaviour is moved, not dropped). The generated
- * `lifecycle.transition.apply` command is a tagged union over entity kind
- * (`{ project: {...} }` | `{ plan: {...} }` | ...); this helper builds the
- * `project` variant and unwraps the generated `Result` into the throw-on-error
- * contract callers expect.
+ * binding (FR-004: the behaviour is moved, not dropped). The wire shape is the
+ * canonical FLAT discriminated envelope from the source-of-truth contract
+ * (`packages/contracts/src/generated/lifecycle.transition.d.ts`): `entityType`
+ * is the serde tag on the backend's `TransitionRequest` and the remaining
+ * fields sit beside it — there is NO `{ project: {...} }` wrapper (issue #423:
+ * the previous wrapped payload was rejected by the backend with
+ * `missing field entityType`). This helper builds the `project` family request
+ * and unwraps the generated `Result` into the throw-on-error contract callers
+ * expect.
  */
 
 import { commands } from '@/bindings/index';
@@ -64,9 +68,16 @@ export interface LifecycleTransitionResponse {
 export async function applyProjectLifecycleTransition(
   req: ProjectLifecycleTransitionRequest,
 ): Promise<LifecycleTransitionResponse> {
+  // The cast is required because tauri-specta renders the internally-tagged
+  // `TransitionRequest` enum as an externally-wrapped union
+  // (`{ project: {...} }`) that does NOT match the serde wire format. The flat
+  // `req` (with its `entityType: 'project'` discriminator) IS the wire truth —
+  // pinned by the backend round-trip tests
+  // (`crates/contracts/core/tests/lifecycle_transition_roundtrip.rs`) and the
+  // spec-037 `lifecycle_integrity` E2E journey.
   return unwrap(
     await commands.lifecycleTransitionApply(
-      { project: req } as Parameters<typeof commands.lifecycleTransitionApply>[0],
+      req as unknown as Parameters<typeof commands.lifecycleTransitionApply>[0],
     ),
   ) as LifecycleTransitionResponse;
 }

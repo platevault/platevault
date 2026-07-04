@@ -55,6 +55,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   "operation.not_found": m.err_operation_not_found,
   "plan.approval_required": m.err_plan_approval_required,
   "plan.approval.stale": m.err_plan_approval_stale,
+  "plan.conflict.overlap": m.err_plan_conflict_overlap,
   "plan.invalid_state": m.err_plan_invalid_state,
   "plan.not_found": m.err_plan_not_found,
   "plan.not_in_apply": m.err_plan_not_in_apply,

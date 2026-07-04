@@ -260,6 +260,7 @@
   "err_plan_approval_required": "Approve the plan before applying it.",
   "err_plan_approval_stale": "The plan changed since you reviewed it. Review it again.",
   "err_plan_blocked_by_protection": "This plan is blocked by a protected item. Resolve the protection first.",
+  "err_plan_conflict_overlap": "Another plan is currently working on the same files or folders. Wait for it to finish, then try again.",
   "err_plan_in_progress": "This plan is already running.",
   "err_plan_invalid_state": "This plan can't be used in its current state.",
   "err_plan_items_empty": "This plan has no items to apply.",
@@ -380,7 +381,6 @@
   "projects_calib_readiness_title": "Calibration readiness",
   "projects_channels_in_sync": "in sync",
   "projects_channels_palette_title": "{channels} — {palette} palette",
-  "projects_cleanup_no_preview": "No cleanup preview yet — available after the project is verified.",
   "projects_cleanup_protected_label": "Protected — never proposed for cleanup",
   "projects_cleanup_title": "Cleanup preview",
   "projects_create_btn": "Create project",
@@ -2015,5 +2015,121 @@
   "dev_settings_toggle_info": "When on, the recording proxy captures contract calls and Developer / Contracts becomes reachable from the command palette (Cmd+K / Ctrl+K).",
   "dev_settings_restart_hint": "Turning developer mode off here stops new contract calls from being recorded immediately, but the recording proxy itself is only fully removed after the app restarts.",
   "dev_settings_saving": "Saving…",
-  "dev_settings_error": "Could not update developer mode: {message}"
+  "dev_settings_error": "Could not update developer mode: {message}",
+  "projects_cleanup_scan_btn": "Scan for cleanup candidates",
+  "projects_cleanup_scanning": "Scanning…",
+  "projects_cleanup_scan_prompt": "Scan this project to preview cleanup candidates. Scanning is read-only — nothing is removed without explicit plan approval.",
+  "projects_cleanup_scan_failed": "Cleanup scan failed.",
+  "projects_cleanup_reclaimable": "{size} reclaimable",
+  "projects_cleanup_no_candidates_title": "No cleanup candidates",
+  "projects_cleanup_no_candidates_desc": "The cleanup policy keeps every data type, or no processing artifacts have been observed for this project.",
+  "projects_cleanup_type_intermediate": "Intermediates",
+  "projects_cleanup_type_master": "Masters",
+  "projects_cleanup_type_final": "Finals",
+  "projects_cleanup_col_file": "File",
+  "projects_cleanup_col_size": "Size",
+  "projects_cleanup_col_confidence": "Confidence",
+  "projects_cleanup_col_protection": "Protection",
+  "projects_cleanup_confidence_pct": "{pct}%",
+  "projects_cleanup_row_protected_hint": "Protected — requires explicit acknowledgement during plan review before it can be applied",
+  "projects_cleanup_dest_label": "Destructive destination",
+  "projects_cleanup_dest_archive_hint": "App-managed archive folder — reversible until you empty it",
+  "projects_cleanup_dest_trash_hint": "OS-native recycle bin / trash",
+  "projects_cleanup_generate_btn": "Generate cleanup plan",
+  "projects_cleanup_generating": "Generating…",
+  "projects_cleanup_generate_failed": "Could not generate the cleanup plan.",
+  "projects_cleanup_review_title": "Review cleanup plan",
+  "plans_dest_archive": "Archive folder",
+  "plans_dest_trash": "System trash",
+  "plans_review_overlay_title": "Review plan",
+  "plans_review_load_error": "Could not load the plan.",
+  "plans_review_no_mutation_note": "Nothing has been changed on disk. Review every proposed item below; applying requires explicit approval.",
+  "plans_review_bytes_required": "Requires {size} at the destination.",
+  "plans_review_col_item": "Item",
+  "plans_review_col_action": "Action",
+  "plans_review_col_from": "Source path",
+  "plans_review_col_protection": "Protection",
+  "plans_review_approve_apply_btn": "Approve & apply",
+  "plans_review_approving": "Approving…",
+  "plans_review_discard_btn": "Discard plan",
+  "plans_review_discarded_toast": "Plan discarded.",
+  "plans_review_apply_success_toast": "Cleanup plan applied.",
+  "plans_review_apply_failed": "Plan apply failed.",
+  "plans_review_progress_running": "Applying {applied} of {total}…",
+  "projects_cleanup_group_meta": [
+    {
+      "declarations": [
+        "input count",
+        "input size",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} file · {size}",
+        "pp=other": "{count} files · {size}"
+      }
+    }
+  ],
+  "projects_cleanup_plan_created_toast": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "Cleanup plan created with {count} item — review before anything is applied.",
+        "pp=other": "Cleanup plan created with {count} items — review before anything is applied."
+      }
+    }
+  ],
+  "plans_review_item_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} item",
+        "pp=other": "{count} items"
+      }
+    }
+  ],
+  "plans_review_progress_done": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} item applied",
+        "pp=other": "{count} items applied"
+      }
+    }
+  ],
+  "plans_review_progress_failed": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} item failed",
+        "pp=other": "{count} items failed"
+      }
+    }
+  ]
 }
