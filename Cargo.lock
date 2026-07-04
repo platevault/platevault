@@ -183,6 +183,7 @@ dependencies = [
  "domain_core",
  "fs_inventory",
  "moka",
+ "patterns",
  "persistence_db",
  "project_structure",
  "serde_json",
@@ -193,6 +194,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workflow_profiles",
 ]
 
 [[package]]

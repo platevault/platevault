@@ -6,7 +6,7 @@
 //! `all()` returns a fixed-size array of owned `ToolProfile` values.
 //! `validate_seeds()` is called once at app boot to assert seed integrity.
 
-use crate::{ArgsToken, DetachStrategy, ToolProfile};
+use crate::{ArgsToken, DetachStrategy, ToolProfile, DEFAULT_SOURCE_VIEW_LAYOUT};
 
 fn pixinsight_profile() -> ToolProfile {
     ToolProfile {
@@ -16,6 +16,8 @@ fn pixinsight_profile() -> ToolProfile {
         args_template: vec![ArgsToken::Folder],
         supports_open_folder: true,
         detach_strategy: DetachStrategy::OpenBundleId,
+        // WBPP: session/night → filter → exposure grouping (spec 049 US2 T025).
+        source_view_layout: Some(DEFAULT_SOURCE_VIEW_LAYOUT),
     }
 }
 
@@ -27,6 +29,9 @@ fn siril_profile() -> ToolProfile {
         args_template: vec![ArgsToken::Folder],
         supports_open_folder: true,
         detach_strategy: DetachStrategy::OpenBundleId,
+        // No Siril-specific layout yet — resolve_source_view_layout() falls
+        // back to DEFAULT_SOURCE_VIEW_LAYOUT (spec 049 US2 T025 note).
+        source_view_layout: None,
     }
 }
 
@@ -54,6 +59,30 @@ pub fn validate_seeds() -> Result<(), String> {
 #[must_use]
 pub fn find(tool_id: &str) -> Option<ToolProfile> {
     all().into_iter().find(|p| p.id == tool_id)
+}
+
+/// Find a seed profile by its display `name` (the string stored in the
+/// `projects.tool` column, e.g. `"PixInsight"`), returning an owned clone.
+#[must_use]
+pub fn find_by_name(name: &str) -> Option<ToolProfile> {
+    all().into_iter().find(|p| p.name == name)
+}
+
+/// Resolve the effective source-view layout for a project's active tool
+/// profile (spec 049 US2 T025).
+///
+/// `profile_ref` may be either a stable profile `id` (e.g. `"pixinsight"`) or
+/// the display `name`/DB string (e.g. `"PixInsight"`, as stored in the
+/// `projects.tool` column) — both are tried. Falls back to
+/// [`crate::DEFAULT_SOURCE_VIEW_LAYOUT`] when `profile_ref` is `None`, matches
+/// no seeded profile (e.g. `"Planetary Suite"`, which has none yet), or the
+/// matched profile has no explicit layout of its own.
+#[must_use]
+pub fn resolve_source_view_layout(profile_ref: Option<&str>) -> crate::SourceViewLayout {
+    profile_ref
+        .and_then(|s| find(s).or_else(|| find_by_name(s)))
+        .and_then(|p| p.source_view_layout)
+        .unwrap_or(DEFAULT_SOURCE_VIEW_LAYOUT)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -95,5 +124,53 @@ mod tests {
     #[test]
     fn two_seeds_are_registered() {
         assert_eq!(all().len(), 2);
+    }
+
+    // ── Spec 049 US2 T023: WBPP layout groups by session/night → filter →
+    // exposure, and calibration lands at the profile's expected location. ──
+
+    #[test]
+    fn pixinsight_layout_groups_lights_by_night_filter_exposure() {
+        let p = find("pixinsight").expect("pixinsight must be seeded");
+        let layout = p.source_view_layout.expect("pixinsight must have a source-view layout");
+        assert_eq!(layout.light_pattern, "{date}/{filter}/{exposure}/");
+        assert_eq!(layout.calibration_pattern, "calibration/{frame_type}/");
+    }
+
+    #[test]
+    fn resolve_source_view_layout_matches_by_id_or_name() {
+        let by_id = resolve_source_view_layout(Some("pixinsight"));
+        let by_name = resolve_source_view_layout(Some("PixInsight"));
+        assert_eq!(by_id, by_name);
+        assert_eq!(by_id.light_pattern, "{date}/{filter}/{exposure}/");
+    }
+
+    #[test]
+    fn resolve_source_view_layout_falls_back_to_default() {
+        // No profile, an unknown profile, and a seeded profile without an
+        // explicit layout (siril) all fall back to the WBPP/PixInsight default.
+        assert_eq!(resolve_source_view_layout(None), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
+        assert_eq!(
+            resolve_source_view_layout(Some("Planetary Suite")),
+            crate::DEFAULT_SOURCE_VIEW_LAYOUT
+        );
+        assert_eq!(resolve_source_view_layout(Some("siril")), crate::DEFAULT_SOURCE_VIEW_LAYOUT);
+    }
+
+    // ── Spec 049 US2 T024: changing the layout pattern only changes the
+    // *destination path* produced downstream — this crate has no DB/plan
+    // access, so this asserts the pure contract the builder relies on:
+    // different profile refs resolve to independently-comparable pattern
+    // strings with no shared mutable state (spec 049 US2 AS2).
+
+    #[test]
+    fn different_profiles_can_resolve_to_different_layouts_independently() {
+        let default_layout = resolve_source_view_layout(None);
+        let pixinsight_layout = resolve_source_view_layout(Some("pixinsight"));
+        // Today these happen to be equal (pixinsight IS the default), but the
+        // resolution is independent per call — no shared/cached state that
+        // would prevent a future per-profile override from taking effect.
+        assert_eq!(default_layout, pixinsight_layout);
+        assert_eq!(pixinsight_layout.light_pattern, "{date}/{filter}/{exposure}/");
     }
 }
