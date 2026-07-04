@@ -1330,6 +1330,49 @@ export const commands = {
 	 */
 	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_list", { req })),
 	/**
+	 *  `inventory.frame.list` — list per-frame inventory entries for a session
+	 *  or root.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure or an invalid scope.
+	 */
+	inventoryFrameList: (req: InventoryFrameListRequest_Deserialize) => typedError<InventoryFrameListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_frame_list", { req })),
+	/**
+	 *  `inventory.reconcile.run` — run a reconciliation pass over a root.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` (`root.unavailable`) when the root is not
+	 *  registered, or a database error otherwise. Never mutates a file.
+	 */
+	inventoryReconcileRun: (req: InventoryReconcileRunRequest) => typedError<InventoryReconcileRunResponse, ContractError_Serialize>(__TAURI_INVOKE("inventory_reconcile_run", { req })),
+	/**
+	 *  `inventory.frame.relink` — relink a surfaced missing frame to a candidate
+	 *  file under the same root, confirmed by sha256 content hash.
+	 * 
+	 *  Stub (US2 T025 not yet implemented): always returns `internal.error`
+	 *  rather than silently claiming a match. Contract shape only.
+	 * 
+	 *  # Errors
+	 *  Always returns `ContractError` until T025 lands.
+	 */
+	inventoryFrameRelink: (req: InventoryFrameRelinkRequest) => typedError<InventoryFrameRelinkResponse, ContractError_Serialize>(__TAURI_INVOKE("inventory_frame_relink", { req })),
+	/**
+	 *  `inventory.root_config.get` — read a root's reconcile/detection
+	 *  configuration, with documented defaults filled in for unset keys.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure.
+	 */
+	inventoryRootConfigGet: (req: RootConfigGetRequest) => typedError<RootInventoryConfig, ContractError_Serialize>(__TAURI_INVOKE("inventory_root_config_get", { req })),
+	/**
+	 *  `inventory.root_config.set` — write a (possibly partial) update to a
+	 *  root's reconcile/detection configuration.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure.
+	 */
+	inventoryRootConfigSet: (req: RootConfigSetRequest_Deserialize) => typedError<RootInventoryConfig, ContractError_Serialize>(__TAURI_INVOKE("inventory_root_config_set", { req })),
+	/**
 	 *  `ingestion.settings.get` — returns current ingestion/scan settings,
 	 *  merging any persisted overrides with in-code defaults.
 	 * 
@@ -2569,6 +2612,33 @@ export type Density = "compact" | "comfortable" | "spacious";
 /**  Per-plan destination for destructive items (R-Trash-1). */
 export type DestructiveDestination = "archive" | "os_trash";
 
+/**  Per-root detection trigger configuration (spec 048 FR-014/FR-015/FR-017). */
+export type DetectionConfig = {
+	live: boolean,
+	scheduled: boolean,
+	onOpen: boolean,
+	followSymlinks: boolean,
+};
+
+/**  Partial detection-trigger update for `inventory.root_config.set`. */
+export type DetectionConfigUpdate = DetectionConfigUpdate_Serialize | DetectionConfigUpdate_Deserialize;
+
+/**  Partial detection-trigger update for `inventory.root_config.set`. */
+export type DetectionConfigUpdate_Deserialize = {
+	live: boolean | null,
+	scheduled: boolean | null,
+	onOpen: boolean | null,
+	followSymlinks: boolean | null,
+};
+
+/**  Partial detection-trigger update for `inventory.root_config.set`. */
+export type DetectionConfigUpdate_Serialize = {
+	live?: boolean | null,
+	scheduled?: boolean | null,
+	onOpen?: boolean | null,
+	followSymlinks?: boolean | null,
+};
+
 /**  Request for `dev.calls.list`. */
 export type DevCallsListRequest = DevCallsListRequest_Serialize | DevCallsListRequest_Deserialize;
 
@@ -2774,6 +2844,19 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  *  Included per task instruction.
  */
 "launch.failed" | "macos.quarantine.detected" | "filters.invalid" | "os.command_failed" | "picker.unavailable" | "format.unsupported" | "range.invalid" | "path.write.denied" | "path.parent.missing" | "database.error" | "serialise.error" | "io.error" | 
+/**
+ *  A root's storage is unavailable (e.g. a removable drive is
+ *  disconnected). Frames under it are reported unavailable/missing —
+ *  this is a non-destructive terminal state, never an implicit delete.
+ */
+"root.unavailable" | 
+/**
+ *  A user-initiated relink's candidate file did not match the missing
+ *  frame's sha256 content hash; the record is not re-homed.
+ */
+"hash.mismatch" | 
+/**  Referenced `file_record` id does not exist. */
+"frame.not_found" | 
 /**  Used when a legacy `String` error is wrapped into `ContractError`. */
 "internal.error";
 
@@ -2901,6 +2984,12 @@ export type FirstRunStateResponse_Serialize = {
 	completedAt?: string | null,
 	lastStep: string,
 };
+
+/**
+ *  Presence state of a per-frame inventory entry, projected from
+ *  `file_record.state` (spec 048 data-model.md).
+ */
+export type FramePresenceState = "present" | "missing" | "protected";
 
 /**  A group of frames within a session (per-filter breakdown). */
 export type Frameset = {
@@ -4263,6 +4352,80 @@ export type IngestionSettings = {
 	defaultFilter: string | null,
 };
 
+/**  One per-frame inventory entry (a `file_record` projection). */
+export type InventoryFrame = InventoryFrame_Serialize | InventoryFrame_Deserialize;
+
+/**  Request envelope for `inventory.frame.list`. */
+export type InventoryFrameListRequest = InventoryFrameListRequest_Serialize | InventoryFrameListRequest_Deserialize;
+
+/**  Request envelope for `inventory.frame.list`. */
+export type InventoryFrameListRequest_Deserialize = {
+	scope: InventoryFrameListScope_Deserialize,
+	includeMissing?: boolean | null,
+};
+
+/**  Request envelope for `inventory.frame.list`. */
+export type InventoryFrameListRequest_Serialize = {
+	scope: InventoryFrameListScope_Serialize,
+	includeMissing?: boolean | null,
+};
+
+/**  Response payload for `inventory.frame.list`. `present_*` exclude `missing`. */
+export type InventoryFrameListResponse = InventoryFrameListResponse_Serialize | InventoryFrameListResponse_Deserialize;
+
+/**  Response payload for `inventory.frame.list`. `present_*` exclude `missing`. */
+export type InventoryFrameListResponse_Deserialize = {
+	frames: InventoryFrame_Deserialize[],
+	presentCount: number,
+	presentSizeBytes: number,
+};
+
+/**  Response payload for `inventory.frame.list`. `present_*` exclude `missing`. */
+export type InventoryFrameListResponse_Serialize = {
+	frames: InventoryFrame_Serialize[],
+	presentCount: number,
+	presentSizeBytes: number,
+};
+
+/**
+ *  Scope for `inventory.frame.list` — exactly one of `session_id`/`root_id`
+ *  is expected to be set.
+ */
+export type InventoryFrameListScope = InventoryFrameListScope_Serialize | InventoryFrameListScope_Deserialize;
+
+/**
+ *  Scope for `inventory.frame.list` — exactly one of `session_id`/`root_id`
+ *  is expected to be set.
+ */
+export type InventoryFrameListScope_Deserialize = {
+	sessionId: string | null,
+	rootId: string | null,
+};
+
+/**
+ *  Scope for `inventory.frame.list` — exactly one of `session_id`/`root_id`
+ *  is expected to be set.
+ */
+export type InventoryFrameListScope_Serialize = {
+	sessionId?: string | null,
+	rootId?: string | null,
+};
+
+/**  Request envelope for `inventory.frame.relink`. */
+export type InventoryFrameRelinkRequest = {
+	frameId: string,
+	candidateRelativePath: string,
+};
+
+/**
+ *  Response payload for `inventory.frame.relink`. On a hash mismatch, callers
+ *  receive `hash.mismatch` as a `ContractError` instead (no re-home).
+ */
+export type InventoryFrameRelinkResponse = {
+	relinked: boolean,
+	matchedHash: string,
+};
+
 /**
  *  Frame type for an inventory session.
  *  `DarkFlat` is reserved but never returned in v1.
@@ -4270,6 +4433,28 @@ export type IngestionSettings = {
  *  mixed folders into single-type items at ingest, so a session is never mixed.)
  */
 export type InventoryFrameType = "light" | "dark" | "flat" | "bias";
+
+/**  One per-frame inventory entry (a `file_record` projection). */
+export type InventoryFrame_Deserialize = {
+	frameId: string,
+	rootId: string,
+	relativePath: string,
+	frameType: RawFrameType,
+	sizeBytes: number,
+	state: FramePresenceState,
+	sessionId: string | null,
+};
+
+/**  One per-frame inventory entry (a `file_record` projection). */
+export type InventoryFrame_Serialize = {
+	frameId: string,
+	rootId: string,
+	relativePath: string,
+	frameType: RawFrameType,
+	sizeBytes: number,
+	state: FramePresenceState,
+	sessionId?: string | null,
+};
 
 /**  Outbound references shown in the drawer's "Linked" section. */
 export type InventoryLinkedRefs = InventoryLinkedRefs_Serialize | InventoryLinkedRefs_Deserialize;
@@ -4371,6 +4556,26 @@ export type InventoryProvenanceSummary_Serialize = {
 	filter?: string | null,
 	inferred?: string | null,
 	confirmedBy?: string | null,
+};
+
+/**  Request envelope for `inventory.reconcile.run`. */
+export type InventoryReconcileRunRequest = {
+	rootId: string,
+	reason: ReconcileReason,
+};
+
+/**
+ *  Terminal summary for a reconcile pass. A future long-running-operation
+ *  status stream may report `progress_pct` incrementally (SC-005); this
+ *  scaffold reports the terminal values only.
+ */
+export type InventoryReconcileRunResponse = {
+	scanned: number,
+	present: number,
+	newlyMissing: number,
+	recovered: number,
+	sizeBackfilled: number,
+	progressPct: number,
 };
 
 /**
@@ -6421,6 +6626,15 @@ export type ProvenanceReadResponse_Serialize = {
 
 export type ProvenanceResponseStatus = "success" | "error";
 
+/**  Raw frame kind for a per-frame inventory entry. */
+export type RawFrameType = "light" | "dark" | "flat" | "bias";
+
+/**  Per-root reconcile mode (spec 048 FR-013). */
+export type ReconcileMode = "flag_missing" | "auto_reconcile";
+
+/**  What triggered a reconcile pass (spec 048 contracts/operations.md). */
+export type ReconcileReason = "on_demand" | "on_open" | "scheduled" | "live_event";
+
 export type RecoveryAction = RecoveryAction_Serialize | RecoveryAction_Deserialize;
 
 export type RecoveryAction_Deserialize = {
@@ -6709,11 +6923,51 @@ export type ReviewItem_Serialize = {
 /**  Category of a library root directory. */
 export type RootCategory = "raw" | "calibration" | "project" | "inbox";
 
+/**  Request envelope for `inventory.root_config.get`. */
+export type RootConfigGetRequest = {
+	rootId: string,
+};
+
+/**
+ *  Request envelope for `inventory.root_config.set`. Unset fields leave the
+ *  stored value unchanged (partial update).
+ */
+export type RootConfigSetRequest = RootConfigSetRequest_Serialize | RootConfigSetRequest_Deserialize;
+
+/**
+ *  Request envelope for `inventory.root_config.set`. Unset fields leave the
+ *  stored value unchanged (partial update).
+ */
+export type RootConfigSetRequest_Deserialize = {
+	rootId: string,
+	reconcileMode: ReconcileMode | null,
+	detection: DetectionConfigUpdate_Deserialize | null,
+};
+
+/**
+ *  Request envelope for `inventory.root_config.set`. Unset fields leave the
+ *  stored value unchanged (partial update).
+ */
+export type RootConfigSetRequest_Serialize = {
+	rootId: string,
+	reconcileMode?: ReconcileMode | null,
+	detection?: DetectionConfigUpdate_Serialize | null,
+};
+
 export type RootHealth = {
 	id: string,
 	path: string,
 	kind: string,
 	online: boolean,
+};
+
+/**
+ *  A root's full reconcile/detection configuration, with defaults filled in
+ *  for any unset key (spec 048 data-model.md).
+ */
+export type RootInventoryConfig = {
+	reconcileMode: ReconcileMode,
+	detection: DetectionConfig,
 };
 
 /**
