@@ -176,12 +176,16 @@ export function WizardPage() {
       }
 
       const tool = PROFILE_TO_TOOL[wizardData.name.workflowProfile] ?? 'PixInsight';
-      // Derive a safe path from the project name (kebab-case, no special chars).
+      // Derive a safe folder name from the project name (kebab-case, no
+      // special chars). The backend anchors this relative name to the
+      // registered project folder (registered_sources.kind = 'project'), so
+      // no 'projects/' prefix here — that would nest a redundant level under
+      // the folder the user already chose during setup.
       const safeName = trimmedName
         .toLowerCase()
         .replace(/[^a-z0-9_-]+/g, '-')
         .replace(/^-+|-+$/g, '');
-      const path = `projects/${safeName || 'new-project'}`;
+      const path = safeName || 'new-project';
 
       const result = await callCreateProject({
         requestId: crypto.randomUUID(),

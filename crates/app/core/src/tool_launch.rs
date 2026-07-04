@@ -36,8 +36,8 @@ use contracts_core::tools::{
 };
 use domain_core::ids::{new_id, Timestamp};
 use persistence_db::repositories::{
-    inventory as inv_repo, projects as proj_repo, settings as settings_repo,
-    tool_launches as tl_repo,
+    first_run as first_run_repo, inventory as inv_repo, projects as proj_repo,
+    settings as settings_repo, tool_launches as tl_repo,
 };
 use project_structure::resolve_working_folder;
 use sqlx::SqlitePool;
@@ -215,12 +215,20 @@ pub async fn launch(
     // ── Step 4: canonicalize cwd + library-root containment check ────────────
     let canonical_cwd = working_dir_path.canonicalize().unwrap_or(working_dir_path.clone());
     let all_roots = inv_repo::list_all_roots(pool).await.map_err(|e| format!("{e}"))?;
+    // Roots added through the setup wizard live in `registered_sources` (the
+    // gen-3 source model) and are only mirrored into the legacy `library_root`
+    // table on ingest. Include them so launching from a project anchored under
+    // the registered project folder passes containment (same fallback as
+    // plan_apply root resolution).
+    let registered = first_run_repo::list_sources(pool).await.map_err(|e| format!("{e}"))?;
     // Canonicalize roots the same way as `canonical_cwd` so containment compares
     // like-for-like (e.g. macOS `/var` -> `/private/var`, symlinked roots).
     let root_paths: Vec<std::path::PathBuf> = all_roots
         .iter()
-        .map(|r| {
-            let p = std::path::PathBuf::from(&r.current_path);
+        .map(|r| r.current_path.as_str())
+        .chain(registered.iter().map(|s| s.path.as_str()))
+        .map(|raw| {
+            let p = std::path::PathBuf::from(raw);
             p.canonicalize().unwrap_or(p)
         })
         .collect();
@@ -654,6 +662,34 @@ mod tests {
         let calls = spawner.drain();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].executable, "/usr/bin/pixinsight");
+    }
+
+    /// Wizard-registered roots live in `registered_sources` only (they are
+    /// mirrored into `library_root` on ingest, which never happens for a
+    /// project folder). Containment must accept them, or every launch from a
+    /// project anchored under the registered project folder fails.
+    #[tokio::test]
+    async fn launch_accepts_cwd_under_registered_source_root() {
+        let db = setup_db().await;
+        let project_id = make_project(&db).await;
+        let bus = make_bus(db.pool().clone());
+        let spawner = FakeSpawner::ok();
+        // NO library_root row: only a gen-3 registered project source
+        // containing the project path (/mnt/library/test_project).
+        sqlx::query(
+            "INSERT INTO registered_sources \
+             (id, kind, path, scan_depth, created_at, created_via, organization_state) \
+             VALUES ('rs-proj', 'project', '/mnt/library', 'recursive', \
+                     '2026-01-01T00:00:00Z', 'first_run', 'organized')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        set_tool_path(&db, "pixinsight", "/usr/bin/pixinsight").await;
+        let req = ToolLaunchRequest { project_id, tool_id: "pixinsight".to_owned(), force: false };
+        let resp = launch(db.pool(), &bus, &spawner, req).await.unwrap();
+        assert_eq!(resp.status, ToolLaunchStatus::Success);
+        assert_eq!(spawner.drain().len(), 1);
     }
 
     #[tokio::test]

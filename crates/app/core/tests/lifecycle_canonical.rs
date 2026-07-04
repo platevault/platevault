@@ -43,7 +43,7 @@ async fn create_project(pool: &SqlitePool, bus: &EventBus, name: &str) -> String
         request_id: new_id(),
         name: name.to_owned(),
         tool: ProjectTool::PixInsight,
-        path: format!("projects/{name}"),
+        path: format!("/library/projects/{name}"),
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,

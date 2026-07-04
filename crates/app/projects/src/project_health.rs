@@ -452,7 +452,9 @@ mod tests {
             request_id: new_id(),
             name: name.to_owned(),
             tool: ProjectTool::PixInsight,
-            path: format!("projects/{name}"),
+            // Absolute: `project_setup::create` anchors/validates the path
+            // (Constitution I); these tests exercise health, not anchoring.
+            path: format!("/library/projects/{name}"),
             initial_sources: vec![],
             notes: None,
             canonical_target_id: None,

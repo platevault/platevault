@@ -35,7 +35,7 @@ fn make_create_req(name: &str, tool: ProjectTool) -> ProjectCreateRequest {
         request_id: Uuid::new_v4().to_string(),
         name: name.to_owned(),
         tool,
-        path: format!("projects/{name}"),
+        path: format!("/library/projects/{name}"),
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,
@@ -56,7 +56,7 @@ async fn create_then_get_returns_persisted_fields() {
         request_id: Uuid::new_v4().to_string(),
         name: name.clone(),
         tool: ProjectTool::PixInsight,
-        path: format!("projects/{name}"),
+        path: format!("/library/projects/{name}"),
         initial_sources: vec![],
         notes: Some("Initial observing notes".to_owned()),
         canonical_target_id: None,
@@ -81,7 +81,11 @@ async fn create_then_get_returns_persisted_fields() {
     assert_eq!(detail.name, name, "persisted name must match request");
     assert_eq!(detail.tool, ProjectTool::PixInsight, "persisted tool must match request");
     assert_eq!(detail.lifecycle, "setup_incomplete");
-    assert_eq!(detail.path, format!("projects/{name}"), "persisted path must match request");
+    assert_eq!(
+        detail.path,
+        format!("/library/projects/{name}"),
+        "persisted path must match request"
+    );
     assert!(detail.sources.is_empty(), "no sources should be linked on create");
     assert!(detail.channels.is_empty(), "no channels inferred without sources");
     // notes field lives on the projects row; we pass it through the `notes` column.
@@ -100,7 +104,7 @@ async fn create_duplicate_name_is_rejected_at_db_layer() {
     project_setup::create(db.pool(), &bus, &req1).await.expect("first create must succeed");
 
     let req2 = ProjectCreateRequest {
-        path: format!("projects/{name}-2"), // different path
+        path: format!("/library/projects/{name}-2"), // different path
         ..make_create_req(&name, ProjectTool::PixInsight)
     };
     let err =
