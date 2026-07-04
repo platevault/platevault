@@ -727,6 +727,28 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
     // project drawer opens/closes. No watcher runs until a project is attached.
     let artifact_watcher_registry = crate::watcher::new_artifact_watcher_registry();
     app.manage(artifact_watcher_registry);
+    // spec 012 (WP-012-A): one-time, idempotent fix-up for `processing_artifacts`
+    // rows the retired global root watcher (pre-#400) keyed by a library-root id
+    // instead of the owning project's id. Runs once per app start, before any
+    // per-project watcher attaches and records new (correctly-attributed) rows.
+    {
+        let fixup_pool = pool.clone();
+        tokio::spawn(async move {
+            match app_core::artifact::reattribute_root_keyed_artifacts(&fixup_pool).await {
+                Ok((fixed, unmatched)) => {
+                    if fixed > 0 || unmatched > 0 {
+                        tracing::info!(
+                            "artifact re-attribution fix-up: {fixed} row(s) corrected, \
+                             {unmatched} row(s) left flagged (no matching project)"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("artifact re-attribution fix-up failed: {e:?}");
+                }
+            }
+        });
+    }
 
     // spec 018 T020: emit a settings.snapshot at session start, then every 5 minutes.
     // This gives the audit log a durable record of the active configuration even when
