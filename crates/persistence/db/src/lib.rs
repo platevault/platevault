@@ -184,9 +184,8 @@ mod tests {
     // Single scenario test walking a multi-step seed → re-derivation → assert
     // pipeline; splitting it would scatter the narrative across helper fns
     // that are each only ever called once.
-    #[allow(clippy::too_many_lines)] // pre-existing test, exercises a wide migration surface
-    #[tokio::test]
     #[allow(clippy::too_many_lines)] // pre-existing multi-stage migration fixture test
+    #[tokio::test]
     async fn migration_0047_rederivation_on_seeded_0046_db() {
         // We cannot run migrations up to 0046 and then 0047 separately in the
         // same in-memory DB with the embedded migrator (sqlx::migrate! runs all
