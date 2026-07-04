@@ -401,16 +401,34 @@
   vertical-align: middle;
 }
 
-/* Empty + footer states. */
-.alm-sessions-table__empty {
-  padding: var(--alm-sp-5);
-  text-align: center;
+/* ── Shared list-table viewport ────────────────────────────────────────────
+ * ONE wrapper for every full-width (virtualized) list table — Inbox and
+ * Sessions today. A flex column that fills the list-page main region: the
+ * shared Table's scroll container takes the remaining height, an optional
+ * grouping-hint footer pins under it, and the empty state renders in place of
+ * the table. No per-feature clones (supersedes `.alm-inbox-list*` and
+ * `.alm-sessions-table__empty/__footer`). */
+.alm-listtable {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+/* The shared Table's scroll wrapper fills the flex column. */
+.alm-listtable__scroll {
+  flex: 1;
+}
+/* Grouping-state hint footer — NOT a duplicate count. */
+.alm-listtable__foot {
+  flex-shrink: 0;
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+  border-top: 1px solid var(--alm-border);
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+.alm-listtable__empty {
+  padding: var(--alm-sp-4);
   color: var(--alm-text-muted);
   font-size: var(--alm-text-sm);
-}
-.alm-sessions-table__footer {
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  border-top: 1px solid var(--alm-border-subtle);
 }

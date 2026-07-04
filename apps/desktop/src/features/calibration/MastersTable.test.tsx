@@ -168,6 +168,18 @@ describe('MastersTable (spec 043 §4)', () => {
     expect(onSort).toHaveBeenCalledWith('camera');
   });
 
+  it('9b. the active sort column <th> emits aria-sort (shared Table + ariaSortFor)', () => {
+    // Second consumer of the shared aria-sort plumbing (SessionsTable is the
+    // first) — proves every SortHeader table gets it from the shared layer.
+    const { container } = render(
+      <MastersTable {...baseProps} masters={masters} sort={{ col: 'camera', dir: 'asc' }} />,
+    );
+    const marked = container.querySelectorAll('th[aria-sort]');
+    expect(marked.length).toBe(1);
+    expect(marked[0].getAttribute('aria-sort')).toBe('ascending');
+    expect(marked[0].textContent).toMatch(/Camera/);
+  });
+
   it('10. renders without crashing when fingerprint is null (R-2 regression guard)', () => {
     const nullFp = makeMaster({ id: 'null-fp', kind: 'dark', ageDays: 5 });
     // Simulate backend rows with no fingerprint populated.

@@ -563,6 +563,7 @@
   "sessions_linked_projects_heading": "Linked projects",
   "sessions_load_error": "Failed to load sessions.",
   "sessions_needs_review_aria": "Needs review",
+  "sessions_grouping_hint": "Grouped by {dims}",
   "sessions_no_match": "No sessions match the current filters.",
   "sessions_ignore_btn": "Ignore",
   "sessions_reject_btn": "Reject",

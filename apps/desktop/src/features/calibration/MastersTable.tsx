@@ -26,7 +26,7 @@
 import { useMemo } from 'react';
 import { Pill, Table, EmptyState } from '@/ui';
 import type { PillVariant, TableColumn, TableRow } from '@/ui';
-import { SortHeader } from '@/components';
+import { SortHeader, ariaSortFor } from '@/components';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 import {
@@ -303,6 +303,7 @@ export function MastersTable({
   const columns: TableColumn[] = COLUMNS.map((c) => ({
     key: c.key,
     className: c.className,
+    ariaSort: ariaSortFor(sort.col === c.sort, sort.dir),
     label: (
       <SortHeader
         label={c.label()}
