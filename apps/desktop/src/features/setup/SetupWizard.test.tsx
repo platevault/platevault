@@ -1,10 +1,13 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
- * SetupWizard gating tests (T044 — rewritten for 5-step flow).
+ * SetupWizard gating tests (T044 — rewritten for 5-step flow; spec 044 T016
+ * inserted an Observing Site step before Confirm, making it a 6-step flow).
  *
  * Validates that Step 1 (Source Folders) blocks advancement when required
  * folder types (light_frames, project) are missing, and that Steps 2–3
- * advance freely. The Scan step (step 5) has its own StepScan.test.tsx.
+ * advance freely. Step 4 (Observing Site) is covered separately below (it's
+ * optional and never blocks advancement). The Scan step (step 6) has its own
+ * StepScan.test.tsx.
  */
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -219,7 +222,7 @@ describe('SetupWizard 5-step flow', () => {
   it('starts on Step 1 (Source Folders) and shows the heading', () => {
     renderWizard();
     expect(screen.getByText(/where does your data live/i)).toBeInTheDocument();
-    expect(screen.getByText(/step 1 of 5/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 1 of 6/i)).toBeInTheDocument();
   });
 
   it('blocks Continue on Step 1 when no paths are added', () => {
@@ -344,7 +347,7 @@ describe('SetupWizard 5-step flow', () => {
 
     // We should be on the Processing Tools step (heading)
     expect(screen.getByRole('heading', { name: /processing tools/i })).toBeInTheDocument();
-    expect(screen.getByText(/step 2 of 5/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 2 of 6/i)).toBeInTheDocument();
 
     // Continue should be enabled (tools step has no requirements)
     const continueBtn = getContinueButton();
@@ -377,17 +380,169 @@ describe('SetupWizard 5-step flow', () => {
 
     // We should be on the Catalogs step (heading)
     expect(screen.getByRole('heading', { name: /configuration/i })).toBeInTheDocument();
-    expect(screen.getByText(/step 3 of 5/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 3 of 6/i)).toBeInTheDocument();
 
     // Continue should be enabled
     const continueBtn = getContinueButton();
     expect(continueBtn).not.toBeDisabled();
   });
 
-  it('shows Confirm step (Step 4) with Start scan button', async () => {
-    // Seed state at step 3 (Confirm) with all required kinds satisfied.
+  it('allows Step 4 (Observing Site) to advance while completely empty (spec 044 T016, optional)', () => {
+    // Seed state at step 3 (Observing Site) with required folders already
+    // satisfied so Continue is gated only by the site step itself.
     const seeded = {
       currentStep: 3,
+      sources: [
+        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
+        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+      ],
+      catalogSettings: { selectedCatalogIds: ['common', 'openngc'] },
+      tools: {
+        pixinsight: { enabled: false, path: null },
+        siril: { enabled: false, path: null },
+      },
+      site: { name: '', latitudeDegText: '', longitudeDegText: '', elevationMText: '', timezone: 'UTC' },
+    };
+    window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
+
+    renderWizard();
+
+    expect(screen.getByRole('heading', { name: /where do you observe from/i })).toBeInTheDocument();
+    expect(screen.getByText(/step 4 of 6/i)).toBeInTheDocument();
+
+    // Never required — Continue is enabled with every field blank.
+    const continueBtn = getContinueButton();
+    expect(continueBtn).not.toBeDisabled();
+
+    fireEvent.click(continueBtn);
+    expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
+  });
+
+  it('blocks Continue on the Observing Site step when latitude is out of range', () => {
+    const seeded = {
+      currentStep: 3,
+      sources: [
+        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
+        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+      ],
+      catalogSettings: { selectedCatalogIds: ['common', 'openngc'] },
+      tools: {
+        pixinsight: { enabled: false, path: null },
+        siril: { enabled: false, path: null },
+      },
+      site: { name: 'Backyard', latitudeDegText: '120', longitudeDegText: '4.9', elevationMText: '', timezone: 'UTC' },
+    };
+    window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
+
+    renderWizard();
+
+    const continueBtn = getContinueButton();
+    expect(continueBtn).toBeDisabled();
+  });
+
+  it('persists the site from the Observing Site step as default+active when finishing', async () => {
+    mockSettingsUpdate.mockClear();
+
+    // Seed at the Scan step's predecessor state directly at Confirm with a
+    // filled-in site, then drive to Scan -> Finish the same way the
+    // tool-persistence test does.
+    const seeded = {
+      currentStep: 4,
+      sources: [
+        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
+        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+      ],
+      catalogSettings: { selectedCatalogIds: [] },
+      tools: {
+        pixinsight: { enabled: false, path: null },
+        siril: { enabled: false, path: null },
+      },
+      site: {
+        name: 'Backyard',
+        latitudeDegText: '52.37',
+        longitudeDegText: '4.9',
+        elevationMText: '2',
+        timezone: 'Europe/Amsterdam',
+      },
+    };
+    window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
+
+    renderWizard();
+    expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
+
+    const startScanBtn = screen.getByRole('button', { name: /start scan/i });
+    await act(async () => {
+      fireEvent.click(startScanBtn);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const finishBtn = await screen.findByTestId('finish-button');
+    await waitFor(() => expect(finishBtn).not.toBeDisabled());
+
+    await act(async () => {
+      fireEvent.click(finishBtn);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    await waitFor(() => expect(mockSettingsUpdate).toHaveBeenCalledWith(
+      'observing',
+      expect.objectContaining({
+        observingSites: [
+          expect.objectContaining({ name: 'Backyard', latitudeDeg: 52.37, longitudeDeg: 4.9, elevationM: 2 }),
+        ],
+      }),
+    ));
+    const call = mockSettingsUpdate.mock.calls.find(([scope]) => scope === 'observing');
+    const values = call?.[1] as { observingSites: Array<{ id: string }>; observingDefaultSiteId: string; observingActiveSiteId: string };
+    const siteId = values.observingSites[0].id;
+    expect(values.observingDefaultSiteId).toBe(siteId);
+    expect(values.observingActiveSiteId).toBe(siteId);
+  });
+
+  it('does not call settingsUpdate for observing sites when the site step was left empty', async () => {
+    mockSettingsUpdate.mockClear();
+    mockFirstrunComplete.mockClear();
+
+    const seeded = {
+      currentStep: 4,
+      sources: [
+        { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
+        { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
+      ],
+      catalogSettings: { selectedCatalogIds: [] },
+      tools: {
+        pixinsight: { enabled: false, path: null },
+        siril: { enabled: false, path: null },
+      },
+      site: { name: '', latitudeDegText: '', longitudeDegText: '', elevationMText: '', timezone: 'UTC' },
+    };
+    window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
+
+    renderWizard();
+
+    const startScanBtn = screen.getByRole('button', { name: /start scan/i });
+    await act(async () => {
+      fireEvent.click(startScanBtn);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const finishBtn = await screen.findByTestId('finish-button');
+    await waitFor(() => expect(finishBtn).not.toBeDisabled());
+
+    await act(async () => {
+      fireEvent.click(finishBtn);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    await waitFor(() => expect(mockFirstrunComplete).toHaveBeenCalledTimes(1));
+    expect(mockSettingsUpdate).not.toHaveBeenCalledWith('observing', expect.anything());
+  });
+
+  it('shows Confirm step (Step 5) with Start scan button', async () => {
+    // Seed state at step 4 (Confirm, after the spec 044 Site step) with all
+    // required kinds satisfied.
+    const seeded = {
+      currentStep: 4,
       sources: [
         { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
         { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
@@ -407,7 +562,7 @@ describe('SetupWizard 5-step flow', () => {
 
     // Verify we are on the Confirm step
     expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
-    expect(screen.getByText(/step 4 of 5/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 5 of 6/i)).toBeInTheDocument();
 
     // "Start scan" button should be present and enabled (not "Complete setup")
     const startScanBtn = screen.getByRole('button', { name: /start scan/i });
@@ -416,9 +571,9 @@ describe('SetupWizard 5-step flow', () => {
   });
 
   it('blocks Start scan on Confirm step when required folders are missing', async () => {
-    // Seed at step 3 but WITHOUT a project folder
+    // Seed at step 4 (Confirm) but WITHOUT a project folder
     const seeded = {
-      currentStep: 3,
+      currentStep: 4,
       sources: [
         { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
       ],
@@ -472,10 +627,10 @@ describe('SetupWizard 5-step flow', () => {
     mockToolsUpdate.mockClear();
     mockFirstrunComplete.mockClear();
 
-    // Seed at the Confirm step (step 3) with PixInsight enabled+pathed and
+    // Seed at the Confirm step (step 4) with PixInsight enabled+pathed and
     // Siril disabled, so we can verify both tools are sent to toolUpdate.
     const seeded = {
-      currentStep: 3,
+      currentStep: 4,
       sources: [
         { path: '/astro/lights', kind: 'light_frames', scanDepth: 'recursive' },
         { path: '/astro/projects', kind: 'project', scanDepth: 'recursive' },
