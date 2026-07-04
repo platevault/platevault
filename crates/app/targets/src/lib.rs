@@ -11,6 +11,7 @@
 //! paths so the public surface is byte-identical.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
+pub mod frame_writer;
 pub mod ingest_resolution;
 pub mod ingest_sessions;
 pub mod resolver_settings;
