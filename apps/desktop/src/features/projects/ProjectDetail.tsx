@@ -20,10 +20,11 @@
  * The transition buttons carry the data-testid="transition-btn-*" hooks. The
  * previous duplicate bottom footer was removed to de-duplicate these actions.
  *
- * Channels palette: STUB — derives one row per unique filter from project
- * sources because ProjectChannelDto only carries label/source/addedAt.
- * A dedicated backend channel-mapping model with per-channel subs/integ is
- * planned; replace deriveChannels() once that lands.
+ * Channels palette: `subFrames`/`totalIntegrationS` are aggregated server-side
+ * (P7 — `ProjectChannelDto`, grouped by `filter_snapshot` over the project's
+ * linked sources). `deriveChannels()` only adds the presentational `inSync`
+ * flag (whether the channel is currently backed by a linked source with a
+ * matching filter), which the API does not model.
  */
 
 import { useState } from 'react';
@@ -62,7 +63,10 @@ import {
 // spec 012 T008: filesystem artifact watcher, attached/detached with this
 // drawer's own mount lifecycle.
 import { useProjectArtifactWatcher } from './artifacts';
-import type { ProjectSourceDto_Deserialize } from '@/bindings/index';
+import type {
+  ProjectChannelDto_Deserialize,
+  ProjectSourceDto_Deserialize,
+} from '@/bindings/index';
 // Secondary sections (Notes, Manifests, Calibration, Source views, Outputs,
 // Cleanup) have moved to ProjectBottomDetail (task #104 — bottom panel).
 
@@ -90,12 +94,13 @@ function fmtFrames(n: number): string {
   return n > 0 ? String(n) : '—';
 }
 
-// ── Channels palette (STUB) ──────────────────────────────────────────────────
+// ── Channels palette ─────────────────────────────────────────────────────────
 
 /**
- * STUB: dedicated channel-mapping backend model pending — derived from source
- * filters. ProjectChannelDto only exposes label/source/addedAt; no per-channel
- * subs or integration totals are available from the current API.
+ * Presentation-ready channel row. `totalFrames`/`totalIntegS` come straight
+ * from the server-aggregated `ProjectChannelDto` (P7); only `inSync` is
+ * derived client-side (the API has no notion of "backed by a current
+ * source" — it just returns the channel list + its totals).
  */
 interface DerivedChannel {
   label: string;
@@ -106,26 +111,19 @@ interface DerivedChannel {
 }
 
 function deriveChannels(
+  channels: ProjectChannelDto_Deserialize[],
   sources: ProjectSourceDto_Deserialize[],
-  projectChannelLabels: string[],
 ): DerivedChannel[] {
-  const byFilter = new Map<string, { frames: number; integS: number }>();
-  for (const src of sources) {
-    if (!src.filter) continue;
-    const key = src.filter.toUpperCase();
-    const existing = byFilter.get(key) ?? { frames: 0, integS: 0 };
-    existing.frames += src.frames;
-    byFilter.set(key, existing);
-  }
+  const sourceFilters = new Set(
+    sources.filter((src) => src.filter).map((src) => src.filter.toUpperCase()),
+  );
 
-  const channelSet = new Set(projectChannelLabels.map((l) => l.toUpperCase()));
-
-  return Array.from(byFilter.entries()).map(([filter, agg]) => ({
-    label: filter,
-    filter,
-    totalFrames: agg.frames,
-    totalIntegS: agg.integS,
-    inSync: channelSet.has(filter),
+  return channels.map((ch) => ({
+    label: ch.label,
+    filter: ch.label,
+    totalFrames: ch.subFrames,
+    totalIntegS: ch.totalIntegrationS,
+    inSync: sourceFilters.has(ch.label.toUpperCase()),
   }));
 }
 
@@ -282,11 +280,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     return { kind: 'user', note: note ?? m.projects_blocked_note_fallback() } satisfies BlockedReason;
   })();
 
-  // ── Derived channel palette data (STUB — see module comment) ─────────────
-  const channelLabels = (project.channels ?? []).map((c) => c.label);
+  // ── Derived channel palette data (server totals + client `inSync`) ────────
   const derivedChannels = deriveChannels(
+    (project.channels ?? []) as ProjectChannelDto_Deserialize[],
     project.sources as ProjectSourceDto_Deserialize[],
-    channelLabels,
   );
   const paletteLabel = paletteName(derivedChannels);
   const allInSync =
@@ -494,12 +491,11 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
         {/* ── Channels palette section (task #10) ──────────────────────────── */}
         {/*
-         * STUB: dedicated channel-mapping backend model pending — derived from
-         * source filters. ProjectChannelDto only carries label/source/addedAt;
-         * no per-channel subs or integration totals exist in the current API.
-         * Replace deriveChannels() once the backend model lands.
+         * subFrames/totalIntegS are server-aggregated (P7); derivedChannels
+         * is a 1:1 presentational mapping of project.channels (see
+         * deriveChannels() above).
          */}
-        {(derivedChannels.length > 0 || (project.channels?.length ?? 0) > 0) && (
+        {derivedChannels.length > 0 && (
           <Section
             title={paletteLabel ? m.projects_channels_palette_title({ channels: m.projects_edit_channels_label(), palette: paletteLabel }) : m.projects_edit_channels_label()}
             right={allInSync ? <Pill variant="ghost">{m.projects_channels_in_sync()}</Pill> : undefined}

@@ -240,4 +240,23 @@ async fn plan_required_refusal() {
         .await
         .unwrap();
     assert_eq!(state, "ready");
+
+    // D23 upgrade (campaign task #45): templated refusals persist structured
+    // display params in `payload.refusal.params` so the Audit Log frontend
+    // can localize the detail; the English `message` stays as fallback.
+    let (payload,): (Option<String>,) = sqlx::query_as(
+        "SELECT payload FROM audit_log_entry WHERE entity_id = ? AND outcome = 'refused'",
+    )
+    .bind(&project)
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    let payload: serde_json::Value =
+        serde_json::from_str(&payload.expect("payload populated")).unwrap();
+    let refusal = &payload["refusal"];
+    assert_eq!(refusal["code"], "plan.required");
+    assert!(refusal["message"].as_str().unwrap().contains("approved FilesystemPlan"));
+    assert_eq!(refusal["params"]["entityType"], "project");
+    assert_eq!(refusal["params"]["fromState"], "ready");
+    assert_eq!(refusal["params"]["toState"], "prepared");
 }

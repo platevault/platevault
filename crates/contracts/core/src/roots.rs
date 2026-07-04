@@ -33,6 +33,10 @@ pub struct LibraryRoot {
     pub file_count: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_scanned: Option<String>,
+    /// Whether this root is enabled for scan/ingest (P6b — Data Sources
+    /// Disable/Enable). Disabled roots are excluded from scans/ingest but
+    /// their history is retained; this is a visibility flag, not a deletion.
+    pub active: bool,
 }
 
 /// A piece of astrophotography equipment.

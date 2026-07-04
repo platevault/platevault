@@ -39,6 +39,60 @@ function outcomeLabel(outcome: AuditOutcome): string {
   }
 }
 
+/**
+ * Localize an entry's detail text at DISPLAY time (D23 upgrade, campaign
+ * task #45). The backend surfaces a stable `detailCode` + flat string
+ * `detailParams` (derived from the durable `audit_log_entry.payload` JSON);
+ * this render-time factory (spec 046 #8b) maps them to Paraglide catalog
+ * messages so the tooltip re-reads the active locale.
+ *
+ * A code is only mapped when the params its template needs are present —
+ * `transition.refused` in particular also covers free-form refusal reasons
+ * that carry no params. Any unmapped row (old rows, unknown codes, missing
+ * params) falls back to the stored backend-composed English `detail`.
+ */
+function detailText(e: AuditEntry): string {
+  const p = e.detailParams ?? {};
+  switch (e.detailCode) {
+    case 'transition.refused':
+      if (p.entityType && p.fromState && p.toState) {
+        return m.settings_auditlog_detail_transition_refused_edge({
+          entityType: p.entityType,
+          fromState: p.fromState,
+          toState: p.toState,
+        });
+      }
+      break;
+    case 'actor.not_authorised':
+      return m.settings_auditlog_detail_actor_not_authorised();
+    case 'provenance.unreviewed':
+      if (p.count && !Number.isNaN(Number(p.count))) {
+        return m.settings_auditlog_detail_provenance_unreviewed({ count: Number(p.count) });
+      }
+      break;
+    case 'plan.required':
+      if (p.entityType && p.fromState && p.toState) {
+        return m.settings_auditlog_detail_plan_required({
+          entityType: p.entityType,
+          fromState: p.fromState,
+          toState: p.toState,
+        });
+      }
+      break;
+    case 'entity.not_found':
+      return m.settings_auditlog_detail_entity_not_found({ entityId: p.entityId ?? e.entityId });
+    case 'target.resolved':
+      if (p.query) return m.settings_auditlog_detail_target_resolved({ query: p.query });
+      break;
+    case 'target.user_override':
+      if (p.query) return m.settings_auditlog_detail_target_user_override({ query: p.query });
+      break;
+    default:
+      break;
+  }
+  return e.detail;
+}
+
 /** Build the `audit.list` filter payload from the screen's search/date controls. */
 function buildFilters(search: string, dateFrom: string, dateTo: string): AuditFilterDto | null {
   const filters: AuditFilterDto = {};
@@ -226,7 +280,7 @@ export function AuditLog() {
                 </span>
               ),
               entity: (
-                <span className="alm-audit-log__entity" title={e.detail}>
+                <span className="alm-audit-log__entity" title={detailText(e)}>
                   {e.entityType} · {e.entityId}
                 </span>
               ),

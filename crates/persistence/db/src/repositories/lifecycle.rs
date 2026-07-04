@@ -123,11 +123,20 @@ pub trait LifecycleRepository {
     /// code + message in `payload`. Required by data-model.md §242 and §378
     /// — refused transitions MUST be durable, not just observable via the
     /// response envelope.
+    ///
+    /// `refusal_params` (D23 upgrade, campaign task #45): optional structured
+    /// display parameters (a flat JSON object of string values) stored as
+    /// `payload.refusal.params`. When present they identify the exact message
+    /// template behind `refusal_code`, so the frontend can localize the
+    /// refusal detail at display time instead of showing the write-time
+    /// English `refusal_message`. Rows without params keep the English
+    /// message as their only rendering (fallback path).
     fn record_refused_transition(
         &self,
         transition: TransitionRequest,
         refusal_code: &'static str,
         refusal_message: &str,
+        refusal_params: Option<serde_json::Value>,
     ) -> impl std::future::Future<Output = DbResult<AuditId>> + Send;
 
     /// Read the winning `ProvenanceTag` per `field_path` for an entity.
@@ -450,6 +459,7 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         transition: TransitionRequest,
         refusal_code: &'static str,
         refusal_message: &str,
+        refusal_params: Option<serde_json::Value>,
     ) -> DbResult<AuditId> {
         // Per data-model.md §AuditLogEntry invariants:
         //   - `outcome == refused` MUST have `to_state == null`
@@ -472,12 +482,19 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         // Payload carries the refusal code + message so consumers reading the
         // audit table can reconstruct the refusal envelope without joining
         // against the response log. JSON form matches the contract's
-        // dotted-form error codes.
+        // dotted-form error codes. `params` (when provided) additionally
+        // carries the structured display parameters for catalog-based
+        // localization of the detail text (D23 upgrade) — the stored English
+        // `message` remains the durable fallback.
+        let mut refusal = serde_json::json!({
+            "code": refusal_code,
+            "message": refusal_message,
+        });
+        if let (Some(obj), Some(params)) = (refusal.as_object_mut(), refusal_params) {
+            obj.insert("params".to_owned(), params);
+        }
         let payload = serde_json::json!({
-            "refusal": {
-                "code": refusal_code,
-                "message": refusal_message,
-            },
+            "refusal": refusal,
             "attempted_to_state": transition.to_state,
         })
         .to_string();
@@ -587,6 +604,7 @@ impl LifecycleRepository for InMemoryLifecycleRepository {
         _transition: TransitionRequest,
         _refusal_code: &'static str,
         _refusal_message: &str,
+        _refusal_params: Option<serde_json::Value>,
     ) -> DbResult<AuditId> {
         // In-memory stub: no durable storage. Tests that need to assert the
         // refused audit row exists should use `SqliteLifecycleRepository`.
