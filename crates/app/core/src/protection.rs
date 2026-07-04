@@ -12,13 +12,8 @@
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
 use audit::bus::EventBus;
-use audit::event_bus::{
-    ProtectionDefaultChanged, ProtectionPlanAcknowledged, ProtectionSourceSet, Source,
-};
-use audit::{
-    TOPIC_PROTECTION_DEFAULT_CHANGED, TOPIC_PROTECTION_PLAN_ACKNOWLEDGED,
-    TOPIC_PROTECTION_SOURCE_SET,
-};
+use audit::event_bus::{ProtectionPlanAcknowledged, ProtectionSourceSet, Source};
+use audit::{TOPIC_PROTECTION_PLAN_ACKNOWLEDGED, TOPIC_PROTECTION_SOURCE_SET};
 use contracts_core::protection::{
     NonBlockingSummary, PlanProtectionCheckRequest, PlanProtectionCheckResponse, ProtectedPlanItem,
     ProtectionLevel, SourceProtectionGetRequest, SourceProtectionGetResponse,
@@ -388,16 +383,29 @@ pub async fn acknowledge_protected_item(
 // ── US4: set_global_protection_default ───────────────────────────────────
 
 /// Persist a global protection default and emit a `protection.default.changed`
-/// audit event (T045, FR-018; fixes spec 016 T-003/T-004/T-005).
+/// audit event (T045, FR-018; spec 016 T-003/T-004/T-005).
 ///
-/// `scope` is typically `"global"`. `key` is one of:
+/// `scope` MUST be `"global"` — it is the only scope the desktop settings
+/// save path (`settings.update` with scope `"cleanup"`) ever writes to, and
+/// the only scope `app_core::protection::load_global_protection` reads from.
+/// `key` is one of:
 /// - `"defaultProtection"` — protection level string
 /// - `"blockPermanentDelete"` — boolean
 /// - `"protectedCategories"` — JSON array of category strings
 ///
+/// This delegates to `app_core_settings::update_setting` (re-exported as
+/// `crate::settings`) rather than writing `protection_defaults` directly, so
+/// there is a single implementation of the validation, no-op guard, and
+/// `protection.default.changed` emission shared with the real desktop save
+/// path (`settings.update` Tauri command → `crate::settings::update_setting`).
+/// Kept as a thin wrapper for callers that already depend on this narrower
+/// signature (e.g. this module's own tests).
+///
 /// # Errors
 ///
-/// Returns `ContractError` on DB or audit failure.
+/// Returns `ContractError` with code `"key.unknown"` if `key` is not
+/// `defaultProtection` / `blockPermanentDelete` / `protectedCategories`,
+/// `"value.invalid"` on a type/enum mismatch, or on DB/audit failure.
 pub async fn set_global_protection_default(
     pool: &SqlitePool,
     bus: &EventBus,
@@ -405,28 +413,15 @@ pub async fn set_global_protection_default(
     key: &str,
     value: serde_json::Value,
 ) -> Result<(), ContractError> {
-    // Read prior value for the audit record.
-    let old = prot_repo::get_protection_default(pool, scope, key).await.map_err(db_err)?;
-
-    // Persist the new value.
-    prot_repo::set_protection_default(pool, scope, key, &value).await.map_err(db_err)?;
-
-    // Emit audit event.
-    let changed_at = Timestamp::now_iso();
-    bus.publish(
-        TOPIC_PROTECTION_DEFAULT_CHANGED,
-        Source::User,
-        ProtectionDefaultChanged {
-            scope: scope.to_owned(),
-            key: key.to_owned(),
-            old,
-            new: value,
-            changed_at,
-        },
-    )
-    .await
-    .map_err(bus_err)?;
-
+    debug_assert_eq!(
+        scope, "global",
+        "global protection defaults are only ever stored under scope=\"global\""
+    );
+    let req = contracts_core::settings::SettingsUpdateRequest {
+        key: key.to_owned(),
+        value: contracts_core::JsonAny::from(value),
+    };
+    crate::settings::update_setting(pool, bus, &req).await?;
     Ok(())
 }
 
