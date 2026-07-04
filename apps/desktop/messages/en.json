@@ -1120,6 +1120,8 @@
   "projects_toast_reinfer_failed": "Re-infer failed.",
   "projects_toast_dismiss_failed": "Dismiss failed.",
   "projects_toast_plan_required": "A filesystem plan is required before this transition. Create or approve a plan first.",
+  "projects_archive_generate_failed": "Could not generate the archive plan.",
+  "projects_archive_review_title": "Review archive plan",
   "projects_toast_transition_failed": "Transition failed.",
   "projects_toast_transitioned": "Project {state}.",
   "projects_toast_archived_readonly": "This project is archived. Notes cannot be edited.",
@@ -2122,6 +2124,21 @@
       "match": {
         "pp=one": "{count} file · {size}",
         "pp=other": "{count} files · {size}"
+      }
+    }
+  ],
+  "projects_archive_plan_created_toast": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "Archive plan created with {count} item — review before anything is moved.",
+        "pp=other": "Archive plan created with {count} items — review before anything is moved."
       }
     }
   ],
