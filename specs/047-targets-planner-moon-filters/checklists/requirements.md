@@ -37,5 +37,5 @@
   questions were returned to the product owner alongside this spec for
   review before `/speckit.plan`.
 - The Track A / Track B boundary is encoded in the "Track Split" section and
-  FR-015..FR-017; Track B (observer/ephemeris engine) is specified and
-  researched separately.
+  FR-015..FR-017; Track B (observer/ephemeris engine) is spec 044, specified
+  and researched separately.
