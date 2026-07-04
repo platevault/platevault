@@ -17,8 +17,8 @@
 //! the UI should surface.
 //!
 //! Constitution II: `create` generates a reviewable `FilesystemPlan` via
-//! `crates/fs/planner` + `crates/persistence/db::repositories::plans`.  The
-//! plan contains one `mkdir` item per folder required by the project's tool
+//! `domain_core::lifecycle::plan` + `crates/persistence/db::repositories::plans`.
+//! The plan contains one `mkdir` item per folder required by the project's tool
 //! (from `crates/project/structure::required_folders`) plus a `write_manifest`
 //! item for the project marker.  The plan is returned as `plan_id` in the
 //! response; the caller drives approval + application via specs 017/025.
