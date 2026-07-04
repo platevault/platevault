@@ -183,7 +183,7 @@ export function WizardPage() {
         .replace(/^-+|-+$/g, '');
       const path = `projects/${safeName || 'new-project'}`;
 
-      await callCreateProject({
+      const result = await callCreateProject({
         requestId: crypto.randomUUID(),
         name: trimmedName,
         tool,
@@ -194,15 +194,26 @@ export function WizardPage() {
 
       clearDraft();
 
-      // TODO(plan-review-surface): a `ProjectCreateResult.planId` used to
-      // link a "View plan" toast action to `/archive`, but that route is
-      // fixture-backed archive/delete browsing (see ArchivePage.tsx), not a
-      // real per-project plan review surface — no such surface exists yet
-      // anywhere in the app (SourceViewsSection's `onPlanCreated` callback is
-      // likewise never wired to one). Show a plain success toast until
-      // specs/008 tasks.md US1-7's plan-review destination actually exists,
-      // then reinstate the action here.
-      addToast({ message: m.projects_wizard_toast_created({ name: trimmedName }), variant: 'success' });
+      // mkdir-only scaffolding auto-apply (user decision 2026-07-04,
+      // supersedes D16's "View plan" toast which linked to a wrong page):
+      // the backend auto-applies the folder plan when every action is a
+      // directory creation and reports the outcome in `scaffoldApplied`.
+      // - true  → folders exist on disk: confirm.
+      // - false → creation failed; the plan record remains reviewable.
+      // - null/undefined → plan needs manual review (non-mkdir actions).
+      if (result.scaffoldApplied === false) {
+        addToast({
+          message: m.projects_wizard_toast_folders_failed({ name: trimmedName }),
+          variant: 'error',
+        });
+      } else if (result.scaffoldApplied) {
+        addToast({
+          message: m.projects_wizard_toast_created_folders({ name: trimmedName }),
+          variant: 'success',
+        });
+      } else {
+        addToast({ message: m.projects_wizard_toast_created({ name: trimmedName }), variant: 'success' });
+      }
 
       // Navigate back to projects list; the list re-fetches automatically.
       void navigate({ to: '/projects' });

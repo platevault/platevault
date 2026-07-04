@@ -1,6 +1,9 @@
 // spec 015 — Token Pattern Builder: backend-wired resolver, validator, preview.
 // spec 018 — pattern + autoApplyPattern keys persisted via settings transport.
 // spec 041 (T051, FR-026b) — per-frame-type destination patterns.
+// package P11 — per-type path-string preview wired to the real `pattern.path_preview`
+// backend command (crates/patterns::resolver::resolve_pattern_str), replacing the
+// former client-side token-substitution stub.
 import {
 	type KeyboardEvent as ReactKeyboardEvent,
 	useCallback,
@@ -12,12 +15,14 @@ import {
 	getSettings,
 	type PatternPart,
 	type PatternPreviewResponse,
+	patternPathPreview,
 	patternPreview,
 	patternValidate,
 	updateSettings,
 } from "./settingsIpc";
 import { Btn } from "@/ui";
 import { m } from "@/lib/i18n";
+import { errMessage } from "@/lib/errors";
 import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from "./SettingsKit";
 
 const NAMING_KEYS = ['pattern', 'autoApplyPattern', 'patternsByType'];
@@ -210,47 +215,28 @@ const SAMPLE_METADATA = {
 	set_temp: "-10C",
 };
 
-// ── Per-type live preview (client-side token substitution) ────────────────────
+// ── Per-type live preview (package P11: real backend resolver) ───────────────
 //
-// STUB: The canonical resolver lives in the Rust `patterns` crate
-// (`crates/patterns/src/per_type.rs`), but the only Tauri command exposed today
-// (`pattern.preview`) accepts the token/separator `PatternPart[]` model, which
-// cannot represent the literal path segments (e.g. `flats`, `masters`) that
-// per-type destination patterns rely on. Until a path-string preview command is
-// exposed, we resolve the preview client-side by substituting `{token}`
-// placeholders with representative sample values. Literal segments and `/`
-// separators are passed through verbatim. Replace this with the canonical
-// resolver once a path-string `pattern.preview` (or equivalent) command exists.
+// The canonical resolver lives in the Rust `patterns` crate
+// (`crates/patterns/src/resolver.rs::resolve_pattern_str`), which handles the
+// literal path segments (e.g. `flats`, `masters`) that per-type destination
+// patterns rely on, alongside the same sanitization/traversal/reserved-name
+// pipeline used everywhere else. It is exposed via the `pattern.path_preview`
+// Tauri command (`patternPathPreview` in `./settingsIpc`). Sample metadata
+// values are distinct from the top pattern preview's `SAMPLE_METADATA` so the
+// two live previews are visually distinguishable at a glance.
 
-const PER_TYPE_SAMPLE_TOKENS: Record<
-	(typeof AVAILABLE_TOKENS)[number],
-	string
-> = {
+const PER_TYPE_SAMPLE_METADATA = {
 	target: "IC1396",
 	filter: "Ha",
 	date: "2024-10-20",
-	frame_type: "light",
+	frameType: "light",
 	camera: "ASI2600MM",
 	exposure: "300s",
 	gain: "100",
 	binning: "1x1",
-	set_temp: "-10C",
+	setTemp: "-10C",
 };
-
-/**
- * Resolve a per-type destination pattern string into a sample path by replacing
- * each `{token}` with a representative sample value. Unknown tokens are left as
- * a bracketed placeholder so the preview makes the problem visible rather than
- * silently dropping the segment.
- */
-function resolvePerTypePreview(pattern: string): string {
-	if (pattern.trim() === "") return "";
-	return pattern.replace(/\{([^}]*)\}/g, (_match, token: string) => {
-		const sample =
-			PER_TYPE_SAMPLE_TOKENS[token as (typeof AVAILABLE_TOKENS)[number]];
-		return sample ?? `{${token}}`;
-	});
-}
 
 // ── Default pattern {target}/{filter}/{date}/{frame_type}/ ────────────────────
 
@@ -640,6 +626,15 @@ function PerTypeDestinationPatterns() {
 	const [loaded, setLoaded] = useState(false);
 	const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+	// Per-class live preview, resolved by the real backend `pattern.path_preview`
+	// command (package P11) — keyed by class, absent while loading/unavailable.
+	const [previewsByClass, setPreviewsByClass] = useState<
+		Partial<Record<FrameTypeClass, { path: string; missingTokens: string[] }>>
+	>({});
+	const [previewErrorsByClass, setPreviewErrorsByClass] = useState<
+		Partial<Record<FrameTypeClass, string>>
+	>({});
+
 	// ── Load saved overrides on mount ────────────────────────────────────────
 	useEffect(() => {
 		getSettings({ scope: "naming" })
@@ -663,6 +658,61 @@ function PerTypeDestinationPatterns() {
 			.finally(() => setLoaded(true));
 	}, []);
 
+	// ── Per-class live preview (package P11) ─────────────────────────────────
+	//
+	// Resolves the effective pattern (override or built-in default) for every
+	// class against representative sample metadata via the real resolver. Runs
+	// whenever chips or backend validation errors change, after the initial
+	// load completes. A class with a client- or backend-detected error is
+	// skipped (no preview shown, mirroring the previous stub's behaviour).
+	useEffect(() => {
+		if (!loaded) return;
+		let cancelled = false;
+
+		void (async () => {
+			const nextPreviews: Partial<
+				Record<FrameTypeClass, { path: string; missingTokens: string[] }>
+			> = {};
+			const nextErrors: Partial<Record<FrameTypeClass, string>> = {};
+
+			await Promise.all(
+				FRAME_TYPE_CLASSES.map(async (cls) => {
+					const chips = chipsByClass[cls];
+					const isOverridden = !chipsAreEmpty(chips);
+					const patternStr = isOverridden ? serializePathPattern(chips) : "";
+					const clientError = isOverridden ? validatePatternString(patternStr) : null;
+					const error = backendErrors[cls] ?? clientError ?? undefined;
+					if (error != null) return; // No preview while the pattern is invalid.
+
+					const effectivePattern = isOverridden
+						? patternStr
+						: FRAME_TYPE_DEFAULT_PATTERNS[cls];
+					try {
+						const resp = await patternPathPreview(effectivePattern, PER_TYPE_SAMPLE_METADATA);
+						nextPreviews[cls] = {
+							path: resp.resolvedPath,
+							missingTokens: resp.missingTokens,
+						};
+					} catch (err: unknown) {
+						// `errMessage` resolves a ContractError code (pattern.empty,
+						// token.unknown, path.traversal, …) to its translated catalog
+						// entry; anything unrecognisable gets the safe generic fallback.
+						nextErrors[cls] = errMessage(err);
+					}
+				}),
+			);
+
+			if (!cancelled) {
+				setPreviewsByClass(nextPreviews);
+				setPreviewErrorsByClass(nextErrors);
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [chipsByClass, backendErrors, loaded]);
+
 	// ── Persist the full override map (debounced, captures backend errors) ────
 	const persist = useCallback((next: Record<FrameTypeClass, PathChip[]>) => {
 		if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -684,10 +734,11 @@ function PerTypeDestinationPatterns() {
 				},
 				(err: unknown) => {
 					// Backend rejected at least one pattern (error code value.invalid).
-					// We cannot tell which class from a single string; flag all classes
+					// We cannot tell which class from a single payload; flag all classes
 					// that currently fail client-side validation, falling back to a
-					// generic banner keyed on the first overridden class.
-					const message = typeof err === "string" ? err : m.settings_naming_pertype_invalid_pattern();
+					// banner keyed on the first overridden class. `errMessage` resolves
+					// the ContractError code to its translated catalog entry.
+					const message = errMessage(err);
 					const errs: Partial<Record<FrameTypeClass, string>> = {};
 					let attributed = false;
 					for (const cls of FRAME_TYPE_CLASSES) {
@@ -744,14 +795,11 @@ function PerTypeDestinationPatterns() {
 					loaded && isOverridden ? validatePatternString(patternStr) : null;
 				const error = backendErrors[cls] ?? clientError ?? undefined;
 				const rowId = `naming-pattern-${cls}`;
-				// Live preview: resolve the effective pattern (override or
-				// built-in default) against representative sample values. Only
+				// Live preview: resolved by the real backend `pattern.path_preview`
+				// command (package P11) against representative sample metadata. Only
 				// shown when the pattern is free of validation errors.
-				const effectivePattern = isOverridden
-					? patternStr
-					: FRAME_TYPE_DEFAULT_PATTERNS[cls];
-				const previewPath =
-					error == null ? resolvePerTypePreview(effectivePattern) : "";
+				const preview = error == null ? previewsByClass[cls] : undefined;
+				const previewUnavailable = error == null && previewErrorsByClass[cls];
 				return (
 					<SettingsRow
 						key={cls}
@@ -775,23 +823,41 @@ function PerTypeDestinationPatterns() {
 								/>
 							</div>
 
-							{/* Working live preview of the resolved sample path. */}
-							{previewPath !== "" && (
+							{/* Working live preview of the resolved sample path. Announced
+							    politely so screen-reader users hear updates while editing. */}
+							{preview && preview.path !== "" && (
 								<div
 									className="alm-naming__pertype-preview"
+									aria-live="polite"
 									data-testid={`${rowId}-preview`}
 								>
 									<span className="alm-naming__pertype-preview-label">
 										{m.settings_naming_preview_label()}
 									</span>{" "}
 									<code className="alm-mono alm-naming__pertype-preview-code">
-										{previewPath}
+										{preview.path}
 									</code>
+									{preview.missingTokens.length > 0 && (
+										<span className="alm-naming__preview-fallback">
+											{m.settings_naming_fallback_used({
+												tokens: preview.missingTokens.join(", "),
+											})}
+										</span>
+									)}
 									{!isOverridden && (
 										<span className="alm-naming__pertype-preview-default">
 											{m.settings_naming_preview_default()}
 										</span>
 									)}
+								</div>
+							)}
+							{previewUnavailable && (
+								<div
+									className="alm-naming__preview-error"
+									role="alert"
+									data-testid={`${rowId}-preview-error`}
+								>
+									{previewUnavailable}
 								</div>
 							)}
 

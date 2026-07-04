@@ -12,6 +12,8 @@ extend-exclude = [
     "GEMINI.md",
     "*/CLAUDE.md",
     "*/AGENTS.md",
+    # generated star-catalog seed data (Bayer designations trip the checker)
+    "assets/seed/",
 ]
 
 [default.extend-words]
@@ -31,3 +33,18 @@ ot = "ot"
 mis = "mis"
 # accepted spelling in a test description
 unparseable = "unparseable"
+# UI abbreviation for "designation" (targets alias kind label)
+desig = "desig"
+# Bayer designations / test IDs (gamma, omega, nu)
+gam = "gam"
+ome = "ome"
+noo = "noo"
+# haversine formula abbreviation in coords.rs comments
+hav = "hav"
+# variable name for b->a angular separation in symmetry tests
+ba = "ba"
+# intentional wording: "review-transitionable lifecycle state"
+transitionable = "transitionable"
+# comment prose pluralising SQL keywords ("UNIONs", "LIKEs")
+UNIO = "UNIO"
+LIK = "LIK"

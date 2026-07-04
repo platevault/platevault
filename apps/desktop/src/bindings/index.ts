@@ -323,6 +323,11 @@ export const commands = {
 	/**
 	 *  `projects.create` — create a new project.
 	 * 
+	 *  Routes through `app_core::project_create` so the folder-scaffolding plan
+	 *  is auto-applied when it is mkdir-only (user decision 2026-07-04); the
+	 *  result's `scaffold_applied` reports the outcome. The plan + audit records
+	 *  are still written either way (constitution II).
+	 * 
 	 *  # Errors
 	 * 
 	 *  Returns `Err(String)` with the error code on validation or database failure.
@@ -749,6 +754,18 @@ export const commands = {
 	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
 	 */
 	patternPreview: (request: PatternPreviewRequest_Deserialize) => typedError<PatternPreviewResponse, ContractError_Serialize>(__TAURI_INVOKE("pattern_preview", { request })),
+	/**
+	 *  `pattern.path_preview` — resolve a per-type destination **path-string**
+	 *  pattern against sample metadata, for the Settings per-frame-type
+	 *  destination pattern editor's live preview (spec 041, package P11).
+	 * 
+	 *  Returns `PathPatternPreviewResponse { resolved_path, missing_tokens, warnings }`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
+	 */
+	patternPathPreview: (request: PathPatternPreviewRequest_Deserialize) => typedError<PathPatternPreviewResponse, ContractError_Serialize>(__TAURI_INVOKE("pattern_path_preview", { request })),
 	/**
 	 *  `source.protection.get` — resolve effective protection for a source (US2, T012).
 	 * 
@@ -4945,6 +4962,63 @@ export type OpticalTrain = {
 export type OrganizationState = "organized" | "unorganized";
 
 /**
+ *  Request for `pattern.path_preview` — preview a per-type destination
+ *  **path-string** pattern (e.g. `masters/flats/{filter}/`) against sample
+ *  metadata, for the Settings per-frame-type destination pattern editor.
+ * 
+ *  Unlike [`PatternPreviewRequest`] (which carries the `PatternPart[]`
+ *  token/separator model), `pattern` here is a raw path string that may
+ *  interleave `{token}` placeholders with literal directory segments — the
+ *  form produced by [`crate::patterns`] (this module) is not applicable;
+ *  resolution is delegated to `crates/patterns::resolver::resolve_pattern_str`,
+ *  which reuses the v1 token registry as the single token-name authority.
+ */
+export type PathPatternPreviewRequest = PathPatternPreviewRequest_Serialize | PathPatternPreviewRequest_Deserialize;
+
+/**
+ *  Request for `pattern.path_preview` — preview a per-type destination
+ *  **path-string** pattern (e.g. `masters/flats/{filter}/`) against sample
+ *  metadata, for the Settings per-frame-type destination pattern editor.
+ * 
+ *  Unlike [`PatternPreviewRequest`] (which carries the `PatternPart[]`
+ *  token/separator model), `pattern` here is a raw path string that may
+ *  interleave `{token}` placeholders with literal directory segments — the
+ *  form produced by [`crate::patterns`] (this module) is not applicable;
+ *  resolution is delegated to `crates/patterns::resolver::resolve_pattern_str`,
+ *  which reuses the v1 token registry as the single token-name authority.
+ */
+export type PathPatternPreviewRequest_Deserialize = {
+	pattern: string,
+	sampleMetadata: MetadataBundleDto_Deserialize,
+};
+
+/**
+ *  Request for `pattern.path_preview` — preview a per-type destination
+ *  **path-string** pattern (e.g. `masters/flats/{filter}/`) against sample
+ *  metadata, for the Settings per-frame-type destination pattern editor.
+ * 
+ *  Unlike [`PatternPreviewRequest`] (which carries the `PatternPart[]`
+ *  token/separator model), `pattern` here is a raw path string that may
+ *  interleave `{token}` placeholders with literal directory segments — the
+ *  form produced by [`crate::patterns`] (this module) is not applicable;
+ *  resolution is delegated to `crates/patterns::resolver::resolve_pattern_str`,
+ *  which reuses the v1 token registry as the single token-name authority.
+ */
+export type PathPatternPreviewRequest_Serialize = {
+	pattern: string,
+	sampleMetadata: MetadataBundleDto_Serialize,
+};
+
+/**  Successful response for `pattern.path_preview`. */
+export type PathPatternPreviewResponse = {
+	/**  The resolved relative path for display. */
+	resolvedPath: string,
+	/**  Token names resolved via fallback (shown as dim segments in the UI). */
+	missingTokens: string[],
+	warnings: string[],
+};
+
+/**
  *  One element of an ordered token pattern (data-model.md §PatternPart).
  * 
  *  Re-exported from `crates/contracts/core` so the Tauri command layer can
@@ -5606,6 +5680,22 @@ export type ProjectCreateResult_Deserialize = {
 	channels: ProjectChannelDto_Deserialize[],
 	auditId: string,
 	createdAt: string,
+	/**
+	 *  Outcome of the mkdir-only scaffolding auto-apply (user decision
+	 *  2026-07-04, supersedes handover D16). The folder-structure plan and its
+	 *  audit rows are still written (constitution II reviewability-as-record);
+	 *  only the approval click is skipped, and only when every plan action is
+	 *  directory creation.
+	 * 
+	 *  - `Some(true)`  — the scaffolding plan auto-applied cleanly; the
+	 *    project folders exist on disk.
+	 *  - `Some(false)` — auto-apply was attempted but did not complete
+	 *    cleanly; the plan remains reviewable via the normal plan surfaces,
+	 *    exactly like a failed manual apply.
+	 *  - `None`        — the plan requires manual review (it contains a
+	 *    non-mkdir action) or no plan was generated.
+	 */
+	scaffoldApplied?: boolean | null,
 };
 
 /**  Successful result from `projects.create`. */
@@ -5620,6 +5710,22 @@ export type ProjectCreateResult_Serialize = {
 	channels: ProjectChannelDto_Serialize[],
 	auditId: string,
 	createdAt: string,
+	/**
+	 *  Outcome of the mkdir-only scaffolding auto-apply (user decision
+	 *  2026-07-04, supersedes handover D16). The folder-structure plan and its
+	 *  audit rows are still written (constitution II reviewability-as-record);
+	 *  only the approval click is skipped, and only when every plan action is
+	 *  directory creation.
+	 * 
+	 *  - `Some(true)`  — the scaffolding plan auto-applied cleanly; the
+	 *    project folders exist on disk.
+	 *  - `Some(false)` — auto-apply was attempted but did not complete
+	 *    cleanly; the plan remains reviewable via the normal plan surfaces,
+	 *    exactly like a failed manual apply.
+	 *  - `None`        — the plan requires manual review (it contains a
+	 *    non-mkdir action) or no plan was generated.
+	 */
+	scaffoldApplied?: boolean | null,
 };
 
 /**  A project detail (sources + channels included). */

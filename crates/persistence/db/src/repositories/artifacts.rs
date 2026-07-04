@@ -250,6 +250,48 @@ pub async fn update_classification(
     Ok(())
 }
 
+/// Minimal `(id, project_id, path)` view of an artifact row, used by the
+/// spec 012 WP-012-A one-time re-attribution fix-up to find rows whose
+/// `project_id` was mistakenly set to a library-root id.
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct ArtifactIdentityRow {
+    pub id: String,
+    pub project_id: String,
+    pub path: String,
+}
+
+/// List every artifact's `(id, project_id, path)` (WP-012-A re-attribution
+/// fix-up input; small enough table that a full scan is fine).
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn list_all_artifact_identities(pool: &SqlitePool) -> DbResult<Vec<ArtifactIdentityRow>> {
+    let rows = sqlx::query_as::<_, ArtifactIdentityRow>(
+        "SELECT id, project_id, path FROM processing_artifacts",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Update only the `project_id` of an artifact row (WP-012-A re-attribution
+/// fix-up). Leaves every other field untouched.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn set_project_id(
+    pool: &SqlitePool,
+    artifact_id: &str,
+    project_id: &str,
+) -> DbResult<()> {
+    sqlx::query("UPDATE processing_artifacts SET project_id = ? WHERE id = ?")
+        .bind(project_id)
+        .bind(artifact_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Update `tool_launch_id` for attribution (T022/T022b).
 ///
 /// # Errors

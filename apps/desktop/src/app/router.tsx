@@ -216,6 +216,21 @@ const devContractsRoute = DEV_TOOLS_ENABLED
     })
   : null;
 
+// Hidden devMode toggle (spec 021 T032). Deliberately NOT added to the
+// command palette's DEV_PAGES and NOT linked from Settings — reachable only
+// by typing `/dev/settings` directly. Same compile-time gate as
+// `devContractsRoute` above.
+const devSettingsRoute = DEV_TOOLS_ENABLED
+  ? createRoute({
+      getParentRoute: () => shellRoute,
+      path: '/dev/settings',
+      component: lazyRouteComponent(
+        () => import('@/dev/DevSettingsPage'),
+        'DevSettingsPage',
+      ),
+    })
+  : null;
+
 // --- Setup (standalone, no shell) ---
 
 const setupRoute = createRoute({
@@ -265,6 +280,8 @@ const routeTree = rootRoute.addChildren([
     settingsPaneRoute,
     // Developer Contract Diagnostics (spec 021 / T075): only present in dev-tools builds.
     ...(devContractsRoute ? [devContractsRoute] : []),
+    // Hidden devMode toggle (spec 021 / T032): only present in dev-tools builds.
+    ...(devSettingsRoute ? [devSettingsRoute] : []),
   ]),
 ]);
 
