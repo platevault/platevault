@@ -2693,7 +2693,9 @@ export type GenerateCleanupPlanRequest = {
 	title?: string | null,
 	/**
 	 *  Per-plan destructive destination: `"archive"` (default, app-managed) or
-	 *  `"os_trash"` (FR-016). Defaults to `"archive"` when absent.
+	 *  `"trash"` (OS-native recycle bin). Canonical vocabulary per migration
+	 *  0040 / spec 033 vocab split: `archive | trash`. Defaults to `"archive"`
+	 *  when absent; any other value is rejected with `value.invalid`.
 	 */
 	destructiveDestination?: string | null,
 };
