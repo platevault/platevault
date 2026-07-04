@@ -223,6 +223,49 @@ pub struct SourceListResponse {
     pub sources: Vec<SourceSummary>,
 }
 
+// ── Root dependents (P6b — `roots.delete`) ───────────────────────────────────
+
+/// Counts of records that reference a registered source by root/source id,
+/// checked before `roots.delete` is allowed to proceed (decision D8).
+///
+/// `registered_sources` has no FK cascade: deleting a root's registration
+/// must never silently orphan or nullify history it left behind (constitution
+/// §I/§II). When [`Self::total`] is non-zero the delete is blocked with
+/// `root.has_dependents`; the caller can use the individual fields to explain
+/// which records still remain.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RootDependencyCounts {
+    /// Rows in `inbox_items` with `root_id` equal to this source's id.
+    pub inbox_items: u32,
+    /// Rows in `plan_items` with `source_id` equal to this source's id.
+    pub plan_items: u32,
+    /// Rows in `file_record` with `root_id` equal to this source's id.
+    pub file_records: u32,
+    /// Rows in `acquisition_session` with `root_id` equal to this source's id.
+    pub acquisition_sessions: u32,
+    /// Rows in `calibration_session` with `root_id` equal to this source's id.
+    pub calibration_sessions: u32,
+}
+
+impl RootDependencyCounts {
+    /// Total number of dependent records across every category.
+    #[must_use]
+    pub fn total(&self) -> u32 {
+        self.inbox_items
+            + self.plan_items
+            + self.file_records
+            + self.acquisition_sessions
+            + self.calibration_sessions
+    }
+
+    /// `true` when no dependent records exist anywhere — the delete may proceed.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.total() == 0
+    }
+}
+
 // ── firstrun.complete ─────────────────────────────────────────────────────────
 
 /// Response payload for `firstrun.complete`.
