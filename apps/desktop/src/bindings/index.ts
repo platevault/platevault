@@ -5558,6 +5558,17 @@ export type ProjectChannelDto_Deserialize = {
 	/**  `"inferred"` or `"manual"` */
 	source: string,
 	addedAt: string | null,
+	/**
+	 *  Total sub-frame (light) count across all linked sources whose
+	 *  `filter_snapshot` matches this channel's `label` (P7: server-side
+	 *  aggregation, previously derived client-side).
+	 */
+	subFrames: number,
+	/**
+	 *  Total integration time in seconds across the same matching sources
+	 *  (`frames_snapshot * parse(exposure_snapshot)` summed per source).
+	 */
+	totalIntegrationS: number,
 };
 
 /**  A project channel (inferred or manually added). */
@@ -5566,6 +5577,17 @@ export type ProjectChannelDto_Serialize = {
 	/**  `"inferred"` or `"manual"` */
 	source: string,
 	addedAt?: string | null,
+	/**
+	 *  Total sub-frame (light) count across all linked sources whose
+	 *  `filter_snapshot` matches this channel's `label` (P7: server-side
+	 *  aggregation, previously derived client-side).
+	 */
+	subFrames: number,
+	/**
+	 *  Total integration time in seconds across the same matching sources
+	 *  (`frames_snapshot * parse(exposure_snapshot)` summed per source).
+	 */
+	totalIntegrationS: number,
 };
 
 /**  Request body for `projects.channels.dismiss_drift`. */

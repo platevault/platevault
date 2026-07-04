@@ -92,6 +92,13 @@ pub struct ProjectChannelDto {
     pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub added_at: Option<String>,
+    /// Total sub-frame (light) count across all linked sources whose
+    /// `filter_snapshot` matches this channel's `label` (P7: server-side
+    /// aggregation, previously derived client-side).
+    pub sub_frames: u32,
+    /// Total integration time in seconds across the same matching sources
+    /// (`frames_snapshot * parse(exposure_snapshot)` summed per source).
+    pub total_integration_s: u64,
 }
 
 /// A project source (Inventory session link with snapshot fields).
