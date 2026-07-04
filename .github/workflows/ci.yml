@@ -87,6 +87,14 @@ jobs:
       - name: Rust format
         run: cargo fmt --all --check
 
+      # DB boundary ratchet (parked in PR #384, wired in here): fails if raw
+      # sqlx query/exec sites outside crates/persistence/db exceed the
+      # checked-in baseline. Pure grep, no compile — runs once on Linux only
+      # per the design doc's guidance (docs/development/persistence-layer-hardening.md).
+      - name: DB boundary ratchet
+        if: runner.os == 'Linux'
+        run: just db-boundary
+
       - name: Clippy (workspace, all targets, deny warnings)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
