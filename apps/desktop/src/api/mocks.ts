@@ -54,6 +54,8 @@ import type {
   CalibrationMatchDto_Serialize,
   IngestionSettings,
   UpdateIngestionSettings,
+  AuditFilterDto,
+  AuditPaginationDto,
 } from '@/bindings/index';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -72,6 +74,47 @@ const mockAuditEntries: AuditEntry[] = [
   { id: 'audit-004', timestamp: '2026-05-19T23:30:00Z', eventType: 'scan.completed', entityType: 'root', entityId: 'root-001', actor: 'system', outcome: 'ok', detail: 'Discovered 1,247 files in 4.2s' },
   { id: 'audit-005', timestamp: '2026-05-19T23:25:00Z', eventType: 'scan.started', entityType: 'root', entityId: 'root-001', actor: 'user', outcome: 'ok', detail: 'Manual scan triggered' },
 ];
+
+/**
+ * Mirrors the real `audit_list`/`audit_export` filter semantics
+ * (`apps/desktop/src-tauri/src/commands/audit.rs`) over the mock fixture, so
+ * mock mode exercises the same search/entity/outcome/date-range filtering the
+ * real `audit_log_entry` query applies. `severity` has no equivalent on the
+ * `AuditEntry` fixture (the real DTO doesn't carry it either — only the
+ * filter does) and is ignored here, same as it plays no role in what the UI
+ * renders.
+ */
+function filterMockAuditEntries(filters: AuditFilterDto | null | undefined): AuditEntry[] {
+  let result = mockAuditEntries;
+  if (filters?.entityType) {
+    result = result.filter((e) => e.entityType === filters.entityType);
+  }
+  if (filters?.entityId) {
+    result = result.filter((e) => e.entityId === filters.entityId);
+  }
+  if (filters?.outcome) {
+    result = result.filter((e) => e.outcome === filters.outcome);
+  }
+  if (filters?.search) {
+    const q = filters.search.toLowerCase();
+    result = result.filter(
+      (e) =>
+        e.eventType.toLowerCase().includes(q) ||
+        e.entityType.toLowerCase().includes(q) ||
+        e.entityId.toLowerCase().includes(q) ||
+        e.actor.toLowerCase().includes(q),
+    );
+  }
+  if (filters?.from) {
+    const from = new Date(filters.from).getTime();
+    result = result.filter((e) => new Date(e.timestamp).getTime() >= from);
+  }
+  if (filters?.to) {
+    const to = new Date(filters.to).getTime();
+    result = result.filter((e) => new Date(e.timestamp).getTime() < to);
+  }
+  return [...result].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+}
 
 const mockSettingsData: SettingsData = {
   scope: 'general',
@@ -457,10 +500,19 @@ export async function mockInvoke(
       return planDetail;
     }
     case 'audit_list': {
-      return { entries: mockAuditEntries, total: mockAuditEntries.length } satisfies AuditListResponse_Serialize;
+      const args = _args as
+        | { filters?: AuditFilterDto | null; pagination?: AuditPaginationDto | null }
+        | undefined;
+      const filtered = filterMockAuditEntries(args?.filters);
+      const offset = args?.pagination?.offset ?? 0;
+      const limit = args?.pagination?.limit ?? filtered.length;
+      const page = filtered.slice(offset, offset + limit);
+      return { entries: page, total: filtered.length } satisfies AuditListResponse_Serialize;
     }
     case 'audit_export': {
-      return mockAuditEntries.map((e) => JSON.stringify(e)).join('\n');
+      const args = _args as { filters?: AuditFilterDto | null } | undefined;
+      const filtered = filterMockAuditEntries(args?.filters);
+      return filtered.map((e) => JSON.stringify(e)).join('\n');
     }
     case 'log_recent': {
       const { MOCK_LOG_ENTRIES } = await import('@/data/mockLogEntries');

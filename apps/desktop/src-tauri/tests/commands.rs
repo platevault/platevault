@@ -308,19 +308,93 @@ async fn plans_retry_requires_terminal_parent() {
 }
 
 // ─── Audit (2 commands) ─────────────────────────────────────────────────────
+//
+// `audit_list` / `audit_export` moved off the spec-029 fixture stub onto real
+// `audit_log_entry` reads (crates/persistence/db/src/repositories/audit.rs).
+// Both commands now take `State<'_, AppState>`, so — like the other
+// state-backed lifecycle commands in this file — they are exercised against
+// `mock_lifecycle_app()`'s in-memory `SQLite` database rather than by calling
+// them with no state at all.
 
-#[tokio::test]
-async fn stub_audit_list() {
-    let res = audit_list(None, None).await;
-    assert!(res.is_ok(), "audit_list failed: {res:?}");
-    assert!(!res.unwrap().entries.is_empty());
+async fn insert_audit_row(
+    pool: &sqlx::SqlitePool,
+    audit_id: &str,
+    entity_type: &str,
+    entity_id: &str,
+    trigger: &str,
+) {
+    sqlx::query(
+        "INSERT INTO audit_log_entry \
+         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+          outcome, severity, request_id, at, payload) \
+         VALUES (?, ?, ?, NULL, NULL, ?, 'user', 'applied', 'workflow', 'req-1', \
+                 '2026-01-01T00:00:00Z', NULL)",
+    )
+    .bind(audit_id)
+    .bind(entity_type)
+    .bind(entity_id)
+    .bind(trigger)
+    .execute(pool)
+    .await
+    .expect("insert audit_log_entry row");
 }
 
 #[tokio::test]
-async fn stub_audit_export() {
-    let res = audit_export(None).await;
-    assert!(res.is_ok(), "audit_export failed: {res:?}");
-    assert!(!res.unwrap().is_empty());
+async fn audit_list_reads_real_audit_log_entry_rows() {
+    let app = mock_lifecycle_app().await;
+    let state = app.state::<AppState>();
+    insert_audit_row(state.repo.pool(), "a1", "session", "ses-1", "Confirm session").await;
+
+    let res = audit_list(state, None, None).await.expect("audit_list ok");
+    assert_eq!(res.total, 1);
+    assert_eq!(res.entries.len(), 1);
+    let entry = &res.entries[0];
+    assert_eq!(entry.id, "a1");
+    assert_eq!(entry.entity_type, "session");
+    assert_eq!(entry.entity_id, "ses-1");
+    assert_eq!(entry.event_type, "Confirm session");
+    // No `payload` on this row — `detail` falls back to the `trigger` text.
+    assert_eq!(entry.detail, "Confirm session");
+}
+
+#[tokio::test]
+async fn audit_list_empty_db_returns_empty_response() {
+    let app = mock_lifecycle_app().await;
+    let state = app.state::<AppState>();
+
+    let res = audit_list(state, None, None).await.expect("audit_list ok");
+    assert_eq!(res.total, 0);
+    assert!(res.entries.is_empty());
+}
+
+#[tokio::test]
+async fn audit_list_filters_by_entity_type() {
+    let app = mock_lifecycle_app().await;
+    let state = app.state::<AppState>();
+    insert_audit_row(state.repo.pool(), "a1", "session", "ses-1", "Confirm session").await;
+    insert_audit_row(state.repo.pool(), "a2", "plan", "plan-1", "Approve plan").await;
+
+    let filters = desktop_shell::commands::audit::AuditFilterDto {
+        entity_type: Some("plan".to_owned()),
+        ..Default::default()
+    };
+    let res = audit_list(state, Some(filters), None).await.expect("audit_list ok");
+    assert_eq!(res.total, 1);
+    assert_eq!(res.entries[0].entity_id, "plan-1");
+}
+
+#[tokio::test]
+async fn audit_export_returns_ndjson_of_real_rows() {
+    let app = mock_lifecycle_app().await;
+    let state = app.state::<AppState>();
+    insert_audit_row(state.repo.pool(), "a1", "session", "ses-1", "Confirm session").await;
+
+    let res = audit_export(state, None).await.expect("audit_export ok");
+    let lines: Vec<&str> = res.lines().collect();
+    assert_eq!(lines.len(), 1);
+    let parsed: serde_json::Value = serde_json::from_str(lines[0]).expect("valid ndjson line");
+    assert_eq!(parsed["id"], "a1");
+    assert_eq!(parsed["entityId"], "ses-1");
 }
 
 // ─── Review (1 command) ─────────────────────────────────────────────────────

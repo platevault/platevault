@@ -141,29 +141,6 @@ export const CLEANUP_TYPES: CleanupTypeFixture[] = [
   { id: 20, type: 'Unknown files', action: 'Keep', stage: 'Project metadata' },
 ];
 
-// ─── Audit Log Events ─────────────────────────────────────────────────────────
-
-export interface AuditEventFixture {
-  id: number;
-  timestamp: string;
-  event: string;
-  entity: string;
-  outcome: 'ok' | 'warn' | 'error';
-  actor: 'user' | 'system';
-  detail: string;
-}
-
-export const AUDIT_EVENTS: AuditEventFixture[] = [
-  { id: 1, timestamp: '2026-04-18T21:42:00Z', event: 'session.confirmed', entity: 'NGC 7000 · SII · 2026-04-18', outcome: 'ok', actor: 'user', detail: 'Session confirmed via review queue' },
-  { id: 2, timestamp: '2026-04-18T21:40:00Z', event: 'session.discovered', entity: 'NGC 7000 · SII · 2026-04-18', outcome: 'ok', actor: 'system', detail: 'Inbox scan found 14 new FITS files' },
-  { id: 3, timestamp: '2026-04-16T09:12:00Z', event: 'session.confirmed', entity: 'NGC 7000 · OIII · 2026-04-15', outcome: 'ok', actor: 'user', detail: 'Session confirmed via review queue' },
-  { id: 4, timestamp: '2026-04-15T21:06:00Z', event: 'session.candidate', entity: 'NGC 7000 · OIII · 2026-04-15', outcome: 'ok', actor: 'system', detail: 'Metadata extraction completed; target and filter resolved' },
-  { id: 5, timestamp: '2026-04-12T08:30:00Z', event: 'project.source_added', entity: 'NGC 7000 · SHO mosaic', outcome: 'ok', actor: 'user', detail: 'Session NGC 7000 · Ha · 2026-04-12 added as source' },
-  { id: 6, timestamp: '2026-04-10T14:05:00Z', event: 'calibration.master_imported', entity: 'MasterDark_300s_-10C_g100', outcome: 'ok', actor: 'system', detail: 'Master dark imported from scan #14' },
-  { id: 7, timestamp: '2026-03-30T22:18:00Z', event: 'session.confirmed', entity: 'M31 · R · 2026-03-30', outcome: 'ok', actor: 'user', detail: 'Session confirmed via review queue' },
-  { id: 8, timestamp: '2026-03-28T20:00:00Z', event: 'session.discovered', entity: 'M31 · L · 2026-03-28', outcome: 'warn', actor: 'system', detail: 'Filter origin is inferred — needs review' },
-];
-
 // ─── Legacy / existing settings shape (retained) ──────────────────────────────
 
 interface CleanupPolicyCell {
