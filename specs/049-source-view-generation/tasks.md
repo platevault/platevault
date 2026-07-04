@@ -22,8 +22,8 @@ tests are treated as required, not optional.
 
 ## Phase 1: Setup (Shared)
 
-- [ ] T001 [SETUP] Confirm reuse surfaces compile as baselines: `crates/project/structure` (`PreparedSourceView`), `crates/fs/planner` (`FilesystemPlan`), `crates/patterns` resolver, `crates/workflow/profiles`, `crates/calibration/core`. No code change — record entry points in a scratch note for the implementers.
-- [ ] T002 [P] [SETUP] Add a `Source Views` settings section id to the settings section registry (frontend + `crates/domain/core` section map) so the new keys have a home.
+- [x] T001 [SETUP] Confirm reuse surfaces compile as baselines: `crates/project/structure` (`PreparedSourceView`), `crates/fs/planner` (`FilesystemPlan`), `crates/patterns` resolver, `crates/workflow/profiles`, `crates/calibration/core`. No code change — record entry points in a scratch note for the implementers.
+- [ ] T002 [P] [SETUP] Add a `Source Views` settings section id to the settings section registry (frontend + `crates/domain/core` section map) so the new keys have a home. DEFERRED: only consumer is T030 (Phase 7 settings pane), out of scope for US1.
 
 ---
 
@@ -31,13 +31,13 @@ tests are treated as required, not optional.
 
 **⚠️ CRITICAL**: No user story work begins until this phase is complete.
 
-- [ ] T003 [FND] Write migration `crates/persistence/db/migrations/0061_source_view_generation_origin.sql`: recreate `plans` (SQLite table-recreate technique per 0029/0053) expanding `origin` CHECK with `prepared_view_generation` and `plan_type` CHECK with `source_view_generation`; preserve all data; re-create `plan_items` FK + index. (Migration verdict: this is the ONLY migration — see data-model.md.)
-- [ ] T004 [FND] Touch `crates/persistence/db/src/lib.rs` (or the embed anchor) to force `sqlx::migrate!` re-embed of the new migration (project memory: stale-embed guard).
-- [ ] T005 [P] [FND] Add `PlanOrigin::PreparedViewGeneration` + `PlanType::SourceViewGeneration` variants in `crates/fs/planner` and map them to the DB enum strings; unit-test round-trip serialization.
-- [ ] T006 [P] [FND] Add the two settings fields to `SettingsState` in `crates/domain/core/src/settings.rs`: `source_view_link_kind_intra_drive` (default `hardlink`), `source_view_link_kind_cross_drive` (default `symlink`, enum excludes `hardlink`), with serde + defaults; unit-test defaults + deserialization.
-- [ ] T007 [P] [FND] Add `DriveScope` classifier + volume-identity helper in `crates/fs/inventory` (same-volume detection for a source path vs a destination path, cross-platform); unit tests with mocked volume ids.
-- [ ] T008 [FND] Add the filesystem-capability probe in `crates/fs/inventory` (symlink privilege, junction support, hardlink same-volume) returning a `FilesystemCapability`; unit-test the matrix (symlink-yes/no × junction × cross-volume). Depends on T007.
-- [ ] T009 [FND] Add the pure `LinkKind` resolver in `crates/domain/core`: `(DriveScope, settings pair, FilesystemCapability) -> Result<Materialization, NoLinkKind>` implementing the deterministic rule (cross-drive never hardlink; capability-drift fallback; no achievable kind → error). Unit-test every branch incl. drift fallback + refuse. Depends on T006, T007, T008.
+- [x] T003 [FND] Write migration `crates/persistence/db/migrations/0054_source_view_generation_origin.sql` (renumbered from 0061 — 0053 was the highest on disk; 0054 confirmed free): recreate `plans` (SQLite table-recreate technique per 0029/0053) expanding `origin` CHECK with `prepared_view_generation` and `plan_type` CHECK with `source_view_generation`; preserve all data. (Migration verdict: this is the ONLY migration — see data-model.md.)
+- [x] T004 [FND] Touch `crates/persistence/db/src/lib.rs` (or the embed anchor) to force `sqlx::migrate!` re-embed of the new migration (project memory: stale-embed guard).
+- [x] T005 [P] [FND] Add `PlanOrigin::PreparedViewGeneration` + `PlanType::SourceViewGeneration` variants — actually in `crates/contracts/core/src/plans.rs` (tasks.md guessed `crates/fs/planner`; that crate has no DB/enum plumbing) and mapped to the DB enum strings; unit-tested round-trip serialization.
+- [x] T006 [P] [FND] Add the two settings fields to `SettingsState` in `crates/domain/core/src/settings.rs`: `source_view_link_kind_intra_drive` (default `hardlink`), `source_view_link_kind_cross_drive` (default `symlink`, enum excludes `hardlink`), with serde + defaults; unit-tested defaults + deserialization; wired into `crates/app/settings` descriptors/defaults/apply.
+- [x] T007 [P] [FND] Add `DriveScope` classifier + volume-identity helper in `crates/fs/inventory::drive_scope` (same-volume detection for a source path vs a destination path, cross-platform); unit tests with mocked volume ids.
+- [x] T008 [FND] Add the filesystem-capability probe in `crates/fs/inventory::capability` (symlink privilege, junction support, hardlink same-volume) returning a `FilesystemCapability`; unit-tested matrix (symlink-yes/no × junction × cross-volume). Depends on T007.
+- [x] T009 [FND] Add the pure `LinkKind` resolver in `crates/domain/core::source_view::resolve_link_kind`: `(DriveScope, settings pair, FilesystemCapability) -> Result<Materialization, NoLinkKind>` implementing the deterministic rule (cross-drive never hardlink; capability-drift fallback; no achievable kind → error). Unit-tested every branch incl. drift fallback + refuse. Depends on T006, T007, T008.
 
 **Checkpoint**: origin enum, settings, drive-scope, capability probe, and kind resolver exist and are unit-tested.
 
@@ -56,22 +56,26 @@ item resolving to canonical sources, zero originals copied, DB unchanged, and a
 
 ### Tests for US1
 
-- [ ] T010 [P] [US1] Contract test validating `contracts/sourceview.generate.json` (request/response, success + failure shapes) in `packages/contracts/tests`.
-- [ ] T011 [P] [US1] Integration test: build a generation plan for a fixture project with selected lights + matched masters → assert per-item `link`+`mkdir` actions, all targets under destination, no action targets an inventory path, `origin=prepared_view_generation` (SC-001/SC-003) in `crates/fs/planner/tests`.
-- [ ] T012 [P] [US1] Integration test: applied plan (symlink-capable fixture) → one link per item resolving to canonical source, 0 copies, DB unchanged, `PreparedSourceView` state `current` with recorded `materialization` (US1 AS2/AS3).
-- [ ] T013 [P] [US1] Test: generated tree contains 0 tool-control files (no `.xpsm`/`.xosm`/process-icons) — SC-002/FR-011.
+- [x] T010 [P] [US1] Contract test validating `contracts/sourceview.generate.json` (request/response, success + failure shapes) in `packages/contracts/tests/sourceview.generate.test.mjs`.
+- [x] T011 [P] [US1] Integration test: build a generation plan for a fixture project with selected lights + matched masters → assert per-item `link`+`mkdir` actions, all targets under destination, no action targets an inventory path, `origin=prepared_view_generation` (SC-001/SC-003) in `crates/app/projects/tests/source_view_generation_builder.rs` (builder lives in `app_core_projects`, not `fs/planner` — see T005/T014 note).
+- [x] T012 [P] [US1] Integration test: applied plan (symlink-capable fixture) → one link per item resolving to canonical source, 0 copies, DB unchanged, `PreparedSourceView` state `current` with recorded `materialization` (US1 AS2/AS3) in `crates/app/core/tests/source_view_generation_us1.rs`.
+- [x] T013 [P] [US1] Test: generated tree contains 0 tool-control files (no `.xpsm`/`.xosm`/process-icons) — SC-002/FR-011 (same test file as T012).
 
 ### Implementation for US1
 
-- [ ] T014 [US1] Add the generation-plan builder in `crates/fs/planner`: enumerate selected lights (session-level for MVP; per-frame in US-shared T031), resolve destination-relative paths (flat WBPP-ish default for MVP; full profile layout in US2), classify drive-scope (T007), pick recorded kind (T009), emit `mkdir`+`link` (or opt-in `copy`) actions. Depends on T005, T009.
-- [ ] T015 [US1] Collision guard: detect two sources → same destination path and refuse with `destination.collision` pointing at the pattern (FR-009a/FR-017); never suffix. Unit + integration test. Depends on T014.
-- [ ] T016 [US1] Destination-exists guard: refuse `destination.exists` when a destination path is an existing user-owned file/folder (FR-016); never overwrite. Depends on T014.
-- [ ] T017 [US1] Resolve default destination `<project>/source-views/<view>/` via `crates/project/structure` (spec 024 envelope). Depends on T014.
-- [ ] T018 [US1] Add `GenerateSourceView` use case in `crates/app/core`: validate project lifecycle (spec 026 FR-012 → `lifecycle.read_only`), consume selection + matches, invoke builder, return `planId` + warnings. Depends on T014, T017.
-- [ ] T019 [US1] First-materialization write in `crates/project/structure`: on successful apply of a `prepared_view_generation` plan, create `PreparedSourceView` (state `current`) + items with recorded `materialization`; wire the apply-success hook. Depends on T018.
-- [ ] T020 [US1] Per-item audit: ensure the spec 017/025 executor emits attempted-action/outcome events for the new origin (FR-007) — add the `prepared_view_generation` origin to the audit routing. Depends on T005.
-- [ ] T021 [P] [US1] Contract DTOs in `crates/contracts/core` + generated TS in `packages/contracts` for `sourceview.generate`; register Tauri command `sourceview_generate` → `sourceview.generate` (do NOT rename invoke target — project memory). Depends on T018.
-- [ ] T022 [US1] Minimal generation dialog in `apps/desktop`: pick profile (default), show resolved capability + kind, copy opt-in, submit → plan review surface. Depends on T021.
+- [x] T014 [US1] Add the generation-plan builder — actually in `crates/app/projects/src/source_view_generate.rs` (mirrors spec 026's `prepared_views::regenerate_prepared_view`; `crates/fs/planner` is a tiny pure-domain crate with no DB access and isn't where plan builders live): enumerate selected lights (session-level for MVP; per-frame in US-shared T031), resolve destination-relative paths (flat WBPP-ish default for MVP; full profile layout in US2), classify drive-scope (T007), pick recorded kind (T009), emit `mkdir`+`link` (or opt-in `copy`) actions. Depends on T005, T009.
+- [x] T015 [US1] Collision guard: detect two sources → same destination path and refuse with `destination.collision` pointing at the pattern (FR-009a/FR-017); never suffix. Unit + integration test. Depends on T014.
+- [x] T016 [US1] Destination-exists guard: refuse `destination.exists` when a destination path is an existing user-owned file/folder (FR-016); never overwrite. Depends on T014.
+- [x] T017 [US1] Resolve default destination `<project>/source-views/<view>/` via `crates/project/structure` (spec 024 envelope). Depends on T014.
+- [x] T018 [US1] Add `GenerateSourceView` use case in `crates/app/core` (`source_view_generate.rs`): validate project lifecycle (spec 026 FR-012 → `lifecycle.read_only`), consume selection + matches, invoke builder, return `planId` + warnings. Depends on T014, T017.
+- [x] T019 [US1] First-materialization write `finalize_view_generation` in `crates/app/core/src/plan_apply.rs`: on successful apply of a `prepared_view_generation` plan, create `PreparedSourceView` (state `current`) + items with recorded `materialization`; wired into the apply-success hook. Depends on T018.
+- [x] T020 [US1] Per-item audit: confirmed the spec 017/025 executor already emits attempted-action/outcome events origin-agnostically (FR-007) — no new routing code needed for the new origin. Depends on T005.
+- [x] T021 [P] [US1] Contract DTOs in `crates/contracts/core/src/source_view_generate.rs` + generated TS in `packages/contracts`/`apps/desktop/src/bindings` for `sourceview.generate`; registered Tauri command `sourceview_generate` → `sourceview.generate` (invoke target unchanged — project memory). Depends on T018.
+- [x] T022 [US1] Minimal generation dialog `apps/desktop/src/features/projects/GenerateSourceViewDialog.tsx`: pick profile (default), show resolved capability + kind, copy opt-in, submit → plan review surface, wired into `SourceViewsSection.tsx`. Depends on T021.
+
+**Implementation note**: while restoring real materialization for `link` actions, discovered `plan_items.action = "link"` was mapped to a no-op in the executor (spec 026 never materialized real links either). Added real link/hardlink/copy materialization (`crates/fs/executor/src/ops/link_op.rs`) — in scope because US1's acceptance criteria require real links on disk, not simulated ones.
+
+**Deferred (explicitly out of US1 scope, tracked for US2/US4/cross-cutting)**: masters-vs-raw calibration selection (T027), junction materialization (capability probe never advertises it so it's unreachable in practice), settings section registry id (T002/T030).
 
 **Checkpoint**: US1 fully functional — generate → review → apply → recorded view, links only.
 

@@ -46,6 +46,7 @@ pub use lifecycle::{
 };
 pub use projects::{
     prepared_views, project_health, project_manifests, project_notes, project_setup,
+    source_view_generate,
 };
 pub use targets::{
     ingest_resolution, ingest_sessions, resolver_settings, target_dto, target_management,

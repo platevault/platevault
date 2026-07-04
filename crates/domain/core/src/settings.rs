@@ -143,6 +143,18 @@ pub struct SettingsState {
     /// Hours after a tool launch during which output files are attributed to
     /// that session (spec 018 T043). Default: 6.0 hours.
     pub tool_attribution_window_hours: f64,
+
+    // ── Source Views (spec 049) ──────────────────────────────────────────
+    /// Default link kind when a source and the generated view destination
+    /// share a volume: `"hardlink"` | `"symlink"` | `"junction"` (spec 049
+    /// FR-004). Resolved deterministically per drive-scope at plan time.
+    pub source_view_link_kind_intra_drive: String,
+
+    /// Default link kind when a source and the generated view destination
+    /// are on different volumes: `"symlink"` | `"junction"` (spec 049
+    /// FR-004a — `"hardlink"` is never a valid cross-drive value because
+    /// hardlinks cannot cross volumes).
+    pub source_view_link_kind_cross_drive: String,
 }
 
 impl Default for SettingsState {
@@ -188,6 +200,8 @@ impl Default for SettingsState {
                 ".avi".to_owned(),
             ],
             tool_attribution_window_hours: 6.0,
+            source_view_link_kind_intra_drive: "hardlink".to_owned(),
+            source_view_link_kind_cross_drive: "symlink".to_owned(),
         }
     }
 }

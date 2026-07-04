@@ -178,8 +178,10 @@ version = "0.1.0"
 dependencies = [
  "app_core_errors",
  "audit",
+ "camino",
  "contracts_core",
  "domain_core",
+ "fs_inventory",
  "moka",
  "persistence_db",
  "project_structure",
@@ -1757,6 +1759,7 @@ name = "fs_inventory"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "domain_core",
  "notify",
  "serde",
  "serde_json",

@@ -457,6 +457,16 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.tool_attribution_window_hours = v;
             }
         }
+        "sourceViewLinkKindIntraDrive" => {
+            if let Some(v) = value.as_str() {
+                state.source_view_link_kind_intra_drive = v.to_owned();
+            }
+        }
+        "sourceViewLinkKindCrossDrive" => {
+            if let Some(v) = value.as_str() {
+                state.source_view_link_kind_cross_drive = v.to_owned();
+            }
+        }
         _ => {
             // Structured-path keys are not mapped to static SettingsState fields.
             // Use resolve_setting(key, source_id) to read them individually.
@@ -516,6 +526,8 @@ fn default_value_for_key(key: &str) -> Value {
         "toolAttributionWindowHours" => {
             serde_json::json!(defaults.tool_attribution_window_hours)
         }
+        "sourceViewLinkKindIntraDrive" => Value::String(defaults.source_view_link_kind_intra_drive),
+        "sourceViewLinkKindCrossDrive" => Value::String(defaults.source_view_link_kind_cross_drive),
         // Structured-path: tools.<id>.bundle_id resolves the seed default
         // when no user override is stored (spec 018 T042).
         _ if is_tools_bundle_id_key(key) => {

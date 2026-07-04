@@ -221,6 +221,18 @@ pub enum ErrorCode {
     #[serde(rename = "view.unsupported_kind")]
     ViewUnsupportedKind,
 
+    // ── Source view generation (spec 049) ───────────────────────────────────
+    #[serde(rename = "no_selection")]
+    NoSelection,
+    #[serde(rename = "no_link_kind")]
+    NoLinkKind,
+    #[serde(rename = "destination.collision")]
+    DestinationCollision,
+    #[serde(rename = "destination.exists")]
+    DestinationExists,
+    #[serde(rename = "profile.not_found")]
+    ProfileNotFound,
+
     // ── Canonical target ─────────────────────────────────────────────────────
     #[serde(rename = "canonical_target.not_found")]
     CanonicalTargetNotFound,

@@ -9,6 +9,7 @@ pub mod json_any;
 pub mod lifecycle;
 pub mod project;
 pub mod settings;
+pub mod source_view;
 
 pub use actor::Actor;
 pub use ids::{AuditId, ContentHash, EntityId, Timestamp};

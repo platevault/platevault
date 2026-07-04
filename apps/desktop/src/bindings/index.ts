@@ -1528,6 +1528,28 @@ export const commands = {
 	 */
 	preparedviewRegenerate: (viewId: string) => typedError<PreparedViewRegenerateResponse, ContractError_Serialize>(__TAURI_INVOKE("preparedview_regenerate", { viewId })),
 	/**
+	 *  `sourceview.generate` — create a `prepared_view_generation` plan
+	 *  first-materializing a project's selected light frames plus their matched
+	 *  calibration as per-item link (or, with explicit opt-in, copy) actions.
+	 * 
+	 *  The response `planId` should be routed through `plans.approve` then
+	 *  `plan.apply`, exactly like `preparedview.regenerate`. Nothing is written to
+	 *  disk before apply (FR-001). On successful apply, the `PreparedSourceView`
+	 *  (state `current`) is written by the apply-success hook
+	 *  (`app_core::plan_apply::finalize_view_generation`).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with codes:
+	 *  - `project.not_found`      — project does not exist.
+	 *  - `lifecycle.read_only`    — owning project is `archived`.
+	 *  - `no_selection`           — no selected light frame resolved.
+	 *  - `no_link_kind`           — no achievable link kind and `copyOptIn` is false.
+	 *  - `destination.collision`  — two sources resolve to the same destination path.
+	 *  - `destination.exists`     — a destination path already exists on disk.
+	 */
+	sourceviewGenerate: (req: SourceViewGenerateRequest) => typedError<SourceViewGenerateResponse, ContractError_Serialize>(__TAURI_INVOKE("sourceview_generate", { req })),
+	/**
 	 *  `dev.contracts.list` — list all registered contracts (spec 021 US1).
 	 * 
 	 *  Returns `dev_mode.disabled` when the runtime `devMode` setting is off.
@@ -2731,7 +2753,7 @@ export type Equipment = {
  */
 export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
 /**  Plan approval is outstanding (sent as `ContractError`, not `TransitionError`). */
-"plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
+"plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
 /**  Used in `ContractError` tests in lib.rs; also may appear via plan-apply. */
 "filesystem.destination_exists" | 
 /**
@@ -2941,6 +2963,31 @@ export type GeneratedViewRefDto = {
 	id: string,
 	path: string,
 };
+
+/**
+ *  Non-blocking review warning surfaced with a generation plan (FR-010a,
+ *  FR-019, FR-004b, FR-018).
+ */
+export type GenerationWarning = {
+	code: GenerationWarningCode,
+	message: string,
+	/**  Affected source references / group identifiers. */
+	items?: string[],
+};
+
+/**  Warning codes for `sourceview.generate` (contract `$defs/Warning.code`). */
+export type GenerationWarningCode = 
+/**  Light view generated without matched calibration; unmatched groups listed (FR-010a). */
+"no_calibration_applied" | 
+/**  A source is missing/unresolved and was skipped/flagged (FR-019). */
+"unresolved_source" | 
+/**
+ *  A saved link kind was not achievable for a drive-scope; a documented
+ *  fallback was applied (FR-004b).
+ */
+"capability_drift" | 
+/**  A destination path exceeds the Windows 260-char limit (FR-018). */
+"long_path";
 
 /**  Response from `guided.dismiss`. */
 export type GuidedDismissResponse = {
@@ -5339,7 +5386,9 @@ export type PlanOrigin = "inbox" | "restructure" | "cleanup" | "archive" | "proj
 /**  Spec 026 — generated source view removal plan. */
 "prepared_view_removal" | 
 /**  Spec 026 — generated source view regeneration plan. */
-"prepared_view_regeneration";
+"prepared_view_regeneration" | 
+/**  Spec 049 — generated source view first-materialization (generation) plan. */
+"prepared_view_generation";
 
 /**  Response DTO for `plan.protection.check`. */
 export type PlanProtectionCheckResponse = PlanProtectionCheckResponse_Serialize | PlanProtectionCheckResponse_Deserialize;
@@ -5464,7 +5513,9 @@ export type PlanType = "split" | "restructure" | "cleanup" | "archive" | "source
 /**  Spec 026 — removes generated source view links/copies. */
 "source_view_removal" | 
 /**  Spec 026 — re-creates previously removed source view. */
-"source_view_regeneration";
+"source_view_regeneration" | 
+/**  Spec 049 — first-materializes a project source view. */
+"source_view_generation";
 
 export type PreparedSourceState = "not_created" | "planned" | "ready" | "stale" | "retired";
 
@@ -6952,6 +7003,43 @@ export type SourceRole = "light" | "dark" | "flat" | "bias";
  *  Canonical definition for this spec. Re-exported from `projects.rs`.
  */
 export type SourceSelection = "selected" | "candidate";
+
+/**
+ *  Request: create a `prepared_view_generation` plan first-materializing a
+ *  project's selected lights + matched calibration as link actions.
+ */
+export type SourceViewGenerateRequest = {
+	projectId: string,
+	/**
+	 *  Workflow/processing profile selecting the tree layout (spec 011).
+	 *  Defaults to the project's active profile (WBPP first).
+	 */
+	profileId?: string | null,
+	/**  Optional per-generation destination path override (FR-021b). */
+	destinationOverride?: string | null,
+	/**
+	 *  Explicit opt-in to copy materialization when no link kind is
+	 *  achievable. Default `false` — the app never silently copies (FR-003).
+	 */
+	copyOptIn?: boolean,
+	/**
+	 *  When `true`, any missing/unresolved source fails the whole plan; when
+	 *  `false` (default), unresolved sources are skipped and flagged (FR-019).
+	 */
+	strict?: boolean,
+};
+
+/**  Success response for `sourceview.generate`. */
+export type SourceViewGenerateResponse = {
+	/**
+	 *  The id of the produced generation plan (`FilesystemPlan` with origin
+	 *  `prepared_view_generation`, plan type `source_view_generation`). Enters
+	 *  the standard spec 017/025 pipeline: approve, then apply.
+	 */
+	planId: string,
+	/**  Non-blocking review warnings surfaced with the plan. */
+	warnings?: GenerationWarning[],
+};
 
 export type StatusSummary = {
 	inboxCount: number,

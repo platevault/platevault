@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 camino = { workspace = true }
+domain_core = { path = "../../domain/core" }
 notify = "7"
 serde = { workspace = true }
 serde_json.workspace = true
