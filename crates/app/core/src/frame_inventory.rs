@@ -495,8 +495,8 @@ mod tests {
     async fn insert_acquisition_session(pool: &SqlitePool, id: &str, frame_ids: &[&str]) {
         let frame_ids_json = serde_json::to_string(frame_ids).unwrap();
         sqlx::query(
-            "INSERT INTO acquisition_session (id, session_key, frame_ids, state, created_at)
-             VALUES (?, '{}', ?, 'confirmed', datetime('now'))",
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at)
+             VALUES (?, '{}', ?, datetime('now'))",
         )
         .bind(id)
         .bind(frame_ids_json)
