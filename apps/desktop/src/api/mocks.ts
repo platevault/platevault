@@ -188,10 +188,10 @@ const mockCalibrationTolerances: CalibrationTolerances = {
   requireSameOffset: true,
 };
 
-const mockRoots: LibraryRoot[] = [
-  { id: 'root-001', path: '/astro/raw', category: 'raw', online: true, fileCount: 1247, lastScanned: '2026-05-19T23:30:00Z' },
-  { id: 'root-002', path: '/astro/calibration', category: 'calibration', online: true, fileCount: 342, lastScanned: '2026-05-19T23:30:00Z' },
-  { id: 'root-003', path: '/astro/projects', category: 'project', online: true, fileCount: 856, lastScanned: '2026-05-18T20:00:00Z' },
+let mockRoots: LibraryRoot[] = [
+  { id: 'root-001', path: '/astro/raw', category: 'raw', online: true, fileCount: 1247, lastScanned: '2026-05-19T23:30:00Z', active: true },
+  { id: 'root-002', path: '/astro/calibration', category: 'calibration', online: true, fileCount: 342, lastScanned: '2026-05-19T23:30:00Z', active: true },
+  { id: 'root-003', path: '/astro/projects', category: 'project', online: true, fileCount: 856, lastScanned: '2026-05-18T20:00:00Z', active: true },
 ];
 
 const mockEquipment: Equipment[] = [
@@ -808,6 +808,30 @@ export async function mockInvoke(
       } satisfies RemapVerification;
     }
     case 'roots_remap_apply': {
+      return null;
+    }
+    case 'sources_set_active': {
+      // Generated `sourcesSetActive` binding invokes with `{ rootId, active }`
+      // (camelCase) — mirror the real backend's `registered_sources.active`
+      // toggle so mock mode's Disable/Enable buttons behave persistently.
+      const rootId = (_args?.rootId as string) ?? '';
+      const active = (_args?.active as boolean) ?? true;
+      mockRoots = mockRoots.map((r) => (r.id === rootId ? { ...r, active } : r));
+      return null;
+    }
+    case 'roots_delete': {
+      // Mirrors the real backend's decision D8 block: `root-001` carries mock
+      // "dependents" (it has file_count/lastScanned in the demo fixture) so
+      // mock mode can also exercise the has_dependents error path — every
+      // other seed root deletes cleanly.
+      const rootId = (_args?.rootId as string) ?? '';
+      if (rootId === 'root-001') {
+        return mockContractError(
+          'root.has_dependents',
+          `root ${rootId} has dependent records and cannot be deleted`,
+        );
+      }
+      mockRoots = mockRoots.filter((r) => r.id !== rootId);
       return null;
     }
     case 'scan_start': {

@@ -241,6 +241,13 @@ pub enum ErrorCode {
     #[serde(rename = "source.invalid_organization_state")]
     SourceInvalidOrganizationState,
 
+    // ── Root ─────────────────────────────────────────────────────────────────
+    /// Returned by `roots.delete` (P6b, decision D8) when dependent records
+    /// (inbox items, plan items, file records, sessions) still reference the
+    /// root; deletion is blocked rather than cascade-nullified.
+    #[serde(rename = "root.has_dependents")]
+    RootHasDependents,
+
     // ── Tool ────────────────────────────────────────────────────────────────
     #[serde(rename = "tool.locked")]
     ToolLocked,
