@@ -17,8 +17,9 @@
 
 use audit::bus::EventBus;
 use audit::event_bus::{
-    SettingsChanged, SettingsRepair, SettingsSnapshot, Source, TOPIC_SETTINGS_CHANGED,
-    TOPIC_SETTINGS_REPAIR, TOPIC_SETTINGS_SNAPSHOT,
+    ProtectionDefaultChanged, SettingsChanged, SettingsRepair, SettingsSnapshot, Source,
+    TOPIC_PROTECTION_DEFAULT_CHANGED, TOPIC_SETTINGS_CHANGED, TOPIC_SETTINGS_REPAIR,
+    TOPIC_SETTINGS_SNAPSHOT,
 };
 use contracts_core::settings::{
     RestoreDefaultsRequest, RestoreDefaultsResponse, RestoreDefaultsStatus,
@@ -27,8 +28,38 @@ use contracts_core::settings::{
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use persistence_db::repositories::settings as repo;
+use persistence_db::repositories::source_protection as protection_repo;
 use serde_json::Value;
 use sqlx::SqlitePool;
+
+// ── Global protection-default keys (spec 016 T-003/T-004/T-005) ─────────────
+//
+// `defaultProtection`, `blockPermanentDelete`, and `protectedCategories` are
+// stable v1 settings keys (see `descriptors::DESCRIPTORS`) but their durable
+// storage is the dedicated `protection_defaults` table (migration 0035)
+// scoped to `"global"`, NOT the generic `settings` table `repo` (aliased
+// above) writes to. `app_core::protection::load_global_protection` — the
+// function the protection resolver and `plan.protection.check` actually
+// read from — prefers `protection_defaults` unconditionally (it is always
+// seeded by migration 0035), so writes that only reach the generic
+// `settings` table are invisible to the resolver. Routing these three keys'
+// global read/write through `protection_repo` here keeps `settings.get`,
+// `settings.update`, and `settings.restore-defaults` in sync with the value
+// the resolver actually uses, and lets their audit trail use the dedicated
+// `protection.default.changed` topic instead of (or in addition to) the
+// generic `settings.changed` topic — including for `protectedCategories`,
+// which is marked `noisy` for the generic no-op-audit policy but is an
+// explicit exception per plan.md E-016-3.
+const GLOBAL_PROTECTION_DEFAULT_SCOPE: &str = "global";
+const GLOBAL_PROTECTION_DEFAULT_KEYS: [&str; 3] =
+    ["defaultProtection", "blockPermanentDelete", "protectedCategories"];
+
+/// Whether `key` is one of the three global protection-default keys backed by
+/// the `protection_defaults` table rather than the generic `settings` table.
+#[must_use]
+pub fn is_global_protection_default_key(key: &str) -> bool {
+    GLOBAL_PROTECTION_DEFAULT_KEYS.contains(&key)
+}
 
 // ── Settings descriptor table (US11 T144) ────────────────────────────────
 //
@@ -545,8 +576,17 @@ pub async fn update_setting(
     let new_value = &req.value.0;
     validate_value(key, new_value)?;
 
-    // 3. Load current stored value (or default).
-    let prior_raw = repo::get_raw(pool, key).await.map_err(db_err)?;
+    let is_protection_default = is_global_protection_default_key(key);
+
+    // 3. Load current stored value (or default). Global protection-default
+    // keys read/write the dedicated `protection_defaults` table (T-005).
+    let prior_raw = if is_protection_default {
+        protection_repo::get_protection_default(pool, GLOBAL_PROTECTION_DEFAULT_SCOPE, key)
+            .await
+            .map_err(db_err)?
+    } else {
+        repo::get_raw(pool, key).await.map_err(db_err)?
+    };
     let prior_value = prior_raw.clone().unwrap_or_else(|| default_value_for_key(key));
 
     // 4. No-op guard.
@@ -561,11 +601,44 @@ pub async fn update_setting(
     }
 
     // 5. Persist.
-    repo::set_raw(pool, key, new_value).await.map_err(db_err)?;
+    if is_protection_default {
+        protection_repo::set_protection_default(
+            pool,
+            GLOBAL_PROTECTION_DEFAULT_SCOPE,
+            key,
+            new_value,
+        )
+        .await
+        .map_err(db_err)?;
+    } else {
+        repo::set_raw(pool, key, new_value).await.map_err(db_err)?;
+    }
 
-    // 6. Emit audit event for non-noisy keys.
+    // 6. Emit audit event. Global protection-default keys ALWAYS emit
+    // `protection.default.changed` (T-004), overriding the noisy-key
+    // no-audit policy — `protectedCategories` is `noisy` for the generic
+    // `settings.changed` topic but is a named exception here (spec 016
+    // plan.md E-016-3: "MUST emit `protection.default.changed` whenever it is
+    // updated").
     let is_noisy = descriptors::is_noisy(key.as_str());
-    let audit_id = if is_noisy {
+    let audit_id = if is_protection_default {
+        let at = Timestamp::now_iso();
+        let evt_id = uuid::Uuid::new_v4().to_string();
+        bus.publish(
+            TOPIC_PROTECTION_DEFAULT_CHANGED,
+            Source::User,
+            ProtectionDefaultChanged {
+                scope: GLOBAL_PROTECTION_DEFAULT_SCOPE.to_owned(),
+                key: key.clone(),
+                old: Some(prior_value.clone()),
+                new: new_value.clone(),
+                changed_at: at,
+            },
+        )
+        .await
+        .map_err(bus_err)?;
+        Some(evt_id)
+    } else if is_noisy {
         None
     } else {
         let at = Timestamp::now_iso();
@@ -636,7 +709,14 @@ pub async fn restore_defaults(
 
     for key in &keys_to_restore {
         let default_val = default_value_for_key(key);
-        let current_raw = repo::get_raw(pool, key).await.map_err(db_err)?;
+        let is_protection_default = is_global_protection_default_key(key);
+        let current_raw = if is_protection_default {
+            protection_repo::get_protection_default(pool, GLOBAL_PROTECTION_DEFAULT_SCOPE, key)
+                .await
+                .map_err(db_err)?
+        } else {
+            repo::get_raw(pool, key).await.map_err(db_err)?
+        };
         let current_val = current_raw.unwrap_or_else(|| default_val.clone());
 
         if settings_value_eq(&current_val, &default_val) {
@@ -645,22 +725,51 @@ pub async fn restore_defaults(
         }
 
         // Write the default value.
-        repo::set_raw(pool, key, &default_val).await.map_err(db_err)?;
+        if is_protection_default {
+            protection_repo::set_protection_default(
+                pool,
+                GLOBAL_PROTECTION_DEFAULT_SCOPE,
+                key,
+                &default_val,
+            )
+            .await
+            .map_err(db_err)?;
+        } else {
+            repo::set_raw(pool, key, &default_val).await.map_err(db_err)?;
+        }
 
         // Emit audit event (even for noisy keys — restore is an explicit action).
+        // Global protection-default keys emit `protection.default.changed`
+        // (T-004) instead of the generic `settings.changed` topic.
         let at = Timestamp::now_iso();
-        bus.publish(
-            TOPIC_SETTINGS_CHANGED,
-            Source::User,
-            SettingsChanged {
-                key: key.clone(),
-                prior_value: current_val,
-                new_value: default_val,
-                at,
-            },
-        )
-        .await
-        .map_err(bus_err)?;
+        if is_protection_default {
+            bus.publish(
+                TOPIC_PROTECTION_DEFAULT_CHANGED,
+                Source::User,
+                ProtectionDefaultChanged {
+                    scope: GLOBAL_PROTECTION_DEFAULT_SCOPE.to_owned(),
+                    key: key.clone(),
+                    old: Some(current_val),
+                    new: default_val,
+                    changed_at: at,
+                },
+            )
+            .await
+            .map_err(bus_err)?;
+        } else {
+            bus.publish(
+                TOPIC_SETTINGS_CHANGED,
+                Source::User,
+                SettingsChanged {
+                    key: key.clone(),
+                    prior_value: current_val,
+                    new_value: default_val,
+                    at,
+                },
+            )
+            .await
+            .map_err(bus_err)?;
+        }
 
         restored.push(key.clone());
     }
@@ -736,8 +845,18 @@ pub async fn resolve_setting(
         }
     }
 
-    // 2. Global setting.
-    if let Some(v) = repo::get_raw(pool, key).await.map_err(db_err)? {
+    // 2. Global setting. Global protection-default keys are resolved from the
+    // dedicated `protection_defaults` table (spec 016 T-005) so this read path
+    // never disagrees with `app_core::protection::load_global_protection`.
+    if is_global_protection_default_key(key) {
+        if let Some(v) =
+            protection_repo::get_protection_default(pool, GLOBAL_PROTECTION_DEFAULT_SCOPE, key)
+                .await
+                .map_err(db_err)?
+        {
+            return Ok(v);
+        }
+    } else if let Some(v) = repo::get_raw(pool, key).await.map_err(db_err)? {
         return Ok(v);
     }
 

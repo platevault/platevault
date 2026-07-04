@@ -168,14 +168,19 @@ pub async fn archive_permanently_delete(
     confirm_text: String,
 ) -> Result<ArchivePermanentlyDeleteResponse, ContractError> {
     // Read blockPermanentDelete from settings (spec 016 protection gate).
-    // We load the setting directly from the settings store rather than caching in AppState.
+    // We load the setting directly from the settings store rather than caching
+    // in AppState. Resolved via `app_core::settings::resolve_setting` (not the
+    // raw `persistence_db::repositories::settings` table) because
+    // `blockPermanentDelete` is a global-protection-default key backed by the
+    // dedicated `protection_defaults` table (spec 016 T-003/T-005) — reading
+    // the legacy generic settings table directly would silently ignore every
+    // value the user actually saved via the Cleanup settings pane.
     let pool = state.repo.pool();
-    let block: bool = persistence_db::repositories::settings::get_raw(pool, "blockPermanentDelete")
+    let block: bool = app_core::settings::resolve_setting(pool, "blockPermanentDelete", None)
         .await
         .ok()
-        .flatten()
         .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .unwrap_or(true);
 
     permanently_delete_archive(pool, &state.bus, &plan_id, &confirm_text, block).await
 }
