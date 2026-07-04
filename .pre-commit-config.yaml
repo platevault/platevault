@@ -1,4 +1,7 @@
-exclude: '^(\.specify/|specs/|\.claude/|\.agents/|\.codex/|\.mcp\.json)'
+# apps/desktop/src/bindings/ is generated (tauri-specta); its doc comments
+# carry trailing whitespace, so whitespace/EOF fixers would corrupt it and
+# break the `just check-generated` drift gate.
+exclude: '^(\.specify/|specs/|\.claude/|\.agents/|\.codex/|\.mcp\.json|apps/desktop/src/bindings/)'
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
