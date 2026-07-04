@@ -1,14 +1,15 @@
 /**
  * PlannerSettings — Settings → Target Planner pane (spec 044).
  *
- * Currently contains one control: the usable-altitude threshold that drives
- * imaging-time and visible-tonight in the Planner table. The value is persisted
- * in localStorage via `altitude-settings.ts` so changes take effect immediately
- * without a backend round-trip.
+ * Two sections: observing-site management (US3 — add/edit/delete named
+ * sites, pick default/active) and the usable-altitude threshold that drives
+ * imaging-time and visible-tonight in the Planner table. Both are persisted
+ * through the settings-backed `observing.*` store (`site-store.ts` /
+ * `altitude-settings.ts`), so changes are durable across relaunch
+ * (SC-005/SC-006) while still applying instantly in the live UI (SC-003).
  *
- * All values in the Planner table that depend on this threshold are MOCK
- * (spec 044 §3, NOT astronomy). The threshold itself is real user preference
- * that will be threaded into the real ephemeris computation when #57/#58 land.
+ * Every value the Planner table/detail pane computes from these settings is
+ * real astronomy-engine output (spec 044 US1), not mock data.
  */
 
 import { useState } from 'react';
@@ -21,6 +22,7 @@ import {
   ALTITUDE_THRESHOLD_MAX,
 } from '@/features/targets/altitude-settings';
 import { USABLE_ALT_DEG } from '@/features/targets/planner-altitude';
+import { ObservingSites } from '@/features/targets/observing-sites/ObservingSites';
 
 export function PlannerSettings() {
   const stored = useAltitudeThreshold();
@@ -41,27 +43,30 @@ export function PlannerSettings() {
   }
 
   return (
-    <SettingsSection title={m.settings_planner_altitude_title()}>
-      <SettingsRow
-        label={m.settings_planner_altitude_label()}
-        info={m.settings_planner_altitude_info({ deg: USABLE_ALT_DEG })}
-      >
-        <input
-          type="number"
-          className="alm-input alm-input--sm alm-settings__num-input"
-          value={draft}
-          min={ALTITUDE_THRESHOLD_MIN}
-          max={ALTITUDE_THRESHOLD_MAX}
-          step={1}
-          aria-label={m.settings_planner_altitude_aria()}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={(e) => commit(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
-          }}
-        />
-        <span className="alm-settings__unit-label">{m.settings_planner_altitude_unit()}</span>
-      </SettingsRow>
-    </SettingsSection>
+    <>
+      <ObservingSites />
+      <SettingsSection title={m.settings_planner_altitude_title()}>
+        <SettingsRow
+          label={m.settings_planner_altitude_label()}
+          info={m.settings_planner_altitude_info({ deg: USABLE_ALT_DEG })}
+        >
+          <input
+            type="number"
+            className="alm-input alm-input--sm alm-settings__num-input"
+            value={draft}
+            min={ALTITUDE_THRESHOLD_MIN}
+            max={ALTITUDE_THRESHOLD_MAX}
+            step={1}
+            aria-label={m.settings_planner_altitude_aria()}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={(e) => commit(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
+            }}
+          />
+          <span className="alm-settings__unit-label">{m.settings_planner_altitude_unit()}</span>
+        </SettingsRow>
+      </SettingsSection>
+    </>
   );
 }

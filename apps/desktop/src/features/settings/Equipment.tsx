@@ -20,7 +20,7 @@
  *    gets an actionable message instead of a raw database error; the backend
  *    constraint remains the source of truth for correctness.
  */
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Btn, Table, Pill } from '@/ui';
 import type { TableRow } from '@/ui';
 import { ConfirmOverlay } from '@/components';
@@ -49,7 +49,7 @@ import {
   type Filter,
   type FilterCategory,
 } from './settingsIpc';
-import { SettingsSection } from './SettingsKit';
+import { SettingsSection, SettingsFormShell } from './SettingsKit';
 
 interface EquipmentProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -118,40 +118,10 @@ function autoDetectedBadge(autoDetected: boolean) {
   );
 }
 
-// ── Shared add/edit form shell ────────────────────────────────────────────────
-
-interface EquipmentFormShellProps {
-  /** Form-level error (wrapped save-error frame or validation message). */
-  error: string | null;
-  /** Disables the actions and switches the save label while a call is in flight. */
-  saving: boolean;
-  onCancel: () => void;
-  onSave: () => void | Promise<void>;
-  /** The entity-specific field controls (each wrapped in `.alm-stack-1`). */
-  children: ReactNode;
-}
-
-/**
- * The one parameterised form frame all four equipment sections share: field
- * grid + error line + cancel/save actions. Only the fields differ per entity
- * type (shared-component mandate — no per-section clones).
- */
-function EquipmentFormShell({ error, saving, onCancel, onSave, children }: EquipmentFormShellProps) {
-  return (
-    <div className="alm-equipment__form">
-      <div className="alm-equipment__form-grid">{children}</div>
-      {error && <span className="alm-field-error">{error}</span>}
-      <div className="alm-equipment__form-actions">
-        <Btn size="sm" variant="ghost" onClick={onCancel} disabled={saving}>
-          {m.common_cancel()}
-        </Btn>
-        <Btn size="sm" onClick={() => void onSave()} disabled={saving}>
-          {saving ? m.common_saving() : m.common_save()}
-        </Btn>
-      </div>
-    </div>
-  );
-}
+// The add/edit form shell (field grid + error line + cancel/save actions) now
+// lives in `SettingsKit.tsx` as `SettingsFormShell`, shared with other panes'
+// CRUD lists (e.g. observing-site management, spec 044 US3) — no per-pane
+// clone (shared-component mandate).
 
 export function Equipment({ save: _save }: EquipmentProps) {
   // ── Cameras ────────────────────────────────────────────────────────────────
@@ -522,7 +492,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
         )}
 
         {trainForm && (
-          <EquipmentFormShell
+          <SettingsFormShell
             error={trainFormError}
             saving={trainSaving}
             onCancel={() => setTrainForm(null)}
@@ -591,7 +561,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 onChange={(e) => setTrainForm({ ...trainForm, focalLengthMmText: e.target.value })}
               />
             </div>
-          </EquipmentFormShell>
+          </SettingsFormShell>
         )}
       </SettingsSection>
 
@@ -653,7 +623,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
         )}
 
         {cameraForm && (
-          <EquipmentFormShell
+          <SettingsFormShell
             error={cameraFormError}
             saving={cameraSaving}
             onCancel={() => setCameraForm(null)}
@@ -686,7 +656,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 onChange={(e) => setCameraForm({ ...cameraForm, aliasesText: e.target.value })}
               />
             </div>
-          </EquipmentFormShell>
+          </SettingsFormShell>
         )}
       </SettingsSection>
 
@@ -764,7 +734,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
         )}
 
         {telescopeForm && (
-          <EquipmentFormShell
+          <SettingsFormShell
             error={telescopeFormError}
             saving={telescopeSaving}
             onCancel={() => setTelescopeForm(null)}
@@ -813,7 +783,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 }
               />
             </div>
-          </EquipmentFormShell>
+          </SettingsFormShell>
         )}
       </SettingsSection>
 
@@ -868,7 +838,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
         )}
 
         {filterForm && (
-          <EquipmentFormShell
+          <SettingsFormShell
             error={filterFormError}
             saving={filterSaving}
             onCancel={() => setFilterForm(null)}
@@ -906,7 +876,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 ))}
               </select>
             </div>
-          </EquipmentFormShell>
+          </SettingsFormShell>
         )}
       </SettingsSection>
 

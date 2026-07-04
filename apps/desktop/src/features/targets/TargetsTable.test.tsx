@@ -19,6 +19,18 @@
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TargetListItem } from '@/bindings/index';
+
+// The no-site banner (spec 044 US3) links to Settings via `Link`, which needs
+// a router context this test doesn't provide. Stub it as a plain anchor —
+// consistent with TargetDetailV2.test.tsx's `@tanstack/react-router` mock.
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to, ...rest }: { children?: import('react').ReactNode; to: string }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 import { TargetsTable, DEFAULT_TARGET_SORT } from './TargetsTable';
 import { __setObservingStateForTest } from './observing-sites/site-store';
 import type { ObserverSite } from './observing-sites/observer-site';
