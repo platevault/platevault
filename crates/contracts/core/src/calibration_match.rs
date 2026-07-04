@@ -85,6 +85,20 @@ pub struct CalibrationMatchDto {
     pub dimensions_matched: Vec<MatchedDimDto>,
     pub dimensions_mismatched: Vec<MismatchedDimDto>,
     pub selection_reason: SelectionReason,
+    /// Session context enrichment (spec P9): the light session's resolved
+    /// target, filter, observing night, and frame count. `None` when the
+    /// context cannot be resolved (e.g. no canonical target link, no
+    /// fingerprint row, or the session id is unknown). Populated by
+    /// `app_core_calibration` as a post-processing step — the pure
+    /// `calibration_core` matching engine never touches persistence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acquisition_night: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame_count: Option<u32>,
 }
 
 // ── calibration.match.suggest ─────────────────────────────────────────────────
@@ -330,6 +344,13 @@ pub fn match_to_dto(m: &CalibrationMatch) -> Option<CalibrationMatchDto> {
         dimensions_matched: m.dimensions_matched.iter().map(matched_dim_to_dto).collect(),
         dimensions_mismatched: m.dimensions_mismatched.iter().map(mismatched_dim_to_dto).collect(),
         selection_reason,
+        // Session context is not known to the pure domain match; the caller
+        // (`app_core_calibration`) enriches these fields via a batched DB
+        // lookup after conversion.
+        target_name: None,
+        filter: None,
+        acquisition_night: None,
+        frame_count: None,
     })
 }
 

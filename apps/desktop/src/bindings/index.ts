@@ -1968,6 +1968,18 @@ export type CalibrationMatchDto_Deserialize = {
 	dimensionsMatched: MatchedDimDto_Deserialize[],
 	dimensionsMismatched: MismatchedDimDto_Deserialize[],
 	selectionReason: SelectionReason,
+	/**
+	 *  Session context enrichment (spec P9): the light session's resolved
+	 *  target, filter, observing night, and frame count. `None` when the
+	 *  context cannot be resolved (e.g. no canonical target link, no
+	 *  fingerprint row, or the session id is unknown). Populated by
+	 *  `app_core_calibration` as a post-processing step — the pure
+	 *  `calibration_core` matching engine never touches persistence.
+	 */
+	targetName: string | null,
+	filter: string | null,
+	acquisitionNight: string | null,
+	frameCount: number | null,
 };
 
 /**  A ranked calibration master suggestion. */
@@ -1979,6 +1991,18 @@ export type CalibrationMatchDto_Serialize = {
 	dimensionsMatched: MatchedDimDto_Serialize[],
 	dimensionsMismatched: MismatchedDimDto_Serialize[],
 	selectionReason: SelectionReason,
+	/**
+	 *  Session context enrichment (spec P9): the light session's resolved
+	 *  target, filter, observing night, and frame count. `None` when the
+	 *  context cannot be resolved (e.g. no canonical target link, no
+	 *  fingerprint row, or the session id is unknown). Populated by
+	 *  `app_core_calibration` as a post-processing step — the pure
+	 *  `calibration_core` matching engine never touches persistence.
+	 */
+	targetName?: string | null,
+	filter?: string | null,
+	acquisitionNight?: string | null,
+	frameCount?: number | null,
 };
 
 /**  Request DTO for `calibration.match.suggest`. */

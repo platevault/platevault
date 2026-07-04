@@ -87,14 +87,6 @@
   text-overflow: ellipsis;
 }
 
-/* Placeholder cell for backend-absent columns (Target / Filter / Night /
- * Frames). Faint em-dash so the column reads as "not yet available" rather
- * than empty/broken. De-stub once the suggest contract carries session
- * enrichment. */
-.alm-match-candidates__stub-cell {
-  color: var(--alm-text-faint);
-}
-
 /* === merged from .cssblocks/projects.css (parallel coder, spec-043) === */
 /* === PROJECTS LIST: rich list rows (spec 043 §4 / task #43) ===
  *
