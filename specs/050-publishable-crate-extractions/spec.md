@@ -121,30 +121,53 @@ is generically useful outside this app.
   the input shape the coordinate kit consumes — the two crates are designed to
   compose.
 
-**Catalog supply boundary** (user directive, 2026-07-04):
+**Catalog supply boundary — the three-layer stack** (user directive
+2026-07-04, corrected same day):
 
-- The crate's matching APIs take `&[TargetCoord]` — **catalog supply is
-  explicitly out of scope**. The published crate ships **no seed catalog** and
-  has **no resolver dependency**. Consumers bring their own catalog rows.
-- **Open question (documented with default)**: should the bundled seed catalog
-  (`seed.json`, built by `crates/tools/seed-builder` from SIMBAD/OpenNGC) also
-  be published — either as an optional data feature of `astro-target-id` or as
-  a separate tiny data crate (e.g. `astro-seed-catalog`)? Considerations:
-  - Licensing/attribution of the SIMBAD/OpenNGC-derived data MUST be verified
-    before any publish (CDS/SIMBAD acknowledgment requirements, OpenNGC
-    license).
-  - Dataset staleness/versioning policy — how a published data crate would be
-    refreshed and versioned.
-  - Size of the bundled data.
+The published offering is a **three-layer stack** (user correction 2026-07-04;
+supersedes an earlier recorded default of not publishing the seed):
 
-  **Default**: do NOT publish the seed in v1 — ship `astro-target-id` pure;
-  revisit only if consumers ask.
-- **Dependency direction with `simbad-resolver`** (the Later-tier candidate):
-  `astro-target-id` NEVER depends on `simbad-resolver`. The inverse holds: a
-  future published `simbad-resolver` would COMPLEMENT `astro-target-id` — it
-  populates a local cache whose rows map to `TargetCoord` — and may depend on
-  it for normalization/identity. This direction is recorded explicitly so the
-  extraction never inverts it.
+- **(a) `astro-target-id` — the kernel.** Pure math/identity: normalization,
+  UUIDv5 identity, coordinate matching. No data, no I/O. Its matching APIs
+  take `&[TargetCoord]` — the kernel never acquires a catalog and never
+  resolves over the network.
+- **(b) `astro-seed-catalog` — the data layer.** The bundled seed (`seed.json`,
+  built by `crates/tools/seed-builder` from SIMBAD TAP + OpenNGC: Messier,
+  Caldwell, and an NGC/IC slice, with aliases and coordinates) IS published as
+  a data crate, **gated only on license verification**: SIMBAD/CDS attribution
+  requirements and the OpenNGC license MUST be verified before any publish.
+  If licensing forbids redistribution, the fallback is publishing the
+  seed-**builder** tooling instead, so consumers generate their own seed.
+  - **New work item — seed ingestion API**: today's `seed.json` shape is
+    PlateVault-internal (it's loaded into the app's SQLite cache via
+    `targeting_resolver::seed::load` → `cache::upsert_resolved`, which a pure
+    published crate cannot reuse). Publishing requires a stable, documented
+    format plus a loader API that yields (1) `TargetCoord`-compatible
+    coordinate rows for the matching kit and (2) designation/alias rows for
+    name matching through the normalizer. This is how consumers ingest the
+    catalog into `astro-target-id`.
+  - Also decide staleness/versioning policy (seed-builder rerun cadence,
+    data-crate version bumps) and check bundled-data size.
+- **(c) `simbad-resolver` — the live layer.** Resolve-on-demand against SIMBAD
+  TAP/Sesame plus local-cache population. Stays in the Later tier (blocked on
+  `domain_core` id-kernel work), but it is the stack's third layer, not an
+  unrelated candidate.
+
+**Resolution story** (explicit, so nobody mistakes the kernel for a resolver):
+`astro-target-id` alone does NOT resolve names. Full resolution =
+normalize (kernel) → look up in a catalog (seed or consumer-supplied) → on
+miss, live resolve (`simbad-resolver`) → persist to a local cache. Consumers
+pick layers: kernel-only (bring your own rows), kernel + seed (offline
+resolution of common objects), or all three (full PlateVault-equivalent
+resolution). This mirrors the in-tree reality today: `targeting_resolver`
+supplies rows from seed + SIMBAD + user overrides into the SQLite cache, and
+the app feeds them to `coords::rank_candidates` as `TargetCoord`s.
+
+**Dependency direction** (unchanged, restated): kernel ← seed-catalog ←
+resolver — `astro-target-id` depends on nothing in the stack;
+`astro-seed-catalog` may depend on the kernel's types; `simbad-resolver` may
+depend on both. Never inverted (this is already the in-tree direction:
+`targeting_resolver` depends on `targeting`).
 
 **Effort**: Small — mostly documentation and API-surface polish on
 already-decoupled code.
@@ -172,6 +195,9 @@ contract rather than an internal implementation detail.
 ## Deprioritized / Rejected Candidates (for the record — do not re-propose without new information)
 
 - **`simbad-resolver`** — later; blocked on `domain_core` id-kernel work.
+  Now framed as layer (c) of the `astro-target-id` catalog stack (see
+  Extraction 3), not an unrelated candidate — the Later-tier timing is
+  unchanged.
 - **`observing-night`** — later; also blocked on `domain_core` id-kernel work.
 - **`path-template-resolver`** — niche; revisit on demand, no current
   pull.
