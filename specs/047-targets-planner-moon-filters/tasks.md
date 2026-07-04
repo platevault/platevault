@@ -108,20 +108,20 @@ illumination vs a published almanac on known dates (new/full/quarters).
 **Independent test**: M31/M42 separations vs planetarium reference on known
 dates within ±2°; sort order matches displayed values.
 
-- [ ] T012 [P] [US2] Create `apps/desktop/src/features/targets/astro/lunar-separation.ts`
+- [X] T012 [P] [US2] Create `apps/desktop/src/features/targets/astro/lunar-separation.ts`
       — target J2000 RA/Dec unit vector vs Moon vector, `AngleBetween` →
       0–180° (plan D3) + fixture tests `astro/lunar-separation.test.ts`:
       ≥10 well-known targets × ≥5 spread dates vs planetarium reference
       values, all within ±2° (SC-002); null-coordinate passthrough.
       Depends: T003.
-- [ ] T013 [US2] Wire real separation into
+- [X] T013 [US2] Wire real separation into
       `apps/desktop/src/features/targets/TargetsTable.tsx`: derive
       `RowMoonPlanning` (data-model.md) in the existing row `useMemo` from
       `raDeg`/`decDeg` + shared `ObservingNight`; lunar-distance cell shows
       whole degrees or explicit unknown ("—" + i18n title, never a number);
       remove the row's dependence on `mockLunarDistanceDegFor`. Depends:
       T010, T012.
-- [ ] T014 [US2] Sorting (FR-007): `lunarDist` comparator on real values,
+- [X] T014 [US2] Sorting (FR-007): `lunarDist` comparator on real values,
       asc/desc via existing `SortHeader`, unknowns always last, designation
       tie-break; tests in `TargetsTable.test.tsx` (order, unknown grouping,
       tie determinism). Depends: T013.

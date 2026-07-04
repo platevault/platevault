@@ -20,6 +20,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import type { TargetListItem } from '@/bindings/index';
 import { TargetsTable, DEFAULT_TARGET_SORT } from './TargetsTable';
+import type { ObservingNight } from './astro/moon-state';
 
 function item(primaryDesignation: string, objectType = 'other'): TargetListItem {
   return {
@@ -157,5 +158,95 @@ describe('TargetsTable (#84/#85)', () => {
   it('shows the loading footer while loading', () => {
     renderTable({ loading: true });
     expect(screen.getByText('Loading…')).toBeInTheDocument();
+  });
+});
+
+// ── US2: real lunar distance + sorting (spec 047 T013/T014) ──────────────────
+
+/** Build a controllable observing night with the Moon pointing at RA0/Dec0. */
+function nightWithMoonAtVernalEquinox(): ObservingNight {
+  return {
+    nightKey: '2026-07-05',
+    midnight: new Date('2026-07-05T00:00:00Z'),
+    phaseName: 'full',
+    waxing: false,
+    illuminationFrac: 1,
+    moonAgeFromFullDays: 0,
+    moonVec: { x: 1, y: 0, z: 0 }, // RA 0h, Dec 0°
+  };
+}
+
+/** A target row with explicit coordinates (or null for the unknown case). */
+function coordItem(desig: string, raDeg: number | null, decDeg: number | null): TargetListItem {
+  return {
+    id: desig,
+    effectiveLabel: desig,
+    primaryDesignation: desig,
+    objectType: 'other',
+    raDeg,
+    decDeg,
+    aliases: [],
+  };
+}
+
+describe('TargetsTable — lunar distance (US2)', () => {
+  const night = nightWithMoonAtVernalEquinox();
+  // Sep from Moon@RA0/Dec0: NEAR=0°, MID=90°, FAR=180°, UNK=unknown.
+  const NEAR = coordItem('NEAR', 0, 0);
+  const MID = coordItem('MID', 90, 0);
+  const FAR = coordItem('FAR', 180, 0);
+  const UNK = coordItem('UNK', null, null);
+
+  function renderWithNight(sortDir: 'asc' | 'desc', targets: TargetListItem[]) {
+    render(
+      <TargetsTable
+        targets={targets}
+        selected={null}
+        onSelect={vi.fn()}
+        sort={{ col: 'lunarDist', dir: sortDir }}
+        onSort={vi.fn()}
+        night={night}
+      />,
+    );
+  }
+
+  function rowOrder(): string[] {
+    const table = screen.getByRole('table');
+    return within(table)
+      .getAllByText(/^(NEAR|MID|FAR|UNK)$/)
+      .map((el) => el.textContent as string);
+  }
+
+  it('renders whole-degree separations and "—" for unknown coordinates', () => {
+    renderWithNight('asc', [MID, UNK]);
+    // MID is 90° from the Moon.
+    expect(screen.getByText('90°')).toBeInTheDocument();
+    // UNK shows an explicit dash, never a number.
+    const table = screen.getByRole('table');
+    expect(within(table).getAllByText('—').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('sorts ascending by real separation with unknowns last', () => {
+    renderWithNight('asc', [FAR, UNK, NEAR, MID]);
+    expect(rowOrder()).toEqual(['NEAR', 'MID', 'FAR', 'UNK']);
+  });
+
+  it('sorts descending by real separation, unknowns STILL last', () => {
+    renderWithNight('desc', [FAR, UNK, NEAR, MID]);
+    expect(rowOrder()).toEqual(['FAR', 'MID', 'NEAR', 'UNK']);
+  });
+
+  it('gates off (all "—") when no observing night is provided', () => {
+    render(
+      <TargetsTable
+        targets={[NEAR, MID]}
+        selected={null}
+        onSelect={vi.fn()}
+        sort={DEFAULT_TARGET_SORT}
+        onSort={vi.fn()}
+      />,
+    );
+    // No numeric lunar separations; both rows show the unknown dash.
+    expect(screen.queryByText('90°')).not.toBeInTheDocument();
   });
 });

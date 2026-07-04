@@ -69,6 +69,11 @@ import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
 import { rowAltitudeFor, USABLE_ALT_DEG, type RowAltitude } from './planner-altitude';
 import type { ObservingNight } from './astro/moon-state';
+import {
+  deriveRowMoonPlanning,
+  UNKNOWN_ROW_PLANNING,
+  type RowMoonPlanning,
+} from './astro/row-planning';
 import { AltitudeSparkline } from './AltitudeSparkline';
 import { FilterBadges } from './FilterBadges';
 import { m } from '@/lib/i18n';
@@ -143,8 +148,10 @@ function compareStr(a: string, b: string): number {
 function compareTargetRows(
   a: TargetListItem,
   altA: RowAltitude,
+  moonA: RowMoonPlanning,
   b: TargetListItem,
   altB: RowAltitude,
+  moonB: RowMoonPlanning,
   sort: TargetSort,
 ): number {
   let cmp = 0;
@@ -168,9 +175,18 @@ function compareTargetRows(
       // All values are '—' until backend ephemeris lands; preserve input order.
       cmp = 0;
       break;
-    case 'lunarDist':
-      cmp = altA.lunarDistanceDeg - altB.lunarDistanceDeg;
+    case 'lunarDist': {
+      // Real lunar separation (US2). Unknowns (no coordinates / no site) always
+      // sort AFTER known values regardless of direction, with a deterministic
+      // designation tie-break (FR-007).
+      const sa = moonA.lunarSeparationDeg;
+      const sb = moonB.lunarSeparationDeg;
+      if (sa === null && sb === null) return compareStr(a.effectiveLabel, b.effectiveLabel);
+      if (sa === null) return 1;
+      if (sb === null) return -1;
+      cmp = sa - sb || compareStr(a.effectiveLabel, b.effectiveLabel);
       break;
+    }
     case 'imagingTime':
       cmp = altA.hoursAboveUsable - altB.hoursAboveUsable;
       break;
@@ -184,27 +200,29 @@ function compareTargetRows(
 
 interface TargetGroup {
   label: string;
-  /** Each entry holds the item and its pre-computed altitude row. */
-  rows: Array<{ target: TargetListItem; alt: RowAltitude }>;
+  /** Each entry holds the item, its altitude row, and its moon-planning row. */
+  rows: Array<{ target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning }>;
 }
 
 /**
- * Group targets by the selected key, compute altitude for each, sort within
- * groups, then order groups by their first (sorted) row.
+ * Group targets by the selected key, compute altitude + moon planning for each,
+ * sort within groups, then order groups by their first (sorted) row.
  */
 function groupTargets(
   targets: TargetListItem[],
   sort: TargetSort,
   groupBy: TargetGroupBy,
   usableAltDeg: number,
+  night: ObservingNight | null,
 ): TargetGroup[] {
-  const byKey = new Map<string, Array<{ target: TargetListItem; alt: RowAltitude }>>();
+  const byKey = new Map<string, Array<{ target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning }>>();
   for (const t of targets) {
     const key = groupHeadlineOf(t, groupBy);
     const alt = rowAltitudeFor(t, usableAltDeg);
+    const moon = deriveRowMoonPlanning(t, night);
     const bucket = byKey.get(key);
-    if (bucket) bucket.push({ target: t, alt });
-    else byKey.set(key, [{ target: t, alt }]);
+    if (bucket) bucket.push({ target: t, alt, moon });
+    else byKey.set(key, [{ target: t, alt, moon }]);
   }
 
   const groups: TargetGroup[] = [];
@@ -212,7 +230,7 @@ function groupTargets(
     groups.push({
       label,
       rows: [...rows].sort((ra, rb) =>
-        compareTargetRows(ra.target, ra.alt, rb.target, rb.alt, sort),
+        compareTargetRows(ra.target, ra.alt, ra.moon, rb.target, rb.alt, rb.moon, sort),
       ),
     });
   }
@@ -221,8 +239,10 @@ function groupTargets(
     const cmp = compareTargetRows(
       ga.rows[0].target,
       ga.rows[0].alt,
+      ga.rows[0].moon,
       gb.rows[0].target,
       gb.rows[0].alt,
+      gb.rows[0].moon,
       sort,
     );
     return cmp !== 0 ? cmp : compareStr(ga.label, gb.label);
@@ -238,7 +258,7 @@ function groupTargets(
 
 type FlatRow =
   | { kind: 'group'; key: string; label: string; count: number; path?: string; depth?: number; collapsible?: boolean; collapsed?: boolean }
-  | { kind: 'target'; key: string; target: TargetListItem; alt: RowAltitude; depth?: number };
+  | { kind: 'target'; key: string; target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning; depth?: number };
 
 // ── Multi-level grouping accessors ────────────────────────────────────────────
 
@@ -266,8 +286,8 @@ function flattenGroups(groups: TargetGroup[]): FlatRow[] {
       label: group.label,
       count: group.rows.length,
     });
-    for (const { target, alt } of group.rows) {
-      rows.push({ kind: 'target', key: target.id, target, alt });
+    for (const { target, alt, moon } of group.rows) {
+      rows.push({ kind: 'target', key: target.id, target, alt, moon });
     }
   }
   return rows;
@@ -378,6 +398,7 @@ export function TargetsTable({
   dims,
   emptyMessage = m.targets_table_no_match(),
   usableAltDeg = USABLE_ALT_DEG,
+  night = null,
   favouriteIds,
   onToggleFavourite,
 }: Props) {
@@ -403,14 +424,19 @@ export function TargetsTable({
 
   const flatRows = useMemo(() => {
     if (useMultiGroup) {
-      // Pre-compute altitude for all items (needed for sort + display).
-      const withAlt = targets.map((t) => ({ target: t, alt: rowAltitudeFor(t, usableAltDeg) }));
+      // Pre-compute altitude + moon planning for all items (needed for sort + display).
+      const withAlt = targets.map((t) => ({
+        target: t,
+        alt: rowAltitudeFor(t, usableAltDeg),
+        moon: deriveRowMoonPlanning(t, night),
+      }));
       // Sort the flat list first.
       const sortedWithAlt = [...withAlt].sort((a, b) =>
-        compareTargetRows(a.target, a.alt, b.target, b.alt, sort),
+        compareTargetRows(a.target, a.alt, a.moon, b.target, b.alt, b.moon, sort),
       );
       const sorted = sortedWithAlt.map((r) => r.target);
       const altMap = new Map(sortedWithAlt.map((r) => [r.target.id, r.alt]));
+      const moonMap = new Map(sortedWithAlt.map((r) => [r.target.id, r.moon]));
 
       // Build the group tree using shared engine.
       const tree = groupByDimensions(sorted, dims!, TARGET_ACCESSORS);
@@ -435,24 +461,29 @@ export function TargetsTable({
           key: t.id,
           target: t,
           alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg),
+          moon: moonMap.get(t.id) ?? UNKNOWN_ROW_PLANNING,
           depth: vrow.depth,
         };
       });
     }
     // Single-tier legacy grouping ONLY if a caller explicitly asks for it.
     if (groupBy) {
-      const groups = groupTargets(targets, sort, groupBy, usableAltDeg);
+      const groups = groupTargets(targets, sort, groupBy, usableAltDeg, night);
       return flattenGroups(groups);
     }
     // Default: no grouping selected → FLAT sorted list (no group headers).
-    const withAlt = targets.map((t) => ({ target: t, alt: rowAltitudeFor(t, usableAltDeg) }));
+    const withAlt = targets.map((t) => ({
+      target: t,
+      alt: rowAltitudeFor(t, usableAltDeg),
+      moon: deriveRowMoonPlanning(t, night),
+    }));
     const sortedWithAlt = [...withAlt].sort((a, b) =>
-      compareTargetRows(a.target, a.alt, b.target, b.alt, sort),
+      compareTargetRows(a.target, a.alt, a.moon, b.target, b.alt, b.moon, sort),
     );
     return sortedWithAlt.map(
-      (r): FlatRow => ({ kind: 'target', key: r.target.id, target: r.target, alt: r.alt, depth: 0 }),
+      (r): FlatRow => ({ kind: 'target', key: r.target.id, target: r.target, alt: r.alt, moon: r.moon, depth: 0 }),
     );
-  }, [targets, sort, groupBy, usableAltDeg, useMultiGroup, dims, collapsed]);
+  }, [targets, sort, groupBy, usableAltDeg, night, useMultiGroup, dims, collapsed]);
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -610,6 +641,7 @@ export function TargetsTable({
 
               const t = row.target;
               const alt = row.alt;
+              const moon = row.moon;
               const showAltDesig = t.effectiveLabel !== t.primaryDesignation;
               const isSelected = selected === t.id;
 
@@ -691,14 +723,24 @@ export function TargetsTable({
                   <td className="alm-targets-cell--opposition">
                     <span className="alm-targets-cell--muted" title={m.targets_table_next_opposition()}>—</span>
                   </td>
-                  {/* MOCK (spec 044): lunar angular separation. NOT astronomy. */}
+                  {/* Real lunar angular separation (spec 047 US2). Unknown
+                      coordinates / no site → explicit "—", never a number. */}
                   <td className="alm-targets-cell--num">
-                    <span
-                      className="alm-targets-cell--lunardist"
-                      title={m.targets_table_lunar_dist_title({ deg: Math.round(alt.lunarDistanceDeg) })}
-                    >
-                      {Math.round(alt.lunarDistanceDeg)}°
-                    </span>
+                    {moon.lunarSeparationDeg === null ? (
+                      <span
+                        className="alm-targets-cell--muted"
+                        title={m.targets_lunar_unknown_title()}
+                      >
+                        —
+                      </span>
+                    ) : (
+                      <span
+                        className="alm-targets-cell--lunardist"
+                        title={m.targets_table_lunar_dist_title({ deg: Math.round(moon.lunarSeparationDeg) })}
+                      >
+                        {Math.round(moon.lunarSeparationDeg)}°
+                      </span>
+                    )}
                   </td>
                   {/* MOCK (spec 044): filter recommendation from moon phase + separation. */}
                   <td className="alm-targets-cell--filters">
