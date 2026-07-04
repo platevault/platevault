@@ -392,4 +392,3 @@ describe('T078c: create project end-to-end', () => {
     expect(mockCallCreateProject).not.toHaveBeenCalled();
   });
 });
-

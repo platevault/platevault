@@ -1,7 +1,7 @@
 # 077 — FITS / XISF Header Analysis and Recommended Extraction Fields
 
-**Date:** 2026-06-22  
-**Author:** Analysis agent (read-only pass over /mnt/d/astrophotography)  
+**Date:** 2026-06-22
+**Author:** Analysis agent (read-only pass over /mnt/d/astrophotography)
 **Status:** Complete — implementation follow-up tracked separately
 
 ---
@@ -159,7 +159,7 @@ BAYERPAT=RGGB, BITPIX=16, BSCALE=1, BZERO=32768
 EXTEND=T, NAXIS=2, NAXIS1=3856, NAXIS2=2180, SIMPLE=T
 ```
 
-`IMAGETYP`, `EXPTIME`, `GAIN`, `CCD-TEMP`, `INSTRUME` — all **absent**.  
+`IMAGETYP`, `EXPTIME`, `GAIN`, `CCD-TEMP`, `INSTRUME` — all **absent**.
 Filename pattern: `dark_exp_{exptime}_gain_{gain}_bin_{bin}_{temp}C_stack_{count}.fits`
 
 ### 2.7 Master DARK / XISF — PixInsight WBPP output (DWARF III source)
@@ -192,7 +192,7 @@ PCL:CFASourcePattern = RGGB
 PCL:TotalExposureTime (base64-encoded float64 vector)
 ```
 
-No `GAIN`, no `SET-TEMP/CCD-TEMP`, no `STACKCNT/NCOMBINE`.  
+No `GAIN`, no `SET-TEMP/CCD-TEMP`, no `STACKCNT/NCOMBINE`.
 Integration count in HISTORY comments: `ImageIntegration.numberOfImages: 10`.
 
 ### 2.8 Master DARK / XISF — PixInsight WBPP (Poseidon-C PRO source)
@@ -354,26 +354,26 @@ The table below maps domain fields to concrete header keywords observed in the r
 
 ### Priority tiers
 
-**Tier 1 — Calibration matching (required for spec 040 accuracy):**  
+**Tier 1 — Calibration matching (required for spec 040 accuracy):**
 `OFFSET`, `CCD-TEMP`, `SET-TEMP`
 
 These are essential for matching raw calibration frames to light sessions and for
 identifying which master to apply. Without temperature, two darks with the same
 gain/exposure but different sensor temperatures are indistinguishable in metadata.
 
-**Tier 2 — Camera / equipment fingerprinting:**  
+**Tier 2 — Camera / equipment fingerprinting:**
 `XPIXSZ`, `YPIXSZ`, `BAYERPAT`, `EGAIN`
 
 Pixel size and Bayer pattern are needed for the equipment auto-detection feature
 (settings spec #53). `EGAIN` is ZWO-specific but useful for calibration scaling.
 
-**Tier 3 — Target and observation context:**  
+**Tier 3 — Target and observation context:**
 `RA`, `DEC`, `FOCALLEN`, `SWCREATE`, `DATE-END`
 
 Useful for displaying target position, planning, and provenance. Lower urgency
 for calibration matching but important for the broader library feature set.
 
-**Tier 4 — Stacking provenance (informational):**  
+**Tier 4 — Stacking provenance (informational):**
 `FLAT_CNT`, `BIAS_CNT`, `DATE-LOC`
 
 Informational only. `FLAT_CNT` is NINA-specific. Can be surfaced in the UI
