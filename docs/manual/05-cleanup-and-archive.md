@@ -100,9 +100,10 @@ From here you can send an archived item further along:
   DELETE to confirm — this cannot be undone." Anything other than the literal
   word `DELETE` leaves the button disabled.
 
-The reveal action uses your platform's native label (**Show in File
-Explorer** on Windows) and is disabled when there is nothing on disk to
-reveal.
+A reveal button (**Reveal in Explorer** in the current build; platform-native
+wording such as **Show in File Explorer** / **Reveal in Finder** arrives with
+a pending update) opens the item's location, and is disabled when there is
+nothing on disk to reveal.
 
 [screenshot: the Archive page with an item selected showing its audit history]
 

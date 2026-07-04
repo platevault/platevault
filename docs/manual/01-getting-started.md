@@ -122,8 +122,9 @@ From each card you can:
   touched — this only removes the registration." Deletion is refused while
   other records (sessions, projects, plans) still depend on that root.
 
-Every card also offers a reveal action using your platform's native wording
-(**Show in File Explorer** on Windows, **Reveal in Finder** on macOS).
+Folder selection throughout the app uses your operating system's native
+pickers rather than ad-hoc dialogs; reveal actions elsewhere open your
+system's file manager.
 
 ## Source protection defaults
 
