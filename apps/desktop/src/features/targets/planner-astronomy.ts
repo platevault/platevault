@@ -184,7 +184,7 @@ export function computeNightObservability(
   }
 
   // Exact transit nearest the night (search from 1h before night start).
-  let transit: AltEvent | null = null;
+  let transit: AltEvent | null;
   try {
     const event = SearchHourAngle(Body.Star1, observer, 0, new Date(startMs - MS_PER_HOUR), +1);
     transit = { tMs: event.time.date.getTime(), altDeg: event.hor.altitude };

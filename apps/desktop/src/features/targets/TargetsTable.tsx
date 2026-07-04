@@ -63,7 +63,7 @@
 import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TargetListItem, TargetObjectType } from '@/bindings/index';
-import { Pill } from '@/ui';
+import { Pill, Banner } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
@@ -72,6 +72,8 @@ import { AltitudeSparkline } from './AltitudeSparkline';
 import { FilterBadges } from './FilterBadges';
 import { m } from '@/lib/i18n';
 import { useFavourites } from './useFavourites';
+import { useActiveSite } from './observing-sites/site-store';
+import type { ObserverSite } from './observing-sites/observer-site';
 import {
   groupByDimensions,
   flattenVisibleGroups,
@@ -167,9 +169,16 @@ function compareTargetRows(
       // All values are '—' until backend ephemeris lands; preserve input order.
       cmp = 0;
       break;
-    case 'lunarDist':
-      cmp = altA.lunarDistanceDeg - altB.lunarDistanceDeg;
+    case 'lunarDist': {
+      // null (no site / no coordinates — T013) sorts after real values.
+      const a = altA.lunarDistanceDeg;
+      const b = altB.lunarDistanceDeg;
+      if (a === null && b === null) cmp = 0;
+      else if (a === null) cmp = 1;
+      else if (b === null) cmp = -1;
+      else cmp = a - b;
       break;
+    }
     case 'imagingTime':
       cmp = altA.hoursAboveUsable - altB.hoursAboveUsable;
       break;
@@ -196,11 +205,12 @@ function groupTargets(
   sort: TargetSort,
   groupBy: TargetGroupBy,
   usableAltDeg: number,
+  site: ObserverSite | null,
 ): TargetGroup[] {
   const byKey = new Map<string, Array<{ target: TargetListItem; alt: RowAltitude }>>();
   for (const t of targets) {
     const key = groupHeadlineOf(t, groupBy);
-    const alt = rowAltitudeFor(t, usableAltDeg);
+    const alt = rowAltitudeFor(t, usableAltDeg, site);
     const bucket = byKey.get(key);
     if (bucket) bucket.push({ target: t, alt });
     else byKey.set(key, [{ target: t, alt }]);
@@ -382,10 +392,18 @@ export function TargetsTable({
   const scrollRef = useRef<HTMLDivElement>(null);
   const { collapsed, toggle: toggleCollapsed } = useCollapsibleGroups();
 
-  // Grouping + sorting + per-row altitude MOCK are all derived here so a filter
+  // US6/T015: the active observing site drives every row's real astronomy.
+  // Self-contained subscription (mirrors useFavourites above) so callers don't
+  // need to thread a `site` prop through — when there is no active site every
+  // row degrades to the "needs a site" zero/not-visible state (T013) and the
+  // banner below prompts the user to add one.
+  const site = useActiveSite();
+
+  // Grouping + sorting + per-row altitude are all derived here so a filter
   // or sort change does one O(n) pass off the render hot path, not per-row work
-  // inside the virtualized render loop. usableAltDeg is included in the dep
-  // array so that changing the altitude threshold re-derives all rows.
+  // inside the virtualized render loop. usableAltDeg + site are included in the
+  // dep array so that changing the altitude threshold or the active site
+  // re-derives all rows.
   //
   // When `dims` is non-empty we use the shared multi-level groupByDimensions
   // engine (with collapsible headers); when empty we fall back to the
@@ -395,7 +413,7 @@ export function TargetsTable({
   const flatRows = useMemo(() => {
     if (useMultiGroup) {
       // Pre-compute altitude for all items (needed for sort + display).
-      const withAlt = targets.map((t) => ({ target: t, alt: rowAltitudeFor(t, usableAltDeg) }));
+      const withAlt = targets.map((t) => ({ target: t, alt: rowAltitudeFor(t, usableAltDeg, site) }));
       // Sort the flat list first.
       const sortedWithAlt = [...withAlt].sort((a, b) =>
         compareTargetRows(a.target, a.alt, b.target, b.alt, sort),
@@ -425,25 +443,25 @@ export function TargetsTable({
           kind: 'target',
           key: t.id,
           target: t,
-          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg),
+          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg, site),
           depth: vrow.depth,
         };
       });
     }
     // Single-tier legacy grouping ONLY if a caller explicitly asks for it.
     if (groupBy) {
-      const groups = groupTargets(targets, sort, groupBy, usableAltDeg);
+      const groups = groupTargets(targets, sort, groupBy, usableAltDeg, site);
       return flattenGroups(groups);
     }
     // Default: no grouping selected → FLAT sorted list (no group headers).
-    const withAlt = targets.map((t) => ({ target: t, alt: rowAltitudeFor(t, usableAltDeg) }));
+    const withAlt = targets.map((t) => ({ target: t, alt: rowAltitudeFor(t, usableAltDeg, site) }));
     const sortedWithAlt = [...withAlt].sort((a, b) =>
       compareTargetRows(a.target, a.alt, b.target, b.alt, sort),
     );
     return sortedWithAlt.map(
       (r): FlatRow => ({ kind: 'target', key: r.target.id, target: r.target, alt: r.alt, depth: 0 }),
     );
-  }, [targets, sort, groupBy, usableAltDeg, useMultiGroup, dims, collapsed]);
+  }, [targets, sort, groupBy, usableAltDeg, useMultiGroup, dims, collapsed, site]);
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -504,6 +522,11 @@ export function TargetsTable({
 
   return (
     <div className="alm-targets-table__wrap">
+      {!site && (
+        <Banner variant="info" className="alm-targets-table__no-site-banner">
+          {m.targets_planner_no_site_banner()}
+        </Banner>
+      )}
       <div ref={scrollRef} className="alm-targets-table__scroll">
         <table className="alm-table alm-targets-table">
           {/* Fixed-layout colgroup: column widths are pinned so the table
@@ -682,14 +705,19 @@ export function TargetsTable({
                   <td className="alm-targets-cell--opposition">
                     <span className="alm-targets-cell--muted" title={m.targets_table_next_opposition()}>—</span>
                   </td>
-                  {/* MOCK (spec 044): lunar angular separation. NOT astronomy. */}
+                  {/* Real (spec 044 Track B): lunar angular separation at transit.
+                      null in the T013 degrade states (no coordinates / no site). */}
                   <td className="alm-targets-cell--num">
-                    <span
-                      className="alm-targets-cell--lunardist"
-                      title={m.targets_table_lunar_dist_title({ deg: Math.round(alt.lunarDistanceDeg) })}
-                    >
-                      {Math.round(alt.lunarDistanceDeg)}°
-                    </span>
+                    {alt.lunarDistanceDeg == null ? (
+                      <span className="alm-targets-cell--muted">—</span>
+                    ) : (
+                      <span
+                        className="alm-targets-cell--lunardist"
+                        title={m.targets_table_lunar_dist_title({ deg: Math.round(alt.lunarDistanceDeg) })}
+                      >
+                        {Math.round(alt.lunarDistanceDeg)}°
+                      </span>
+                    )}
                   </td>
                   {/* MOCK (spec 044): filter recommendation from moon phase + separation. */}
                   <td className="alm-targets-cell--filters">

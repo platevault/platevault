@@ -20,8 +20,18 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { computeNightObservability, angularSeparationFromMoonDeg } from './planner-astronomy';
+import {
+  computeNightObservability,
+  angularSeparationFromMoonDeg,
+  type AltEvent,
+} from './planner-astronomy';
 import type { ObserverSite } from './observing-sites/observer-site';
+
+/** Assert-and-narrow: fails the test with a clear message instead of `!`. */
+function required<T>(value: T | null, label: string): T {
+  if (value === null) throw new Error(`expected ${label} to be non-null`);
+  return value;
+}
 
 const AMSTERDAM: ObserverSite = {
   id: 'site-ams',
@@ -41,33 +51,37 @@ describe('computeNightObservability — SC-001 internal consistency', () => {
   it('transit altitude is >= the sampled-grid maximum (grid can only fall short of the true peak)', () => {
     // Equatorial target, well-placed for a mid-northern site.
     const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
-    expect(night.transit).not.toBeNull();
+    const transit = required<AltEvent>(night.transit, 'transit');
     const sampledMax = Math.max(...night.samples.map((s) => s.altDeg));
-    expect(night.transit!.altDeg).toBeGreaterThanOrEqual(sampledMax - 0.01);
+    expect(transit.altDeg).toBeGreaterThanOrEqual(sampledMax - 0.01);
     // And the grid should get close to the true transit altitude (10-min grid).
-    expect(sampledMax).toBeGreaterThan(night.transit!.altDeg - 2);
+    expect(sampledMax).toBeGreaterThan(transit.altDeg - 2);
   });
 
   it('rise precedes transit precedes set for a normal (non-circumpolar) target', () => {
     const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
-    expect(night.rise).not.toBeNull();
-    expect(night.set).not.toBeNull();
-    expect(night.transit).not.toBeNull();
-    expect(night.rise!.tMs).toBeLessThan(night.transit!.tMs);
-    expect(night.transit!.tMs).toBeLessThan(night.set!.tMs);
+    const rise = required<AltEvent>(night.rise, 'rise');
+    const transit = required<AltEvent>(night.transit, 'transit');
+    const set = required<AltEvent>(night.set, 'set');
+    expect(rise.tMs).toBeLessThan(transit.tMs);
+    expect(transit.tMs).toBeLessThan(set.tMs);
   });
 
   it('altitude at rise and set is ~0 (near the true horizon, refraction applied)', () => {
     const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
-    expect(Math.abs(night.rise!.altDeg)).toBeLessThan(1);
-    expect(Math.abs(night.set!.altDeg)).toBeLessThan(1);
+    const rise = required<AltEvent>(night.rise, 'rise');
+    const set = required<AltEvent>(night.set, 'set');
+    expect(Math.abs(rise.altDeg)).toBeLessThan(1);
+    expect(Math.abs(set.altDeg)).toBeLessThan(1);
   });
 });
 
 describe('computeNightObservability — SC-002 rise/set plausibility', () => {
   it('an equatorial target is above the horizon for ~12h (±10min for refraction)', () => {
     const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
-    const upMs = night.set!.tMs - night.rise!.tMs;
+    const rise = required<AltEvent>(night.rise, 'rise');
+    const set = required<AltEvent>(night.set, 'set');
+    const upMs = set.tMs - rise.tMs;
     const twelveHoursMs = 12 * 3_600_000;
     expect(Math.abs(upMs - twelveHoursMs)).toBeLessThan(10 * 60_000);
   });
@@ -111,9 +125,9 @@ describe('computeNightObservability — dark window + grid shape', () => {
 
   it('the astronomical dark window sits inside (or matches) the night span', () => {
     const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
-    expect(night.darkWindow).not.toBeNull();
-    expect(night.darkWindow!.startMs).toBeGreaterThanOrEqual(night.nightStartMs);
-    expect(night.darkWindow!.endMs).toBeLessThanOrEqual(night.nightEndMs);
+    const darkWindow = required(night.darkWindow, 'darkWindow');
+    expect(darkWindow.startMs).toBeGreaterThanOrEqual(night.nightStartMs);
+    expect(darkWindow.endMs).toBeLessThanOrEqual(night.nightEndMs);
   });
 });
 

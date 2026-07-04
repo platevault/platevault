@@ -148,12 +148,19 @@ export async function saveActiveSiteId(activeSiteId: string | null): Promise<voi
   await saveSites(current.sites, current.defaultSiteId, activeSiteId);
 }
 
-/** Persist a new usable-altitude threshold and update the live cache (SC-003/SC-006). */
+/**
+ * Persist a new usable-altitude threshold and update the live cache
+ * (SC-003/SC-006). Updates the cache + notifies subscribers OPTIMISTICALLY,
+ * synchronously before the backend round-trip settles, so slider drags and
+ * Settings-pane edits reflect instantly (SC-003) rather than waiting on IPC
+ * latency; the backend write still happens (durability, SC-006), it just
+ * isn't gating the UI update.
+ */
 export async function saveUsableAltitude(degrees: number): Promise<void> {
   const clamped = clampThreshold(degrees);
-  unwrap(await commands.settingsUpdate(OBSERVING_SCOPE, { [USABLE_ALTITUDE_KEY]: clamped }));
   current = { ...current, usableAltitudeDeg: clamped };
   emit();
+  unwrap(await commands.settingsUpdate(OBSERVING_SCOPE, { [USABLE_ALTITUDE_KEY]: clamped }));
 }
 
 /** Non-hook read of the current cached state (comparators, tests). */

@@ -33,8 +33,9 @@ import type { TargetSessionItem, TargetProjectItem } from '@/bindings';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
-import { rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
+import { altitudeFor, rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
 import { FilterBadges } from './FilterBadges';
+import { useActiveSite } from './observing-sites/site-store';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -110,47 +111,15 @@ function errorMessage(err: TargetOpError, fallback: string): string {
 
 // ── Altitude curve helper ─────────────────────────────────────────────────────
 //
-// STUB: altitude ephemeris — replace with real astro calc when
-// location/ephemeris backend lands. This helper approximates the altitude curve
-// using a sinusoidal model based on the target's declination and a placeholder
-// observer latitude. It does not account for refraction, precession, or
-// accurate LST computation. The transit hour is estimated from RA alone.
-
-const STUB_OBSERVER_LAT_DEG = 52.1; // placeholder: ~Netherlands latitude
+// Real per-night altitude curve (spec 044 Track B, T012) via `planner-altitude`
+// (`planner-astronomy.ts` + `planner-derive.ts`, astronomy-engine, offline).
+// Replaces the prior sinusoidal placeholder curve at a fixed 52.1°N latitude.
 
 interface AltPoint {
-  /** Local solar time offset from 18:00 (start of night), in hours (0–12). */
+  /** Hours into the night (0 = night start … night end). */
   tHour: number;
-  /** Approximate altitude in degrees (-90..+90). */
+  /** Altitude in degrees (-90..+90), refraction-corrected. */
   altDeg: number;
-}
-
-function altitudeCurve(raDeg: number | null, decDeg: number | null): AltPoint[] {
-  const points: AltPoint[] = [];
-  // Night spans roughly 18:00 → 06:00 (12 h). We sample every 20 min.
-  for (let i = 0; i <= 36; i++) {
-    const tHour = i * (12 / 36); // 0..12 hours into the night
-    const localHour = 18 + tHour; // local clock 18..30 (30=06:00 next day)
-
-    let altDeg: number;
-    if (raDeg == null || decDeg == null) {
-      altDeg = 0;
-    } else {
-      // Approximate hour angle from RA. We assume RA=raDeg/15 hours transits at
-      // midnight local time (LST ≈ 00:00), so HA = (localHour - 24) * 15 deg.
-      const haHour = (localHour - 24); // hours from midnight transit
-      const haDeg = haHour * 15;
-      const latRad = (STUB_OBSERVER_LAT_DEG * Math.PI) / 180;
-      const decRad = (decDeg * Math.PI) / 180;
-      const haRad = (haDeg * Math.PI) / 180;
-      const sinAlt =
-        Math.sin(latRad) * Math.sin(decRad) +
-        Math.cos(latRad) * Math.cos(decRad) * Math.cos(haRad);
-      altDeg = (Math.asin(Math.max(-1, Math.min(1, sinAlt))) * 180) / Math.PI;
-    }
-    points.push({ tHour, altDeg });
-  }
-  return points;
 }
 
 // ── Tonight Altitude SVG ──────────────────────────────────────────────────────
@@ -365,6 +334,10 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
 
   const navigate = useNavigate();
 
+  // US6/T015: real astronomy needs an active observing site; the graph/stats
+  // degrade cleanly (T013) via `altitudeFor`'s needsSite flag when there isn't one.
+  const site = useActiveSite();
+
   const load = useCallback(() => {
     setLoadState({ status: 'loading' });
     commands
@@ -533,10 +506,13 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   const commonName = detail.aliases.find((a) => a.kind === 'common_name')?.alias ?? null;
 
   // Tonight planner data — shared with the list row (same rowAltitudeFor source
-  // so the graph peak and the "Max alt" stat agree). Falls back to an RA/Dec
-  // curve when the list item isn't available.
-  const rowAlt = item ? rowAltitudeFor(item, usableAltDeg) : null;
-  const tonightPoints: AltPoint[] = rowAlt?.points ?? altitudeCurve(detail.raDeg, detail.decDeg);
+  // so the graph peak and the "Max alt" stat agree). Falls back to a direct
+  // real computation from the detail's own RA/Dec when the list item isn't
+  // available (e.g. direct navigation to a target's detail page).
+  const rowAlt = item
+    ? rowAltitudeFor(item, usableAltDeg, site)
+    : altitudeFor({ id: detail.id, raDeg: detail.raDeg, decDeg: detail.decDeg }, usableAltDeg, site);
+  const tonightPoints: AltPoint[] = rowAlt.points;
 
   const raDecStr =
     detail.raDeg != null && detail.decDeg != null
@@ -559,11 +535,16 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   ];
 
   // Tonight stats (numeric) — Filters render separately (a component, not a value).
-  const tonightStats: PropertyDef[] = rowAlt
+  // No astronomy is possible in the degrade states (T013): no coordinates, or
+  // no active observing site (US6/T015) — show nothing rather than 0°/NaN°.
+  const tonightAvailable = !rowAlt.needsCoordinates && !rowAlt.needsSite;
+  const tonightStats: PropertyDef[] = tonightAvailable
     ? [
         { key: 'maxalt', label: m.targets_col_max_alt(), value: `${Math.round(rowAlt.maxAltDeg)}°` },
         { key: 'imgtime', label: m.targets_col_img_time(), value: `${rowAlt.hoursAboveUsable.toFixed(1)} h` },
-        { key: 'lunar', label: m.targets_col_lunar(), value: `${Math.round(rowAlt.lunarDistanceDeg)}°` },
+        ...(rowAlt.lunarDistanceDeg != null
+          ? [{ key: 'lunar', label: m.targets_col_lunar(), value: `${Math.round(rowAlt.lunarDistanceDeg)}°` } as PropertyDef]
+          : []),
       ]
     : [];
 
@@ -622,16 +603,24 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         {/* Tonight column: a small transit graph + the planner stats. */}
         <div className="alm-planner__tonight">
           <div className="alm-planner__graph-title">
-            {m.targets_detail_tonight_title({ lat: Math.round(STUB_OBSERVER_LAT_DEG) })}
+            {site
+              ? m.targets_detail_tonight_title({ lat: Math.round(site.latitudeDeg) })
+              : m.targets_detail_tonight_title_no_site()}
           </div>
-          <AltitudeGraph points={tonightPoints} />
-          {rowAlt && (
+          {rowAlt.needsSite ? (
+            <Banner variant="info">{m.targets_planner_no_site_banner()}</Banner>
+          ) : (
             <>
-              <PropertyTable mode="view" properties={tonightStats} />
-              <div className="alm-planner__tonight-filters">
-                <span className="alm-planner__tonight-filters-label">{m.common_filters()}</span>
-                <FilterBadges recommendation={rowAlt.filters} />
-              </div>
+              <AltitudeGraph points={tonightPoints} />
+              {tonightAvailable && (
+                <>
+                  <PropertyTable mode="view" properties={tonightStats} />
+                  <div className="alm-planner__tonight-filters">
+                    <span className="alm-planner__tonight-filters-label">{m.common_filters()}</span>
+                    <FilterBadges recommendation={rowAlt.filters} />
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
