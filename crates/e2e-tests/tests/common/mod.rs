@@ -313,6 +313,31 @@ impl E2eApp {
         }
     }
 
+    /// Poll `current_url()` until it contains `needle` or `timeout` elapses.
+    ///
+    /// The index route's first-run gate (`apps/desktop/src/app/router.tsx`)
+    /// redirects to `/setup` from an **async** `beforeLoad`:
+    /// `checkFirstRunComplete` does a dynamic `import('@/bindings/index')` plus a
+    /// `firstrun_state` IPC round-trip, so the redirect lands slightly *after*
+    /// the page's `__ALM_E2E__` bridge becomes ready. Asserting the URL the
+    /// instant `wait_bridge_ready` returns races that redirect — poll for it.
+    pub async fn wait_url_contains(&self, needle: &str, timeout: Duration) -> Result<String> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let url = self.driver.current_url().await.context("failed to read current_url")?;
+            let current = url.to_string();
+            if current.contains(needle) {
+                return Ok(current);
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "URL never contained {needle:?} within {timeout:?} (last: {current})"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
     /// `true` once `window.__ALM_E2E__.invoke` exists — a real signal that
     /// `main.tsx` finished its top-level module evaluation for the current
     /// page load (used instead of a blind sleep after `goto_route`).

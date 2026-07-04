@@ -58,11 +58,14 @@ async fn first_run_resolve_create_project() -> anyhow::Result<()> {
     // "Add folder" buttons open cannot be driven by WebDriver (documented
     // constraint, see `e2e-agentic-test/003-first-run-source-setup/`).
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
-    let current_url = app.driver.current_url().await?;
-    anyhow::ensure!(
-        current_url.as_str().contains("/setup"),
-        "expected a fresh DB to redirect to /setup, got {current_url}"
-    );
+    // The index route's first-run gate redirects to /setup from an *async*
+    // `beforeLoad` (dynamic import + a `firstrun_state` IPC round-trip), so the
+    // redirect lands shortly after the bridge is ready — poll for it rather than
+    // racing the immediate assertion (which non-deterministically caught the URL
+    // still at "/").
+    app.wait_url_contains("/setup", Duration::from_secs(15))
+        .await
+        .map_err(|e| anyhow::anyhow!("expected a fresh DB to redirect to /setup: {e}"))?;
 
     // Real backend round-trip (FR-008): resolve a bundled-seed target.
     let resolve: serde_json::Value = app
@@ -145,6 +148,10 @@ async fn first_run_resolve_create_project() -> anyhow::Result<()> {
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
+    // The `__ALM_E2E__` invoke bridge is installed by an async dynamic import in
+    // `apps/desktop/src/main.tsx`, so it is not present the instant the session
+    // is created — wait for it before the first `invoke` (FR-008).
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
 
     // 1. Register a disposable light-frames root with one real FITS file.
     let root_dir = tempfile::tempdir()?;
@@ -305,6 +312,8 @@ async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn ingestion_sessions_search() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
+    // Bridge is installed by an async dynamic import (`main.tsx`) — wait for it.
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
 
     let root_dir = tempfile::tempdir()?;
     let original_path = write_minimal_fits(
@@ -462,6 +471,8 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn lifecycle_integrity() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
+    // Bridge is installed by an async dynamic import (`main.tsx`) — wait for it.
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
 
     // 1. Create a project with no sources — it starts life "setup_incomplete"
     // (real, per `projects.create`'s documented lifecycle rule) and does NOT
@@ -575,6 +586,8 @@ async fn lifecycle_integrity() -> anyhow::Result<()> {
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn cleanup_plan_review() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
+    // Bridge is installed by an async dynamic import (`main.tsx`) — wait for it.
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
 
     // The artifact watcher's attach-time reconciliation pass requires the
     // project's output folder to already exist on disk.
