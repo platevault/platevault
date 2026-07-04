@@ -38,6 +38,9 @@ import type {
   OperationEvent,
   PlanApplyResponse,
   AuditListResponse_Serialize,
+  ArchiveListResponse,
+  ArchiveSendToTrashResponse,
+  ArchivePermanentlyDeleteResponse,
   Camera,
   CreateCamera,
   UpdateCamera,
@@ -565,6 +568,50 @@ export async function mockInvoke(
       const args = _args as { filters?: AuditFilterDto | null } | undefined;
       const filtered = filterMockAuditEntries(args?.filters);
       return filtered.map((e) => JSON.stringify(e)).join('\n');
+    }
+
+    // ── Archive commands (spec 017 WP-B) ──────────────────────────────────────
+    case 'archive_list': {
+      return {
+        entries: [
+          {
+            id: 'arch-proj-001',
+            name: 'NGC 7000 · HOO (v1)',
+            entityType: 'project',
+            archivedAt: '2026-05-12T21:40:00Z',
+            reason: 'Superseded by reprocess',
+            originalPath: 'Projects/NGC7000_HOO_v1',
+            sizeBytes: 12_400_000_000,
+            archivedViaPlanId: 'plan-archive-001',
+          },
+          {
+            id: 'arch-proj-002',
+            name: 'M31 · LRGB (2025)',
+            entityType: 'project',
+            archivedAt: '2026-03-02T19:05:00Z',
+            reason: 'Completed and delivered',
+            originalPath: 'Projects/M31_LRGB_2025',
+            sizeBytes: 8_100_000_000,
+            archivedViaPlanId: 'plan-archive-002',
+          },
+        ],
+      } satisfies ArchiveListResponse;
+    }
+    case 'archive_send_to_trash': {
+      const args = _args as { planId?: string } | undefined;
+      return {
+        planId: args?.planId ?? 'plan-archive-001',
+        itemsMoved: 3,
+        auditId: 'audit-archive-trash-001',
+      } satisfies ArchiveSendToTrashResponse;
+    }
+    case 'archive_permanently_delete': {
+      const args = _args as { planId?: string } | undefined;
+      return {
+        planId: args?.planId ?? 'plan-archive-001',
+        itemsDeleted: 3,
+        auditId: 'audit-archive-delete-001',
+      } satisfies ArchivePermanentlyDeleteResponse;
     }
     case 'log_recent': {
       const { MOCK_LOG_ENTRIES } = await import('@/data/mockLogEntries');

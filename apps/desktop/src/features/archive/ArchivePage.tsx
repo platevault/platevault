@@ -31,6 +31,7 @@ import {
 import { Btn, EmptyState } from '@/ui';
 import { m } from '@/lib/i18n';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
+import { revealLabel } from '@/lib/reveal-label';
 import { ArchiveDetail } from './ArchiveDetail';
 import { ArchiveTable, DEFAULT_ARCHIVE_SORT } from './ArchiveTable';
 import type { ArchiveSort, ArchiveSortCol } from './ArchiveTable';
@@ -134,9 +135,16 @@ export function ArchivePage() {
             {/* STUB: Reveal needs the app-managed archive location
                 (.astro-plan-archive/<planId>/, D24) which the ArchiveEntry
                 contract does not expose yet — disabled, no fake IPC. The old
-                layout shipped this button ENABLED with no handler. */}
-            <Btn size="sm" disabled title={m.archive_reveal_unavailable_title()}>
-              {m.projects_detail_reveal_btn()}
+                layout shipped this button ENABLED with no handler. Label is
+                the shared platform-native revealLabel() (File Explorer /
+                Finder / file manager). */}
+            <Btn
+              size="sm"
+              disabled
+              title={m.archive_reveal_unavailable_title()}
+              data-testid="archive-reveal-btn"
+            >
+              {revealLabel()}
             </Btn>
           </>
         )

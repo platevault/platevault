@@ -191,12 +191,14 @@ describe('ArchivePage — spec 043 single-column layout', () => {
     expect(screen.getByText('Audit history')).toBeInTheDocument();
   });
 
-  it('13. Reveal is a DISABLED stub (archive location not in the contract yet)', () => {
+  it('13. Reveal is a DISABLED stub with the platform-native label', () => {
     archiveListState.data = [makeEntry({ id: 'proj-1' })];
     mockSelectedId.current = 'proj-1';
     render(<ArchivePage />);
-    const reveal = screen.getByText('Reveal in Explorer').closest('button');
+    const reveal = screen.getByTestId('archive-reveal-btn');
     expect(reveal).toBeDisabled();
     expect(reveal).toHaveAttribute('title');
+    // jsdom reports no platform → the Linux-generic label.
+    expect(reveal).toHaveTextContent('Show in file manager');
   });
 });
