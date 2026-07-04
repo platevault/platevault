@@ -48,7 +48,20 @@ pub struct AuditEntry {
     pub to_state: Option<String>,
     pub actor: AuditActor,
     pub outcome: AuditOutcome,
+    /// Backend-composed English detail. Durable fallback rendering for rows
+    /// without `detail_code` / usable `detail_params` (D23 upgrade).
     pub detail: String,
+    /// Stable detail code (e.g. `plan.required`, `provenance.unreviewed`,
+    /// `target.resolved`) identifying a frontend catalog message template.
+    /// Derived at read time from the durable `audit_log_entry.payload` JSON;
+    /// absent for rows written before the D23 upgrade or whose detail has no
+    /// template.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail_code: Option<String>,
+    /// Structured display parameters for `detail_code` (flat string map,
+    /// e.g. `{ "entityType": "project", "fromState": "ready", ... }`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail_params: Option<std::collections::HashMap<String, String>>,
 }
 
 /// Paginated response for audit list queries.

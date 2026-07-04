@@ -1808,6 +1808,27 @@
       }
     }
   ],
+  "settings_auditlog_detail_transition_refused_edge": "Transition {fromState} → {toState} is not allowed for {entityType}",
+  "settings_auditlog_detail_actor_not_authorised": "Automatic (system) transitions are only allowed for blocking, unblocking, or marking a project ready",
+  "settings_auditlog_detail_provenance_unreviewed": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} field requires review before this transition",
+        "pp=other": "{count} fields require review before this transition"
+      }
+    }
+  ],
+  "settings_auditlog_detail_plan_required": "Transition {fromState} → {toState} for {entityType} requires an approved filesystem plan",
+  "settings_auditlog_detail_entity_not_found": "Entity {entityId} was not found",
+  "settings_auditlog_detail_target_resolved": "Target resolved from query “{query}”",
+  "settings_auditlog_detail_target_user_override": "Target chosen by user override for query “{query}”",
   "settings_naming_unknown_tokens": [
     {
       "declarations": [
