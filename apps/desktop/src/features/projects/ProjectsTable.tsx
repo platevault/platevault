@@ -21,7 +21,7 @@ import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { m } from '@/lib/i18n';
 import { Table } from '@/ui';
-import { SortHeader } from '@/components';
+import { SortHeader, ariaSortFor } from '@/components';
 import type { TableColumn, TableRow } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
 import { ProjectStatusTag } from './ProjectStatusTag';
@@ -146,6 +146,7 @@ export function ProjectsTable({
   const columns: TableColumn[] = COLUMNS.map((c) => ({
     key: c.key,
     className: c.className,
+    ariaSort: c.sort ? ariaSortFor(sort.col === c.sort, sort.dir) : undefined,
     label: c.sort ? (
       <SortHeader
         label={c.label()}

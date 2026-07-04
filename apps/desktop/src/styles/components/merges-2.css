@@ -71,41 +71,14 @@
   font-size: var(--alm-text-2xs);
 }
 
-/* ── List viewport (replaces the ListSidebar wrapper) ─────────────────────── */
-.alm-inbox-list {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  height: 100%;
-}
-.alm-inbox-list__scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-/* Grouping-state hint footer — NOT a duplicate count. */
-.alm-inbox-list__footer {
-  flex-shrink: 0;
-  padding: var(--alm-sp-1) var(--alm-sp-3);
-  border-top: 1px solid var(--alm-border);
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-text-muted);
-}
-.alm-inbox-list__empty {
-  padding: var(--alm-sp-4);
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
-}
+/* ── List viewport: moved to the SHARED `.alm-listtable` block (tables-lists.css)
+   — one wrapper for every full-width virtualized list table (Inbox · Sessions);
+   the old `.alm-inbox-list*` viewport/footer/empty clones were deleted. ── */
 
 /* ── Inbox list on the shared Table construct (font/row-height/header parity) ── */
 .alm-inbox-table {
   table-layout: fixed;
   width: 100%;
-}
-/* The shared Table's scroll wrapper fills the flex-column inbox list. */
-.alm-inbox-table__scroll {
-  flex: 1;
 }
 .alm-inbox-table td.num,
 .alm-inbox-table th.num,

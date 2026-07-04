@@ -6,7 +6,7 @@
  * from the narrow side panel to the full-width bottom panel):
  * 1. ManifestsAccordion — shows loading, then list, then expand, then reveal.
  * 2. ProjectNotesSection — shows "No notes." when note is empty; loads and saves.
- * 3. Reveal in OS calls revealManifestInOs and shows error toast on failure.
+ * 3. The Reveal button calls revealManifestInOs and shows error toast on failure.
  * 4. ManifestsAccordion empty state when no manifests.
  * 5. ManifestsAccordion error state on fetch failure.
  * 6. Notes section shows readOnly on archived project.
@@ -220,6 +220,11 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
     await waitFor(() => {
       expect(screen.getByTestId(`manifest-reveal-${MANIFEST_SUMMARY.id}`)).toBeInTheDocument();
     });
+    // Tooltip carries the shared platform-native revealLabel() (jsdom → Linux-generic).
+    expect(screen.getByTestId(`manifest-reveal-${MANIFEST_SUMMARY.id}`)).toHaveAttribute(
+      'title',
+      'Show in file manager',
+    );
     await act(async () => {
       fireEvent.click(screen.getByTestId(`manifest-reveal-${MANIFEST_SUMMARY.id}`));
     });

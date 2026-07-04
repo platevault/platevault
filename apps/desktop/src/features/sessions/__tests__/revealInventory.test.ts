@@ -1,7 +1,7 @@
 /**
  * revealInventoryPath command-wiring test — spec 006 FR-007 (T411).
  *
- * The Sessions/Inventory row "Reveal in OS" action must invoke the spec-004
+ * The Sessions/Inventory row Reveal action must invoke the spec-004
  * native reveal command (`native.reveal`) with the row's resolved source path
  * and an `inventory_row` audit tag.
  */

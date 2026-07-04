@@ -79,11 +79,16 @@
   "archive_restore_project_btn": "Restore project",
   "archive_restore_session_btn": "Restore session",
   "archive_search_placeholder": "Search archive…",
-  "archive_select_item_desc": "Choose an item from the list to view its details.",
-  "archive_select_item_title": "Select an archived item",
   "archive_status_pill": "archived",
   "archive_subtitle_no_path": "No original path recorded",
-  "archive_item_archived_on": "Archived {date}",
+  "archive_col_name": "Name",
+  "archive_col_type": "Type",
+  "archive_sort_by_aria": "Sort by {col}",
+  "archive_no_match": "No archived items match the current filters.",
+  "archive_reveal_unavailable_title": "Reveal isn't available yet — the archive location isn't exposed by the backend.",
+  "reveal_label_windows": "Show in File Explorer",
+  "reveal_label_macos": "Reveal in Finder",
+  "reveal_label_linux": "Show in file manager",
   "archive_send_to_trash_btn": "Send to trash",
   "archive_load_error": "Could not load archived items.",
   "archive_empty_title": "No archived projects yet",
@@ -402,7 +407,6 @@
   "projects_detail_load_error": "Could not load project.",
   "projects_detail_loading": "Loading project…",
   "projects_detail_reinfer_btn": "Re-infer channels",
-  "projects_detail_reveal_btn": "Reveal in Explorer",
   "projects_edit_archived_notice": "This project is archived. Settings are read-only.",
   "projects_edit_channels_auto_tag": "Auto",
   "projects_edit_channels_empty": "No channels inferred yet.",
@@ -421,7 +425,6 @@
   "projects_manifests_load_error": "Could not load manifests.",
   "projects_manifests_notes_label": "Notes snapshot:",
   "projects_manifests_reveal_btn": "Reveal",
-  "projects_manifests_reveal_title": "Reveal in file manager",
   "projects_manifests_title": "Manifests",
   "projects_manifests_workflow_label": "Workflow:",
   "projects_name_label": "Project name",
@@ -563,6 +566,7 @@
   "sessions_linked_projects_heading": "Linked projects",
   "sessions_load_error": "Failed to load sessions.",
   "sessions_needs_review_aria": "Needs review",
+  "sessions_grouping_hint": "Grouped by {dims}",
   "sessions_no_match": "No sessions match the current filters.",
   "sessions_ignore_btn": "Ignore",
   "sessions_reject_btn": "Reject",
@@ -575,7 +579,6 @@
   "sessions_review_filter_default_label": "Default",
   "sessions_review_filter_label": "Review",
   "sessions_review_needs_review_state": "Needs review ({state})",
-  "sessions_reveal_btn": "Reveal in OS",
   "sessions_reveal_title": "Open the session's source location in the OS file browser",
   "sessions_search_aria": "Search sessions",
   "sessions_search_placeholder": "Search target, filter, camera…",
@@ -1477,7 +1480,6 @@
   "calibration_col_usage": "Usage",
   "calibration_action_use_in_project": "Use in project",
   "calibration_action_replace_master": "Replace master",
-  "calibration_action_reveal_explorer": "Reveal in Explorer",
   "calibration_col_session": "Session",
   "calibration_col_match": "Match",
   "calibration_col_dimensions": "Dimensions",
@@ -1900,21 +1902,6 @@
       "match": {
         "pp=one": "{count} item",
         "pp=other": "{count} items"
-      }
-    }
-  ],
-  "archive_subtitle_item_count": [
-    {
-      "declarations": [
-        "input count",
-        "local pp = count: plural"
-      ],
-      "selectors": [
-        "pp"
-      ],
-      "match": {
-        "pp=one": "{count} archived item",
-        "pp=other": "{count} archived items"
       }
     }
   ],

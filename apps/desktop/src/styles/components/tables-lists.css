@@ -285,12 +285,19 @@
   overflow-y: visible;
 }
 
-/* --- Dense sortable table ------------------------------------------------- */
+/* --- Dense sortable table --------------------------------------------------
+ * `.alm-densetable` is the FEATURE-AGNOSTIC name (used by Archive and any new
+ * list table); `.alm-sessions-table` is the original Sessions alias kept for
+ * its e2e selectors. ONE rule body via selector lists — never clone these. */
+.alm-densetable,
 .alm-sessions-table {
   /* Inherits .alm-table base; tighten cell padding for density. */
   table-layout: auto;
 }
+.alm-densetable th,
 .alm-sessions-table th { user-select: none; }
+.alm-densetable td,
+.alm-densetable th,
 .alm-sessions-table td,
 .alm-sessions-table th {
   padding: var(--alm-sp-1) var(--alm-sp-3);
@@ -370,22 +377,29 @@
   font-size: var(--alm-text-xs);
 }
 
-/* Selectable session rows. */
+/* Selectable rows (generic + Sessions alias, one rule body). */
+.alm-densetable__row,
 .alm-sessions-table__row { cursor: pointer; }
+.alm-densetable__row:hover td,
 .alm-sessions-table__row:hover td { background: var(--alm-surface); }
+.alm-densetable__row--selected td,
 .alm-sessions-table__row--selected td {
   background: var(--alm-accent-bg);
 }
 
-/* Cell helpers (token-only). */
-.alm-sessions-cell--target { font-weight: var(--alm-weight-medium); color: var(--alm-text); }
-.alm-sessions-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
-.alm-sessions-cell--mono {
+/* Generic table-cell helpers (token-only) — SHARED by every list table
+ * (Sessions · Archive · …). Feature-agnostic on purpose: use these instead of
+ * minting per-feature `*-cell--num/--mono/--muted` clones. */
+.alm-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
+.alm-cell--mono {
 
   font-size: var(--alm-text-xs);
   color: var(--alm-text-secondary);
 }
-.alm-sessions-cell--muted { color: var(--alm-text-muted); }
+.alm-cell--muted { color: var(--alm-text-muted); }
+
+/* Sessions-specific cell helpers. */
+.alm-sessions-cell--target { font-weight: var(--alm-weight-medium); color: var(--alm-text); }
 
 /* Projects cell pills. */
 .alm-sessions-cell__projects {
@@ -401,16 +415,34 @@
   vertical-align: middle;
 }
 
-/* Empty + footer states. */
-.alm-sessions-table__empty {
-  padding: var(--alm-sp-5);
-  text-align: center;
+/* ── Shared list-table viewport ────────────────────────────────────────────
+ * ONE wrapper for every full-width (virtualized) list table — Inbox and
+ * Sessions today. A flex column that fills the list-page main region: the
+ * shared Table's scroll container takes the remaining height, an optional
+ * grouping-hint footer pins under it, and the empty state renders in place of
+ * the table. No per-feature clones (supersedes `.alm-inbox-list*` and
+ * `.alm-sessions-table__empty/__footer`). */
+.alm-listtable {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+/* The shared Table's scroll wrapper fills the flex column. */
+.alm-listtable__scroll {
+  flex: 1;
+}
+/* Grouping-state hint footer — NOT a duplicate count. */
+.alm-listtable__foot {
+  flex-shrink: 0;
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+  border-top: 1px solid var(--alm-border);
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+.alm-listtable__empty {
+  padding: var(--alm-sp-4);
   color: var(--alm-text-muted);
   font-size: var(--alm-text-sm);
-}
-.alm-sessions-table__footer {
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  font-size: var(--alm-text-xs);
-  color: var(--alm-text-muted);
-  border-top: 1px solid var(--alm-border-subtle);
 }

@@ -33,6 +33,7 @@ import { useGrouping } from '@/lib/use-grouping';
 import {
   SessionsTable,
   DEFAULT_SESSION_SORT,
+  SESSION_DIM_LABELS,
 } from './SessionsTable';
 import type { SessionSort, SessionSortCol } from './SessionsTable';
 import { SessionDetail } from './SessionDetail';
@@ -45,23 +46,50 @@ import { m } from '@/lib/i18n';
 import { revealInventoryPath } from './revealInventory';
 import type { InventorySource } from '@/bindings/index';
 
-/** Client-side text search across the visible session fields. */
-function filterSourcesBySearch(sources: InventorySource[], query: string): InventorySource[] {
+/**
+ * Client-side text search + field filters across the visible session fields
+ * (Inbox-parity: the top toolbar carries select filters next to search; all
+ * are applied here in one pass). Exported for tests.
+ */
+export function filterSources(
+  sources: InventorySource[],
+  query: string,
+  filterName: string,
+  camera: string,
+): InventorySource[] {
   const q = query.trim().toLowerCase();
-  if (!q) return sources;
+  if (!q && !filterName && !camera) return sources;
   const matches = (v: string | null | undefined) => (v ?? '').toLowerCase().includes(q);
   return sources
     .map((src) => ({
       ...src,
       sessions: src.sessions.filter(
         (s) =>
-          matches(s.target) ||
-          matches(s.name) ||
-          matches(s.filter) ||
-          matches(s.camera),
+          (!q ||
+            matches(s.target) ||
+            matches(s.name) ||
+            matches(s.filter) ||
+            matches(s.camera)) &&
+          (!filterName || s.filter === filterName) &&
+          (!camera || s.camera === camera),
       ),
     }))
     .filter((src) => src.sessions.length > 0);
+}
+
+/** Unique, sorted non-empty values of one session field → select options. Exported for tests. */
+export function fieldOptions(
+  sources: InventorySource[],
+  pick: (s: InventorySource['sessions'][number]) => string | null | undefined,
+): FilterOption[] {
+  const seen = new Set<string>();
+  for (const src of sources) {
+    for (const s of src.sessions) {
+      const v = pick(s);
+      if (v) seen.add(v);
+    }
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b)).map((v) => ({ value: v, label: v }));
 }
 
 export function SessionsPage() {
@@ -72,6 +100,9 @@ export function SessionsPage() {
 
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SessionSort>(DEFAULT_SESSION_SORT);
+  // Inbox-parity field filters ('' = all): optical filter + camera.
+  const [filterName, setFilterName] = useState('');
+  const [cameraFilter, setCameraFilter] = useState('');
 
   const { dims, setSlot } = useGrouping({
     storageKey: 'sessions.grouping.dims.v1',
@@ -79,13 +110,10 @@ export function SessionsPage() {
     defaultDims: [],
   });
 
-  const SESSION_DIMENSIONS: FilterOption[] = [
-    { value: 'target', label: m.projects_create_target_label() },
-    { value: 'filter', label: m.common_filter() },
-    { value: 'night', label: m.sessions_col_night() },
-    { value: 'camera', label: m.settings_calmatch_camera() },
-    { value: 'month', label: m.sessions_dim_month() },
-  ];
+  // Group-by options share their labels with the table's grouping-hint footer.
+  const SESSION_DIMENSIONS: FilterOption[] = Object.entries(SESSION_DIM_LABELS).map(
+    ([value, label]) => ({ value, label: label() }),
+  );
 
   // Build filters from URL params and pass directly to useInventorySources.
   const filters: InventoryFilters = {};
@@ -94,8 +122,19 @@ export function SessionsPage() {
   const { data: response, loading, error } = useInventorySources(filters);
 
   const sources = useMemo(
-    () => filterSourcesBySearch(response?.sources ?? [], search),
-    [response?.sources, search],
+    () => filterSources(response?.sources ?? [], search, filterName, cameraFilter),
+    [response?.sources, search, filterName, cameraFilter],
+  );
+
+  // Filter options come from the UNFILTERED response so a pick never removes
+  // the other options.
+  const filterOptions = useMemo(
+    () => fieldOptions(response?.sources ?? [], (s) => s.filter),
+    [response?.sources],
+  );
+  const cameraOptions = useMemo(
+    () => fieldOptions(response?.sources ?? [], (s) => s.camera),
+    [response?.sources],
   );
 
   // (task #87) The per-page status-bar summary (session/confirmed/needs-review
@@ -145,8 +184,9 @@ export function SessionsPage() {
   // Top-bar convention (task #80): NO title + NO summary (the left nav names
   // the page; the count/metadata lives in the bottom status bar) and NO sort
   // control (sorting is driven by the clickable SessionsTable column headers).
-  // The bar carries only search + Group-by (spec 041 FR-051: the review-state
-  // filter was removed along with the review lifecycle).
+  // The bar carries search + Filter/Camera field filters + Group-by —
+  // Inbox-parity toolbar (spec 043 §4). (Spec 041 FR-051: the review-state
+  // filter was removed along with the review lifecycle.)
   const topBar = (
     <PageTopBar
       filters={
@@ -157,6 +197,24 @@ export function SessionsPage() {
             placeholder: m.sessions_search_placeholder(),
             ariaLabel: m.sessions_search_aria(),
           }}
+          fields={[
+            {
+              key: 'filter',
+              label: m.common_filter(),
+              value: filterName,
+              options: filterOptions,
+              allLabel: m.common_all(),
+              onChange: setFilterName,
+            },
+            {
+              key: 'camera',
+              label: m.settings_calmatch_camera(),
+              value: cameraFilter,
+              options: cameraOptions,
+              allLabel: m.common_all(),
+              onChange: setCameraFilter,
+            },
+          ]}
           grouping={{
             dimensions: SESSION_DIMENSIONS,
             dims,
@@ -184,7 +242,7 @@ export function SessionsPage() {
       detailLabel={m.cmp_listpage_close_session_details_aria()}
     >
       {error != null ? (
-        <div className="alm-sessions-table__empty">{m.sessions_load_error()}</div>
+        <div className="alm-listtable__empty">{m.sessions_load_error()}</div>
       ) : (
         <SessionsTable
           sources={sources}

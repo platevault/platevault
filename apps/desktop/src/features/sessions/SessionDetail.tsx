@@ -25,6 +25,7 @@ import {
 } from '@/components';
 import { EmptyState, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
+import { revealLabel } from '@/lib/reveal-label';
 
 interface Props {
   session: InventorySession | null;
@@ -118,9 +119,11 @@ export function SessionDetail({
   // share this row (Confirm/Re-open/Reject/Ignore) are removed.
   const actionButtons = (
     <span className="alm-session-detail2__actions">
+      {/* Platform-native label via the shared revealLabel() helper;
+          the title keeps the descriptive what-it-does tooltip. */}
       {revealVisible && (
         <Btn size="sm" onClick={onReveal} title={m.sessions_reveal_title()}>
-          {m.sessions_reveal_btn()}
+          {revealLabel()}
         </Btn>
       )}
     </span>

@@ -64,7 +64,7 @@ import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TargetListItem, TargetObjectType } from '@/bindings/index';
 import { Pill } from '@/ui';
-import { SortHeader } from '@/components';
+import { SortHeader, ariaSortFor } from '@/components';
 import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
 import { rowAltitudeFor, USABLE_ALT_DEG, type RowAltitude } from './planner-altitude';
@@ -480,6 +480,8 @@ export function TargetsTable({
     key: c.key,
     className: c.className,
     title: c.title?.(),
+    // aria-sort belongs on the <th> (this table renders its own header row).
+    ariaSort: c.sort ? ariaSortFor(sort.col === c.sort, sort.dir) : undefined,
     header: c.sort ? (
       <SortHeader
         label={c.label()}
@@ -528,7 +530,7 @@ export function TargetsTable({
           <thead>
             <tr>
               {columns.map((c) => (
-                <th key={c.key} className={c.className} title={c.title}>
+                <th key={c.key} className={c.className} title={c.title} aria-sort={c.ariaSort}>
                   {c.header}
                 </th>
               ))}

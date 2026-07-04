@@ -174,6 +174,9 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
     // The action bar still hosts always-present actions (Reveal / Open in tool),
     // but no lifecycle transition buttons exist for setup_incomplete.
     expect(screen.queryByTestId(/^transition-btn-/)).not.toBeInTheDocument();
+    // The Reveal action carries the shared platform-native revealLabel()
+    // (jsdom reports no platform → the Linux-generic label).
+    expect(screen.getByTestId('action-reveal')).toHaveTextContent('Show in file manager');
   });
 
   it('renders unarchive actions for archived state', () => {
