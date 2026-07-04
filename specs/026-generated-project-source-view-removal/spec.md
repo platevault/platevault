@@ -21,6 +21,24 @@
 > **open** with its P3 work deferred until a product decision: either (a) restore
 > a generation path and finish P3, or (b) formally retire the source-view feature
 > and mark this spec Superseded. Do not close as Implemented until that decision.
+>
+> **UPDATE (2026-07-04): generation path RESTORED — option (a) chosen.** The user
+> confirmed source-view generation is in scope, reversing the retire lean. The
+> **generation** (first-materialization) counterpart is specified by
+> [Spec 049 — Source View Generation](../049-source-view-generation/spec.md),
+> which reuses (does not duplicate) this spec's `PreparedSourceView` /
+> `PreparedSourceViewItem` entities and remove/regenerate/stale machinery. Once
+> 049 lands a live generation path, this surface is no longer vestigial and P3
+> stale-detection/audit work here should be finished. **Cross-spec conflict to
+> resolve:** spec 049 OQ-2 flags a tension with **FR-008 / the single-kind
+> invariant** (below) — when a generation's selected sources span multiple
+> volumes, one uniform materialization kind may be impossible. Spec 049's
+> best-effort resolution keeps single-kind and *refuses* cross-drive-forced mixed
+> views rather than violating FR-008; a future amendment here may relax FR-008
+> (per-item kind or per-volume sub-views) if that refusal proves too strict.
+> **Revert note:** if the product decision is reversed and generation is retired
+> again, delete spec 049 and restore this banner's original "possibly obsolete"
+> framing.
 
 ## Implementation Status: core built (P1/P2); vestigial pending decision
 
