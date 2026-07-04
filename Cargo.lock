@@ -76,6 +76,7 @@ dependencies = [
  "dashmap",
  "domain_core",
  "fs_executor",
+ "fs_inventory",
  "hex",
  "patterns",
  "persistence_db",

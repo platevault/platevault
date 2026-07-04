@@ -121,6 +121,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   "database.error": m.err_database_error,
   "serialise.error": m.err_serialise_error,
   "io.error": m.err_io_error,
+  // Per-frame inventory (spec 048).
+  "root.unavailable": m.err_root_unavailable,
+  "hash.mismatch": m.err_hash_mismatch,
+  "frame.not_found": m.err_frame_not_found,
   // The generic wrap code maps to the shared generic fallback message (no
   // duplicated catalog values; spec 046 FR-013).
   "internal.error": m.err_generic_fallback,

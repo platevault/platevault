@@ -23,6 +23,7 @@ audit = { path = "../../audit" }
 contracts_core = { path = "../../contracts/core" }
 domain_core = { path = "../../domain/core" }
 fs_executor = { path = "../../fs/executor" }
+fs_inventory = { path = "../../fs/inventory" }
 patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }

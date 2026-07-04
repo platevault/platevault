@@ -3,6 +3,8 @@
 pub mod artifact_watcher;
 pub mod capability;
 pub mod drive_scope;
+pub mod reconcile;
+pub mod symlink_gate;
 pub mod watcher;
 
 pub const CRATE_NAME: &str = "fs_inventory";
