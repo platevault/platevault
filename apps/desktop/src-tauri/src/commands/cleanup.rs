@@ -1,84 +1,95 @@
-//! Spec 030 cleanup policy commands (T024).
+//! Spec 030 cleanup policy + spec 017 cleanup candidate commands.
 //!
-//! Stubs that return a default cleanup policy and accept updates.
-//! Real persistence will be wired when the cleanup policy repository is built.
+//! Two-step cleanup flow (D11):
+//!   - `cleanup.scan` — pure, read-only preview (candidates + reclaimable bytes);
+//!     creates NO plan.
+//!   - `cleanup.plan.generate` — materialise a reviewable cleanup plan from the
+//!     same candidates via the spec-016 protection generator.
+//!
+//! Policy is persisted through `app_core::cleanup_generator` (the generic
+//! `protection_defaults` store, D13); these commands are thin adapters.
 
+use app_core::cleanup_generator;
 use contracts_core::cleanup::{
-    CleanupAction, CleanupPolicy, CleanupPolicyEntry, CleanupScanResult, UpdateCleanupPolicy,
+    CleanupPolicy, CleanupScanResult, GenerateCleanupPlanRequest, GenerateCleanupPlanResult,
+    UpdateCleanupPolicy,
 };
 use contracts_core::ContractError;
+use tauri::State;
 
-/// `cleanup.policy.get` — returns the current cleanup policy.
+use crate::commands::lifecycle::AppState;
+
+/// `cleanup.policy.get` — returns the persisted cleanup policy (or the default).
 ///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `ContractError` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn cleanup_policy_get() -> Result<CleanupPolicy, ContractError> {
-    tracing::debug!("stub: cleanup.policy.get");
-    Ok(default_cleanup_policy())
+pub async fn cleanup_policy_get(
+    state: State<'_, AppState>,
+) -> Result<CleanupPolicy, ContractError> {
+    tracing::debug!("cleanup.policy.get");
+    cleanup_generator::get_policy(state.repo.pool()).await
 }
 
-/// `cleanup.policy.update` — update the cleanup policy.
+/// `cleanup.policy.update` — persist the cleanup policy.
 ///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `ContractError` on serialisation or database failure.
 #[tauri::command]
 #[specta::specta]
 pub async fn cleanup_policy_update(
+    state: State<'_, AppState>,
     request: UpdateCleanupPolicy,
 ) -> Result<CleanupPolicy, ContractError> {
     tracing::debug!(
-        "stub: cleanup.policy.update ({} entries, auto={})",
+        "cleanup.policy.update ({} entries, auto={})",
         request.entries.len(),
         request.auto_on_completion,
     );
-    // Echo back as if persisted.
-    Ok(CleanupPolicy { entries: request.entries, auto_on_completion: request.auto_on_completion })
+    let policy =
+        CleanupPolicy { entries: request.entries, auto_on_completion: request.auto_on_completion };
+    cleanup_generator::set_policy(state.repo.pool(), &policy).await
 }
 
-/// `cleanup.scan` — scan a project for cleanup candidates.
+/// `cleanup.scan` — pure, read-only cleanup preview for a project (D11 step 1).
 ///
-/// Returns an empty candidates list as a stub. The real implementation will
-/// walk the project file tree and apply the cleanup policy to identify
-/// reclaimable artifacts.
+/// Enumerates the project's observed processing artifacts, classifies them,
+/// applies the persisted policy, and returns candidate files plus reclaimable
+/// bytes. Creates NO plan and performs NO filesystem mutation.
 ///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `ContractError` on database failure.
 #[tauri::command]
 #[specta::specta]
-pub async fn cleanup_scan(project_id: String) -> Result<CleanupScanResult, ContractError> {
-    tracing::debug!("stub: cleanup.scan project_id={project_id}");
-    Ok(CleanupScanResult { project_id, candidates: vec![], total_reclaimable_bytes: 0 })
+pub async fn cleanup_scan(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> Result<CleanupScanResult, ContractError> {
+    tracing::debug!("cleanup.scan project_id={project_id}");
+    cleanup_generator::scan(state.repo.pool(), &project_id).await
 }
 
-fn default_cleanup_policy() -> CleanupPolicy {
-    let data_types = [
-        "calibrated_lights",
-        "registered_lights",
-        "drizzle_data",
-        "cosmetic_correction",
-        "debayered_frames",
-        "master_bias",
-        "master_dark",
-        "master_flat",
-        "master_light",
-        "processing_logs",
-        "sequence_files",
-        "light_subs_with_master",
-        "dark_subs_with_master",
-        "flat_subs_with_master",
-        "bias_subs_with_master",
-    ];
-
-    CleanupPolicy {
-        entries: data_types
-            .iter()
-            .map(|dt| CleanupPolicyEntry {
-                data_type: (*dt).to_owned(),
-                action: CleanupAction::Keep,
-            })
-            .collect(),
-        auto_on_completion: false,
-    }
+/// `cleanup.plan.generate` — materialise a reviewable cleanup plan (D11 step 2).
+///
+/// Builds plan items from the current cleanup candidates and delegates to the
+/// spec-016 protection generator, which resolves per-item protection and gates
+/// approval. Generating the plan performs NO filesystem mutation (FR-002).
+///
+/// # Errors
+/// Returns `ContractError` on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn cleanup_plan_generate(
+    state: State<'_, AppState>,
+    request: GenerateCleanupPlanRequest,
+) -> Result<GenerateCleanupPlanResult, ContractError> {
+    tracing::debug!("cleanup.plan.generate project_id={}", request.project_id);
+    cleanup_generator::generate(
+        state.repo.pool(),
+        &request.project_id,
+        request.title.as_deref(),
+        request.destructive_destination.as_deref(),
+    )
+    .await
 }

@@ -236,6 +236,7 @@ fn exports_typescript_bindings() {
         "cleanup_policy_get",
         "cleanup_policy_update",
         "cleanup_scan",
+        "cleanup_plan_generate",
         // inbox / inventory / ingestion
         "inbox_scan",
         "inbox_scan_folder",

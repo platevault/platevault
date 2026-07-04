@@ -45,7 +45,9 @@ use domain_core::ids::{new_id, Timestamp};
 /// Reads from `protection_defaults` (scope="global") first (migration 0035,
 /// FR-018). Falls back to the legacy `settings` table rows for backwards
 /// compatibility, then to hard-coded defaults when both are absent.
-async fn load_global_protection(pool: &SqlitePool) -> Result<GlobalProtection, ContractError> {
+pub(crate) async fn load_global_protection(
+    pool: &SqlitePool,
+) -> Result<GlobalProtection, ContractError> {
     use serde_json::Value;
 
     // Prefer protection_defaults table (migration 0035).
@@ -88,10 +90,10 @@ async fn load_global_protection(pool: &SqlitePool) -> Result<GlobalProtection, C
     Ok(GlobalProtection { level, block_permanent_delete, categories })
 }
 
-struct GlobalProtection {
-    level: String,
-    block_permanent_delete: bool,
-    categories: Vec<String>,
+pub(crate) struct GlobalProtection {
+    pub(crate) level: String,
+    pub(crate) block_permanent_delete: bool,
+    pub(crate) categories: Vec<String>,
 }
 
 // ── US2: source.protection.get ────────────────────────────────────────────
@@ -458,6 +460,12 @@ pub struct GenerateCleanupPlanRequest {
     pub plan_id: String,
     pub title: String,
     pub destructive_destination: String,
+    /// Bytes the plan will require at its destination once applied (FR-012 /
+    /// spec 025 D17). For cleanup plans this is the total size of archive-action
+    /// items (items sent to trash or deleted need no destination space). The
+    /// apply executor's free-space pre-flight reads this; the generator only
+    /// populates it.
+    pub total_bytes_required: i64,
     pub items: Vec<CleanupPlanItem>,
 }
 
@@ -495,7 +503,7 @@ pub async fn generate_cleanup_plan(
             plan_type: "cleanup",
             destructive_destination: &req.destructive_destination,
             parent_plan_id: None,
-            total_bytes_required: 0,
+            total_bytes_required: req.total_bytes_required,
         },
     )
     .await
@@ -519,7 +527,11 @@ pub async fn generate_cleanup_plan(
         .await
         .map_err(db_err)?;
 
-        let protection = &resolved.level;
+        // The `plan_items.protection` column only permits 'normal' | 'protected'
+        // (migration 0014 CHECK). `resolve_protection` can return "unprotected"
+        // for a source with an explicit unprotected override, so map it to
+        // 'normal' for storage — both are non-gating from the plan's view.
+        let protection = if resolved.level == "unprotected" { "normal" } else { &resolved.level };
         if protection == "protected" {
             protected_item_count += 1;
         }
@@ -810,6 +822,7 @@ mod tests {
             plan_id: plan_id.to_owned(),
             title: "Cleanup lights session 2026-05".to_owned(),
             destructive_destination: "archive".to_owned(),
+            total_bytes_required: 0,
             items: vec![super::CleanupPlanItem {
                 id: "item-t040-1".to_owned(),
                 name: "light_001.fits".to_owned(),
@@ -930,6 +943,7 @@ mod tests {
             plan_id: plan_id.to_owned(),
             title: "Cleanup inbox session".to_owned(),
             destructive_destination: "archive".to_owned(),
+            total_bytes_required: 0,
             items: vec![super::CleanupPlanItem {
                 id: "item-t042-1".to_owned(),
                 name: "inbox_raw_001.fits".to_owned(),
