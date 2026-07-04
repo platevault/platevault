@@ -72,6 +72,11 @@ pub async fn projects_get(
 
 /// `projects.create` — create a new project.
 ///
+/// Routes through `app_core::project_create` so the folder-scaffolding plan
+/// is auto-applied when it is mkdir-only (user decision 2026-07-04); the
+/// result's `scaffold_applied` reports the outcome. The plan + audit records
+/// are still written either way (constitution II).
+///
 /// # Errors
 ///
 /// Returns `Err(String)` with the error code on validation or database failure.
@@ -81,7 +86,7 @@ pub async fn projects_create(
     state: State<'_, AppState>,
     req: ProjectCreateRequest,
 ) -> Result<ProjectCreateResult, ContractError> {
-    project_setup::create(state.repo.pool(), &state.bus, &req).await
+    app_core::project_create::create(state.repo.pool(), &state.bus, &req).await
 }
 
 // ── projects.update ───────────────────────────────────────────────────────────

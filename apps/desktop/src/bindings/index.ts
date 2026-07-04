@@ -323,6 +323,11 @@ export const commands = {
 	/**
 	 *  `projects.create` — create a new project.
 	 * 
+	 *  Routes through `app_core::project_create` so the folder-scaffolding plan
+	 *  is auto-applied when it is mkdir-only (user decision 2026-07-04); the
+	 *  result's `scaffold_applied` reports the outcome. The plan + audit records
+	 *  are still written either way (constitution II).
+	 * 
 	 *  # Errors
 	 * 
 	 *  Returns `Err(String)` with the error code on validation or database failure.
@@ -5653,6 +5658,22 @@ export type ProjectCreateResult_Deserialize = {
 	channels: ProjectChannelDto_Deserialize[],
 	auditId: string,
 	createdAt: string,
+	/**
+	 *  Outcome of the mkdir-only scaffolding auto-apply (user decision
+	 *  2026-07-04, supersedes handover D16). The folder-structure plan and its
+	 *  audit rows are still written (constitution II reviewability-as-record);
+	 *  only the approval click is skipped, and only when every plan action is
+	 *  directory creation.
+	 * 
+	 *  - `Some(true)`  — the scaffolding plan auto-applied cleanly; the
+	 *    project folders exist on disk.
+	 *  - `Some(false)` — auto-apply was attempted but did not complete
+	 *    cleanly; the plan remains reviewable via the normal plan surfaces,
+	 *    exactly like a failed manual apply.
+	 *  - `None`        — the plan requires manual review (it contains a
+	 *    non-mkdir action) or no plan was generated.
+	 */
+	scaffoldApplied?: boolean | null,
 };
 
 /**  Successful result from `projects.create`. */
@@ -5667,6 +5688,22 @@ export type ProjectCreateResult_Serialize = {
 	channels: ProjectChannelDto_Serialize[],
 	auditId: string,
 	createdAt: string,
+	/**
+	 *  Outcome of the mkdir-only scaffolding auto-apply (user decision
+	 *  2026-07-04, supersedes handover D16). The folder-structure plan and its
+	 *  audit rows are still written (constitution II reviewability-as-record);
+	 *  only the approval click is skipped, and only when every plan action is
+	 *  directory creation.
+	 * 
+	 *  - `Some(true)`  — the scaffolding plan auto-applied cleanly; the
+	 *    project folders exist on disk.
+	 *  - `Some(false)` — auto-apply was attempted but did not complete
+	 *    cleanly; the plan remains reviewable via the normal plan surfaces,
+	 *    exactly like a failed manual apply.
+	 *  - `None`        — the plan requires manual review (it contains a
+	 *    non-mkdir action) or no plan was generated.
+	 */
+	scaffoldApplied?: boolean | null,
 };
 
 /**  A project detail (sources + channels included). */
