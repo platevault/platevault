@@ -362,6 +362,10 @@ apps/desktop/playwright-report/
 .headroom/
 /headroom_memory.db
 
+# Spec 037 Layer-2 real-UI E2E: disposable local/CI ALM_DB_URL target
+# (crates/e2e-tests, .github/workflows/e2e.yml)
+/e2e-test.db*
+
 # Local-only tauri MCP bridge host (gateway IP differs per machine)
 .mcp.tauri.env
 

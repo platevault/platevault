@@ -1,21 +1,34 @@
 # Nextest configuration for spec 037 Layer-2 real-UI E2E journeys.
 #
-# Run the E2E suite (once wired) with:
+# Run the E2E suite with:
 #   cargo nextest run -p e2e_tests --profile e2e --run-ignored all
 #
-# The "e2e" profile enforces serial execution (one app/driver/DB at a time),
-# a generous per-test timeout, one automatic retry, and immediate-final
-# failure output so the first broken journey is visible without scrolling.
+# (`--run-ignored all` because the journeys are `#[ignore]`d in-source so the
+# Layer-1 `cargo test --workspace` job — no tauri-webdriver CLI, no
+# e2e-feature app build, no served frontend — skips them.)
+#
+# The "e2e" profile enforces serial execution (one app/driver/DB at a time —
+# it keeps journeys from racing each other over the shared :4444/:4445 ports
+# and the shared ALM_DB_URL file), a generous per-test timeout, one automatic
+# retry, and immediate-final failure output so the first broken journey is
+# visible without scrolling.
 
 [profile.e2e]
 # One test at a time — a single app instance, driver session, and database.
 test-threads = 1
 
-# Allow up to 60 s per slow-test period; terminate after 3 consecutive periods.
-slow-timeout = { period = "60s", terminate-after = 3 }
+# Warn every 60 s; terminate after 5 periods (300 s). Must exceed the
+# harness's LAUNCH_TIMEOUT (120 s — slow debug-build app boot on CI runners,
+# see crates/e2e-tests/tests/common/mod.rs) plus in-journey polling.
+slow-timeout = { period = "60s", terminate-after = 5 }
 
 # Retry once to guard against transient driver/startup flakes.
 retries = 1
+
+# Run every journey even when one fails: with fail-fast (the default) a single
+# failure cancels the remaining serial tests, hiding their results from CI
+# (run 28694907445 reported "1/6 tests run" with no signal for the other 5).
+fail-fast = false
 
 # Print failures immediately and again at the end for easy scanning.
 failure-output = "immediate-final"
