@@ -10,6 +10,7 @@ live in this directory; feature-scoped research lives under
 - [imagetyp-normalization.md](./imagetyp-normalization.md) — IMAGETYP → frame-type normalization.
 - [implementation-dependencies.md](./implementation-dependencies.md) — cross-feature implementation dependencies.
 - [lifecycle-state-model.md](./lifecycle-state-model.md) — data lifecycle state model.
+- [044-frontend-astronomy-libraries.md](./044-frontend-astronomy-libraries.md) — astronomy/charting library selection for the planner (astronomy-engine, visx, react-table, moon filter model, FITS/XISF crate split); handover for spec 044 + orchestrator.
 
 ## Feature research decisions
 
