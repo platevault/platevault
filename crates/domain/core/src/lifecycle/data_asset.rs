@@ -12,9 +12,12 @@ use crate::lifecycle::plan::{FilesystemPlan, PlanState};
 use crate::lifecycle::prepared_source::{PreparedSourceState, PreparedSourceView};
 use crate::lifecycle::project::{Project, ProjectState};
 use crate::lifecycle::projection::{ProcessingArtifact, ProjectionState};
-use crate::lifecycle::session::{AcquisitionSession, CalibrationSession, SessionState};
-
 /// The string tag used in contracts and audit rows for each entity family.
+///
+/// Spec 041 FR-051 (T076): `AcquisitionSession`, `CalibrationSession`, and
+/// `InventorySession` were removed. Sessions no longer carry a
+/// review-transitionable lifecycle state, so they are no longer Data Assets
+/// dispatched through the generic `lifecycle.transition` machinery.
 #[derive(
     Clone,
     Copy,
@@ -33,15 +36,12 @@ use crate::lifecycle::session::{AcquisitionSession, CalibrationSession, SessionS
 pub enum EntityType {
     LibraryRoot,
     FileRecord,
-    AcquisitionSession,
-    CalibrationSession,
     DataSource,
     Project,
     PreparedSource,
     ProcessingArtifact,
     Projection,
     Plan,
-    InventorySession,
     FilesystemPlan,
 }
 
@@ -51,15 +51,12 @@ impl EntityType {
         match self {
             Self::LibraryRoot => "library_root",
             Self::FileRecord => "file_record",
-            Self::AcquisitionSession => "acquisition_session",
-            Self::CalibrationSession => "calibration_session",
             Self::DataSource => "data_source",
             Self::Project => "project",
             Self::PreparedSource => "prepared_source",
             Self::ProcessingArtifact => "processing_artifact",
             Self::Projection => "projection",
             Self::Plan => "plan",
-            Self::InventorySession => "inventory_session",
             Self::FilesystemPlan => "filesystem_plan",
         }
     }
@@ -122,34 +119,6 @@ impl DataAsset for FilesystemPlan {
             PlanState::Cancelled => "cancelled",
             PlanState::Discarded => "discarded",
         }
-    }
-}
-
-impl DataAsset for AcquisitionSession {
-    fn entity_id(&self) -> EntityId {
-        self.id
-    }
-
-    fn entity_type(&self) -> EntityType {
-        EntityType::AcquisitionSession
-    }
-
-    fn current_state_label(&self) -> &'static str {
-        session_state_label(self.state)
-    }
-}
-
-impl DataAsset for CalibrationSession {
-    fn entity_id(&self) -> EntityId {
-        self.id
-    }
-
-    fn entity_type(&self) -> EntityType {
-        EntityType::CalibrationSession
-    }
-
-    fn current_state_label(&self) -> &'static str {
-        session_state_label(self.state)
     }
 }
 
@@ -228,16 +197,5 @@ impl DataAsset for ProcessingArtifact {
             ProjectionState::Stale => "stale",
             ProjectionState::Regenerating => "regenerating",
         }
-    }
-}
-
-fn session_state_label(state: SessionState) -> &'static str {
-    match state {
-        SessionState::Discovered => "discovered",
-        SessionState::Candidate => "candidate",
-        SessionState::NeedsReview => "needs_review",
-        SessionState::Confirmed => "confirmed",
-        SessionState::Rejected => "rejected",
-        SessionState::Ignored => "ignored",
     }
 }

@@ -10,18 +10,18 @@
  */
 
 import type { DispatchFn } from './recorder';
-import { setInvokeOverride } from '@/api/commands';
-import { getSettings } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { setInvokeOverride, unwrap } from '@/api/ipc';
 
 /**
  * installRecorder — called from main.tsx with the `wrap` function from recorder.ts.
  * Queries devMode from backend settings and installs the proxy if enabled.
  */
 export async function installRecorder(
-  wrap: (dispatch: DispatchFn, devMode: boolean, contracts?: import('@/api/commands').ContractMeta[]) => DispatchFn,
+  wrap: (dispatch: DispatchFn, devMode: boolean, contracts?: import('@/bindings/index').ContractMeta[]) => DispatchFn,
 ): Promise<void> {
   try {
-    const settings = await getSettings({ scope: 'advanced' });
+    const settings = unwrap(await commands.settingsGet('advanced'));
     const vals = settings.values as Record<string, unknown>;
     const devMode = vals?.devMode === true;
 

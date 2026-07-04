@@ -172,6 +172,46 @@ describe('alm/no-user-string', () => {
     expect(run("const a = n === 1 ? 'item' : 'items';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
   });
 
+  it('alm/no-js-plural flags suffix template-literal ternaries and short-circuit suffixes', () => {
+    const linter = new Linter();
+    const run = (code: string) =>
+      linter.verify(code, {
+        plugins: { alm: plugin },
+        languageOptions: { parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } },
+        rules: { 'alm/no-js-plural': 'error' },
+      });
+    // template-literal suffix/empty branches (no interpolation) → flagged
+    expect(run('const a = n === 1 ? `` : `s`;').filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    // short-circuit suffix → flagged
+    expect(run("const a = `${n}${n !== 1 && 's'}`;").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    // non-suffix logical-AND → NOT flagged
+    expect(run("const a = ok && 'Save';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
+  });
+
+  it('alm/no-js-plural flags a ternary picking between paired m.*_plural()/m.*_singular() catalog calls', () => {
+    const linter = new Linter();
+    const run = (code: string) =>
+      linter.verify(code, {
+        plugins: { alm: plugin },
+        languageOptions: { parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } },
+        rules: { 'alm/no-js-plural': 'error' },
+      });
+    const out = run("const a = n !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular();");
+    const hits = out.filter((m) => m.ruleId === 'alm/no-js-plural');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('jsPluralPairedCall');
+    // reversed branch order → still flagged
+    expect(
+      run("const b = n === 1 ? m.inbox_list_file_singular() : m.inbox_list_file_plural();").filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(1);
+    // ternary between two unrelated catalog calls → NOT flagged
+    expect(
+      run("const c = ok ? m.common_save() : m.common_cancel();").filter((m) => m.ruleId === 'alm/no-js-plural'),
+    ).toHaveLength(0);
+  });
+
   it('ignores pure-interpolation / machine template literals (no letters)', () => {
     const out = lint(`
       function P({ a, b, id }) {
@@ -180,6 +220,176 @@ describe('alm/no-user-string', () => {
     `);
     // aria-label \`\${a}-\${b}\` has no letters in its static chunks → not flagged;
     // className/key are not user-facing attrs anyway.
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  // ── Enhancements (spec 046 #4: variable-assigned blind spot + attr/key gaps) ──
+
+  it('flags the component-prop attrs heading and info', () => {
+    const out = lint(`
+      function P() {
+        return (
+          <div>
+            <Group heading="Results" />
+            <Row info="Controls how scans run." />
+          </div>
+        );
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(2);
+    expect(hits.every((m) => m.messageId === 'attr')).toBe(true);
+  });
+
+  it('flags a logical (??/||) string fallback in a user-facing attribute', () => {
+    const out = lint(`
+      function P({ groupBy, sort }) {
+        return <div label={groupBy.label ?? 'Group by'} title={sort.title || 'Sort'} />;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(2);
+    expect(hits.every((m) => m.messageId === 'attr')).toBe(true);
+  });
+
+  it('flags title/desc/description/body object-literal keys', () => {
+    const out = lint(`
+      const META = { title: 'Data Sources', desc: 'Library roots indexed.' };
+      const CARD = { description: 'On-demand resolution.', body: 'A longer note.' };
+      export { META, CARD };
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(4);
+  });
+
+  it('flags a user string assigned to a variable and then rendered', () => {
+    const out = lint(`
+      function P({ n, len }) {
+        const summary = n === 0 ? 'None' : n === len ? 'All' : \`\${n} selected\`;
+        return <span>{summary}</span>;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('variable');
+  });
+
+  it('does NOT flag machine-token variables even when rendered (prose gate)', () => {
+    const out = lint(`
+      function P({ ok }) {
+        const status = ok ? 'pending' : 'no_match';
+        const pattern = '{target}_{filter}';
+        return <span title={status}>{pattern}</span>;
+      }
+    `);
+    // 'pending'/'no_match' are lowercase/snake tokens; '{target}_{filter}' has braces.
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  it('does NOT flag a prose variable used only in a machine context', () => {
+    const out = lint(`
+      function P({ ok }) {
+        const cls = ok ? 'Active row' : 'Idle row';
+        return <div className={cls} />;
+      }
+    `);
+    // 'Active row' is prose, but className is not a rendered/user position.
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  // ── State-setter sink + toast template literals (spec 046: prose template
+  // literals passed directly to `setState(...)` or a toast call) ──
+
+  it('flags a prose template literal passed directly to a useState setter and rendered', () => {
+    const out = lint(`
+      function P({ dims }) {
+        const [errorMsg, setErrorMsg] = useState(undefined);
+        const handle = () => {
+          setErrorMsg(\`Hard-rule mismatch: \${dims.join(', ')}. Confirm to force-assign.\`);
+        };
+        return <div onClick={handle}>{errorMsg}</div>;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('variable');
+  });
+
+  it('flags a prose string literal passed directly to a useState setter and rendered', () => {
+    const out = lint(`
+      function P() {
+        const [aliasError, setAliasError] = useState(null);
+        const handle = () => {
+          setAliasError('Alias must not be blank.');
+        };
+        return <span>{aliasError}</span>;
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('variable');
+  });
+
+  it('does NOT flag a machine-token string passed to a useState setter (prose gate)', () => {
+    const out = lint(`
+      function P() {
+        const [status, setStatus] = useState('idle');
+        const handle = () => setStatus('pending');
+        return <span title={status}>{handle.name}</span>;
+      }
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  it('does NOT flag a useState setter argument that is never rendered', () => {
+    const out = lint(`
+      function P() {
+        const [msg, setMsg] = useState('');
+        const handle = () => setMsg('Not rendered anywhere');
+        return <div onClick={handle} />;
+      }
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  it('does NOT flag a machine path/id template literal passed to a useState setter', () => {
+    const out = lint(`
+      function P({ id }) {
+        const [path, setPath] = useState('');
+        const handle = () => setPath(\`/library/\${id}/preview\`);
+        return <div title={path} />;
+      }
+    `);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+  });
+
+  it('flags a prose template literal passed directly to a toast call', () => {
+    const out = lint(`
+      function P({ n }) {
+        return toast(\`Saved \${n} items\`);
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('toast');
+  });
+
+  it('flags a prose template literal in a toast object-form message prop', () => {
+    const out = lint(`
+      function P({ n }) {
+        return addToast({ message: \`Saved \${n} items\`, variant: 'ok' });
+      }
+    `);
+    const hits = out.filter((m) => m.ruleId === 'alm/no-user-string');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].messageId).toBe('toast');
+  });
+
+  it('does NOT flag a pure-interpolation (no-letter) template literal passed to a toast call', () => {
+    const out = lint(`
+      function P({ a, b }) {
+        return toast(\`#\${a}-\${b}\`);
+      }
+    `);
     expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
   });
 });

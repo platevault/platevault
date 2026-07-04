@@ -16,6 +16,7 @@ use contracts_core::dev::{
     DevContractsListResponse, DevExportRequest, DevExportResponse, DevSchemaGetRequest,
     DevSchemaGetResponse,
 };
+use contracts_core::ContractError;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
@@ -143,7 +144,7 @@ pub async fn dev_export(
         .unwrap_or(false);
 
     if !dev_mode {
-        return Err("dev_mode.disabled: Developer mode is disabled.".to_owned());
+        return Err(ContractError::internal("dev_mode.disabled: Developer mode is disabled."));
     }
 
     // Resolve contracts list.
@@ -168,7 +169,7 @@ pub async fn dev_export(
     // Validate output path — must be absolute.
     let output_path = Path::new(&request.output_path);
     if !output_path.is_absolute() {
-        return Err("path.write.denied: Output path must be absolute.".to_owned());
+        return Err(ContractError::internal("path.write.denied: Output path must be absolute."));
     }
 
     // Write the file.
@@ -204,7 +205,7 @@ pub async fn dev_schema_get(
         .unwrap_or(false);
 
     if !dev_mode {
-        return Err("dev_mode.disabled: Developer mode is disabled.".to_owned());
+        return Err(ContractError::internal("dev_mode.disabled: Developer mode is disabled."));
     }
 
     if request.schema_path.is_empty() {
@@ -231,7 +232,6 @@ mod tests {
     use contracts_core::dev::ContractCall;
 
     use super::{CallBuffer, CALL_BUFFER_CAP};
-    use contracts_core::ContractError;
 
     fn make_call(id: &str) -> ContractCall {
         ContractCall {

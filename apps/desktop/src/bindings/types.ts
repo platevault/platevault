@@ -13,8 +13,9 @@
 
 // ─── Enum / String-Union Re-exports ─────────────────────────────────────────
 
+// Spec 041 FR-051 (T076, Phase 13): `SessionState` was removed — sessions
+// are derived, already-confirmed inventory with no review-state machine.
 export type {
-  SessionState,
   ProjectState,
   ConfidenceLevel,
   ProvenanceOrigin,

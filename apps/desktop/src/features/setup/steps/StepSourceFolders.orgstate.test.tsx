@@ -11,7 +11,7 @@
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // StepSourceFolders uses useDirectoryPicker — stub it so no Tauri bridge is needed.
 vi.mock('@/shared/native', () => ({
@@ -187,21 +187,30 @@ describe('StepSourceFolders — onOrganizationStateChange callback', () => {
 
 // ── Tests: flushToDB includes organizationState in register payload ────────
 
-vi.mock('@/api/commands', () => ({
-  registerRootBatch: vi.fn().mockResolvedValue({ results: [] }),
+// flushToDB (sources-store.ts) delegates registration to registerSources.ts,
+// which calls commands.rootsRegisterBatch + unwrap (spec 037 caller
+// migration) — mock the generated bindings surface, not @/api/commands.
+const { mockRootsRegisterBatch } = vi.hoisted(() => ({
+  mockRootsRegisterBatch: vi.fn(),
+}));
+
+vi.mock('@/bindings/index', () => ({
+  commands: { rootsRegisterBatch: mockRootsRegisterBatch },
 }));
 
 vi.stubEnv('VITE_USE_MOCKS', 'false');
 
 describe('flushToDB — organizationState in register payload', () => {
-  it('sends the user-chosen organizationState for non-inbox sources', async () => {
-    const { registerRootBatch } = await import('@/api/commands');
-    vi.mocked(registerRootBatch).mockResolvedValue({ results: [] });
+  beforeEach(() => {
+    mockRootsRegisterBatch.mockReset();
+    mockRootsRegisterBatch.mockResolvedValue({ status: 'ok', data: { status: 'success', items: [] } });
+  });
 
+  it('sends the user-chosen organizationState for non-inbox sources', async () => {
     const sources = addSource([], 'light_frames', '/astro/lights', 'recursive', 'unorganized');
     await flushToDB(sources);
 
-    expect(registerRootBatch).toHaveBeenCalledWith(
+    expect(mockRootsRegisterBatch).toHaveBeenCalledWith(
       expect.objectContaining({
         sources: expect.arrayContaining([
           expect.objectContaining({
@@ -215,15 +224,12 @@ describe('flushToDB — organizationState in register payload', () => {
   });
 
   it('always sends "unorganized" for inbox sources regardless of stored value', async () => {
-    const { registerRootBatch } = await import('@/api/commands');
-    vi.mocked(registerRootBatch).mockResolvedValue({ results: [] });
-
     // Force-add an inbox source — addSource already coerces to unorganized,
     // but we test that flushToDB also enforces it.
     const sources = addSource([], 'inbox', '/astro/inbox', 'recursive');
     await flushToDB(sources);
 
-    expect(registerRootBatch).toHaveBeenCalledWith(
+    expect(mockRootsRegisterBatch).toHaveBeenCalledWith(
       expect.objectContaining({
         sources: expect.arrayContaining([
           expect.objectContaining({
@@ -237,14 +243,11 @@ describe('flushToDB — organizationState in register payload', () => {
   });
 
   it('defaults to "organized" for non-inbox sources when no state is specified', async () => {
-    const { registerRootBatch } = await import('@/api/commands');
-    vi.mocked(registerRootBatch).mockResolvedValue({ results: [] });
-
     // addSource with no explicit organizationState → defaults to 'organized'
     const sources = addSource([], 'project', '/astro/projects', 'recursive');
     await flushToDB(sources);
 
-    expect(registerRootBatch).toHaveBeenCalledWith(
+    expect(mockRootsRegisterBatch).toHaveBeenCalledWith(
       expect.objectContaining({
         sources: expect.arrayContaining([
           expect.objectContaining({

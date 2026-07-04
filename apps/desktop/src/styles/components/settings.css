@@ -1,0 +1,222 @@
+/* === SETTINGS === */
+.alm-settings { display: flex; flex: 1; min-height: 0; }
+.alm-settings__nav {
+  width: 180px; flex-shrink: 0;
+  border-right: 1px solid var(--alm-border);
+  padding: var(--alm-sp-3) 0;
+  overflow-y: auto;
+}
+.alm-settings__nav-item {
+  display: block; width: 100%;
+  padding: 7px var(--alm-sp-4);
+  font-size: var(--alm-text-sm); color: var(--alm-text-secondary);
+  cursor: pointer; border: none; background: none; text-align: left;
+font-weight: var(--alm-weight-medium);
+  transition: all var(--alm-transition-fast);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.alm-settings__nav-item:hover { background: var(--alm-hover-bg); color: var(--alm-text); }
+.alm-settings__nav-item--active {
+  color: var(--alm-accent-text); background: var(--alm-selected-bg);
+  font-weight: var(--alm-weight-semibold);
+  border-left: 2px solid var(--alm-accent);
+  padding-left: calc(var(--alm-sp-4) - var(--alm-sp-0));
+}
+.alm-settings__nav-group { margin-bottom: var(--alm-sp-2); }
+.alm-settings__nav-group-label {
+  font-size: 9.5px; font-weight: var(--alm-weight-semibold);
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--alm-text-faint);
+  padding: var(--alm-sp-3) var(--alm-sp-4) var(--alm-sp-1);
+}
+.alm-settings__content {
+  /* Scroll independently within the two-pane detail column */
+  flex: 1; min-width: 0; overflow-y: auto;
+  padding: var(--alm-sp-5) var(--alm-sp-6) var(--alm-sp-7);
+  max-width: 680px;
+}
+.alm-settings__title {
+  font-size: var(--alm-text-xl); font-weight: var(--alm-weight-semibold);
+  margin-bottom: var(--alm-sp-1);
+}
+.alm-settings__desc {
+  font-size: var(--alm-text-sm); color: var(--alm-text-muted);
+  margin: 0 0 var(--alm-sp-5);
+  line-height: 1.6;
+}
+.alm-settings__group { margin-bottom: var(--alm-sp-6); }
+.alm-settings__group:last-child { margin-bottom: 0; }
+.alm-settings__group-title {
+  font-size: var(--alm-text-sm); font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+  margin-bottom: var(--alm-sp-3);
+  padding-bottom: var(--alm-sp-2);
+  border-bottom: 1px solid var(--alm-border-subtle);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.alm-settings__group-note {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin: 0 0 var(--alm-sp-3) 0;
+  line-height: 1.6;
+}
+.alm-attribution__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+.alm-attribution__item {
+  padding: var(--alm-sp-3);
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-md);
+  background: var(--alm-surface);
+}
+.alm-attribution__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+.alm-attribution__org {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+.alm-attribution__desc {
+  margin: var(--alm-sp-1) 0;
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
+}
+.alm-attribution__link {
+  font-size: var(--alm-text-xs);
+  word-break: break-all;
+}
+/* Grid so help text (__row-desc) always sits BELOW the control in column 2,
+   never beside/overlapping it (was a 3rd flex column → collision on
+   Ingestion/Calibration tolerance rows). */
+.alm-settings__row {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  column-gap: var(--alm-sp-4); row-gap: var(--alm-sp-1);
+  align-items: start;
+  padding: var(--alm-sp-3) 0;
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-settings__row:last-child { border-bottom: none; }
+.alm-settings__row-label {
+  grid-column: 1; grid-row: 1;
+  display: flex; align-items: center; gap: var(--alm-sp-1);
+  font-size: var(--alm-text-sm); font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-secondary);
+  padding-top: 5px; /* align with control vertical centre */
+}
+.alm-settings__row-content { grid-column: 2; grid-row: 1; min-width: 0; }
+.alm-settings__row-desc {
+  grid-column: 2; grid-row: 2;
+  font-size: var(--alm-text-xs); color: var(--alm-text-muted);
+  line-height: 1.5;
+}
+/* Flex header row inside a group: title on left, action button on right */
+.alm-settings__group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--alm-sp-3);
+}
+.alm-settings__group-header .alm-settings__group-title { margin-bottom: 0; border-bottom: none; padding-bottom: 0; }
+/* Ruled header: keeps the hairline under the whole title+action row (mock .sec__t + .sec__r). */
+.alm-settings__group-header--ruled {
+  padding-bottom: var(--alm-sp-2);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+/* Inline error message for settings save failures */
+.alm-settings__error {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+  margin-top: var(--alm-sp-2);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  background: var(--alm-danger-bg, rgba(220,38,38,0.08));
+  border-radius: var(--alm-radius-sm);
+  border: 1px solid var(--alm-danger-border, rgba(220,38,38,0.2));
+}
+
+/* Radio group */
+.alm-radio-group { display: flex; gap: var(--alm-sp-2); flex-wrap: wrap; }
+.alm-radio {
+  display: flex; align-items: center; gap: var(--alm-sp-1);
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+  border: 1px solid var(--alm-border); border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs); cursor: pointer;
+  transition: all var(--alm-transition-fast);
+  background: var(--alm-bg); color: var(--alm-text-secondary);
+}
+.alm-radio:hover { border-color: var(--alm-ink3); }
+.alm-radio--active {
+  border-color: var(--alm-accent); background: var(--alm-accent-bg);
+  color: var(--alm-accent-text); font-weight: var(--alm-weight-medium);
+}
+.alm-radio__desc { font-size: var(--alm-text-2xs); color: var(--alm-text-muted); margin-top: 1px; }
+.alm-radio--active .alm-radio__desc { color: var(--alm-accent-text); }
+
+/* Segmented control */
+.alm-seg { display: inline-flex; border: 1px solid var(--alm-border); border-radius: var(--alm-radius-sm); overflow: hidden; }
+.alm-seg__btn {
+  padding: var(--alm-sp-0) var(--alm-sp-2); font-size: var(--alm-text-2xs);
+  border: none; background: var(--alm-bg); color: var(--alm-text-muted);
+  cursor: pointer;font-weight: var(--alm-weight-medium);
+  border-right: 1px solid var(--alm-border);
+  transition: all var(--alm-transition-fast);
+}
+.alm-seg__btn:last-child { border-right: none; }
+.alm-seg__btn:hover { background: var(--alm-hover-bg); }
+.alm-seg__btn--active { background: var(--alm-ink); color: var(--alm-on-accent); }
+.alm-seg__btn--danger.alm-seg__btn--active { background: var(--alm-danger); }
+
+/* Toggle switch */
+.alm-toggle { position: relative; width: 36px; height: 20px; cursor: pointer; flex-shrink: 0; display: inline-flex; }
+.alm-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.alm-toggle__track {
+  position: absolute; inset: 0;
+  background: var(--alm-rule); border-radius: 10px;
+  transition: background var(--alm-transition-base);
+}
+.alm-toggle__thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--alm-surface-raised); box-shadow: var(--alm-shadow-sm);
+  transition: transform var(--alm-transition-base);
+}
+.alm-toggle input:checked ~ .alm-toggle__track { background: var(--alm-accent); }
+.alm-toggle input:checked ~ .alm-toggle__thumb { transform: translateX(16px); }
+
+/* Token chip (naming builder) */
+.alm-token-chip {
+  display: inline-flex; align-items: center; gap: var(--alm-sp-1);
+  padding: var(--alm-sp-0) var(--alm-sp-2); border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+  background: var(--alm-accent-bg); color: var(--alm-accent-text);
+  border: 1px solid var(--alm-info-border);
+}
+.alm-token-chip__x { cursor: pointer; opacity: 0.6; }
+.alm-token-chip__x:hover { opacity: 1; }
+.alm-sep-chip {
+  display: inline-flex; align-items: center;
+  padding: var(--alm-sp-0) var(--alm-sp-2); border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+  background: var(--alm-chip); color: var(--alm-text-secondary);
+  border: 1px solid var(--alm-border);
+}
+/* Literal path-segment chip (per-type destination pattern editor) */
+.alm-literal-chip {
+  display: inline-flex; align-items: center; gap: var(--alm-sp-1);
+  padding: var(--alm-sp-0) var(--alm-sp-2); border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+  background: var(--alm-success-bg, var(--alm-surface-raised)); color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+}
+
+/* DataSources SettingsSection action row (was an inline style). */
+.alm-datasources__action-row {
+  display: flex;
+  gap: var(--alm-sp-2);
+  align-items: center;
+}

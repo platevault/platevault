@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Btn, Pill } from '@/ui';
 import { DirPicker } from '@/ui/DirPicker';
-import { listRoots, registerRoot, startScan, settingsSourceOverrideSet, settingsOverridableKeys } from '@/api/commands';
+import { listRoots, registerRoot, rescanRoot, settingsSourceOverrideSet, settingsOverridableKeys } from './settingsIpc';
 import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
 import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
+import { RemapRootDialog } from './RemapRootDialog';
 
 const SOURCES_KEYS = ['followSymlinks', 'hashOnScan', 'alwaysPreviewBeforePlan'];
 
@@ -24,12 +25,15 @@ interface DataSourcesProps {
 /** Display order and labels for category groups (matches mock: Raw / Calibration / Project / Inbox). */
 const CATEGORY_ORDER: RootCategory[] = ['raw', 'calibration', 'project', 'inbox'];
 
-const CATEGORY_LABEL: Record<RootCategory, string> = {
-  raw: 'Raw',
-  calibration: 'Calibration',
-  project: 'Project',
-  inbox: 'Inbox',
-};
+/** Render-time factory (spec 046 #8b) so category labels re-read the active locale. */
+function categoryLabel(category: RootCategory): string {
+  switch (category) {
+    case 'raw': return m.settings_datasources_category_raw();
+    case 'calibration': return m.settings_datasources_category_calibration();
+    case 'project': return m.settings_datasources_category_project();
+    case 'inbox': return m.settings_datasources_category_inbox();
+  }
+}
 
 export function DataSources({ save: _save }: DataSourcesProps) {
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
@@ -41,6 +45,12 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   const [addingCategory, setAddingCategory] = useState<RootCategory>('raw');
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+
+  // ── Rescan (P6a) ──────────────────────────────────────────────────────────
+  const [rescanningId, setRescanningId] = useState<string | null>(null);
+
+  // ── Remap dialog (P6a) ────────────────────────────────────────────────────
+  const [remapRoot, setRemapRoot] = useState<LibraryRoot | null>(null);
 
   // ── Overridable keys — fetched from backend (T025) ──────────────────────────
   const [overridableKeys, setOverridableKeys] = useState<string[]>([...OVERRIDABLE_KEYS_FALLBACK]);
@@ -114,12 +124,15 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   };
 
   const handleRescan = async (root: LibraryRoot) => {
+    setRescanningId(root.id);
     try {
-      await startScan({ root_ids: [root.id] });
-      // Reload after a short delay to pick up updated lastScanned
-      setTimeout(loadRoots, 800);
+      await rescanRoot({ rootId: root.id, rootAbsolutePath: root.path });
+      // Real scan has already completed — reload immediately (no guess-delay).
+      loadRoots();
     } catch (err: unknown) {
       console.error('Rescan failed:', errMessage(err));
+    } finally {
+      setRescanningId(null);
     }
   };
 
@@ -206,18 +219,26 @@ export function DataSources({ save: _save }: DataSourcesProps) {
       {grouped.map(({ category, roots: groupRoots }) => (
         <div key={category} className="alm-data-sources__group">
           <h4 className="alm-data-sources__group-label">
-            {CATEGORY_LABEL[category]}
+            {categoryLabel(category)}
           </h4>
           {groupRoots.map((root) => (
             <RootCard
               key={root.id}
               root={root}
               onRescan={handleRescan}
+              rescanning={rescanningId === root.id}
+              onRemap={setRemapRoot}
             />
           ))}
         </div>
       ))}
     </SettingsSection>
+
+    <RemapRootDialog
+      root={remapRoot}
+      onClose={() => setRemapRoot(null)}
+      onApplied={loadRoots}
+    />
 
     {/* Per-source setting override (spec 018 T025) */}
     {roots.length > 0 && (
@@ -304,17 +325,21 @@ export function DataSources({ save: _save }: DataSourcesProps) {
 interface RootCardProps {
   root: LibraryRoot;
   onRescan: (root: LibraryRoot) => void;
+  rescanning: boolean;
+  onRemap: (root: LibraryRoot) => void;
 }
 
-function RootCard({ root, onRescan }: RootCardProps) {
+function RootCard({ root, onRescan, rescanning, onRemap }: RootCardProps) {
   const isOffline = !root.online;
 
   const metaParts: string[] = [];
   if (root.fileCount != null && root.fileCount > 0) {
-    metaParts.push(`${root.fileCount.toLocaleString()} files`);
+    metaParts.push(
+      m.data_sources_file_count({ count: root.fileCount, formatted: root.fileCount.toLocaleString() }),
+    );
   }
   if (root.lastScanned) {
-    metaParts.push(`scanned ${root.lastScanned}`);
+    metaParts.push(m.settings_datasources_scanned({ date: root.lastScanned }));
   }
   const meta = metaParts.join(' · ');
 
@@ -346,8 +371,8 @@ function RootCard({ root, onRescan }: RootCardProps) {
       {/* Right: action buttons */}
       <div className="alm-data-sources__root-actions">
         {!isOffline && (
-          <Btn size="sm" onClick={() => onRescan(root)}>
-            {m.common_rescan()}
+          <Btn size="sm" onClick={() => onRescan(root)} disabled={rescanning}>
+            {rescanning ? m.common_rescanning() : m.common_rescan()}
           </Btn>
         )}
         {!isOffline && (
@@ -361,13 +386,7 @@ function RootCard({ root, onRescan }: RootCardProps) {
             {m.settings_datasources_disable()}
           </Btn>
         )}
-        <Btn
-          size="sm"
-          onClick={() => {
-            // STUB: remap-root dialog flow pending (remapRoot + applyRootRemap exist in commands.ts)
-            console.log('STUB: remap backend command pending', root.id);
-          }}
-        >
+        <Btn size="sm" onClick={() => onRemap(root)}>
           {m.settings_datasources_remap()}
         </Btn>
         {isOffline && (

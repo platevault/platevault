@@ -93,6 +93,10 @@ pub enum FailureCode {
     OsTrashFull,
     /// Permission denied for OS trash operation.
     OsTrashPermissionDenied,
+    /// Requested link materialization kind is not implemented on this
+    /// platform/executor (spec 049 — e.g. `junction`, deferred pending a
+    /// dedicated Windows reparse-point implementation).
+    MaterializationUnsupported,
     /// Unclassified OS error.
     Unknown,
 }
@@ -122,6 +126,7 @@ impl FailureCode {
             Self::OsTrashUnavailable => "os_trash.unavailable",
             Self::OsTrashFull => "os_trash.full",
             Self::OsTrashPermissionDenied => "os_trash.permission.denied",
+            Self::MaterializationUnsupported => "materialization.unsupported",
             Self::Unknown => "unknown",
         }
     }
@@ -150,6 +155,7 @@ impl FailureCode {
             | Self::ProtectedSource
             | Self::TrashUnavailable
             | Self::CopySucceededDeleteFailedRollbackFailed
+            | Self::MaterializationUnsupported
             | Self::Unknown => false,
         }
     }

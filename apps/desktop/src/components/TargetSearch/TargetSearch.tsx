@@ -45,12 +45,9 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Combobox } from '@base-ui-components/react/combobox';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDebouncedCallback } from 'use-debounce';
-import {
-  searchTargets,
-  resolveTarget,
-  TARGET_SEARCH_CONTRACT_VERSION,
-} from '@/api/commands';
-import type { TargetSuggestion, ResolvedTarget } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { TargetSuggestion, ResolvedTarget } from '@/bindings/aliases';
 import type { TargetCatalogId, TargetObjectType } from '@/bindings/index';
 import { Pill } from '@/ui';
 import { m } from '@/lib/i18n';
@@ -62,6 +59,12 @@ import {
 } from './objectType';
 
 // ── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Contract version for the target.search / target.resolve requests. Moved here
+ * off the retired @/api/commands wrapper (spec 037 FR-004: move, not drop).
+ */
+const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
 
 const DEBOUNCE_MS = 300;
 const DEFAULT_LIMIT = 20;
@@ -147,8 +150,8 @@ export function TargetSearch({
   catalogFilter,
   typeFilter,
   limit = DEFAULT_LIMIT,
-  label = 'Search for a target',
-  placeholder = 'e.g. M31, NGC 224, Andromeda',
+  label = m.targets_add_target_search_label(),
+  placeholder = m.projects_create_target_search_placeholder(),
   hideLabel = false,
   inputId,
   autoFocus = false,
@@ -228,14 +231,16 @@ export function TargetSearch({
 
       // ── Phase 1: local seed + cache (instant) ──────────────────────────────
       try {
-        const res = await searchTargets({
-          contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
-          requestId: crypto.randomUUID(),
-          query: trimmed,
-          catalogFilter: effectiveCatalogFilter,
-          typeFilter: effectiveTypeFilter,
-          limit,
-        });
+        const res = unwrap(
+          await commands.targetSearch({
+            contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+            requestId: crypto.randomUUID(),
+            query: trimmed,
+            catalogFilter: effectiveCatalogFilter,
+            typeFilter: effectiveTypeFilter,
+            limit,
+          }),
+        );
         if (!isCurrent()) return; // superseded — drop stale result
         setSuggestions(res.suggestions);
       } catch {
@@ -253,20 +258,21 @@ export function TargetSearch({
 
       setResolving(true);
       try {
-        const res = await resolveTarget({
-          contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
-          requestId: crypto.randomUUID(),
-          query: trimmed,
-          override: null,
-        });
+        const res = unwrap(
+          await commands.targetResolve({
+            contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+            requestId: crypto.randomUUID(),
+            query: trimmed,
+            override: null,
+          }),
+        );
         // Cancel-in-flight guard: a newer query must not be overwritten.
         if (!isCurrent()) return;
         if (res.status === 'resolved' && res.target) {
           // Merge against the current list (the Phase-1 local hits for this
           // generation) so the long-tail row is appended, never duplicated.
-          setSuggestions((prev) =>
-            mergeDedupe(prev, resolvedToSuggestion(res.target as ResolvedTarget)),
-          );
+          const resolved = res.target;
+          setSuggestions((prev) => mergeDedupe(prev, resolvedToSuggestion(resolved)));
         }
         // `unresolved` (unknown / offline / resolver-disabled) is non-fatal:
         // leave the local hits untouched and surface no error (FR-011/FR-015).
@@ -317,12 +323,14 @@ export function TargetSearch({
       setOverriding(s.targetId);
       setError(null);
       try {
-        const res = await resolveTarget({
-          contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
-          requestId: crypto.randomUUID(),
-          query: trimmed,
-          override: { targetId: s.targetId },
-        });
+        const res = unwrap(
+          await commands.targetResolve({
+            contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+            requestId: crypto.randomUUID(),
+            query: trimmed,
+            override: { targetId: s.targetId },
+          }),
+        );
         const result: TargetSuggestion =
           res.status === 'resolved' && res.target
             ? resolvedToSuggestion(res.target)

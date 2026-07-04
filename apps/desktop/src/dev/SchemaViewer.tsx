@@ -8,7 +8,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { devSchemaGet } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 
 interface SchemaViewerProps {
   /** Absolute path to the JSON Schema file. */
@@ -35,7 +36,9 @@ export function SchemaViewer({
     setContent(null);
     setMissing(false);
 
-    devSchemaGet(schemaPath)
+    commands
+      .devSchemaGet({ schemaPath })
+      .then(unwrap)
       .then((resp) => {
         if (cancelled) return;
         if (resp.found && resp.content != null) {

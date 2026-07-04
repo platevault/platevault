@@ -241,6 +241,36 @@ pub async fn get_project_canonical_target(
     }))
 }
 
+/// Set a project's spec-035 `canonical_target_id` association, but only if it
+/// is currently unset.
+///
+/// Spec 041 R-17/FR-052: called when a light's resolved target propagates from
+/// its acquisition session to a linked project. This never overwrites an
+/// existing value — whether it was set manually at project creation
+/// (spec-035 US1 #2) or by an earlier propagation — so a project's canonical
+/// target is first-write-wins, not last-write-wins.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn set_project_canonical_target_id(
+    pool: &SqlitePool,
+    id: &str,
+    canonical_target_id: &str,
+) -> DbResult<()> {
+    let now = Timestamp::now_iso();
+    sqlx::query(
+        "UPDATE projects SET canonical_target_id = ?, updated_at = ? \
+         WHERE id = ? AND canonical_target_id IS NULL",
+    )
+    .bind(canonical_target_id)
+    .bind(&now)
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// List all projects ordered by updated_at descending.
 ///
 /// # Errors
@@ -455,6 +485,82 @@ pub async fn update_project_lifecycle_unblock(
     Ok(now)
 }
 
+/// Record the archive plan that drove a project into the `archived` lifecycle
+/// state (spec 017 C5, migration 0053). Idempotent overwrite; does not touch
+/// `updated_at` so the archived timestamp set by the lifecycle transition is
+/// preserved.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn set_archived_via_plan_id(
+    pool: &SqlitePool,
+    project_id: &str,
+    plan_id: &str,
+) -> DbResult<()> {
+    sqlx::query("UPDATE projects SET archived_via_plan_id = ? WHERE id = ?")
+        .bind(plan_id)
+        .bind(project_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// One archived-project row for the Archive surface (spec 017 `archive.list`).
+///
+/// Joined with the owning archive plan so the row can surface the plan title
+/// (as the archive reason) and the bytes moved into the app-managed archive.
+#[derive(Debug, Clone)]
+pub struct ArchivedProjectRow {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    /// `updated_at` at the time the project reached `archived`.
+    pub archived_at: String,
+    pub archived_via_plan_id: Option<String>,
+    /// Owning plan's title, when the plan row still exists.
+    pub plan_title: Option<String>,
+    /// Bytes the owning plan moved into the archive (`total_bytes_required`).
+    pub archived_bytes: Option<i64>,
+}
+
+type ArchivedProjectTuple =
+    (String, String, String, String, Option<String>, Option<String>, Option<i64>);
+
+/// List every project currently in the `archived` lifecycle state, most-recent
+/// first (spec 017 C5 — projects-only Archive surface).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_archived_projects(pool: &SqlitePool) -> DbResult<Vec<ArchivedProjectRow>> {
+    let rows: Vec<ArchivedProjectTuple> = sqlx::query_as(
+        "SELECT p.id, p.name, p.path, p.updated_at, p.archived_via_plan_id, \
+                pl.title, pl.total_bytes_required \
+         FROM projects p \
+         LEFT JOIN plans pl ON pl.id = p.archived_via_plan_id \
+         WHERE p.lifecycle = 'archived' \
+         ORDER BY p.updated_at DESC, p.id ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(id, name, path, archived_at, archived_via_plan_id, plan_title, archived_bytes)| {
+            ArchivedProjectRow {
+                id,
+                name,
+                path,
+                archived_at,
+                archived_via_plan_id,
+                plan_title,
+                archived_bytes,
+            }
+        })
+        .collect())
+}
+
 /// Set channel_drift flag on a project.
 ///
 /// # Errors
@@ -472,6 +578,28 @@ pub async fn set_channel_drift(pool: &SqlitePool, id: &str, has_drift: bool) -> 
 }
 
 // ── project_sources CRUD ──────────────────────────────────────────────────────
+
+/// List the ids of every project linked (via `project_sources`) to a given
+/// `inventory_session_id` (an `acquisition_session.id`).
+///
+/// Spec 041 R-17/FR-052: the read side of target propagation — a session with
+/// no linked project simply returns an empty vec (not an error).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_project_ids_for_session(
+    pool: &SqlitePool,
+    inventory_session_id: &str,
+) -> DbResult<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT project_id FROM project_sources WHERE inventory_session_id = ?",
+    )
+    .bind(inventory_session_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
 
 /// Insert a project source link row.
 ///

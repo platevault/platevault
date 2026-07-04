@@ -16,7 +16,7 @@
  * - Sensitive fields are redacted before storage per ContractMeta.sensitiveFields.
  */
 
-import type { ContractCall, ContractMeta } from '@/api/commands';
+import type { ContractCall, ContractMeta } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
 
 /** Maximum entries retained in the ring buffer. */

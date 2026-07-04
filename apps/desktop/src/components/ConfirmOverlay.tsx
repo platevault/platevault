@@ -28,7 +28,7 @@ export function ConfirmOverlay({
   onConfirm,
   title,
   description,
-  confirmLabel = 'Confirm',
+  confirmLabel = m.common_confirm(),
   confirmVariant = 'primary',
   children,
 }: ConfirmOverlayProps) {

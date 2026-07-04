@@ -2,38 +2,27 @@
 //!
 //! These types mirror the JSON Schema contracts in
 //! `specs/006-inventory-library-lifecycle/contracts/`. They are the canonical
-//! Rust-side DTO boundary for `inventory.list` and `inventory.session.review`.
+//! Rust-side DTO boundary for `inventory.list`.
 //!
 //! The UI-visible `InventorySource` / `InventorySession` types are **read-only
-//! projections** — no new persisted entities are introduced by spec 006. All
-//! state mutations go through `inventory_session_review` which wraps the
-//! spec-002 `lifecycle.transition` use case.
+//! projections** — no new persisted entities are introduced by spec 006.
+//!
+//! Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
+//! inventory. The review-state machine (`InventorySessionState`) and the
+//! `inventory.session.review` command that wrapped the spec-002
+//! `lifecycle.transition` use case were removed; there is no longer a
+//! review-state mutation on this surface. Session metadata remains editable
+//! post-hoc via the inbox per-file metadata/override tables.
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
-
-use crate::JsonAny;
-
-// ── SessionState ─────────────────────────────────────────────────────────────
-
-/// Canonical spec 002 session state. Six values; no presentational projection.
-/// UI maps display labels locally: `discovered` and `candidate` → "Needs review".
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum InventorySessionState {
-    Discovered,
-    Candidate,
-    NeedsReview,
-    Confirmed,
-    Rejected,
-    Ignored,
-}
 
 // ── FrameType ────────────────────────────────────────────────────────────────
 
 /// Frame type for an inventory session.
 /// `DarkFlat` is reserved but never returned in v1.
-/// `Mixed` is a server-derived sentinel for post-promotion regressions.
+/// (`Mixed` removed 2026-07-03: Inbox single-type ingest — spec 041 — splits
+/// mixed folders into single-type items at ingest, so a session is never mixed.)
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum InventoryFrameType {
@@ -41,7 +30,6 @@ pub enum InventoryFrameType {
     Dark,
     Flat,
     Bias,
-    Mixed,
 }
 
 // ── SourceKind / SourceState ─────────────────────────────────────────────────
@@ -107,6 +95,9 @@ pub struct InventoryLinkedRefs {
 
 /// One row in the inventory ledger. Projects one `AcquisitionSession` OR one
 /// `CalibrationSession` into a unified DTO.
+///
+/// Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
+/// inventory with no review lifecycle.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InventorySession {
@@ -119,7 +110,6 @@ pub struct InventorySession {
     pub target: Option<String>,
     pub filter: Option<String>,
     pub exposure: Option<String>,
-    pub state: InventorySessionState,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub camera: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -162,11 +152,6 @@ pub struct InventoryListFilters {
     /// When set, limits sessions to the given frame type.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frame_filter: Option<InventoryFrameType>,
-    /// When set, limits sessions to the given canonical state.
-    /// `ignored` sessions are excluded from the default ledger.
-    /// Use `reviewFilter=ignored` to surface them (FR-010).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub review_filter: Option<String>,
 }
 
 /// Request envelope for `inventory.list`.
@@ -188,135 +173,4 @@ pub struct InventoryListResponse {
     pub request_id: String,
     pub generated_at: String,
     pub sources: Vec<InventorySource>,
-}
-
-// ── inventory.session.review request / response ───────────────────────────────
-
-/// Request envelope for `inventory.session.review`.
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct InventorySessionReviewRequest {
-    pub contract_version: String,
-    pub request_id: String,
-    pub session_id: String,
-    /// Target canonical state. When equal to current state → noop (no error).
-    pub next_state: InventorySessionState,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub action_label: Option<String>,
-    /// "user" or "system"
-    pub actor: String,
-}
-
-/// Response envelope for `inventory.session.review`.
-/// Status is "success", "noop", or "error".
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct InventorySessionReviewResponse {
-    pub status: String,
-    pub contract_version: String,
-    pub request_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub applied_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub entity_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prior_state: Option<InventorySessionState>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_state: Option<InventorySessionState>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub audit_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<InventoryReviewError>,
-}
-
-/// Error payload for `inventory.session.review`.
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct InventoryReviewError {
-    pub code: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<JsonAny>,
-}
-
-impl InventorySessionReviewResponse {
-    /// Construct a success response.
-    #[must_use]
-    pub fn success(
-        request_id: String,
-        applied_at: String,
-        entity_type: String,
-        prior_state: InventorySessionState,
-        new_state: InventorySessionState,
-        audit_id: String,
-    ) -> Self {
-        Self {
-            status: "success".to_owned(),
-            contract_version: "2.0.0".to_owned(),
-            request_id,
-            applied_at: Some(applied_at),
-            entity_type: Some(entity_type),
-            prior_state: Some(prior_state),
-            new_state: Some(new_state),
-            audit_id: Some(audit_id),
-            error: None,
-        }
-    }
-
-    /// Construct a noop response (state unchanged).
-    #[must_use]
-    pub fn noop(request_id: String) -> Self {
-        Self {
-            status: "noop".to_owned(),
-            contract_version: "2.0.0".to_owned(),
-            request_id,
-            applied_at: None,
-            entity_type: None,
-            prior_state: None,
-            new_state: None,
-            audit_id: None,
-            error: None,
-        }
-    }
-
-    /// Construct an error response.
-    #[must_use]
-    pub fn error(request_id: String, code: &str, message: String) -> Self {
-        Self {
-            status: "error".to_owned(),
-            contract_version: "2.0.0".to_owned(),
-            request_id,
-            applied_at: None,
-            entity_type: None,
-            prior_state: None,
-            new_state: None,
-            audit_id: None,
-            error: Some(InventoryReviewError { code: code.to_owned(), message, details: None }),
-        }
-    }
-
-    /// Construct an error response with structured details.
-    #[must_use]
-    pub fn error_with_details(
-        request_id: String,
-        code: &str,
-        message: String,
-        details: JsonAny,
-    ) -> Self {
-        Self {
-            status: "error".to_owned(),
-            contract_version: "2.0.0".to_owned(),
-            request_id,
-            applied_at: None,
-            entity_type: None,
-            prior_state: None,
-            new_state: None,
-            audit_id: None,
-            error: Some(InventoryReviewError {
-                code: code.to_owned(),
-                message,
-                details: Some(details),
-            }),
-        }
-    }
 }

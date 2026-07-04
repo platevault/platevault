@@ -10,11 +10,13 @@
 
 import { describe, it, expect } from 'vitest';
 import { deriveInboxStats } from './inboxStatsFromItems';
-import type { InboxListItem } from '@/api/commands';
+import type { InboxListItem } from '@/bindings/index';
 
 function folder(id: string, frameType: string | null, files: number): InboxListItem {
   return {
     inboxItemId: id,
+    groupId: id,
+    groupKey: '',
     rootId: 'r1',
     rootAbsolutePath: '/lib',
     relativePath: id,

@@ -1,11 +1,14 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { m } from '@/lib/i18n';
 
 export type OperationStatus = 'idle' | 'scanning' | 'applying';
 
-const STATUS_LABELS: Record<OperationStatus, string> = {
-  idle: 'Idle',
-  scanning: 'Scanning...',
-  applying: 'Applying plan...',
+// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8) —
+// never call these at module scope (e.g. in the `createContext` default below).
+const STATUS_LABEL_FNS: Record<OperationStatus, () => string> = {
+  idle: () => m.opstatus_idle(),
+  scanning: () => m.opstatus_scanning(),
+  applying: () => m.opstatus_applying_plan(),
 };
 
 interface OperationStatusState {
@@ -16,7 +19,10 @@ interface OperationStatusState {
 
 const OperationStatusContext = createContext<OperationStatusState>({
   status: 'idle',
-  statusLabel: STATUS_LABELS.idle,
+  // Fallback default context value (never rendered — the app always mounts
+  // under OperationStatusProvider); left empty to avoid calling `m.*()` at
+  // module-import time, which would freeze the locale (spec 046 #8).
+  statusLabel: '',
   setStatus: () => {},
 });
 
@@ -29,7 +35,7 @@ export function OperationStatusProvider({ children }: { children: ReactNode }) {
 
   return (
     <OperationStatusContext.Provider
-      value={{ status, statusLabel: STATUS_LABELS[status], setStatus }}
+      value={{ status, statusLabel: STATUS_LABEL_FNS[status](), setStatus }}
     >
       {children}
     </OperationStatusContext.Provider>

@@ -146,20 +146,45 @@ impl Default for RecentOptions<'_> {
     }
 }
 
+/// Result of [`recent_entries`]: the projected entries plus retention-gap
+/// info (spec 019 FR-015).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecentEntries {
+    /// Oldest-first window of projected entries.
+    pub entries: Vec<LogEntry>,
+    /// True when the caller's cursor predates the oldest `event_id` still
+    /// retained in the `events` table — i.e. entries between the cursor and
+    /// the oldest retained row were evicted before this call. `false` for a
+    /// fresh-start subscription (no cursor supplied).
+    pub truncated: bool,
+    /// Exact count of entries evicted between the cursor and the oldest
+    /// still-retained entry. `event_id` is an `AUTOINCREMENT` primary key
+    /// that is contiguous under normal insert-only usage, so the gap width
+    /// is derived directly (`oldest_retained - cursor - 1`) rather than
+    /// estimated. Always `Some` when `truncated` is `true`; always `None`
+    /// when `truncated` is `false`.
+    pub truncated_count: Option<i64>,
+}
+
 /// Pull the most-recent log entries from the `events` table.
 ///
 /// Returns at most `options.window_size` entries (default 500), ordered
 /// oldest-first for UI appending.
 ///
 /// When `options.since_event_id` is set, only entries with
-/// `event_id > since_event_id` are returned (cursor-based resume).
+/// `event_id > since_event_id` are returned (cursor-based resume). If the
+/// supplied cursor predates the oldest entry still retained in `events`
+/// (FR-015: entries evicted since the caller's last poll), the returned
+/// [`RecentEntries::truncated`] flag is set and, since `event_id` gaps are
+/// exactly countable, [`RecentEntries::truncated_count`] carries the exact
+/// number of evicted entries.
 ///
 /// # Errors
 /// Returns `LogError::Database` if the query fails.
 pub async fn recent_entries(
     pool: &SqlitePool,
     options: RecentOptions<'_>,
-) -> Result<Vec<LogEntry>, LogError> {
+) -> Result<RecentEntries, LogError> {
     let limit = i64::try_from(options.window_size.min(LOG_BUFFER_SIZE)).unwrap_or(500);
     let since_id = options.since_event_id.unwrap_or(0);
 
@@ -208,7 +233,34 @@ pub async fn recent_entries(
         entries.drain(0..drain_count);
     }
 
-    Ok(entries)
+    let (truncated, truncated_count) = retention_gap(pool, options.since_event_id).await?;
+
+    Ok(RecentEntries { entries, truncated, truncated_count })
+}
+
+/// Detect a retention/eviction gap (FR-015) between `cursor` and the oldest
+/// `event_id` currently retained in the `events` table.
+///
+/// `event_id` is assigned by `AUTOINCREMENT` and is contiguous under normal
+/// insert-only usage, so any missing ids between `cursor` and the oldest
+/// retained row must have existed and been evicted (rather than never
+/// having been written). A fresh-start subscription (`cursor = None`) never
+/// reports a gap: there is no prior client state to have gone stale.
+async fn retention_gap(
+    pool: &SqlitePool,
+    cursor: Option<i64>,
+) -> Result<(bool, Option<i64>), LogError> {
+    let Some(cursor_id) = cursor else {
+        return Ok((false, None));
+    };
+
+    let oldest_retained: Option<i64> =
+        sqlx::query_scalar("SELECT MIN(event_id) FROM events").fetch_one(pool).await?;
+
+    match oldest_retained {
+        Some(min_id) if min_id > cursor_id + 1 => Ok((true, Some(min_id - cursor_id - 1))),
+        _ => Ok((false, None)),
+    }
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
@@ -372,11 +424,11 @@ mod tests {
         insert_event(&pool, "plan.approved", r#"{"plan_id":"p1"}"#).await;
         insert_event(&pool, "settings.changed", r#"{"key":"logLevel"}"#).await;
 
-        let entries = recent_entries(&pool, RecentOptions::default()).await.unwrap();
-        assert_eq!(entries.len(), 2);
+        let result = recent_entries(&pool, RecentOptions::default()).await.unwrap();
+        assert_eq!(result.entries.len(), 2);
         // Oldest first: plan.approved came first.
-        assert_eq!(entries[0].source, LogEntrySource::Plan);
-        assert_eq!(entries[1].source, LogEntrySource::Settings);
+        assert_eq!(result.entries[0].source, LogEntrySource::Plan);
+        assert_eq!(result.entries[1].source, LogEntrySource::Settings);
     }
 
     #[tokio::test]
@@ -385,7 +437,7 @@ mod tests {
         insert_event(&pool, "plan.approved", "{}").await; // info
         insert_event(&pool, "catalog.download.failed", r#"{"message":"net error"}"#).await; // error
 
-        let entries = recent_entries(
+        let result = recent_entries(
             &pool,
             RecentOptions { level_min: Some(LogLevel::Warn), ..Default::default() },
         )
@@ -393,8 +445,8 @@ mod tests {
         .unwrap();
 
         // Only error-level entry should pass warn+ filter.
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].level, LogLevel::Error);
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].level, LogLevel::Error);
     }
 
     #[tokio::test]
@@ -404,10 +456,10 @@ mod tests {
             insert_event(&pool, "plan.approved", &format!(r#"{{"plan_id":"p{i}"}}"#)).await;
         }
 
-        let entries = recent_entries(&pool, RecentOptions { window_size: 3, ..Default::default() })
+        let result = recent_entries(&pool, RecentOptions { window_size: 3, ..Default::default() })
             .await
             .unwrap();
-        assert_eq!(entries.len(), 3);
+        assert_eq!(result.entries.len(), 3);
     }
 
     #[tokio::test]
@@ -419,10 +471,10 @@ mod tests {
 
         // Get first two entries.
         let all = recent_entries(&pool, RecentOptions::default()).await.unwrap();
-        assert_eq!(all.len(), 3);
+        assert_eq!(all.entries.len(), 3);
 
         // Parse cursor from second entry id: "aud:2"
-        let cursor_id: i64 = all[1].id.strip_prefix("aud:").unwrap().parse().unwrap();
+        let cursor_id: i64 = all.entries[1].id.strip_prefix("aud:").unwrap().parse().unwrap();
 
         let resumed = recent_entries(
             &pool,
@@ -430,8 +482,69 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(resumed.len(), 1);
-        assert_eq!(resumed[0].id, format!("aud:{}", cursor_id + 1));
+        assert_eq!(resumed.entries.len(), 1);
+        assert_eq!(resumed.entries[0].id, format!("aud:{}", cursor_id + 1));
+        // Nothing was evicted between the cursor and the oldest retained row.
+        assert!(!resumed.truncated, "no-gap resume must not report truncated");
+        assert_eq!(resumed.truncated_count, None);
+    }
+
+    #[tokio::test]
+    async fn recent_entries_fresh_start_never_truncated() {
+        let pool = make_pool().await;
+        // No events at all, and no cursor: fresh-start subscription.
+        let result = recent_entries(&pool, RecentOptions::default()).await.unwrap();
+        assert!(!result.truncated, "fresh start (no cursor) must never report truncated");
+        assert_eq!(result.truncated_count, None);
+        assert!(result.entries.is_empty());
+
+        // Even once entries exist, a fresh-start (no cursor) request still
+        // reports no gap: there is no prior client state to have gone stale.
+        insert_event(&pool, "plan.approved", "{}").await;
+        insert_event(&pool, "plan.approved", "{}").await;
+        // Simulate a retention policy having evicted the very oldest row.
+        sqlx::query("DELETE FROM events WHERE event_id = 1").execute(&pool).await.unwrap();
+
+        let result = recent_entries(&pool, RecentOptions::default()).await.unwrap();
+        assert!(!result.truncated, "fresh start must not report truncated even after eviction");
+        assert_eq!(result.truncated_count, None);
+    }
+
+    #[tokio::test]
+    async fn recent_entries_gap_after_eviction_is_detected() {
+        let pool = make_pool().await;
+
+        // Fill well past the ring buffer capacity so a retention/vacuum
+        // policy would plausibly evict the oldest rows.
+        for i in 0..(LOG_BUFFER_SIZE + 20) {
+            insert_event(&pool, "plan.approved", &format!(r#"{{"plan_id":"p{i}"}}"#)).await;
+        }
+
+        // A client resumes from a stale cursor near the very beginning.
+        let stale_cursor: i64 = 2;
+
+        // Simulate eviction: a retention job has pruned the oldest 15 rows,
+        // so `stale_cursor` now predates the oldest retained entry.
+        sqlx::query("DELETE FROM events WHERE event_id <= 15").execute(&pool).await.unwrap();
+
+        let resumed = recent_entries(
+            &pool,
+            RecentOptions { since_event_id: Some(stale_cursor), ..Default::default() },
+        )
+        .await
+        .unwrap();
+
+        assert!(resumed.truncated, "resuming from a cursor predating retention must be truncated");
+        // Entries 3..=15 (13 entries) were evicted between the cursor and the
+        // oldest retained row (16).
+        assert_eq!(resumed.truncated_count, Some(13));
+        // 505 rows (16..=520) survive eviction, which is more than the
+        // window cap (LOG_BUFFER_SIZE = 500), so the returned window is
+        // itself capped to the newest 500 — independent of the gap
+        // detection above, which is derived purely from `event_id`s, not
+        // from what the window happened to return.
+        assert_eq!(resumed.entries.len(), LOG_BUFFER_SIZE);
+        assert_eq!(resumed.entries.first().unwrap().id, "aud:21");
     }
 
     #[tokio::test]
@@ -469,15 +582,15 @@ mod tests {
         insert_event(&pool, "settings.changed", "{}").await;
         insert_event(&pool, "catalog.download.started", "{}").await;
 
-        let entries = recent_entries(
+        let result = recent_entries(
             &pool,
             RecentOptions { source_filter: &[LogEntrySource::Plan], ..Default::default() },
         )
         .await
         .unwrap();
 
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].source, LogEntrySource::Plan);
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].source, LogEntrySource::Plan);
     }
 
     #[tokio::test]

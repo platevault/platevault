@@ -18,7 +18,7 @@ import {
   getResolverSettings,
   updateResolverSettings,
   type ResolverSettings,
-} from '@/api/commands';
+} from './settingsIpc';
 import { m } from '@/lib/i18n';
 import { SettingsRow } from './SettingsKit';
 
@@ -104,8 +104,8 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
           label={m.settings_resolver_online_label()}
           info={
             settings.onlineEnabled
-              ? 'Targets not in the bundled seed or local cache are resolved on demand from SIMBAD, then cached.'
-              : 'Online resolution is off — only the bundled seed and local cache are used. Unknown objects are marked unresolved.'
+              ? m.settings_resolver_online_on_info()
+              : m.settings_resolver_online_off_info()
           }
         >
           <Toggle
@@ -119,9 +119,9 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
       {!compact && (
         <>
           <SettingsRow
-             
+
             label={<label htmlFor={endpointId}>{m.settings_resolver_endpoint_label()}</label>}
-            info="The CDS TAP service URL queried for long-tail resolution."
+            info={m.settings_resolver_tapurl_info()}
           >
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={endpointId} (cross-column association the rule can't trace) */}
             <input
@@ -136,9 +136,9 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
           </SettingsRow>
 
           <SettingsRow
-             
+
             label={<label htmlFor={debounceId}>{m.settings_resolver_debounce_label()}</label>}
-            info="How long to wait after typing before querying SIMBAD."
+            info={m.settings_resolver_debounce_info()}
           >
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={debounceId} (cross-column association the rule can't trace) */}
             <input
@@ -157,9 +157,9 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
           </SettingsRow>
 
           <SettingsRow
-             
+
             label={<label htmlFor={timeoutId}>{m.settings_resolver_timeout_label()}</label>}
-            info="How long to wait for a SIMBAD response before giving up."
+            info={m.settings_resolver_timeout_info()}
           >
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={timeoutId} (cross-column association the rule can't trace) */}
             <input

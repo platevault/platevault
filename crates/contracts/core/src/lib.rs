@@ -1,5 +1,6 @@
 //! Rust-side contract DTO boundary.
 
+pub mod archive;
 pub mod audit;
 pub mod calibration;
 pub mod calibration_match;
@@ -30,6 +31,7 @@ pub mod roots;
 pub mod search;
 pub mod sessions;
 pub mod settings;
+pub mod source_view_generate;
 pub mod status;
 pub mod targets;
 pub mod tools;

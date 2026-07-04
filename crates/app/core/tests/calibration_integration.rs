@@ -27,8 +27,8 @@ use uuid::Uuid;
 async fn insert_acq_session(pool: &sqlx::SqlitePool, id: &str) {
     sqlx::query(
         "INSERT INTO acquisition_session \
-         (id, session_key, frame_ids, state, created_at) \
-         VALUES (?, ?, '[]', 'confirmed', '2026-05-01T00:00:00Z')",
+         (id, session_key, frame_ids, created_at) \
+         VALUES (?, ?, '[]', '2026-05-01T00:00:00Z')",
     )
     .bind(id)
     .bind(format!("key-{id}"))
@@ -69,8 +69,8 @@ async fn insert_acq_fingerprint(
 async fn insert_cal_session(pool: &sqlx::SqlitePool, id: &str, kind: &str) {
     sqlx::query(
         "INSERT INTO calibration_session \
-         (id, session_key, frame_ids, kind, state, created_at) \
-         VALUES (?, ?, '[]', ?, 'confirmed', '2026-05-01T00:00:00Z')",
+         (id, session_key, frame_ids, kind, created_at) \
+         VALUES (?, ?, '[]', ?, '2026-05-01T00:00:00Z')",
     )
     .bind(id)
     .bind(format!("calkey-{id}"))
@@ -105,6 +105,54 @@ async fn insert_cal_fingerprint(
     .execute(pool)
     .await
     .unwrap_or_else(|e| panic!("insert calibration_fingerprint failed: {e}"));
+}
+
+/// Insert a `canonical_target` row and link it to an acquisition session via
+/// `canonical_target_id` (spec P9 context-enrichment source).
+async fn link_canonical_target(
+    pool: &sqlx::SqlitePool,
+    session_id: &str,
+    target_id: &str,
+    designation: &str,
+) {
+    sqlx::query(
+        "INSERT INTO canonical_target \
+         (id, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at) \
+         VALUES (?, ?, 'galaxy', 10.0, 20.0, 'seed', '2026-01-01T00:00:00Z')",
+    )
+    .bind(target_id)
+    .bind(designation)
+    .execute(pool)
+    .await
+    .unwrap_or_else(|e| panic!("insert canonical_target failed: {e}"));
+
+    sqlx::query("UPDATE acquisition_session SET canonical_target_id = ? WHERE id = ?")
+        .bind(target_id)
+        .bind(session_id)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("link canonical_target_id failed: {e}"));
+}
+
+/// Overwrite `frame_ids` on an acquisition session so the `frame_count`
+/// enrichment (`json_array_length`) resolves to a known value.
+async fn set_frame_ids(pool: &sqlx::SqlitePool, session_id: &str, frame_ids_json: &str) {
+    sqlx::query("UPDATE acquisition_session SET frame_ids = ? WHERE id = ?")
+        .bind(frame_ids_json)
+        .bind(session_id)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("set frame_ids failed: {e}"));
+}
+
+/// Set `filter_name` on an `acquisition_fingerprint` row.
+async fn set_filter(pool: &sqlx::SqlitePool, session_id: &str, filter: &str) {
+    sqlx::query("UPDATE acquisition_fingerprint SET filter_name = ? WHERE id = ?")
+        .bind(filter)
+        .bind(session_id)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("set filter_name failed: {e}"));
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -289,4 +337,106 @@ async fn batch_suggest_returns_results_and_errors_per_session() {
         errors.iter().any(|e| e.code == "session.not_found"),
         "expected session.not_found error code, got {errors:?}",
     );
+}
+
+/// P9: `suggest` enriches each candidate DTO with session context (target,
+/// filter, observing night, frame count) via one batched lookup, keyed by
+/// `session_id`. A field with no backing data (filter is left unset here)
+/// stays `None` rather than defaulting to a placeholder.
+#[tokio::test]
+async fn suggest_enriches_candidates_with_session_context() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    let session_id = Uuid::new_v4().to_string();
+    let master_id = Uuid::new_v4().to_string();
+    let target_id = Uuid::new_v4().to_string();
+
+    insert_acq_session(pool, &session_id).await;
+    insert_acq_fingerprint(pool, &session_id, 100.0, 10.0, -10.0, "1x1").await;
+    link_canonical_target(pool, &session_id, &target_id, "M 31").await;
+    set_frame_ids(pool, &session_id, r#"["f1","f2","f3","f4"]"#).await;
+
+    insert_cal_session(pool, &master_id, "dark").await;
+    insert_cal_fingerprint(pool, &master_id, "dark", 100.0, 10.0, -10.0, "1x1").await;
+
+    let req = CalibrationMatchSuggestRequest {
+        contract_version: SUGGEST_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        calibration_types: Some(vec![CalibrationType::Dark]),
+    };
+
+    let resp = suggest(pool, req).await.expect("suggest should not return Err");
+    let matches = resp.matches.expect("expected Some(matches)");
+
+    let candidate =
+        matches.iter().find(|m| m.master_id == master_id).expect("expected master in candidates");
+    assert_eq!(candidate.target_name.as_deref(), Some("M 31"));
+    // insert_acq_fingerprint hard-codes observing_night_date but leaves
+    // filter_name unset — the enrichment must not fabricate a value.
+    assert_eq!(candidate.acquisition_night.as_deref(), Some("2026-05-01"));
+    assert_eq!(candidate.filter, None, "filter_name was never set — must stay None");
+    assert_eq!(candidate.frame_count, Some(4));
+}
+
+/// P9 batch coverage: known sessions get enriched independently (one linked
+/// to a canonical target, one not), and an id with no matching session at all
+/// neither breaks the batched context lookup nor gets a phantom context row —
+/// it still surfaces through the existing `session.not_found` error path.
+#[tokio::test]
+async fn batch_suggest_enriches_known_sessions_and_ignores_missing_ids() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    let session_a = Uuid::new_v4().to_string();
+    let session_b = Uuid::new_v4().to_string();
+    let master_id = Uuid::new_v4().to_string();
+    let target_id = Uuid::new_v4().to_string();
+    let missing_session = Uuid::new_v4().to_string(); // never inserted → not_found
+
+    // Session A: full context (canonical target + known frame count).
+    insert_acq_session(pool, &session_a).await;
+    insert_acq_fingerprint(pool, &session_a, 50.0, 5.0, -5.0, "1x1").await;
+    link_canonical_target(pool, &session_a, &target_id, "NGC 7000").await;
+    set_frame_ids(pool, &session_a, r#"["f1","f2"]"#).await;
+    set_filter(pool, &session_a, "Ha").await;
+
+    // Session B: matches the same master, but has no canonical_target_id
+    // link — target_name must resolve to None while frame_count (from the
+    // default `frame_ids = '[]'`) still resolves to 0, not None.
+    insert_acq_session(pool, &session_b).await;
+    insert_acq_fingerprint(pool, &session_b, 50.0, 5.0, -5.0, "1x1").await;
+
+    insert_cal_session(pool, &master_id, "bias").await;
+    insert_cal_fingerprint(pool, &master_id, "bias", 50.0, 5.0, -5.0, "1x1").await;
+
+    let req = CalibrationMatchBatchRequest {
+        contract_version: BATCH_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_ids: vec![session_a.clone(), session_b.clone(), missing_session.clone()],
+        calibration_types: Some(vec![CalibrationType::Bias]),
+    };
+
+    let resp = batch_suggest(pool, req).await.expect("batch_suggest should not return Err");
+    let results = resp.results.expect("expected Some(results)");
+
+    let result_a =
+        results.iter().find(|r| r.session_id == session_a).expect("expected session_a result");
+    let candidates_a = result_a.candidates.as_ref().expect("expected candidates for session_a");
+    assert_eq!(candidates_a[0].target_name.as_deref(), Some("NGC 7000"));
+    assert_eq!(candidates_a[0].filter.as_deref(), Some("Ha"));
+    assert_eq!(candidates_a[0].frame_count, Some(2));
+
+    let result_b =
+        results.iter().find(|r| r.session_id == session_b).expect("expected session_b result");
+    let candidates_b = result_b.candidates.as_ref().expect("expected candidates for session_b");
+    assert_eq!(candidates_b[0].target_name, None, "no canonical_target_id linked → None");
+    assert_eq!(candidates_b[0].frame_count, Some(0), "default frame_ids '[]' → 0, not None");
+
+    // The unresolvable id must not appear anywhere in results and must still
+    // surface via the pre-existing session.not_found error path.
+    assert!(!results.iter().any(|r| r.session_id == missing_session));
+    let errors = resp.errors.expect("expected Some(errors)");
+    assert!(errors.iter().any(|e| e.session_id.as_deref() == Some(&missing_session)));
 }

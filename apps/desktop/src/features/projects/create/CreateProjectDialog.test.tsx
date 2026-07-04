@@ -24,20 +24,25 @@ const { mockCreateProject, mockListProjects, mockSearchTargets, mockResolveTarge
   mockResolveTarget: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  createProject: mockCreateProject,
-  listProjects008: mockListProjects,
-  updateProject: vi.fn(),
-  addProjectSource: vi.fn(),
-  removeProjectSource: vi.fn(),
-  reinferProjectChannels: vi.fn(),
-  dismissProjectChannelDrift: vi.fn(),
-  getProject008: vi.fn(),
-  // TargetSearch (spec 035) is embedded in the dialog.
-  searchTargets: mockSearchTargets,
-  resolveTarget: mockResolveTarget,
-  TARGET_SEARCH_CONTRACT_VERSION: '1.0',
-}));
+// CreateProjectDialog's live duplicate-name check calls commands.projectsList,
+// and its embedded TargetSearch (spec 035) child calls commands.targetSearch /
+// commands.targetResolve — all via the generated bindings + unwrap (spec 037).
+// The target-* mocks adapt the raw payload into the `{ status: 'ok' }` Result
+// so the mockResolvedValue sites below stay unchanged.
+vi.mock('@/bindings/index', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/bindings/index')>();
+  return {
+    ...original,
+    commands: {
+      ...original.commands,
+      projectsList: mockListProjects,
+      targetSearch: (req: unknown) =>
+        Promise.resolve(mockSearchTargets(req)).then((data) => ({ status: 'ok', data })),
+      targetResolve: (req: unknown) =>
+        Promise.resolve(mockResolveTarget(req)).then((data) => ({ status: 'ok', data })),
+    },
+  };
+});
 
 // Mock the store's useCreateProject so it calls our mock
 vi.mock('@/features/projects/store', () => ({
@@ -82,7 +87,7 @@ function renderDialog(open = true) {
 describe('CreateProjectDialog', () => {
   beforeEach(() => {
     mockCreateProject.mockReset();
-    mockListProjects.mockResolvedValue([]);
+    mockListProjects.mockResolvedValue({ status: 'ok', data: [] });
     mockSearchTargets.mockReset();
     mockResolveTarget.mockReset();
     // Default: TargetSearch finds nothing / resolves nothing (no network).
@@ -118,7 +123,7 @@ describe('CreateProjectDialog', () => {
   });
 
   it('shows name required error on submit with empty name', async () => {
-    mockListProjects.mockResolvedValue([]);
+    mockListProjects.mockResolvedValue({ status: 'ok', data: [] });
     renderDialog();
     const submit = screen.getByRole('button', { name: /create project/i });
     await act(async () => {
@@ -130,7 +135,7 @@ describe('CreateProjectDialog', () => {
   });
 
   it('shows path required error on submit with empty path', async () => {
-    mockListProjects.mockResolvedValue([]);
+    mockListProjects.mockResolvedValue({ status: 'ok', data: [] });
     renderDialog();
     const nameInput = screen.getByLabelText(/project name/i);
     fireEvent.change(nameInput, { target: { value: 'Test Project' } });
@@ -145,7 +150,7 @@ describe('CreateProjectDialog', () => {
   });
 
   it('calls onSuccess with result when form submits successfully', async () => {
-    mockListProjects.mockResolvedValue([]);
+    mockListProjects.mockResolvedValue({ status: 'ok', data: [] });
     const successResult = {
       projectId: 'proj-new',
       lifecycle: 'setup_incomplete',
@@ -182,7 +187,7 @@ describe('CreateProjectDialog', () => {
   });
 
   it('sends the selected target as canonicalTargetId (spec 035 US1)', async () => {
-    mockListProjects.mockResolvedValue([]);
+    mockListProjects.mockResolvedValue({ status: 'ok', data: [] });
     mockCreateProject.mockResolvedValue({
       projectId: 'proj-new',
       lifecycle: 'setup_incomplete',
@@ -237,7 +242,7 @@ describe('CreateProjectDialog', () => {
   });
 
   it('shows error message when command returns an error code', async () => {
-    mockListProjects.mockResolvedValue([]);
+    mockListProjects.mockResolvedValue({ status: 'ok', data: [] });
     mockCreateProject.mockRejectedValue('name.duplicate');
 
     renderDialog();

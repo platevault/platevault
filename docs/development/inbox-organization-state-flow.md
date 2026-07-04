@@ -1,6 +1,6 @@
 # Inbox: Organization-State Decision Flow
 
-**Spec**: 041 — Inbox Plan Surface, US4 FR-019b  
+**Spec**: 041 — Inbox Plan Surface, US4 FR-019b
 **Audience**: end-user wizard explainer + developer reference
 
 ---

@@ -1,10 +1,10 @@
 /// <reference types="@testing-library/jest-dom" />
 /**
  * Spec 041 (T021) — user-configurable multi-level grouping. Spec 043: the
- * grouping CONTROLS moved out of InboxList into the top-bar `InboxControls`
- * (driven by `useInboxControls`); InboxList is now a controlled list that
+ * grouping CONTROLS moved out of InboxList into the shared FilterToolbar on
+ * InboxPage (driven by `useGrouping`); InboxList is now a controlled list that
  * receives the active `dims`. These tests mount both via a small harness that
- * mirrors the page wiring.
+ * mirrors the page wiring using FilterToolbar.grouping + useGrouping.
  *
  * Tests:
  * 1. Picking a grouping dimension renders nested, collapsible group headers
@@ -19,12 +19,14 @@
 import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { InboxList } from '../InboxList';
-import { InboxControls, useInboxControls, GROUPING_STORAGE_KEY } from '../InboxControls';
-import type { InboxListItem } from '@/api/commands';
+import { FilterToolbar } from '@/components';
+import { useGrouping } from '@/lib/use-grouping';
+import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from '../InboxControls';
+import type { InboxListItem } from '@/bindings/index';
 
 // ── Harness ───────────────────────────────────────────────────────────────────
-// Mirrors InboxPage's wiring: useInboxControls owns the grouping/sort state,
-// rendered via InboxControls (top bar) + passed down to InboxList.
+// Mirrors InboxPage's wiring: useGrouping owns the grouping state,
+// FilterToolbar.grouping renders the selects, dims fed to InboxList.
 function Harness({
   items,
   onSelect = vi.fn(),
@@ -32,16 +34,19 @@ function Harness({
   items: InboxListItem[];
   onSelect?: (idx: number) => void;
 }) {
-  const { dims, sortBy, setSortBy, setSlot } = useInboxControls();
+  const { dims, setSlot } = useGrouping({
+    storageKey: GROUPING_STORAGE_KEY,
+    validIds: GROUPING_DIMENSIONS.map((d) => d.id),
+    defaultDims: [],
+  });
   return (
     <>
-      <InboxControls
-        dims={dims}
-        setSlot={setSlot}
-        sortBy={sortBy}
-        onSortByChange={setSortBy}
-        filterType="all"
-        onFilterTypeChange={vi.fn()}
+      <FilterToolbar
+        grouping={{
+          dimensions: GROUPING_DIMENSIONS.map((d) => ({ value: d.id, label: d.label() })),
+          dims,
+          setSlot,
+        }}
       />
       <InboxList
         items={items}
@@ -49,7 +54,6 @@ function Harness({
         onSelect={onSelect}
         filterType="all"
         dims={dims}
-        sortBy={sortBy}
       />
     </>
   );

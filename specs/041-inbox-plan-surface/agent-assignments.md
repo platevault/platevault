@@ -1,33 +1,30 @@
-# Agent Assignments — 041-inbox-plan-surface (destination-model iteration)
+# Agent Assignments — 041-inbox-plan-surface (single-type ingest iteration, Phase 12 & 13)
 
-Generated: 2026-06-21 · Command: `/speckit.agent-assign.assign`
+Generated: 2026-06-23 · Command: `/speckit.agent-assign.assign` · Scope: unstarted T061–T080 (T001–T060 already implemented)
 
-Canonical machine-readable source: [`agent-assignments.yml`](./agent-assignments.yml).
-This markdown is a human-readable mirror.
+Machine-readable source of truth: `agent-assignments.yml`. Validation: `agent-assignments.validated.md` (PASS).
 
-## Agents scanned
+| Task | Description | Agent | Issue |
+|---|---|---|---|
+| T061 | Migration 0047 — source-groups, sub-item identity, overrides | coder | #320 |
+| T062 | Extend FITS+XISF extraction | rust-pro | #321 |
+| T063 | Property registry module + `inbox.property_registry` | coder | #322 |
+| T064 | Grouping engine — recipes, bucketing, tolerances | rust-pro | #323 |
+| T065 | scan.rs — emit source-group rows, stay lazy | coder | #324 |
+| T066 | classify.rs — materialize single-type sub-items | coder | #325 |
+| T067 | Composite identity + signature stability tests | test-automator | #326 |
+| T068 | reclassify.rs — field-agnostic map + bulk | coder | #328 |
+| T069 | Override persistence + staleness | coder | #329 |
+| T070 | Generalized missing-mandatory gate + needs-review | coder | #330 |
+| T071 | confirm.rs — delete split/mixed; one rootId | coder | #331 |
+| T072 | Contracts + binding regen | frontend-developer | #332 |
+| T073 | Layer-1 + vitest tests (Phase 12) | test-automator | #333 |
+| T080 | Flat↔light rotation matching + warning UI | frontend-developer | #334 |
+| T074 | Coordinate target resolution + op | rust-pro | #335 |
+| T075 | Target propagation to projects | coder | #336 |
+| T076 | Drop session review lifecycle | frontend-developer | #337 |
+| T077 | Migration handling for plan_open legacy items | coder | #338 |
+| T078 | sync.conflicts vs 045/006/035; mark 045 superseded | default (orchestrator) | #339 |
+| T079 | quickstart + Windows E2E (tauri MCP) | default (orchestrator) | #340 |
 
-| Agent | Source | Description |
-|-------|--------|-------------|
-| rust-pro | project | Rust 1.75+ systems/domain specialist |
-| frontend-developer | project | React/TypeScript UI specialist |
-| test-automator | project | Test authoring across frameworks |
-| speckit-implement-task | project | Non-code / tightly scoped SpecKit tasks |
-
-## Assignments (T048–T060)
-
-| Task | Agent | Reason |
-|------|-------|--------|
-| T048 | speckit-implement-task | research.md decision record + attribute matrix (non-code spec artifact) |
-| T049 | rust-pro | Per-type pattern resolver + selector in `crates/patterns` |
-| T050 | rust-pro | Settings persistence in `crates/persistence/db` (SQLite) |
-| T051 | frontend-developer | Settings UI for per-type patterns (`apps/desktop`) |
-| T052 | rust-pro | `confirm.rs` pattern selection by resolved type |
-| T053 | rust-pro | `confirm.rs` destination-root resolution |
-| T054 | rust-pro | Contracts/bindings: optional `root_id` + absolute destination |
-| T055 | frontend-developer | InboxDetail/PlanPanel root picker + absolute-path display |
-| T056 | rust-pro | classify.rs/confirm.rs missing-path-attribute gate |
-| T057 | frontend-developer | Frontend missing-attribute input gate (IMAGETYP flow) |
-| T058 | test-automator | Layer-1 cargo tests |
-| T059 | test-automator | vitest: picker, abs-path, gate |
-| T060 | default | Windows real-app E2E via tauri MCP + coverage-matrix update |
+**Breakdown**: coder ×10 · rust-pro ×3 · frontend-developer ×3 · test-automator ×2 · default ×2.

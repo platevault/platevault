@@ -9,21 +9,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/data/queryKeys";
 import { queryClient as sharedQueryClient } from "@/data/queryClient";
-import {
-  listProjects008,
-  getProject008,
-  createProject,
-  updateProject,
-  addProjectSource,
-  removeProjectSource,
-  reinferProjectChannels,
-  dismissProjectChannelDrift,
-  applyProjectLifecycleTransition,
-} from "@/api/commands";
+import { commands } from "@/bindings/index";
+import { unwrap } from "@/api/ipc";
+import { applyProjectLifecycleTransition } from "./lifecycleTransition";
 import type {
   ProjectLifecycleState,
   LifecycleTransitionResponse,
-} from "@/api/commands";
+} from "./lifecycleTransition";
 import type { ProjectSummaryDto, ProjectDetailDto } from "@/bindings/index";
 import type {
   ProjectCreateRequest,
@@ -39,6 +31,54 @@ import type {
   ProjectChannelsDismissDriftRequest,
   ProjectChannelsDismissDriftResult,
 } from "@/bindings/index";
+
+// Local IPC helpers — migrated off the hand-written @/api/commands wrappers
+// (spec 037) onto the generated bindings. unwrap() turns the generated Result
+// into the throw-on-error contract the hooks/helpers below rely on.
+
+async function listProjects008(): Promise<ProjectSummaryDto[]> {
+  return unwrap(await commands.projectsList(null));
+}
+
+async function getProject008(args: { id: string }): Promise<ProjectDetailDto> {
+  return unwrap(await commands.projectsGet(args.id));
+}
+
+async function createProject(req: ProjectCreateRequest): Promise<ProjectCreateResult> {
+  return unwrap(
+    await commands.projectsCreate(req as Parameters<typeof commands.projectsCreate>[0]),
+  );
+}
+
+async function updateProject(req: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
+  return unwrap(
+    await commands.projectsUpdate(req as Parameters<typeof commands.projectsUpdate>[0]),
+  );
+}
+
+async function addProjectSource(
+  req: ProjectSourceAddRequest,
+): Promise<ProjectSourceAddResult> {
+  return unwrap(await commands.projectsSourceAdd(req));
+}
+
+async function removeProjectSource(
+  req: ProjectSourceRemoveRequest,
+): Promise<ProjectSourceRemoveResult> {
+  return unwrap(await commands.projectsSourceRemove(req));
+}
+
+async function reinferProjectChannels(
+  req: ProjectChannelsReinferRequest,
+): Promise<ProjectChannelsReinferResult> {
+  return unwrap(await commands.projectsChannelsReinfer(req));
+}
+
+async function dismissProjectChannelDrift(
+  req: ProjectChannelsDismissDriftRequest,
+): Promise<ProjectChannelsDismissDriftResult> {
+  return unwrap(await commands.projectsChannelsDismissDrift(req));
+}
 
 // Query state shape (matches old QueryState<T> surface for backward compat)
 

@@ -26,9 +26,20 @@
 //! call in the generated bindings file and asserts that none of the strings
 //! contain a dot (which is the unmistakable signature of a dotted rename).
 
+#[cfg(feature = "dev-tools")]
 use specta_typescript::Typescript;
 
 // The full list of snake_case invoke strings produces >100 lines of test body.
+//
+// Gated on `dev-tools` (spec 037 US-dev): the committed `bindings/index.ts` is
+// the *dev-inclusive* surface (it contains the feature-gated `dev.*` commands so
+// the desktop dev-tools screens can call them through the generated bindings like
+// every other command). Only the `specta_builder()` compiled WITH `dev-tools`
+// enumerates those commands, so regeneration MUST run under that feature — the
+// `just check-generated` gate passes `--features dev-tools`. A plain
+// `cargo test` (no feature) skips this writer so it can never overwrite the
+// committed bindings with a narrower, dev-less surface.
+#[cfg(feature = "dev-tools")]
 #[allow(clippy::too_many_lines)]
 #[test]
 fn exports_typescript_bindings() {
@@ -108,7 +119,6 @@ fn exports_typescript_bindings() {
         "sessions_list",
         "sessions_get",
         "sessions_calendar",
-        "sessions_transition",
         "sessions_split",
         "sessions_merge",
         // calibration
@@ -226,6 +236,10 @@ fn exports_typescript_bindings() {
         "cleanup_policy_get",
         "cleanup_policy_update",
         "cleanup_scan",
+        "cleanup_plan_generate",
+        // archive (spec 017)
+        "archive_list",
+        "archive_plan_generate",
         // inbox / inventory / ingestion
         "inbox_scan",
         "inbox_scan_folder",
@@ -233,7 +247,6 @@ fn exports_typescript_bindings() {
         "inbox_confirm",
         "inbox_reclassify",
         "inventory_list",
-        "inventory_session_review",
         "ingestion_settings_get",
         "ingestion_settings_update",
         // tools / artifacts
@@ -245,6 +258,8 @@ fn exports_typescript_bindings() {
         "artifact_list",
         "artifact_classify",
         "artifact_mark_resolved",
+        "artifact_watcher_attach",
+        "artifact_watcher_detach",
         // manifests / notes / prepared views
         "manifest_list",
         "manifest_get",

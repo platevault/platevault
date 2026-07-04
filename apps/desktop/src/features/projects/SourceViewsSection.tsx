@@ -31,6 +31,7 @@ import {
 } from './source-views';
 import type { PreparedViewSummary, PreparedViewItemDetail } from './source-views';
 import { errMessage } from '@/lib/errors';
+import { GenerateSourceViewDialog } from './GenerateSourceViewDialog';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,20 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyViewId, setBusyViewId] = useState<string | null>(null);
+  const [generateOpen, setGenerateOpen] = useState(false);
+
+  function handleGenerated(planId: string) {
+    onPlanCreated?.(planId);
+    // Refresh the list so a newly-applied view (once the caller approves +
+    // applies the plan) will show up on next load; nothing to reload yet
+    // since the plan hasn't been applied.
+  }
+
+  const generateButton = (
+    <Btn size="sm" variant="primary" onClick={() => setGenerateOpen(true)} data-testid="generate-source-view-btn">
+      {m.projects_source_views_generate_btn()}
+    </Btn>
+  );
 
   // Load views on mount or when projectId changes.
   useEffect(() => {
@@ -132,32 +147,45 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
+  const dialog = (
+    <GenerateSourceViewDialog
+      projectId={projectId}
+      open={generateOpen}
+      onClose={() => setGenerateOpen(false)}
+      onPlanCreated={handleGenerated}
+    />
+  );
+
   if (loading) {
     return (
-      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
         <p className="text-muted text-sm">{m.common_loading()}</p>
+        {dialog}
       </Section>
     );
   }
 
   if (error) {
     return (
-      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
         <Banner variant="danger">{m.projects_source_views_load_error({ error })}</Banner>
+        {dialog}
       </Section>
     );
   }
 
   if (views.length === 0) {
     return (
-      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
         <p className="text-muted text-sm">{m.projects_source_views_empty()}</p>
+        {dialog}
       </Section>
     );
   }
 
   return (
-    <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen}>
+    <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
+      {dialog}
       <ul className="flex flex-col gap-3">
         {views.map((view) => (
           <li

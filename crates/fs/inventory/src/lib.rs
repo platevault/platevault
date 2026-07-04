@@ -1,6 +1,8 @@
 //! Library root, path, scan, and filesystem inventory boundaries.
 
 pub mod artifact_watcher;
+pub mod capability;
+pub mod drive_scope;
 pub mod watcher;
 
 pub const CRATE_NAME: &str = "fs_inventory";

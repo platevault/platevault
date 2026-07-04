@@ -18,7 +18,7 @@
 
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import type { TargetListItem } from '@/api/commands';
+import type { TargetListItem } from '@/bindings/index';
 import { TargetsTable, DEFAULT_TARGET_SORT } from './TargetsTable';
 
 function item(primaryDesignation: string, objectType = 'other'): TargetListItem {
@@ -77,12 +77,19 @@ describe('TargetsTable (#84/#85)', () => {
     expect(screen.getByText('Img time')).toBeInTheDocument();
   });
 
-  it('renders rows inside a real <table> with group headers', () => {
+  it('renders rows inside a real <table>; FLAT by default (no group headers)', () => {
     renderTable();
     const table = screen.getByRole('table');
     expect(within(table).getByText('NGC 7000')).toBeInTheDocument();
     expect(within(table).getByText('M 31')).toBeInTheDocument();
-    // Default group-by is catalogue → Messier + NGC group headers with counts.
+    // Consistent with every list page: flat by default → no catalogue headers.
+    expect(within(table).queryByText('Messier')).not.toBeInTheDocument();
+    expect(within(table).queryByText('NGC')).not.toBeInTheDocument();
+  });
+
+  it('groups by catalogue when dims=["catalogue"] (Messier + NGC headers)', () => {
+    renderTable({ dims: ['catalogue'] });
+    const table = screen.getByRole('table');
     expect(within(table).getByText('Messier')).toBeInTheDocument();
     expect(within(table).getByText('NGC')).toBeInTheDocument();
   });

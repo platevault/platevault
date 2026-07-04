@@ -13,7 +13,7 @@
 import { useCallback } from 'react';
 import { basename } from 'pathe';
 import { m } from '@/lib/i18n';
-import type { ArtifactSummary } from '@/api/commands';
+import type { ArtifactSummary } from '@/bindings/index';
 import {
   groupArtifactsByLaunch,
   useArtifacts,
@@ -60,22 +60,19 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
     >
       {/* Kind badge */}
       <span
-        className={`artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge`}
-        title={`${artifact.kind}${isFallback ? ' (low confidence)' : ''}`}
-        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional opacity for low-confidence fallback badge
-        style={{ opacity: isFallback ? 0.6 : 1 }}
+        className={`artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge` + (isFallback ? ' alm-tool-launches__kind-badge--fallback' : '')}
+        title={
+          isFallback
+            ? m.projects_toollaunch_low_confidence({ kind: artifact.kind })
+            : artifact.kind
+        }
       >
         {artifact.kind}
       </span>
 
       {/* File name — strikethrough when missing */}
       <span
-        className="artifact-file-name alm-tool-launches__file-name"
-        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional strikethrough + opacity for missing artifact
-        style={{
-          textDecoration: isMissing ? 'line-through' : 'none',
-          opacity: isMissing ? 0.5 : 1,
-        }}
+        className={'artifact-file-name alm-tool-launches__file-name' + (isMissing ? ' alm-tool-launches__file-name--missing' : '')}
         title={artifact.path}
       >
         {fileName}
@@ -122,7 +119,9 @@ interface GroupSectionProps {
 }
 
 function ArtifactGroupSection({ group, projectId, onAction }: GroupSectionProps) {
-  const label = group.toolLaunchId ? `Launch ${group.toolLaunchId.slice(0, 8)}…` : 'Unattributed';
+  const label = group.toolLaunchId
+    ? m.projects_toollaunch_label({ id: group.toolLaunchId.slice(0, 8) })
+    : m.projects_toollaunch_unattributed();
   const counts = group.artifacts.reduce(
     (acc, a) => {
       acc[a.kind] = (acc[a.kind] ?? 0) + 1;

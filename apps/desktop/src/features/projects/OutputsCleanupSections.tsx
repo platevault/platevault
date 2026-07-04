@@ -97,11 +97,14 @@ export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSect
  * principle II / spec 042 cleanup). They are NOT live policy values; when the
  * cleanup policy read path is wired, derive these from CleanupPolicy entries.
  */
-const PROTECTED_CATEGORIES: readonly string[] = [
-  'Accepted outputs',
-  'Master calibration frames',
-  'Source acquisition frames',
-];
+// Render-time factory so category labels re-read the active locale (spec 046 #8).
+function protectedCategories(): readonly string[] {
+  return [
+    m.projects_cleanup_category_outputs(),
+    m.projects_cleanup_category_calibration(),
+    m.projects_cleanup_category_sources(),
+  ];
+}
 
 /**
  * Cleanup preview summary, as the future backend will expose it
@@ -146,11 +149,11 @@ export function CleanupPreviewSection({ preview, defaultOpen = true }: CleanupPr
           {m.projects_cleanup_protected_label()}
         </div>
         <div className="alm-project-detail__cleanup-protected-list">
-          {PROTECTED_CATEGORIES.map((cat) => (
+          {protectedCategories().map((cat) => (
             <KV
               key={cat}
               label={cat}
-              value={<Lock reason={`${cat} are protected and excluded from cleanup plans`} />}
+              value={<Lock reason={m.projects_cleanup_category_protected_reason({ category: cat })} />}
             />
           ))}
         </div>

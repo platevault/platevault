@@ -15,7 +15,10 @@ use sqlx::SqlitePool;
 use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
 
-use crate::commands::artifacts::{artifact_classify, artifact_list, artifact_mark_resolved};
+use crate::commands::artifacts::{
+    artifact_classify, artifact_list, artifact_mark_resolved, artifact_watcher_attach,
+    artifact_watcher_detach,
+};
 use crate::commands::audit::{audit_export, audit_list};
 use crate::commands::calibration::{
     calibration_masters_get, calibration_masters_list, calibration_match_assign,
@@ -24,7 +27,9 @@ use crate::commands::calibration::{
 use crate::commands::calibration_tolerances::{
     calibration_tolerances_get, calibration_tolerances_update,
 };
-use crate::commands::cleanup::{cleanup_policy_get, cleanup_policy_update, cleanup_scan};
+use crate::commands::cleanup::{
+    cleanup_plan_generate, cleanup_policy_get, cleanup_policy_update, cleanup_scan,
+};
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::{
     dev_calls_list, dev_contracts_list, dev_export, dev_schema_get, CallBuffer,
@@ -46,10 +51,11 @@ use crate::commands::guided::{
 use crate::commands::inbox::{
     inbox_classify, inbox_confirm, inbox_item_metadata, inbox_list, inbox_plan, inbox_plan_apply,
     inbox_plan_apply_all, inbox_plan_apply_selected, inbox_plan_cancel, inbox_plan_list_open,
-    inbox_reclassify, inbox_scan, inbox_scan_folder, inbox_stats,
+    inbox_property_registry, inbox_reclassify, inbox_reclassify_v2, inbox_scan, inbox_scan_folder,
+    inbox_stats, inbox_target_recommendations,
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
-use crate::commands::inventory::{inventory_list, inventory_session_review};
+use crate::commands::inventory::inventory_list;
 use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
@@ -59,18 +65,20 @@ use crate::commands::manifests::{
     manifest_get, manifest_list, manifest_reveal_in_os, note_get, note_update,
 };
 use crate::commands::native::{native_directory_pick, native_file_pick, native_reveal};
-use crate::commands::patterns::{pattern_preview, pattern_resolve, pattern_validate};
+use crate::commands::patterns::{
+    pattern_path_preview, pattern_preview, pattern_resolve, pattern_validate,
+};
 use crate::commands::plan_apply::{
     plans_apply_real, plans_apply_status, plans_cancel, plans_item_retry, plans_item_skip,
     plans_resume,
 };
 use crate::commands::plans::{
-    archive_permanently_delete, archive_send_to_trash, plans_approve, plans_discard, plans_get,
-    plans_list, plans_retry,
+    archive_list, archive_permanently_delete, archive_plan_generate, archive_send_to_trash,
+    plans_approve, plans_discard, plans_get, plans_list, plans_retry,
 };
 use crate::commands::preferences::{preferences_get, preferences_set};
 use crate::commands::prepared_views::{
-    preparedview_list, preparedview_regenerate, preparedview_remove,
+    preparedview_list, preparedview_regenerate, preparedview_remove, sourceview_generate,
 };
 use crate::commands::projects::{
     projects_channels_dismiss_drift, projects_channels_reinfer, projects_create,
@@ -89,7 +97,6 @@ use crate::commands::roots::{
 use crate::commands::search::search_global;
 use crate::commands::sessions::{
     sessions_calendar, sessions_get, sessions_list, sessions_merge, sessions_split,
-    sessions_transition,
 };
 use crate::commands::settings::{
     settings_get, settings_overridable_keys, settings_restore_defaults,
@@ -168,7 +175,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         sessions_list,
         sessions_get,
         sessions_calendar,
-        sessions_transition,
         sessions_split,
         sessions_merge,
         // calibration (spec 029 stubs)
@@ -219,6 +225,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         plans_retry,
         archive_send_to_trash,
         archive_permanently_delete,
+        archive_list,
+        archive_plan_generate,
         // plan apply (spec 025)
         plans_apply_real,
         plans_cancel,
@@ -251,6 +259,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         pattern_validate,
         pattern_resolve,
         pattern_preview,
+        pattern_path_preview,
         // source protection (spec 016 US2–US4)
         source_protection_get,
         source_protection_set,
@@ -302,6 +311,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         cleanup_policy_get,
         cleanup_policy_update,
         cleanup_scan,
+        cleanup_plan_generate,
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,
@@ -311,6 +321,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_classify,
         inbox_confirm,
         inbox_reclassify,
+        inbox_reclassify_v2,
         inbox_item_metadata,
         inbox_list,
         inbox_plan,
@@ -320,9 +331,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_plan_cancel,
         inbox_stats,
         inbox_plan_list_open,
+        inbox_property_registry,
+        inbox_target_recommendations,
         // inventory (spec 006)
         inventory_list,
-        inventory_session_review,
         // ingestion settings (spec 030)
         ingestion_settings_get,
         ingestion_settings_update,
@@ -336,6 +348,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         artifact_list,
         artifact_classify,
         artifact_mark_resolved,
+        artifact_watcher_attach,
+        artifact_watcher_detach,
         // manifests + notes (spec 024)
         manifest_list,
         manifest_get,
@@ -346,6 +360,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         preparedview_list,
         preparedview_remove,
         preparedview_regenerate,
+        // source view generation (spec 049)
+        sourceview_generate,
     ])
 }
 
@@ -367,7 +383,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         sessions_list,
         sessions_get,
         sessions_calendar,
-        sessions_transition,
         sessions_split,
         sessions_merge,
         // calibration (spec 029 stubs)
@@ -418,6 +433,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         plans_retry,
         archive_send_to_trash,
         archive_permanently_delete,
+        archive_list,
+        archive_plan_generate,
         // plan apply (spec 025)
         plans_apply_real,
         plans_cancel,
@@ -450,6 +467,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         pattern_validate,
         pattern_resolve,
         pattern_preview,
+        pattern_path_preview,
         // source protection (spec 016 US2–US4)
         source_protection_get,
         source_protection_set,
@@ -501,6 +519,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         cleanup_policy_get,
         cleanup_policy_update,
         cleanup_scan,
+        cleanup_plan_generate,
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,
@@ -510,6 +529,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_classify,
         inbox_confirm,
         inbox_reclassify,
+        inbox_reclassify_v2,
         inbox_item_metadata,
         inbox_list,
         inbox_plan,
@@ -519,9 +539,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_plan_cancel,
         inbox_stats,
         inbox_plan_list_open,
+        inbox_property_registry,
+        inbox_target_recommendations,
         // inventory (spec 006)
         inventory_list,
-        inventory_session_review,
         // ingestion settings (spec 030)
         ingestion_settings_get,
         ingestion_settings_update,
@@ -535,6 +556,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         artifact_list,
         artifact_classify,
         artifact_mark_resolved,
+        artifact_watcher_attach,
+        artifact_watcher_detach,
         // manifests + notes (spec 024)
         manifest_list,
         manifest_get,
@@ -545,6 +568,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         preparedview_list,
         preparedview_remove,
         preparedview_regenerate,
+        // source view generation (spec 049)
+        sourceview_generate,
         // developer diagnostics (spec 021) — dev-tools build only
         dev_contracts_list,
         dev_calls_list,
@@ -705,8 +730,33 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
     // spec 024: manifest auto-generation on workflow-run completion.
     // The JoinHandle is intentionally dropped — the task runs independently.
     drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));
-    // spec 012: artifact filesystem watcher → artifact.detected + artifact.classified events.
-    crate::watcher::spawn_artifact_watcher(pool.clone(), bus.clone());
+    // spec 012 T008: per-project artifact filesystem watchers, attached/detached
+    // via the `artifact.watcher.attach`/`artifact.watcher.detach` commands as the
+    // project drawer opens/closes. No watcher runs until a project is attached.
+    let artifact_watcher_registry = crate::watcher::new_artifact_watcher_registry();
+    app.manage(artifact_watcher_registry);
+    // spec 012 (WP-012-A): one-time, idempotent fix-up for `processing_artifacts`
+    // rows the retired global root watcher (pre-#400) keyed by a library-root id
+    // instead of the owning project's id. Runs once per app start, before any
+    // per-project watcher attaches and records new (correctly-attributed) rows.
+    {
+        let fixup_pool = pool.clone();
+        tokio::spawn(async move {
+            match app_core::artifact::reattribute_root_keyed_artifacts(&fixup_pool).await {
+                Ok((fixed, unmatched)) => {
+                    if fixed > 0 || unmatched > 0 {
+                        tracing::info!(
+                            "artifact re-attribution fix-up: {fixed} row(s) corrected, \
+                             {unmatched} row(s) left flagged (no matching project)"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("artifact re-attribution fix-up failed: {e:?}");
+                }
+            }
+        });
+    }
 
     // spec 018 T020: emit a settings.snapshot at session start, then every 5 minutes.
     // This gives the audit log a durable record of the active configuration even when

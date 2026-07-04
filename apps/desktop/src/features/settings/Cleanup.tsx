@@ -8,7 +8,7 @@
 // defaults and the locked/unlocked flags. (T061 FR-024)
 import { useState, useEffect, Fragment } from 'react';
 import { Toggle, SegControl, Pill, Banner } from '@/ui';
-import { getSettings } from '@/api/commands';
+import { getSettings } from './settingsIpc';
 import { CLEANUP_TYPES, CLEANUP_STAGE_ORDER, type CleanupTypeFixture } from '@/data/fixtures/settings';
 import { m } from '@/lib/i18n';
 import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
@@ -128,7 +128,7 @@ export function Cleanup({ save }: CleanupProps) {
       >
         <SettingsRow
           label={m.settings_cleanup_block_delete_label()}
-          info="Routes all destructive operations through archive or trash workflows instead of immediate permanent deletion."
+          info={m.settings_cleanup_route_info()}
         >
           <Toggle
             checked={blockPermanentDelete}
@@ -141,7 +141,7 @@ export function Cleanup({ save }: CleanupProps) {
 
         <SettingsRow
           label={m.settings_cleanup_default_protection_label()}
-          info="Controls the starting protection level assigned to newly ingested sources. Protected sources are skipped by cleanup plans unless explicitly approved."
+          info={m.settings_cleanup_protection_info()}
         >
           <select
             className="alm-select alm-cleanup__protection-select"
@@ -194,10 +194,15 @@ export function Cleanup({ save }: CleanupProps) {
                       </td>
                       <td>
                         <SegControl
-                          options={['Keep', 'Archive', 'Delete']}
+                          options={[
+                            { value: 'Keep', label: m.settings_cleanup_action_keep() },
+                            { value: 'Archive', label: m.settings_cleanup_action_archive() },
+                            { value: 'Delete', label: m.settings_cleanup_action_delete() },
+                          ]}
                           value={current}
                           onChange={(v) => handleTableChange(row.id, v)}
                           danger
+                          dangerValue="Delete"
                         />
                       </td>
                     </tr>

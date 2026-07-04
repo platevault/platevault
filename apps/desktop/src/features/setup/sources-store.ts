@@ -1,4 +1,4 @@
-import { registerRootBatch } from '@/api/commands';
+import { registerRootBatch } from './registerSources';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
 
@@ -19,11 +19,12 @@ export const ALL_SOURCE_KINDS: SourceKind[] = [
   'inbox',
 ];
 
-export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
-  light_frames: m.setup_kind_light_frames(),
-  calibration: m.setup_kind_calibration(),
-  project: m.common_projects(),
-  inbox: m.settings_datasources_category_inbox(),
+// Values are render-time thunks so labels re-read the active locale (spec 046 #8).
+export const SOURCE_KIND_LABELS: Record<SourceKind, () => string> = {
+  light_frames: () => m.setup_kind_light_frames(),
+  calibration: () => m.setup_kind_calibration(),
+  project: () => m.common_projects(),
+  inbox: () => m.settings_datasources_category_inbox(),
 };
 
 // spec 039: inbox is now optional — users do not need a dedicated drop folder
@@ -111,6 +112,26 @@ export function saveSources(sources: SourcesState): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...existing, sources }));
   } catch {
     // storage full -- proceed without persistence
+  }
+}
+
+/**
+ * Replace the entire persisted wizard state with a fresh run prefilled with
+ * `sources` (spec 003 US3 restart flow, A7).
+ *
+ * Used after a successful `firstrun.restart` call so the wizard opens at
+ * step 0 with the previously registered sources loaded into the working
+ * buffer for editing, rather than resuming a stale in-progress run.
+ * Intentionally overwrites (not merges) `currentStep`/`catalogSettings`/
+ * `tools` — omitting them here makes `SetupWizard`'s `loadWizardState` fall
+ * back to its own defaults for those fields.
+ */
+export function resetWizardStateWithSources(sources: SourcesState): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ sources }));
+  } catch {
+    // storage full / unavailable -- the wizard will start from loadSources()'s
+    // empty-array fallback instead of the prefilled sources; best-effort only.
   }
 }
 
@@ -263,7 +284,7 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         kind: s.kind,
         path: s.path,
         success: false,
-        error: `Batch registration failed: ${errMessage(err)}`,
+        error: m.setup_sources_error_batch_registration_failed({ message: errMessage(err) }),
       })),
       allSucceeded: false,
     };

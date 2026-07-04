@@ -139,7 +139,7 @@ async fn insert_master_inbox_item(
         db.pool(),
         &UpsertClassification {
             inbox_item_id: item_id,
-            result: "single_type",
+            result: "classified",
             frame_type: Some(master_frame_type),
             content_signature: sig,
             unclassified_file_count: 0,
@@ -209,7 +209,6 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
         db.pool(),
         ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
-            action: "confirm".to_owned(),
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
@@ -282,7 +281,6 @@ async fn organized_master_catalogues_then_registers_at_apply() {
         db.pool(),
         ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
-            action: "confirm".to_owned(),
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
@@ -337,7 +335,7 @@ async fn non_master_item_still_creates_plan() {
         db.pool(),
         &UpsertClassification {
             inbox_item_id: item_id,
-            result: "single_type",
+            result: "classified",
             frame_type: Some("light"),
             content_signature: sig,
             unclassified_file_count: 0,
@@ -368,7 +366,6 @@ async fn non_master_item_still_creates_plan() {
         db.pool(),
         ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
-            action: "confirm".to_owned(),
             content_signature: sig.to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),

@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState } from 'react';
-import { updateSettings } from '@/api/commands';
+import { updateSettings } from './settingsIpc';
 
 /**
  * Auto-save hook with 300ms debounce.

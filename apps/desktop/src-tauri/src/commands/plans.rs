@@ -12,10 +12,12 @@
 //! The `plans.apply` stub is retained for spec 025 compatibility — it returns
 //! `unimplemented` and will be replaced when spec 025 lands.
 
+use app_core::archive_generator::{generate as generate_archive_plan, list_archived};
 use app_core::plans::{
     approve_plan, discard_plan, get_plan, list_plans, permanently_delete_archive, retry_plan,
     send_archive_to_trash,
 };
+use contracts_core::archive::{ArchiveListResponse, GenerateArchivePlanResult};
 use contracts_core::plans::{
     ArchivePermanentlyDeleteResponse, ArchiveSendToTrashResponse, PlanApproveResponse, PlanDetail,
     PlanDiscardResponse, PlanListRequest, PlanListResponse, PlanRetryResponse, RetryItemsFilter,
@@ -134,6 +136,42 @@ pub async fn plans_retry(
     retry_plan(state.repo.pool(), &state.bus, &parent_plan_id, filter).await
 }
 
+// ── archive.list ────────────────────────────────────────────────────────────
+
+/// `archive.list` — list projects currently in the `archived` lifecycle state
+/// (spec 017 C5). Projects-only surface; each row carries `archivedViaPlanId`
+/// so the management commands act on the owning plan.
+///
+/// # Errors
+///
+/// Returns `Err` with the contract error code on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_list(
+    state: State<'_, AppState>,
+) -> Result<ArchiveListResponse, ContractError> {
+    list_archived(state.repo.pool()).await
+}
+
+// ── archive.plan.generate ─────────────────────────────────────────────────────
+
+/// `archive.plan.generate` — build a reviewable whole-project archive plan
+/// (spec 017 US2/WP-B). Creates a `ready_for_review` plan; performs NO
+/// filesystem mutation and never auto-applies (constitution II / FR-002).
+///
+/// # Errors
+///
+/// Returns `Err` with the contract error code on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_plan_generate(
+    state: State<'_, AppState>,
+    project_id: String,
+    title: Option<String>,
+) -> Result<GenerateArchivePlanResult, ContractError> {
+    generate_archive_plan(state.repo.pool(), &project_id, title.as_deref()).await
+}
+
 // ── archive.send_to_trash ─────────────────────────────────────────────────────
 
 /// `archive.send_to_trash` — send the archive subtree to OS trash (US6, T045).
@@ -168,14 +206,19 @@ pub async fn archive_permanently_delete(
     confirm_text: String,
 ) -> Result<ArchivePermanentlyDeleteResponse, ContractError> {
     // Read blockPermanentDelete from settings (spec 016 protection gate).
-    // We load the setting directly from the settings store rather than caching in AppState.
+    // We load the setting directly from the settings store rather than caching
+    // in AppState. Resolved via `app_core::settings::resolve_setting` (not the
+    // raw `persistence_db::repositories::settings` table) because
+    // `blockPermanentDelete` is a global-protection-default key backed by the
+    // dedicated `protection_defaults` table (spec 016 T-003/T-005) — reading
+    // the legacy generic settings table directly would silently ignore every
+    // value the user actually saved via the Cleanup settings pane.
     let pool = state.repo.pool();
-    let block: bool = persistence_db::repositories::settings::get_raw(pool, "blockPermanentDelete")
+    let block: bool = app_core::settings::resolve_setting(pool, "blockPermanentDelete", None)
         .await
         .ok()
-        .flatten()
         .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .unwrap_or(true);
 
     permanently_delete_archive(pool, &state.bus, &plan_id, &confirm_text, block).await
 }

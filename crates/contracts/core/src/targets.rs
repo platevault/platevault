@@ -278,7 +278,9 @@ pub struct TargetDisplayAliasClearRequest {
 /// - `created_at` — RFC 3339 UTC timestamp the row was created.
 /// - `frame_count` — length of the `frame_ids` JSON array (computed via
 ///   `json_array_length`; 0 for legacy rows with the default `'[]'`).
-/// - `state` — session lifecycle state string (e.g. `"confirmed"`, `"candidate"`).
+///
+/// Spec 041 FR-051 (T076): no `state` field — sessions are derived,
+/// already-confirmed inventory with no review lifecycle.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetSessionItem {
@@ -289,8 +291,6 @@ pub struct TargetSessionItem {
     pub created_at: String,
     /// Number of frames in `frame_ids` JSON array.
     pub frame_count: i64,
-    /// Lifecycle state (e.g. `"confirmed"`, `"candidate"`, `"needs_review"`).
-    pub state: String,
 }
 
 /// A linked project returned by `target.projects.list` (spec 023 US3).

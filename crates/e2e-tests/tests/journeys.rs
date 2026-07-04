@@ -1,10 +1,11 @@
 //! Spec 037 Layer-2 real-UI E2E journey stubs.
 //!
 //! All journeys are `#[ignore]`d. They compile and appear in
-//! `cargo nextest list` but execution is deferred until the
-//! `__APP_E2E__` bridge and tauri-driver caps are wired in.
+//! `cargo nextest list` but execution is deferred until the backend commands
+//! they assert against are de-stubbed (research D9). The harness
+//! (`window.__ALM_E2E__` bridge, tauri-webdriver capabilities) is wired.
 //!
-//! Run (once wired):
+//! Run (once un-ignored):
 //! ```text
 //! cargo nextest run -p e2e_tests --profile e2e --run-ignored all
 //! ```

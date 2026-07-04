@@ -106,6 +106,7 @@ async fn list_profiles_round_trips_through_real_db() {
             id: first_id.clone(),
             path: Some(fake_exe_str.clone()),
             enabled: true,
+            watch_extensions: None,
         },
     )
     .await
@@ -139,7 +140,12 @@ async fn update_tool_persists_disabled_state() {
     // Disable it (no path change).
     let summary = tool_launch::update_tool(
         pool,
-        UpdateProcessingTool { id: tool_id.clone(), path: None, enabled: false },
+        UpdateProcessingTool {
+            id: tool_id.clone(),
+            path: None,
+            enabled: false,
+            watch_extensions: None,
+        },
     )
     .await
     .expect("update_tool disable");
@@ -244,6 +250,7 @@ async fn launch_wiring_with_fake_spawner_persists_row() {
             id: "pixinsight".to_owned(),
             path: Some(fake_exe_str.clone()),
             enabled: true,
+            watch_extensions: None,
         },
     )
     .await
@@ -277,4 +284,283 @@ async fn launch_wiring_with_fake_spawner_persists_row() {
             .expect("query tool_launches");
 
     assert_eq!(count, 1, "expected 1 tool_launches row with outcome='spawned', found {count}");
+}
+
+/// Like `insert_projects_row`, but with a caller-supplied `name` so a single
+/// test can register more than one project (the `projects` table has a
+/// `UNIQUE(name)` constraint that the shared helper's hardcoded name would
+/// otherwise violate).
+async fn insert_named_project_row(pool: &sqlx::SqlitePool, name: &str, path: &str) -> String {
+    let id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO projects \
+         (id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at) \
+         VALUES (?, ?, 'PixInsight', 'setup_incomplete', ?, NULL, 0, \
+                 '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+    )
+    .bind(&id)
+    .bind(name)
+    .bind(path)
+    .execute(pool)
+    .await
+    .expect("insert named projects row");
+    id
+}
+
+// ── WP-012-A: path → project attribution (watcher mis-attribution fix) ───────
+//
+// The retired global artifact watcher (spec 033 T028, replaced by #400's
+// per-project watchers) watched entire registered library roots, not a
+// single project's output folder, and stored the watched ROOT's id as
+// `project_id` verbatim — a placeholder that never matched a real
+// project, so watcher-detected artifacts never surfaced in `artifact.list` /
+// the Tool Launches accordion. These tests exercise the real DB-backed
+// resolver (`artifact::resolve_project_id_for_path`) and the one-time
+// re-attribution fix-up (`artifact::reattribute_root_keyed_artifacts`) for
+// pre-existing mis-keyed rows.
+
+/// A root can contain multiple projects; the resolver must pick the project
+/// that actually owns the path (longest-prefix match), not just any project
+/// under the same root.
+#[tokio::test]
+async fn resolve_project_id_for_path_picks_the_owning_project_under_a_shared_root() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    let root_dir = tempfile::tempdir().expect("tempdir");
+    let root_path = root_dir.path().to_str().expect("utf-8").to_owned();
+    insert_library_root(pool, &root_path).await;
+
+    let m31_dir = root_dir.path().join("projects").join("M31");
+    let ngc7000_dir = root_dir.path().join("projects").join("NGC7000");
+    std::fs::create_dir_all(&m31_dir).expect("mkdir project M31");
+    std::fs::create_dir_all(&ngc7000_dir).expect("mkdir project NGC7000");
+
+    let m31_project_id =
+        insert_named_project_row(pool, "M31 Project", m31_dir.to_str().expect("utf-8")).await;
+    let ngc7000_project_id =
+        insert_named_project_row(pool, "NGC7000 Project", ngc7000_dir.to_str().expect("utf-8"))
+            .await;
+
+    let artifact_path = ngc7000_dir.join("MasterFlat_bin1x1.xisf");
+    std::fs::write(&artifact_path, b"fake").expect("write artifact file");
+
+    let resolved =
+        artifact::resolve_project_id_for_path(pool, artifact_path.to_str().expect("utf-8"))
+            .await
+            .expect("resolve_project_id_for_path");
+
+    assert_eq!(
+        resolved,
+        Some(ngc7000_project_id),
+        "must resolve to the project actually owning the path, not {m31_project_id}"
+    );
+}
+
+/// A path that falls under a registered root but outside every registered
+/// project's folder must resolve to `None` — the resolver must never
+/// fabricate an attribution.
+#[tokio::test]
+async fn resolve_project_id_for_path_returns_none_when_no_project_claims_it() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    let root_dir = tempfile::tempdir().expect("tempdir");
+    let root_path = root_dir.path().to_str().expect("utf-8").to_owned();
+    insert_library_root(pool, &root_path).await;
+
+    let project_dir = root_dir.path().join("projects").join("M31");
+    std::fs::create_dir_all(&project_dir).expect("mkdir project");
+    insert_projects_row(pool, project_dir.to_str().expect("utf-8")).await;
+
+    // A file living directly under the root, outside any project folder
+    // (e.g. still-unsorted inbox content).
+    let unsorted_dir = root_dir.path().join("unsorted");
+    std::fs::create_dir_all(&unsorted_dir).expect("mkdir unsorted");
+    let stray_path = unsorted_dir.join("random.fits");
+    std::fs::write(&stray_path, b"fake").expect("write stray file");
+
+    let resolved = artifact::resolve_project_id_for_path(pool, stray_path.to_str().expect("utf-8"))
+        .await
+        .expect("resolve_project_id_for_path");
+
+    assert!(resolved.is_none(), "path outside every project must not resolve to any project");
+}
+
+/// End-to-end regression guard for the original bug: simulating the fixed
+/// watcher flow (resolve, then detect) must persist the artifact under the
+/// real project id — never under the root's id.
+#[tokio::test]
+async fn watcher_flow_attributes_artifact_to_real_project_not_root_id() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    let root_dir = tempfile::tempdir().expect("tempdir");
+    let root_path = root_dir.path().to_str().expect("utf-8").to_owned();
+    insert_library_root(pool, &root_path).await;
+    let root_id: String = sqlx::query_scalar("SELECT id FROM library_root WHERE current_path = ?")
+        .bind(&root_path)
+        .fetch_one(pool)
+        .await
+        .expect("read back root id");
+
+    let project_dir = root_dir.path().join("projects").join("M31");
+    std::fs::create_dir_all(&project_dir).expect("mkdir project");
+    let project_id = insert_projects_row(pool, project_dir.to_str().expect("utf-8")).await;
+
+    let artifact_path = project_dir.join("MasterDark_bin1x1.xisf");
+    std::fs::write(&artifact_path, b"fake").expect("write artifact file");
+    let path_str = artifact_path.to_str().expect("utf-8").to_owned();
+
+    // Mirror the watcher's fixed flow: resolve first, then call detect with
+    // the resolved id (never the root id).
+    let resolved_project_id = artifact::resolve_project_id_for_path(pool, &path_str)
+        .await
+        .expect("resolve_project_id_for_path")
+        .expect("a project should own this path");
+    assert_eq!(resolved_project_id, project_id);
+    assert_ne!(resolved_project_id, root_id, "must never attribute to the root's id");
+
+    artifact::detect(
+        pool,
+        &bus,
+        &resolved_project_id,
+        &path_str,
+        "pixinsight",
+        4096,
+        "2026-07-03T09:58:00Z",
+        "2026-07-03T10:00:00Z",
+    )
+    .await
+    .expect("artifact::detect");
+
+    let artifacts = artifact::list(pool, &project_id, &[]).await.expect("artifact::list");
+    assert_eq!(artifacts.len(), 1);
+    assert_eq!(artifacts[0].project_id, project_id);
+
+    // Querying by the (wrong) root id must return nothing — proving the
+    // artifact is NOT hidden under the root id anymore.
+    let under_root = artifact::list(pool, &root_id, &[]).await.expect("artifact::list");
+    assert!(under_root.is_empty(), "artifact must not be attributed to the root id");
+}
+
+/// One-time re-attribution fix-up: a legacy row keyed by the ROOT's id (the
+/// pre-fix bug) must be corrected to the real project id, and a second pass
+/// must be a no-op (idempotent).
+#[tokio::test]
+async fn reattribute_root_keyed_artifacts_fixes_legacy_rows_idempotently() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    let root_dir = tempfile::tempdir().expect("tempdir");
+    let root_path = root_dir.path().to_str().expect("utf-8").to_owned();
+    insert_library_root(pool, &root_path).await;
+    let root_id: String = sqlx::query_scalar("SELECT id FROM library_root WHERE current_path = ?")
+        .bind(&root_path)
+        .fetch_one(pool)
+        .await
+        .expect("read back root id");
+
+    let project_dir = root_dir.path().join("projects").join("M31");
+    std::fs::create_dir_all(&project_dir).expect("mkdir project");
+    let project_id = insert_projects_row(pool, project_dir.to_str().expect("utf-8")).await;
+
+    let artifact_path = project_dir.join("MasterDark_bin1x1.xisf");
+    std::fs::write(&artifact_path, b"fake").expect("write artifact file");
+    let path_str = artifact_path.to_str().expect("utf-8").to_owned();
+
+    // Simulate a legacy row created by the pre-fix watcher: project_id is
+    // actually the root's id.
+    let artifact_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO processing_artifacts \
+         (id, project_id, tool_launch_id, path, kind, tool, detected_at, last_seen_at, state, \
+          classification_confidence, classification_source, size_bytes, file_mtime, content_hash) \
+         VALUES (?, ?, NULL, ?, 'intermediate', 'pixinsight', '2026-07-01T00:00:00Z', \
+                 '2026-07-01T00:00:00Z', 'present', 0.1, 'fallback', 4096, \
+                 '2026-07-01T00:00:00Z', NULL)",
+    )
+    .bind(&artifact_id)
+    .bind(&root_id)
+    .bind(&path_str)
+    .execute(pool)
+    .await
+    .expect("insert legacy mis-keyed artifact row");
+
+    // First pass: must correct the row.
+    let (fixed, unmatched) = artifact::reattribute_root_keyed_artifacts(pool)
+        .await
+        .expect("reattribute_root_keyed_artifacts");
+    assert_eq!(fixed, 1, "expected exactly one legacy row to be corrected");
+    assert_eq!(unmatched, 0);
+
+    let (stored_project_id,): (String,) =
+        sqlx::query_as("SELECT project_id FROM processing_artifacts WHERE id = ?")
+            .bind(&artifact_id)
+            .fetch_one(pool)
+            .await
+            .expect("read back artifact row");
+    assert_eq!(stored_project_id, project_id, "row must now be keyed to the real project");
+
+    // Second pass: idempotent no-op — the row is no longer root-keyed.
+    let (fixed_again, unmatched_again) = artifact::reattribute_root_keyed_artifacts(pool)
+        .await
+        .expect("reattribute_root_keyed_artifacts (second pass)");
+    assert_eq!(fixed_again, 0, "second pass must not re-touch an already-corrected row");
+    assert_eq!(unmatched_again, 0);
+}
+
+/// A legacy root-keyed row whose path no longer matches any registered
+/// project must be left as-is (not deleted) and reported as unmatched.
+#[tokio::test]
+async fn reattribute_root_keyed_artifacts_leaves_unmatched_rows_in_place() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    let root_dir = tempfile::tempdir().expect("tempdir");
+    let root_path = root_dir.path().to_str().expect("utf-8").to_owned();
+    insert_library_root(pool, &root_path).await;
+    let root_id: String = sqlx::query_scalar("SELECT id FROM library_root WHERE current_path = ?")
+        .bind(&root_path)
+        .fetch_one(pool)
+        .await
+        .expect("read back root id");
+
+    // No project registered at all — the stray path can never resolve.
+    let stray_dir = root_dir.path().join("unsorted");
+    std::fs::create_dir_all(&stray_dir).expect("mkdir unsorted");
+    let stray_path = stray_dir.join("random.fits");
+    std::fs::write(&stray_path, b"fake").expect("write stray file");
+    let stray_path_str = stray_path.to_str().expect("utf-8").to_owned();
+
+    let artifact_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO processing_artifacts \
+         (id, project_id, tool_launch_id, path, kind, tool, detected_at, last_seen_at, state, \
+          classification_confidence, classification_source, size_bytes, file_mtime, content_hash) \
+         VALUES (?, ?, NULL, ?, 'intermediate', 'pixinsight', '2026-07-01T00:00:00Z', \
+                 '2026-07-01T00:00:00Z', 'present', 0.1, 'fallback', 4096, \
+                 '2026-07-01T00:00:00Z', NULL)",
+    )
+    .bind(&artifact_id)
+    .bind(&root_id)
+    .bind(&stray_path_str)
+    .execute(pool)
+    .await
+    .expect("insert legacy mis-keyed artifact row");
+
+    let (fixed, unmatched) = artifact::reattribute_root_keyed_artifacts(pool)
+        .await
+        .expect("reattribute_root_keyed_artifacts");
+    assert_eq!(fixed, 0);
+    assert_eq!(unmatched, 1, "unresolvable row must be flagged, not silently dropped");
+
+    // The row must still exist, untouched (still root-keyed) — not deleted.
+    let (stored_project_id,): (String,) =
+        sqlx::query_as("SELECT project_id FROM processing_artifacts WHERE id = ?")
+            .bind(&artifact_id)
+            .fetch_one(pool)
+            .await
+            .expect("row must still exist");
+    assert_eq!(stored_project_id, root_id, "unmatched row must be left as-is, not deleted");
 }

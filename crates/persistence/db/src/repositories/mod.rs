@@ -9,7 +9,9 @@
 //! Spec 023 US2/US3/US4 target history + notes queries live in `targets`.
 
 pub mod artifacts;
+pub mod audit;
 pub mod calibration_assignment;
+pub mod calibration_tolerances;
 pub mod equipment;
 pub mod first_run;
 pub mod guided_flow;

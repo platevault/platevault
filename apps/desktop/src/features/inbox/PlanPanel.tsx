@@ -121,15 +121,14 @@ export interface PlanPanelProps {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-const ACTION_LABELS: Record<string, string> = {
-  move: 'Move',
-  catalogue: 'Catalogue',
-  archive: 'Archive',
-  trash: 'Trash',
-};
-
 function actionLabel(kind: string): string {
-  return ACTION_LABELS[kind] ?? kind;
+  switch (kind) {
+    case 'move': return m.inbox_action_move();
+    case 'catalogue': return m.inbox_action_catalogue();
+    case 'archive': return m.inbox_action_archive();
+    case 'trash': return m.inbox_action_trash();
+    default: return kind;
+  }
 }
 
 function basename(path: string): string {
@@ -248,6 +247,33 @@ function pluralLabel(singular: string, count: number): string {
   return singular.endsWith('s') ? singular : `${singular}s`;
 }
 
+/**
+ * Localized "{count} <frame type>" count-variant thunks for the KNOWN canonical
+ * frame-type bucket keys (see `FRAME_TYPE_KEYWORDS`/`normalizeFrameTypeHint`:
+ * light/dark/flat/bias/dark flat/master). Render-time thunks (spec 046 #8) so
+ * they re-read the active locale on each call rather than resolving once at
+ * module scope.
+ */
+const FRAMETYPE_COUNT_LABEL_FNS: Record<string, (count: number) => string> = {
+  light: (count) => m.inbox_frametype_count_light({ count }),
+  dark: (count) => m.inbox_frametype_count_dark({ count }),
+  flat: (count) => m.inbox_frametype_count_flat({ count }),
+  bias: (count) => m.inbox_frametype_count_bias({ count }),
+  'dark flat': (count) => m.inbox_frametype_count_dark_flat({ count }),
+  master: (count) => m.inbox_frametype_count_master({ count }),
+};
+
+/**
+ * Localized "{count} <frame type>" label for a plan summary bucket. Returns
+ * the count-variant message for a KNOWN canonical frame-type key; returns
+ * `null` for unknown values (e.g. the `actionLabel(...).toLowerCase()`
+ * fallback for an unrecognised frame type) so the caller falls back to the
+ * existing `pluralLabel` behaviour, which is already localized at its source.
+ */
+function frameTypeCountLabel(frameType: string, count: number): string | null {
+  return FRAMETYPE_COUNT_LABEL_FNS[frameType]?.(count) ?? null;
+}
+
 /** One collapsed summary line: "N <frametype> → <destination tail>". */
 export interface PlanGroupSummaryLine {
   /** Stable key for the row. */
@@ -290,7 +316,10 @@ function buildGroupSummary(
     .map(([key, b]) => ({
       key,
       count: b.count,
-      frameType: pluralLabel(b.frameType, b.count),
+      // Kept SINGULAR (not pluralised here) so the JSX consumer can key off
+      // the canonical value to pick a localized count-variant message for a
+      // known frame type, falling back to `pluralLabel` for unknown ones.
+      frameType: b.frameType,
       destinationShort: shortDestination(b.destinationFull),
       destinationFull: b.destinationFull,
     }));
@@ -698,21 +727,37 @@ export function PlanPanel({
                         frameType: l.frameType,
                         count: l.count,
                       }))
-                  ).map((entry, i) => (
-                    <span key={entry.key} className="alm-plan-panel__summary-type">
-                      {i > 0 && (
-                        <span className="alm-plan-panel__summary-sep" aria-hidden="true">
-                          ·{' '}
-                        </span>
-                      )}
-                      <span className="alm-plan-panel__summary-type-count">
-                        {entry.count}
-                      </span>{' '}
-                      <span className="alm-plan-panel__summary-type-name">
-                        {pluralLabel(entry.frameType, entry.count)}
+                  ).map((entry, i) => {
+                    // A KNOWN canonical frame type (light/dark/flat/bias/dark
+                    // flat/master) gets a localized count-variant message that
+                    // already embeds the number — render it as one node. An
+                    // UNKNOWN frame type (e.g. the `actionLabel(...)` fallback)
+                    // keeps the existing count + `pluralLabel` rendering.
+                    const knownLabel = frameTypeCountLabel(entry.frameType, entry.count);
+                    return (
+                      <span key={entry.key} className="alm-plan-panel__summary-type">
+                        {i > 0 && (
+                          <span className="alm-plan-panel__summary-sep" aria-hidden="true">
+                            ·{' '}
+                          </span>
+                        )}
+                        {knownLabel !== null ? (
+                          <span className="alm-plan-panel__summary-type-name">
+                            {knownLabel}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="alm-plan-panel__summary-type-count">
+                              {entry.count}
+                            </span>{' '}
+                            <span className="alm-plan-panel__summary-type-name">
+                              {pluralLabel(entry.frameType, entry.count)}
+                            </span>
+                          </>
+                        )}
                       </span>
-                    </span>
-                  ))}
+                    );
+                  })}
                 </span>
 
                 {/* Col 4: destination (aligned across all plans). In-place
@@ -752,7 +797,7 @@ export function PlanPanel({
                       : m.inbox_plan_file_count_tooltip_inplace({ count: plan.actions.length })
                   }
                 >
-                  {plan.actions.length}{' '}{plan.actions.length !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular()}
+                  {m.inbox_list_file_count({ count: plan.actions.length })}
                 </span>
 
                 {/* Col 6: stale badge + per-group apply (live progress) + discard */}

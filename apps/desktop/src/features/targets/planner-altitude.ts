@@ -28,7 +28,7 @@
  *     recompute from the Settings → Target Planner control.
  */
 
-import type { TargetListItem } from '@/api/commands';
+import type { TargetListItem } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 
 /** Placeholder observer latitude — mirrors TargetDetailV2.STUB_OBSERVER_LAT_DEG. */

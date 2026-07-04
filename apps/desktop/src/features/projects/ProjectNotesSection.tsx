@@ -87,7 +87,7 @@ export function ProjectNotesSection({
         const { updatedAt, error } = await saveNote(projectId, content);
         setSaving(false);
         if (error === 'note.content_too_large') {
-          setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
+          setFieldError(m.projects_notes_byte_limit_exceeded({ max: MAX_NOTE_BYTES.toLocaleString() }));
         } else if (error === 'project.read_only') {
           addToast({ message: m.projects_toast_archived_readonly(), variant: 'error' });
         } else if (error) {
@@ -110,7 +110,7 @@ export function ProjectNotesSection({
 
   const handleSave = async () => {
     if (overLimit) {
-      setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
+      setFieldError(m.projects_notes_byte_limit_exceeded({ max: MAX_NOTE_BYTES.toLocaleString() }));
       return;
     }
     triggerSave.cancel();
@@ -118,7 +118,7 @@ export function ProjectNotesSection({
     const { updatedAt, error } = await saveNote(projectId, draft);
     setSaving(false);
     if (error === 'note.content_too_large') {
-      setFieldError(`Note exceeds the ${MAX_NOTE_BYTES.toLocaleString()}-byte limit.`);
+      setFieldError(m.projects_notes_byte_limit_exceeded({ max: MAX_NOTE_BYTES.toLocaleString() }));
     } else if (error === 'project.read_only') {
       addToast({ message: m.projects_toast_archived_readonly(), variant: 'error' });
       setEditing(false);
@@ -193,14 +193,13 @@ export function ProjectNotesSection({
       <div className="alm-project-notes__toolbar">
         <span
           data-testid="notes-byte-counter"
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color (over-limit / near-limit / normal)
-          style={{
-            color: overLimit
-              ? 'var(--alm-danger)'
+          className={
+            overLimit
+              ? 'alm-project-notes__byte-counter--over'
               : nearLimit
-                ? 'var(--alm-warn)'
-                : 'var(--alm-text-muted)',
-          }}
+                ? 'alm-project-notes__byte-counter--near'
+                : 'alm-project-notes__byte-counter'
+          }
         >
           {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()} {m.projects_notes_bytes_unit()}
         </span>

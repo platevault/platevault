@@ -246,8 +246,8 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
 
     sqlx::query(
         "INSERT INTO calibration_session
-            (id, session_key, frame_ids, kind, state, created_at, source_inbox_item_id)
-         VALUES (?, ?, ?, ?, 'confirmed', datetime('now'), ?)",
+            (id, session_key, frame_ids, kind, created_at, source_inbox_item_id)
+         VALUES (?, ?, ?, ?, datetime('now'), ?)",
     )
     .bind(&session_id)
     .bind(&session_key)
@@ -429,7 +429,7 @@ mod tests {
             db.pool(),
             &inbox_repo::UpsertClassification {
                 inbox_item_id: item_id,
-                result: "single_type",
+                result: "classified",
                 frame_type: Some("light"),
                 content_signature: "sig",
                 unclassified_file_count: 0,

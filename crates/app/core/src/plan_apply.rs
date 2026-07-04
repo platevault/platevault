@@ -174,6 +174,167 @@ fn db_err(e: DbError) -> ContractError {
     }
 }
 
+// ── Source view generation finalization (spec 049) ───────────────────────────
+
+/// Terminal step of a `prepared_view_generation` plan apply: write the
+/// first-materialization `PreparedSourceView` (state `current`) plus one
+/// `PreparedSourceViewItem` per successfully-applied `link` item.
+///
+/// Best-effort: the links are already on disk, so a failure here must NOT
+/// fail the apply. Every failure is logged for an external watchdog (§II).
+/// Idempotent: a re-entrant call (e.g. a retried terminal transition) skips
+/// item rows that already exist for this view id.
+async fn finalize_view_generation(pool: &SqlitePool, plan_id: &str, project_id: &str) {
+    use domain_core::source_view::Materialization;
+    use persistence_db::repositories::prepared_source_views as views_repo;
+
+    let items = match plans_repo::list_plan_items(pool, plan_id).await {
+        Ok(items) => items,
+        Err(e) => {
+            tracing::error!(%plan_id, error=%e, "generation finalize: failed to load plan items");
+            return;
+        }
+    };
+
+    let succeeded: Vec<_> =
+        items.iter().filter(|i| i.action == "link" && i.item_state == "succeeded").collect();
+
+    if succeeded.is_empty() {
+        tracing::warn!(%plan_id, "generation finalize: no succeeded link items; no view recorded");
+        return;
+    }
+
+    // The view's display `kind` is the dominant per-item materialization
+    // (spec 026 FR-008 amended, CL-2) — the first succeeded item's kind is a
+    // reasonable representative; per-item kind remains authoritative.
+    let dominant_kind = succeeded
+        .first()
+        .map_or(Materialization::Symlink, |row| materialization_from_provenance(row));
+
+    let view_id = new_id();
+    if let Err(e) = views_repo::insert_view(
+        pool,
+        &views_repo::InsertPreparedSourceView {
+            id: &view_id,
+            project_id,
+            kind: dominant_kind.as_str(),
+        },
+    )
+    .await
+    {
+        tracing::error!(%plan_id, %view_id, error=%e, "generation finalize: failed to insert view");
+        return;
+    }
+
+    for item in succeeded {
+        let Some(inventory_item_id) = item.linked_entity.as_deref() else {
+            tracing::warn!(
+                %plan_id, item_id = %item.id,
+                "generation finalize: link item missing linked_entity (inventory reference); skipped"
+            );
+            continue;
+        };
+        let materialization = materialization_from_provenance(item);
+        let view_item_id = new_id();
+        if let Err(e) = views_repo::insert_view_item(
+            pool,
+            &views_repo::InsertPreparedSourceViewItem {
+                id: &view_item_id,
+                view_id: &view_id,
+                inventory_item_id,
+                view_relative_path: &item.to_relative_path,
+                materialization: materialization.as_str(),
+            },
+        )
+        .await
+        {
+            tracing::error!(
+                %plan_id, %view_id, item_id = %item.id, error=%e,
+                "generation finalize: failed to insert view item"
+            );
+        }
+    }
+}
+
+// ── Archive lifecycle closure (spec 017 C5) ──────────────────────────────────
+
+/// Terminal step of a successful `origin = archive` plan apply: drive the owning
+/// project into the `archived` lifecycle state (C5). This is the ONE legitimate
+/// closure of the requires-plan gate — the plan was reviewed, approved, and just
+/// applied, so the filesystem move that `completed → archived` requires has
+/// happened. We call the low-level [`transition_lifecycle`] directly (which does
+/// not re-run the requires-plan gate that `apply_transition` enforces) and then
+/// record `archived_via_plan_id` so the archive-management commands can act on
+/// this plan.
+///
+/// Best-effort: the files are already archived, so a failure here must NOT fail
+/// the apply. Every failure is logged for an external watchdog (§II).
+async fn finalize_archive_lifecycle(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    plan_id: &str,
+    project_id: &str,
+) {
+    use crate::lifecycle::lifecycle_use_case::{
+        build_edge_table, transition_lifecycle, TransitionCommand,
+    };
+    use domain_core::ids::EntityId;
+    use domain_core::lifecycle::data_asset::EntityType;
+    use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
+    use persistence_db::repositories::projects as projects_repo;
+
+    // The lifecycle repo keys entities on their UUID id.
+    let uuid = match uuid::Uuid::parse_str(project_id) {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::error!(%project_id, error=%e, "archive lifecycle closure: project id is not a uuid");
+            return;
+        }
+    };
+
+    // Read the current lifecycle so the transition CAS matches whatever the
+    // project is in (typically `completed` or `blocked`).
+    let current = match projects_repo::get_project(pool, project_id).await {
+        Ok(p) => p.lifecycle,
+        Err(e) => {
+            tracing::error!(%project_id, error=%e, "archive lifecycle closure: project not found");
+            return;
+        }
+    };
+
+    // Idempotent: an already-archived project just needs the plan link recorded.
+    if current == "archived" {
+        if let Err(e) = projects_repo::set_archived_via_plan_id(pool, project_id, plan_id).await {
+            tracing::error!(%project_id, error=%e, "archive lifecycle closure: failed to record archived_via_plan_id");
+        }
+        return;
+    }
+
+    let repo = SqliteLifecycleRepository::new(pool.clone(), bus.clone());
+    let table = build_edge_table();
+    let cmd = TransitionCommand {
+        entity_id: EntityId::from_uuid(uuid),
+        entity_type: EntityType::Project,
+        from_state: current,
+        to_state: "archived".to_owned(),
+        trigger: "archive.plan.applied".to_owned(),
+        actor: "user".to_owned(),
+        request_id: EntityId::new(),
+    };
+
+    match transition_lifecycle(&repo, bus, cmd, &table).await {
+        Ok(_) => {
+            if let Err(e) = projects_repo::set_archived_via_plan_id(pool, project_id, plan_id).await
+            {
+                tracing::error!(%project_id, error=%e, "archive lifecycle closure: transition succeeded but recording archived_via_plan_id failed");
+            }
+        }
+        Err(e) => {
+            tracing::error!(%project_id, %plan_id, error=%e, "archive lifecycle closure: transition to archived failed");
+        }
+    }
+}
+
 // ── Overlap check (R-Concur-1) ────────────────────────────────────────────────
 
 /// Reject if any active run's path set overlaps with the new plan's paths.
@@ -228,6 +389,33 @@ fn verify_approval_token(
 
 // ── Item → ExecutorItem mapping ───────────────────────────────────────────────
 
+/// Parse the recorded link-materialization kind out of a plan item's
+/// free-form `provenance` JSON (`[{"label":"materialization","value":"..."}]`,
+/// spec 049 generation/regeneration plan builders). Falls back to `Symlink`
+/// (the constitution-preferred default) when absent or unparseable, rather
+/// than guessing a destructive kind.
+fn materialization_from_provenance(
+    row: &plans_repo::PlanItemRow,
+) -> domain_core::source_view::Materialization {
+    row.provenance
+        .as_deref()
+        .and_then(|raw| serde_json::from_str::<Vec<serde_json::Value>>(raw).ok())
+        .and_then(|entries| {
+            entries.into_iter().find_map(|entry| {
+                if entry.get("label").and_then(serde_json::Value::as_str) == Some("materialization")
+                {
+                    entry
+                        .get("value")
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(domain_core::source_view::Materialization::from_str_opt)
+                } else {
+                    None
+                }
+            })
+        })
+        .unwrap_or(domain_core::source_view::Materialization::Symlink)
+}
+
 /// Convert a `PlanItemRow` into an `ExecutorItem`, resolving the library root
 /// from the provided root-id → absolute-path map (T023a).
 ///
@@ -258,6 +446,19 @@ fn item_row_to_executor_item(
         "delete" => ExecutorItemAction::Delete,
         // spec 041: catalogue = record-in-place, no filesystem mutation.
         "catalogue" => ExecutorItemAction::Catalogue,
+        // spec 008 scaffolding: create the destination directory for real
+        // (previously fell through to NoOp, so applied mkdir plans never
+        // created anything on disk).
+        "mkdir" => ExecutorItemAction::Mkdir,
+        // spec 049: create a real link (or, with explicit copy opt-in, a real
+        // copy). Previously fell through to NoOp, so applied source-view
+        // generation/regeneration plans never created anything on disk. The
+        // recorded materialization kind rides the free-form `provenance` JSON
+        // array (`[{"label":"materialization","value":"symlink"}]`, spec 014
+        // convention); an unparseable/missing value conservatively falls back
+        // to `symlink` (the constitution-preferred default) rather than
+        // guessing a destructive kind.
+        "link" => ExecutorItemAction::Link { kind: materialization_from_provenance(row) },
         _ => ExecutorItemAction::NoOp,
     };
 
@@ -495,6 +696,13 @@ pub async fn apply_plan(
     // Token verification (A1).
     verify_approval_token(plan_row.approval_token.as_deref(), approval_token)?;
 
+    // Spec 017 C5: capture the archive-plan lifecycle-closure inputs before the
+    // plan row is consumed. On a successful `applied` apply of an
+    // `origin = archive` plan, the project (stored in `origin_path`) is driven
+    // into `archived` as the terminal step.
+    let plan_origin = plan_row.origin.clone();
+    let plan_project_id = plan_row.origin_path.clone();
+
     // Overlap check (R-Concur-1).
     check_no_overlap(plan_id)?;
 
@@ -627,6 +835,8 @@ pub async fn apply_plan(
     let plan_id_owned = plan_id.to_owned();
     let run_id_owned = run_id.clone();
     let op_emitter_task = op_emitter.clone();
+    let plan_origin_owned = plan_origin;
+    let plan_project_id_owned = plan_project_id;
 
     tokio::spawn(async move {
         // Own the RAII removal guard for the whole task scope. Its `Drop`
@@ -651,6 +861,36 @@ pub async fn apply_plan(
             ApplyOutcome::Completed(counts) => {
                 let terminal = counts.terminal_state(false).to_owned();
                 let at = Timestamp::now_iso();
+
+                // Spec 017 C5: on a fully-applied archive plan, drive the owning
+                // project into `archived` (the legitimate requires-plan closure).
+                // Only a clean `applied` terminal qualifies — a partial/failed
+                // apply leaves the project where it is.
+                if terminal == "applied" && plan_origin_owned == "archive" {
+                    if let Some(project_id) = plan_project_id_owned.as_deref() {
+                        finalize_archive_lifecycle(
+                            &pool_clone,
+                            &bus_clone,
+                            &plan_id_owned,
+                            project_id,
+                        )
+                        .await;
+                    }
+                }
+
+                // Spec 049: on a successful (or partially-applied) generation
+                // plan apply, write the first-materialization
+                // `PreparedSourceView` (state `current`) from the succeeded
+                // link items. Failed/skipped items are simply omitted — a
+                // single missing source never blocks recording the rest of
+                // the view (FR-019).
+                if (terminal == "applied" || terminal == "partially_applied")
+                    && plan_origin_owned == "prepared_view_generation"
+                {
+                    if let Some(project_id) = plan_project_id_owned.as_deref() {
+                        finalize_view_generation(&pool_clone, &plan_id_owned, project_id).await;
+                    }
+                }
 
                 let _ = apply_repo::complete_run(
                     &pool_clone,
@@ -1190,6 +1430,7 @@ mod tests {
     use audit::EventBus;
     use persistence_db::repositories::plans as repo;
     use persistence_db::Database;
+    use uuid::Uuid;
 
     async fn setup() -> (Database, EventBus) {
         let db = Database::in_memory().await.expect("in-memory DB");
@@ -1344,6 +1585,85 @@ mod tests {
         // Durable audit trail is retained: the DB still holds run events.
         let plan = repo::get_plan(db.pool(), "p-evt", false).await.unwrap();
         assert_ne!(plan.state, "approved", "plan must have progressed past approved in the DB");
+    }
+
+    // ── Spec 017 C5: archive lifecycle closure ──────────────────────────────
+
+    /// The finalize helper drives a completed project into `archived` and records
+    /// the owning plan id — the legitimate closure of the requires-plan gate.
+    #[tokio::test]
+    async fn finalize_archive_lifecycle_archives_completed_project() {
+        use persistence_db::repositories::projects as projects_repo;
+
+        let (db, bus) = setup().await;
+        let project_id = Uuid::new_v4().to_string();
+        projects_repo::insert_project(
+            db.pool(),
+            &projects_repo::InsertProject {
+                id: &project_id,
+                name: "M31 LRGB",
+                tool: "PixInsight",
+                lifecycle: "completed",
+                path: "projects/M31_LRGB",
+                notes: None,
+                canonical_target_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        finalize_archive_lifecycle(db.pool(), &bus, "plan-arch-1", &project_id).await;
+
+        let project = projects_repo::get_project(db.pool(), &project_id).await.unwrap();
+        assert_eq!(project.lifecycle, "archived", "project must be driven to archived");
+
+        // The link is recorded so archive-management commands act O(1).
+        let archived = projects_repo::list_archived_projects(db.pool()).await.unwrap();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].archived_via_plan_id.as_deref(), Some("plan-arch-1"));
+    }
+
+    /// An already-archived project is idempotent: the closure only (re)records
+    /// the plan link and never errors.
+    #[tokio::test]
+    async fn finalize_archive_lifecycle_is_idempotent_for_archived_project() {
+        use persistence_db::repositories::projects as projects_repo;
+
+        let (db, bus) = setup().await;
+        let project_id = Uuid::new_v4().to_string();
+        projects_repo::insert_project(
+            db.pool(),
+            &projects_repo::InsertProject {
+                id: &project_id,
+                name: "M31",
+                tool: "PixInsight",
+                lifecycle: "archived",
+                path: "projects/M31",
+                notes: None,
+                canonical_target_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        finalize_archive_lifecycle(db.pool(), &bus, "plan-arch-2", &project_id).await;
+
+        let project = projects_repo::get_project(db.pool(), &project_id).await.unwrap();
+        assert_eq!(project.lifecycle, "archived");
+        let archived = projects_repo::list_archived_projects(db.pool()).await.unwrap();
+        assert_eq!(archived[0].archived_via_plan_id.as_deref(), Some("plan-arch-2"));
+    }
+
+    /// A non-UUID project id must not panic (best-effort logging only).
+    #[tokio::test]
+    async fn finalize_archive_lifecycle_non_uuid_is_noop() {
+        let (db, bus) = setup().await;
+        finalize_archive_lifecycle(db.pool(), &bus, "plan-x", "not-a-uuid").await;
+        // No panic, no rows.
+        let archived = persistence_db::repositories::projects::list_archived_projects(db.pool())
+            .await
+            .unwrap();
+        assert!(archived.is_empty());
     }
 
     #[tokio::test]

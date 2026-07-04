@@ -508,7 +508,7 @@ mod tests {
         sqlx::query(
             "INSERT INTO inbox_classifications
              (inbox_item_id, result, frame_type, computed_at, content_signature, unclassified_file_count)
-             VALUES (?, 'single_type', 'light', '2025-01-01T00:00:00Z', 'sig-abc', 0)
+             VALUES (?, 'classified', 'light', '2025-01-01T00:00:00Z', 'sig-abc', 0)
              ON CONFLICT(inbox_item_id) DO UPDATE SET
                  result = excluded.result, frame_type = excluded.frame_type,
                  computed_at = excluded.computed_at, content_signature = excluded.content_signature,
@@ -573,7 +573,6 @@ mod tests {
     async fn do_confirm(db: &Database, item_id: &str, root_path: &std::path::Path) -> String {
         let req = ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
-            action: "confirm".to_owned(),
             content_signature: "sig-abc".to_owned(),
             destructive_destination: None,
             root_absolute_path: root_path.to_path_buf(),
@@ -713,7 +712,7 @@ mod tests {
         sqlx::query(
             "INSERT INTO inbox_classifications
              (inbox_item_id, result, frame_type, computed_at, content_signature, unclassified_file_count)
-             VALUES (?, 'single_type', 'light', '2025-01-01T00:00:00Z', 'sig-abc', 0)
+             VALUES (?, 'classified', 'light', '2025-01-01T00:00:00Z', 'sig-abc', 0)
              ON CONFLICT(inbox_item_id) DO UPDATE SET
                  result = excluded.result, frame_type = excluded.frame_type,
                  computed_at = excluded.computed_at, content_signature = excluded.content_signature,

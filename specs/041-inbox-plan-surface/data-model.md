@@ -120,7 +120,7 @@ New / changed data:
 
 ## Iteration 2026-06-23: Single-type sub-items at ingest (Pivot)
 
-New migration **`0046_inbox_single_type.sql`** (head after 0045). Changes the inbox unit of work from one-row-per-leaf-folder to **one row per single-type group within a leaf folder**, adds source-group provenance, replaces fixed override columns with a generic per-file override table, broadens the missing-metadata gate, adds extended extracted metadata, and drops the session review lifecycle. References research decisions R-9…R-18.
+New migration **`0049_inbox_single_type.sql`** (renumbered from 0048 during the redesign-ui-platevault merge — 0048 was already taken by `0048_target_notes.sql`; **0046 + 0047 already taken** by `0046_session_canonical_target.sql` + `0047_target_constellation_magnitude.sql` — the latter renamed by PR #317 to resolve the dual-0046). Changes the inbox unit of work from one-row-per-leaf-folder to **one row per single-type group within a leaf folder**, adds source-group provenance, replaces fixed override columns with a generic per-file override table, broadens the missing-metadata gate, adds extended extracted metadata, and drops the session review lifecycle. References research decisions R-9…R-18.
 
 ### Source group (new table `inbox_source_groups`)
 
@@ -198,6 +198,7 @@ New per-file fields added to support the R-9 grouping recipe and R-18 semantics.
 | `sky_rotation_deg` | REAL NULL | `OBJCTROT` (sky PA) | informational only — NOT a flat key (R-18) |
 | `readout_mode` | TEXT NULL | `READOUTM` | optional grouping dim, default OFF |
 | `focal_length_mm` | REAL NULL | `FOCALLEN`; XISF `Instrument:Telescope:FocalLength`×1000 | optic-train composite (light+flat) |
+| `pixel_size_um` | REAL NULL | `XPIXSZ` / `PIXSIZE`; XISF `Image:PixelSize` | feeds the FOV-aware target radius (R-17) together with `focal_length_mm` + `naxis1/2` |
 | `observer_lat` | REAL NULL | `SITELAT` → `OBSGEO-B` → `LAT-OBS` | future grouping only |
 | `observer_long` | REAL NULL | `SITELONG` → `OBSGEO-L` → `LONG-OBS` | future grouping; prerequisite for UTC-fallback night binning |
 | `observer_elev` | REAL NULL | `SITEELEV` → `OBSGEO-H` → `ALT-OBS` | future grouping only |
@@ -215,17 +216,17 @@ Reverse the planned session **review lifecycle** (spec 045). Acquisition + calib
 - Sessions expose **derived, confirmed inventory + an editable metadata view only**; editing re-opens the same per-file metadata/override table (`inbox_file_overrides` / `inbox_file_metadata`) that defines the session, with no lifecycle gate.
 - **Cross-spec**: obsoletes most of spec **045-review-state-real** (mark superseded) and reduces spec **006** `SessionState`. Run `/speckit.sync.conflicts` after apply. Constitution boundary intact (reviewable plans retained; no image processing; durable DB audit retained).
 
-## Migration 0046 summary (DDL intent)
+## Migration 0048 summary (DDL intent)
 
 1. `CREATE TABLE inbox_source_groups (...)` with `UNIQUE(root_id, relative_path)`.
 2. Rebuild `inbox_items` (SQLite table-rebuild pattern, required for the UNIQUE change): add `source_group_id`, `group_key`, `group_label`, `frame_type`; change `content_signature` to per-sub-group; replace `UNIQUE(root_id, relative_path)` → `UNIQUE(root_id, relative_path, group_key)`.
 3. `CREATE TABLE inbox_file_overrides (...)` with `UNIQUE(source_group_id, relative_file_path, property_key)`.
 4. Rebuild `inbox_classifications` to collapse the `result` CHECK to `('classified','unclassified')` (drop `'mixed'`).
-5. `ALTER TABLE inbox_file_metadata` add the extended extracted fields (`offset`, `set_temp_c`, `ccd_temp_c`, `ra_deg`, `dec_deg`, `rotator_angle_deg`, `rotator_name`, `sky_rotation_deg`, `readout_mode`, `focal_length_mm`, `observer_lat`/`_long`/`_elev`, `date_loc`, `date_end`, `mjd_avg`, `mjd_obs`) — all nullable.
+5. `ALTER TABLE inbox_file_metadata` add the extended extracted fields (`offset`, `set_temp_c`, `ccd_temp_c`, `ra_deg`, `dec_deg`, `rotator_angle_deg`, `rotator_name`, `sky_rotation_deg`, `readout_mode`, `focal_length_mm`, `pixel_size_um`, `observer_lat`/`_long`/`_elev`, `date_loc`, `date_end`, `mjd_avg`, `mjd_obs`) — all nullable.
 6. Remove the session review-state columns/transitions from the session model (lifecycle drop, E).
 7. Data migration of `inbox_classification_evidence.override_*` / `manual_override` into `inbox_file_overrides` rows; then drop those columns.
 
-### Migration 0046 re-derivation approach (RQ6)
+### Migration 0048 re-derivation approach (RQ6)
 
 Re-derivation is **filesystem-free** because per-file metadata is already persisted (`inbox_file_metadata`):
 

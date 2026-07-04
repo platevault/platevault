@@ -20,8 +20,9 @@
 import { useState, useEffect } from 'react';
 import { Section, Pill, EmptyState } from '@/ui';
 import type { PillVariant } from '@/ui';
-import { calibrationMatchSuggestBatch } from '@/api/commands';
-import type { BatchSessionResultDto, CalibrationMatchType } from '@/api/commands';
+import { calibrationMatchSuggestBatch } from './calibrationMatch';
+import type { CalibrationMatchType } from './calibrationMatch';
+import type { BatchSessionResultDto } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
 
@@ -40,11 +41,11 @@ function statusVariant(status: string): PillVariant {
 
 function statusLabel(status: string): string {
   switch (status) {
-    case 'match': return 'match';
-    case 'ambiguous': return 'ambiguous';
-    case 'no_match': return 'no match';
-    case 'observer_location_missing': return 'needs location';
-    case 'session.mixed_state': return 'mixed session';
+    case 'match': return m.projects_calib_status_match();
+    case 'ambiguous': return m.projects_calib_status_ambiguous();
+    case 'no_match': return m.projects_calib_status_no_match();
+    case 'observer_location_missing': return m.projects_calib_status_needs_location();
+    case 'session.mixed_state': return m.projects_calib_status_mixed_session();
     default: return status;
   }
 }
@@ -82,7 +83,7 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
         if (cancelled) return;
         setLoading(false);
         if (res.status === 'error') {
-          setFetchError(res.errors?.[0]?.message ?? 'Batch suggest failed');
+          setFetchError(res.errors?.[0]?.message ?? m.calibration_batch_suggest_failed());
           return;
         }
         setResults(res.results ?? []);

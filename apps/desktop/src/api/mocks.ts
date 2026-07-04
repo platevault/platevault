@@ -10,6 +10,7 @@ import type {
   MatchCandidate,
 } from '@/bindings/types';
 import type {
+  CalibrationTolerances,
   InboxListResponse_Serialize,
   InboxScanFolderResponse_Serialize,
   InboxClassifyResponse_Serialize,
@@ -26,7 +27,6 @@ import type {
   ProjectChannelsReinferResult_Serialize,
   ProjectChannelsDismissDriftResult,
   TransitionResponse_Serialize,
-  InventorySessionReviewResponse_Serialize,
   LogRecentResponse_Serialize,
   LogExportResponse_Serialize,
   FirstRunRestartResponse,
@@ -38,9 +38,60 @@ import type {
   OperationEvent,
   PlanApplyResponse,
   AuditListResponse_Serialize,
+  Camera,
+  CreateCamera,
+  UpdateCamera,
+  Telescope,
+  CreateTelescope,
+  UpdateTelescope,
+  OpticalTrain,
+  CreateOpticalTrain,
+  UpdateOpticalTrain,
+  Filter,
+  CreateFilter,
+  UpdateFilter,
+  CalibrationMatchSuggestResponse,
+  CalibrationMatchBatchResponse,
+  CalibrationMatchDto_Serialize,
+  IngestionSettings,
+  UpdateIngestionSettings,
+  AuditFilterDto,
+  AuditPaginationDto,
+  PathPatternPreviewResponse,
 } from '@/bindings/index';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+// ── pattern.path_preview token bridge (spec 041 P11) ──────────────────────────
+//
+// Maps a v1 registry `{token}` name (snake_case, as it appears in a per-type
+// destination pattern string) to the camelCase `MetadataBundleDto` field name
+// carried in `sampleMetadata`. Fallbacks mirror `crates/patterns/src/registry.rs`
+// (data-model.md §Errors) so the mock preview matches the real resolver's
+// "missing token" substitution.
+const PATH_PREVIEW_TOKEN_FIELDS: Record<string, string> = {
+  target: 'target',
+  filter: 'filter',
+  date: 'date',
+  frame_type: 'frameType',
+  camera: 'camera',
+  exposure: 'exposure',
+  gain: 'gain',
+  binning: 'binning',
+  set_temp: 'setTemp',
+};
+
+const PATH_PREVIEW_TOKEN_FALLBACKS: Record<string, string> = {
+  target: 'unclassified',
+  filter: 'nofilter',
+  date: 'undated',
+  frame_type: 'unknown',
+  camera: 'unknown-camera',
+  exposure: 'unknown-exposure',
+  gain: 'unknown-gain',
+  binning: '1x1',
+  set_temp: 'untempered',
+};
 
 // --- Inline fixtures for modules not yet created by T015 ---
 //
@@ -57,6 +108,47 @@ const mockAuditEntries: AuditEntry[] = [
   { id: 'audit-005', timestamp: '2026-05-19T23:25:00Z', eventType: 'scan.started', entityType: 'root', entityId: 'root-001', actor: 'user', outcome: 'ok', detail: 'Manual scan triggered' },
 ];
 
+/**
+ * Mirrors the real `audit_list`/`audit_export` filter semantics
+ * (`apps/desktop/src-tauri/src/commands/audit.rs`) over the mock fixture, so
+ * mock mode exercises the same search/entity/outcome/date-range filtering the
+ * real `audit_log_entry` query applies. `severity` has no equivalent on the
+ * `AuditEntry` fixture (the real DTO doesn't carry it either — only the
+ * filter does) and is ignored here, same as it plays no role in what the UI
+ * renders.
+ */
+function filterMockAuditEntries(filters: AuditFilterDto | null | undefined): AuditEntry[] {
+  let result = mockAuditEntries;
+  if (filters?.entityType) {
+    result = result.filter((e) => e.entityType === filters.entityType);
+  }
+  if (filters?.entityId) {
+    result = result.filter((e) => e.entityId === filters.entityId);
+  }
+  if (filters?.outcome) {
+    result = result.filter((e) => e.outcome === filters.outcome);
+  }
+  if (filters?.search) {
+    const q = filters.search.toLowerCase();
+    result = result.filter(
+      (e) =>
+        e.eventType.toLowerCase().includes(q) ||
+        e.entityType.toLowerCase().includes(q) ||
+        e.entityId.toLowerCase().includes(q) ||
+        e.actor.toLowerCase().includes(q),
+    );
+  }
+  if (filters?.from) {
+    const from = new Date(filters.from).getTime();
+    result = result.filter((e) => new Date(e.timestamp).getTime() >= from);
+  }
+  if (filters?.to) {
+    const to = new Date(filters.to).getTime();
+    result = result.filter((e) => new Date(e.timestamp).getTime() < to);
+  }
+  return [...result].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+}
+
 const mockSettingsData: SettingsData = {
   scope: 'general',
   values: {
@@ -64,6 +156,36 @@ const mockSettingsData: SettingsData = {
     default_source_view_strategy: 'symlink',
     calibration_age_warning_days: 90,
   },
+};
+
+// Mutable so `ingestion_settings_update` round-trips through `_get` in mock
+// mode (spec 030, package P12) — mirrors real persistence closely enough for
+// the Ingestion settings pane's load/save flow to be exercised without a
+// backend.
+let mockIngestionSettings: IngestionSettings = {
+  watcherEnabled: true,
+  scanOnStartup: true,
+  followSymlinks: false,
+  followJunctions: false,
+  hashingMode: 'lazy',
+  metadataExtraction: true,
+  exposureGroupingToleranceS: 2,
+  temperatureGroupingToleranceC: 5,
+  defaultFilter: null,
+};
+
+// Spec 007 / spec 043 P8 — mirrors the persisted `calibration_tolerances`
+// singleton row's real defaults (migration 0008 + 0051), including
+// `requireSameOffset` (STUB-OFFSET-REQUIRED closed: this is now a real,
+// persisted field, not a local-only stub).
+const mockCalibrationTolerances: CalibrationTolerances = {
+  temperatureToleranceC: 5.0,
+  exposureToleranceS: 2.0,
+  agingLimitDays: 365,
+  requireSameCamera: true,
+  requireSameGain: true,
+  requireSameBinning: true,
+  requireSameOffset: true,
 };
 
 const mockRoots: LibraryRoot[] = [
@@ -77,6 +199,48 @@ const mockEquipment: Equipment[] = [
   { id: 'eq-002', name: 'Esprit 100ED', kind: 'telescope', aliases: ['SW Esprit 100ED'] },
   { id: 'eq-003', name: 'EQ6-R Pro', kind: 'mount', aliases: ['EQ6R'] },
 ];
+
+// ── Equipment CRUD (spec 030) ────────────────────────────────────────────────
+//
+// Mutable in-memory stores so mock mode's add/edit/delete flows behave like
+// the real backend across a session (previously `@/data/fixtures/settings`,
+// which the Equipment pane held in local `useState` and never persisted
+// through an IPC round-trip). Seed data replaces those retired fixtures.
+
+let mockCameras: Camera[] = [
+  { id: 'cam-001', name: 'ASI2600MM Pro', aliases: ['ZWO ASI2600MM'], autoDetected: false },
+  { id: 'cam-002', name: 'ASI533MC Pro', aliases: ['ZWO ASI533MC'], autoDetected: false },
+];
+
+let mockTelescopes: Telescope[] = [
+  { id: 'tel-001', name: 'Takahashi FSQ-106EDX4', aliases: [], focalLengthMm: 530, autoDetected: false },
+  { id: 'tel-002', name: 'William Optics GT81', aliases: [], focalLengthMm: 478, autoDetected: false },
+];
+
+let mockOpticalTrains: OpticalTrain[] = [
+  {
+    id: 'train-001',
+    name: 'FSQ-106 + ASI2600MM',
+    telescopeId: 'tel-001',
+    cameraId: 'cam-001',
+    focalLengthMm: 530,
+  },
+];
+
+let mockFilters: Filter[] = [
+  { id: 'filt-001', name: 'Ha', category: 'narrowband', autoDetected: false },
+  { id: 'filt-002', name: 'OIII', category: 'narrowband', autoDetected: false },
+  { id: 'filt-003', name: 'SII', category: 'narrowband', autoDetected: false },
+  { id: 'filt-004', name: 'L', category: 'broadband', autoDetected: false },
+  { id: 'filt-005', name: 'R', category: 'broadband', autoDetected: false },
+  { id: 'filt-006', name: 'G', category: 'broadband', autoDetected: false },
+  { id: 'filt-007', name: 'B', category: 'broadband', autoDetected: false },
+];
+
+/** Mirrors the shape `unwrap()` expects on the error branch of a `Result`. */
+function mockContractError(code: string, message: string): never {
+  throw { code, message, severity: 'blocking', retryable: false };
+}
 
 const mockPreferences: AppPreferences = {
   sidebarCollapsed: false,
@@ -133,6 +297,46 @@ const mockMatchCandidates: MatchCandidate[] = [
 ];
 
 /**
+ * `calibration.match.suggest` / `.suggest.batch` fixtures (spec P9).
+ *
+ * The second candidate deliberately omits every session-context field to
+ * exercise the real-app "—" fallback (no canonical target link / no
+ * fingerprint row) alongside the first candidate's fully-resolved context.
+ */
+function mockCalibrationMatches(sessionId: string): CalibrationMatchDto_Serialize[] {
+  return [
+    {
+      sessionId,
+      masterId: 'master-001',
+      calibrationType: 'dark',
+      confidence: 0.97,
+      dimensionsMatched: [
+        { dimension: 'gain', observed: { value: 100 }, reference: { value: 100 } },
+        { dimension: 'offset', observed: { value: 10 }, reference: { value: 10 } },
+      ],
+      dimensionsMismatched: [],
+      selectionReason: 'same_night',
+      targetName: 'M 31',
+      filter: 'Ha',
+      acquisitionNight: '2026-05-18',
+      frameCount: 42,
+    },
+    {
+      sessionId,
+      masterId: 'master-002',
+      calibrationType: 'dark',
+      confidence: 0.81,
+      dimensionsMatched: [{ dimension: 'gain', observed: { value: 100 }, reference: { value: 100 } }],
+      dimensionsMismatched: [
+        { dimension: 'temperature', reason: 'out_of_tolerance', delta: 3.5 },
+      ],
+      selectionReason: 'compatible_fallback',
+      // Unresolved session context — every P9 field stays absent.
+    },
+  ];
+}
+
+/**
  * Dispatch a mock IPC response for `cmd`.
  *
  * Returns `Promise<unknown>`: the caller (`invoke<T>` in `ipc.ts` /
@@ -171,6 +375,35 @@ export async function mockInvoke(
     }
     case 'calibration_matches': {
       return mockMatchCandidates;
+    }
+    case 'calibration_match_suggest': {
+      const req = (_args as { req?: { requestId?: string; sessionId?: string } } | undefined)?.req;
+      const sessionId = req?.sessionId ?? 'ses-001';
+      return {
+        status: 'success',
+        contractVersion: '2.0.0',
+        requestId: req?.requestId ?? crypto.randomUUID(),
+        suggestStatus: 'match',
+        matches: mockCalibrationMatches(sessionId),
+      } satisfies CalibrationMatchSuggestResponse;
+    }
+    case 'calibration_match_suggest_batch': {
+      const req = (_args as { req?: { requestId?: string; sessionIds?: string[] } } | undefined)?.req;
+      const sessionIds = req?.sessionIds ?? ['ses-001'];
+      return {
+        status: 'success',
+        contractVersion: '1.0',
+        requestId: req?.requestId ?? crypto.randomUUID(),
+        results: sessionIds.map((sessionId) => ({
+          sessionId,
+          calibrationType: 'dark' as const,
+          status: 'match',
+          candidates: mockCalibrationMatches(sessionId),
+        })),
+      } satisfies CalibrationMatchBatchResponse;
+    }
+    case 'calibration_tolerances_get': {
+      return mockCalibrationTolerances;
     }
     case 'targets_list': {
       const { targets } = await import('@/data/fixtures/targets');
@@ -262,6 +495,8 @@ export async function mockInvoke(
         channels: [],
         auditId: 'mock-audit-id',
         createdAt: new Date().toISOString(),
+        // mkdir-only scaffolding auto-applies (user decision 2026-07-04).
+        scaffoldApplied: true,
       } satisfies ProjectCreateResult_Serialize;
     }
     case 'projects_update': {
@@ -317,10 +552,19 @@ export async function mockInvoke(
       return planDetail;
     }
     case 'audit_list': {
-      return { entries: mockAuditEntries, total: mockAuditEntries.length } satisfies AuditListResponse_Serialize;
+      const args = _args as
+        | { filters?: AuditFilterDto | null; pagination?: AuditPaginationDto | null }
+        | undefined;
+      const filtered = filterMockAuditEntries(args?.filters);
+      const offset = args?.pagination?.offset ?? 0;
+      const limit = args?.pagination?.limit ?? filtered.length;
+      const page = filtered.slice(offset, offset + limit);
+      return { entries: page, total: filtered.length } satisfies AuditListResponse_Serialize;
     }
     case 'audit_export': {
-      return mockAuditEntries.map((e) => JSON.stringify(e)).join('\n');
+      const args = _args as { filters?: AuditFilterDto | null } | undefined;
+      const filtered = filterMockAuditEntries(args?.filters);
+      return filtered.map((e) => JSON.stringify(e)).join('\n');
     }
     case 'log_recent': {
       const { MOCK_LOG_ENTRIES } = await import('@/data/mockLogEntries');
@@ -344,11 +588,26 @@ export async function mockInvoke(
     case 'settings_get': {
       return mockSettingsData;
     }
+    case 'ingestion_settings_get': {
+      return mockIngestionSettings;
+    }
     case 'roots_list': {
       return mockRoots;
     }
     case 'equipment_list': {
       return mockEquipment;
+    }
+    case 'equipment_cameras_list': {
+      return mockCameras;
+    }
+    case 'equipment_telescopes_list': {
+      return mockTelescopes;
+    }
+    case 'equipment_trains_list': {
+      return mockOpticalTrains;
+    }
+    case 'equipment_filters_list': {
+      return mockFilters;
     }
     case 'review_queue': {
       const { reviewItems } = await import('@/data/fixtures/review');
@@ -379,10 +638,6 @@ export async function mockInvoke(
       } satisfies TransitionResponse_Serialize;
     }
 
-    case 'sessions_transition': {
-      const { sessions } = await import('@/data/fixtures/sessions');
-      return sessions[0];
-    }
     case 'sessions_split': {
       const { sessions } = await import('@/data/fixtures/sessions');
       return { original: sessions[0], new: sessions[1] };
@@ -446,17 +701,36 @@ export async function mockInvoke(
     case 'settings_update': {
       return null;
     }
+    case 'ingestion_settings_update': {
+      const req = (_args as { request?: UpdateIngestionSettings } | undefined)?.request;
+      if (req) {
+        mockIngestionSettings = { ...req };
+      }
+      return mockIngestionSettings;
+    }
+    case 'calibration_tolerances_update': {
+      // Echo the request back, mirroring the real `calibration.tolerances.update`
+      // command's upsert-then-return behaviour (persistence_db::repositories::
+      // calibration_tolerances::update).
+      const req = (_args as { request?: CalibrationTolerances } | undefined)?.request;
+      return { ...mockCalibrationTolerances, ...req } satisfies CalibrationTolerances;
+    }
     case 'roots_register': {
       return mockRoots[0];
     }
     case 'roots_remap': {
       // Generated `RemapVerification` is camelCase; mirror the real contract so
       // the verification UI (which reads `samples`/`allVerified`) works in mock
-      // mode exactly as it does against the backend.
+      // mode exactly as it does against the backend. The generated `rootsRemap`
+      // binding invokes with `{ rootId, newPath }` (camelCase) — NOT
+      // `root_id`/`new_path` — so read those keys here.
+      const rootId = (_args?.rootId as string) ?? 'root-001';
+      const newPath = (_args?.newPath as string) ?? '/new/path';
+      const originalPath = mockRoots.find((r) => r.id === rootId)?.path ?? '/old/path';
       return {
-        rootId: (_args?.root_id as string) ?? 'root-1',
-        originalPath: '/old/path',
-        newPath: (_args?.new_path as string) ?? '/new/path',
+        rootId,
+        originalPath,
+        newPath,
         samples: [
           { relativePath: 'M31/light_001.fits', found: true },
           { relativePath: 'M31/light_002.fits', found: true },
@@ -527,6 +801,8 @@ export async function mockInvoke(
         items: [
           {
             inboxItemId: 'item-001',
+            groupId: 'item-001',
+            groupKey: '',
             rootId: 'root-lights-001',
             rootAbsolutePath: '/astro/raw',
             relativePath: '2025-10-10/NGC7000',
@@ -540,6 +816,8 @@ export async function mockInvoke(
           },
           {
             inboxItemId: 'item-002',
+            groupId: 'item-002',
+            groupKey: '',
             rootId: 'root-lights-001',
             rootAbsolutePath: '/astro/raw',
             relativePath: '2025-10-10/darks',
@@ -554,6 +832,8 @@ export async function mockInvoke(
           {
             // Individual master item — spec 040 FR-005
             inboxItemId: 'item-master-dark',
+            groupId: 'item-master-dark',
+            groupKey: '',
             rootId: 'root-lights-001',
             rootAbsolutePath: '/astro/raw',
             relativePath: '2025-10-10/darks/masterDark_Ha_300s.xisf',
@@ -570,6 +850,8 @@ export async function mockInvoke(
           },
           {
             inboxItemId: 'item-003',
+            groupId: 'item-003',
+            groupKey: '',
             rootId: 'root-inbox-001',
             rootAbsolutePath: '/astro/inbox',
             relativePath: '2025-11-01/Jupiter',
@@ -668,44 +950,19 @@ export async function mockInvoke(
     }
 
     // ── Inventory commands (spec 006) ─────────────────────────────────────────
+    //
+    // Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
+    // inventory. `inventory_session_review` (the mock for the removed
+    // `inventory.session.review` command) and the `reviewFilter`/`ignored`
+    // session filtering were removed along with the review-state machine.
 
     case 'inventory_list': {
-      const { INVENTORY_LIST_RESPONSE, INVENTORY_SOURCES } = await import(
-        '@/data/fixtures/inventory'
-      );
-      const req = (_args as { req?: { filters?: { reviewFilter?: string } } } | undefined)?.req;
-      const reviewFilter = req?.filters?.reviewFilter;
-      // If reviewFilter=ignored, include ignored sessions; otherwise exclude them.
-      const sources =
-        reviewFilter === 'ignored'
-          ? INVENTORY_SOURCES.map((src) => ({
-              ...src,
-              sessions: src.sessions.filter((s) => s.state === 'ignored'),
-            })).filter((src) => src.sessions.length > 0)
-          : INVENTORY_LIST_RESPONSE.sources;
+      const { INVENTORY_LIST_RESPONSE } = await import('@/data/fixtures/inventory');
+      const req = (_args as { req?: { filters?: unknown } } | undefined)?.req;
       return {
         ...INVENTORY_LIST_RESPONSE,
-        sources,
         requestId: req?.filters ? INVENTORY_LIST_RESPONSE.requestId : INVENTORY_LIST_RESPONSE.requestId,
       };
-    }
-
-    case 'inventory_session_review': {
-      const req = (_args as {
-        req?: { sessionId?: string; nextState?: string; requestId?: string };
-      } | undefined)?.req;
-      const requestId = req?.requestId ?? '00000000-0000-0000-0000-000000000099';
-      // Mock: always succeeds (idempotency handled by noop check in real impl).
-      return {
-        status: 'success',
-        contractVersion: '2.0.0',
-        requestId,
-        appliedAt: new Date().toISOString(),
-        entityType: 'acquisition_session',
-        priorState: 'needs_review',
-        newState: (req?.nextState as 'confirmed') ?? 'confirmed',
-        auditId: `audit-${Date.now()}`,
-      } satisfies InventorySessionReviewResponse_Serialize;
     }
 
     // ── Developer diagnostics (spec 021) ─────────────────────────────────────
@@ -773,6 +1030,207 @@ export async function mockInvoke(
 
     case 'preparedview_regenerate': {
       return { planId: 'mock-plan-regen-001', unresolvedItemCount: 0 };
+    }
+
+    // spec 012 T008: watcher attach/detach — no real filesystem watching in
+    // mock mode; the project drawer's mount/unmount effect still calls these,
+    // so they must resolve rather than throw "unknown mock command".
+    case 'artifact_watcher_attach':
+    case 'artifact_watcher_detach': {
+      return null;
+    }
+
+    // ── Equipment CRUD (spec 030) ───────────────────────────────────────────
+
+    case 'equipment_cameras_create': {
+      const req = (_args as { request?: CreateCamera } | undefined)?.request;
+      const camera: Camera = {
+        id: `cam-${crypto.randomUUID()}`,
+        name: req?.name ?? '',
+        aliases: req?.aliases ?? [],
+        autoDetected: false,
+      };
+      mockCameras = [...mockCameras, camera];
+      return camera;
+    }
+    case 'equipment_cameras_update': {
+      const req = (_args as { request?: UpdateCamera } | undefined)?.request;
+      if (!req) return mockContractError('equipment.not_found', 'camera not found');
+      const existing = mockCameras.find((c) => c.id === req.id);
+      if (!existing) return mockContractError('equipment.not_found', `camera ${req.id} not found`);
+      const updated: Camera = { ...existing, name: req.name, aliases: req.aliases };
+      mockCameras = mockCameras.map((c) => (c.id === req.id ? updated : c));
+      return updated;
+    }
+    case 'equipment_cameras_delete': {
+      const id = (_args as { id?: string } | undefined)?.id;
+      if (!id || !mockCameras.some((c) => c.id === id)) {
+        return mockContractError('equipment.not_found', `camera ${id ?? ''} not found`);
+      }
+      if (mockOpticalTrains.some((t) => t.cameraId === id)) {
+        return mockContractError('internal.database', 'FOREIGN KEY constraint failed');
+      }
+      mockCameras = mockCameras.filter((c) => c.id !== id);
+      return null;
+    }
+
+    case 'equipment_telescopes_create': {
+      const req = (_args as { request?: CreateTelescope } | undefined)?.request;
+      const telescope: Telescope = {
+        id: `tel-${crypto.randomUUID()}`,
+        name: req?.name ?? '',
+        aliases: req?.aliases ?? [],
+        focalLengthMm: req?.focalLengthMm ?? null,
+        autoDetected: false,
+      };
+      mockTelescopes = [...mockTelescopes, telescope];
+      return telescope;
+    }
+    case 'equipment_telescopes_update': {
+      const req = (_args as { request?: UpdateTelescope } | undefined)?.request;
+      if (!req) return mockContractError('equipment.not_found', 'telescope not found');
+      const existing = mockTelescopes.find((t) => t.id === req.id);
+      if (!existing) return mockContractError('equipment.not_found', `telescope ${req.id} not found`);
+      const updated: Telescope = {
+        ...existing,
+        name: req.name,
+        aliases: req.aliases,
+        focalLengthMm: req.focalLengthMm,
+      };
+      mockTelescopes = mockTelescopes.map((t) => (t.id === req.id ? updated : t));
+      return updated;
+    }
+    case 'equipment_telescopes_delete': {
+      const id = (_args as { id?: string } | undefined)?.id;
+      if (!id || !mockTelescopes.some((t) => t.id === id)) {
+        return mockContractError('equipment.not_found', `telescope ${id ?? ''} not found`);
+      }
+      if (mockOpticalTrains.some((t) => t.telescopeId === id)) {
+        return mockContractError('internal.database', 'FOREIGN KEY constraint failed');
+      }
+      mockTelescopes = mockTelescopes.filter((t) => t.id !== id);
+      return null;
+    }
+
+    case 'equipment_trains_create': {
+      const req = (_args as { request?: CreateOpticalTrain } | undefined)?.request;
+      const train: OpticalTrain = {
+        id: `train-${crypto.randomUUID()}`,
+        name: req?.name ?? '',
+        telescopeId: req?.telescopeId ?? null,
+        cameraId: req?.cameraId ?? null,
+        focalLengthMm: req?.focalLengthMm ?? 0,
+      };
+      mockOpticalTrains = [...mockOpticalTrains, train];
+      return train;
+    }
+    case 'equipment_trains_update': {
+      const req = (_args as { request?: UpdateOpticalTrain } | undefined)?.request;
+      if (!req) return mockContractError('equipment.not_found', 'optical train not found');
+      const existing = mockOpticalTrains.find((t) => t.id === req.id);
+      if (!existing) {
+        return mockContractError('equipment.not_found', `optical train ${req.id} not found`);
+      }
+      const updated: OpticalTrain = {
+        ...existing,
+        name: req.name,
+        telescopeId: req.telescopeId,
+        cameraId: req.cameraId,
+        focalLengthMm: req.focalLengthMm,
+      };
+      mockOpticalTrains = mockOpticalTrains.map((t) => (t.id === req.id ? updated : t));
+      return updated;
+    }
+    case 'equipment_trains_delete': {
+      const id = (_args as { id?: string } | undefined)?.id;
+      if (!id || !mockOpticalTrains.some((t) => t.id === id)) {
+        return mockContractError('equipment.not_found', `optical train ${id ?? ''} not found`);
+      }
+      mockOpticalTrains = mockOpticalTrains.filter((t) => t.id !== id);
+      return null;
+    }
+
+    case 'equipment_filters_create': {
+      const req = (_args as { request?: CreateFilter } | undefined)?.request;
+      const filter: Filter = {
+        id: `filt-${crypto.randomUUID()}`,
+        name: req?.name ?? '',
+        category: req?.category ?? 'custom',
+        autoDetected: false,
+      };
+      mockFilters = [...mockFilters, filter];
+      return filter;
+    }
+    case 'equipment_filters_update': {
+      const req = (_args as { request?: UpdateFilter } | undefined)?.request;
+      if (!req) return mockContractError('equipment.not_found', 'filter not found');
+      const existing = mockFilters.find((f) => f.id === req.id);
+      if (!existing) return mockContractError('equipment.not_found', `filter ${req.id} not found`);
+      const updated: Filter = { ...existing, name: req.name, category: req.category };
+      mockFilters = mockFilters.map((f) => (f.id === req.id ? updated : f));
+      return updated;
+    }
+    case 'equipment_filters_delete': {
+      const id = (_args as { id?: string } | undefined)?.id;
+      if (!id || !mockFilters.some((f) => f.id === id)) {
+        return mockContractError('equipment.not_found', `filter ${id ?? ''} not found`);
+      }
+      mockFilters = mockFilters.filter((f) => f.id !== id);
+      return null;
+    }
+
+    // ── pattern.path_preview (spec 041 per-type destination patterns, P11) ──
+    //
+    // Mirrors the real resolver's token-substitution + missing-token report
+    // for the mock/dev environment. `{token}` names are the v1 registry
+    // token names (snake_case); `sampleMetadata` carries the camelCase DTO
+    // field names, so PATH_PREVIEW_TOKEN_FIELDS bridges the two. Errors are
+    // thrown as full ContractError envelopes (code + message + severity +
+    // retryable), matching the real backend, so mock mode exercises the same
+    // `errMessage()` catalog-resolution path as production.
+    case 'pattern_path_preview': {
+      const req = (_args as { request?: { pattern?: string; sampleMetadata?: Record<string, string | null | undefined> } } | undefined)?.request;
+      const pattern = req?.pattern ?? '';
+      const sample = req?.sampleMetadata ?? {};
+      if (pattern.trim() === '') {
+        throw {
+          code: 'pattern.empty',
+          message: 'Pattern is empty.',
+          severity: 'blocking',
+          retryable: false,
+          details: null,
+        };
+      }
+      const missingTokens: string[] = [];
+      const segments = pattern
+        .split('/')
+        .filter((seg) => seg !== '')
+        .map((seg) =>
+          seg.replace(/\{([^}]*)\}/g, (_match, token: string) => {
+            const field = PATH_PREVIEW_TOKEN_FIELDS[token];
+            if (!field) {
+              // The real resolver rejects unregistered tokens outright.
+              throw {
+                code: 'token.unknown',
+                message: `Unknown token: ${token}`,
+                severity: 'blocking',
+                retryable: false,
+                details: { token },
+              };
+            }
+            const value = sample[field];
+            if (value == null || value === '') {
+              missingTokens.push(token);
+              return PATH_PREVIEW_TOKEN_FALLBACKS[token] ?? token;
+            }
+            return value;
+          }),
+        );
+      return {
+        resolvedPath: segments.join('/'),
+        missingTokens,
+        warnings: [],
+      } satisfies PathPatternPreviewResponse;
     }
 
     default:

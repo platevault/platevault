@@ -5,3 +5,20 @@ type-complexity-threshold = 350
 # `result_large_err`. Boxing it everywhere would harm ergonomics, so the
 # threshold is raised to accommodate the canonical error type.
 large-error-threshold = 160
+
+# --- DB boundary: SECONDARY signal for persistence-layer hardening ---
+# `disallowed-methods` flags the raw sqlx escape hatches. It is NOT the real
+# boundary guard: clippy cannot path-scope a lint to "everywhere EXCEPT
+# crates/persistence/db", so this also fires inside the sanctioned persistence/db
+# crate and inside test modules. The authoritative, path-scoped, ratcheting
+# enforcement lives in scripts/check-db-boundary.sh (`just db-boundary`).
+#
+# Kept as plain entries (clippy::disallowed_methods defaults to warn, and the
+# workspace does not deny it) so today's ~200 production + ~1000 test sites do
+# not break the build. Treat any NEW occurrence as a prompt to relocate the
+# query into crates/persistence/db. See docs/development/persistence-layer-hardening.md.
+disallowed-methods = [
+  { path = "sqlx::query", reason = "route raw SQL through a crates/persistence/db repository (persistence-layer-hardening.md)" },
+  { path = "sqlx::query_as", reason = "route typed SQL through a crates/persistence/db repository" },
+  { path = "sqlx::query_scalar", reason = "route scalar SQL through a crates/persistence/db repository" },
+]

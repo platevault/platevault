@@ -12,12 +12,7 @@ import {
 import { Pill, KV, Section, Table, CoverageBar, Banner, EmptyState } from '@/ui';
 import type { PropertyDef } from '@/components';
 import { m } from '@/lib/i18n';
-import {
-  sessionStateLabel,
-  sessionStateVariant,
-  projectStateLabel,
-  projectStateVariant,
-} from '@/lib/lifecycle';
+import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
 
 interface TargetDetailPaneInlineProps {
   target: TargetFixture | null;
@@ -153,7 +148,6 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
                 { key: 'filter', label: m.common_filter() },
                 { key: 'frames', label: m.projects_wizard_col_frames() },
                 { key: 'integ', label: m.targets_col_integ() },
-                { key: 'state', label: m.sessions_col_state() },
                 { key: 'projects', label: m.common_projects() },
               ]}
               rows={detail.sessions.map((s) => ({
@@ -162,7 +156,6 @@ export function TargetDetailPaneInline({ target }: TargetDetailPaneInlineProps) 
                 frames: <span className="alm-mono">{s.frameCount}</span>,
                 // eslint-disable-next-line alm/no-user-string -- unit abbreviation "h" is a universal scientific symbol
                 integ: <span className="alm-mono">{((s.totalIntegrationSeconds ?? 0) / 3600).toFixed(1)}h</span>,
-                state: <Pill variant={sessionStateVariant(s.state)}>{sessionStateLabel(s.state)}</Pill>,
                 projects:
                   s.projectIds.length === 0 ? (
                     <span className="alm-target-detail-legacy__no-projects-dash">—</span>

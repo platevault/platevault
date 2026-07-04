@@ -193,6 +193,179 @@ async fn apply_plan_moves_file_and_writes_audit_events() {
     );
 }
 
+// ── Test: spec 017 C5 archive lifecycle closure ──────────────────────────────
+
+/// Seed a `completed` project and an approved `origin = archive` plan whose one
+/// item moves a real tempfile, with the project id carried in `origin_path`.
+async fn seed_approved_archive_plan(
+    pool: &sqlx::SqlitePool,
+    plan_id: &str,
+    project_id: &str,
+    src_path: &std::path::Path,
+    dst_path: &std::path::Path,
+) {
+    plans_repo::insert_plan(
+        pool,
+        &plans_repo::InsertPlan {
+            id: plan_id,
+            title: "Archive Test Plan",
+            origin: "archive",
+            origin_path: Some(project_id),
+            plan_type: "archive",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        },
+    )
+    .await
+    .expect("insert archive plan");
+
+    plans_repo::insert_plan_item(
+        pool,
+        &plans_repo::InsertPlanItem {
+            id: &format!("{plan_id}-item-0"),
+            plan_id,
+            item_index: 1,
+            name: "capture.fits",
+            action: "move",
+            from_root_id: None,
+            from_relative_path: src_path.to_str().expect("utf-8 src"),
+            to_root_id: None,
+            to_relative_path: dst_path.to_str().expect("utf-8 dst"),
+            reason: "archive",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: Some(project_id),
+            category: Some("intermediate"),
+        },
+    )
+    .await
+    .expect("insert archive item");
+
+    plans_repo::update_plan_state(pool, plan_id, "ready_for_review").await.expect("ready");
+    plans_repo::set_approved(pool, plan_id, "2026-06-19T00:00:00Z", "tok-test-fixed")
+        .await
+        .expect("approve");
+}
+
+/// C5: applying an `origin = archive` plan to a clean `applied` terminal drives
+/// the owning project into `archived` (the legitimate requires-plan closure) and
+/// records `archived_via_plan_id`.
+#[tokio::test]
+async fn archive_plan_apply_drives_project_to_archived() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let project_id = Uuid::new_v4().to_string();
+    support::insert_project(db.pool(), &project_id, "t", "completed").await;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("capture.fits");
+    let dst = dir.path().join("archive/capture.fits");
+    std::fs::write(&src, b"raw-light-frame").expect("write src");
+
+    seed_approved_archive_plan(db.pool(), &plan_id, &project_id, &src, &dst).await;
+
+    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
+        .await
+        .expect("apply_plan should succeed");
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
+
+    // Plan reached 'applied'.
+    let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
+    assert_eq!(plan_row.state, "applied");
+
+    // Project driven to 'archived' with the plan link recorded.
+    let archived = persistence_db::repositories::projects::list_archived_projects(db.pool())
+        .await
+        .expect("list_archived_projects");
+    assert_eq!(archived.len(), 1, "the completed project must now be archived");
+    assert_eq!(archived[0].id, project_id);
+    assert_eq!(archived[0].archived_via_plan_id.as_deref(), Some(plan_id.as_str()));
+
+    // A lifecycle audit row for the project → archived transition was written.
+    let (transition_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM audit_log_entry \
+         WHERE entity_id = ? AND to_state = 'archived' AND outcome = 'applied'",
+    )
+    .bind(&project_id)
+    .fetch_one(db.pool())
+    .await
+    .expect("query lifecycle audit");
+    assert_eq!(transition_count, 1, "archive closure must write a lifecycle audit row");
+}
+
+/// A non-archive plan apply must NOT touch project lifecycle (guard the origin
+/// gate — the closure is archive-only).
+#[tokio::test]
+async fn non_archive_plan_apply_leaves_project_lifecycle_untouched() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let project_id = Uuid::new_v4().to_string();
+    support::insert_project(db.pool(), &project_id, "t", "completed").await;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("capture.fits");
+    let dst = dir.path().join("processed/capture.fits");
+    std::fs::write(&src, b"raw").expect("write src");
+
+    // A plain cleanup plan (origin != archive) that happens to reference the
+    // project in origin_path must not archive it.
+    plans_repo::insert_plan(
+        db.pool(),
+        &plans_repo::InsertPlan {
+            id: &plan_id,
+            title: "Cleanup",
+            origin: "cleanup",
+            origin_path: Some(&project_id),
+            plan_type: "cleanup",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        },
+    )
+    .await
+    .expect("insert plan");
+    plans_repo::insert_plan_item(
+        db.pool(),
+        &plans_repo::InsertPlanItem {
+            id: &format!("{plan_id}-item-0"),
+            plan_id: &plan_id,
+            item_index: 1,
+            name: "capture.fits",
+            action: "move",
+            from_root_id: None,
+            from_relative_path: src.to_str().unwrap(),
+            to_root_id: None,
+            to_relative_path: dst.to_str().unwrap(),
+            reason: "cleanup",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        },
+    )
+    .await
+    .expect("insert item");
+    plans_repo::update_plan_state(db.pool(), &plan_id, "ready_for_review").await.unwrap();
+    plans_repo::set_approved(db.pool(), &plan_id, "2026-06-19T00:00:00Z", "tok-test-fixed")
+        .await
+        .unwrap();
+
+    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
+        .await
+        .expect("apply");
+    tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
+
+    let project =
+        persistence_db::repositories::projects::get_project(db.pool(), &project_id).await.unwrap();
+    assert_eq!(project.lifecycle, "completed", "non-archive apply must not archive the project");
+}
+
 // ── Test 3: no-overwrite safety guarantee ────────────────────────────────────
 
 /// Attempting to move a file to a destination that already exists must

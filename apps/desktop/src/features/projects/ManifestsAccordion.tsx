@@ -98,7 +98,7 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
       try {
         await revealManifestInOs({ path: manifest.path });
       } catch (err: unknown) {
-        const msg = typeof err === 'string' ? err : (err as Error)?.message ?? 'Reveal failed.';
+        const msg = typeof err === 'string' ? err : (err as Error)?.message ?? m.projects_manifests_reveal_failed_fallback();
         addToast({ message: msg, variant: 'error' });
       } finally {
         setRevealWorking(null);

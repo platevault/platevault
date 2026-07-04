@@ -27,7 +27,8 @@
         "available",
         "supportsOpenFolder",
         "enabled",
-        "autoDetected"
+        "autoDetected",
+        "watchExtensions"
       ],
       "additionalProperties": false,
       "properties": {
@@ -57,6 +58,11 @@
         "autoDetected": {
           "type": "boolean",
           "description": "True when the current executablePath came from R2 discovery and has not been explicitly saved by the user yet."
+        },
+        "watchExtensions": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^\\.[a-zA-Z0-9]+$" },
+          "description": "Spec 012 T007b (R-ExtAllow): the effective artifact-watch extension allow-list for this tool — a per-tool Settings override when configured, else the workflow_artifacts DEFAULT_WATCH_EXTENSIONS default."
         }
       }
     },

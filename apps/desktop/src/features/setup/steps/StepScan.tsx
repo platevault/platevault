@@ -8,8 +8,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Pill } from '@/ui/Pill';
 import type { PillVariant } from '@/ui/Pill';
 import { m } from '@/lib/i18n';
-import { inboxScanFolder, inboxClassify } from '@/api/commands';
-import type { InboxItemSummary, InboxClassifyResponse } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { InboxItemSummary } from '@/bindings/index';
+import type { InboxClassifyResponse } from '@/bindings/aliases';
 import type { SourceEntry } from '../sources-store';
 import type { FlushResult } from '../sources-store';
 import { errMessage } from '@/lib/errors';
@@ -89,8 +91,10 @@ function titleCase(s: string): string {
  * "Master" when the base frame type couldn't be inferred.
  */
 function masterLabel(item: InboxItemSummary): string {
-  const ft = item.masterFrameType ? `Master ${titleCase(item.masterFrameType)}` : 'Master';
-  const parts = [ft];
+  const ft: string = item.masterFrameType
+    ? m.setup_scan_master_kind({ kind: titleCase(item.masterFrameType) })
+    : m.setup_scan_master();
+  const parts: string[] = [ft];
   if (item.masterFilter) parts.push(item.masterFilter);
   if (item.masterExposureS != null) parts.push(`${item.masterExposureS}s`);
   return parts.join(' · ');
@@ -155,9 +159,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
               }
             : undefined
         }
-        className="alm-setup-scan__header"
-        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional cursor based on expandable state
-        style={{ cursor: isExpandable ? 'pointer' : 'default' }}
+        className={'alm-setup-scan__header' + (isExpandable ? ' alm-setup-scan__header--expandable' : '')}
       >
         {/* Chevron — only shown when expandable */}
         {isExpandable && (
@@ -325,10 +327,12 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
 
         try {
           // 1. Scan the folder
-          const scanResponse = await inboxScanFolder({
-            rootId: entry.rootId,
-            rootAbsolutePath: entry.source.path,
-          });
+          const scanResponse = unwrap(
+            await commands.inboxScanFolder({
+              rootId: entry.rootId,
+              rootAbsolutePath: entry.source.path,
+            }),
+          );
 
           const items = scanResponse.items ?? [];
 
@@ -337,10 +341,12 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
           await Promise.allSettled(
             items.map(async (item) => {
               try {
-                const cls = await inboxClassify({
-                  inboxItemId: item.inboxItemId,
-                  rootAbsolutePath: entry.source.path,
-                });
+                const cls = unwrap(
+                  await commands.inboxClassify({
+                    inboxItemId: item.inboxItemId,
+                    rootAbsolutePath: entry.source.path,
+                  }),
+                );
                 classifications.set(item.inboxItemId, cls);
               } catch {
                 // Classification failure for one item: skip but don't abort

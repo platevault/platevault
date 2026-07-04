@@ -34,32 +34,6 @@
       "properties": {
         "entityType": {
           "type": "string",
-          "const": "inventory_session"
-        }
-      },
-      "$ref": "#/$defs/InventorySessionTransitionRequest",
-      "required": [
-        "entityType"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "entityType": {
-          "type": "string",
-          "const": "calibration_session"
-        }
-      },
-      "$ref": "#/$defs/CalibrationSessionTransitionRequest",
-      "required": [
-        "entityType"
-      ]
-    },
-    {
-      "type": "object",
-      "properties": {
-        "entityType": {
-          "type": "string",
           "const": "data_source"
         }
       },
@@ -109,49 +83,6 @@
     }
   ],
   "$defs": {
-    "CalibrationSessionTransitionRequest": {
-      "type": "object",
-      "properties": {
-        "actionLabel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "actor": {
-          "$ref": "#/$defs/TransitionActor"
-        },
-        "contractVersion": {
-          "type": "string"
-        },
-        "currentState": {
-          "$ref": "#/$defs/SessionState"
-        },
-        "entityId": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "entityType": {
-          "type": "string"
-        },
-        "nextState": {
-          "$ref": "#/$defs/SessionState"
-        },
-        "requestId": {
-          "type": "string",
-          "format": "uuid"
-        }
-      },
-      "required": [
-        "contractVersion",
-        "requestId",
-        "entityType",
-        "entityId",
-        "currentState",
-        "nextState",
-        "actor"
-      ]
-    },
     "DataSourceState": {
       "type": "string",
       "enum": [
@@ -242,49 +173,6 @@
         },
         "nextState": {
           "$ref": "#/$defs/FileRecordState"
-        },
-        "requestId": {
-          "type": "string",
-          "format": "uuid"
-        }
-      },
-      "required": [
-        "contractVersion",
-        "requestId",
-        "entityType",
-        "entityId",
-        "currentState",
-        "nextState",
-        "actor"
-      ]
-    },
-    "InventorySessionTransitionRequest": {
-      "type": "object",
-      "properties": {
-        "actionLabel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "actor": {
-          "$ref": "#/$defs/TransitionActor"
-        },
-        "contractVersion": {
-          "type": "string"
-        },
-        "currentState": {
-          "$ref": "#/$defs/SessionState"
-        },
-        "entityId": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "entityType": {
-          "type": "string"
-        },
-        "nextState": {
-          "$ref": "#/$defs/SessionState"
         },
         "requestId": {
           "type": "string",
@@ -525,17 +413,6 @@
         "currentState",
         "nextState",
         "actor"
-      ]
-    },
-    "SessionState": {
-      "type": "string",
-      "enum": [
-        "discovered",
-        "candidate",
-        "needs_review",
-        "confirmed",
-        "rejected",
-        "ignored"
       ]
     },
     "TransitionActor": {

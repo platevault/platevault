@@ -5,6 +5,10 @@
 //! applied server-side so the wire payload is small.
 //!
 //! No new tables are introduced — inventory is a read-only projection.
+//!
+//! Spec 041 FR-051 (T076, Phase 13): sessions no longer carry a review-state
+//! column — they are derived, already-confirmed inventory. The `state`
+//! projection column and `review_state` filter were removed.
 
 use sqlx::SqlitePool;
 
@@ -33,7 +37,6 @@ pub struct SessionProjectionRow {
     pub frame_type: String,
     /// JSON array of frame ids.
     pub frame_ids: String,
-    pub state: String,
     /// Target id (acquisition sessions only; NULL for calibration).
     pub target_id: Option<String>,
     /// Target primary designation when linked.
@@ -57,9 +60,6 @@ pub struct InventoryFilters {
     /// When `Some`, restrict to sessions with the given frame type.
     /// `"mixed"` matches heterogeneous sessions.
     pub frame_type: Option<String>,
-    /// When `Some`, restrict to sessions in the given canonical state.
-    /// By default (no filter), `ignored` sessions are excluded.
-    pub review_state: Option<String>,
 }
 
 /// List all `LibraryRoot` rows that have at least one session under them.
@@ -114,10 +114,6 @@ pub async fn list_sessions_for_root(
     root_id: &str,
     filters: &InventoryFilters,
 ) -> DbResult<Vec<SessionProjectionRow>> {
-    // Default exclusion: ignored sessions are filtered out unless explicitly
-    // requested (FR-010: Cmd+K "Show ignored items" → reviewFilter=ignored).
-    let exclude_ignored = filters.review_state.as_deref() != Some("ignored");
-    let state_filter = filters.review_state.as_deref();
     let frame_filter = filters.frame_type.as_deref();
 
     // Acquisition sessions — target_name is always NULL (gen-1 `target`
@@ -132,7 +128,6 @@ pub async fn list_sessions_for_root(
             'acquisition'                   AS session_kind,
             'light'                         AS frame_type,
             acs.frame_ids                   AS frame_ids,
-            acs.state                       AS state,
             acs.target_id                   AS target_id,
             NULL                            AS target_name,
             acs.created_at                  AS created_at
@@ -155,7 +150,6 @@ pub async fn list_sessions_for_root(
             'calibration'                   AS session_kind,
             cs.kind                         AS frame_type,
             cs.frame_ids                    AS frame_ids,
-            cs.state                        AS state,
             NULL                            AS target_id,
             NULL                            AS target_name,
             cs.created_at                   AS created_at
@@ -170,30 +164,10 @@ pub async fn list_sessions_for_root(
 
     let all: Vec<SessionProjectionRow> = acq_rows.into_iter().chain(cal_rows).collect();
 
-    // Apply post-fetch filters (state and frame_type) — these cannot be
-    // trivially done in a single UNION query with dynamic placeholders.
-    let filtered = all
-        .into_iter()
-        .filter(|row| {
-            // Exclude ignored sessions unless review_filter=ignored
-            if exclude_ignored && row.state == "ignored" {
-                return false;
-            }
-            // State filter
-            if let Some(sf) = state_filter {
-                if row.state != sf {
-                    return false;
-                }
-            }
-            // Frame type filter
-            if let Some(ff) = frame_filter {
-                if row.frame_type != ff {
-                    return false;
-                }
-            }
-            true
-        })
-        .collect();
+    // Apply post-fetch frame_type filter — cannot be trivially done in a
+    // single UNION query with dynamic placeholders.
+    let filtered =
+        all.into_iter().filter(|row| frame_filter.is_none_or(|ff| row.frame_type == ff)).collect();
 
     Ok(filtered)
 }
@@ -254,40 +228,66 @@ pub async fn list_project_links_for_sessions(
     Ok(rows)
 }
 
-/// Look up the current state of an `acquisition_session` row.
+/// Session context enrichment row (spec P9): resolved target/filter/night/
+/// frame-count for a light (`acquisition_session`) row, keyed by session id.
 ///
-/// Returns `Some((state, root_id))` when found, `None` when not found.
-///
-/// # Errors
-/// Returns [`DbError::Database`] on query failure.
-pub async fn get_acquisition_session_state(
-    pool: &SqlitePool,
-    session_id: &str,
-) -> DbResult<Option<(String, String)>> {
-    let row: Option<(String, String)> =
-        sqlx::query_as("SELECT state, root_id FROM acquisition_session WHERE id = ?")
-            .bind(session_id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(row)
+/// `target_name` prefers the user-owned `display_alias` over
+/// `primary_designation` (same effective-label rule as the Targets surface).
+/// `filter` and `acquisition_night` come from `acquisition_fingerprint`
+/// (absent until the metadata extraction pipeline populates a fingerprint
+/// row). `frame_count` is derived from `json_array_length(frame_ids)` and is
+/// always present for a matched row (the column is `NOT NULL DEFAULT '[]'`).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct SessionContextRow {
+    pub id: String,
+    pub target_name: Option<String>,
+    pub filter: Option<String>,
+    pub acquisition_night: Option<String>,
+    pub frame_count: i64,
 }
 
-/// Look up the current state of a `calibration_session` row.
+/// Batch-load session context for calibration match-suggest enrichment
+/// (spec P9). One query for the whole `session_ids` set — callers MUST NOT
+/// call this per-row (N+1).
 ///
-/// Returns `Some((state, root_id))` when found, `None` when not found.
+/// Only `acquisition_session` (light) rows are covered; calibration sessions
+/// have no target/filter/night context to enrich. Ids with no matching row
+/// (unknown session, or a calibration session id) are simply absent from the
+/// returned `Vec` — callers treat a missing id as "no context available".
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on query failure.
-pub async fn get_calibration_session_state(
+pub async fn get_session_context_by_ids(
     pool: &SqlitePool,
-    session_id: &str,
-) -> DbResult<Option<(String, String)>> {
-    let row: Option<(String, String)> =
-        sqlx::query_as("SELECT state, root_id FROM calibration_session WHERE id = ?")
-            .bind(session_id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(row)
+    session_ids: &[String],
+) -> DbResult<Vec<SessionContextRow>> {
+    if session_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders = vec!["?"; session_ids.len()].join(",");
+    let sql = format!(
+        "SELECT
+             acs.id                                              AS id,
+             COALESCE(ct.display_alias, ct.primary_designation)  AS target_name,
+             af.filter_name                                      AS filter,
+             af.observing_night_date                             AS acquisition_night,
+             json_array_length(acs.frame_ids)                    AS frame_count
+         FROM acquisition_session acs
+         LEFT JOIN canonical_target ct ON ct.id = acs.canonical_target_id
+         LEFT JOIN acquisition_fingerprint af ON af.id = acs.id
+         WHERE acs.id IN ({placeholders})"
+    );
+
+    // SQL is built only from a fixed `?` placeholder count (no user strings
+    // in the text); every id flows through `bind`. Same pattern as the
+    // dynamic `IN (?, …)` lists in `inbox.rs` / `lifecycle.rs`.
+    let mut q = sqlx::query_as::<_, SessionContextRow>(sqlx::AssertSqlSafe(sql));
+    for id in session_ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(rows)
 }
 
 /// Set `root_id` on an `acquisition_session` row (T036, FR-012).
@@ -404,31 +404,104 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_acquisition_session_state_returns_none_for_unknown() {
-        let db = setup().await;
-        let result =
-            get_acquisition_session_state(db.pool(), "00000000-0000-0000-0000-000000000000")
-                .await
-                .unwrap();
-        assert!(result.is_none());
-    }
-
-    #[tokio::test]
-    async fn get_calibration_session_state_returns_none_for_unknown() {
-        let db = setup().await;
-        let result =
-            get_calibration_session_state(db.pool(), "00000000-0000-0000-0000-000000000000")
-                .await
-                .unwrap();
-        assert!(result.is_none());
-    }
-
-    #[tokio::test]
     async fn get_library_root_state_returns_none_for_unknown() {
         let db = setup().await;
         let result = get_library_root_state(db.pool(), "00000000-0000-0000-0000-000000000000")
             .await
             .unwrap();
         assert!(result.is_none());
+    }
+
+    // ── get_session_context_by_ids (spec P9) ──────────────────────────────────
+
+    #[tokio::test]
+    async fn session_context_empty_ids_returns_empty_without_querying() {
+        let db = setup().await;
+        let rows = get_session_context_by_ids(db.pool(), &[]).await.unwrap();
+        assert!(rows.is_empty());
+    }
+
+    #[tokio::test]
+    async fn session_context_batches_multiple_ids_in_one_call() {
+        let db = setup().await;
+
+        sqlx::query(
+            "INSERT INTO canonical_target
+                (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at, display_alias)
+             VALUES ('t-1', NULL, 'M 31', 'galaxy', 10.68, 41.27, 'seed', '2026-01-01T00:00:00Z', 'Andromeda')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at, canonical_target_id) \
+             VALUES ('acq-1', 'M31/L/2026-03-01', '[\"f1\",\"f2\",\"f3\"]', '2026-03-01T00:00:00Z', 't-1')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_fingerprint (id, filter_name, observing_night_date) \
+             VALUES ('acq-1', 'Ha', '2026-03-01')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // A second session with no fingerprint and no canonical target link —
+        // context fields resolve to None, but frame_count is still derived.
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at) \
+             VALUES ('acq-2', 'unknown/L/2026-03-02', '[\"f4\"]', '2026-03-02T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let ids = vec!["acq-1".to_owned(), "acq-2".to_owned(), "missing-id".to_owned()];
+        let mut rows = get_session_context_by_ids(db.pool(), &ids).await.unwrap();
+        rows.sort_by(|a, b| a.id.cmp(&b.id));
+
+        // Unknown session ids are simply absent — no error, no phantom row.
+        assert_eq!(rows.len(), 2, "missing-id must not produce a row");
+
+        assert_eq!(rows[0].id, "acq-1");
+        assert_eq!(rows[0].target_name.as_deref(), Some("Andromeda"), "display_alias wins");
+        assert_eq!(rows[0].filter.as_deref(), Some("Ha"));
+        assert_eq!(rows[0].acquisition_night.as_deref(), Some("2026-03-01"));
+        assert_eq!(rows[0].frame_count, 3);
+
+        assert_eq!(rows[1].id, "acq-2");
+        assert_eq!(rows[1].target_name, None);
+        assert_eq!(rows[1].filter, None);
+        assert_eq!(rows[1].acquisition_night, None);
+        assert_eq!(rows[1].frame_count, 1);
+    }
+
+    #[tokio::test]
+    async fn session_context_falls_back_to_primary_designation_without_display_alias() {
+        let db = setup().await;
+
+        sqlx::query(
+            "INSERT INTO canonical_target
+                (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
+             VALUES ('t-2', NULL, 'NGC 7000', 'nebula', 20.0, 30.0, 'seed', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at, canonical_target_id) \
+             VALUES ('acq-3', 'NGC7000/L/2026-04-01', '[]', '2026-04-01T00:00:00Z', 't-2')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let rows = get_session_context_by_ids(db.pool(), &["acq-3".to_owned()]).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].target_name.as_deref(), Some("NGC 7000"));
+        assert_eq!(rows[0].frame_count, 0);
     }
 }

@@ -43,13 +43,39 @@ and `size_bytes`.
       `artifact.missing`, `artifact.recovered`, `artifact.user_resolved`,
       `artifact.classify.override`, `artifact.classify.override.cleared`,
       `workflow.run_completed` added to `crates/audit/src/event_bus.rs`.
-- [ ] **T007b** Add `watch_extensions` field to `WorkflowProfile`
-      schema. DEFERRED — `DEFAULT_WATCH_EXTENSIONS` constant in
-      `watcher.rs` provides the default; per-profile override via spec
-      018 settings ripple not yet wired.
-- [ ] **T008** Wire watcher attach/detach to project drawer lifecycle
-      events in the desktop app. DEFERRED — needs OS watcher runtime
-      (notify-rs) and Tauri window lifecycle hooks (GUI runtime needed).
+- [x] **T007b** Add `watch_extensions` field to `WorkflowProfile`
+      schema. `tools.<tool_id>.watch_extensions` Settings key, read/write via
+      `app_core::tool_launch::read_watch_extensions` +
+      `update_tool`/`list_profiles`, defaulting to `DEFAULT_WATCH_EXTENSIONS`;
+      exposed on `ToolProfileSummary`/`UpdateProcessingTool` and applied by
+      both the live watcher and the on-attach reconciliation pass (T008).
+      — `crates/app/core/src/tool_launch.rs`; `crates/contracts/core/src/tools.rs`
+- [x] **T008** Wire watcher attach/detach to project drawer lifecycle
+      events in the desktop app. Replaced the always-on global watcher (which
+      watched entire library roots and stamped the wrong `project_id`) with a
+      per-project `ArtifactWatcherRegistry`, attached/detached via new
+      `artifact.watcher.attach`/`artifact.watcher.detach` commands called from
+      `useProjectArtifactWatcher` inside `ProjectDetailContent`'s mount
+      lifecycle (attach on open, detach on close/project switch). Attach runs
+      the T005 on-attach reconciliation pass first.
+      — `apps/desktop/src-tauri/src/watcher.rs`; `apps/desktop/src-tauri/src/commands/artifacts.rs`;
+        `apps/desktop/src/features/projects/artifacts.ts`; `apps/desktop/src/features/projects/ProjectDetail.tsx`
+- [x] **T008b** (WP-012-A) Repair legacy mis-attributed artifact rows. The
+      retired global watcher (pre-T008) stamped the *library-root* id into
+      `processing_artifacts.project_id`, so those rows never surfaced in
+      `artifact.list`, the Tool Launches accordion, or the spec 017
+      cleanup/archive plan generators (#389/#401, which enumerate by
+      `project_id`). Added a
+      pure longest-prefix path→project resolver (case-insensitive
+      component-wise fallback for Windows case drift) plus a one-time,
+      idempotent startup fix-up that re-keys root-keyed rows to the real
+      owning project and leaves unresolvable rows in place (flagged via
+      `tracing::warn`, never deleted). No schema change needed.
+      — `crates/workflow/artifacts/src/project_mapping.rs` (9 unit tests);
+        `app_core::artifact::{resolve_project_id_for_path, reattribute_root_keyed_artifacts}`;
+        `persistence_db::repositories::artifacts::{list_all_artifact_identities, set_project_id}`;
+        startup spawn in `apps/desktop/src-tauri/src/lib.rs`;
+        5 integration tests in `crates/app/core/tests/tools_artifacts_integration.rs`
 - [ ] **T009** Integration test: drop a known-good file into a fixture
       output folder. DEFERRED — requires notify-rs watcher runtime (GUI).
 - [ ] **T010** Integration test: delete file → rescan → expect `missing`.

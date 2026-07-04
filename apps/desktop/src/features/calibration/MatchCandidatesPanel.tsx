@@ -12,9 +12,12 @@
  *   - Respects `prefillSuggestion` to auto-open confirm prompt on top candidate
  *   - Humanized empty state when no sessions match.
  *
- * Target / Filter / Night / Frames are NOT carried on the suggest DTO
- * (`CalibrationMatchDto` only has sessionId + confidence + dimension breakdown);
- * those cells are marked `// STUB:` until the backend enriches the contract.
+ * Target / Filter / Night / Frames come from the P9 session-context
+ * enrichment on `CalibrationMatchDto` (`targetName` / `filter` /
+ * `acquisitionNight` / `frameCount`, all resolved server-side via a single
+ * batched lookup). Any field the backend could not resolve (e.g. no
+ * canonical target link, no fingerprint row) renders as `—`, matching the
+ * fallback convention used elsewhere (e.g. `SessionsTable.tsx`).
  *
  * No Playwright/visual smoke tests — jsdom unit-tested in MatchCandidatesPanel.test.tsx.
  */
@@ -28,8 +31,9 @@ import type {
   CalibrationMatchSuggestResponse,
   SuggestStatus,
   MismatchReason,
-} from '@/api/commands';
+} from '@/bindings/index';
 import { m } from '@/lib/i18n';
+import { RotationWarningNotice, type RotationWarning } from './RotationWarning';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -45,19 +49,19 @@ function statusVariant(status: SuggestStatus | string): PillVariant {
 
 function statusLabel(status: SuggestStatus | string): string {
   switch (status) {
-    case 'match': return 'match';
-    case 'ambiguous': return 'ambiguous';
-    case 'no_match': return 'no match';
-    case 'observer_location_missing': return 'location missing';
+    case 'match': return m.calibration_status_match();
+    case 'ambiguous': return m.calibration_status_ambiguous();
+    case 'no_match': return m.calibration_status_no_match();
+    case 'observer_location_missing': return m.calibration_status_location_missing();
     default: return status;
   }
 }
 
 function reasonLabel(reason: MismatchReason): string {
   switch (reason) {
-    case 'out_of_tolerance': return 'out of tolerance';
-    case 'metadata_missing': return 'metadata missing';
-    case 'hard_rule_violation': return 'hard rule violation';
+    case 'out_of_tolerance': return m.calibration_reason_out_of_tolerance();
+    case 'metadata_missing': return m.calibration_reason_metadata_missing();
+    case 'hard_rule_violation': return m.calibration_reason_hard_rule_violation();
     default: return reason;
   }
 }
@@ -95,10 +99,19 @@ function ConfidenceBar({ value }: { value: number }) {
 
 // ── Dimension breakdown (matched + mismatched) ────────────────────────────────
 
-function DimensionBreakdown({ match }: { match: CalibrationMatchDto }) {
+/**
+ * Optional flat↔light rotation warning carried alongside a match (spec 041
+ * T080 / FR-040). The suggest DTO does not yet carry this field; it is read
+ * defensively so a future contract enrichment surfaces automatically.
+ */
+type MatchWithRotation = CalibrationMatchDto & { rotationWarning?: RotationWarning | null };
+
+function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
   const hasMismatches = match.dimensionsMismatched.length > 0;
   return (
     <div className="alm-match-candidates__dim-list">
+      <RotationWarningNotice warning={match.rotationWarning} />
+
       {match.dimensionsMatched.map((d) => (
         <span
           key={d.dimension}
@@ -168,10 +181,10 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
         const dims = res.error.details?.dimensions ?? [];
         setOverrideDims(dims);
         setPending('override_confirm');
-        setErrorMsg(`Hard-rule mismatch: ${dims.join(', ')}. Confirm to force-assign.`);
+        setErrorMsg(m.calibration_hard_rule_mismatch({ dims: dims.join(', ') }));
       } else {
         setPending('idle');
-        setErrorMsg(res.error?.message ?? 'Assignment failed');
+        setErrorMsg(res.error?.message ?? m.calibration_assignment_failed_fallback());
       }
       return;
     }
@@ -320,7 +333,7 @@ export function MatchCandidatesPanel({
       );
     }
     const isObserverMissing = code === 'match.observer_location_missing' || response.suggestStatus === 'observer_location_missing';
-     
+
     const isMixedState = response.error?.code === 'session.mixed_state';
     const guardMessage = isObserverMissing
       ? m.calibration_observer_missing_guard()
@@ -397,16 +410,11 @@ export function MatchCandidatesPanel({
               {m.sessionId.length > 12 ? '…' : ''}
             </span>
           ),
-          // STUB: target name not on CalibrationMatchDto (suggest contract).
-          // Backend enrichment needed to resolve sessionId → target.
-          target: <span className="alm-match-candidates__stub-cell">—</span>,
-          // STUB: filter not on CalibrationMatchDto. Backend enrichment needed.
-          filter: <span className="alm-match-candidates__stub-cell">—</span>,
-          // STUB: acquisition night not on CalibrationMatchDto. Backend enrichment needed.
-          night: <span className="alm-match-candidates__stub-cell">—</span>,
-          // STUB: frame count not on CalibrationMatchDto. Backend enrichment needed.
-          frames: <span className="alm-match-candidates__stub-cell">—</span>,
-          confidence: <ConfidenceBar value={m.confidence} />,
+          target: m.targetName ?? '—',
+          filter: m.filter ?? '—',
+          night: m.acquisitionNight ?? '—',
+          frames: m.frameCount ?? '—',
+          confidence: <ConfidenceBar value={m.confidence ?? 0} />,
           dimensions: <DimensionBreakdown match={m} />,
           assign: (
             <AssignButton

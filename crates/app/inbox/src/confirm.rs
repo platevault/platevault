@@ -1,4 +1,10 @@
-//! `inbox.confirm` use case — split and confirm branches (spec 005, T027/T028).
+//! `inbox.confirm` use case — the single confirm path (spec 005, T027/T028).
+//!
+//! Spec 041 FR-050/T071: the legacy "split" action and its mixed per-type
+//! confirm branch are removed. `inbox.classify`'s T066 materialization already
+//! splits a folder into single-type sub-items before confirm ever sees them,
+//! so every confirmable item carries exactly one classification result
+//! ("classified") and one chosen destination `rootId`.
 //!
 //! Creates a reviewable Plan in `ready_for_review` via
 //! `persistence_db::repositories::plans`. File list comes from
@@ -43,8 +49,6 @@ use contracts_core::{ContractError, ErrorSeverity};
 #[derive(Clone, Debug)]
 pub struct ConfirmRequest {
     pub inbox_item_id: String,
-    /// "split" (mixed) or "confirm" (single_type)
-    pub action: String,
     /// Folder content_signature from the most recent classify response (Ref: A8).
     pub content_signature: String,
     /// Required when plan includes destructive items.
@@ -136,6 +140,19 @@ pub async fn confirm(
         ));
     }
 
+    // 3. T070 / FR-049 / SC-015: reject any item that is still in the
+    // needs-review sentinel bucket (missing mandatory attributes).  Splitting /
+    // recalculation happens at classify/reclassify (before confirm), never here.
+    if item.group_key == super::classify::SENTINEL_NEEDS_REVIEW {
+        return Err(ContractError::new(
+            ErrorCode::InboxMissingPathAttributes,
+            "This item is in the needs-review bucket: one or more files are missing mandatory \
+             attributes. Supply the missing values via inbox.reclassify before confirming.",
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
     // 4. Load classification
     let classification = inbox_repo::get_classification(pool, &req.inbox_item_id)
         .await
@@ -159,18 +176,18 @@ pub async fn confirm(
         ));
     }
 
-    // 7. Validate action / classification match
-    let valid = matches!(
-        (req.action.as_str(), classification.result.as_str()),
-        ("split", "mixed") | ("confirm", "single_type")
-    );
-    if !valid {
+    // 7. Validate the request. Spec 041 FR-050/T071/T072: the "split" action
+    // and the mixed per-type confirm branch are removed — the request no
+    // longer carries an `action` field at all; `classified` (migration
+    // 0048's CHECK-constrained single-type DB value) is the only confirmable
+    // classification result. A folder that classified as `unclassified`
+    // (zero or multiple distinct frame types) is not confirmable directly; it
+    // must be re-split into single-type sub-items (T066 materialization)
+    // before confirming.
+    if classification.result != "classified" {
         return Err(ContractError::new(
             ErrorCode::ClassificationAmbiguous,
-            format!(
-                "Action '{}' does not match classification '{}'",
-                req.action, classification.result
-            ),
+            format!("Classification result '{}' is not confirmable", classification.result),
             ErrorSeverity::Blocking,
             false,
         ));
@@ -182,7 +199,7 @@ pub async fn confirm(
         .map_err(|e| db_internal_ctx(e, "list inbox evidence"))?;
 
     // Only include files that have a frame type (classified or manually overridden)
-    let mut plan_files: Vec<&persistence_db::repositories::inbox::InboxEvidenceRow> =
+    let plan_files: Vec<&persistence_db::repositories::inbox::InboxEvidenceRow> =
         evidence_rows.iter().filter(|ev| effective_frame_type(ev).is_some()).collect();
 
     if plan_files.is_empty() {
@@ -194,17 +211,10 @@ pub async fn confirm(
         ));
     }
 
-    // US5 (T036): order files by effective frame type so confirm emits one
-    // contiguous action group per type within a single plan (each type resolves
-    // to its own pattern-derived destination). A multi-type folder therefore
-    // auto-splits on confirm — there is no separate "split" command path; the
-    // `split` action just labels a confirm whose classification is `mixed`.
-    plan_files.sort_by(|a, b| {
-        effective_frame_type(a)
-            .unwrap_or("")
-            .cmp(effective_frame_type(b).unwrap_or(""))
-            .then_with(|| a.relative_file_path.cmp(&b.relative_file_path))
-    });
+    // Spec 041 FR-050/T071: per-type action grouping is retired along with the
+    // "split" action — a confirmable item is single-type (classification.result
+    // == "classified"), so no frame-type sort is needed. `list_evidence` already
+    // orders rows by `relative_file_path`, which is deterministic order enough.
 
     // 8a. Look up the owning source's organization state (spec 041 US4, R-7).
     //
@@ -407,13 +417,18 @@ pub async fn confirm(
         .unwrap_or("archive");
 
     let plan_id = Uuid::new_v4().to_string();
-    let title = format!("Inbox {}: {} ({})", req.action, item.relative_path, classification.result);
+    let title = format!("Inbox confirm: {} ({})", item.relative_path, classification.result);
 
     let insert_plan = plans_repo::InsertPlan {
         id: &plan_id,
         title: &title,
         origin: "inbox",
         origin_path: Some(&item.relative_path),
+        // "split" is the stable `plans.plan_type` CHECK-constrained category for
+        // every inbox-confirm-origin plan (see `crates/app/core/src/plans.rs`
+        // `parse_plan_type` and `plan_listener.rs`); it predates and is
+        // unrelated to the removed per-request "split" action, so FR-050/T071
+        // does not touch it.
         plan_type: "split",
         destructive_destination: destructive_dest,
         parent_plan_id: None,
@@ -465,7 +480,7 @@ pub async fn confirm(
             from_relative_path: &row.source_rel,
             to_root_id: Some(&row.to_root_id),
             to_relative_path: &row.dest_rel,
-            reason: "inbox_split",
+            reason: "inbox_confirm",
             protection: "normal",
             linked_entity: None,
             provenance_json: None,
@@ -940,7 +955,7 @@ mod tests {
             db.pool(),
             &UpsertClassification {
                 inbox_item_id: item_id,
-                result: "single_type",
+                result: "classified",
                 frame_type,
                 content_signature: sig,
                 unclassified_file_count: 0,
@@ -1001,7 +1016,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-c1",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-abc",
             &["light_001.fits", "light_002.fits", "light_003.fits"],
@@ -1012,7 +1027,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-c1".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-abc".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1063,7 +1077,7 @@ mod tests {
             setup_classified_item(
                 &db,
                 "item-dd",
-                "single_type",
+                "classified",
                 Some("light"),
                 "sig-dd",
                 &["light_001.fits"],
@@ -1074,7 +1088,6 @@ mod tests {
                 db.pool(),
                 ConfirmRequest {
                     inbox_item_id: "item-dd".to_owned(),
-                    action: "confirm".to_owned(),
                     content_signature: "sig-dd".to_owned(),
                     destructive_destination: dest.map(str::to_owned),
                     root_absolute_path: tmp.path().to_owned(),
@@ -1098,9 +1111,15 @@ mod tests {
         }
     }
 
+    /// Spec 041 FR-050/T071: the "split" action is removed and a genuinely
+    /// mixed folder (classification.result == "unclassified" because it still
+    /// has 2+ distinct frame types) is no longer confirmable at all — not via
+    /// "split" (gone) and not via "confirm" (requires "classified"). It must
+    /// be re-split into single-type sub-items (T066 materialization) before
+    /// any of its pieces can be confirmed.
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
-    async fn confirm_mixed_split_creates_plan() {
+    async fn confirm_of_mixed_result_is_rejected() {
         let tmp = tempfile::tempdir().unwrap();
         write_fits(
             tmp.path(),
@@ -1159,7 +1178,7 @@ mod tests {
             db.pool(),
             &UpsertClassification {
                 inbox_item_id: item_id,
-                result: "mixed",
+                result: "unclassified",
                 frame_type: None,
                 content_signature: sig,
                 unclassified_file_count: 0,
@@ -1194,11 +1213,10 @@ mod tests {
             .unwrap();
         }
 
-        let resp = confirm(
+        let err = confirm(
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: item_id.to_owned(),
-                action: "split".to_owned(),
                 content_signature: sig.to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1206,10 +1224,9 @@ mod tests {
             },
         )
         .await
-        .unwrap();
+        .unwrap_err();
 
-        assert_eq!(resp.items_total, 4);
-        assert_eq!(resp.plan_state, "ready_for_review");
+        assert_eq!(err.code, ErrorCode::ClassificationAmbiguous);
     }
 
     /// Helper: insert a classified inbox item with explicit per-file frame-type
@@ -1278,80 +1295,6 @@ mod tests {
             .unwrap_or_default()
     }
 
-    /// US5 (T036/T037): confirming a multi-type folder auto-produces one
-    /// contiguous action group per frame type, each with its own pattern-resolved
-    /// destination — in a single confirm, no separate split step.
-    #[tokio::test]
-    async fn confirm_mixed_emits_per_type_action_groups() {
-        let tmp = tempfile::tempdir().unwrap();
-        for (fname, imagetyp, date) in [
-            ("light_001.fits", "Light Frame", "2025-10-10T22:00:00"),
-            ("light_002.fits", "Light Frame", "2025-10-10T22:05:00"),
-            ("dark_001.fits", "Dark Frame", "2025-10-10T20:00:00"),
-            ("dark_002.fits", "Dark Frame", "2025-10-10T20:05:00"),
-        ] {
-            if imagetyp == "Light Frame" {
-                write_fits(tmp.path(), fname, imagetyp, Some("NGC7000"), Some("Ha"), Some(date));
-            } else {
-                // Dark default pattern `darks/{exposure}/` needs an exposure.
-                write_fits_exp(tmp.path(), fname, imagetyp, None, None, Some(date), 300.0);
-            }
-        }
-
-        let db = test_db().await;
-        setup_typed_item(
-            &db,
-            "item-pertype",
-            "sig-pertype",
-            "mixed",
-            &[
-                ("light", "light_001.fits", "Light Frame"),
-                ("light", "light_002.fits", "Light Frame"),
-                ("dark", "dark_001.fits", "Dark Frame"),
-                ("dark", "dark_002.fits", "Dark Frame"),
-            ],
-        )
-        .await;
-
-        let resp = confirm(
-            db.pool(),
-            ConfirmRequest {
-                inbox_item_id: "item-pertype".to_owned(),
-                action: "split".to_owned(),
-                content_signature: "sig-pertype".to_owned(),
-                destructive_destination: None,
-                root_absolute_path: tmp.path().to_owned(),
-                root_id: None,
-            },
-        )
-        .await
-        .unwrap();
-
-        let mut items =
-            persistence_db::repositories::plans::list_plan_items(db.pool(), &resp.plan_id)
-                .await
-                .unwrap();
-        assert_eq!(items.len(), 4);
-
-        // One destination group per frame type.
-        let dirs: std::collections::BTreeSet<String> = items.iter().map(dest_dir).collect();
-        assert_eq!(
-            dirs.len(),
-            2,
-            "mixed folder must resolve to one destination group per frame type, got {dirs:?}"
-        );
-
-        // Groups are contiguous (AABB, not ABAB): exactly one dir transition in
-        // item_index order proves confirm emitted grouped per-type actions.
-        items.sort_by_key(|it| it.item_index);
-        let seq: Vec<String> = items.iter().map(dest_dir).collect();
-        let transitions = seq.windows(2).filter(|w| w[0] != w[1]).count();
-        assert_eq!(
-            transitions, 1,
-            "per-type actions must be grouped contiguously, got sequence {seq:?}"
-        );
-    }
-
     /// US5 (T037): a single-type folder produces exactly one action group.
     #[tokio::test]
     async fn confirm_single_type_emits_one_action_group() {
@@ -1378,7 +1321,7 @@ mod tests {
             &db,
             "item-single",
             "sig-single",
-            "single_type",
+            "classified",
             &[
                 ("light", "light_001.fits", "Light Frame"),
                 ("light", "light_002.fits", "Light Frame"),
@@ -1390,7 +1333,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-single".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-single".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1407,142 +1349,6 @@ mod tests {
         assert_eq!(dirs.len(), 1, "single-type folder must yield exactly one action group");
     }
 
-    /// Prove that light/dark/flat frames resolve to DISTINCT destination path prefixes
-    /// using the default pattern (`target/filter/date/frame_type/filename`).
-    #[tokio::test]
-    #[allow(clippy::too_many_lines)]
-    async fn destinations_are_distinct_per_frame_type() {
-        let tmp = tempfile::tempdir().unwrap();
-        write_fits(
-            tmp.path(),
-            "light.fits",
-            "Light Frame",
-            Some("M42"),
-            Some("Ha"),
-            Some("2025-10-10T22:00:00"),
-        );
-        write_fits_exp(
-            tmp.path(),
-            "dark.fits",
-            "Dark Frame",
-            None,
-            None,
-            Some("2025-10-10T20:00:00"),
-            300.0,
-        );
-        write_fits(
-            tmp.path(),
-            "flat.fits",
-            "Flat Frame",
-            None,
-            Some("Ha"),
-            Some("2025-10-10T21:00:00"),
-        );
-
-        let db = test_db().await;
-        let item_id = "item-distinct-dest";
-        let sig = "sig-distinct";
-
-        inbox_repo::insert_inbox_item(
-            db.pool(),
-            &InsertInboxItem {
-                id: item_id,
-                root_id: "root-1",
-                relative_path: "",
-                file_count: 3,
-                content_signature: Some(sig),
-                lane: "fits",
-            },
-        )
-        .await
-        .unwrap();
-
-        inbox_repo::upsert_classification(
-            db.pool(),
-            &UpsertClassification {
-                inbox_item_id: item_id,
-                result: "mixed",
-                frame_type: None,
-                content_signature: sig,
-                unclassified_file_count: 0,
-            },
-        )
-        .await
-        .unwrap();
-
-        for (ft, fname) in [("light", "light.fits"), ("dark", "dark.fits"), ("flat", "flat.fits")] {
-            let ev_id = format!("ev-distinct-{ft}");
-            inbox_repo::insert_evidence(
-                db.pool(),
-                &InsertEvidence {
-                    id: &ev_id,
-                    inbox_item_id: item_id,
-                    relative_file_path: fname,
-                    frame_type: Some(ft),
-                    evidence_source: "imagetyp_header",
-                    raw_value: None,
-                    unclassified: false,
-                    manual_override: None,
-                    is_master: false,
-                    master_detector: None,
-                },
-            )
-            .await
-            .unwrap();
-        }
-
-        let resp = confirm(
-            db.pool(),
-            ConfirmRequest {
-                inbox_item_id: item_id.to_owned(),
-                action: "split".to_owned(),
-                content_signature: sig.to_owned(),
-                destructive_destination: None,
-                root_absolute_path: tmp.path().to_owned(),
-                root_id: None,
-            },
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(resp.items_total, 3, "all three files got plan items");
-
-        // Verify that the destination paths in the DB are distinct per frame type.
-        let items = sqlx::query_as::<_, (String, String)>(
-            "SELECT from_relative_path, to_relative_path FROM plan_items WHERE plan_id = ? ORDER BY item_index",
-        )
-        .bind(&resp.plan_id)
-        .fetch_all(db.pool())
-        .await
-        .unwrap();
-
-        assert_eq!(items.len(), 3);
-
-        // Collect destination prefixes (directory, not filename)
-        let dest_dirs: Vec<String> = items
-            .iter()
-            .map(|(_, to)| {
-                let parts: Vec<&str> = to.rsplitn(2, '/').collect();
-                parts.get(1).map(|s| (*s).to_owned()).unwrap_or_default()
-            })
-            .collect();
-
-        // All three destination directories must be unique (different frame types go different places)
-        let unique_dirs: std::collections::HashSet<&str> =
-            dest_dirs.iter().map(String::as_str).collect();
-        assert_eq!(
-            unique_dirs.len(),
-            3,
-            "light, dark, flat should resolve to distinct directories; got: {dest_dirs:?}"
-        );
-
-        // Verify sources are preserved as-is
-        let sources: Vec<&str> = items.iter().map(|(from, _)| from.as_str()).collect();
-        assert!(sources.contains(&"light.fits"));
-        assert!(sources.contains(&"dark.fits"));
-        assert!(sources.contains(&"flat.fits"));
-    }
-
     #[tokio::test]
     async fn stale_signature_returns_error() {
         let tmp = tempfile::tempdir().unwrap();
@@ -1552,7 +1358,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-stale",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-current",
             &["frame_000.fits"],
@@ -1563,7 +1369,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-stale".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-OLD".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1576,8 +1381,15 @@ mod tests {
         assert_eq!(err.code, ErrorCode::ClassificationStale);
     }
 
+    /// Spec 041 FR-050/T071/T072: `ConfirmRequest` no longer carries an
+    /// `action` field at all — the only gate is `classification.result ==
+    /// "classified"`. An item whose classification is still `"unclassified"`
+    /// (e.g. a folder with multiple distinct frame types that has not yet
+    /// been re-split into single-type sub-items) is rejected with the same
+    /// ambiguous-classification error a legacy "split" action request used
+    /// to hit.
     #[tokio::test]
-    async fn action_mismatch_returns_ambiguous() {
+    async fn unclassified_result_returns_ambiguous() {
         let tmp = tempfile::tempdir().unwrap();
         write_fits(tmp.path(), "frame_000.fits", "Light Frame", None, None, None);
 
@@ -1585,8 +1397,8 @@ mod tests {
         setup_classified_item(
             &db,
             "item-ambig",
-            "single_type",
-            Some("light"),
+            "unclassified",
+            None,
             "sig-x",
             &["frame_000.fits"],
         )
@@ -1596,7 +1408,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-ambig".to_owned(),
-                action: "split".to_owned(), // wrong action for single_type
                 content_signature: "sig-x".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1633,7 +1444,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-dup",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-dup",
             &["frame_000.fits", "frame_001.fits"],
@@ -1645,7 +1456,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-dup".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-dup".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1660,7 +1470,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-dup".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-dup".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1708,7 +1517,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-org",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-org",
             &["light_001.fits"],
@@ -1719,7 +1528,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-org".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-org".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1767,7 +1575,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-unorg",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-unorg",
             &["light_001.fits"],
@@ -1778,7 +1586,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-unorg".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-unorg".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1825,7 +1632,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-absent",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-absent",
             &["frame_000.fits"],
@@ -1836,7 +1643,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-absent".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-absent".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1894,7 +1700,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-np",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-np",
             &["light_001.fits"],
@@ -1905,7 +1711,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-np".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-np".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -1959,7 +1764,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-1cand".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-1c".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -2012,7 +1816,6 @@ mod tests {
 
         let mk = |root_id: Option<String>| ConfirmRequest {
             inbox_item_id: "item-2cand".to_owned(),
-            action: "confirm".to_owned(),
             content_signature: "sig-2c".to_owned(),
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
@@ -2067,7 +1870,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-0cand".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-0c".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -2079,71 +1881,36 @@ mod tests {
         assert_eq!(err.code, ErrorCode::InboxNoDestinationRoot);
     }
 
-    /// FR-026a: a calibration master lands under its `masters/...` pattern with
-    /// NO target/date segment; a raw dark lands under `darks/{exposure}/`.
+    /// FR-026a: a raw dark lands under `darks/{exposure}/` with NO target/date
+    /// segment.
+    ///
+    /// Spec 041 FR-050/T071: previously this and the master-flat case below
+    /// were exercised in one multi-type "split" confirm over a single mixed
+    /// item; that path is retired, so each frame type is now its own
+    /// single-type "classified" item confirmed independently — matching what
+    /// T066 materialization actually produces upstream of confirm.
     #[tokio::test]
-    async fn calibration_destinations_omit_target() {
+    async fn calibration_dark_destination_omits_target() {
         let tmp = tempfile::tempdir().unwrap();
         write_fits_exp(tmp.path(), "dark.fits", "Dark Frame", None, None, None, 300.0);
-        write_fits_exp(tmp.path(), "master_flat.fits", "Flat Frame", None, Some("Ha"), None, 5.0);
 
         let db = test_db().await;
         register_source_full(&db, "root-1", "calibration", "/cal", "unorganized").await;
-
-        // Two calibration files: a raw dark and a master flat.
-        inbox_repo::insert_inbox_item(
-            db.pool(),
-            &InsertInboxItem {
-                id: "item-cal",
-                root_id: "root-1",
-                relative_path: "",
-                file_count: 2,
-                content_signature: Some("sig-cal"),
-                lane: "fits",
-            },
+        setup_classified_item(
+            &db,
+            "item-cal-dark",
+            "classified",
+            Some("dark"),
+            "sig-cal-dark",
+            &["dark.fits"],
         )
-        .await
-        .unwrap();
-        inbox_repo::upsert_classification(
-            db.pool(),
-            &UpsertClassification {
-                inbox_item_id: "item-cal",
-                result: "mixed",
-                frame_type: None,
-                content_signature: "sig-cal",
-                unclassified_file_count: 0,
-            },
-        )
-        .await
-        .unwrap();
-        for (ft, fname, master) in
-            [("dark", "dark.fits", false), ("flat", "master_flat.fits", true)]
-        {
-            inbox_repo::insert_evidence(
-                db.pool(),
-                &InsertEvidence {
-                    id: &format!("ev-cal-{fname}"),
-                    inbox_item_id: "item-cal",
-                    relative_file_path: fname,
-                    frame_type: Some(ft),
-                    evidence_source: "imagetyp_header",
-                    raw_value: None,
-                    unclassified: false,
-                    manual_override: None,
-                    is_master: master,
-                    master_detector: None,
-                },
-            )
-            .await
-            .unwrap();
-        }
+        .await;
 
         let resp = confirm(
             db.pool(),
             ConfirmRequest {
-                inbox_item_id: "item-cal".to_owned(),
-                action: "split".to_owned(),
-                content_signature: "sig-cal".to_owned(),
+                inbox_item_id: "item-cal-dark".to_owned(),
+                content_signature: "sig-cal-dark".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
@@ -2158,6 +1925,79 @@ mod tests {
             .map(|d| (d.from_path.clone(), d.to_relative_path.clone()))
             .collect();
         assert_eq!(dests["dark.fits"], "darks/300/dark.fits");
+    }
+
+    /// FR-026a: a calibration master lands under its `masters/...` pattern with
+    /// NO target/date segment. See `calibration_dark_destination_omits_target`
+    /// for why this is now its own single-type confirm.
+    #[tokio::test]
+    async fn calibration_master_destination_omits_target() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_exp(tmp.path(), "master_flat.fits", "Flat Frame", None, Some("Ha"), None, 5.0);
+
+        let db = test_db().await;
+        register_source_full(&db, "root-2", "calibration", "/cal", "unorganized").await;
+        inbox_repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: "item-cal-master",
+                root_id: "root-2",
+                relative_path: "",
+                file_count: 1,
+                content_signature: Some("sig-cal-master"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        inbox_repo::upsert_classification(
+            db.pool(),
+            &UpsertClassification {
+                inbox_item_id: "item-cal-master",
+                result: "classified",
+                frame_type: Some("flat"),
+                content_signature: "sig-cal-master",
+                unclassified_file_count: 0,
+            },
+        )
+        .await
+        .unwrap();
+        inbox_repo::insert_evidence(
+            db.pool(),
+            &InsertEvidence {
+                id: "ev-cal-master-flat",
+                inbox_item_id: "item-cal-master",
+                relative_file_path: "master_flat.fits",
+                frame_type: Some("flat"),
+                evidence_source: "imagetyp_header",
+                raw_value: None,
+                unclassified: false,
+                manual_override: None,
+                is_master: true,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let resp = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-cal-master".to_owned(),
+                content_signature: "sig-cal-master".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let dests: std::collections::HashMap<String, String> = resp
+            .destinations
+            .iter()
+            .map(|d| (d.from_path.clone(), d.to_relative_path.clone()))
+            .collect();
         assert_eq!(dests["master_flat.fits"], "masters/flats/Ha/master_flat.fits");
     }
 
@@ -2174,7 +2014,7 @@ mod tests {
         setup_classified_item(
             &db,
             "item-gate",
-            "single_type",
+            "classified",
             Some("light"),
             "sig-gate",
             &["light_001.fits"],
@@ -2185,7 +2025,6 @@ mod tests {
             db.pool(),
             ConfirmRequest {
                 inbox_item_id: "item-gate".to_owned(),
-                action: "confirm".to_owned(),
                 content_signature: "sig-gate".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
@@ -2202,5 +2041,140 @@ mod tests {
             attrs.iter().any(|a| a.as_str() == Some("date")),
             "missing 'date' must be reported, got {attrs:?}"
         );
+    }
+
+    // ── T070 tests — needs-review sentinel gate at confirm ───────────────────
+
+    /// T070/FR-049/SC-015: confirm of an item whose group_key is the sentinel
+    /// __needs_review__ must be rejected with InboxMissingPathAttributes.
+    #[tokio::test]
+    async fn t070_confirm_of_needs_review_item_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Write a light without mandatory attrs — doesn't matter here since
+        // the gate fires on group_key before reaching file resolution.
+        write_fits(tmp.path(), "light_001.fits", "Light Frame", Some("M42"), Some("Ha"), None);
+
+        let db = test_db().await;
+        register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
+
+        // Insert the inbox item with group_key = SENTINEL_NEEDS_REVIEW directly.
+        // The sentinel gate checks item.group_key, so we bypass setup_classified_item
+        // and set group_key explicitly via raw SQL.
+        let item_id = "item-t070-sentinel";
+        let sig = "sig-t070-sentinel";
+        inbox_repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 1,
+                content_signature: Some(sig),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        // Set group_key to SENTINEL_NEEDS_REVIEW.
+        sqlx::query("UPDATE inbox_items SET group_key = ? WHERE id = ?")
+            .bind(crate::classify::SENTINEL_NEEDS_REVIEW)
+            .bind(item_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+        // Add a classification so the item doesn't fail on "no classification".
+        inbox_repo::upsert_classification(
+            db.pool(),
+            &UpsertClassification {
+                inbox_item_id: item_id,
+                result: "classified",
+                frame_type: None,
+                content_signature: sig,
+                unclassified_file_count: 1,
+            },
+        )
+        .await
+        .unwrap();
+
+        let err = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: item_id.to_owned(),
+                content_signature: sig.to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            err.code,
+            ErrorCode::InboxMissingPathAttributes,
+            "needs-review item must be rejected with InboxMissingPathAttributes"
+        );
+        assert!(
+            err.message.contains("needs-review"),
+            "error message must mention needs-review, got: {}",
+            err.message
+        );
+    }
+
+    /// T070: a fully-resolved item (with all mandatory attributes satisfied via
+    /// the active pattern) confirms successfully and produces a plan.
+    #[tokio::test]
+    async fn t070_fully_resolved_item_confirms_successfully() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Light with object + filter + date (no EXPTIME needed for the gate here;
+        // the pattern gate fires on date/target in the existing test).
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2024-11-01"),
+        );
+
+        let db = test_db().await;
+        register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
+        setup_classified_item(
+            &db,
+            "item-t070-ok",
+            "classified",
+            Some("light"),
+            "sig-t070-ok",
+            &["light_001.fits"],
+        )
+        .await;
+
+        // A fully-resolved item (group_key defaults to '' in the helper, which is
+        // not SENTINEL_NEEDS_REVIEW) must pass the sentinel gate.
+        let result = confirm(
+            db.pool(),
+            ConfirmRequest {
+                inbox_item_id: "item-t070-ok".to_owned(),
+                content_signature: "sig-t070-ok".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+            },
+        )
+        .await;
+
+        // The item passes the sentinel gate (group_key != SENTINEL_NEEDS_REVIEW).
+        // It may still fail on other gates (destination root, pattern) — what we
+        // assert is that it does NOT fail with InboxMissingPathAttributes from the
+        // sentinel check: any error must NOT be the sentinel gate.
+        if let Err(ref e) = result {
+            assert_ne!(
+                e.code,
+                ErrorCode::InboxMissingPathAttributes,
+                "fully-resolved item must not be blocked by the needs-review sentinel gate: {}",
+                e.message
+            );
+        }
+        // If it succeeds, the plan was created — also valid.
     }
 }

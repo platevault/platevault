@@ -1,4 +1,18 @@
-# IPC wrapper → generated-bindings migration (planned)
+# IPC wrapper → generated-bindings migration (DONE)
+
+> **Status: complete (2026-07-03).** All caller areas were migrated to the
+> generated `commands.*` bindings + `unwrap` and merged to
+> `redesign-ui-platevault` (PRs #359, #368, #369, #372–#378). `commands.ts` and
+> its `commands.bindings-guard.test.ts` are deleted. The `target.*` migration
+> also swept two callers the area breakdown missed — `features/guided/store.ts`
+> (was calling dotted `invoke('guided.state.get')` and silently falling back to
+> Idle) and `features/projects/source-views.ts` (hand-rolled local `invoke`).
+> SC-001 (no `invoke('...')` outside the `api/ipc.ts` switcher) and SC-005 (no
+> `@/api/commands` imports) are now enforced in CI by
+> `apps/desktop/src/api/ipc-boundary.guard.test.ts`. The dev-tools commands are
+> generated under `--features dev-tools` (see `tests/bindings.rs` + `justfile`).
+> The historical planning notes below are kept for context.
+
 
 ## Why
 

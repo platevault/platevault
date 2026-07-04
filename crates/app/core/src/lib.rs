@@ -46,6 +46,7 @@ pub use lifecycle::{
 };
 pub use projects::{
     prepared_views, project_health, project_manifests, project_notes, project_setup,
+    source_view_generate,
 };
 pub use targets::{
     ingest_resolution, ingest_sessions, resolver_settings, target_dto, target_management,
@@ -55,6 +56,8 @@ pub use targets::{
 // In-crate modules (file layout under `src/`). These live in `app_core` itself
 // and may reference the extracted domain crates as `crate::errors`,
 // `crate::lifecycle`, etc. via the re-exports above.
+pub mod archive_generator;
+pub mod cleanup_generator;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
 pub mod first_run;
@@ -68,6 +71,10 @@ pub mod native;
 pub mod patterns;
 pub mod plan_apply;
 pub mod plans;
+/// Project-create orchestration (create + mkdir-only scaffolding auto-apply,
+/// user decision 2026-07-04). Lives in `app_core` (not `app_core_projects`)
+/// because it orchestrates `plans` + `plan_apply`, which are `app_core` modules.
+pub mod project_create;
 pub mod protection;
 pub mod search;
 pub mod sessions;

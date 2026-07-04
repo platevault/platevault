@@ -8,15 +8,29 @@ import { wizardNameSchema, type WizardNameValues } from '@/features/projects/sch
 
 export type StepNameData = WizardNameValues;
 
+/**
+ * Server-side `projects.create` error routed onto this step (WP-008-B).
+ * `name` and `tool` both land here because the wizard's `workflowProfile`
+ * radio group is what maps onto the backend `tool` enum at create time — this
+ * step is the only place a `tool.*` error can be actionable.
+ */
+export interface StepNameServerError {
+  field: 'name' | 'tool';
+  message: string;
+}
+
 export interface StepNameProps {
   data: StepNameData;
   onChange: (data: StepNameData) => void;
+  /** Cleared by the wizard once the user edits the corresponding field. */
+  serverError?: StepNameServerError | null;
 }
 
+// `label`/`description` are render-time thunks so they re-read the active locale (spec 046 #8).
 const PROFILES = [
-  { id: 'pixinsight' as const, label: m.projects_wizard_profile_pixinsight(), description: m.projects_wizard_profile_pixinsight_desc() },
-  { id: 'siril' as const, label: m.projects_wizard_profile_siril(), description: m.projects_wizard_profile_siril_desc() },
-  { id: 'planetary' as const, label: m.projects_wizard_profile_planetary(), description: m.projects_wizard_profile_planetary_desc() },
+  { id: 'pixinsight' as const, label: () => m.projects_wizard_profile_pixinsight(), description: () => m.projects_wizard_profile_pixinsight_desc() },
+  { id: 'siril' as const, label: () => m.projects_wizard_profile_siril(), description: () => m.projects_wizard_profile_siril_desc() },
+  { id: 'planetary' as const, label: () => m.projects_wizard_profile_planetary(), description: () => m.projects_wizard_profile_planetary_desc() },
 ];
 
 /**
@@ -27,7 +41,7 @@ const PROFILES = [
  * and propagates every change up via `onChange`, while `wizardNameSchema`
  * (zodResolver) drives the same "name required" message the wizard relied on.
  */
-export function StepName({ data, onChange }: StepNameProps) {
+export function StepName({ data, onChange, serverError }: StepNameProps) {
   const {
     control,
     register,
@@ -73,12 +87,12 @@ export function StepName({ data, onChange }: StepNameProps) {
           id="project-name"
           type="text"
           placeholder={m.projects_wizard_step_name_placeholder()}
-          aria-invalid={Boolean(errors.name)}
-          aria-describedby={errors.name ? 'project-name-error' : undefined}
+          aria-invalid={Boolean(errors.name) || serverError?.field === 'name'}
+          aria-describedby={errors.name || serverError?.field === 'name' ? 'project-name-error' : undefined}
           {...register('name')}
           className="alm-wizard-name__input"
         />
-        {errors.name && (
+        {errors.name ? (
           <span
             id="project-name-error"
             role="alert"
@@ -86,7 +100,15 @@ export function StepName({ data, onChange }: StepNameProps) {
           >
             {errors.name.message}
           </span>
-        )}
+        ) : serverError?.field === 'name' ? (
+          <span
+            id="project-name-error"
+            role="alert"
+            className="alm-wizard-name__error"
+          >
+            {serverError.message}
+          </span>
+        ) : null}
       </div>
 
       {/* Workflow profile */}
@@ -114,16 +136,16 @@ export function StepName({ data, onChange }: StepNameProps) {
                   <Radio.Root
                     value={profile.id}
                     className="alm-radio"
-                    aria-label={profile.label}
+                    aria-label={profile.label()}
                   >
                     <Radio.Indicator className="alm-radio__indicator" />
                   </Radio.Root>
                   <div>
                     <div className="alm-wizard-name__profile-label">
-                      {profile.label}
+                      {profile.label()}
                     </div>
                     <div className="alm-wizard-name__profile-description">
-                      {profile.description}
+                      {profile.description()}
                     </div>
                   </div>
                 </label>
@@ -131,6 +153,11 @@ export function StepName({ data, onChange }: StepNameProps) {
             </RadioGroup>
           )}
         />
+        {serverError?.field === 'tool' && (
+          <span role="alert" className="alm-wizard-name__error">
+            {serverError.message}
+          </span>
+        )}
       </div>
     </div>
   );

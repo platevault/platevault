@@ -17,7 +17,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { getCalibrationMaster, listSessions } from "@/api/commands";
+import { commands } from "@/bindings/index";
+import { unwrap } from "@/api/ipc";
 import type { CalibrationMaster_Serialize as CalibrationMaster } from "@/bindings/index";
 import {
 	DetailPane,
@@ -72,7 +73,10 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 		let cancelled = false;
 		setDetail({ confirmedNames: [], compatibleNames: [], loading: true });
 
-		Promise.all([getCalibrationMaster({ id: masterId }), listSessions()])
+		Promise.all([
+			commands.calibrationMastersGet(masterId).then(unwrap),
+			commands.sessionsList().then(unwrap),
+		])
 			.then(([masterDetail, sessions]) => {
 				if (cancelled) return;
 				const idToName = new Map<string, string>();
@@ -128,8 +132,8 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 				? (fp.filter ?? "")
 				: "";
 	const masterTitle = masterDisc
-		? `Master ${kindCap} · ${masterDisc}`
-		: `Master ${kindCap}`;
+		? m.calibration_master_title_disc({ kind: kindCap, disc: masterDisc })
+		: m.calibration_master_title({ kind: kindCap });
 
 	// Fingerprint as flat PropertyTable rows — split across two columns like
 	// SessionDetail's factProps.

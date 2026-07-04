@@ -92,6 +92,13 @@ pub struct ProjectChannelDto {
     pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub added_at: Option<String>,
+    /// Total sub-frame (light) count across all linked sources whose
+    /// `filter_snapshot` matches this channel's `label` (P7: server-side
+    /// aggregation, previously derived client-side).
+    pub sub_frames: u32,
+    /// Total integration time in seconds across the same matching sources
+    /// (`frames_snapshot * parse(exposure_snapshot)` summed per source).
+    pub total_integration_s: u64,
 }
 
 /// A project source (Inventory session link with snapshot fields).
@@ -227,6 +234,21 @@ pub struct ProjectCreateResult {
     pub channels: Vec<ProjectChannelDto>,
     pub audit_id: String,
     pub created_at: String,
+    /// Outcome of the mkdir-only scaffolding auto-apply (user decision
+    /// 2026-07-04, supersedes handover D16). The folder-structure plan and its
+    /// audit rows are still written (constitution II reviewability-as-record);
+    /// only the approval click is skipped, and only when every plan action is
+    /// directory creation.
+    ///
+    /// - `Some(true)`  — the scaffolding plan auto-applied cleanly; the
+    ///   project folders exist on disk.
+    /// - `Some(false)` — auto-apply was attempted but did not complete
+    ///   cleanly; the plan remains reviewable via the normal plan surfaces,
+    ///   exactly like a failed manual apply.
+    /// - `None`        — the plan requires manual review (it contains a
+    ///   non-mkdir action) or no plan was generated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scaffold_applied: Option<bool>,
 }
 
 // ── project.update ────────────────────────────────────────────────────────────

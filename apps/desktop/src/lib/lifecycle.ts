@@ -1,5 +1,6 @@
 import type { PillVariant } from '@/ui';
-import type { ProjectState, SessionState } from '@/bindings/index';
+import type { ProjectState } from '@/bindings/index';
+import { m } from '@/lib/i18n';
 
 /**
  * Centralized project lifecycle model — the single source of truth for the
@@ -34,14 +35,17 @@ export const projectStateIndex: Record<ProjectState, number> = {
   blocked: -1,
 };
 
-const PROJECT_STATE_LABELS: Record<ProjectState, string> = {
-  setup_incomplete: 'Setup',
-  ready: 'Ready',
-  prepared: 'Prepared',
-  processing: 'Processing',
-  completed: 'Completed',
-  archived: 'Archived',
-  blocked: 'Blocked',
+// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8) —
+// the Record itself stays exhaustive over `ProjectState`, but no `m.*()` call
+// happens until `projectStateLabel` actually invokes the thunk.
+const PROJECT_STATE_LABEL_FNS: Record<ProjectState, () => string> = {
+  setup_incomplete: () => m.lifecycle_state_setup(),
+  ready: () => m.lifecycle_state_ready(),
+  prepared: () => m.lifecycle_state_prepared(),
+  processing: () => m.lifecycle_state_processing(),
+  completed: () => m.lifecycle_state_completed(),
+  archived: () => m.lifecycle_state_archived(),
+  blocked: () => m.lifecycle_state_blocked(),
 };
 
 const PROJECT_STATE_VARIANTS: Record<ProjectState, PillVariant> = {
@@ -55,33 +59,14 @@ const PROJECT_STATE_VARIANTS: Record<ProjectState, PillVariant> = {
 };
 
 export function projectStateLabel(state: string): string {
-  return PROJECT_STATE_LABELS[state as ProjectState] ?? state;
+  return PROJECT_STATE_LABEL_FNS[state as ProjectState]?.() ?? state;
 }
 
 export function projectStateVariant(state: string): PillVariant {
   return PROJECT_STATE_VARIANTS[state as ProjectState] ?? 'neutral';
 }
 
-// ─── Acquisition session states ──────────────────────────────────────────────
-
-const SESSION_STATE_VARIANTS: Record<SessionState, PillVariant> = {
-  confirmed: 'ok',
-  // discovered / candidate / needs_review all surface as "Needs review" in the
-  // UI — give them one variant so identical labels never render in two colors.
-  needs_review: 'warn',
-  discovered: 'warn',
-  candidate: 'warn',
-  rejected: 'danger',
-  ignored: 'neutral',
-};
-
-export function sessionStateLabel(state: string): string {
-  const s = state.replace(/_/g, ' ');
-  // Title-case the first letter so labels read consistently (e.g. "Needs review",
-  // "Confirmed") regardless of which render path produced them.
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-export function sessionStateVariant(state: string): PillVariant {
-  return SESSION_STATE_VARIANTS[state as SessionState] ?? 'neutral';
-}
+// Spec 041 FR-051 (T076): acquisition/calibration sessions are derived,
+// already-confirmed inventory — the review-state pill/label helpers
+// (sessionStateLabel/sessionStateVariant) were removed along with the
+// review-state machine they rendered.

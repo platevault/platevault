@@ -28,8 +28,7 @@ import { Dialog } from '@base-ui-components/react/dialog';
 import { Btn, RadioGroup, Pill } from '@/ui';
 import type { RadioOption } from '@/ui';
 import { callCreateProject } from '@/features/projects/store';
-import { listProjects008 } from '@/api/commands';
-import type { TargetSuggestion } from '@/api/commands';
+import type { TargetSuggestion } from '@/bindings/aliases';
 import { TargetSearch } from '@/components';
 import type { ProjectCreateResult } from '@/bindings/index';
 import {
@@ -38,12 +37,18 @@ import {
   MAX_NAME_LEN,
   MAX_NOTES_LEN,
 } from '@/features/projects/schemas';
+import {
+  createProjectErrorCode,
+  findDuplicateProjectName,
+  mapCreateProjectErrorCode,
+} from '@/features/projects/projectCreateErrors';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const TOOL_OPTIONS: RadioOption[] = [
-  { value: 'PixInsight', label: m.setup_tools_pixinsight_name(), desc: 'WBPP, StarAlignment, integration' },
-  { value: 'Siril', label: m.setup_tools_siril_name(), desc: 'Free open-source stacking' },
+// Render-time factory so option labels re-read the active locale (spec 046 #8).
+const toolOptions = (): RadioOption[] => [
+  { value: 'PixInsight', label: m.setup_tools_pixinsight_name(), desc: m.projects_create_tool_pixinsight_desc() },
+  { value: 'Siril', label: m.setup_tools_siril_name(), desc: m.projects_create_tool_siril_desc() },
 ];
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -98,15 +103,9 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
   async function onValid(values: CreateProjectFormValues) {
     const trimmedName = values.name.trim();
-    try {
-      const list = await listProjects008();
-      const dup = list.find((p) => p.name.toLowerCase() === trimmedName.toLowerCase());
-      if (dup) {
-        setError('name', { type: 'duplicate', message: m.projects_create_name_duplicate() });
-        return;
-      }
-    } catch {
-      // Non-fatal: let the server enforce uniqueness
+    if (await findDuplicateProjectName(trimmedName)) {
+      setError('name', { type: 'duplicate', message: m.projects_create_name_duplicate() });
+      return;
     }
 
     setServerError(null);
@@ -124,8 +123,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
       handleOpenChange(false);
       onSuccess(result);
     } catch (err: unknown) {
-      const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-      setServerError(mapErrorCode(code));
+      setServerError(mapCreateProjectErrorCode(createProjectErrorCode(err)));
     }
   }
 
@@ -205,7 +203,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
                   name="tool"
                   render={({ field }) => (
                     <RadioGroup
-                      options={TOOL_OPTIONS}
+                      options={toolOptions()}
                       value={field.value}
                       onChange={(v) => field.onChange(v)}
                       aria-label={m.projects_tool_label()}
@@ -274,18 +272,4 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
       </Dialog.Portal>
     </Dialog.Root>
   );
-}
-
-// ── Error code → user-facing message ─────────────────────────────────────────
-
-function mapErrorCode(code: string): string {
-  switch (code) {
-    case 'name.empty':      return 'Project name is required.';
-    case 'name.too_long':   return 'Project name is too long (max 120 characters).';
-    case 'name.duplicate':  return 'A project with this name already exists.';
-    case 'tool.unknown':    return 'Unknown processing tool selected.';
-    case 'path.invalid':    return 'Folder path is required.';
-    case 'path.collision':  return 'Another project already uses this folder path.';
-    default:                return `Could not create project (${code}).`;
-  }
 }

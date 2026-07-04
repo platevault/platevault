@@ -1,0 +1,549 @@
+/* === TARGET DETAIL === */
+
+/* Title-extra: object-type pill beside the target heading */
+.alm-target-detail__title-extra {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* Identity section: two-column definition list */
+.alm-target-detail__identity-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--alm-sp-1) var(--alm-sp-3);
+  font-size: var(--alm-text-sm);
+}
+.alm-target-detail__identity-label {
+  color: var(--alm-text-muted);
+}
+
+/* Display-alias section — edit mode row */
+.alm-target-detail__display-alias-edit {
+  display: flex;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+
+/* Display-alias section — view mode row */
+.alm-target-detail__display-alias-view {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+.alm-target-detail__display-alias-value {
+  font-size: var(--alm-text-sm);
+}
+.alm-target-detail__display-alias-placeholder {
+  color: var(--alm-text-faint);
+}
+
+/* Inline text inputs (display-alias and add-alias) */
+.alm-target-detail__text-input {
+  flex: 1;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-target-detail__text-input:focus { outline: none; border-color: var(--alm-accent); }
+.alm-target-detail__text-input::placeholder { color: var(--alm-text-faint); }
+
+/* Small action buttons used in edit row and add-alias row */
+.alm-target-detail__action-btn {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  background: var(--alm-surface-raised); color: var(--alm-text-secondary);
+  border: 1px solid var(--alm-border); border-radius: var(--alm-radius-sm);
+  cursor: pointer; font-size: var(--alm-text-xs);
+}
+.alm-target-detail__action-btn:hover { background: var(--alm-hover-bg); color: var(--alm-text); }
+.alm-target-detail__action-btn--muted {
+  color: var(--alm-text-muted);
+}
+
+/* Edit / Set button in display-alias view mode */
+.alm-target-detail__edit-btn {
+  background: none;
+  color: var(--alm-text-secondary);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  padding: var(--alm-sp-0) var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+}
+.alm-target-detail__edit-btn:hover { background: var(--alm-hover-bg); color: var(--alm-text); }
+
+/* Alias pill list */
+.alm-target-detail__alias-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+}
+.alm-target-detail__alias-kind {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-right: var(--alm-sp-1);
+}
+.alm-target-detail__alias-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-left: var(--alm-sp-1);
+  padding: 0;
+  color: var(--alm-text-muted);
+  display: inline-flex;
+  vertical-align: middle;
+}
+.alm-target-detail__alias-empty {
+  color: var(--alm-text-faint);
+  font-size: var(--alm-text-sm);
+}
+
+/* Add-alias form row */
+.alm-target-detail__alias-add-row {
+  display: flex;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-2);
+}
+
+/* Error/action banners below alias forms */
+.alm-target-detail__banner {
+  margin-top: var(--alm-sp-1);
+}
+
+/* Back navigation button */
+.alm-target-detail__back-btn {
+  margin: var(--alm-sp-3) 0;
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+  font-size: var(--alm-text-sm);
+  cursor: pointer;
+}
+
+/* === NAMING & STRUCTURE === */
+
+/* Chip row — flex container for pattern chips and add-buttons */
+.alm-naming__chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+  align-items: center;
+  min-height: 32px;
+}
+
+/* Inline-block wrapper for relative-positioned dropdowns */
+.alm-naming__menu-anchor {
+  position: relative;
+  display: inline-block;
+}
+
+/* Dropdown panel (token menu, sep menu, literal popover) */
+.alm-naming__dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  padding: var(--alm-sp-1);
+  box-shadow: var(--alm-shadow-sm);
+}
+
+.alm-naming__dropdown--token { min-width: 160px; }
+.alm-naming__dropdown--sep   { min-width: 100px; }
+
+/* Literal popover is row-direction */
+.alm-naming__dropdown--literal {
+  min-width: 160px;
+  display: flex;
+  gap: var(--alm-sp-1);
+}
+
+/* Menu item buttons inside dropdowns */
+.alm-naming__menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+  border: none;
+  cursor: pointer;
+
+  font-size: var(--alm-text-xs);
+}
+.alm-naming__menu-item:hover {
+  background: var(--alm-hover-bg);
+}
+.alm-naming__menu-item:focus {
+  outline: none;
+  background: var(--alm-hover-bg);
+}
+
+/* Literal segment text input inside the literal popover */
+.alm-naming__literal-input {
+
+  font-size: var(--alm-text-xs);
+  width: 100px;
+  padding: var(--alm-sp-0) 6px;
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+}
+.alm-naming__literal-input::placeholder {
+  color: var(--alm-text-faint);
+}
+.alm-naming__literal-input:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+/* "Add" confirm button inside the literal popover */
+.alm-naming__literal-add-btn {
+  padding: var(--alm-sp-0) var(--alm-sp-2);
+  background: var(--alm-accent);
+  color: var(--alm-on-accent);
+  border: none;
+  border-radius: var(--alm-radius-md);
+  cursor: pointer;
+  font-size: var(--alm-text-xs);
+}
+.alm-naming__literal-add-btn:hover {
+  background: var(--alm-accent-hover);
+}
+.alm-naming__literal-add-btn:focus {
+  outline: none;
+  border: 1px solid var(--alm-accent-deep);
+}
+
+/* Placeholder span shown when no chips are present */
+.alm-naming__chip-placeholder {
+
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  font-style: italic;
+}
+
+/* Validation error feedback below chip row */
+.alm-naming__error {
+  margin-top: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+}
+
+/* Validation warning feedback below chip row */
+.alm-naming__warning {
+  margin-top: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Per-type section description (marginBottom only) */
+.alm-naming__pertype-desc {
+  margin-bottom: var(--alm-sp-2);
+}
+
+/* Per-type row inner: chip editor + reset button side by side */
+.alm-naming__pertype-row-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--alm-sp-2);
+}
+
+/* The flex-1 wrapper around the PerTypePatternChipsEditor */
+.alm-naming__pertype-editor-wrap {
+  flex: 1;
+}
+
+/* Checkbox label margin */
+.alm-naming__checkbox {
+  margin-right: var(--alm-sp-1);
+}
+
+/* Live Preview section */
+.alm-naming__preview-sample {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-1);
+}
+
+.alm-naming__preview-empty {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  font-style: italic;
+}
+
+.alm-naming__preview-error {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+}
+
+.alm-naming__preview-path-row {
+  display: flex;
+  gap: var(--alm-sp-3);
+  align-items: baseline;
+}
+
+.alm-naming__preview-code {
+  font-size: var(--alm-text-xs);
+}
+
+.alm-naming__preview-fallback {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  font-style: italic;
+}
+
+/* === PROJECT DETAIL === */
+
+/* Loading placeholder */
+.alm-project-detail__loading {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+}
+
+/* Channel-drift banner: button row below the drift message */
+.alm-project-detail__drift-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-2);
+}
+
+/* Rail: canonical target info block */
+.alm-project-detail__target-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-0);
+}
+.alm-project-detail__target-name {
+  font-weight: var(--alm-weight-semibold);
+}
+.alm-project-detail__target-common {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Rail: channel chips */
+.alm-project-detail__channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+}
+.alm-project-detail__channel-chip {
+  padding: var(--alm-sp-0) 6px;
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+}
+.alm-project-detail__channel-chip--inferred {
+  background: var(--alm-bg3);
+}
+.alm-project-detail__channel-chip--manual {
+  background: var(--alm-accent-bg);
+}
+/* "Auto" label appended to inferred channel chips */
+.alm-project-detail__channel-auto {
+  margin-left: var(--alm-sp-1);
+  opacity: 0.6;
+  font-size: 0.75em;
+}
+
+/* Sources section: empty state */
+.alm-project-detail__sources-empty {
+  padding: var(--alm-sp-2);
+  color: var(--alm-text-muted);
+}
+
+/* Sources section: individual source row */
+.alm-project-detail__source-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-1) 0;
+  border-bottom: 1px solid var(--alm-border);
+}
+.alm-project-detail__source-name {
+  flex: 1;
+}
+.alm-project-detail__source-frames {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+/* Shared footer bar: lifecycle actions and tool-launch CTA */
+.alm-project-detail__footer {
+  display: flex;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  border-top: 1px solid var(--alm-border);
+}
+/* Tool-launch footer also centers items vertically */
+.alm-project-detail__footer--tool {
+  align-items: center;
+}
+
+/* Tool-launch footer: "not configured" hint text */
+.alm-project-detail__tool-hint {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+.alm-project-detail__tool-link {
+  color: var(--alm-accent);
+}
+
+/* Re-launch confirmation modal overlay (scrim + centering) */
+.alm-project-detail__modal-overlay {
+  position: absolute;
+  inset: 0;
+  /* theme-aware semi-transparent scrim: 50% of the text ink colour */
+  background: color-mix(in srgb, var(--alm-ink) 50%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+/* Re-launch modal card */
+.alm-project-detail__modal-card {
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-lg);
+  padding: var(--alm-sp-6);
+  max-width: 360px;
+  width: 100%;
+}
+.alm-project-detail__modal-body {
+  margin-bottom: var(--alm-sp-4);
+}
+.alm-project-detail__modal-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  justify-content: flex-end;
+}
+
+/* Edit-project pane full-pane overlay */
+.alm-project-detail__edit-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--alm-surface);
+  z-index: 10;
+  overflow: auto;
+}
+
+/* === INBOX DETAIL === */
+
+/* Muted dash spans produced by fmtOrDash / fmtBinning / fmtExposure / fmtTemp */
+.alm-inbox-detail__dash { color: var(--alm-text-muted); }
+
+/* Per-detection "Source" destination-root picker (inline in the confirm header). */
+.alm-inbox-detail__dest-root {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+.alm-inbox-detail__dest-root-label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* EmptyClassification placeholder block */
+.alm-inbox-detail__empty {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* Mixed-composition summary line (FR-011) */
+.alm-inbox-detail__mixed-summary {
+  margin-top: var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
+}
+
+/* Breakdown table: fixed layout so columns don't reflow across items */
+.alm-inbox-detail__table-fixed {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Sample files cell content */
+.alm-inbox-detail__samples { font-size: var(--alm-text-xs); }
+.alm-inbox-detail__samples-more { color: var(--alm-text-muted); }
+
+/* Truncated file-path cell (unclassified rows + metadata rows) */
+.alm-inbox-detail__file-cell {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--alm-text-xs);
+}
+
+/* Per-file missing-attribute inline badge */
+.alm-inbox-detail__missing-attr-badge {
+  display: inline-block;
+  margin-left: var(--alm-sp-1);
+  padding: 0 var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-warn);
+  border: 1px solid currentColor;
+  border-radius: var(--alm-radius-md);
+  white-space: nowrap;
+}
+
+/* Top margin for Banner components in this pane */
+.alm-inbox-detail__banner-mt3 { margin-top: var(--alm-sp-3); }
+.alm-inbox-detail__banner-mt2 { margin-top: var(--alm-sp-2); }
+
+/* Select-all affordance row above the unclassified table */
+.alm-inbox-detail__select-all-row {
+  margin-bottom: var(--alm-sp-1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* "Select all / N selected" label beside the select-all checkbox */
+.alm-inbox-detail__select-all-label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Bulk override controls panel (visible when ≥1 file selected) */
+.alm-inbox-detail__bulk-controls {
+  margin-top: var(--alm-sp-3);
+  padding: var(--alm-sp-3);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-2);
+  align-items: flex-end;
+}
+
+/* Column wrapper for each label+control pair inside bulk controls */
+.alm-inbox-detail__bulk-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+/* Label text inside each bulk field */
+.alm-inbox-detail__bulk-label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Narrow fixed-width inputs in the bulk controls (filter / exposure / binning) */
+.alm-inbox-detail__bulk-input-w80 { width: 80px; }
+
+/* Single-file apply-overrides button row */
+.alm-inbox-detail__apply-row {
+  margin-top: var(--alm-sp-2);
+  display: flex;
+  gap: var(--alm-sp-2);
+}
+
+/* Metadata table horizontal scroll wrapper */
+.alm-inbox-detail__metadata-scroll { overflow-x: auto; }

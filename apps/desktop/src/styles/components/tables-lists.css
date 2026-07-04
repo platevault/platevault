@@ -1,0 +1,416 @@
+/* === SESSIONS SORTABLE TABLE === */
+/* STUB: full-width table + bottom inspector (inbox parity) — future agent */
+
+/* ── Controls bar ─────────────────────────────────────────────────────────── */
+
+.alm-sessions-list__controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+.alm-sessions-list__filter-row {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+}
+
+/* ── Source group spacing ─────────────────────────────────────────────────── */
+
+.alm-sessions-list__group {
+  margin-bottom: var(--alm-sp-0);
+}
+
+/* ── Session list row (shared alm-list-item pattern) ──────────────────────── */
+
+/* Target label: ellipsis when the narrow sidebar can't fit it. */
+.alm-session-row__target {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Needs-review icon next to the target label. */
+.alm-session-row__needs-review-icon {
+  color: var(--alm-warn);
+  flex-shrink: 0;
+}
+
+/* === merged from .cssblocks/sessions-table.css (parallel coder, spec-043) === */
+/* ===========================================================================
+ * Sessions — full-width dense sortable table (task #36, spec 043 §4).
+ *
+ * SCRATCH FILE: not imported anywhere. The parent merges this into
+ * components.css and runs check-tokens. Token-only (existing --alm-* tokens);
+ * no raw hex/rgb/ms. The old `alm-sessions-list*` / `alm-session-row*` rules in
+ * components.css are now dead (parent removes on merge).
+ *
+ * Layout: the page bar (.alm-page__bar) holds the always-visible toolbar
+ * (search + filters + review actions). The body is a horizontal split — a
+ * full-width scrolling table on the left and an optional detail drawer on the
+ * right that appears only when a row is selected.
+ * ======================================================================== */
+
+/* === Shared list-page layout system (spec 043, tasks #62/#63/#73) ==========
+ * Sessions is the reference adoption; Calibration / Projects / Targets / Inbox
+ * adopt the same primitives. The body keeps the list + detail PANE shape (the
+ * detail pane is preserved, NOT collapsed to a hidden drawer); the pane is
+ * given real width so its rail content is fully visible and never compresses
+ * to single-character columns.
+ * ======================================================================== */
+
+/* --- PageTopBar: pinned top band (carries .alm-page__bar; never scrolls) -- */
+.alm-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  flex-wrap: wrap;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-bottom: 1px solid var(--alm-border);
+  background: var(--alm-surface);
+  /* Reserve scrollbar space so a page-level scrollbar appearing or disappearing
+   * (e.g. when a native <select> opens its OS dropdown on Windows) does not
+   * shift the bar height or reflow the content panel below it. */
+  scrollbar-gutter: stable;
+}
+.alm-topbar__lead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--alm-sp-2);
+  flex-shrink: 0;
+}
+.alm-topbar__title { display: flex; align-items: baseline; }
+.alm-topbar__heading {
+  margin: 0;
+  font-size: var(--alm-text-lg);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+.alm-topbar__summary {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+.alm-topbar__filters {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.alm-topbar__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* --- FilterToolbar: search + labeled selects + group-by + sort + actions -- */
+.alm-filterbar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+.alm-filterbar__search {
+  flex: 1 1 200px;
+  min-width: 160px;
+  max-width: 320px;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-filterbar__search:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+.alm-filterbar__field {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+.alm-filterbar__field-label { white-space: nowrap; }
+.alm-filterbar__select {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+}
+/* Multi-level grouping configurator (Group / then / then). */
+.alm-filterbar__group {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+.alm-filterbar__sort {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+.alm-filterbar__sort-dir { line-height: 1; }
+.alm-filterbar__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  align-items: center;
+}
+
+/* Multi-select popover field (task #82) — native <details> disclosure with a
+ * checkbox menu. See .cssblocks/targets-refine.css for the staged copy. */
+.alm-filterbar__multi {
+  position: relative;
+  display: inline-block;
+}
+.alm-filterbar__multi-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.alm-filterbar__multi-summary::-webkit-details-marker { display: none; }
+.alm-filterbar__multi-summary::marker { content: ''; }
+.alm-filterbar__multi-summary::after {
+  content: '\25BE';
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+.alm-filterbar__multi[open] > .alm-filterbar__multi-summary {
+  border-color: var(--alm-accent);
+}
+.alm-filterbar__multi-menu {
+  position: absolute;
+  z-index: var(--alm-z-popover, 50);
+  top: calc(100% + var(--alm-sp-1));
+  left: 0;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-2);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  box-shadow: var(--alm-shadow-sm);
+}
+.alm-filterbar__multi-option {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.alm-filterbar__multi-check {
+  accent-color: var(--alm-accent);
+  cursor: pointer;
+}
+
+/* === ListPageLayout bottom detail panel (spec-043, task #86 → #89) ===
+ * The detail opens as a horizontal BOTTOM split below the primary content (not a
+ * right-side pane), so the full-width table keeps stable columns. The panel is
+ * NON-resizable (task #89): it AUTO-SIZES to its content via `height: fit-content`
+ * with a `max-height` cap, and scrolls WITHIN itself when its content is tall —
+ * it never grows unbounded or pushes the table off-screen. No splitter, no drag,
+ * no persisted height. */
+.alm-listpage__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.alm-listpage__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.alm-listpage__detail {
+  flex: 0 0 auto;
+  /* Auto-expand: grows to fit content; only scrolls past the cap.
+   * clamp(min, preferred, max) — never shorter than 220px, never taller than
+   * 52vh; sits naturally between for typical content heights. */
+  height: fit-content;
+  max-height: clamp(220px, 40vh, 52vh);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--alm-border);
+  background: var(--alm-surface-raised);
+}
+.alm-listpage__detail-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+.alm-listpage__detail-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+  line-height: 1;
+  padding: var(--alm-sp-1);
+  border-radius: var(--alm-radius-sm);
+}
+.alm-listpage__detail-close:hover { color: var(--alm-text); }
+.alm-listpage__detail-body {
+  flex: 1;
+  min-height: 0;
+  /* Do NOT add overflow-y:auto here — the .alm-detailpanel__content column
+   * is the sole scroll region. Double overflow-y causes nested scrollbars. */
+  overflow: hidden;
+}
+/* The bottom panel has ample horizontal room, so its dashboard grid keeps its
+ * natural multi-column rail layout (the old single-column collapse the narrow
+ * right-side pane needed is relaxed). */
+.alm-listpage__detail-body .alm-detail--fill > .alm-dash {
+  grid-template-rows: auto;
+}
+.alm-listpage__detail-body .alm-detail--fill .alm-dash__primary {
+  overflow-y: visible;
+}
+
+/* --- Dense sortable table ------------------------------------------------- */
+.alm-sessions-table {
+  /* Inherits .alm-table base; tighten cell padding for density. */
+  table-layout: auto;
+}
+.alm-sessions-table th { user-select: none; }
+.alm-sessions-table td,
+.alm-sessions-table th {
+  padding: var(--alm-sp-1) var(--alm-sp-3);
+}
+
+/* Sortable column header (button-in-th) — the SINGLE shared control used by
+ * every list table (Sessions / Calibration / Projects / Targets / Inbox) via
+ * the <SortHeader> component. Do not reintroduce per-feature `*-sorth` classes;
+ * they drifted and left Inbox unstyled. */
+.alm-sorth {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.alm-sorth:hover { color: var(--alm-text); }
+.alm-sorth--active { color: var(--alm-text); }
+.alm-sorth__arrow {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+
+/* ── Shared spanning group-header row ──────────────────────────────────────
+ * ONE class, ONE look for every list-page table (Sessions · Calibration ·
+ * Targets · Projects) — no per-feature clones. A quiet banded row that
+ * headlines each group with a count. The cell is a real <button> (collapsible
+ * headers), so it resets native chrome and inherits the row typography. */
+.alm-listgroup td {
+  background: var(--alm-surface);
+  font-weight: var(--alm-weight-semibold);
+  font-size: var(--alm-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+  border-bottom: 1px solid var(--alm-border-subtle);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+}
+.alm-listgroup__cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+.alm-listgroup__caret {
+  width: 0.7em;
+  display: inline-block;
+  flex-shrink: 0;
+  color: var(--alm-text-muted);
+}
+.alm-listgroup__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.alm-listgroup__count {
+  margin-left: var(--alm-sp-2);
+  font-weight: var(--alm-weight-normal);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+/* Selectable session rows. */
+.alm-sessions-table__row { cursor: pointer; }
+.alm-sessions-table__row:hover td { background: var(--alm-surface); }
+.alm-sessions-table__row--selected td {
+  background: var(--alm-accent-bg);
+}
+
+/* Cell helpers (token-only). */
+.alm-sessions-cell--target { font-weight: var(--alm-weight-medium); color: var(--alm-text); }
+.alm-sessions-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
+.alm-sessions-cell--mono {
+
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+.alm-sessions-cell--muted { color: var(--alm-text-muted); }
+
+/* Projects cell pills. */
+.alm-sessions-cell__projects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+}
+
+/* Needs-review marker before a target/state. */
+.alm-sessions-cell__warn-icon {
+  color: var(--alm-text-muted);
+  margin-right: var(--alm-sp-1);
+  vertical-align: middle;
+}
+
+/* Empty + footer states. */
+.alm-sessions-table__empty {
+  padding: var(--alm-sp-5);
+  text-align: center;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+.alm-sessions-table__footer {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  border-top: 1px solid var(--alm-border-subtle);
+}

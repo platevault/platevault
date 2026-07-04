@@ -16,78 +16,80 @@ import { General } from './General';
 import { Advanced } from './Advanced';
 import { AuditLog } from './AuditLog';
 
+// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
 const PANES = [
-  { id: 'sources', label: m.settings_nav_pane_sources() },
-  { id: 'equipment', label: m.settings_nav_pane_equipment() },
-  { id: 'ingestion', label: m.settings_nav_pane_ingestion() },
-  { id: 'naming', label: m.settings_nav_pane_naming() },
-  { id: 'tools', label: m.settings_nav_pane_tools() },
-  { id: 'cal', label: m.settings_nav_pane_cal() },
-  { id: 'catalogs', label: m.settings_nav_pane_catalogs() },
-  { id: 'planner', label: m.settings_nav_pane_planner() },
-  { id: 'cleanup', label: m.settings_nav_pane_cleanup() },
-  { id: 'general', label: m.settings_nav_pane_general() },
-  { id: 'advanced', label: m.settings_nav_pane_advanced() },
-  { id: 'audit', label: m.settings_nav_pane_audit() },
+  { id: 'sources', label: () => m.settings_nav_pane_sources() },
+  { id: 'equipment', label: () => m.settings_nav_pane_equipment() },
+  { id: 'ingestion', label: () => m.settings_nav_pane_ingestion() },
+  { id: 'naming', label: () => m.settings_nav_pane_naming() },
+  { id: 'tools', label: () => m.settings_nav_pane_tools() },
+  { id: 'cal', label: () => m.settings_nav_pane_cal() },
+  { id: 'catalogs', label: () => m.settings_nav_pane_catalogs() },
+  { id: 'planner', label: () => m.settings_nav_pane_planner() },
+  { id: 'cleanup', label: () => m.settings_nav_pane_cleanup() },
+  { id: 'general', label: () => m.settings_nav_pane_general() },
+  { id: 'advanced', label: () => m.settings_nav_pane_advanced() },
+  { id: 'audit', label: () => m.settings_nav_pane_audit() },
 ] as const;
 
 type PaneId = (typeof PANES)[number]['id'];
 
 // Grouped sub-nav (Library / Processing / Application).
-const NAV_GROUPS: { label: string; panes: PaneId[] }[] = [
-  { label: m.settings_nav_group_library(), panes: ['sources', 'equipment', 'ingestion', 'naming', 'catalogs', 'planner'] },
-  { label: m.settings_nav_group_processing(), panes: ['tools', 'cal', 'cleanup'] },
-  { label: m.settings_nav_group_application(), panes: ['general', 'advanced', 'audit'] },
+const NAV_GROUPS: { label: () => string; panes: PaneId[] }[] = [
+  { label: () => m.settings_nav_group_library(), panes: ['sources', 'equipment', 'ingestion', 'naming', 'catalogs', 'planner'] },
+  { label: () => m.settings_nav_group_processing(), panes: ['tools', 'cal', 'cleanup'] },
+  { label: () => m.settings_nav_group_application(), panes: ['general', 'advanced', 'audit'] },
 ];
 
-const PANE_META: Record<PaneId, { title: string; desc: string }> = {
+// Render-time thunks so pane titles/descriptions re-read the active locale (spec 046 #8).
+const PANE_META: Record<PaneId, { title: () => string; desc: () => string }> = {
   sources: {
-    title: 'Data Sources',
-    desc: 'Library roots the app indexes. Files are read in read-only mode; nothing is modified outside an approved plan.',
+    title: () => m.settings_pane_sources_title(),
+    desc: () => m.settings_pane_sources_desc(),
   },
   equipment: {
-    title: 'Equipment',
-    desc: 'Cameras, telescopes, and optical trains used across your sessions.',
+    title: () => m.settings_pane_equipment_title(),
+    desc: () => m.settings_pane_equipment_desc(),
   },
   ingestion: {
-    title: 'Ingestion',
-    desc: 'Controls how the app scans source folders and groups newly discovered files.',
+    title: () => m.settings_pane_ingestion_title(),
+    desc: () => m.settings_pane_ingestion_desc(),
   },
   naming: {
-    title: 'Naming & Structure',
-    desc: 'Token patterns used when files are confirmed from Inbox to Inventory.',
+    title: () => m.settings_pane_naming_title(),
+    desc: () => m.settings_pane_naming_desc(),
   },
   tools: {
-    title: 'Processing Tools',
-    desc: 'Configure executable paths and directory templates for each processing tool.',
+    title: () => m.settings_pane_tools_title(),
+    desc: () => m.settings_pane_tools_desc(),
   },
   cal: {
-    title: 'Calibration Matching',
-    desc: 'Tolerances and requirements for automatic calibration frame matching.',
+    title: () => m.settings_pane_cal_title(),
+    desc: () => m.settings_pane_cal_desc(),
   },
   catalogs: {
-    title: 'Target Resolution',
-    desc: 'How object names in your files are resolved to canonical targets — online SIMBAD resolution plus the bundled seed and local cache.',
+    title: () => m.settings_pane_catalogs_title(),
+    desc: () => m.settings_pane_catalogs_desc(),
   },
   planner: {
-    title: 'Target Planner',
-    desc: 'Observation planning preferences — altitude threshold and filter visibility settings for the Planner table.',
+    title: () => m.settings_pane_planner_title(),
+    desc: () => m.settings_pane_planner_desc(),
   },
   cleanup: {
-    title: 'Cleanup',
-    desc: 'Default actions for each data type when a cleanup plan is generated after processing.',
+    title: () => m.settings_pane_cleanup_title(),
+    desc: () => m.settings_pane_cleanup_desc(),
   },
   general: {
-    title: 'Appearance',
-    desc: 'Theme, font size, and display density.',
+    title: () => m.settings_pane_general_title(),
+    desc: () => m.settings_pane_general_desc(),
   },
   advanced: {
-    title: 'Advanced',
-    desc: 'Logging level, database information, and reset options.',
+    title: () => m.settings_pane_advanced_title(),
+    desc: () => m.settings_pane_advanced_desc(),
   },
   audit: {
-    title: 'Audit Log',
-    desc: 'Searchable history of every state change, plan application, and system event.',
+    title: () => m.settings_pane_audit_title(),
+    desc: () => m.settings_pane_audit_desc(),
   },
 };
 
@@ -124,7 +126,7 @@ export function SettingsPage() {
         topBar={
           <TopActionBar
             title={m.settings_page_title()}
-            subtitle={meta.title}
+            subtitle={meta.title()}
             right={
               saved && (
                 <span
@@ -140,8 +142,8 @@ export function SettingsPage() {
         list={
           <nav className="alm-settings__nav" aria-label={m.settings_page_nav_aria()}>
             {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="alm-settings__nav-group">
-                <div className="alm-settings__nav-group-label">{group.label}</div>
+              <div key={group.label()} className="alm-settings__nav-group">
+                <div className="alm-settings__nav-group-label">{group.label()}</div>
                 {group.panes.map((paneId) => {
                   const pane = PANES.find((p) => p.id === paneId);
                   if (!pane) return null;
@@ -153,7 +155,7 @@ export function SettingsPage() {
                       onClick={() => setActivePane(pane.id)}
                       aria-current={activePane === pane.id ? 'page' : undefined}
                     >
-                      {pane.label}
+                      {pane.label()}
                     </button>
                   );
                 })}

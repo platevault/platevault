@@ -1,23 +1,54 @@
 /**
- * Artifact store helpers — spec 012 T020/T022/T023.
+ * Artifact store helpers — spec 012 T008/T020/T022/T023.
  *
  * Provides:
  * - `useArtifacts(projectId)` — reactive query over `artifact.list`.
  * - `useArtifactClassify()` — mutation hook wrapping `artifact.classify`.
  * - `useArtifactMarkResolved()` — mutation hook wrapping `artifact.mark_resolved`.
+ * - `useProjectArtifactWatcher(projectId)` — attaches the filesystem watcher on
+ *   mount and detaches it on unmount/projectId change (T008: project drawer
+ *   open/close lifecycle).
  * - `groupArtifactsByLaunch()` — pure grouping helper for the accordion (T023).
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import {
-  artifactList,
-  artifactClassify,
-  artifactMarkResolved,
-  type ArtifactSummary,
-  type ArtifactListResponse,
-  type ArtifactClassifyRequest,
-} from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type {
+  ArtifactSummary,
+  ArtifactListRequest,
+  ArtifactListResponse,
+  ArtifactClassifyRequest,
+  ArtifactClassifyResponse,
+  ArtifactMarkResolvedRequest,
+  ArtifactWatcherRequest,
+} from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
+
+// Local IPC helpers — migrated off the hand-written @/api/commands wrappers
+// (spec 037) onto the generated bindings.
+
+async function artifactList(request: ArtifactListRequest): Promise<ArtifactListResponse> {
+  return unwrap(await commands.artifactList(request));
+}
+
+async function artifactClassify(
+  request: ArtifactClassifyRequest,
+): Promise<ArtifactClassifyResponse> {
+  return unwrap(await commands.artifactClassify(request));
+}
+
+async function artifactMarkResolved(request: ArtifactMarkResolvedRequest): Promise<void> {
+  unwrap(await commands.artifactMarkResolved(request));
+}
+
+async function artifactWatcherAttach(request: ArtifactWatcherRequest): Promise<void> {
+  unwrap(await commands.artifactWatcherAttach(request));
+}
+
+async function artifactWatcherDetach(request: ArtifactWatcherRequest): Promise<void> {
+  unwrap(await commands.artifactWatcherDetach(request));
+}
 
 // ── Grouping types ─────────────────────────────────────────────────────────────
 
@@ -134,6 +165,41 @@ export function useArtifacts(projectId: string): ArtifactsState {
   }, [projectId, tick]);
 
   return { artifacts, loading, error, reload };
+}
+
+// ── useProjectArtifactWatcher ─────────────────────────────────────────────────
+
+/**
+ * Attach the project's filesystem artifact watcher on mount, detach it on
+ * unmount or when `projectId` changes (spec 012 T008).
+ *
+ * This mirrors the project drawer's own mount lifecycle: `ProjectDetailContent`
+ * only exists while a project is selected, so the effect naturally fires once
+ * per drawer-open and cleans up on drawer-close/project-switch. Attach runs an
+ * on-attach reconciliation pass on the backend before starting the live watch,
+ * so files written while the drawer was closed are still detected.
+ *
+ * Best-effort: attach/detach failures are logged, not surfaced as UI errors —
+ * artifact observation is a background enhancement, not a blocking operation.
+ */
+export function useProjectArtifactWatcher(projectId: string): void {
+  useEffect(() => {
+    if (!projectId) return undefined;
+
+    let cancelled = false;
+    artifactWatcherAttach({ projectId }).catch((err: unknown) => {
+      if (!cancelled) {
+        console.warn('artifact watcher attach failed', errMessage(err));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      artifactWatcherDetach({ projectId }).catch((err: unknown) => {
+        console.warn('artifact watcher detach failed', errMessage(err));
+      });
+    };
+  }, [projectId]);
 }
 
 // ── useArtifactClassify ────────────────────────────────────────────────────────

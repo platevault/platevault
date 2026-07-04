@@ -34,19 +34,22 @@
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { listRoots } from "@/api/commands";
-import type { InboxConfirmDestination } from "@/api/commands";
+import { commands } from "@/bindings/index";
+import { unwrap } from "@/api/ipc";
+import type { InboxConfirmDestination } from "@/bindings/index";
 import { useSetPageStatus } from "@/app/PageStatusContext";
 import { FilterToolbar, ListPageLayout, PageTopBar } from "@/components";
 import { usePlanApplyProgress } from "@/features/plans/usePlanApplyProgress";
 import { m } from "@/lib/i18n";
 import type { FrameType } from "@/lib/route-contract";
+import { useGrouping } from "@/lib/use-grouping";
 import { useStaleSelectionCleanup } from "@/lib/use-stale-selection";
 import { addToast } from "@/shared/toast";
 import { Btn } from "@/ui";
-import { InboxControls, useInboxControls } from "./InboxControls";
+import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from "./InboxControls";
 import { InboxDetail } from "./InboxDetail";
-import { InboxList } from "./InboxList";
+import { InboxList, DEFAULT_INBOX_SORT } from "./InboxList";
+import type { InboxSortCol, InboxSort } from "./InboxList";
 import { InboxStatsSummary } from "./InboxStatsSummary";
 import { deriveInboxStats } from "./inboxStatsFromItems";
 import { PlanApprovalOverlay } from "./PlanApprovalOverlay";
@@ -101,10 +104,31 @@ export function InboxPage() {
 	const items = listData?.items ?? [];
 
 	// Search + grouping / sort / frame-type controls now live in the top bar
-	// (spec 043 #73/#31). `useInboxControls` owns the persisted ordered grouping
-	// dimensions + sort; the frame-type filter stays URL-backed (`type`).
+	// (spec 043 #73/#31). `useGrouping` owns the persisted ordered grouping
+	// dimensions; sort is local column-header state; lane + kind filters are
+	// URL-backed (`type`) and local state respectively.
 	const [search, setSearch] = useState("");
-	const { dims, sortBy, setSortBy, setSlot } = useInboxControls();
+	const { dims, setSlot } = useGrouping({
+		storageKey: GROUPING_STORAGE_KEY,
+		validIds: GROUPING_DIMENSIONS.map((d) => d.id),
+		defaultDims: [],
+	});
+
+	// Column-header sort state (replaces the old sort dropdown).
+	const [inboxSort, setInboxSort] = useState<InboxSort>(DEFAULT_INBOX_SORT);
+	const handleSort = useCallback(
+		(col: InboxSortCol) => {
+			setInboxSort((prev) =>
+				prev.col === col
+					? { col, dir: prev.dir === "asc" ? "desc" : "asc" }
+					: { col, dir: "asc" },
+			);
+		},
+		[],
+	);
+
+	// Kind filter: frame type of the detection (bias/dark/flat/light/master).
+	const [kindFilter, setKindFilter] = useState("");
 
 	// spec 041: aggregate open-plan surface (all ingestions at once).
 	const { data: openPlansData, refresh: refreshOpenPlans } =
@@ -209,7 +233,9 @@ export function InboxPage() {
 	const [selectedDestRootId, setSelectedDestRootId] = useState("");
 	useEffect(() => {
 		let alive = true;
-		listRoots()
+		commands
+			.rootsList()
+			.then(unwrap)
 			.then((rs) => {
 				if (!alive) return;
 				setDestRoots(
@@ -288,13 +314,11 @@ export function InboxPage() {
 		async (
 			item: { inboxItemId: string; rootAbsolutePath: string },
 			contentSignature: string,
-			action: string,
 			rootId?: string,
 		) => {
 			try {
 				const result = await confirm({
 					inboxItemId: item.inboxItemId,
-					action,
 					contentSignature,
 					rootAbsolutePath: item.rootAbsolutePath,
 					destructiveDestination,
@@ -333,7 +357,7 @@ export function InboxPage() {
 				}
 				if (code === "inbox.invalid_destination_root") {
 					addToast({
-						message: message || "That destination root is not valid.",
+						message: message || m.inbox_toast_invalid_destination_root(),
 						variant: "error",
 					});
 					return;
@@ -341,7 +365,7 @@ export function InboxPage() {
 				if (code === "inbox.no_destination_root") {
 					addToast({
 						message:
-							message || "No library root is registered for this frame type.",
+							message || m.inbox_toast_no_destination_root(),
 						variant: "error",
 					});
 					return;
@@ -374,15 +398,21 @@ export function InboxPage() {
 	);
 
 	const handleConfirm = async () => {
-		if (!selectedItem || !classification) return;
-		const action = classification.type === "mixed" ? "split" : "confirm";
+		// spec 041 T071/T072 (FR-050): the backend "split" action is removed —
+		// classification.type === "mixed" is only reachable when the SELECTED
+		// item is still the pre-materialization leaf-folder row spanning more
+		// than one frame type (T066 already split it into single-type
+		// sub-items, which appear as separate list rows). Such a row can never
+		// itself be confirmed (its classification.result is never
+		// "classified"), so confirm is gated off entirely for it via
+		// `canConfirm` below — guard here too as defense in depth.
+		if (!selectedItem || !classification || classification.type === "mixed") return;
 		await runConfirm(
 			{
 				inboxItemId: selectedItem.inboxItemId,
 				rootAbsolutePath: selectedRootPath,
 			},
 			classification.contentSignature,
-			action,
 			// "" = auto-select (let the backend choose); otherwise the picked root.
 			selectedDestRootId || undefined,
 		);
@@ -417,7 +447,6 @@ export function InboxPage() {
 			try {
 				await confirm({
 					inboxItemId: it.inboxItemId,
-					action: "confirm",
 					contentSignature: it.contentSignature,
 					rootAbsolutePath: it.rootAbsolutePath,
 					destructiveDestination,
@@ -457,14 +486,16 @@ export function InboxPage() {
 	const handlePickDestinationRoot = async (rootId: string) => {
 		if (!rootPickItemId || !selectedItem || !classification) return;
 		if (selectedItem.inboxItemId !== rootPickItemId) return;
-		const action = classification.type === "mixed" ? "split" : "confirm";
+		// A "mixed" classification can never reach the destination-root picker
+		// (confirm rejects it with classification.ambiguous before root
+		// resolution runs) — guarded as defense in depth, matching handleConfirm.
+		if (classification.type === "mixed") return;
 		await runConfirm(
 			{
 				inboxItemId: selectedItem.inboxItemId,
 				rootAbsolutePath: selectedRootPath,
 			},
 			classification.contentSignature,
-			action,
 			rootId,
 		);
 	};
@@ -546,7 +577,6 @@ export function InboxPage() {
 	// confirm — any file lacking a path-load-bearing attribute cannot be routed
 	// to a destination, so the backend rejects it (inbox.missing_path_attributes).
 	// Disable confirm up-front and let the detail pane's danger alert explain why.
-	// A MIXED folder is NOT blocked here: confirming it generates a split plan.
 	const hasMissingRequiredMeta = useMemo(
 		() =>
 			(fileMetadata ?? []).some(
@@ -555,10 +585,16 @@ export function InboxPage() {
 		[fileMetadata],
 	);
 
+	// spec 041 T071/T072 (FR-050): the backend "split" action for MIXED items
+	// is removed — a folder that still classifies as "mixed" (multiple frame
+	// types on this row) can never itself be confirmed; only "single_type"
+	// rows (including the sub-items T066 already materialized alongside it)
+	// are confirmable, so confirm is disabled for both "unclassified" and
+	// "mixed" here.
 	const canConfirm =
 		!!selectedItem &&
 		!!classification &&
-		classification.type !== "unclassified" &&
+		classification.type === "single_type" &&
 		!hasMissingRequiredMeta &&
 		!hasOpenPlan;
 
@@ -574,10 +610,10 @@ export function InboxPage() {
 		}
 	}, [planOverlayOpen, openPlans.length, pendingRootPick]);
 
-	const confirmLabel =
-		classification?.type === "mixed"
-			? "Generate split plan"
-			: "Confirm to inventory";
+	// spec 041 T072: "Generate split plan" is retired along with the backend
+	// "split" action (FR-050) — a mixed row is disabled via `canConfirm`
+	// above, so the label is always the plain confirm label now.
+	const confirmLabel = m.inbox_confirm_to_inventory();
 
 	// spec 041 US6: aggregate inbox queue stats. Derived from the SAME item list
 	// the header/footer count from (distinct-folder counting) so the stats strip,
@@ -690,8 +726,8 @@ export function InboxPage() {
 			parts.push(m.inbox_count_folders({ count: folderCount }));
 		if (masterCount > 0)
 			parts.push(m.inbox_count_masters({ count: masterCount }));
-		const base = parts.length > 0 ? parts.join(" · ") : "0 detections";
-		return isCapped ? `${base} (first ${listData?.limit ?? 500})` : base;
+		const base = parts.length > 0 ? parts.join(" · ") : m.inbox_summary_zero_detections();
+		return isCapped ? m.inbox_summary_capped({ base, limit: String(listData?.limit ?? 500) }) : base;
 	}, [listLoading, folderCount, masterCount, isCapped, listData?.limit]);
 
 	// ── Status bar: push the inbox-specific folder/master count + per-frame-type
@@ -721,25 +757,49 @@ export function InboxPage() {
 						value: search,
 						onChange: setSearch,
 						placeholder: m.inbox_search_placeholder(),
-						ariaLabel: "Search inbox",
+						ariaLabel: m.inbox_search_aria_label(),
 					}}
-					actions={
-						<InboxControls
-							dims={dims}
-							setSlot={setSlot}
-							sortBy={sortBy}
-							onSortByChange={setSortBy}
-							filterType={type ?? "all"}
-							onFilterTypeChange={(t) =>
+					fields={[
+						{
+							key: "fileType",
+							label: m.inbox_filter_file_type_label(),
+							value: type ?? "",
+							options: [
+								{ value: "fits", label: m.inbox_filter_fits() },
+								{ value: "video", label: m.inbox_filter_video() },
+							],
+							allLabel: m.inbox_filter_all_file_types(),
+							onChange: (v) =>
 								navigate({
 									search: (prev) => ({
 										...prev,
-										type: t as FrameType | undefined,
+										type: (v || undefined) as FrameType | undefined,
 									}),
-								})
-							}
-						/>
-					}
+								}),
+						},
+						{
+							key: "kind",
+							label: m.inbox_filter_kind_label(),
+							value: kindFilter,
+							options: [
+								{ value: "bias", label: m.inbox_kind_bias() },
+								{ value: "dark", label: m.inbox_kind_dark() },
+								{ value: "flat", label: m.inbox_kind_flat() },
+								{ value: "light", label: m.inbox_kind_light() },
+								{ value: "master", label: m.inbox_kind_master() },
+							],
+							allLabel: m.inbox_filter_kind_all(),
+							onChange: setKindFilter,
+						},
+					]}
+					grouping={{
+						dimensions: GROUPING_DIMENSIONS.map((d) => ({
+							value: d.id,
+							label: d.label(),
+						})),
+						dims,
+						setSlot,
+					}}
 				/>
 			}
 			actions={
@@ -814,8 +874,9 @@ export function InboxPage() {
 							rootAbsolutePath={selectedRootPath}
 							classification={classification ?? null}
 							fileMetadata={fileMetadata}
-							// Confirm/split runs the same flow the old top-bar button did
-							// (handleConfirm picks 'split' for mixed folders).
+							// Confirm runs the same flow the old top-bar button did.
+							// Disabled entirely for "mixed" rows (FR-050) — see
+							// canConfirm above.
 							onConfirm={() => void handleConfirm()}
 							confirmLabel={confirmLabel}
 							confirmDisabled={!canConfirm}
@@ -834,7 +895,9 @@ export function InboxPage() {
 					onSelect={onSelect}
 					filterType={type ?? "all"}
 					dims={dims}
-					sortBy={sortBy}
+					kindFilter={kindFilter}
+					sort={inboxSort}
+					onSort={handleSort}
 				/>
 			</ListPageLayout>
 

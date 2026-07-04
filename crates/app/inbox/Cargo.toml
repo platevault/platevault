@@ -19,6 +19,8 @@ metadata_video = { path = "../../metadata/video" }
 metadata_xisf = { path = "../../metadata/xisf" }
 patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
+targeting = { path = "../../targeting" }
+targeting_resolver = { path = "../../targeting/resolver" }
 camino = { workspace = true }
 hex.workspace = true
 serde = { workspace = true }

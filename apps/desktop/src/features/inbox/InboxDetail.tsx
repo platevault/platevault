@@ -5,7 +5,8 @@
  *
  *   HEADER — item path (title, bold) + titleExtra: classification pill +
  *             inline action buttons (left-packed, alm-session-detail2__actions).
- *             "Generate split plan" for mixed folders lives HERE.
+ *             Confirm lives HERE; disabled for "mixed" rows (spec 041 FR-050 —
+ *             the backend "split" action is removed, T071/T072).
  *   BODY   — left-packed .alm-session-detail2 flex row:
  *     col A (PropertyTable) — classification + file-count + FITS metadata
  *     mixed-summary line   — compact "N light · M dark" muted text (mixed only)
@@ -21,7 +22,7 @@
 
 import { Popover } from "@base-ui-components/react/popover";
 import { useState } from "react";
-import type { InboxFileMetadata, InboxItemSummary } from "@/api/commands";
+import type { InboxFileMetadata_Serialize as InboxFileMetadata, InboxItemSummary } from "@/bindings/index";
 import type { PropertyDef } from "@/components";
 import { DetailPanel, PropertyTable } from "@/components";
 import { errMessage } from "@/lib/errors";
@@ -239,7 +240,7 @@ export function InboxDetail({
 	classification,
 	fileMetadata,
 	onConfirm,
-	confirmLabel = "Confirm to inventory",
+	confirmLabel = m.inbox_confirm_to_inventory(),
 	confirmDisabled = false,
 	confirmBusy = false,
 	destinationRoots,
@@ -338,7 +339,7 @@ export function InboxDetail({
 		}
 	};
 
-	const title = item.relativePath || "(root)";
+	const title = item.relativePath || m.inbox_list_root_label();
 	const classType = classification?.type ?? "pending";
 
 	// Library picker (point 1): narrow the destination roots to the category that

@@ -19,7 +19,10 @@
 use std::io::{self, Read};
 use std::path::Path;
 
-use metadata_core::{MetadataExtractError, MetadataExtractor, RawFileMetadata};
+use metadata_core::{
+    parse_f64, parse_i64, sexagesimal_dec_to_deg, sexagesimal_ra_to_deg, MetadataExtractError,
+    MetadataExtractor, RawFileMetadata,
+};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
@@ -120,36 +123,69 @@ fn parse_xml_header(xml: &str, path: &Path) -> Result<RawFileMetadata, MetadataE
     loop {
         match reader.read_event() {
             Ok(Event::Empty(e) | Event::Start(e)) => {
-                // We only care about <FITSKeyword> elements
-                if e.name().as_ref() != b"FITSKeyword" {
-                    continue;
-                }
+                match e.name().as_ref() {
+                    b"FITSKeyword" => {
+                        let mut name: Option<String> = None;
+                        let mut value: Option<String> = None;
 
-                let mut name: Option<String> = None;
-                let mut value: Option<String> = None;
+                        for attr_result in e.attributes() {
+                            let attr = attr_result.map_err(|e| MetadataExtractError::Parse {
+                                path: path_str.clone(),
+                                msg: format!("attribute error: {e}"),
+                            })?;
 
-                for attr_result in e.attributes() {
-                    let attr = attr_result.map_err(|e| MetadataExtractError::Parse {
-                        path: path_str.clone(),
-                        msg: format!("attribute error: {e}"),
-                    })?;
+                            let key = std::str::from_utf8(attr.key.as_ref())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            let val = attr
+                                .decode_and_unescape_value(reader.decoder())
+                                .map(std::borrow::Cow::into_owned)
+                                .unwrap_or_default();
 
-                    let key =
-                        std::str::from_utf8(attr.key.as_ref()).unwrap_or("").to_ascii_lowercase();
-                    let val = attr
-                        .decode_and_unescape_value(reader.decoder())
-                        .map(std::borrow::Cow::into_owned)
-                        .unwrap_or_default();
+                            match key.as_str() {
+                                "name" => name = Some(val),
+                                "value" => value = Some(val),
+                                _ => {}
+                            }
+                        }
 
-                    match key.as_str() {
-                        "name" => name = Some(val),
-                        "value" => value = Some(val),
-                        _ => {}
+                        if let (Some(kw), Some(val)) = (name, value) {
+                            apply_fits_keyword(&mut meta, &kw, &val);
+                        }
                     }
-                }
+                    // XISF native <Property id="..." value="..."> elements carry
+                    // focal length & pixel size in SI units (metres). These are a
+                    // fallback for files that omit the equivalent FITSKeyword form.
+                    b"Property" => {
+                        let mut id: Option<String> = None;
+                        let mut value: Option<String> = None;
 
-                if let (Some(kw), Some(val)) = (name, value) {
-                    apply_fits_keyword(&mut meta, &kw, &val);
+                        for attr_result in e.attributes() {
+                            let attr = attr_result.map_err(|e| MetadataExtractError::Parse {
+                                path: path_str.clone(),
+                                msg: format!("attribute error: {e}"),
+                            })?;
+
+                            let key = std::str::from_utf8(attr.key.as_ref())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            let val = attr
+                                .decode_and_unescape_value(reader.decoder())
+                                .map(std::borrow::Cow::into_owned)
+                                .unwrap_or_default();
+
+                            match key.as_str() {
+                                "id" => id = Some(val),
+                                "value" => value = Some(val),
+                                _ => {}
+                            }
+                        }
+
+                        if let (Some(prop_id), Some(val)) = (id, value) {
+                            apply_xisf_property(&mut meta, &prop_id, &val);
+                        }
+                    }
+                    _ => {}
                 }
             }
             Ok(Event::Eof) => break,
@@ -171,6 +207,11 @@ fn parse_xml_header(xml: &str, path: &Path) -> Result<RawFileMetadata, MetadataE
 ///
 /// XISF stores string values with surrounding single quotes (like FITS cards);
 /// we strip them here.
+///
+/// The observer-location fallback arms share bodies but are intentionally
+/// separate keyword patterns with per-field `is_none()` guards (fallback
+/// precedence), so `match_same_arms` is allowed here.
+#[allow(clippy::match_same_arms)]
 fn apply_fits_keyword(meta: &mut RawFileMetadata, keyword: &str, raw_value: &str) {
     // Strip FITS-style single-quote wrapping: 'Light Frame' → Light Frame
     let value = strip_fits_string_quotes(raw_value);
@@ -196,6 +237,70 @@ fn apply_fits_keyword(meta: &mut RawFileMetadata, keyword: &str, raw_value: &str
         }
         "NCOMBINE" if meta.stack_count.is_none() => {
             meta.stack_count = non_empty(value).and_then(|s| s.trim().parse::<u32>().ok());
+        }
+
+        // ── Extended extracted metadata (spec 041 T062, R-9/R-18) ───────────
+        "OFFSET" => meta.offset = parse_i64(value),
+        "BLKLEVEL" if meta.offset.is_none() => meta.offset = parse_i64(value),
+        "SET-TEMP" => meta.set_temp_c = parse_f64(value),
+        "CCD-TEMP" => meta.ccd_temp_c = parse_f64(value),
+        "DET-TEMP" if meta.ccd_temp_c.is_none() => meta.ccd_temp_c = parse_f64(value),
+        // Pointing: decimal RA/DEC preferred over sexagesimal OBJCTRA/OBJCTDEC.
+        "RA" => meta.ra_deg = parse_f64(value),
+        "OBJCTRA" if meta.ra_deg.is_none() => meta.ra_deg = sexagesimal_ra_to_deg(value),
+        "DEC" => meta.dec_deg = parse_f64(value),
+        "OBJCTDEC" if meta.dec_deg.is_none() => meta.dec_deg = sexagesimal_dec_to_deg(value),
+        // Rotation: ROTATANG (= ROTATOR, mechanical) flat-match key; OBJCTROT
+        // is the informational sky position angle. Never swap them.
+        "ROTATANG" => meta.rotator_angle_deg = parse_f64(value),
+        "ROTATOR" if meta.rotator_angle_deg.is_none() => {
+            meta.rotator_angle_deg = parse_f64(value);
+        }
+        "ROTNAME" => meta.rotator_name = non_empty(value),
+        "OBJCTROT" => meta.sky_rotation_deg = parse_f64(value),
+        "READOUTM" => meta.readout_mode = non_empty(value),
+        // FOCALLEN here is in mm (FITSKeyword form); the XISF Property form is
+        // handled separately in metres → mm.
+        "FOCALLEN" => meta.focal_length_mm = parse_f64(value),
+        "XPIXSZ" => meta.pixel_size_um = parse_f64(value),
+        "PIXSIZE" if meta.pixel_size_um.is_none() => meta.pixel_size_um = parse_f64(value),
+        // Observer location: SITE* preferred, OBSGEO-* then *-OBS fallbacks.
+        "SITELAT" => meta.observer_lat = parse_f64(value),
+        "OBSGEO-B" if meta.observer_lat.is_none() => meta.observer_lat = parse_f64(value),
+        "LAT-OBS" if meta.observer_lat.is_none() => meta.observer_lat = parse_f64(value),
+        "SITELONG" => meta.observer_long = parse_f64(value),
+        "OBSGEO-L" if meta.observer_long.is_none() => meta.observer_long = parse_f64(value),
+        "LONG-OBS" if meta.observer_long.is_none() => meta.observer_long = parse_f64(value),
+        "SITEELEV" => meta.observer_elev = parse_f64(value),
+        "OBSGEO-H" if meta.observer_elev.is_none() => meta.observer_elev = parse_f64(value),
+        "ALT-OBS" if meta.observer_elev.is_none() => meta.observer_elev = parse_f64(value),
+        "DATE-LOC" => meta.date_loc = non_empty(value),
+        "DATE-END" => meta.date_end = non_empty(value),
+        "MJD-AVG" => meta.mjd_avg = parse_f64(value),
+        "MJD-OBS" => meta.mjd_obs = parse_f64(value),
+        _ => {}
+    }
+}
+
+/// Apply an XISF native `<Property id=… value=…>` element to `meta`.
+///
+/// These carry instrument values in **SI units (metres)** and are used as a
+/// fallback for files that omit the equivalent FITSKeyword form. Per the
+/// data-model:
+/// - `Instrument:Telescope:FocalLength` (metres) → millimetres (×1000).
+/// - `Image:PixelSize` (micrometres) → pixel size in micrometres.
+///
+/// FITSKeyword values take precedence (already applied when this runs only if
+/// the corresponding field is still `None`).
+fn apply_xisf_property(meta: &mut RawFileMetadata, id: &str, value: &str) {
+    match id {
+        "Instrument:Telescope:FocalLength" if meta.focal_length_mm.is_none() => {
+            // metres → millimetres
+            meta.focal_length_mm = parse_f64(value).map(|m| m * 1000.0);
+        }
+        "Image:PixelSize" if meta.pixel_size_um.is_none() => {
+            // Already micrometres per data-model R-9 mapping.
+            meta.pixel_size_um = parse_f64(value);
         }
         _ => {}
     }
@@ -363,5 +468,162 @@ mod tests {
         assert_eq!(strip_fits_string_quotes("'Ha      '"), "Ha      ");
         assert_eq!(strip_fits_string_quotes("300.0"), "300.0");
         assert_eq!(strip_fits_string_quotes("''"), "");
+    }
+
+    // ── Extended extracted metadata (spec 041 T062) ───────────────────────────
+
+    /// Build an XISF byte stream with explicit `<Property>` and `<FITSKeyword>`
+    /// blocks. `properties` is `(id, type, value)`; `keywords` is
+    /// `(name, value, comment)`.
+    fn build_xisf_full(
+        properties: &[(&str, &str, &str)],
+        keywords: &[(&str, &str, &str)],
+    ) -> Vec<u8> {
+        use std::fmt::Write as _;
+        let mut body = String::new();
+        for (id, ty, value) in properties {
+            let _ = writeln!(body, "  <Property id=\"{id}\" type=\"{ty}\" value=\"{value}\"/>");
+        }
+        for (name, value, comment) in keywords {
+            let _ = writeln!(
+                body,
+                "  <FITSKeyword name=\"{name}\" value=\"{value}\" comment=\"{comment}\" />"
+            );
+        }
+        let xml = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+ <Image geometry="4144:2822:1" sampleFormat="Float32" >
+{body} </Image>
+</xisf>"#
+        );
+        let xml_bytes = xml.as_bytes();
+        let xml_len = u32::try_from(xml_bytes.len()).expect("test XML too large");
+        let mut out = Vec::new();
+        out.extend_from_slice(XISF_SIGNATURE);
+        out.extend_from_slice(&xml_len.to_le_bytes());
+        out.extend_from_slice(&[0u8; 4]);
+        out.extend_from_slice(xml_bytes);
+        out
+    }
+
+    fn parse(data: &[u8]) -> RawFileMetadata {
+        let mut slice = data;
+        let xml = read_xml_header(&mut slice, Path::new("t.xisf")).unwrap();
+        parse_xml_header(&xml, Path::new("t.xisf")).unwrap()
+    }
+
+    fn approx(a: Option<f64>, b: f64) {
+        let v = a.expect("expected Some");
+        assert!((v - b).abs() < 1e-4, "expected {b}, got {v}");
+    }
+
+    #[test]
+    fn parses_extended_fits_keywords() {
+        let data = build_xisf(&[
+            ("OFFSET", "20", ""),
+            ("SET-TEMP", "0.0", ""),
+            ("CCD-TEMP", "0.2", ""),
+            ("READOUTM", "'Low Noise'", ""),
+            ("ROTATANG", "12.4320640563965", ""),
+            ("OBJCTROT", "12.43", ""),
+            ("ROTNAME", "'Manual Rotator + OAG'", ""),
+            ("FOCALLEN", "525.0", ""),
+            ("XPIXSZ", "3.76", ""),
+        ]);
+        let meta = parse(&data);
+        assert_eq!(meta.offset, Some(20));
+        approx(meta.set_temp_c, 0.0);
+        approx(meta.ccd_temp_c, 0.2);
+        assert_eq!(meta.readout_mode.as_deref(), Some("Low Noise"));
+        approx(meta.rotator_angle_deg, 12.432_064);
+        approx(meta.sky_rotation_deg, 12.43);
+        assert_eq!(meta.rotator_name.as_deref(), Some("Manual Rotator + OAG"));
+        approx(meta.focal_length_mm, 525.0);
+        approx(meta.pixel_size_um, 3.76);
+    }
+
+    #[test]
+    fn prefers_decimal_ra_dec_over_sexagesimal() {
+        // Real NINA XISF: both decimal RA/DEC and quoted OBJCTRA/OBJCTDEC present.
+        let data = build_xisf(&[
+            ("RA", "83.74159794045094", ""),
+            ("DEC", "-5.34226120604197", ""),
+            ("OBJCTRA", "'5 34 57.984'", ""),
+            ("OBJCTDEC", "'-5 20 32.14'", ""),
+        ]);
+        let meta = parse(&data);
+        approx(meta.ra_deg, 83.741_598);
+        approx(meta.dec_deg, -5.342_261);
+    }
+
+    #[test]
+    fn falls_back_to_sexagesimal_ra_dec() {
+        let data =
+            build_xisf(&[("OBJCTRA", "'5 34 57.984'", ""), ("OBJCTDEC", "'-5 20 32.14'", "")]);
+        let meta = parse(&data);
+        approx(meta.ra_deg, 83.7416);
+        approx(meta.dec_deg, -5.342_261);
+    }
+
+    #[test]
+    fn focal_length_property_converts_metres_to_mm() {
+        // No FOCALLEN FITSKeyword → Property fallback (metres → mm).
+        let data =
+            build_xisf_full(&[("Instrument:Telescope:FocalLength", "Float64", "0.835784")], &[]);
+        let meta = parse(&data);
+        approx(meta.focal_length_mm, 835.784);
+    }
+
+    #[test]
+    fn fits_keyword_focallen_wins_over_property() {
+        // Both present: FITSKeyword (mm) takes precedence over Property (metres).
+        let data = build_xisf_full(
+            &[("Instrument:Telescope:FocalLength", "Float64", "0.835784")],
+            &[("FOCALLEN", "835.78444", "mm")],
+        );
+        let meta = parse(&data);
+        approx(meta.focal_length_mm, 835.784_44);
+    }
+
+    #[test]
+    fn pixel_size_property_image_pixelsize() {
+        let data = build_xisf_full(&[("Image:PixelSize", "Float64", "3.76")], &[]);
+        let meta = parse(&data);
+        approx(meta.pixel_size_um, 3.76);
+    }
+
+    #[test]
+    fn observer_location_and_time_keywords() {
+        let data = build_xisf(&[
+            ("SITELAT", "24.839", ""),
+            ("SITELONG", "55.383", ""),
+            ("SITEELEV", "101.0", ""),
+            ("DATE-LOC", "'2025-10-17T19:23:39.413'", ""),
+            ("DATE-END", "'2025-10-17T19:24:09.413'", ""),
+            ("MJD-AVG", "60965.0", ""),
+            ("MJD-OBS", "60965.5", ""),
+        ]);
+        let meta = parse(&data);
+        approx(meta.observer_lat, 24.839);
+        approx(meta.observer_long, 55.383);
+        approx(meta.observer_elev, 101.0);
+        assert_eq!(meta.date_loc.as_deref(), Some("2025-10-17T19:23:39.413"));
+        assert_eq!(meta.date_end.as_deref(), Some("2025-10-17T19:24:09.413"));
+        approx(meta.mjd_avg, 60965.0);
+        approx(meta.mjd_obs, 60965.5);
+    }
+
+    #[test]
+    fn extended_fields_absent_are_none() {
+        let data = build_xisf(&[("IMAGETYP", "'Light Frame'", "")]);
+        let meta = parse(&data);
+        assert!(meta.offset.is_none());
+        assert!(meta.ra_deg.is_none());
+        assert!(meta.rotator_angle_deg.is_none());
+        assert!(meta.focal_length_mm.is_none());
+        assert!(meta.pixel_size_um.is_none());
+        assert!(meta.observer_lat.is_none());
+        assert!(meta.mjd_avg.is_none());
     }
 }

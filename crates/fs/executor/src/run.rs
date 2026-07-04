@@ -32,6 +32,8 @@ use crate::ops::archive_op;
 use crate::ops::cas_check::{check_cas, CasSnapshot};
 use crate::ops::catalogue_op;
 use crate::ops::delete_op;
+use crate::ops::link_op;
+use crate::ops::mkdir_op;
 use crate::ops::move_op;
 use crate::ops::path_gate;
 use crate::ops::trash_op;
@@ -160,7 +162,18 @@ pub enum ExecutorItemAction {
     /// Record-in-place: no filesystem mutation. Signals that the file is already
     /// at its final location and only needs to be catalogued (spec 041, T007).
     Catalogue,
-    /// RecordOnly / Mkdir / Link / Junction — no FS mutation; mark succeeded.
+    /// Create the destination directory (project scaffolding, spec 008).
+    ///
+    /// Destination-only (no source). Idempotent when the directory already
+    /// exists; a non-directory entry at the destination fails with
+    /// `conflict.destination_exists` (constitution §II: never overwrite).
+    Mkdir,
+    /// Create a real link (or, with `Materialization::Copy`, a real copy) from
+    /// source to destination (spec 049 — source view generation).
+    Link {
+        kind: domain_core::source_view::Materialization,
+    },
+    /// RecordOnly / WriteManifest — no FS mutation; mark succeeded.
     NoOp,
 }
 
@@ -598,6 +611,18 @@ fn execute_item(item: &ExecutorItem) -> Result<(), OpError> {
             // No filesystem I/O — record-in-place (spec 041, T007).
             catalogue_op::catalogue_noop()
                 .map_err(|e| (e, false, RollbackOutcome::NotApplicable, None))
+        }
+
+        ExecutorItemAction::Mkdir => {
+            let dst = require_resolved_path(resolved_dst.as_deref(), "destination")?;
+            mkdir_op::make_dir(dst).map_err(|f| (f, false, RollbackOutcome::NotApplicable, None))
+        }
+
+        ExecutorItemAction::Link { kind } => {
+            let src = require_resolved_path(resolved_src.as_deref(), "source")?;
+            let dst = require_resolved_path(resolved_dst.as_deref(), "destination")?;
+            link_op::create_link(src, dst, *kind)
+                .map_err(|f| (f, false, RollbackOutcome::NotApplicable, None))
         }
     }
 }

@@ -77,15 +77,94 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
     }
 }
 
-/// Convert a slice of DB channel rows to contract DTOs.
-fn channels_to_dto(rows: &[repo::ProjectChannelRow]) -> Vec<ProjectChannelDto> {
+/// Parse an `exposure_snapshot` string (e.g. `"300s"`, `"1.5s"`) into whole
+/// seconds (D5: parse at read time; the write path / stored format is
+/// unchanged — see `persistence_db::repositories::inbox::format_exposure_label`
+/// for the writer this mirrors).
+///
+/// Never panics: missing, empty, or unparseable values (e.g. `"Mixed"` from
+/// a multi-value grouping bucket, or a bare `"na"`) degrade to `0` with a
+/// debug-level log line rather than surfacing an error. Fractional seconds
+/// are truncated toward zero.
+fn parse_exposure_seconds(exposure: &str) -> u64 {
+    let trimmed = exposure.trim();
+    if trimmed.is_empty() {
+        return 0;
+    }
+    let numeric = trimmed.strip_suffix('s').unwrap_or(trimmed);
+    match numeric.parse::<f64>() {
+        // Guarded by `v.is_finite() && v >= 0.0`, so truncation only ever
+        // drops a fractional-second remainder and sign loss cannot occur.
+        #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+        Ok(v) if v.is_finite() && v >= 0.0 => v as u64,
+        _ => {
+            tracing::debug!("unparseable exposure snapshot '{exposure}', treating as 0s");
+            0
+        }
+    }
+}
+
+/// Per-channel aggregate totals (sub-frame count, integration seconds),
+/// grouped by `filter_snapshot`. Channel labels are matched against this map
+/// by exact (case-sensitive) string equality — the same rule
+/// `domain_core::project::channels::infer_channels` uses to derive labels
+/// from filters in the first place.
+fn channel_totals_by_filter(
+    sources: &[repo::ProjectSourceRow],
+) -> std::collections::HashMap<String, (u32, u64)> {
+    let mut totals: std::collections::HashMap<String, (u32, u64)> =
+        std::collections::HashMap::new();
+    for s in sources {
+        if s.filter_snapshot.is_empty() {
+            continue;
+        }
+        let frames = u32::try_from(s.frames_snapshot).unwrap_or(0);
+        let secs = parse_exposure_seconds(&s.exposure_snapshot);
+        let entry = totals.entry(s.filter_snapshot.clone()).or_insert((0, 0));
+        entry.0 = entry.0.saturating_add(frames);
+        entry.1 = entry.1.saturating_add(u64::from(frames).saturating_mul(secs));
+    }
+    totals
+}
+
+/// Convert a slice of DB channel rows to contract DTOs, aggregating
+/// `subFrames`/`totalIntegrationS` from the project's linked sources (P7).
+fn channels_to_dto(
+    rows: &[repo::ProjectChannelRow],
+    sources: &[repo::ProjectSourceRow],
+) -> Vec<ProjectChannelDto> {
+    let totals = channel_totals_by_filter(sources);
     rows.iter()
-        .map(|r| ProjectChannelDto {
-            label: r.label.clone(),
-            source: r.source.clone(),
-            added_at: Some(r.added_at.clone()),
+        .map(|r| {
+            let (sub_frames, total_integration_s) = totals.get(&r.label).copied().unwrap_or((0, 0));
+            ProjectChannelDto {
+                label: r.label.clone(),
+                source: r.source.clone(),
+                added_at: Some(r.added_at.clone()),
+                sub_frames,
+                total_integration_s,
+            }
         })
         .collect()
+}
+
+/// Convert a domain `Channel` (label + source only) to a contract DTO,
+/// aggregating `subFrames`/`totalIntegrationS` from a pre-computed totals map
+/// (P7). Used by the three call sites that build channels from a freshly
+/// recomputed `Vec<Channel>` rather than DB rows.
+fn channel_dto_from_domain(
+    channel: Channel,
+    added_at: &str,
+    totals: &std::collections::HashMap<String, (u32, u64)>,
+) -> ProjectChannelDto {
+    let (sub_frames, total_integration_s) = totals.get(&channel.label).copied().unwrap_or((0, 0));
+    ProjectChannelDto {
+        label: channel.label,
+        source: channel.source,
+        added_at: Some(added_at.to_owned()),
+        sub_frames,
+        total_integration_s,
+    }
 }
 
 /// Convert a DB source row to a contract DTO.
@@ -266,8 +345,12 @@ async fn build_folder_plan(
 /// links any `initial_sources`, infers channels, checks the auto-ready trigger,
 /// and emits a `project.created` audit event.
 ///
-/// Constitution II: folder structure creation is deferred to a FilesystemPlan;
-/// `plan_id` is currently `None`. The caller drives folder creation via spec 025.
+/// Constitution II: folder structure creation goes through a persisted,
+/// auditable FilesystemPlan returned as `plan_id`. Application is driven by
+/// the caller: the app_core `project_create` orchestration auto-applies the
+/// plan when every action is directory creation (user decision 2026-07-04,
+/// supersedes handover D16) and falls back to the manual review flow
+/// otherwise.
 ///
 /// # Errors
 ///
@@ -428,14 +511,9 @@ pub async fn create(
     .await
     .map_err(bus_err)?;
 
-    let channel_dtos: Vec<ProjectChannelDto> = channels
-        .into_iter()
-        .map(|c| ProjectChannelDto {
-            label: c.label,
-            source: c.source,
-            added_at: Some(now.clone()),
-        })
-        .collect();
+    let channel_totals = channel_totals_by_filter(&source_rows);
+    let channel_dtos: Vec<ProjectChannelDto> =
+        channels.into_iter().map(|c| channel_dto_from_domain(c, &now, &channel_totals)).collect();
 
     // 10. Generate the folder-structure FilesystemPlan (Constitution II).
     //     plan_id is returned so the UI can link to the spec 017 review surface.
@@ -450,6 +528,10 @@ pub async fn create(
         channels: channel_dtos,
         audit_id,
         created_at: now,
+        // Set by the app_core `project_create` orchestration when the
+        // scaffolding plan qualifies for mkdir-only auto-apply (user decision
+        // 2026-07-04). This module only persists the reviewable plan.
+        scaffold_applied: None,
     })
 }
 
@@ -583,9 +665,10 @@ pub async fn update(
 /// - Source not already linked (`source.already.linked`).
 /// - Lifecycle not archived.
 ///
-/// Note: `source.not_confirmed` check against the Inventory table is deferred
-/// to spec 003 integration (the Inventory table does not exist yet). When spec
-/// 003 lands, this function should verify `acquisition_sessions.state == "confirmed"`.
+/// Note (D9, 2026-07-03): the old spec-002 `source.not_confirmed` gate against
+/// `acquisition_sessions.state` is descoped. Post spec-041, sessions are
+/// derived, already-confirmed inventory (there is no unconfirmed state left to
+/// gate on), so no confirmation check runs here.
 ///
 /// Recomputes channel inference and merges with existing manual channels.
 /// Sets `channel_drift = true` when channels were manually overridden before.
@@ -627,9 +710,9 @@ pub async fn add_source(
         .with_details(serde_json::json!({ "existingLinkAt": dupe.linked_at })));
     }
 
-    // NOTE: spec 003 Inventory integration pending.
-    // TODO: when spec 003 lands, query `acquisition_sessions` WHERE id = req.inventory_session_id
-    // and verify `state == "confirmed"`. Return `source.not_confirmed` otherwise.
+    // D9 (2026-07-03): no confirmation gate here — sessions are derived,
+    // already-confirmed inventory post spec-041, so there is no
+    // `source.not_confirmed` state to check.
 
     let now = Timestamp::now_iso();
     let src_id = new_id();
@@ -694,14 +777,9 @@ pub async fn add_source(
         linked_at: now.clone(),
     };
 
-    let channel_dtos: Vec<ProjectChannelDto> = merged
-        .into_iter()
-        .map(|c| ProjectChannelDto {
-            label: c.label,
-            source: c.source,
-            added_at: Some(now.clone()),
-        })
-        .collect();
+    let channel_totals = channel_totals_by_filter(&all_sources);
+    let channel_dtos: Vec<ProjectChannelDto> =
+        merged.into_iter().map(|c| channel_dto_from_domain(c, &now, &channel_totals)).collect();
 
     Ok(ProjectSourceAddResult {
         project_id: req.project_id.clone(),
@@ -855,14 +933,9 @@ pub async fn reinfer_channels(
     .await
     .map_err(bus_err)?;
 
-    let channel_dtos: Vec<ProjectChannelDto> = channels
-        .into_iter()
-        .map(|c| ProjectChannelDto {
-            label: c.label,
-            source: c.source,
-            added_at: Some(now.clone()),
-        })
-        .collect();
+    let channel_totals = channel_totals_by_filter(&sources);
+    let channel_dtos: Vec<ProjectChannelDto> =
+        channels.into_iter().map(|c| channel_dto_from_domain(c, &now, &channel_totals)).collect();
 
     Ok(ProjectChannelsReinferResult {
         project_id: req.project_id.clone(),
@@ -984,7 +1057,7 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ProjectDetailDto, Contra
             },
         },
         sources: sources.iter().map(source_to_dto).collect(),
-        channels: channels_to_dto(&channels),
+        channels: channels_to_dto(&channels, &sources),
         created_at: row.created_at,
         updated_at: row.updated_at,
         canonical_target,
@@ -1005,6 +1078,79 @@ mod tests {
         db.migrate().await.unwrap();
         let bus = EventBus::with_pool(db.pool().clone());
         (db.pool().clone(), bus)
+    }
+
+    // ── P7: exposure parsing + channel aggregation (pure helpers) ─────────────
+
+    #[test]
+    fn parse_exposure_seconds_whole_and_fractional() {
+        assert_eq!(parse_exposure_seconds("300s"), 300);
+        assert_eq!(parse_exposure_seconds("60s"), 60);
+        // Fractional seconds truncate toward zero.
+        assert_eq!(parse_exposure_seconds("1.5s"), 1);
+        // Missing trailing "s" is still accepted.
+        assert_eq!(parse_exposure_seconds("120"), 120);
+    }
+
+    #[test]
+    fn parse_exposure_seconds_degrades_to_zero_without_panicking() {
+        assert_eq!(parse_exposure_seconds(""), 0);
+        assert_eq!(parse_exposure_seconds("na"), 0);
+        assert_eq!(parse_exposure_seconds("Mixed"), 0);
+        assert_eq!(parse_exposure_seconds("-5s"), 0);
+        assert_eq!(parse_exposure_seconds("   "), 0);
+    }
+
+    #[test]
+    fn channel_totals_by_filter_groups_and_sums() {
+        let sources = vec![
+            repo::ProjectSourceRow {
+                id: "s1".to_owned(),
+                project_id: "p1".to_owned(),
+                inventory_session_id: "inv-1".to_owned(),
+                name_snapshot: "Ha 1".to_owned(),
+                frames_snapshot: 18,
+                filter_snapshot: "Ha".to_owned(),
+                exposure_snapshot: "120s".to_owned(),
+                linked_at: "2026-01-01T00:00:00Z".to_owned(),
+            },
+            repo::ProjectSourceRow {
+                id: "s2".to_owned(),
+                project_id: "p1".to_owned(),
+                inventory_session_id: "inv-2".to_owned(),
+                name_snapshot: "Ha 2".to_owned(),
+                frames_snapshot: 10,
+                filter_snapshot: "Ha".to_owned(),
+                exposure_snapshot: "60s".to_owned(),
+                linked_at: "2026-01-01T00:00:00Z".to_owned(),
+            },
+            repo::ProjectSourceRow {
+                id: "s3".to_owned(),
+                project_id: "p1".to_owned(),
+                inventory_session_id: "inv-3".to_owned(),
+                name_snapshot: "OIII 1".to_owned(),
+                frames_snapshot: 20,
+                filter_snapshot: "OIII".to_owned(),
+                exposure_snapshot: "300s".to_owned(),
+                linked_at: "2026-01-01T00:00:00Z".to_owned(),
+            },
+            // Empty filter (unconfirmed source) must not contribute a bogus group.
+            repo::ProjectSourceRow {
+                id: "s4".to_owned(),
+                project_id: "p1".to_owned(),
+                inventory_session_id: "inv-4".to_owned(),
+                name_snapshot: String::new(),
+                frames_snapshot: 5,
+                filter_snapshot: String::new(),
+                exposure_snapshot: String::new(),
+                linked_at: "2026-01-01T00:00:00Z".to_owned(),
+            },
+        ];
+
+        let totals = channel_totals_by_filter(&sources);
+        assert_eq!(totals.get("Ha"), Some(&(28, 18 * 120 + 10 * 60)));
+        assert_eq!(totals.get("OIII"), Some(&(20, 20 * 300)));
+        assert_eq!(totals.len(), 2, "empty filter_snapshot must not create a group");
     }
 
     fn make_create_req(name: &str, tool: ProjectTool) -> ProjectCreateRequest {
@@ -1420,5 +1566,85 @@ mod tests {
 
         let detail = get(&pool, &created.project_id).await.unwrap();
         assert!(detail.canonical_target.is_none(), "no association → None");
+    }
+
+    // ── P7: server-side channel aggregation (end-to-end via `get`) ────────────
+
+    /// Directly insert a `project_sources` row with real snapshot data
+    /// (bypassing `add_source`, which — pending spec 003 Inventory
+    /// integration — always writes empty/zero snapshot fields). This mirrors
+    /// the fixture shape used in `persistence_db::repositories::projects`
+    /// tests and is the only way to exercise the aggregation with non-zero
+    /// frames/exposure until spec 003 lands.
+    async fn seed_real_source(
+        pool: &SqlitePool,
+        project_id: &str,
+        inv_id: &str,
+        filter: &str,
+        frames: i64,
+        exposure: &str,
+    ) {
+        repo::insert_project_source(
+            pool,
+            &repo::InsertProjectSource {
+                id: &new_id(),
+                project_id,
+                inventory_session_id: inv_id,
+                name_snapshot: &format!("{filter} {inv_id}"),
+                frames_snapshot: frames,
+                filter_snapshot: filter,
+                exposure_snapshot: exposure,
+                linked_at: "2026-01-01T00:00:00Z",
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn get_aggregates_sub_frames_and_integration_seconds_per_channel() {
+        let (pool, bus) = setup().await;
+        let req = make_create_req("Aggregation Project", ProjectTool::PixInsight);
+        let created = create(&pool, &bus, &req).await.unwrap();
+
+        seed_real_source(&pool, &created.project_id, "inv-1", "Ha", 18, "120s").await;
+        seed_real_source(&pool, &created.project_id, "inv-2", "Ha", 10, "60s").await;
+        seed_real_source(&pool, &created.project_id, "inv-3", "OIII", 20, "300s").await;
+        repo::replace_project_channels(
+            &pool,
+            &created.project_id,
+            &[("Ha", "inferred"), ("OIII", "inferred")],
+        )
+        .await
+        .unwrap();
+
+        let detail = get(&pool, &created.project_id).await.unwrap();
+        let ha = detail.channels.iter().find(|c| c.label == "Ha").expect("Ha channel");
+        assert_eq!(ha.sub_frames, 28);
+        assert_eq!(ha.total_integration_s, 18 * 120 + 10 * 60);
+
+        let oiii = detail.channels.iter().find(|c| c.label == "OIII").expect("OIII channel");
+        assert_eq!(oiii.sub_frames, 20);
+        assert_eq!(oiii.total_integration_s, 20 * 300);
+    }
+
+    #[tokio::test]
+    async fn get_channel_totals_ignore_unparseable_exposure_without_panicking() {
+        let (pool, bus) = setup().await;
+        let req = make_create_req("Unparseable Exposure Project", ProjectTool::PixInsight);
+        let created = create(&pool, &bus, &req).await.unwrap();
+
+        seed_real_source(&pool, &created.project_id, "inv-1", "Ha", 5, "Mixed").await;
+        repo::replace_project_channels(&pool, &created.project_id, &[("Ha", "inferred")])
+            .await
+            .unwrap();
+
+        let detail = get(&pool, &created.project_id).await.unwrap();
+        let ha = detail.channels.iter().find(|c| c.label == "Ha").expect("Ha channel");
+        assert_eq!(
+            ha.sub_frames, 5,
+            "frame count is still summed even when exposure is unparseable"
+        );
+        assert_eq!(ha.total_integration_s, 0, "unparseable exposure degrades to 0s, never panics");
     }
 }

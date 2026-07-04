@@ -62,14 +62,22 @@
 
 import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { TargetListItem } from '@/api/commands';
+import type { TargetListItem, TargetObjectType } from '@/bindings/index';
 import { Pill } from '@/ui';
+import { SortHeader } from '@/components';
+import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
 import { rowAltitudeFor, USABLE_ALT_DEG, type RowAltitude } from './planner-altitude';
 import { AltitudeSparkline } from './AltitudeSparkline';
 import { FilterBadges } from './FilterBadges';
 import { m } from '@/lib/i18n';
 import { useFavourites } from './useFavourites';
+import {
+  groupByDimensions,
+  flattenVisibleGroups,
+  type DimensionAccessor,
+} from '@/lib/grouping';
+import { useCollapsibleGroups } from '@/lib/use-grouping';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -108,18 +116,18 @@ export const DEFAULT_TARGET_SORT: TargetSort = { col: 'designation', dir: 'asc' 
 export type TargetGroupBy = 'catalogue' | 'type';
 export const DEFAULT_TARGET_GROUP_BY: TargetGroupBy = 'catalogue';
 
-/** Formats the objectType string into a readable label. */
+/** Formats the objectType string into a readable, localized label. */
 export function formatType(objectType: string): string {
-  return objectType.replace(/_/g, ' ');
+  return objectTypeLabel(objectType as TargetObjectType);
 }
 
 /** Resolve the group key + display headline for a target under `groupBy`. */
 function groupHeadlineOf(t: TargetListItem, groupBy: TargetGroupBy): string {
   if (groupBy === 'type') {
-    return t.objectType ? formatType(t.objectType) : 'Unknown type';
+    return t.objectType ? formatType(t.objectType) : m.targets_table_unknown_type();
   }
   const cat = catalogueOf(t);
-  return cat ? catalogueLabel(cat) : 'Other';
+  return cat ? catalogueLabel(cat) : m.targets_objtype_other();
 }
 
 function compareStr(a: string, b: string): number {
@@ -228,8 +236,25 @@ function groupTargets(
 // same row height (keyed off --alm-row-height in CSS).
 
 type FlatRow =
-  | { kind: 'group'; key: string; label: string; count: number }
-  | { kind: 'target'; key: string; target: TargetListItem; alt: RowAltitude };
+  | { kind: 'group'; key: string; label: string; count: number; path?: string; depth?: number; collapsible?: boolean; collapsed?: boolean }
+  | { kind: 'target'; key: string; target: TargetListItem; alt: RowAltitude; depth?: number };
+
+// ── Multi-level grouping accessors ────────────────────────────────────────────
+
+export const TARGET_ACCESSORS: Readonly<Record<string, DimensionAccessor<TargetListItem>>> = {
+  constellation: (t) => (t as TargetListItem & { constellation?: string }).constellation ?? null,
+  type: (t) => t.objectType ? formatType(t.objectType) : null,
+  catalogue: (t) => {
+    const cat = catalogueOf(t);
+    return cat ? catalogueLabel(cat) : m.targets_objtype_other();
+  },
+  // Applicable filters: group by the target's recommended band set (the same
+  // mock recommendation the Filter-bands filter uses), e.g. "Ha OIII SII".
+  filters: (t) => {
+    const bands = rowAltitudeFor(t, USABLE_ALT_DEG).filters.bands;
+    return bands.length > 0 ? bands.join(' ') : null;
+  },
+};
 
 function flattenGroups(groups: TargetGroup[]): FlatRow[] {
   const rows: FlatRow[] = [];
@@ -257,27 +282,28 @@ function flattenGroups(groups: TargetGroup[]): FlatRow[] {
 // Sessions: linked-session count not on TargetListItem yet (#57). Renders '—'.
 // All non-text columns are sortable on their mock value.
 
+// `label`/`title` are render-time thunks (spec 046 #8b) so headers re-read the active locale.
 const COLUMNS: Array<{
   key: string;
-  label: string;
+  label: () => string;
   sort?: TargetSortCol;
   className?: string;
-  title?: string;
+  title?: () => string;
 }> = [
   // task #18: star column (no label — icon-only header)
-  { key: 'star', label: '★', className: 'alm-targets-cell--center', title: m.targets_col_favourite() },
-  { key: 'designation', label: m.targets_col_designation(), sort: 'designation' },
-  { key: 'type', label: m.cmp_target_search_type_label(), sort: 'type' },
-  { key: 'maxAlt', label: m.targets_col_max_alt(), sort: 'maxAlt', className: 'alm-targets-cell--num', title: m.targets_table_approx_max_alt() },
-  { key: 'spark', label: m.targets_col_tonight(), className: 'alm-targets-cell--spark' },
-  { key: 'visible', label: m.targets_col_visible(), sort: 'visible', className: 'alm-targets-cell--center', title: m.targets_col_visible_title() },
-  { key: 'opposition', label: m.targets_col_opposition(), sort: 'opposition', className: 'alm-targets-cell--opposition', title: m.targets_table_next_opposition() },
+  { key: 'star', label: () => '★', className: 'alm-targets-cell--center', title: () => m.targets_col_favourite() },
+  { key: 'designation', label: () => m.targets_col_designation(), sort: 'designation' },
+  { key: 'type', label: () => m.cmp_target_search_type_label(), sort: 'type' },
+  { key: 'maxAlt', label: () => m.targets_col_max_alt(), sort: 'maxAlt', className: 'alm-targets-cell--num', title: () => m.targets_table_approx_max_alt() },
+  { key: 'spark', label: () => m.targets_col_tonight(), className: 'alm-targets-cell--spark' },
+  { key: 'visible', label: () => m.targets_col_visible(), sort: 'visible', className: 'alm-targets-cell--center', title: () => m.targets_col_visible_title() },
+  { key: 'opposition', label: () => m.targets_col_opposition(), sort: 'opposition', className: 'alm-targets-cell--opposition', title: () => m.targets_table_next_opposition() },
   // task #5: abbreviated header "Lunar" fits the widened 80px column without clipping
-  { key: 'lunarDist', label: m.targets_col_lunar(), sort: 'lunarDist', className: 'alm-targets-cell--num', title: m.targets_col_lunar_title() },
-  { key: 'filters', label: m.common_filters(), className: 'alm-targets-cell--filters', title: m.targets_col_filters_title() },
+  { key: 'lunarDist', label: () => m.targets_col_lunar(), sort: 'lunarDist', className: 'alm-targets-cell--num', title: () => m.targets_col_lunar_title() },
+  { key: 'filters', label: () => m.common_filters(), className: 'alm-targets-cell--filters', title: () => m.targets_col_filters_title() },
   // task #5: abbreviated header "Img time" fits the widened 100px column without clipping
-  { key: 'imagingTime', label: m.targets_col_img_time(), sort: 'imagingTime', className: 'alm-targets-cell--num', title: m.targets_col_img_time_title() },
-  { key: 'sessions', label: m.common_sessions(), sort: 'sessions', className: 'alm-targets-cell--num', title: m.targets_col_sessions_title() },
+  { key: 'imagingTime', label: () => m.targets_col_img_time(), sort: 'imagingTime', className: 'alm-targets-cell--num', title: () => m.targets_col_img_time_title() },
+  { key: 'sessions', label: () => m.common_sessions(), sort: 'sessions', className: 'alm-targets-cell--num', title: () => m.targets_col_sessions_title() },
 ];
 
 // COL_COUNT is derived from COLUMNS so adding/removing a column stays in sync.
@@ -295,8 +321,19 @@ interface Props {
   loading?: boolean;
   sort: TargetSort;
   onSort: (col: TargetSortCol) => void;
-  /** Group rows under spanning header rows by this key. Default 'catalogue'. */
+  /**
+   * Legacy single-tier group-by (kept for back-compat with tests).
+   * When `dims` is provided it takes precedence; `groupBy` is only used as
+   * the fallback when `dims` is empty.
+   * @deprecated Prefer `dims` from `useGrouping`.
+   */
   groupBy?: TargetGroupBy;
+  /**
+   * Active ordered grouping dimension ids from `useGrouping`.
+   * When non-empty, drives multi-level collapsible grouping; overrides `groupBy`.
+   * When empty, falls back to `groupBy` (single-tier, legacy).
+   */
+  dims?: string[];
   /** Message shown when the list is empty (tab-specific). */
   emptyMessage?: string;
   /**
@@ -325,7 +362,11 @@ export function TargetsTable({
   loading,
   sort,
   onSort,
-  groupBy = DEFAULT_TARGET_GROUP_BY,
+  // No default: when neither `dims` nor an explicit `groupBy` is supplied the
+  // table renders a FLAT sorted list (previously this defaulted to
+  // 'catalogue', which grouped Targets by catalogue even with nothing selected).
+  groupBy,
+  dims,
   emptyMessage = m.targets_table_no_match(),
   usableAltDeg = USABLE_ALT_DEG,
   favouriteIds,
@@ -339,15 +380,70 @@ export function TargetsTable({
   const resolvedFavouriteIds = favouriteIds ?? internalFavourites.favouriteIds;
   const resolvedToggle = onToggleFavourite ?? internalFavourites.toggle;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { collapsed, toggle: toggleCollapsed } = useCollapsibleGroups();
 
   // Grouping + sorting + per-row altitude MOCK are all derived here so a filter
   // or sort change does one O(n) pass off the render hot path, not per-row work
   // inside the virtualized render loop. usableAltDeg is included in the dep
   // array so that changing the altitude threshold re-derives all rows.
+  //
+  // When `dims` is non-empty we use the shared multi-level groupByDimensions
+  // engine (with collapsible headers); when empty we fall back to the
+  // legacy single-tier groupTargets (using `groupBy`).
+  const useMultiGroup = dims != null && dims.length > 0;
+
   const flatRows = useMemo(() => {
-    const groups = groupTargets(targets, sort, groupBy, usableAltDeg);
-    return flattenGroups(groups);
-  }, [targets, sort, groupBy, usableAltDeg]);
+    if (useMultiGroup) {
+      // Pre-compute altitude for all items (needed for sort + display).
+      const withAlt = targets.map((t) => ({ target: t, alt: rowAltitudeFor(t, usableAltDeg) }));
+      // Sort the flat list first.
+      const sortedWithAlt = [...withAlt].sort((a, b) =>
+        compareTargetRows(a.target, a.alt, b.target, b.alt, sort),
+      );
+      const sorted = sortedWithAlt.map((r) => r.target);
+      const altMap = new Map(sortedWithAlt.map((r) => [r.target.id, r.alt]));
+
+      // Build the group tree using shared engine.
+      const tree = groupByDimensions(sorted, dims!, TARGET_ACCESSORS);
+      // Flatten with collapse state, then map to our FlatRow shape.
+      const visRows = flattenVisibleGroups(tree, collapsed);
+      return visRows.map((vrow): FlatRow => {
+        if (vrow.kind === 'header') {
+          return {
+            kind: 'group',
+            key: vrow.path,
+            label: vrow.node.label,
+            count: vrow.node.count,
+            path: vrow.path,
+            depth: vrow.depth,
+            collapsible: true,
+            collapsed: vrow.collapsed,
+          };
+        }
+        const t = vrow.item;
+        return {
+          kind: 'target',
+          key: t.id,
+          target: t,
+          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg),
+          depth: vrow.depth,
+        };
+      });
+    }
+    // Single-tier legacy grouping ONLY if a caller explicitly asks for it.
+    if (groupBy) {
+      const groups = groupTargets(targets, sort, groupBy, usableAltDeg);
+      return flattenGroups(groups);
+    }
+    // Default: no grouping selected → FLAT sorted list (no group headers).
+    const withAlt = targets.map((t) => ({ target: t, alt: rowAltitudeFor(t, usableAltDeg) }));
+    const sortedWithAlt = [...withAlt].sort((a, b) =>
+      compareTargetRows(a.target, a.alt, b.target, b.alt, sort),
+    );
+    return sortedWithAlt.map(
+      (r): FlatRow => ({ kind: 'target', key: r.target.id, target: r.target, alt: r.alt, depth: 0 }),
+    );
+  }, [targets, sort, groupBy, usableAltDeg, useMultiGroup, dims, collapsed]);
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -383,26 +479,18 @@ export function TargetsTable({
   const columns = COLUMNS.map((c) => ({
     key: c.key,
     className: c.className,
-    title: c.title,
+    title: c.title?.(),
     header: c.sort ? (
-      <button
-        type="button"
-        className={
-          'alm-targets-sorth' + (sort.col === c.sort ? ' alm-targets-sorth--active' : '')
-        }
+      <SortHeader
+        label={c.label()}
+        active={sort.col === c.sort}
+        dir={sort.dir}
         onClick={() => onSort(c.sort as TargetSortCol)}
-        aria-label={m.targets_table_sort_by_aria({ col: c.label })}
-        title={c.title}
-      >
-        {c.label}
-        {sort.col === c.sort && (
-          <span className="alm-targets-sorth__arrow" aria-hidden="true">
-            {sort.dir === 'asc' ? '▲' : '▼'}
-          </span>
-        )}
-      </button>
+        ariaLabel={m.targets_table_sort_by_aria({ col: c.label() })}
+        title={c.title?.()}
+      />
     ) : (
-      c.label
+      c.label()
     ),
   }));
 
@@ -460,15 +548,48 @@ export function TargetsTable({
               const row = flatRows[index];
 
               if (row.kind === 'group') {
+                const depthIndent = (row.depth ?? 0) * 12;
+                if (row.collapsible && row.path != null) {
+                  // Multi-level collapsible group header.
+                  return (
+                    <tr
+                      key={row.key}
+                      data-index={index}
+                      className="alm-listgroup"
+                    >
+                      <td colSpan={COL_COUNT}>
+                        <button
+                          type="button"
+                          className="alm-listgroup__cell"
+                          data-testid={`targets-group-${row.key}`}
+                          aria-expanded={!row.collapsed}
+                          aria-label={row.label}
+                          onClick={() => toggleCollapsed(row.path!)}
+                          // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
+                          style={{ paddingLeft: 8 + depthIndent }}
+                        >
+                          <span className="alm-listgroup__caret" aria-hidden="true">
+                            {row.collapsed ? '▸' : '▾'}
+                          </span>
+                          <span className="alm-listgroup__label">{row.label}</span>
+                          <span className="alm-listgroup__count">
+                            {m.targets_table_target_count({ count: row.count })}
+                          </span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
+                // Legacy non-collapsible group header.
                 return (
                   <tr
                     key={row.key}
                     data-index={index}
-                    className="alm-targets-table__group"
+                    className="alm-listgroup"
                   >
                     <td colSpan={COL_COUNT}>
                       {row.label}
-                      <span className="alm-targets-table__group-count">
+                      <span className="alm-listgroup__count">
                         {m.targets_table_target_count({ count: row.count })}
                       </span>
                     </td>

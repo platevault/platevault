@@ -5,24 +5,54 @@
  * ProjectNotesSection. No React imports.
  */
 
-import {
-  listManifests,
-  getManifest,
-  getProjectNote,
-  updateProjectNote,
-  revealManifestInOs,
-} from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import { m } from '@/lib/i18n';
 import type {
-  ManifestListResponse,
-  ManifestGetResponse,
+  ManifestGetRequest,
+  ManifestRevealRequest,
+  ManifestSummaryDto,
+  ProjectNoteGetRequest,
   ProjectNoteGetResult,
+  ProjectNoteUpdateRequest,
   ProjectNoteUpdateResult,
-} from '@/api/commands';
-import type { ManifestSummaryDto } from '@/bindings/index';
+} from '@/bindings/index';
+import type { ManifestListRequest, ManifestListResponse, ManifestGetResponse } from '@/bindings/aliases';
+
+// ── IPC helpers ───────────────────────────────────────────────────────────────
+// Migrated off the hand-written @/api/commands wrappers (spec 037) onto the
+// generated bindings. unwrap() turns the generated Result into the
+// throw-on-error contract ManifestsAccordion / ProjectNotesSection rely on.
+
+/** `project.manifest.list` — list manifest snapshots for a project (spec 024). */
+export async function listManifests(request: ManifestListRequest): Promise<ManifestListResponse> {
+  return unwrap(await commands.manifestList(request));
+}
+
+/** `project.manifest.get` — fetch one manifest with its full structured body (spec 024). */
+export async function getManifest(request: ManifestGetRequest): Promise<ManifestGetResponse> {
+  return unwrap(await commands.manifestGet(request));
+}
+
+/** `project.note.get` — fetch current notes body for a project (spec 024). */
+export async function getProjectNote(req: ProjectNoteGetRequest): Promise<ProjectNoteGetResult> {
+  return unwrap(await commands.noteGet(req));
+}
+
+/** `project.note.update` — replace the project's free-text notes (spec 024). */
+export async function updateProjectNote(
+  req: ProjectNoteUpdateRequest,
+): Promise<ProjectNoteUpdateResult> {
+  return unwrap(await commands.noteUpdate(req));
+}
+
+/** `project.manifest.reveal_in_os` — open the manifest file in the OS file manager (spec 024). */
+export async function revealManifestInOs(request: ManifestRevealRequest): Promise<void> {
+  unwrap(await commands.manifestRevealInOs(request));
+}
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 
-export { listManifests, getManifest, getProjectNote, updateProjectNote, revealManifestInOs };
 export type {
   ManifestListResponse,
   ManifestGetResponse,
@@ -44,15 +74,15 @@ export const NOTE_DEBOUNCE_MS = 5_000;
 export function manifestReasonLabel(reason: string): string {
   switch (reason) {
     case 'created':
-      return 'Project created';
+      return m.projects_manifest_reason_created();
     case 'source_change':
-      return 'Source changed';
+      return m.projects_manifest_reason_source_change();
     case 'lifecycle_transition':
-      return 'Lifecycle transition';
+      return m.projects_manifest_reason_lifecycle_transition();
     case 'cleanup_applied':
-      return 'Cleanup applied';
+      return m.projects_manifest_reason_cleanup_applied();
     case 'workflow_run':
-      return 'Workflow run';
+      return m.projects_manifest_reason_workflow_run();
     default:
       return reason;
   }

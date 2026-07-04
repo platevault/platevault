@@ -27,20 +27,21 @@ export interface StepToolsProps {
 
 interface ToolDef {
   key: keyof ToolsState;
-  name: string;
-  description: string;
+  /** Render-time thunks so the strings re-read the active locale (spec 046 #8). */
+  name: () => string;
+  description: () => string;
 }
 
 const TOOL_DEFS: ToolDef[] = [
   {
     key: 'pixinsight',
-    name: m.setup_tools_pixinsight_name(),
-    description: m.setup_tools_pixinsight_desc(),
+    name: () => m.setup_tools_pixinsight_name(),
+    description: () => m.setup_tools_pixinsight_desc(),
   },
   {
     key: 'siril',
-    name: m.setup_tools_siril_name(),
-    description: m.setup_tools_siril_desc(),
+    name: () => m.setup_tools_siril_name(),
+    description: () => m.setup_tools_siril_desc(),
   },
 ];
 
@@ -182,7 +183,7 @@ function ToolCard({
         <div className="alm-step-tools__tool-info">
           <div className="alm-step-tools__name-row">
             <span className="alm-step-tools__tool-name">
-              {def.name}
+              {def.name()}
             </span>
             {detected ? (
               <Pill variant="ok">{m.setup_tools_detected()}</Pill>
@@ -191,7 +192,7 @@ function ToolCard({
             )}
           </div>
           <span className="alm-step-tools__tool-desc">
-            {def.description}
+            {def.description()}
           </span>
         </div>
         <div className="alm-step-tools__controls">
@@ -200,14 +201,14 @@ function ToolCard({
               variant="ghost"
               onClick={handleRedetect}
               disabled={redetecting}
-              aria-label={m.setup_tools_redetect_binary_aria({ name: def.name })}
+              aria-label={m.setup_tools_redetect_binary_aria({ name: def.name() })}
             >
               {redetecting ? m.common_detecting() : m.setup_tools_redetect()}
             </Btn>
             <Toggle
               checked={config.enabled}
               onChange={onToggle}
-              aria-label={m.setup_tools_enable_aria({ name: def.name })}
+              aria-label={m.setup_tools_enable_aria({ name: def.name() })}
             />
           </div>
           {notFound && (
@@ -222,7 +223,7 @@ function ToolCard({
       {config.enabled && (
         <div className="alm-step-tools__path-row">
           <ToolPathPicker
-            toolName={def.name}
+            toolName={def.name()}
             path={config.path}
             onPathChange={onPathChange}
           />
@@ -261,10 +262,8 @@ function ToolPathPicker({
         {m.setup_tools_executable_label()}
       </span>
       <span
-        className="alm-mono alm-step-tools__path-value"
+        className={'alm-mono alm-step-tools__path-value' + (path ? ' alm-step-tools__path-value--set' : '')}
         title={path ?? undefined}
-        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color for path set vs unset
-        style={{ color: path ? 'var(--alm-text-secondary)' : 'var(--alm-text-faint)' }}
       >
         {path ?? m.setup_tools_no_path()}
       </span>

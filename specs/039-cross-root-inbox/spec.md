@@ -1,10 +1,20 @@
 # Feature Specification: Cross-root Inbox (logical unacknowledged queue)
 
+> **🔴 SUPERSEDED (2026-07-03) by [Spec 041 — Inbox Plan Surface](../041-inbox-plan-surface/spec.md).**
+> This spec's entire scope was implemented as part of the 041 single-type inbox work
+> (no separate `plan.md`/`tasks.md` was ever authored for 039). A code-level verification
+> on 2026-07-03 confirmed **all 3 user stories, 7 functional requirements, and 5 success
+> criteria are satisfied**: cross-root `inbox_list` / `list_unacknowledged_across_roots`
+> (FR-001/002/003), `inbox` removed from `REQUIRED_KINDS` (FR-004), `useInboxRescan` across
+> all roots (FR-005), `INBOX_LIST_LIMIT=500` + virtualized list (FR-006), mock `inbox_list`
+> (FR-007), with offline-root/dedup edge cases covered by `inbox.crossRoot.test.tsx`.
+> Retained for reference only.
+
 **Feature Branch**: `039-cross-root-inbox`
 
 **Created**: 2026-06-19
 
-**Status**: Draft
+**Status**: **Superseded by Spec 041** (2026-07-03) — fully implemented; see banner above.
 
 **Input**: Make the Inbox a logical queue of every unacknowledged detection across all registered roots, regardless of folder — not tied to a physical "inbox" folder. As a consequence, the inbox source folder becomes optional (only for users who use a staging/drop-folder workflow).
 

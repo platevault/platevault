@@ -36,7 +36,6 @@ use desktop_shell::commands::roots::{
 use desktop_shell::commands::search::search_global;
 use desktop_shell::commands::sessions::{
     sessions_calendar, sessions_get, sessions_list, sessions_merge, sessions_split,
-    sessions_transition,
 };
 
 use contracts_core::error_code::ErrorCode;
@@ -89,12 +88,6 @@ async fn stub_sessions_calendar() {
     let res = sessions_calendar("2026-05".to_owned(), "2026-06".to_owned()).await;
     assert!(res.is_ok(), "sessions_calendar failed: {res:?}");
     assert!(!res.unwrap().months.is_empty());
-}
-
-#[tokio::test]
-async fn stub_sessions_transition() {
-    let res = sessions_transition("ses-001".to_owned(), "confirm".to_owned(), None).await;
-    assert!(res.is_ok(), "sessions_transition failed: {res:?}");
 }
 
 #[tokio::test]
@@ -315,19 +308,93 @@ async fn plans_retry_requires_terminal_parent() {
 }
 
 // ─── Audit (2 commands) ─────────────────────────────────────────────────────
+//
+// `audit_list` / `audit_export` moved off the spec-029 fixture stub onto real
+// `audit_log_entry` reads (crates/persistence/db/src/repositories/audit.rs).
+// Both commands now take `State<'_, AppState>`, so — like the other
+// state-backed lifecycle commands in this file — they are exercised against
+// `mock_lifecycle_app()`'s in-memory `SQLite` database rather than by calling
+// them with no state at all.
 
-#[tokio::test]
-async fn stub_audit_list() {
-    let res = audit_list(None, None).await;
-    assert!(res.is_ok(), "audit_list failed: {res:?}");
-    assert!(!res.unwrap().entries.is_empty());
+async fn insert_audit_row(
+    pool: &sqlx::SqlitePool,
+    audit_id: &str,
+    entity_type: &str,
+    entity_id: &str,
+    trigger: &str,
+) {
+    sqlx::query(
+        "INSERT INTO audit_log_entry \
+         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+          outcome, severity, request_id, at, payload) \
+         VALUES (?, ?, ?, NULL, NULL, ?, 'user', 'applied', 'workflow', 'req-1', \
+                 '2026-01-01T00:00:00Z', NULL)",
+    )
+    .bind(audit_id)
+    .bind(entity_type)
+    .bind(entity_id)
+    .bind(trigger)
+    .execute(pool)
+    .await
+    .expect("insert audit_log_entry row");
 }
 
 #[tokio::test]
-async fn stub_audit_export() {
-    let res = audit_export(None).await;
-    assert!(res.is_ok(), "audit_export failed: {res:?}");
-    assert!(!res.unwrap().is_empty());
+async fn audit_list_reads_real_audit_log_entry_rows() {
+    let app = mock_lifecycle_app().await;
+    let state = app.state::<AppState>();
+    insert_audit_row(state.repo.pool(), "a1", "session", "ses-1", "Confirm session").await;
+
+    let res = audit_list(state, None, None).await.expect("audit_list ok");
+    assert_eq!(res.total, 1);
+    assert_eq!(res.entries.len(), 1);
+    let entry = &res.entries[0];
+    assert_eq!(entry.id, "a1");
+    assert_eq!(entry.entity_type, "session");
+    assert_eq!(entry.entity_id, "ses-1");
+    assert_eq!(entry.event_type, "Confirm session");
+    // No `payload` on this row — `detail` falls back to the `trigger` text.
+    assert_eq!(entry.detail, "Confirm session");
+}
+
+#[tokio::test]
+async fn audit_list_empty_db_returns_empty_response() {
+    let app = mock_lifecycle_app().await;
+    let state = app.state::<AppState>();
+
+    let res = audit_list(state, None, None).await.expect("audit_list ok");
+    assert_eq!(res.total, 0);
+    assert!(res.entries.is_empty());
+}
+
+#[tokio::test]
+async fn audit_list_filters_by_entity_type() {
+    let app = mock_lifecycle_app().await;
+    let state = app.state::<AppState>();
+    insert_audit_row(state.repo.pool(), "a1", "session", "ses-1", "Confirm session").await;
+    insert_audit_row(state.repo.pool(), "a2", "plan", "plan-1", "Approve plan").await;
+
+    let filters = desktop_shell::commands::audit::AuditFilterDto {
+        entity_type: Some("plan".to_owned()),
+        ..Default::default()
+    };
+    let res = audit_list(state, Some(filters), None).await.expect("audit_list ok");
+    assert_eq!(res.total, 1);
+    assert_eq!(res.entries[0].entity_id, "plan-1");
+}
+
+#[tokio::test]
+async fn audit_export_returns_ndjson_of_real_rows() {
+    let app = mock_lifecycle_app().await;
+    let state = app.state::<AppState>();
+    insert_audit_row(state.repo.pool(), "a1", "session", "ses-1", "Confirm session").await;
+
+    let res = audit_export(state, None).await.expect("audit_export ok");
+    let lines: Vec<&str> = res.lines().collect();
+    assert_eq!(lines.len(), 1);
+    let parsed: serde_json::Value = serde_json::from_str(lines[0]).expect("valid ndjson line");
+    assert_eq!(parsed["id"], "a1");
+    assert_eq!(parsed["entityId"], "ses-1");
 }
 
 // ─── Review (1 command) ─────────────────────────────────────────────────────
@@ -379,17 +446,80 @@ async fn roots_register_via_use_case() {
     assert_eq!(resp.path, source_path);
 }
 
-#[tokio::test]
-async fn stub_roots_remap() {
-    let res = roots_remap("root-001".to_owned(), "/new/path".to_owned()).await;
-    assert!(res.is_ok(), "roots_remap failed: {res:?}");
-    assert!(res.unwrap().all_verified);
+// `roots_remap`/`roots_remap_apply` now require `State<'_, AppState>` (P6a real
+// impl). Tested at the use-case layer below alongside other stateful commands;
+// the command imports are kept to prove the new signatures compile.
+#[allow(dead_code)]
+fn _roots_remap_compiles_check() {
+    let _ = roots_remap;
+    let _ = roots_remap_apply;
 }
 
 #[tokio::test]
-async fn stub_roots_remap_apply() {
-    let res = roots_remap_apply("root-001".to_owned(), true).await;
-    assert!(res.is_ok(), "roots_remap_apply failed: {res:?}");
+async fn roots_remap_via_use_case() {
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+
+    // Paths must be absolute on the host OS (validate_path rejects POSIX-style
+    // paths on Windows).
+    #[cfg(windows)]
+    let (source_path, new_path) = ("C:\\Temp", "C:\\Windows");
+    #[cfg(not(windows))]
+    let (source_path, new_path) = ("/tmp", "/var/tmp");
+
+    let req = contracts_core::first_run::RegisterSourceRequest {
+        kind: contracts_core::first_run::SourceKind::LightFrames,
+        path: source_path.to_owned(),
+        kind_subtype: None,
+        scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+        organization_state: contracts_core::first_run::OrganizationState::Organized,
+    };
+    let resp = app_core::first_run::register_source(db.pool(), &req)
+        .await
+        .expect("register_source failed");
+
+    let preview = app_core::first_run::remap_root(db.pool(), &resp.source_id, new_path)
+        .await
+        .expect("remap_root failed");
+    assert_eq!(preview.original_path, source_path);
+    assert_eq!(preview.new_path, new_path);
+    assert!(preview.all_verified, "no sample file_record rows means verified-by-existence alone");
+}
+
+#[tokio::test]
+async fn roots_remap_apply_via_use_case() {
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
+
+    #[cfg(windows)]
+    let (source_path, new_path) = ("C:\\Temp", "C:\\Windows");
+    #[cfg(not(windows))]
+    let (source_path, new_path) = ("/tmp", "/var/tmp");
+
+    let req = contracts_core::first_run::RegisterSourceRequest {
+        kind: contracts_core::first_run::SourceKind::Project,
+        path: source_path.to_owned(),
+        kind_subtype: None,
+        scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+        organization_state: contracts_core::first_run::OrganizationState::Organized,
+    };
+    let resp = app_core::first_run::register_source(db.pool(), &req)
+        .await
+        .expect("register_source failed");
+
+    app_core::first_run::apply_root_remap(db.pool(), &bus, &resp.source_id, new_path, true)
+        .await
+        .expect("apply_root_remap failed");
+
+    let (_, path) = persistence_db::repositories::first_run::get_source_kind_and_path(
+        db.pool(),
+        &resp.source_id,
+    )
+    .await
+    .expect("query failed")
+    .expect("source not found");
+    assert_eq!(path, new_path);
 }
 
 #[tokio::test]

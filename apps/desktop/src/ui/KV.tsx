@@ -16,8 +16,8 @@ export const KV = forwardRef<HTMLDivElement, KVProps>(
         <span className="alm-kv__label">{label}</span>
         <span
           className="alm-kv__value"
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional mono font style passthrough (caller-supplied prop)
-          style={mono ? { fontFamily: 'var(--alm-font-mono)', fontSize: 'var(--alm-text-xs)' } : undefined}
+          // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional compact-size passthrough (caller-supplied prop). Font family is enforced globally (reset.css); never set here.
+          style={mono ? { fontSize: 'var(--alm-text-xs)' } : undefined}
         >
           {value}
           {provenance && <span className="alm-kv__provenance">{provenance}</span>}

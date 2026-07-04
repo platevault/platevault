@@ -12,13 +12,8 @@
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
 use audit::bus::EventBus;
-use audit::event_bus::{
-    ProtectionDefaultChanged, ProtectionPlanAcknowledged, ProtectionSourceSet, Source,
-};
-use audit::{
-    TOPIC_PROTECTION_DEFAULT_CHANGED, TOPIC_PROTECTION_PLAN_ACKNOWLEDGED,
-    TOPIC_PROTECTION_SOURCE_SET,
-};
+use audit::event_bus::{ProtectionPlanAcknowledged, ProtectionSourceSet, Source};
+use audit::{TOPIC_PROTECTION_PLAN_ACKNOWLEDGED, TOPIC_PROTECTION_SOURCE_SET};
 use contracts_core::protection::{
     NonBlockingSummary, PlanProtectionCheckRequest, PlanProtectionCheckResponse, ProtectedPlanItem,
     ProtectionLevel, SourceProtectionGetRequest, SourceProtectionGetResponse,
@@ -45,7 +40,9 @@ use domain_core::ids::{new_id, Timestamp};
 /// Reads from `protection_defaults` (scope="global") first (migration 0035,
 /// FR-018). Falls back to the legacy `settings` table rows for backwards
 /// compatibility, then to hard-coded defaults when both are absent.
-async fn load_global_protection(pool: &SqlitePool) -> Result<GlobalProtection, ContractError> {
+pub(crate) async fn load_global_protection(
+    pool: &SqlitePool,
+) -> Result<GlobalProtection, ContractError> {
     use serde_json::Value;
 
     // Prefer protection_defaults table (migration 0035).
@@ -88,10 +85,10 @@ async fn load_global_protection(pool: &SqlitePool) -> Result<GlobalProtection, C
     Ok(GlobalProtection { level, block_permanent_delete, categories })
 }
 
-struct GlobalProtection {
-    level: String,
-    block_permanent_delete: bool,
-    categories: Vec<String>,
+pub(crate) struct GlobalProtection {
+    pub(crate) level: String,
+    pub(crate) block_permanent_delete: bool,
+    pub(crate) categories: Vec<String>,
 }
 
 // ── US2: source.protection.get ────────────────────────────────────────────
@@ -386,16 +383,29 @@ pub async fn acknowledge_protected_item(
 // ── US4: set_global_protection_default ───────────────────────────────────
 
 /// Persist a global protection default and emit a `protection.default.changed`
-/// audit event (T045, FR-018; fixes spec 016 T-003/T-004/T-005).
+/// audit event (T045, FR-018; spec 016 T-003/T-004/T-005).
 ///
-/// `scope` is typically `"global"`. `key` is one of:
+/// `scope` MUST be `"global"` — it is the only scope the desktop settings
+/// save path (`settings.update` with scope `"cleanup"`) ever writes to, and
+/// the only scope `app_core::protection::load_global_protection` reads from.
+/// `key` is one of:
 /// - `"defaultProtection"` — protection level string
 /// - `"blockPermanentDelete"` — boolean
 /// - `"protectedCategories"` — JSON array of category strings
 ///
+/// This delegates to `app_core_settings::update_setting` (re-exported as
+/// `crate::settings`) rather than writing `protection_defaults` directly, so
+/// there is a single implementation of the validation, no-op guard, and
+/// `protection.default.changed` emission shared with the real desktop save
+/// path (`settings.update` Tauri command → `crate::settings::update_setting`).
+/// Kept as a thin wrapper for callers that already depend on this narrower
+/// signature (e.g. this module's own tests).
+///
 /// # Errors
 ///
-/// Returns `ContractError` on DB or audit failure.
+/// Returns `ContractError` with code `"key.unknown"` if `key` is not
+/// `defaultProtection` / `blockPermanentDelete` / `protectedCategories`,
+/// `"value.invalid"` on a type/enum mismatch, or on DB/audit failure.
 pub async fn set_global_protection_default(
     pool: &SqlitePool,
     bus: &EventBus,
@@ -403,28 +413,15 @@ pub async fn set_global_protection_default(
     key: &str,
     value: serde_json::Value,
 ) -> Result<(), ContractError> {
-    // Read prior value for the audit record.
-    let old = prot_repo::get_protection_default(pool, scope, key).await.map_err(db_err)?;
-
-    // Persist the new value.
-    prot_repo::set_protection_default(pool, scope, key, &value).await.map_err(db_err)?;
-
-    // Emit audit event.
-    let changed_at = Timestamp::now_iso();
-    bus.publish(
-        TOPIC_PROTECTION_DEFAULT_CHANGED,
-        Source::User,
-        ProtectionDefaultChanged {
-            scope: scope.to_owned(),
-            key: key.to_owned(),
-            old,
-            new: value,
-            changed_at,
-        },
-    )
-    .await
-    .map_err(bus_err)?;
-
+    debug_assert_eq!(
+        scope, "global",
+        "global protection defaults are only ever stored under scope=\"global\""
+    );
+    let req = contracts_core::settings::SettingsUpdateRequest {
+        key: key.to_owned(),
+        value: contracts_core::JsonAny::from(value),
+    };
+    crate::settings::update_setting(pool, bus, &req).await?;
     Ok(())
 }
 
@@ -458,6 +455,35 @@ pub struct GenerateCleanupPlanRequest {
     pub plan_id: String,
     pub title: String,
     pub destructive_destination: String,
+    /// Bytes the plan will require at its destination once applied (FR-012 /
+    /// spec 025 D17). For cleanup plans this is the total size of archive-action
+    /// items (items sent to trash or deleted need no destination space). The
+    /// apply executor's free-space pre-flight reads this; the generator only
+    /// populates it.
+    pub total_bytes_required: i64,
+    pub items: Vec<CleanupPlanItem>,
+}
+
+/// Generalised request for generating any protection-resolved plan (D12 shared
+/// helper). [`GenerateCleanupPlanRequest`] is the cleanup-specialised façade
+/// over this; the whole-project archive generator (spec 017 WP-B) reuses the
+/// same protection-resolution tail with `origin`/`plan_type` = `archive`.
+pub struct GeneratePlanRequest {
+    pub plan_id: String,
+    pub title: String,
+    /// Plan origin (`"cleanup"`, `"archive"`, …) — drives the plans-list origin
+    /// filter (FR-010).
+    pub origin: String,
+    /// Plan type (`"cleanup"`, `"archive"`, …).
+    pub plan_type: String,
+    /// Origin context carried on the plan row. The archive generator stores the
+    /// project id here so the apply path can drive the lifecycle closure.
+    pub origin_path: Option<String>,
+    pub destructive_destination: String,
+    /// Per-item `reason` label stored on every item.
+    pub reason: String,
+    /// See [`GenerateCleanupPlanRequest::total_bytes_required`].
+    pub total_bytes_required: i64,
     pub items: Vec<CleanupPlanItem>,
 }
 
@@ -484,18 +510,66 @@ pub async fn generate_cleanup_plan(
     pool: &SqlitePool,
     req: &GenerateCleanupPlanRequest,
 ) -> Result<GenerateCleanupPlanResponse, ContractError> {
+    generate_plan(
+        pool,
+        &GeneratePlanRequest {
+            plan_id: req.plan_id.clone(),
+            title: req.title.clone(),
+            origin: "cleanup".to_owned(),
+            plan_type: "cleanup".to_owned(),
+            origin_path: None,
+            destructive_destination: req.destructive_destination.clone(),
+            reason: "cleanup".to_owned(),
+            total_bytes_required: req.total_bytes_required,
+            // CleanupPlanItem is not Clone; move the items in by rebuilding the
+            // request is avoidable — callers hand us a borrowed req, so clone
+            // the item fields into fresh CleanupPlanItems.
+            items: req
+                .items
+                .iter()
+                .map(|i| CleanupPlanItem {
+                    id: i.id.clone(),
+                    name: i.name.clone(),
+                    action: i.action.clone(),
+                    source_id: i.source_id.clone(),
+                    category: i.category.clone(),
+                    from_relative_path: i.from_relative_path.clone(),
+                    from_root_id: i.from_root_id.clone(),
+                    to_relative_path: i.to_relative_path.clone(),
+                })
+                .collect(),
+        },
+    )
+    .await
+}
+
+/// Generalised protection-resolved plan generator (D12 shared tail).
+///
+/// Creates the plan row (in `draft`), inserts each item with its real
+/// `source_id`/`category`/resolved `protection` level, then advances the plan to
+/// `ready_for_review` so [`plan_protection_check`] can fire. Performs NO
+/// filesystem mutation (FR-002). Used by both the cleanup generator (per-file)
+/// and the archive generator (whole-project).
+///
+/// # Errors
+///
+/// Returns `ContractError` on DB failure.
+pub async fn generate_plan(
+    pool: &SqlitePool,
+    req: &GeneratePlanRequest,
+) -> Result<GenerateCleanupPlanResponse, ContractError> {
     // Create the plan in draft state.
     plans_repo::insert_plan(
         pool,
         &plans_repo::InsertPlan {
             id: &req.plan_id,
             title: &req.title,
-            origin: "cleanup",
-            origin_path: None,
-            plan_type: "cleanup",
+            origin: &req.origin,
+            origin_path: req.origin_path.as_deref(),
+            plan_type: &req.plan_type,
             destructive_destination: &req.destructive_destination,
             parent_plan_id: None,
-            total_bytes_required: 0,
+            total_bytes_required: req.total_bytes_required,
         },
     )
     .await
@@ -519,7 +593,11 @@ pub async fn generate_cleanup_plan(
         .await
         .map_err(db_err)?;
 
-        let protection = &resolved.level;
+        // The `plan_items.protection` column only permits 'normal' | 'protected'
+        // (migration 0014 CHECK). `resolve_protection` can return "unprotected"
+        // for a source with an explicit unprotected override, so map it to
+        // 'normal' for storage — both are non-gating from the plan's view.
+        let protection = if resolved.level == "unprotected" { "normal" } else { &resolved.level };
         if protection == "protected" {
             protected_item_count += 1;
         }
@@ -536,7 +614,7 @@ pub async fn generate_cleanup_plan(
                 from_relative_path: &item.from_relative_path,
                 to_root_id: None,
                 to_relative_path: &item.to_relative_path,
-                reason: "cleanup",
+                reason: &req.reason,
                 protection,
                 linked_entity: None,
                 provenance_json: None,
@@ -810,6 +888,7 @@ mod tests {
             plan_id: plan_id.to_owned(),
             title: "Cleanup lights session 2026-05".to_owned(),
             destructive_destination: "archive".to_owned(),
+            total_bytes_required: 0,
             items: vec![super::CleanupPlanItem {
                 id: "item-t040-1".to_owned(),
                 name: "light_001.fits".to_owned(),
@@ -930,6 +1009,7 @@ mod tests {
             plan_id: plan_id.to_owned(),
             title: "Cleanup inbox session".to_owned(),
             destructive_destination: "archive".to_owned(),
+            total_bytes_required: 0,
             items: vec![super::CleanupPlanItem {
                 id: "item-t042-1".to_owned(),
                 name: "inbox_raw_001.fits".to_owned(),

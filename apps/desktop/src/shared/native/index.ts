@@ -8,7 +8,7 @@ export {
   getSelectedFilter,
   setSelectedFilter,
   isPickerError,
-  CALIBRATION_FILE_FILTERS,
+  calibrationFileFilters,
 } from './picker';
 
 export type {

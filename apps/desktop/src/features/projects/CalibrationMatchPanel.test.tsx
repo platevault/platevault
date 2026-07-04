@@ -15,15 +15,15 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock API commands
-vi.mock('@/api/commands', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@/api/commands')>();
+// Mock the calibration-match IPC helper
+vi.mock('./calibrationMatch', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./calibrationMatch')>();
   return { ...original, calibrationMatchSuggestBatch: vi.fn() };
 });
 
 import { CalibrationMatchPanel } from './CalibrationMatchPanel';
-import { calibrationMatchSuggestBatch } from '@/api/commands';
-import type { CalibrationMatchBatchResponse } from '@/api/commands';
+import { calibrationMatchSuggestBatch } from './calibrationMatch';
+import type { CalibrationMatchBatchResponse } from '@/bindings/index';
 
 const SESSION_1 = 'ses-aabbccdd-0001';
 const SESSION_2 = 'ses-aabbccdd-0002';

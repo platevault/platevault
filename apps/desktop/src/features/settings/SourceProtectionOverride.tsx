@@ -11,8 +11,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Pill, Btn } from '@/ui';
-import { sourceProtectionGet, sourceProtectionSet } from '@/api/commands';
-import type { ProtectionLevel } from '@/api/commands';
+import { sourceProtectionGet, sourceProtectionSet } from './settingsIpc';
+import type { ProtectionLevel } from './settingsIpc';
 import { m } from '@/lib/i18n';
 
 interface SourceProtectionOverrideProps {
@@ -38,14 +38,14 @@ const LEVEL_VARIANT: Record<ProtectionLevel, 'ok' | 'info' | 'warn' | 'danger' |
 
 /** Convert a ProtectionLevel to its hint string (spec 016 T034). */
 function levelHint(level: ProtectionLevel, inherits: boolean): string {
-  const prefix = inherits ? 'Inherits global default — ' : '';
+  const prefix = inherits ? m.settings_source_protect_inherits_prefix() : '';
   switch (level) {
     case 'protected':
-      return `${prefix}Cleanup plans require explicit approval for this source's files.`;
+      return m.settings_source_protect_hint_protected({ prefix });
     case 'normal':
-      return `${prefix}Standard plan review applies; no extra acknowledgement required.`;
+      return m.settings_source_protect_hint_normal({ prefix });
     case 'unprotected':
-      return `${prefix}Destructive plan actions proceed without additional confirmation.`;
+      return m.settings_source_protect_hint_unprotected({ prefix });
   }
 }
 
@@ -89,7 +89,7 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
         onSaved?.(pendingLevel);
       })
       .catch((err: unknown) => {
-        setErrorMsg(typeof err === 'string' ? err : 'Save failed');
+        setErrorMsg(typeof err === 'string' ? err : m.common_save_failed());
         setLoadState('error');
       });
   };

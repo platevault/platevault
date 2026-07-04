@@ -4,12 +4,14 @@
  * Calls the `guided.*` Tauri commands (or stubs in mock mode) and exposes
  * a simple React-friendly hook surface.
  *
- * The guided commands are NOT in the auto-generated bindings yet — they will
- * be added when `cargo test` regenerates `src/bindings/index.ts`.  Until then
- * we call `invoke` directly with the stable command names.
+ * The guided commands go through the generated `commands.*` bindings + `unwrap`
+ * (spec 037): the previous hand-written `invoke('guided.state.get', …)` used
+ * dotted names the real backend never registered (it registers `guided_state_get`),
+ * so every call silently fell back to the Idle state.
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import { m } from '@/lib/i18n';
 
 // ── Types (mirror the Rust DTOs) ──────────────────────────────────────────────
@@ -92,12 +94,12 @@ const IDLE_STATE: GuidedFlowStateDto = {
 export async function getGuidedState(): Promise<GuidedFlowStateDto> {
   if (isMockMode()) return IDLE_STATE;
   try {
-    const resp = await invoke<GuidedStateGetResponse>('guided.state.get');
+    const resp = unwrap(await commands.guidedStateGet());
     return resp.state;
   } catch {
     // If state_corrupted, retry once for the fresh Idle state.
     try {
-      const resp2 = await invoke<GuidedStateGetResponse>('guided.state.get');
+      const resp2 = unwrap(await commands.guidedStateGet());
       return resp2.state;
     } catch {
       return IDLE_STATE;
@@ -108,7 +110,7 @@ export async function getGuidedState(): Promise<GuidedFlowStateDto> {
 export async function activateGuidedFlow(): Promise<GuidedFlowStateDto> {
   if (isMockMode()) return { ...IDLE_STATE, currentStep: STEP_INBOX_CONFIRM_FIRST };
   try {
-    return await invoke<GuidedFlowStateDto>('guided.activate');
+    return unwrap(await commands.guidedActivate());
   } catch {
     return IDLE_STATE;
   }
@@ -126,18 +128,18 @@ export async function completeGuidedStep(
       state: { ...IDLE_STATE, completedSteps: [stepId], currentStep: nextStep },
     };
   }
-  return invoke<GuidedStepCompleteResponse>('guided.step.complete', { request: { stepId } });
+  return unwrap(await commands.guidedStepComplete({ stepId }));
 }
 
 export async function dismissGuidedFlow(): Promise<GuidedDismissResponse> {
   if (isMockMode()) return { dismissedAt: new Date().toISOString() };
-  return invoke<GuidedDismissResponse>('guided.dismiss');
+  return unwrap(await commands.guidedDismiss());
 }
 
 export async function restartGuidedFlow(): Promise<GuidedFlowStateDto> {
   if (isMockMode()) return { ...IDLE_STATE, currentStep: STEP_INBOX_CONFIRM_FIRST };
   try {
-    const resp = await invoke<GuidedRestartResponse>('guided.restart');
+    const resp = unwrap(await commands.guidedRestart());
     return resp.state;
   } catch {
     return IDLE_STATE;

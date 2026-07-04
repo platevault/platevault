@@ -29,8 +29,20 @@
 //!    unresolved frames still group coherently.
 //! 5. **Upsert `acquisition_session`** by `session_key`: append the file-record
 //!    id to the `frame_ids` JSON array (set-deduped). On insert,
-//!    `state = 'discovered'`, `canonical_target_id` = resolved id or NULL,
-//!    legacy `target_id` left NULL (R10).
+//!    `canonical_target_id` = resolved id or NULL, legacy `target_id` left
+//!    NULL (R10). Sessions are derived, already-confirmed inventory (spec
+//!    041 FR-051) — there is no review-state column to set.
+//! 6. **Propagate to linked projects** (spec 041 R-17/FR-052, T075): whenever a
+//!    session's `canonical_target_id` transitions from unset to resolved (on
+//!    insert, on back-fill-on-append, or via [`backfill_session_targets`]),
+//!    every project linked to that session through `project_sources` has its
+//!    own `canonical_target_id` set to match — but only if the project does
+//!    not already have one (never overwrites an existing value, manually
+//!    picked or otherwise). This closes spec-035 project↔target gap #1 for
+//!    the live-ingest path: `projects.canonical_target_id` (migration 0033)
+//!    was previously only ever set once, manually, at project creation; it
+//!    now also gets set from whatever the project's lights first resolve to
+//!    when it was unset. A session with no linked project is a no-op.
 //!
 //! ## Idempotency (R12)
 //!
@@ -52,6 +64,7 @@ use audit::EventBus;
 use metadata_core::{MetadataExtractor, RawFileMetadata};
 use metadata_fits::FitsExtractor;
 use metadata_xisf::XisfExtractor;
+use persistence_db::repositories::projects as repo_projects;
 use sessions::{session_key, ObserverContext};
 use sqlx::SqlitePool;
 use time::format_description::well_known::Iso8601;
@@ -346,8 +359,8 @@ fn parse_date_obs(raw: Option<&str>) -> OffsetDateTime {
 // ── acquisition_session upsert ────────────────────────────────────────────────
 
 /// Upsert an `acquisition_session` by `session_key`, appending `image_id` to the
-/// `frame_ids` JSON array (set-deduped). On insert: `state = 'discovered'`,
-/// `canonical_target_id` set, legacy `target_id` NULL (R10).
+/// `frame_ids` JSON array (set-deduped). On insert: `canonical_target_id` set,
+/// legacy `target_id` NULL (R10). No review-state column (spec 041 FR-051).
 ///
 /// Idempotent (R12): the SELECT-by-`session_key` lookup keeps grouping
 /// single-row, and a repeat append of the same frame id is dropped (set-dedup).
@@ -386,6 +399,11 @@ async fn upsert_session(
             .execute(pool)
             .await
             .map_err(db_err)?;
+            // T075/FR-052: newly resolved on this session → propagate to any
+            // linked project.
+            if let Some(target_id) = canonical_target_id {
+                propagate_target_to_projects(pool, &id, target_id).await?;
+            }
         } else {
             sqlx::query("UPDATE acquisition_session SET frame_ids = ? WHERE id = ?")
                 .bind(&frames_json)
@@ -402,8 +420,8 @@ async fn upsert_session(
     sqlx::query(
         "INSERT INTO acquisition_session
             (id, session_key, target_id, canonical_target_id, has_observer_location,
-             frame_ids, state, observer_location, created_at)
-         VALUES (?, ?, NULL, ?, ?, ?, 'discovered', NULL, ?)",
+             frame_ids, observer_location, created_at)
+         VALUES (?, ?, NULL, ?, ?, ?, NULL, ?)",
     )
     .bind(&id)
     .bind(key)
@@ -414,6 +432,43 @@ async fn upsert_session(
     .execute(pool)
     .await
     .map_err(db_err)?;
+
+    // T075/FR-052: the new session already resolved a target → propagate.
+    if let Some(target_id) = canonical_target_id {
+        propagate_target_to_projects(pool, &id, target_id).await?;
+    }
+    Ok(())
+}
+
+// ── Target propagation (T075) ─────────────────────────────────────────────────
+
+/// Propagate a session's resolved canonical target to every project linked to
+/// it via `project_sources` (spec 041 R-17/FR-052).
+///
+/// Closes spec-035 project↔target gap #1 for the live-ingest path:
+/// `projects.canonical_target_id` (migration 0033) was previously only ever
+/// set once, manually, at project creation (`CreateProjectDialog`); this keeps
+/// it in sync with whatever the project's lights actually resolve to,
+/// whenever a linked session's own `canonical_target_id` becomes known.
+///
+/// A session with no linked project (`project_sources` has no row for it) is
+/// a no-op — never an error.
+///
+/// # Errors
+///
+/// Returns [`ContractError`] (`internal.database`) on a query failure.
+async fn propagate_target_to_projects(
+    pool: &SqlitePool,
+    session_id: &str,
+    canonical_target_id: &str,
+) -> Result<(), ContractError> {
+    let project_ids =
+        repo_projects::list_project_ids_for_session(pool, session_id).await.map_err(db_err)?;
+    for project_id in project_ids {
+        repo_projects::set_project_canonical_target_id(pool, &project_id, canonical_target_id)
+            .await
+            .map_err(db_err)?;
+    }
     Ok(())
 }
 
@@ -469,6 +524,8 @@ pub async fn backfill_session_targets(pool: &SqlitePool) -> Result<usize, Contra
         .execute(pool)
         .await
         .map_err(db_err)?;
+        // T075/FR-052: newly resolved via back-fill → propagate.
+        propagate_target_to_projects(pool, &session_id, target_id).await?;
         linked += 1;
     }
     Ok(linked)
@@ -561,5 +618,209 @@ mod tests {
         let (key, has_loc) = derive_session_key("M 31", &m);
         assert!(!has_loc, "UTC fallback marks observer location absent");
         assert_eq!(key, "M 31|Ha|1x1|100|2026-03-15");
+    }
+
+    // ── T075/FR-052: target propagation to linked projects ────────────────────
+
+    use persistence_db::repositories::projects::InsertProject;
+    use persistence_db::Database;
+
+    async fn test_db() -> Database {
+        let db = Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        db
+    }
+
+    /// Insert a minimal `canonical_target` row (same shape used elsewhere in the
+    /// workspace, e.g. `project_setup::seed_canonical_target`).
+    async fn seed_canonical_target(pool: &SqlitePool, id: &str, designation: &str) {
+        sqlx::query(
+            "INSERT INTO canonical_target
+                (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
+             VALUES (?, NULL, ?, 'galaxy', 10.68, 41.27, 'resolved', '2026-01-01T00:00:00Z')",
+        )
+        .bind(id)
+        .bind(designation)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn seed_project(pool: &SqlitePool, id: &str) {
+        repo_projects::insert_project(
+            pool,
+            &InsertProject {
+                id,
+                name: id,
+                tool: "PixInsight",
+                lifecycle: "setup_incomplete",
+                path: &format!("projects/{id}"),
+                notes: None,
+                canonical_target_id: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    async fn link_project_to_session(pool: &SqlitePool, project_id: &str, session_id: &str) {
+        repo_projects::insert_project_source(
+            pool,
+            &repo_projects::InsertProjectSource {
+                id: &Uuid::new_v4().to_string(),
+                project_id,
+                inventory_session_id: session_id,
+                name_snapshot: "",
+                frames_snapshot: 0,
+                filter_snapshot: "",
+                exposure_snapshot: "",
+                linked_at: "2026-01-01T00:00:00Z",
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn propagate_updates_linked_project_canonical_target() {
+        let db = test_db().await;
+        seed_canonical_target(db.pool(), "target-1", "M 31").await;
+        seed_project(db.pool(), "proj-1").await;
+        link_project_to_session(db.pool(), "proj-1", "session-1").await;
+
+        propagate_target_to_projects(db.pool(), "session-1", "target-1").await.unwrap();
+
+        let got =
+            repo_projects::get_project_canonical_target_id(db.pool(), "proj-1").await.unwrap();
+        assert_eq!(got.as_deref(), Some("target-1"));
+    }
+
+    #[tokio::test]
+    async fn propagate_never_overwrites_an_existing_project_target() {
+        let db = test_db().await;
+        seed_canonical_target(db.pool(), "target-old", "M 42").await;
+        seed_canonical_target(db.pool(), "target-new", "M 31").await;
+        seed_project(db.pool(), "proj-1").await;
+        // Project already carries a target — manually picked at project
+        // creation (spec-035 gap #1) or from an earlier propagation. Either
+        // way, propagation is first-write-wins: it must not clobber it.
+        repo_projects::set_project_canonical_target_id(db.pool(), "proj-1", "target-old")
+            .await
+            .unwrap();
+        link_project_to_session(db.pool(), "proj-1", "session-1").await;
+
+        propagate_target_to_projects(db.pool(), "session-1", "target-new").await.unwrap();
+
+        let got =
+            repo_projects::get_project_canonical_target_id(db.pool(), "proj-1").await.unwrap();
+        assert_eq!(got.as_deref(), Some("target-old"), "existing target must not be overwritten");
+    }
+
+    #[tokio::test]
+    async fn propagate_with_no_linked_project_is_a_noop() {
+        let db = test_db().await;
+        seed_canonical_target(db.pool(), "target-1", "M 31").await;
+
+        // No project_sources row for "session-lonely" — must not error or panic.
+        propagate_target_to_projects(db.pool(), "session-lonely", "target-1").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn upsert_session_insert_branch_with_no_linked_project_does_not_error() {
+        let db = test_db().await;
+        seed_canonical_target(db.pool(), "target-1", "M 31").await;
+
+        // A brand-new session (INSERT branch of upsert_session) resolves a
+        // target immediately; `project_sources` cannot yet reference this
+        // session's id (a project can only link an *existing* session in the
+        // real UI flow), so there is no linked project. The INSERT-branch
+        // propagation call must be a safe no-op, not a panic/error.
+        upsert_session(db.pool(), "sk-1", false, Some("target-1"), "image-1").await.unwrap();
+
+        let (canonical_target_id,): (Option<String>,) = sqlx::query_as(
+            "SELECT canonical_target_id FROM acquisition_session WHERE session_key = 'sk-1'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(canonical_target_id.as_deref(), Some("target-1"));
+    }
+
+    #[tokio::test]
+    async fn upsert_session_backfill_branch_propagates_when_project_prelinked() {
+        let db = test_db().await;
+        seed_canonical_target(db.pool(), "target-1", "M 31").await;
+        seed_project(db.pool(), "proj-1").await;
+
+        // First frame arrives with no resolvable target — session created NULL.
+        upsert_session(db.pool(), "sk-2", false, None, "image-1").await.unwrap();
+        let (session_id,): (String,) =
+            sqlx::query_as("SELECT id FROM acquisition_session WHERE session_key = 'sk-2'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        link_project_to_session(db.pool(), "proj-1", &session_id).await;
+
+        // Second frame in the same session resolves — back-fill branch runs and
+        // must propagate to the now-linked project.
+        upsert_session(db.pool(), "sk-2", false, Some("target-1"), "image-2").await.unwrap();
+
+        let got =
+            repo_projects::get_project_canonical_target_id(db.pool(), "proj-1").await.unwrap();
+        assert_eq!(got.as_deref(), Some("target-1"));
+    }
+
+    #[tokio::test]
+    async fn backfill_session_targets_propagates_to_linked_project() {
+        let db = test_db().await;
+        seed_canonical_target(db.pool(), "target-1", "M 31").await;
+        seed_project(db.pool(), "proj-1").await;
+
+        // `ingest_resolution.image_id` FKs to `file_record(id)`, which itself
+        // FKs to `library_root(id)` — seed both minimally so the resolved-row
+        // insert below satisfies the constraints.
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at)
+             VALUES ('root-1', 'root-1', '/tmp/root-1', 'local', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO file_record
+                (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at)
+             VALUES ('image-1', 'root-1', 'lights/light_001.fits', 0, '2026-01-01T00:00:00Z',
+                     'classified', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // A session with an unresolved (NULL) target, one frame.
+        upsert_session(db.pool(), "sk-3", false, None, "image-1").await.unwrap();
+        let (session_id,): (String,) =
+            sqlx::query_as("SELECT id FROM acquisition_session WHERE session_key = 'sk-3'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        link_project_to_session(db.pool(), "proj-1", &session_id).await;
+
+        // The frame resolves later (background drain) — insert a `resolved`
+        // ingest_resolution row for it.
+        sqlx::query(
+            "INSERT INTO ingest_resolution (id, image_id, state, target_id, object_raw, attempts)
+             VALUES (?, 'image-1', 'resolved', 'target-1', 'M 31', 1)",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let linked = backfill_session_targets(db.pool()).await.unwrap();
+        assert_eq!(linked, 1);
+
+        let got =
+            repo_projects::get_project_canonical_target_id(db.pool(), "proj-1").await.unwrap();
+        assert_eq!(got.as_deref(), Some("target-1"));
     }
 }

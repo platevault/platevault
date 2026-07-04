@@ -25,7 +25,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
-import type { CalibrationMatchSuggestResponse } from '@/api/commands';
+import type { CalibrationMatchSuggestResponse } from '@/bindings/index';
 
 // ── Test fixtures ──────────────────────────────────────────────────────────
 
@@ -51,6 +51,11 @@ const matchResponse: CalibrationMatchSuggestResponse = {
       ],
       dimensionsMismatched: [],
       selectionReason: 'compatible_fallback',
+      // P9 session-context enrichment — fully resolved.
+      targetName: 'M 31',
+      filter: 'Ha',
+      acquisitionNight: '2026-03-01',
+      frameCount: 12,
     },
     {
       sessionId: 'ses-001',
@@ -65,6 +70,8 @@ const matchResponse: CalibrationMatchSuggestResponse = {
         { dimension: 'temperature', reason: 'out_of_tolerance', delta: 5.2 },
       ],
       selectionReason: 'compatible_fallback',
+      // P9 session-context enrichment — unresolved (e.g. no canonical target
+      // link, no fingerprint row); every field stays absent.
     },
   ],
 };
@@ -278,5 +285,23 @@ describe('MatchCandidatesPanel', () => {
     fireEvent.click(screen.getByTestId('assign-cancel-btn'));
     expect(screen.queryByTestId('assign-confirm-btn')).not.toBeInTheDocument();
     expect(screen.getByTestId(`assign-btn-${MASTER_ID_1}`)).toBeInTheDocument();
+  });
+
+  it('17. renders target/filter/night/frames from the P9 session-context enrichment', () => {
+    renderPanel({ response: matchResponse });
+    expect(screen.getByText('M 31')).toBeInTheDocument();
+    expect(screen.getByText('Ha')).toBeInTheDocument();
+    expect(screen.getByText('2026-03-01')).toBeInTheDocument();
+    expect(screen.getByText('12')).toBeInTheDocument();
+  });
+
+  it('18. renders "—" fallback for each context field the backend could not resolve', () => {
+    renderPanel({ response: matchResponse });
+    // Candidate 2 (MASTER_ID_2) has no session-context fields — all four
+    // columns fall back to the shared em-dash placeholder used elsewhere
+    // (e.g. SessionsTable). The fully-resolved candidate 1 renders real
+    // values, so at least one dash-per-field must come from candidate 2.
+    const dashes = screen.getAllByText('—');
+    expect(dashes.length).toBeGreaterThanOrEqual(4);
   });
 });

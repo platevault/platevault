@@ -5,7 +5,7 @@
  * and a "View schema" action.
  */
 
-import type { ContractMeta } from '@/api/commands';
+import type { ContractMeta } from '@/bindings/index';
 
 interface ContractListProps {
   contracts: ContractMeta[];

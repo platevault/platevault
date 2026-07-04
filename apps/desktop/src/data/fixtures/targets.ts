@@ -130,7 +130,6 @@ export const targetDetail: TargetDetailType = {
     {
       id: 's-001',
       sessionKey: { target: 'NGC 7000', filter: 'Ha', binning: '1x1', gain: '100', night: '2024-11-30' },
-      state: 'confirmed',
       confidence: 'confirmed',
       opticalTrainId: 'ot-2600mm',
       frameCount: 54,
@@ -144,7 +143,6 @@ export const targetDetail: TargetDetailType = {
     {
       id: 's-002',
       sessionKey: { target: 'NGC 7000', filter: 'OIII', binning: '1x1', gain: '100', night: '2024-11-30' },
-      state: 'confirmed',
       confidence: 'confirmed',
       opticalTrainId: 'ot-2600mm',
       frameCount: 38,
@@ -158,7 +156,6 @@ export const targetDetail: TargetDetailType = {
     {
       id: 's-003',
       sessionKey: { target: 'NGC 7000', filter: 'SII', binning: '1x1', gain: '100', night: '2024-12-01' },
-      state: 'needs_review',
       confidence: 'high',
       opticalTrainId: 'ot-2600mm',
       frameCount: 22,
@@ -172,7 +169,6 @@ export const targetDetail: TargetDetailType = {
     {
       id: 's-004',
       sessionKey: { target: 'NGC 7000', filter: 'Ha', binning: '1x1', gain: '100', night: '2024-12-15' },
-      state: 'confirmed',
       confidence: 'confirmed',
       opticalTrainId: 'ot-2600mm',
       frameCount: 30,

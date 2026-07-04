@@ -140,10 +140,16 @@ async fn restore_defaults_reverts_to_default_value() {
 
 // ── T017: noisy key suppression + emit_snapshot ───────────────────────────────
 
-/// Updating a **noisy** key (e.g. `protectedCategories`) must NOT emit a
+/// Updating a **noisy** key (e.g. `rememberFollowLogs`) must NOT emit a
 /// per-change `settings.changed` audit event, while updating a **non-noisy**
 /// key (e.g. `logLevel`) must emit one.  Separately, `emit_snapshot` must
 /// publish a `settings.snapshot` event.
+///
+/// `protectedCategories` is also `noisy` but is deliberately NOT used as the
+/// example here: spec 016 (plan.md E-016-3) carves out a named exception for
+/// it — see `global_protection_default_update_persists_and_emits_protection_event`
+/// below, which asserts it (and its sibling protection-default keys) DOES
+/// emit an audit event despite being noisy.
 #[tokio::test]
 async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
     let (db, _repo, bus) = support::setup().await;
@@ -177,7 +183,14 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
         "non-noisy logLevel update must emit exactly one settings.changed event"
     );
 
-    // ── noisy key: protectedCategories ───────────────────────────────────
+    // ── noisy key: rememberFollowLogs ─────────────────────────────────────
+    //
+    // `protectedCategories` is ALSO a noisy key, but spec 016 (plan.md
+    // E-016-3) carves out a named exception for it: it must always emit
+    // `protection.default.changed` because it is a global protection default,
+    // not a generic noisy key. See
+    // `global_protection_default_update_persists_and_emits_protection_event`
+    // below for that behaviour.
     let before_noisy: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
         .bind(TOPIC_SETTINGS_CHANGED)
         .fetch_one(pool)
@@ -185,11 +198,11 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
         .expect("count query");
 
     let req_noisy = SettingsUpdateRequest {
-        key: "protectedCategories".to_owned(),
-        value: JsonAny::from(serde_json::json!(["lights", "masters", "finals", "raw"])),
+        key: "rememberFollowLogs".to_owned(),
+        value: JsonAny::from(serde_json::json!(true)),
     };
     let resp_noisy =
-        settings::update_setting(pool, &bus, &req_noisy).await.expect("update protectedCategories");
+        settings::update_setting(pool, &bus, &req_noisy).await.expect("update rememberFollowLogs");
     assert_eq!(resp_noisy.status, SettingsUpdateStatus::Success);
     // Noisy: audit_id must be absent.
     assert!(resp_noisy.audit_id.is_none(), "noisy key update must NOT return an audit_id");
@@ -201,7 +214,7 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
         .expect("count query");
     assert_eq!(
         after_noisy.0, before_noisy.0,
-        "noisy protectedCategories update must NOT emit a settings.changed event"
+        "noisy rememberFollowLogs update must NOT emit a settings.changed event"
     );
 
     // ── emit_snapshot publishes settings.snapshot ─────────────────────────
@@ -225,6 +238,84 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
     );
 }
 
+// ── spec 016 T-003/T-004/T-005: global protection defaults ──────────────────
+
+/// The three global protection-default keys (`defaultProtection`,
+/// `blockPermanentDelete`, `protectedCategories`) MUST persist to the
+/// dedicated `protection_defaults` table (T-003, migration 0035) and emit
+/// `protection.default.changed` (T-004) when saved through the same
+/// `settings.update` use case the desktop Cleanup settings pane calls
+/// (T-005) — INCLUDING `protectedCategories`, which is marked `noisy` for the
+/// generic `settings.changed` topic (see
+/// `noisy_key_update_does_not_emit_changed_event_non_noisy_does` above) but is
+/// a named exception per plan.md E-016-3.
+#[tokio::test]
+async fn global_protection_default_update_persists_and_emits_protection_event() {
+    use audit::event_bus::TOPIC_PROTECTION_DEFAULT_CHANGED;
+
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+
+    for (key, value) in [
+        ("defaultProtection", serde_json::json!("normal")),
+        ("blockPermanentDelete", serde_json::json!(false)),
+        ("protectedCategories", serde_json::json!(["lights", "masters", "finals", "raw"])),
+    ] {
+        let before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+            .bind(TOPIC_PROTECTION_DEFAULT_CHANGED)
+            .fetch_one(pool)
+            .await
+            .expect("count query");
+
+        let req =
+            SettingsUpdateRequest { key: key.to_owned(), value: JsonAny::from(value.clone()) };
+        let resp = settings::update_setting(pool, &bus, &req)
+            .await
+            .unwrap_or_else(|e| panic!("update {key} must succeed: {e:?}"));
+        assert_eq!(resp.status, SettingsUpdateStatus::Success, "{key} update must succeed");
+        assert!(
+            resp.audit_id.is_some(),
+            "{key} update must emit an audit event (T-004), even though \
+             protectedCategories is marked noisy for the generic topic"
+        );
+
+        let after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
+            .bind(TOPIC_PROTECTION_DEFAULT_CHANGED)
+            .fetch_one(pool)
+            .await
+            .expect("count query");
+        assert_eq!(
+            after.0,
+            before.0 + 1,
+            "{key} update must emit exactly one protection.default.changed event"
+        );
+
+        // Persisted to the dedicated protection_defaults table (T-003), not
+        // just the legacy generic settings table — this is what
+        // `app_core::protection::load_global_protection` actually reads, so
+        // this is the assertion that proves the save path is really wired
+        // (T-005) rather than silently landing in a table nobody reads.
+        let stored: (String,) = sqlx::query_as(
+            "SELECT value FROM protection_defaults WHERE scope = 'global' AND key = ?",
+        )
+        .bind(key)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("{key} must be persisted in protection_defaults: {e:?}"));
+        let stored_value: serde_json::Value =
+            serde_json::from_str(&stored.0).expect("stored value must be valid JSON");
+        assert_eq!(stored_value, value, "{key} persisted value must match the update");
+
+        // `resolve_setting` is what `settings.get` AND the safety-critical
+        // `archive.permanently_delete` command use to read `blockPermanentDelete`
+        // — it must reflect the update too, not just the raw table (T-005).
+        let resolved = settings::resolve_setting(pool, key, None)
+            .await
+            .unwrap_or_else(|e| panic!("resolve_setting({key}) must succeed: {e:?}"));
+        assert_eq!(resolved, value, "resolve_setting({key}) must reflect the persisted update");
+    }
+}
+
 // ── log stream: events written by settings surface in recent_entries ──────────
 
 /// Updating a non-noisy setting emits an event to the `events` table. Assert
@@ -238,7 +329,11 @@ async fn log_stream_recent_entries_returns_emitted_events() {
     let empty = log_stream::recent_entries(pool, RecentOptions::default())
         .await
         .expect("recent_entries on empty db should succeed");
-    assert!(empty.is_empty(), "expected empty log on fresh DB, got {} entries", empty.len());
+    assert!(
+        empty.entries.is_empty(),
+        "expected empty log on fresh DB, got {} entries",
+        empty.entries.len()
+    );
 
     // Trigger an audit event via a non-noisy setting update (logLevel is not noisy).
     let req = SettingsUpdateRequest {
@@ -248,14 +343,17 @@ async fn log_stream_recent_entries_returns_emitted_events() {
     settings::update_setting(pool, &bus, &req).await.expect("update_setting should succeed");
 
     // recent_entries should now include at least one entry.
-    let entries = log_stream::recent_entries(pool, RecentOptions::default())
+    let result = log_stream::recent_entries(pool, RecentOptions::default())
         .await
         .expect("recent_entries should succeed after event emit");
 
-    assert!(!entries.is_empty(), "expected at least one log entry after settings update, got 0");
+    assert!(
+        !result.entries.is_empty(),
+        "expected at least one log entry after settings update, got 0"
+    );
 
     // The entry's id must follow the "aud:<n>" convention.
-    let first = &entries[0];
+    let first = &result.entries[0];
     assert!(
         first.id.starts_with("aud:"),
         "log entry id should start with 'aud:', got '{}'",

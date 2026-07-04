@@ -32,6 +32,7 @@ bodies.
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
@@ -76,9 +77,13 @@ def _render_section(heading, bullets):
     return "\n".join(lines)
 
 
-def render_body(phase, node):
-    """Render a node phase dict to markdown (byte-faithful to the old .md)."""
-    parts = ["# " + node["title"]]
+def render_body(phase, node, node_id=""):
+    """Render a node phase dict to markdown (byte-faithful to the old .md).
+
+    A node phase missing its 'title' falls back to node_id so a malformed /
+    hand-edited nodes.json entry degrades gracefully instead of raising KeyError.
+    """
+    parts = ["# " + node.get("title", node_id)]
 
     if phase == "pre":
         if "came_from" in node:
@@ -126,19 +131,35 @@ def render_body(phase, node):
 # ---------------------------------------------------------------------------
 # Event / command extraction.
 # ---------------------------------------------------------------------------
+def _as_str(value):
+    """Return value if it is a str, else "".
+
+    Adversarial / malformed hook payloads can carry non-string values where a
+    command or prompt string is expected (e.g. command_name as a dict or list).
+    Downstream code calls .startswith / re.search / .replace, which raise on a
+    non-string. Coerce anything that is not a str to "" so the guard degrades to
+    a silent no-op instead of crashing.
+    """
+    return value if isinstance(value, str) else ""
+
+
 def _resolve_command(event, payload):
     """Extract the speckit command string from the event payload."""
     if event == "UserPromptExpansion":
-        return payload.get("command_name") or ""
+        return _as_str(payload.get("command_name"))
     if event in ("PreToolUse", "PostToolUse"):
-        tool_input = payload.get("tool_input") or {}
-        cmd = tool_input.get("skill") or tool_input.get("command_name") or ""
+        tool_input = payload.get("tool_input")
+        if not isinstance(tool_input, dict):
+            tool_input = {}
+        cmd = _as_str(tool_input.get("skill")) or _as_str(
+            tool_input.get("command_name")
+        )
         if cmd:
             return cmd
         # Codex PreToolUse/PostToolUse may not carry a skill; try the prompt.
-        return _parse_speckit_slash(tool_input.get("prompt") or "")
+        return _parse_speckit_slash(_as_str(tool_input.get("prompt")))
     if event == "UserPromptSubmit":
-        return _parse_speckit_slash(payload.get("prompt") or "")
+        return _parse_speckit_slash(_as_str(payload.get("prompt")))
     return ""
 
 
@@ -168,6 +189,76 @@ def _normalize(cmd):
     return raw.replace(".", "-")
 
 
+def _find_speckit_root(start):
+    """Walk up from `start` to the nearest ancestor that holds a SpecKit root.
+
+    A SpecKit root is the directory that owns `.specify/` (and `specs/`). This
+    handles an agent whose cwd is a subdirectory of the project (e.g. frontend/)
+    by locating the directory where feature.json and specs/ actually live.
+    Returns "" when no ancestor qualifies.
+    """
+    if not start:
+        return ""
+    cur = os.path.abspath(start)
+    while True:
+        if os.path.isdir(os.path.join(cur, ".specify")) or os.path.isdir(
+            os.path.join(cur, "specs")
+        ):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return ""
+        cur = parent
+
+
+def _resolve_proj_root(payload):
+    """Resolve the project root from the INVOKING AGENT's working directory.
+
+    Claude/Codex hook payloads carry `cwd` -- the working directory of the
+    session or subagent that triggered the hook. In a git worktree this is the
+    worktree path (and `os.getcwd()` agrees, since Claude runs hooks from there).
+    CLAUDE_PROJECT_DIR, by contrast, is pinned to the directory Claude Code was
+    *launched* in -- typically a sibling checkout on a different feature branch.
+    Preferring `cwd` keeps SpecKit feature resolution from leaking across
+    worktrees; CLAUDE_PROJECT_DIR is only a last-resort fallback. We then walk up
+    to the directory that owns `.specify/`/`specs/` so subdirectory cwds resolve.
+    """
+    cwd = payload.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    if not isinstance(cwd, str) or not os.path.isdir(cwd):
+        cwd = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    return _find_speckit_root(cwd) or cwd
+
+
+def _resolve_node_id(node_id, nodes):
+    """Map a normalized command id to the best-matching node key.
+
+    Exact match wins, which preserves the intentional per-subcommand nodes
+    (review-run, optimize-tokens, qa-run, ...). Otherwise we strip trailing
+    "-<segment>" groups until a node exists. This absorbs spec-kit's command
+    naming where the invocable id carries a verb suffix or sub-namespace the
+    DAG models at the parent level:
+
+        verify.run            -> verify-run        -> verify
+        verify-tasks.run      -> verify-tasks-run  -> verify-tasks
+        cleanup.run           -> cleanup-run       -> cleanup
+        fix-findings.run      -> fix-findings-run  -> fix-findings
+        security-review.audit -> security-review-audit -> security-review
+
+    Node existence disambiguates the hyphen's double duty (verify-tasks-run
+    resolves to verify-tasks, not verify, because verify-tasks is a real node).
+    Returns the resolved key, or "" when nothing matches (silent no-op).
+    """
+    if node_id in nodes:
+        return node_id
+    parts = node_id.split("-")
+    while len(parts) > 1:
+        parts.pop()
+        candidate = "-".join(parts)
+        if candidate in nodes:
+            return candidate
+    return ""
+
+
 def _resolve_feat(proj_root):
     """SpecKit 3-tier <feat> resolution. Returns "" if none resolve."""
     env_dir = os.environ.get("SPECIFY_FEATURE_DIRECTORY")
@@ -182,7 +273,7 @@ def _resolve_feat(proj_root):
         try:
             with open(feature_json, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
-            feat = data.get("feature_directory") or "" if isinstance(data, dict) else ""
+            feat = _as_str(data.get("feature_directory")) if isinstance(data, dict) else ""
         except (OSError, ValueError):
             feat = ""
         if feat:
@@ -221,6 +312,19 @@ def _resolve_path(tmpl, feat, proj_root):
     return path
 
 
+def _path_present(path):
+    """True when `path` exists.
+
+    Precondition templates may carry glob metacharacters (e.g. `bug-*.md`,
+    one per numbered artefact). For those, match as a wildcard instead of
+    looking for a file literally named with the asterisk -- os.path.exists on
+    `bug-*.md` can never match a real `bug-1.md`.
+    """
+    if any(ch in path for ch in "*?["):
+        return bool(glob.glob(path))
+    return os.path.exists(path)
+
+
 def _evaluate_block(node, feat, proj_root):
     """Return a block reason string, or "" if nothing blocks."""
     for reason in node.get("hard_deprecated", []):
@@ -239,13 +343,13 @@ def _evaluate_block(node, feat, proj_root):
                 " switch to the feature branch"
             )
         path = _resolve_path(tmpl, feat, proj_root)
-        if not os.path.exists(path):
+        if not _path_present(path):
             return "Required artefact missing: " + path
     for tmpl in node.get("hard_exists", []):
         if "<feat>" in tmpl and not feat:
             continue  # cannot conflict when no feature exists yet
         path = _resolve_path(tmpl, feat, proj_root)
-        if os.path.exists(path):
+        if _path_present(path):
             return (
                 "Conflicting artefact present: " + path
                 + " -- use /speckit.refine.update to amend instead of"
@@ -283,6 +387,9 @@ def main():
         return 0
 
     nodes = _load_nodes(nodes_path)
+    node_id = _resolve_node_id(node_id, nodes)
+    if not node_id:
+        return 0
     node_entry = nodes.get(node_id)
     if not isinstance(node_entry, dict):
         return 0
@@ -290,9 +397,9 @@ def main():
     if not isinstance(node, dict):
         return 0
 
-    node_body = render_body(phase, node)
+    node_body = render_body(phase, node, node_id)
 
-    proj_root = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    proj_root = _resolve_proj_root(payload)
     feat = _resolve_feat(proj_root)
 
     if phase == "pre":

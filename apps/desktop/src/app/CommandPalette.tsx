@@ -3,24 +3,27 @@ import { m } from '@/lib/i18n';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { Command } from 'cmdk';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
-import { searchGlobal, getSettings } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import { openInNewWindow } from '@/lib/window';
 import { useHotkeys } from '@/lib/useHotkeys';
 import type { SearchResult } from '@/bindings/types';
 
-const PAGES: Array<{ label: string; route: string }> = [
-  { label: m.common_sessions(), route: '/sessions' },
-  { label: m.cmdk_page_review_queue(), route: '/review' },
-  { label: m.settings_datasources_category_calibration(), route: '/calibration' },
-  { label: m.nav_targets(), route: '/targets' },
-  { label: m.common_projects(), route: '/projects' },
-  { label: m.cmdk_page_plans(), route: '/plans' },
-  { label: m.cmdk_page_audit_log(), route: '/audit' },
-  { label: m.settings_page_title(), route: '/settings' },
+// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
+const PAGES: Array<{ label: () => string; route: string }> = [
+  { label: () => m.common_sessions(), route: '/sessions' },
+  { label: () => m.cmdk_page_review_queue(), route: '/review' },
+  { label: () => m.settings_datasources_category_calibration(), route: '/calibration' },
+  { label: () => m.nav_targets(), route: '/targets' },
+  { label: () => m.common_projects(), route: '/projects' },
+  { label: () => m.cmdk_page_plans(), route: '/plans' },
+  { label: () => m.cmdk_page_audit_log(), route: '/audit' },
+  { label: () => m.settings_page_title(), route: '/settings' },
 ];
 
 interface PaletteAction {
-  label: string;
+  /** Render-time thunk so the label re-reads the active locale (spec 046 #8). */
+  label: () => string;
   /** Route path for simple navigation actions. */
   route?: string;
   /** Custom handler for actions that need search params or other side effects. */
@@ -28,15 +31,15 @@ interface PaletteAction {
 }
 
 const ACTIONS: Array<PaletteAction> = [
-  { label: m.projects_create_title(), route: '/projects/new' },
+  { label: () => m.projects_create_title(), route: '/projects/new' },
 ];
 
 /**
  * Developer-only palette entry (spec 021 T013).
  * Appended to the Pages group only when devMode is on.
  */
-const DEV_PAGES: Array<{ label: string; route: string }> = [
-  { label: m.cmdk_dev_contracts(), route: '/dev/contracts' },
+const DEV_PAGES: Array<{ label: () => string; route: string }> = [
+  { label: () => m.cmdk_dev_contracts(), route: '/dev/contracts' },
 ];
 
 export function CommandPalette() {
@@ -50,7 +53,9 @@ export function CommandPalette() {
   // Load devMode from backend settings on mount (spec 021 T013).
   useEffect(() => {
     let cancelled = false;
-    getSettings({ scope: 'advanced' })
+    commands
+      .settingsGet('advanced')
+      .then(unwrap)
       .then((data) => {
         if (cancelled) return;
         const vals = data.values as Record<string, unknown>;
@@ -86,9 +91,12 @@ export function CommandPalette() {
     const controller = new AbortController();
     // Debounce search by 200ms to avoid excessive API calls
     const timeoutId = setTimeout(() => {
-      void searchGlobal({ query }).then((r) => {
-        if (!controller.signal.aborted) setResults(r);
-      });
+      void commands
+        .searchGlobal(query)
+        .then(unwrap)
+        .then((r) => {
+          if (!controller.signal.aborted) setResults(r);
+        });
     }, 200);
     return () => {
       clearTimeout(timeoutId);
@@ -118,19 +126,10 @@ export function CommandPalette() {
     [navigate],
   );
 
-  // FR-033 / T077: "Show ignored items" navigates to sessions with ignored review filter.
-  const showIgnoredAction = useCallback(() => {
-    setOpen(false);
-    setQuery('');
-    // Cast needed: TanStack Router search types are route-specific; reviewFilter
-    // is a valid sessions-route param (route-contract.ts REVIEW_FILTERS).
-    void navigate({ to: '/sessions', search: { reviewFilter: 'ignored' } as never });
-  }, [navigate]);
-
-  const ALL_ACTIONS: Array<PaletteAction> = [
-    ...ACTIONS,
-    { label: m.cmdk_action_show_ignored(), onSelect: showIgnoredAction },
-  ];
+  // Spec 041 FR-051 (T076): "Show ignored items" was removed along with the
+  // session review-state machine — sessions no longer have an `ignored`
+  // state, so there is nothing left to surface.
+  const ALL_ACTIONS: Array<PaletteAction> = [...ACTIONS];
 
   // All visible pages: standard pages + dev pages when devMode is on.
   const visiblePages = devMode ? [...PAGES, ...DEV_PAGES] : PAGES;
@@ -156,7 +155,7 @@ export function CommandPalette() {
                 </Command.Empty>
               )}
               {results.length > 0 && (
-                <Command.Group heading="Results">
+                <Command.Group heading={m.cmdk_group_results()}>
                   {results.map((r) => (
                     <Command.Item
                       key={r.id}
@@ -172,25 +171,25 @@ export function CommandPalette() {
                   ))}
                 </Command.Group>
               )}
-              <Command.Group heading="Pages">
+              <Command.Group heading={m.cmdk_group_pages()}>
                 {visiblePages.map((p) => (
                   <Command.Item
                     key={p.route}
                     className="alm-palette__item"
                     onSelect={() => select(p.route)}
                   >
-                    <span className="alm-palette__item-label">{p.label}</span>
+                    <span className="alm-palette__item-label">{p.label()}</span>
                   </Command.Item>
                 ))}
               </Command.Group>
-              <Command.Group heading="Actions">
+              <Command.Group heading={m.cmdk_group_actions()}>
                 {ALL_ACTIONS.map((a) => (
                   <Command.Item
-                    key={a.label}
+                    key={a.label()}
                     className="alm-palette__item"
                     onSelect={() => selectAction(a)}
                   >
-                    <span className="alm-palette__item-label">{a.label}</span>
+                    <span className="alm-palette__item-label">{a.label()}</span>
                   </Command.Item>
                 ))}
                 <Command.Item

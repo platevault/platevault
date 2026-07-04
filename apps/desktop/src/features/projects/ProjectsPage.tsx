@@ -39,6 +39,7 @@ import { Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { projectStateLabel } from '@/lib/lifecycle';
+import { useGrouping } from '@/lib/use-grouping';
 import {
   ProjectsTable,
   DEFAULT_PROJECT_SORT,
@@ -84,7 +85,20 @@ export function ProjectsPage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<ProjectSort>(DEFAULT_PROJECT_SORT);
 
-  // UUID-based selection: find project by id, clear stale ids that no longer exist.
+  const { dims, setSlot } = useGrouping({
+    storageKey: 'projects.grouping.dims.v1',
+    validIds: ['state', 'tool', 'target'],
+    defaultDims: [],
+  });
+
+  const PROJECTS_DIMENSIONS: FilterOption[] = [
+    { value: 'state', label: m.projects_dim_lifecycle() },
+    { value: 'tool', label: m.projects_dim_tool() },
+    { value: 'target', label: m.projects_dim_target() },
+  ];
+
+  // UUID-based selection (origin/main): find project by id, clear stale ids that
+  // no longer exist. (Supersedes redesign's index-based selectedIdx.)
   const project: ProjectSummaryDto | undefined =
     selected != null ? projects.find((p) => p.id === selected) : undefined;
   useStaleSelectionCleanup(selected, project !== undefined || selected == null, () =>
@@ -156,6 +170,11 @@ export function ProjectsPage() {
               onChange: onLifecycleChange,
             },
           ]}
+          grouping={{
+            dimensions: PROJECTS_DIMENSIONS,
+            dims,
+            setSlot,
+          }}
         />
       }
       actions={
@@ -187,7 +206,7 @@ export function ProjectsPage() {
         ) : undefined
       }
       onCloseDetail={project ? clearSelection : undefined}
-      detailLabel="Project details"
+      detailLabel={m.projects_detail_label()}
     >
       <ProjectsTable
         projects={filtered}
@@ -196,6 +215,7 @@ export function ProjectsPage() {
         loading={loading}
         sort={sort}
         onSort={handleHeaderSort}
+        dims={dims}
       />
     </ListPageLayout>
   );

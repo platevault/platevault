@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json pre",
+            "command": "python3 $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/dispatcher.py $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/nodes.json pre",
             "timeout": 5
           }
         ],
@@ -45,7 +45,8 @@
           {
             "type": "command",
             "command": ".codex/hooks/hooks-quality/scripts/quality-before-commit.sh",
-            "if": "Bash(git commit*)"
+            "if": "Bash(git commit*)",
+            "timeout": 10
           }
         ],
         "_apm_source": "hooks-quality"
@@ -54,18 +55,30 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json pre",
+            "command": "python3 $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/dispatcher.py $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/nodes.json pre",
             "timeout": 5
           }
         ],
         "_apm_source": "speckit-dag-hooks"
       },
       {
+        "matcher": "Grep|Glob|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/code-intelligence/scripts/code-discovery-steer.sh",
+            "timeout": 3
+          }
+        ],
+        "_apm_source": "code-intelligence"
+      },
+      {
         "matcher": "apply_patch|Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh"
+            "command": ".codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
+            "timeout": 3
           }
         ],
         "_apm_source": "agent-coder"
@@ -73,21 +86,12 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit",
+        "matcher": "apply_patch|Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": ".codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh"
-          }
-        ],
-        "_apm_source": "hooks-quality"
-      },
-      {
-        "matcher": "apply_patch",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh"
+            "command": ".codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh",
+            "timeout": 3
           }
         ],
         "_apm_source": "hooks-quality"
@@ -98,7 +102,100 @@
           {
             "type": "command",
             "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-            "if": "Bash(git switch -c*)|Bash(git switch --create*)|Bash(git checkout -b*)|Bash(git checkout -B*)|Bash(git worktree add*)|Bash(git merge*)|Bash(git pull*)|Bash(git rebase*)"
+            "async": true,
+            "timeout": 30,
+            "if": "Bash(git switch -c*)"
+          }
+        ],
+        "_apm_source": "mcp-repomix"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+            "async": true,
+            "timeout": 30,
+            "if": "Bash(git switch --create*)"
+          }
+        ],
+        "_apm_source": "mcp-repomix"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+            "async": true,
+            "timeout": 30,
+            "if": "Bash(git checkout -b*)"
+          }
+        ],
+        "_apm_source": "mcp-repomix"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+            "async": true,
+            "timeout": 30,
+            "if": "Bash(git checkout -B*)"
+          }
+        ],
+        "_apm_source": "mcp-repomix"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+            "async": true,
+            "timeout": 30,
+            "if": "Bash(git worktree add*)"
+          }
+        ],
+        "_apm_source": "mcp-repomix"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+            "async": true,
+            "timeout": 30,
+            "if": "Bash(git merge*)"
+          }
+        ],
+        "_apm_source": "mcp-repomix"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+            "async": true,
+            "timeout": 30,
+            "if": "Bash(git pull*)"
+          }
+        ],
+        "_apm_source": "mcp-repomix"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+            "async": true,
+            "timeout": 30,
+            "if": "Bash(git rebase*)"
           }
         ],
         "_apm_source": "mcp-repomix"
@@ -128,11 +225,50 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .codex/hooks/speckit-dag-hooks/scripts/dispatcher.py .codex/hooks/speckit-dag-hooks/scripts/nodes.json post",
+            "command": "python3 $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/dispatcher.py $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/nodes.json post",
             "timeout": 5
           }
         ],
         "_apm_source": "speckit-dag-hooks"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/code-intelligence/scripts/reindex-after-commit.sh",
+            "if": "Bash(git commit*)",
+            "async": true,
+            "timeout": 30
+          }
+        ],
+        "_apm_source": "code-intelligence"
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/code-intelligence/scripts/codebase-index.sh",
+            "async": true,
+            "statusMessage": "Indexing codebase..."
+          }
+        ],
+        "_apm_source": "code-intelligence"
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/code-intelligence/scripts/subagent-context-inject.sh",
+            "timeout": 5
+          }
+        ],
+        "_apm_source": "code-intelligence"
       }
     ]
   }

@@ -7,18 +7,71 @@ shipped in `apps/desktop/` and pending only wiring to real persistence.
 
 ## US1 — Set Global Defaults (P1)
 
-- [x] **T-001** `[mockup-done]` Source Protection settings section UI
-  (`apps/desktop/src/features/settings/SettingsPage.tsx::SourceProtectionSection`).
+- [x] **T-001** `[mockup-done]` Source Protection settings section UI.
+  _Note (impl-016-tail): the UI moved from `SettingsPage.tsx::SourceProtectionSection`
+  to `apps/desktop/src/features/settings/Cleanup.tsx` (spec 018 settings
+  refactor) — same two controls (`blockPermanentDelete` toggle,
+  `defaultProtection` select) render there today; path in this task predates
+  that move._
 - [x] **T-002** `[mockup-done]` Settings store keys `defaultProtection`,
-  `blockPermanentDelete`, `protectedCategories`
-  (`apps/desktop/src/data/settings.ts`).
-- [ ] **T-003** Add `GlobalProtectionDefaults` row to persistence
+  `blockPermanentDelete`, `protectedCategories`.
+  _Note (impl-016-tail): `apps/desktop/src/data/settings.ts` no longer exists;
+  the keys now live in the backend `settings`/`protection_defaults` tables via
+  `apps/desktop/src/features/settings/settingsIpc.ts` (`getSettings`/
+  `updateSettings`), read/written for scope `"cleanup"`._
+- [x] **T-003** Add `GlobalProtectionDefaults` row to persistence
   (`crates/persistence/db/`) with migration; seed values match mockup defaults
   (`protected`, `true`, `["lights", "masters", "finals"]`).
-- [ ] **T-004** Implement `protection.default.changed` audit event
+  _Evidence: already present before impl-016-tail — migration
+  `0035_protection_defaults.sql` creates the `protection_defaults` table
+  (scope, key, value, updated_at) and seeds `global`/`defaultProtection` =
+  `"protected"`, `global`/`blockPermanentDelete` = `true`,
+  `global`/`protectedCategories` = `["lights","masters","finals"]`. Verified
+  by `crates/persistence/db/src/repositories/source_protection.rs`'s
+  `get_protection_default`/`set_protection_default` and by the new
+  `global_protection_default_update_persists_and_emits_protection_event` test
+  in `crates/app/core/tests/settings_logs_integration.rs`, which asserts the
+  row round-trips through the `protection_defaults` table by direct SQL query._
+- [x] **T-004** Implement `protection.default.changed` audit event
   (`crates/audit/`) emitted on every settings update.
-- [ ] **T-005** Wire desktop settings save path to the persistence-backed
+  _Evidence: `TOPIC_PROTECTION_DEFAULT_CHANGED` / `ProtectionDefaultChanged`
+  already existed in `crates/audit/src/event_bus.rs`. impl-016-tail wires the
+  emit into the REAL save path: `app_core_settings::update_setting` and
+  `restore_defaults` (`crates/app/settings/src/lib.rs`) now special-case the
+  three global-protection-default keys to emit `protection.default.changed`
+  instead of (or, for `protectedCategories`, in addition to skipping) the
+  generic `settings.changed`/no-emit path — this is the named noisy-key
+  exception from plan.md E-016-3. Prior to this change the event type existed
+  but was only reachable from a direct test call
+  (`app_core::protection::set_global_protection_default`), never from the
+  real `settings.update` Tauri command — i.e. it was never actually emitted
+  on a real settings update. Tested in
+  `global_protection_default_update_persists_and_emits_protection_event`
+  (`crates/app/core/tests/settings_logs_integration.rs`)._
+- [x] **T-005** Wire desktop settings save path to the persistence-backed
   defaults via the application use-case layer.
+  _Evidence/bug fixed (impl-016-tail): before this change,
+  `app_core::protection::load_global_protection` (the function
+  `plan_protection_check`/`get_source_protection`/`generate_cleanup_plan`
+  actually read from) ALWAYS preferred the `protection_defaults` table
+  (unconditionally seeded by migration 0035), while the desktop save path
+  (`Cleanup.tsx` → `settingsIpc.updateSettings` → `settings.update` Tauri
+  command → `app_core_settings::update_setting`) wrote only to the legacy
+  generic `settings` table. Because `protection_defaults` always had a row,
+  `load_global_protection` never observed the user's change — the Cleanup
+  pane's "Restore/Save" round-tripped through `settings.get` (which also read
+  the legacy table) and LOOKED like it worked, but the actual protection
+  resolver used by plan generation silently ignored it. Fixed by making
+  `resolve_setting`/`update_setting`/`restore_defaults` in
+  `crates/app/settings/src/lib.rs` read/write `protection_defaults` for
+  `defaultProtection`/`blockPermanentDelete`/`protectedCategories` instead of
+  the legacy `settings` table, so `settings.get`, `settings.update`, and
+  `settings.restore-defaults` (all already called by the desktop Cleanup
+  pane) now stay in sync with the value the resolver reads.
+  `app_core::protection::set_global_protection_default` was simplified to
+  delegate to this single implementation. No Tauri command signatures or
+  contracts changed — this was purely an application-use-case-layer fix, so
+  no bindings regen was required._
 
 ## US2 — Per-Source Override (P2)
 

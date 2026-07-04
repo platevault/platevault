@@ -10,7 +10,8 @@
  * 1. InboxDetail renders breakdown rows from classify response.
  * 2. InboxDetail renders "Needs review" section for unclassified files.
  * 3. InboxDetail reclassify override picker fires onReclassify with correct payload.
- * 4. inboxConfirm is called with the correct action and destructiveDestination.
+ * 4. inboxConfirm is called with the correct payload (no `action` field —
+ *    spec 041 FR-050/T072) and destructiveDestination.
  * 5. The plan-created toast always fires after confirm (masters produce a plan too).
  * 6. InboxList renders item with classification state pill / filters by lane.
  */
@@ -53,11 +54,13 @@ const {
 	mockAddToast: vi.fn(),
 }));
 
-vi.mock("@/api/commands", () => ({
-	inboxClassify: mockInboxClassify,
-	inboxConfirm: mockInboxConfirm,
-	inboxReclassify: mockInboxReclassify,
-	inboxScanFolder: mockInboxScanFolder,
+vi.mock("@/bindings/index", () => ({
+	commands: {
+		inboxClassify: mockInboxClassify,
+		inboxConfirm: mockInboxConfirm,
+		inboxReclassify: mockInboxReclassify,
+		inboxScanFolder: mockInboxScanFolder,
+	},
 }));
 
 vi.mock("@/shared/toast", () => ({
@@ -95,11 +98,8 @@ vi.stubEnv("VITE_USE_MOCKS", "true");
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
-import type {
-	InboxClassifyResponse,
-	InboxItemSummary,
-	InboxListItem,
-} from "@/api/commands";
+import type { InboxItemSummary, InboxListItem } from "@/bindings/index";
+import type { InboxClassifyResponse } from "@/bindings/aliases";
 
 const mixedClassification: InboxClassifyResponse = {
 	inboxItemId: "item-001",
@@ -200,10 +200,13 @@ describe("InboxDetail", () => {
 
 	it("fires reclassify with correct payload when override applied", async () => {
 		mockInboxReclassify.mockResolvedValue({
-			inboxItemId: "item-001",
-			updatedType: "mixed",
-			remainingUnclassified: 0,
-			appliedCount: 1,
+			status: "ok",
+			data: {
+				inboxItemId: "item-001",
+				updatedType: "mixed",
+				remainingUnclassified: 0,
+				appliedCount: 1,
+			},
 		});
 
 		render(
@@ -252,6 +255,8 @@ describe("InboxDetail", () => {
 describe("InboxList", () => {
 	const fitsItem: InboxListItem = {
 		inboxItemId: "item-fits",
+		groupId: "item-fits",
+		groupKey: "",
 		rootId: "root-001",
 		rootAbsolutePath: "/astro/inbox",
 		relativePath: "lights/NGC7000",
@@ -268,6 +273,8 @@ describe("InboxList", () => {
 	};
 	const videoItem: InboxListItem = {
 		inboxItemId: "item-video",
+		groupId: "item-video",
+		groupKey: "",
 		rootId: "root-001",
 		rootAbsolutePath: "/astro/inbox",
 		relativePath: "planetary/Jupiter",
@@ -331,6 +338,8 @@ describe("InboxList", () => {
 	it("renders folder + master rows without a duplicate search box or footer count (#83)", () => {
 		const masterItem: InboxListItem = {
 			inboxItemId: "item-master",
+			groupId: "item-master",
+			groupKey: "",
 			rootId: "root-001",
 			rootAbsolutePath: "/astro/inbox",
 			relativePath: "masters/dark_master.fits",
@@ -396,40 +405,13 @@ describe("Confirm payload and toast", () => {
 		);
 	}
 
-	it("calls inboxConfirm with split action for mixed classification", async () => {
-		mockInboxConfirm.mockResolvedValue({
-			planId: "plan-abc",
-			planState: "ready_for_review",
-			itemsTotal: 18,
-			registeredAsMaster: false,
-		});
+	// spec 041 T071/T072 (FR-050): the backend "split" action for mixed
+	// classifications is removed entirely — a mixed row is never confirmed at
+	// all (InboxPage disables Confirm for it via `canConfirm`), so there is no
+	// "split" payload to assert anymore. `mixedClassification` above documents
+	// what that unreachable-for-confirm shape looks like.
 
-		const onConfirm = async () => {
-			await mockInboxConfirm({
-				inboxItemId: "item-001",
-				action: "split",
-				contentSignature: mixedClassification.contentSignature,
-				rootAbsolutePath: "/astro/inbox",
-				destructiveDestination: "archive",
-			});
-		};
-
-		render(<ConfirmStub onConfirm={onConfirm} />);
-
-		await act(async () => {
-			fireEvent.click(screen.getByTestId("inbox-confirm-btn"));
-		});
-
-		expect(mockInboxConfirm).toHaveBeenCalledWith(
-			expect.objectContaining({
-				action: "split",
-				contentSignature: "sig-abc",
-				destructiveDestination: "archive",
-			}),
-		);
-	});
-
-	it("calls inboxConfirm with confirm action for single_type", async () => {
+	it("calls inboxConfirm without an action field for single_type", async () => {
 		mockInboxConfirm.mockResolvedValue({
 			planId: "plan-def",
 			planState: "ready_for_review",
@@ -440,7 +422,6 @@ describe("Confirm payload and toast", () => {
 		const onConfirm = async () => {
 			await mockInboxConfirm({
 				inboxItemId: "item-002",
-				action: "confirm",
 				contentSignature: singleTypeClassification.contentSignature,
 				rootAbsolutePath: "/astro/inbox",
 				destructiveDestination: "archive",
@@ -455,10 +436,10 @@ describe("Confirm payload and toast", () => {
 
 		expect(mockInboxConfirm).toHaveBeenCalledWith(
 			expect.objectContaining({
-				action: "confirm",
 				contentSignature: "sig-def",
 			}),
 		);
+		expect(mockInboxConfirm.mock.calls[0]?.[0]).not.toHaveProperty("action");
 	});
 
 	it("always shows the plan-created toast after confirm (masters now produce a plan too)", async () => {
@@ -474,7 +455,6 @@ describe("Confirm payload and toast", () => {
 		const onConfirm = async () => {
 			const result = await mockInboxConfirm({
 				inboxItemId: "item-master-001",
-				action: "confirm",
 				contentSignature: singleTypeClassification.contentSignature,
 				rootAbsolutePath: "/astro/inbox",
 				destructiveDestination: "archive",

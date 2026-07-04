@@ -6,31 +6,28 @@
 
 **Feature Branch**: `015-token-pattern-builder`  
 **Created**: 2026-05-09  
-**Status**: Draft — mockup implemented for builder UI and preview
+**Status**: **Implemented** (2026-07-03) — builder UI + resolver/validator/preview shipped; see below.
 **Input**: User description: "Specify the token-based pattern builder for project folders and archive locations, without freeform path text."
 
-## Implementation Status
+## Implementation Status: Implemented (2026-07-03)
 
-The visual and interactive surface of the builder is already realized in the
-desktop mockup. Logic for resolving a pattern against metadata, validating it
-against OS path rules, and persisting per-source overrides is **not yet
-implemented** and is in scope for this spec.
+Superseding the original "mockup only" note: the builder is shipped end to end.
+The chip-based editor is live in
+`apps/desktop/src/features/settings/NamingStructure.tsx` (`PatternChipsEditor` —
+token + separator chips with add/remove, live validation via `pattern_validate`,
+live preview via `pattern_preview`, save-blocking when invalid). The
+resolver/validator/sanitizer is the `crates/patterns/` crate
+(registry/resolver/validator/sanitize/per_type, ~64 passing tests), exposed
+through `crates/contracts/core/src/patterns.rs` + app orchestration
+(`crates/app/core/src/patterns.rs`) + Tauri commands `pattern_validate` /
+`pattern_resolve` / `pattern_preview`. A full SpecKit artifact set exists
+(plan/research/data-model/contracts/tasks, ~30 tasks — not "0/0"). Deferred
+downstream scope (per-source overrides, session-backed preview aggregation,
+Inbox-confirm consumption) was handed to spec 018.
 
-### Mockup Evidence
-
-- `apps/desktop/src/ui/TokenPattern.tsx` — exports `TokenPatternBuilder`
-  (token + separator chips with add/remove menus), `PatternPreview` (list of
-  sample destination paths with optional frame counts), and `RenderPattern`
-  (inline read-only render of a pattern).
-- `apps/desktop/src/features/settings/SettingsPage.tsx` — `NamingStructureSection`
-  uses `TokenPatternBuilder` for the library default pattern, shows a
-  `PatternPreview` of representative destinations, exposes auto-apply and
-  always-preview toggles, and lists per-source override stubs.
-- `apps/desktop/src/data/mock.ts` — `availableTokens` enumerates the v1 token
-  vocabulary used by the builder.
-- `apps/desktop/src/data/settings.ts` — `SettingsState.pattern: PatternPart[]`
-  is the persisted shape; `DEFAULT_PATTERN` defines the seeded library default
-  (`{target}/{filter}/{date}/{frame_type}/`).
+> Note: the earlier "Mockup Evidence" file references (`ui/TokenPattern.tsx`,
+> `data/mock.ts`, `data/settings.ts`) are obsolete — those files were replaced
+> by the real implementation above during the 027 frontend rewrite.
 
 ### Token Vocabulary (v1)
 

@@ -5,10 +5,13 @@
 //! `specs/015-token-pattern-builder/contracts/` and are used by the Tauri
 //! command surface in `apps/desktop/src-tauri/src/commands/patterns.rs`.
 //!
-//! Three operations:
+//! Four operations:
 //! - `pattern.validate`  — structural validation without metadata.
 //! - `pattern.resolve`   — full resolution against a metadata bundle.
 //! - `pattern.preview`   — preview resolution against sample metadata for the UI.
+//! - `pattern.path_preview` — preview resolution of a per-type **path-string**
+//!   pattern (spec 041 `{token}`/literal path segments) against sample
+//!   metadata, for the Settings per-frame-type destination pattern editor.
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -157,6 +160,36 @@ pub struct PatternPreviewRequest {
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PatternPreviewResponse {
+    /// The resolved relative path for display.
+    pub resolved_path: String,
+    /// Token names resolved via fallback (shown as dim segments in the UI).
+    pub missing_tokens: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+// ── pattern.path_preview (spec 041 per-type destination patterns, package P11) ──
+
+/// Request for `pattern.path_preview` — preview a per-type destination
+/// **path-string** pattern (e.g. `masters/flats/{filter}/`) against sample
+/// metadata, for the Settings per-frame-type destination pattern editor.
+///
+/// Unlike [`PatternPreviewRequest`] (which carries the `PatternPart[]`
+/// token/separator model), `pattern` here is a raw path string that may
+/// interleave `{token}` placeholders with literal directory segments — the
+/// form produced by [`crate::patterns`] (this module) is not applicable;
+/// resolution is delegated to `crates/patterns::resolver::resolve_pattern_str`,
+/// which reuses the v1 token registry as the single token-name authority.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PathPatternPreviewRequest {
+    pub pattern: String,
+    pub sample_metadata: MetadataBundleDto,
+}
+
+/// Successful response for `pattern.path_preview`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PathPatternPreviewResponse {
     /// The resolved relative path for display.
     pub resolved_path: String,
     /// Token names resolved via fallback (shown as dim segments in the UI).

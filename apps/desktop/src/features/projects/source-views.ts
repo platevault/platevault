@@ -1,13 +1,18 @@
 /**
  * Spec 026 — Generated project source view helpers.
+ * Spec 049 — source view generation (first-materialization) helper.
  *
  * Provides typed wrappers over `preparedview.list`, `preparedview.remove`,
- * and `preparedview.regenerate` Tauri commands.
+ * `preparedview.regenerate`, and `sourceview.generate` Tauri commands.
  *
  * All write operations return a `planId` that must be routed through the
  * standard `plans.approve` → `plan.apply` pipeline (spec 017/025).
  * Destructive destination is always `archive` (R-026-Dest-Archive).
  */
+
+import { m } from '@/lib/i18n';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -66,18 +71,46 @@ export interface PreparedViewRegenerateResponse {
   unresolvedItemCount: number;
 }
 
-// ── Command wrappers ──────────────────────────────────────────────────────────
+// ── Spec 049: source view generation ───────────────────────────────────────────
 
-async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
-  if (useMocks) {
-    const { mockInvoke } = await import('@/api/mocks');
-    // `mockInvoke` returns `Promise<unknown>`; narrow to the caller's `T` here.
-    return mockInvoke(cmd, args) as Promise<T>;
-  }
-  const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
-  return tauriInvoke<T>(cmd, args);
+/** Warning codes for `sourceview.generate` (spec 049). */
+export type GenerationWarningCode =
+  | 'no_calibration_applied'
+  | 'unresolved_source'
+  | 'capability_drift'
+  | 'long_path';
+
+/** A non-blocking review warning surfaced with a generation plan. */
+export interface GenerationWarning {
+  code: GenerationWarningCode;
+  message: string;
+  items?: string[];
 }
+
+/** Request for `sourceview.generate`. */
+export interface SourceViewGenerateRequest {
+  projectId: string;
+  /** Workflow/processing profile id (spec 011). Omit for the project default. */
+  profileId?: string;
+  /** Optional per-generation destination override (FR-021b). */
+  destinationOverride?: string;
+  /** Explicit opt-in to copy when no link kind is achievable (FR-003). */
+  copyOptIn?: boolean;
+  /** When true, any unresolved source fails the whole plan (FR-019). */
+  strict?: boolean;
+}
+
+/** Response from `sourceview.generate`. */
+export interface SourceViewGenerateResponse {
+  /** Id of the generation plan. Route through spec 017/025 pipeline. */
+  planId: string;
+  warnings?: GenerationWarning[];
+}
+
+// ── Command wrappers ──────────────────────────────────────────────────────────
+// Migrated off the hand-rolled local `invoke` onto the generated bindings +
+// unwrap (spec 037 SC-001). Runtime shapes match the local DTOs above, so the
+// unwrapped generated Result is cast to the module's public interface.
 
 /**
  * `preparedview.list` — list all prepared source views for a project.
@@ -85,7 +118,7 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 export async function listPreparedViews(
   projectId: string,
 ): Promise<PreparedViewListResponse> {
-  return invoke<PreparedViewListResponse>('preparedview_list', { projectId });
+  return unwrap(await commands.preparedviewList(projectId)) as PreparedViewListResponse;
 }
 
 /**
@@ -97,7 +130,7 @@ export async function listPreparedViews(
 export async function removePreparedView(
   viewId: string,
 ): Promise<PreparedViewRemoveResponse> {
-  return invoke<PreparedViewRemoveResponse>('preparedview_remove', { viewId });
+  return unwrap(await commands.preparedviewRemove(viewId)) as PreparedViewRemoveResponse;
 }
 
 /**
@@ -109,7 +142,20 @@ export async function removePreparedView(
 export async function regeneratePreparedView(
   viewId: string,
 ): Promise<PreparedViewRegenerateResponse> {
-  return invoke<PreparedViewRegenerateResponse>('preparedview_regenerate', { viewId });
+  return unwrap(await commands.preparedviewRegenerate(viewId)) as PreparedViewRegenerateResponse;
+}
+
+/**
+ * `sourceview.generate` (spec 049) — create a `prepared_view_generation` plan
+ * first-materializing a project's selected lights + matched calibration.
+ *
+ * Returns a `planId` to route through the plan review pipeline. Never copies
+ * by default — copy requires `copyOptIn: true`.
+ */
+export async function generateSourceView(
+  req: SourceViewGenerateRequest,
+): Promise<SourceViewGenerateResponse> {
+  return unwrap(await commands.sourceviewGenerate(req)) as SourceViewGenerateResponse;
 }
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -118,17 +164,17 @@ export async function regeneratePreparedView(
 export function viewStateLabel(state: ViewState): string {
   switch (state) {
     case 'current':
-      return 'Current';
+      return m.projects_view_state_current();
     case 'stale':
-      return 'Stale';
+      return m.projects_view_state_stale();
     case 'missing':
-      return 'Missing';
+      return m.projects_view_state_missing();
     case 'removed':
-      return 'Removed';
+      return m.projects_view_state_removed();
     case 'failed':
-      return 'Failed';
+      return m.projects_view_state_failed();
     case 'kind_diverged':
-      return 'Kind mismatch — resolve before operating';
+      return m.projects_view_state_kind_diverged();
     default:
       return state;
   }

@@ -64,13 +64,6 @@ export const commands = {
 	 */
 	sessionsCalendar: (startMonth: string, endMonth: string) => typedError<CalendarData, ContractError_Serialize>(__TAURI_INVOKE("sessions_calendar", { startMonth, endMonth })),
 	/**
-	 *  `sessions.transition` — transition a session to a new state.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	sessionsTransition: (id: string, action: string, metadata: unknown | null) => typedError<AcquisitionSession_Serialize, ContractError_Serialize>(__TAURI_INVOKE("sessions_transition", { id, action, metadata })),
-	/**
 	 *  `sessions.split` — split a session at a given frame index.
 	 * 
 	 *  # Errors
@@ -330,6 +323,11 @@ export const commands = {
 	/**
 	 *  `projects.create` — create a new project.
 	 * 
+	 *  Routes through `app_core::project_create` so the folder-scaffolding plan
+	 *  is auto-applied when it is mkdir-only (user decision 2026-07-04); the
+	 *  result's `scaffold_applied` reports the outcome. The plan + audit records
+	 *  are still written either way (constitution II).
+	 * 
 	 *  # Errors
 	 * 
 	 *  Returns `Err(String)` with the error code on validation or database failure.
@@ -452,6 +450,26 @@ export const commands = {
 	 */
 	archivePermanentlyDelete: (planId: string, confirmText: string) => typedError<ArchivePermanentlyDeleteResponse, ContractError_Serialize>(__TAURI_INVOKE("archive_permanently_delete", { planId, confirmText })),
 	/**
+	 *  `archive.list` — list projects currently in the `archived` lifecycle state
+	 *  (spec 017 C5). Projects-only surface; each row carries `archivedViaPlanId`
+	 *  so the management commands act on the owning plan.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err` with the contract error code on database failure.
+	 */
+	archiveList: () => typedError<ArchiveListResponse, ContractError_Serialize>(__TAURI_INVOKE("archive_list")),
+	/**
+	 *  `archive.plan.generate` — build a reviewable whole-project archive plan
+	 *  (spec 017 US2/WP-B). Creates a `ready_for_review` plan; performs NO
+	 *  filesystem mutation and never auto-applies (constitution II / FR-002).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err` with the contract error code on database failure.
+	 */
+	archivePlanGenerate: (projectId: string, title: string | null) => typedError<GenerateArchivePlanResult, ContractError_Serialize>(__TAURI_INVOKE("archive_plan_generate", { projectId, title })),
+	/**
 	 *  `plans.apply` — start applying an approved plan (US1, T019; spec 042 US16 T240).
 	 * 
 	 *  Returns immediately with the run id and new state (`"applying"`).
@@ -536,19 +554,46 @@ export const commands = {
 	 */
 	plansApplyStatus: (planId: string) => typedError<PlanApplyStatus_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_apply_status", { planId })),
 	/**
-	 *  `audit.list` — returns paginated audit entries.
+	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
-	auditList: (filters: unknown | null, pagination: unknown | null) => typedError<AuditListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("audit_list", { filters, pagination })),
+	auditList: (filters: {
+	entityType?: string | null,
+	entityId?: string | null,
+	outcome?: AuditOutcome | null,
+	severity?: Severity | null,
+	/**  Case-insensitive substring match against event/entity/actor text. */
+	search?: string | null,
+	/**  RFC 3339 lower bound on the entry timestamp (inclusive). */
+	from?: string | null,
+	/**  RFC 3339 upper bound on the entry timestamp (exclusive). */
+	to?: string | null,
+} | null, pagination: {
+	limit?: number | null,
+	offset?: number | null,
+} | null) => typedError<AuditListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("audit_list", { filters, pagination })),
 	/**
-	 *  `audit.export` — export audit entries as newline-delimited JSON.
+	 *  `audit.export` — export the filtered audit entries as newline-delimited
+	 *  JSON (one `AuditEntry` per line, matching `audit.list`'s entry shape).
+	 *  Ignores pagination — export is always the full filtered set.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
-	auditExport: (filters: unknown | null) => typedError<string, ContractError_Serialize>(__TAURI_INVOKE("audit_export", { filters })),
+	auditExport: (filters: {
+	entityType?: string | null,
+	entityId?: string | null,
+	outcome?: AuditOutcome | null,
+	severity?: Severity | null,
+	/**  Case-insensitive substring match against event/entity/actor text. */
+	search?: string | null,
+	/**  RFC 3339 lower bound on the entry timestamp (inclusive). */
+	from?: string | null,
+	/**  RFC 3339 upper bound on the entry timestamp (exclusive). */
+	to?: string | null,
+} | null) => typedError<string, ContractError_Serialize>(__TAURI_INVOKE("audit_export", { filters })),
 	/**
 	 *  `log.recent` — return the most-recent log entries (initial hydration window).
 	 * 
@@ -606,19 +651,28 @@ export const commands = {
 	 */
 	rootsRegisterBatch: (request: RegisterSourceBatchRequest_Deserialize) => typedError<RegisterSourceBatchResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("roots_register_batch", { request })),
 	/**
-	 *  `roots.remap` — preview a root path remap.
+	 *  `roots.remap` — preview a root path remap (P6a).
+	 * 
+	 *  Delegates to `app_core::first_run::remap_root` for path validation and
+	 *  sample-path verification against the real `registered_sources` row.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `ContractError` (`source.not_found`, `path.not_exists`,
+	 *  `path.not_directory`, `path.permission_denied`, or `internal.database`).
 	 */
 	rootsRemap: (rootId: string, newPath: string) => typedError<RemapVerification, ContractError_Serialize>(__TAURI_INVOKE("roots_remap", { rootId, newPath })),
 	/**
-	 *  `roots.remap.apply` — apply a verified root remap.
+	 *  `roots.remap.apply` — apply a previously previewed root remap (P6a).
+	 * 
+	 *  Delegates to `app_core::first_run::apply_root_remap`, which updates the
+	 *  root's stored path in `registered_sources` and publishes a `root.remapped`
+	 *  audit event.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `ContractError` (`source.not_found`, `path.not_exists`,
+	 *  `path.not_directory`, `path.permission_denied`, or `internal.database`).
 	 */
-	rootsRemapApply: (rootId: string, verified: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("roots_remap_apply", { rootId, verified })),
+	rootsRemapApply: (rootId: string, newPath: string, verified: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("roots_remap_apply", { rootId, newPath, verified })),
 	/**
 	 *  `scan.start` — start a filesystem scan, optionally for specific roots.
 	 * 
@@ -700,6 +754,18 @@ export const commands = {
 	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
 	 */
 	patternPreview: (request: PatternPreviewRequest_Deserialize) => typedError<PatternPreviewResponse, ContractError_Serialize>(__TAURI_INVOKE("pattern_preview", { request })),
+	/**
+	 *  `pattern.path_preview` — resolve a per-type destination **path-string**
+	 *  pattern against sample metadata, for the Settings per-frame-type
+	 *  destination pattern editor's live preview (spec 041, package P11).
+	 * 
+	 *  Returns `PathPatternPreviewResponse { resolved_path, missing_tokens, warnings }`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with the error code on invalid patterns or paths.
+	 */
+	patternPathPreview: (request: PathPatternPreviewRequest_Deserialize) => typedError<PathPatternPreviewResponse, ContractError_Serialize>(__TAURI_INVOKE("pattern_path_preview", { request })),
 	/**
 	 *  `source.protection.get` — resolve effective protection for a source (US2, T012).
 	 * 
@@ -1021,42 +1087,53 @@ export const commands = {
 	 */
 	statusSummary: () => typedError<StatusSummary, ContractError_Serialize>(__TAURI_INVOKE("status_summary")),
 	/**
-	 *  `cleanup.policy.get` — returns the current cleanup policy.
+	 *  `cleanup.policy.get` — returns the persisted cleanup policy (or the default).
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `ContractError` on database failure.
 	 */
 	cleanupPolicyGet: () => typedError<CleanupPolicy, ContractError_Serialize>(__TAURI_INVOKE("cleanup_policy_get")),
 	/**
-	 *  `cleanup.policy.update` — update the cleanup policy.
+	 *  `cleanup.policy.update` — persist the cleanup policy.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `ContractError` on serialisation or database failure.
 	 */
 	cleanupPolicyUpdate: (request: UpdateCleanupPolicy) => typedError<CleanupPolicy, ContractError_Serialize>(__TAURI_INVOKE("cleanup_policy_update", { request })),
 	/**
-	 *  `cleanup.scan` — scan a project for cleanup candidates.
+	 *  `cleanup.scan` — pure, read-only cleanup preview for a project (D11 step 1).
 	 * 
-	 *  Returns an empty candidates list as a stub. The real implementation will
-	 *  walk the project file tree and apply the cleanup policy to identify
-	 *  reclaimable artifacts.
+	 *  Enumerates the project's observed processing artifacts, classifies them,
+	 *  applies the persisted policy, and returns candidate files plus reclaimable
+	 *  bytes. Creates NO plan and performs NO filesystem mutation.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `ContractError` on database failure.
 	 */
 	cleanupScan: (projectId: string) => typedError<CleanupScanResult, ContractError_Serialize>(__TAURI_INVOKE("cleanup_scan", { projectId })),
+	/**
+	 *  `cleanup.plan.generate` — materialise a reviewable cleanup plan (D11 step 2).
+	 * 
+	 *  Builds plan items from the current cleanup candidates and delegates to the
+	 *  spec-016 protection generator, which resolves per-item protection and gates
+	 *  approval. Generating the plan performs NO filesystem mutation (FR-002).
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure.
+	 */
+	cleanupPlanGenerate: (request: GenerateCleanupPlanRequest) => typedError<GenerateCleanupPlanResult, ContractError_Serialize>(__TAURI_INVOKE("cleanup_plan_generate", { request })),
 	/**
 	 *  `calibration.tolerances.get` — returns current calibration matching tolerances.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
 	calibrationTolerancesGet: () => typedError<CalibrationTolerances, ContractError_Serialize>(__TAURI_INVOKE("calibration_tolerances_get")),
 	/**
 	 *  `calibration.tolerances.update` — update calibration matching tolerances.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
 	calibrationTolerancesUpdate: (request: UpdateCalibrationTolerances) => typedError<CalibrationTolerances, ContractError_Serialize>(__TAURI_INVOKE("calibration_tolerances_update", { request })),
 	/**
@@ -1100,6 +1177,20 @@ export const commands = {
 	 *  Returns `"inbox.item.not_found"`, `"inbox.has.open.plan"`, or `"file.not_found"`.
 	 */
 	inboxReclassify: (req: InboxReclassifyRequest_Deserialize) => typedError<InboxReclassifyResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_reclassify", { req })),
+	/**
+	 *  `inbox.reclassify` v2 — field-agnostic property-map + bulk reclassify,
+	 *  scoped to a source group (spec 041 T068/T072 / FR-044/FR-045/FR-049).
+	 * 
+	 *  Unlike [`inbox_reclassify`] (fixed `frame_type`/`filter`/`exposure_s`/`binning`,
+	 *  single item), this accepts an open property map validated against
+	 *  `inbox.property_registry`, plus bulk "set all" entries, and re-splits the
+	 *  source group's files into re-materialized single-type sub-items.
+	 * 
+	 *  # Errors
+	 *  `inbox.item.not_found` | `inbox.has.open.plan` | `file.not_found` |
+	 *  `inbox.reclassify.unknown_property` | `inbox.reclassify.non_overridable_property`
+	 */
+	inboxReclassifyV2: (req: InboxReclassifyV2Request_Deserialize) => typedError<InboxReclassifyV2Response_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_reclassify_v2", { req })),
 	/**
 	 *  `inbox.item.metadata` — assemble per-file extracted metadata for an inbox
 	 *  item (spec 041 US2/FR-010).
@@ -1201,6 +1292,37 @@ export const commands = {
 	 */
 	inboxPlanListOpen: () => typedError<InboxOpenPlansResponse, string>(__TAURI_INVOKE("inbox_plan_list_open")),
 	/**
+	 *  `inbox.property_registry` — return the typed property registry.
+	 * 
+	 *  The registry lists every per-file property that the field-agnostic
+	 *  reclassifier (spec 041 R-13) understands: its key, value kind, physical
+	 *  unit, source FITS/XISF header(s), whether it is user-overridable, the frame
+	 *  types it applies to, and an optional validation hint.
+	 * 
+	 *  The UI uses this registry to render a generic metadata editor without
+	 *  hard-coding field names, so future properties can be added without frontend
+	 *  changes (FR-044).
+	 * 
+	 *  # Errors
+	 *  Never fails; always returns `Ok`.
+	 */
+	inboxPropertyRegistry: () => typedError<PropertyRegistryEntry_Serialize[], string>(__TAURI_INVOKE("inbox_property_registry")),
+	/**
+	 *  `inbox.target_recommendations` — recommend canonical targets for a light
+	 *  sub-group by sky-coordinate proximity (spec 041 R-17 / FR-052).
+	 * 
+	 *  Ranks catalog targets by great-circle separation from the sub-group's
+	 *  pointing within a FOV-aware (or configurable fixed) radius. The `OBJECT`
+	 *  header is returned only as a display hint, never used for matching. The
+	 *  chosen target is written separately via `inbox.reclassify` (T068).
+	 * 
+	 *  Identify the sub-group by `inboxItemId` (preferred) or `sourceGroupId`.
+	 * 
+	 *  # Errors
+	 *  `inbox.item.not_found` — no resolvable inbox item; `internal.database` — query failed.
+	 */
+	inboxTargetRecommendations: (req: InboxTargetRecommendationsRequest_Deserialize) => typedError<InboxTargetRecommendationsResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inbox_target_recommendations", { req })),
+	/**
 	 *  `inventory.list` — return the grouped inventory ledger with optional filters.
 	 * 
 	 *  # Errors
@@ -1208,27 +1330,20 @@ export const commands = {
 	 */
 	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_list", { req })),
 	/**
-	 *  `inventory.session.review` — apply a session review-state transition.
-	 * 
-	 *  Wraps `lifecycle.transition` for the inventory surface.
-	 *  Returns `status: "success"` | `"noop"` | `"error"`.
+	 *  `ingestion.settings.get` — returns current ingestion/scan settings,
+	 *  merging any persisted overrides with in-code defaults.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on infrastructure failure.
-	 */
-	inventorySessionReview: (req: InventorySessionReviewRequest_Deserialize) => typedError<InventorySessionReviewResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_session_review", { req })),
-	/**
-	 *  `ingestion.settings.get` — returns current ingestion/scan settings.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` on database failure.
 	 */
 	ingestionSettingsGet: () => typedError<IngestionSettings, ContractError_Serialize>(__TAURI_INVOKE("ingestion_settings_get")),
 	/**
-	 *  `ingestion.settings.update` — update ingestion/scan settings.
+	 *  `ingestion.settings.update` — validates, persists, and returns the
+	 *  persisted ingestion/scan settings.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
+	 *  Returns `Err(ContractError)` with code `"value.invalid"` for a negative
+	 *  tolerance, or on database failure.
 	 */
 	ingestionSettingsUpdate: (request: UpdateIngestionSettings) => typedError<IngestionSettings, ContractError_Serialize>(__TAURI_INVOKE("ingestion_settings_update", { request })),
 	/**
@@ -1294,6 +1409,30 @@ export const commands = {
 	 *  Returns `Err(String)` on DB failure.
 	 */
 	artifactMarkResolved: (request: ArtifactMarkResolvedRequest) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("artifact_mark_resolved", { request })),
+	/**
+	 *  `artifact.watcher.attach` — attach the live filesystem watcher for a
+	 *  project's output folder (spec 012 T008: project drawer open lifecycle).
+	 * 
+	 *  Idempotent: attaching an already-attached project is a no-op. Runs an
+	 *  on-attach reconciliation pass first so files written while detached are
+	 *  still detected.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ContractError)` on DB failure or if the watcher cannot be
+	 *  started. An unavailable output folder (e.g. a removed drive) is NOT an
+	 *  error — attach succeeds and simply does not watch until a later retry.
+	 */
+	artifactWatcherAttach: (request: ArtifactWatcherRequest) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("artifact_watcher_attach", { request })),
+	/**
+	 *  `artifact.watcher.detach` — detach the live filesystem watcher for a
+	 *  project (spec 012 T008: project drawer close lifecycle).
+	 * 
+	 *  Idempotent: detaching an unattached project is a silent no-op.
+	 * 
+	 *  # Errors
+	 *  Never fails; the `Result` return type matches the shared command shape.
+	 */
+	artifactWatcherDetach: (request: ArtifactWatcherRequest) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("artifact_watcher_detach", { request })),
 	/**
 	 *  `project.manifest.list` — list manifest snapshots for a project.
 	 * 
@@ -1388,6 +1527,65 @@ export const commands = {
 	 *  - `lifecycle.read_only`    — owning project is `archived`.
 	 */
 	preparedviewRegenerate: (viewId: string) => typedError<PreparedViewRegenerateResponse, ContractError_Serialize>(__TAURI_INVOKE("preparedview_regenerate", { viewId })),
+	/**
+	 *  `sourceview.generate` — create a `prepared_view_generation` plan
+	 *  first-materializing a project's selected light frames plus their matched
+	 *  calibration as per-item link (or, with explicit opt-in, copy) actions.
+	 * 
+	 *  The response `planId` should be routed through `plans.approve` then
+	 *  `plan.apply`, exactly like `preparedview.regenerate`. Nothing is written to
+	 *  disk before apply (FR-001). On successful apply, the `PreparedSourceView`
+	 *  (state `current`) is written by the apply-success hook
+	 *  (`app_core::plan_apply::finalize_view_generation`).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with codes:
+	 *  - `project.not_found`      — project does not exist.
+	 *  - `lifecycle.read_only`    — owning project is `archived`.
+	 *  - `no_selection`           — no selected light frame resolved.
+	 *  - `no_link_kind`           — no achievable link kind and `copyOptIn` is false.
+	 *  - `destination.collision`  — two sources resolve to the same destination path.
+	 *  - `destination.exists`     — a destination path already exists on disk.
+	 */
+	sourceviewGenerate: (req: SourceViewGenerateRequest) => typedError<SourceViewGenerateResponse, ContractError_Serialize>(__TAURI_INVOKE("sourceview_generate", { req })),
+	/**
+	 *  `dev.contracts.list` — list all registered contracts (spec 021 US1).
+	 * 
+	 *  Returns `dev_mode.disabled` when the runtime `devMode` setting is off.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on database failure or when `devMode` is disabled.
+	 */
+	devContractsList: (request: DevContractsListRequest_Deserialize) => typedError<DevContractsListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_contracts_list", { request })),
+	/**
+	 *  `dev.calls.list` — return recent recorded calls (spec 021 US2).
+	 * 
+	 *  Reads from the in-memory `CallBuffer` Tauri state.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` when `devMode` is disabled or on database failure.
+	 */
+	devCallsList: (request: DevCallsListRequest_Deserialize) => typedError<DevCallsListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_calls_list", { request })),
+	/**
+	 *  `dev.export` — dump contract registry + calls to a JSON file (spec 021 US4).
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` when `devMode` is disabled, the path is outside the
+	 *  allowed write envelope, or the file cannot be written.
+	 */
+	devExport: (request: DevExportRequest_Deserialize) => typedError<DevExportResponse, ContractError_Serialize>(__TAURI_INVOKE("dev_export", { request })),
+	/**
+	 *  `dev.schema.get` — read a JSON Schema file server-side (spec 021 US3).
+	 * 
+	 *  Reads `request.schema_path` from disk and returns the pretty-printed
+	 *  content. Returns `found: false` when the file is absent or unreadable,
+	 *  avoiding any client-side filesystem dependency.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` when `devMode` is disabled.
+	 */
+	devSchemaGet: (request: DevSchemaGetRequest) => typedError<DevSchemaGetResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_schema_get", { request })),
 };
 
 /* Types */
@@ -1408,7 +1606,6 @@ export type AcquisitionSession = AcquisitionSession_Serialize | AcquisitionSessi
 export type AcquisitionSession_Deserialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -1429,7 +1626,6 @@ export type AcquisitionSession_Deserialize = {
 export type AcquisitionSession_Serialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -1460,6 +1656,38 @@ export type AppPreferences = {
 	sessionsView: SessionsView,
 	tourCompleted: TourCompleted,
 	setupCompleted: boolean,
+};
+
+/**  One archived entity row for the Archive page (C5 design: projects only). */
+export type ArchiveEntry = {
+	/**  Archived entity id (a project id in the current design). */
+	id: string,
+	/**  Display name (project name). */
+	name: string,
+	/**
+	 *  Entity kind. Always `"project"` today (D7/D14: no session/master/target
+	 *  tabs until a real archival model for them is designed).
+	 */
+	entityType: string,
+	/**  When the entity reached the `archived` lifecycle state (ISO-8601). */
+	archivedAt: string,
+	/**  Human-readable reason (the archive plan title when available). */
+	reason: string,
+	/**  The entity's original on-disk location (project-relative library path). */
+	originalPath: string,
+	/**  Bytes moved into the app-managed archive by the owning plan. */
+	sizeBytes: number,
+	/**
+	 *  Plan that archived this entity. Drives the management operations
+	 *  (`archive.send_to_trash` / `archive.permanently_delete`). `None` only
+	 *  for legacy rows archived before this column existed.
+	 */
+	archivedViaPlanId: string | null,
+};
+
+/**  Response for `archive.list` — every project currently in `archived`. */
+export type ArchiveListResponse = {
+	entries: ArchiveEntry[],
 };
 
 /**  Response for `archive.permanently_delete`. */
@@ -1570,6 +1798,15 @@ export type ArtifactSummary = {
 	sizeBytes: number,
 };
 
+/**
+ *  Request DTO for `artifact.watcher.attach` / `artifact.watcher.detach`
+ *  (spec 012 T008): wires the filesystem watcher to the project drawer
+ *  open/close lifecycle.
+ */
+export type ArtifactWatcherRequest = {
+	projectId: string,
+};
+
 export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" | 
 /**  target: alias and primaryDesignation provenance tracking (R-3.2). */
 "target";
@@ -1638,7 +1875,24 @@ export type AuditEntry_Deserialize = {
 	toState: string | null,
 	actor: AuditActor,
 	outcome: AuditOutcome,
+	/**
+	 *  Backend-composed English detail. Durable fallback rendering for rows
+	 *  without `detail_code` / usable `detail_params` (D23 upgrade).
+	 */
 	detail: string,
+	/**
+	 *  Stable detail code (e.g. `plan.required`, `provenance.unreviewed`,
+	 *  `target.resolved`) identifying a frontend catalog message template.
+	 *  Derived at read time from the durable `audit_log_entry.payload` JSON;
+	 *  absent for rows written before the D23 upgrade or whose detail has no
+	 *  template.
+	 */
+	detailCode: string | null,
+	/**
+	 *  Structured display parameters for `detail_code` (flat string map,
+	 *  e.g. `{ "entityType": "project", "fromState": "ready", ... }`).
+	 */
+	detailParams: { [key in string]: string } | null,
 };
 
 /**  A single audit log entry. */
@@ -1652,7 +1906,44 @@ export type AuditEntry_Serialize = {
 	toState?: string | null,
 	actor: AuditActor,
 	outcome: AuditOutcome,
+	/**
+	 *  Backend-composed English detail. Durable fallback rendering for rows
+	 *  without `detail_code` / usable `detail_params` (D23 upgrade).
+	 */
 	detail: string,
+	/**
+	 *  Stable detail code (e.g. `plan.required`, `provenance.unreviewed`,
+	 *  `target.resolved`) identifying a frontend catalog message template.
+	 *  Derived at read time from the durable `audit_log_entry.payload` JSON;
+	 *  absent for rows written before the D23 upgrade or whose detail has no
+	 *  template.
+	 */
+	detailCode?: string | null,
+	/**
+	 *  Structured display parameters for `detail_code` (flat string map,
+	 *  e.g. `{ "entityType": "project", "fromState": "ready", ... }`).
+	 */
+	detailParams?: { [key in string]: string } | null,
+};
+
+/**
+ *  Filter args for `audit.list` / `audit.export`.
+ * 
+ *  `entity_type` + `entity_id` are the key fields a future per-entity history
+ *  view (e.g. an archive-detail audit trail) would reuse — kept as plain
+ *  equality filters rather than something bespoke to the settings screen.
+ */
+export type AuditFilterDto = {
+	entityType?: string | null,
+	entityId?: string | null,
+	outcome?: AuditOutcome | null,
+	severity?: Severity | null,
+	/**  Case-insensitive substring match against event/entity/actor text. */
+	search?: string | null,
+	/**  RFC 3339 lower bound on the entry timestamp (inclusive). */
+	from?: string | null,
+	/**  RFC 3339 upper bound on the entry timestamp (exclusive). */
+	to?: string | null,
 };
 
 /**  Paginated response for audit list queries. */
@@ -1672,6 +1963,12 @@ export type AuditListResponse_Serialize = {
 
 /**  Outcome of an audited action. */
 export type AuditOutcome = "applied" | "ok" | "refused" | "failed" | "paused";
+
+/**  Pagination args for `audit.list`. */
+export type AuditPaginationDto = {
+	limit?: number | null,
+	offset?: number | null,
+};
 
 /**  Hard error for sessions that could not be evaluated at all (e.g. not found). */
 export type BatchErrorDto = BatchErrorDto_Serialize | BatchErrorDto_Deserialize;
@@ -1905,6 +2202,18 @@ export type CalibrationMatchDto_Deserialize = {
 	dimensionsMatched: MatchedDimDto_Deserialize[],
 	dimensionsMismatched: MismatchedDimDto_Deserialize[],
 	selectionReason: SelectionReason,
+	/**
+	 *  Session context enrichment (spec P9): the light session's resolved
+	 *  target, filter, observing night, and frame count. `None` when the
+	 *  context cannot be resolved (e.g. no canonical target link, no
+	 *  fingerprint row, or the session id is unknown). Populated by
+	 *  `app_core_calibration` as a post-processing step — the pure
+	 *  `calibration_core` matching engine never touches persistence.
+	 */
+	targetName: string | null,
+	filter: string | null,
+	acquisitionNight: string | null,
+	frameCount: number | null,
 };
 
 /**  A ranked calibration master suggestion. */
@@ -1916,6 +2225,18 @@ export type CalibrationMatchDto_Serialize = {
 	dimensionsMatched: MatchedDimDto_Serialize[],
 	dimensionsMismatched: MismatchedDimDto_Serialize[],
 	selectionReason: SelectionReason,
+	/**
+	 *  Session context enrichment (spec P9): the light session's resolved
+	 *  target, filter, observing night, and frame count. `None` when the
+	 *  context cannot be resolved (e.g. no canonical target link, no
+	 *  fingerprint row, or the session id is unknown). Populated by
+	 *  `app_core_calibration` as a post-processing step — the pure
+	 *  `calibration_core` matching engine never touches persistence.
+	 */
+	targetName?: string | null,
+	filter?: string | null,
+	acquisitionNight?: string | null,
+	frameCount?: number | null,
 };
 
 /**  Request DTO for `calibration.match.suggest`. */
@@ -1962,30 +2283,6 @@ export type CalibrationMatchSuggestResponse_Serialize = {
 	error?: SuggestErrorDto | null,
 };
 
-export type CalibrationSessionTransitionRequest = CalibrationSessionTransitionRequest_Serialize | CalibrationSessionTransitionRequest_Deserialize;
-
-export type CalibrationSessionTransitionRequest_Deserialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel: string | null,
-	actor: TransitionActor,
-};
-
-export type CalibrationSessionTransitionRequest_Serialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel?: string | null,
-	actor: TransitionActor,
-};
-
 export type CalibrationTolerances = {
 	temperatureToleranceC: number | null,
 	exposureToleranceS: number | null,
@@ -1993,6 +2290,12 @@ export type CalibrationTolerances = {
 	requireSameCamera: boolean,
 	requireSameGain: boolean,
 	requireSameBinning: boolean,
+	/**
+	 *  Hard rule: master must carry the same OFFSET as the light session for
+	 *  dark/bias matching. Feeds `calibration_core::ranking::MatchingRuleConfig
+	 *  ::require_same_offset` (spec 007). Default `true` (see migration 0051).
+	 */
+	requireSameOffset: boolean,
 };
 
 /**
@@ -2068,6 +2371,65 @@ export type CompatibleSessionEntry = {
 /**  Confidence level for inferred or reviewed metadata. */
 export type ConfidenceLevel = "unknown" | "low" | "medium" | "high" | "confirmed" | "rejected";
 
+/**  A single request/response pair captured by the recording proxy (spec 021, US2). */
+export type ContractCall = ContractCall_Serialize | ContractCall_Deserialize;
+
+/**  Error details stored on a failed call. */
+export type ContractCallError = {
+	code: string,
+	message: string,
+};
+
+/**  A single request/response pair captured by the recording proxy (spec 021, US2). */
+export type ContractCall_Deserialize = {
+	/**  Monotonic session-scoped id. Used as the row key. */
+	id: string,
+	/**  Operation name at call time. */
+	contract: string,
+	/**  Operation version at call time (pinned per call). */
+	contractVersion: string,
+	/**  Sanitized request payload. Sensitive fields and filesystem paths redacted. */
+	request: unknown,
+	/**  Response payload on success. Absent when the call errored. */
+	response: unknown | null,
+	/**  Error envelope on failure. Absent on success. */
+	error: ContractCallError | null,
+	/**  Wall-clock UTC start time (ISO-8601). */
+	startedAt: string,
+	/**  Monotonic elapsed time in milliseconds from dispatch to response or error. */
+	durationMs: number | null,
+	/**
+	 *  `true` when the recorder truncated the stored request or response above
+	 *  the 64 KB threshold.
+	 */
+	payloadTruncated: boolean,
+};
+
+/**  A single request/response pair captured by the recording proxy (spec 021, US2). */
+export type ContractCall_Serialize = {
+	/**  Monotonic session-scoped id. Used as the row key. */
+	id: string,
+	/**  Operation name at call time. */
+	contract: string,
+	/**  Operation version at call time (pinned per call). */
+	contractVersion: string,
+	/**  Sanitized request payload. Sensitive fields and filesystem paths redacted. */
+	request: unknown,
+	/**  Response payload on success. Absent when the call errored. */
+	response?: unknown | null,
+	/**  Error envelope on failure. Absent on success. */
+	error?: ContractCallError | null,
+	/**  Wall-clock UTC start time (ISO-8601). */
+	startedAt: string,
+	/**  Monotonic elapsed time in milliseconds from dispatch to response or error. */
+	durationMs: number | null,
+	/**
+	 *  `true` when the recorder truncated the stored request or response above
+	 *  the 64 KB threshold.
+	 */
+	payloadTruncated: boolean,
+};
+
 export type ContractError = ContractError_Serialize | ContractError_Deserialize;
 
 export type ContractError_Deserialize = {
@@ -2088,6 +2450,53 @@ export type ContractError_Serialize = {
 	details: unknown,
 	fieldErrors?: FieldError[],
 	recoveryActions?: RecoveryAction_Serialize[],
+};
+
+/**  Metadata for a single registered contract (spec 021, US1). */
+export type ContractMeta = ContractMeta_Serialize | ContractMeta_Deserialize;
+
+/**  Metadata for a single registered contract (spec 021, US1). */
+export type ContractMeta_Deserialize = {
+	/**  Operation name, e.g. `plan.create`. */
+	name: string,
+	/**  Semantic version of the contract shape. */
+	version: string,
+	/**  Absolute path to the JSON Schema file backing this contract. */
+	schemaPath: string,
+	/**  `"ui-to-core"` or `"core-to-ui"`. */
+	direction: string,
+	/**  `true` only for read-only contracts that opt in. Default `false`. */
+	replaySafe: boolean,
+	/**  JSON Pointer paths whose values are redacted before storage. */
+	sensitiveFields?: string[],
+	/**  SHA-256 of the TypeScript-side schema declaration (absent when unknown). */
+	tsHash: string | null,
+	/**  SHA-256 of the Rust-side schema declaration (absent when unknown). */
+	rustHash: string | null,
+	/**  `true` when both hashes are present and differ. */
+	mismatch: boolean | null,
+};
+
+/**  Metadata for a single registered contract (spec 021, US1). */
+export type ContractMeta_Serialize = {
+	/**  Operation name, e.g. `plan.create`. */
+	name: string,
+	/**  Semantic version of the contract shape. */
+	version: string,
+	/**  Absolute path to the JSON Schema file backing this contract. */
+	schemaPath: string,
+	/**  `"ui-to-core"` or `"core-to-ui"`. */
+	direction: string,
+	/**  `true` only for read-only contracts that opt in. Default `false`. */
+	replaySafe: boolean,
+	/**  JSON Pointer paths whose values are redacted before storage. */
+	sensitiveFields?: string[],
+	/**  SHA-256 of the TypeScript-side schema declaration (absent when unknown). */
+	tsHash?: string | null,
+	/**  SHA-256 of the Rust-side schema declaration (absent when unknown). */
+	rustHash?: string | null,
+	/**  `true` when both hashes are present and differ. */
+	mismatch?: boolean | null,
 };
 
 /**  Equatorial coordinates (J2000). */
@@ -2160,6 +2569,134 @@ export type Density = "compact" | "comfortable" | "spacious";
 /**  Per-plan destination for destructive items (R-Trash-1). */
 export type DestructiveDestination = "archive" | "os_trash";
 
+/**  Request for `dev.calls.list`. */
+export type DevCallsListRequest = DevCallsListRequest_Serialize | DevCallsListRequest_Deserialize;
+
+/**  Request for `dev.calls.list`. */
+export type DevCallsListRequest_Deserialize = {
+	requestId: string | null,
+	/**  Max rows to return. Defaults to the full buffer (100). Clamped to 100. */
+	limit: number | null,
+};
+
+/**  Request for `dev.calls.list`. */
+export type DevCallsListRequest_Serialize = {
+	requestId?: string | null,
+	/**  Max rows to return. Defaults to the full buffer (100). Clamped to 100. */
+	limit?: number | null,
+};
+
+/**  Response for `dev.calls.list`. */
+export type DevCallsListResponse = DevCallsListResponse_Serialize | DevCallsListResponse_Deserialize;
+
+/**  Response for `dev.calls.list`. */
+export type DevCallsListResponse_Deserialize = {
+	/**  Newest-first list of recorded calls. */
+	calls: ContractCall_Deserialize[],
+};
+
+/**  Response for `dev.calls.list`. */
+export type DevCallsListResponse_Serialize = {
+	/**  Newest-first list of recorded calls. */
+	calls: ContractCall_Serialize[],
+};
+
+/**  Request for `dev.contracts.list`. */
+export type DevContractsListRequest = DevContractsListRequest_Serialize | DevContractsListRequest_Deserialize;
+
+/**  Request for `dev.contracts.list`. */
+export type DevContractsListRequest_Deserialize = {
+	requestId: string | null,
+};
+
+/**  Request for `dev.contracts.list`. */
+export type DevContractsListRequest_Serialize = {
+	requestId?: string | null,
+};
+
+/**  Response for `dev.contracts.list`. */
+export type DevContractsListResponse = DevContractsListResponse_Serialize | DevContractsListResponse_Deserialize;
+
+/**  Response for `dev.contracts.list`. */
+export type DevContractsListResponse_Deserialize = {
+	contracts: ContractMeta_Deserialize[],
+};
+
+/**  Response for `dev.contracts.list`. */
+export type DevContractsListResponse_Serialize = {
+	contracts: ContractMeta_Serialize[],
+};
+
+/**  Request for `dev.export`. */
+export type DevExportRequest = DevExportRequest_Serialize | DevExportRequest_Deserialize;
+
+/**  Request for `dev.export`. */
+export type DevExportRequest_Deserialize = {
+	requestId: string | null,
+	/**  Absolute filesystem path where the JSON export should be written. */
+	outputPath: string,
+	/**
+	 *  When `false` (default), filesystem paths in the export are replaced with
+	 *  `${LIBRARY_ROOT}/...` placeholders. When `true`, verbatim paths are included.
+	 */
+	includeVerbatimPaths?: boolean,
+	/**  Include the full contract registry list in the export (default `true`). */
+	includeContracts?: boolean,
+	/**  Include the recent-calls buffer in the export (default `true`). */
+	includeCalls?: boolean,
+};
+
+/**  Request for `dev.export`. */
+export type DevExportRequest_Serialize = {
+	requestId?: string | null,
+	/**  Absolute filesystem path where the JSON export should be written. */
+	outputPath: string,
+	/**
+	 *  When `false` (default), filesystem paths in the export are replaced with
+	 *  `${LIBRARY_ROOT}/...` placeholders. When `true`, verbatim paths are included.
+	 */
+	includeVerbatimPaths: boolean,
+	/**  Include the full contract registry list in the export (default `true`). */
+	includeContracts: boolean,
+	/**  Include the recent-calls buffer in the export (default `true`). */
+	includeCalls: boolean,
+};
+
+/**  Response for `dev.export`. */
+export type DevExportResponse = {
+	/**  Absolute path of the written export file. */
+	writtenPath: string,
+	/**  Number of call records included in the export. */
+	callCount: number,
+	/**  Number of contract records included in the export. */
+	contractCount: number,
+};
+
+/**  Request for `dev.schema.get` — read a JSON Schema file by path. */
+export type DevSchemaGetRequest = {
+	/**  Absolute filesystem path to the JSON Schema file. */
+	schemaPath: string,
+};
+
+/**  Response for `dev.schema.get`. */
+export type DevSchemaGetResponse = DevSchemaGetResponse_Serialize | DevSchemaGetResponse_Deserialize;
+
+/**  Response for `dev.schema.get`. */
+export type DevSchemaGetResponse_Deserialize = {
+	/**  `true` when the file was found and read successfully. */
+	found: boolean,
+	/**  Pretty-printed JSON Schema content (two-space indent). Absent when `found` is false. */
+	content: string | null,
+};
+
+/**  Response for `dev.schema.get`. */
+export type DevSchemaGetResponse_Serialize = {
+	/**  `true` when the file was found and read successfully. */
+	found: boolean,
+	/**  Pretty-printed JSON Schema content (two-space indent). Absent when `found` is false. */
+	content?: string | null,
+};
+
 /**  Request payload for `native.directory.pick`. */
 export type DirectoryPickRequest = DirectoryPickRequest_Serialize | DirectoryPickRequest_Deserialize;
 
@@ -2216,7 +2753,7 @@ export type Equipment = {
  */
 export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
 /**  Plan approval is outstanding (sent as `ContractError`, not `TransitionError`). */
-"plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
+"plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
 /**  Used in `ContractError` tests in lib.rs; also may appear via plan-apply. */
 "filesystem.destination_exists" | 
 /**
@@ -2372,11 +2909,85 @@ export type Frameset = {
 	integrationS: number | null,
 };
 
+/**
+ *  Result of `archive.plan.generate` — a whole-project archive plan created in
+ *  `ready_for_review` (constitution II: reviewable, never auto-applied).
+ */
+export type GenerateArchivePlanResult = {
+	/**  Id of the newly created archive plan (in `ready_for_review` state). */
+	planId: string,
+	/**  Total number of archive items placed on the plan. */
+	itemCount: number,
+	/**
+	 *  Number of items that resolved to a protected protection level and will
+	 *  gate plan approval until acknowledged (constitution II).
+	 */
+	protectedItemCount: number,
+};
+
+/**
+ *  Request for `cleanup.plan.generate` — the second step of the two-step cleanup
+ *  flow (D11). `cleanup.scan` is a pure preview; this command materialises a
+ *  reviewable cleanup plan (plan row + items) via the spec-016 protection
+ *  generator. Generating a plan performs NO filesystem mutation (FR-002).
+ */
+export type GenerateCleanupPlanRequest = {
+	/**  Project whose observed artifacts are scanned for cleanup candidates. */
+	projectId: string,
+	/**  Optional plan title; a default is derived from the project when absent. */
+	title?: string | null,
+	/**
+	 *  Per-plan destructive destination: `"archive"` (default, app-managed) or
+	 *  `"trash"` (OS-native recycle bin). Canonical vocabulary per migration
+	 *  0040 / spec 033 vocab split: `archive | trash`. Defaults to `"archive"`
+	 *  when absent; any other value is rejected with `value.invalid`.
+	 */
+	destructiveDestination?: string | null,
+};
+
+/**  Result of `cleanup.plan.generate`. */
+export type GenerateCleanupPlanResult = {
+	/**  Id of the newly created plan (in `ready_for_review` state). */
+	planId: string,
+	/**  Total number of cleanup items placed on the plan. */
+	itemCount: number,
+	/**
+	 *  Number of items that resolved to a protected protection level and will
+	 *  gate plan approval until acknowledged (constitution II).
+	 */
+	protectedItemCount: number,
+};
+
 /**  A reference to a generated source view embedded in a manifest body. */
 export type GeneratedViewRefDto = {
 	id: string,
 	path: string,
 };
+
+/**
+ *  Non-blocking review warning surfaced with a generation plan (FR-010a,
+ *  FR-019, FR-004b, FR-018).
+ */
+export type GenerationWarning = {
+	code: GenerationWarningCode,
+	message: string,
+	/**  Affected source references / group identifiers. */
+	items?: string[],
+};
+
+/**  Warning codes for `sourceview.generate` (contract `$defs/Warning.code`). */
+export type GenerationWarningCode = 
+/**  Light view generated without matched calibration; unmatched groups listed (FR-010a). */
+"no_calibration_applied" | 
+/**  A source is missing/unresolved and was skipped/flagged (FR-019). */
+"unresolved_source" | 
+/**
+ *  A saved link kind was not achievable for a drive-scope; a documented
+ *  fallback was applied (FR-004b).
+ */
+"capability_drift" | 
+/**  A destination path exceeds the Windows 260-char limit (FR-018). */
+"long_path";
 
 /**  Response from `guided.dismiss`. */
 export type GuidedDismissResponse = {
@@ -2549,8 +3160,6 @@ export type InboxConfirmRequest = InboxConfirmRequest_Serialize | InboxConfirmRe
 /**  Request for `inbox.confirm`. */
 export type InboxConfirmRequest_Deserialize = {
 	inboxItemId: string,
-	/**  `"split"` for mixed items; `"confirm"` for `single_type` items. */
-	action: string,
 	contentSignature: string,
 	destructiveDestination: string | null,
 	/**
@@ -2574,8 +3183,6 @@ export type InboxConfirmRequest_Deserialize = {
 /**  Request for `inbox.confirm`. */
 export type InboxConfirmRequest_Serialize = {
 	inboxItemId: string,
-	/**  `"split"` for mixed items; `"confirm"` for `single_type` items. */
-	action: string,
 	contentSignature: string,
 	destructiveDestination?: string | null,
 	/**
@@ -2723,6 +3330,33 @@ export type InboxFileMetadata_Deserialize = {
 	 *  DATE-OBS). Supplying the value via reclassify clears the gate.
 	 */
 	missingPathAttributes?: string[],
+	/**
+	 *  Registry key names of mandatory attributes that are absent for this file
+	 *  (spec 041 T070 / FR-047 / R-14). Empty when all mandatory attributes are
+	 *  present. The union of mandatory grouping properties and hard per-type keys
+	 *  (e.g. `["target"]` for a light with no OBJECT and no resolved target).
+	 *  Non-empty means this file's sub-item is in the needs-review bucket and
+	 *  blocks plan creation until the value is supplied via reclassify.
+	 */
+	missingMandatory?: string[],
+	/**  Camera read-out offset / pedestal (`OFFSET` / `BLKLEVEL`). ADU. */
+	offset: number | null,
+	/**  Sensor set/target temperature (`SET-TEMP`). Degrees Celsius. */
+	setTempC: number | null,
+	/**  Sensor actual temperature (`CCD-TEMP` / `DET-TEMP`). Degrees Celsius. */
+	ccdTempC: number | null,
+	/**  Right ascension, decimal degrees (`RA` / `OBJCTRA`). */
+	raDeg: number | null,
+	/**  Declination, decimal degrees (`DEC` / `OBJCTDEC`). */
+	decDeg: number | null,
+	/**  Mechanical rotator angle, degrees (`ROTATANG` / `ROTATOR`). */
+	rotatorAngleDeg: number | null,
+	/**  Sensor readout mode (`READOUTM`). */
+	readoutMode: string | null,
+	/**  Focal length, millimetres (`FOCALLEN`). */
+	focalLengthMm: number | null,
+	/**  Local civil observation date (`DATE-LOC`). */
+	dateLoc: string | null,
 };
 
 /**
@@ -2767,6 +3401,33 @@ export type InboxFileMetadata_Serialize = {
 	 *  DATE-OBS). Supplying the value via reclassify clears the gate.
 	 */
 	missingPathAttributes?: string[],
+	/**
+	 *  Registry key names of mandatory attributes that are absent for this file
+	 *  (spec 041 T070 / FR-047 / R-14). Empty when all mandatory attributes are
+	 *  present. The union of mandatory grouping properties and hard per-type keys
+	 *  (e.g. `["target"]` for a light with no OBJECT and no resolved target).
+	 *  Non-empty means this file's sub-item is in the needs-review bucket and
+	 *  blocks plan creation until the value is supplied via reclassify.
+	 */
+	missingMandatory?: string[],
+	/**  Camera read-out offset / pedestal (`OFFSET` / `BLKLEVEL`). ADU. */
+	offset?: number | null,
+	/**  Sensor set/target temperature (`SET-TEMP`). Degrees Celsius. */
+	setTempC?: number | null,
+	/**  Sensor actual temperature (`CCD-TEMP` / `DET-TEMP`). Degrees Celsius. */
+	ccdTempC?: number | null,
+	/**  Right ascension, decimal degrees (`RA` / `OBJCTRA`). */
+	raDeg?: number | null,
+	/**  Declination, decimal degrees (`DEC` / `OBJCTDEC`). */
+	decDeg?: number | null,
+	/**  Mechanical rotator angle, degrees (`ROTATANG` / `ROTATOR`). */
+	rotatorAngleDeg?: number | null,
+	/**  Sensor readout mode (`READOUTM`). */
+	readoutMode?: string | null,
+	/**  Focal length, millimetres (`FOCALLEN`). */
+	focalLengthMm?: number | null,
+	/**  Local civil observation date (`DATE-LOC`). */
+	dateLoc?: string | null,
 };
 
 /**  Request for `inbox.item.metadata`. */
@@ -2917,6 +3578,43 @@ export type InboxListItem_Deserialize = {
 	groupExposure: string | null,
 	/**  Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree. */
 	groupInstrument: string | null,
+	/**
+	 *  Per-item rollup of missing mandatory attribute keys (spec 041 T070 /
+	 *  FR-047 / R-14). Non-empty when this item is in the needs-review bucket
+	 *  because one or more files are missing a mandatory attribute. The set is
+	 *  the union of all per-file missing-mandatory lists across the item's files.
+	 *  Empty for fully-resolved items. Blocks plan creation (FR-048/SC-015).
+	 */
+	missingMandatory?: string[],
+	/**
+	 *  The item's own identity, restated as its "group" id for symmetry with
+	 *  `group_key`/`group_label`. Equals `inbox_item_id`.
+	 */
+	groupId: string,
+	/**
+	 *  Deterministic canonical group key (R-11). Empty string for legacy
+	 *  pre-Phase-12 rows that have not yet been materialized into a
+	 *  single-type sub-item (e.g. the original leaf-folder row).
+	 */
+	groupKey: string,
+	/**
+	 *  Human-readable label `"(root) · <type> · <dims>"` (R-12). `None` until
+	 *  classified.
+	 */
+	groupLabel: string | null,
+	/**
+	 *  Id of the `inbox_source_groups` row (leaf folder) this sub-item was
+	 *  materialized from (FR-043 provenance). `None` for legacy rows that
+	 *  predate source groups.
+	 */
+	sourceGroupId: string | null,
+	/**
+	 *  Authoritative frame type, singular — items are single-type post
+	 *  materialization (T066), so this is a real value rather than the
+	 *  aggregate-with-"Mixed"-fallback `group_frame_type` above. `None`
+	 *  until classified.
+	 */
+	frameType: string | null,
 };
 
 /**
@@ -2969,6 +3667,43 @@ export type InboxListItem_Serialize = {
 	groupExposure?: string | null,
 	/**  Camera / instrument (FITS `INSTRUME`). `Some("Mixed")` if files disagree. */
 	groupInstrument?: string | null,
+	/**
+	 *  Per-item rollup of missing mandatory attribute keys (spec 041 T070 /
+	 *  FR-047 / R-14). Non-empty when this item is in the needs-review bucket
+	 *  because one or more files are missing a mandatory attribute. The set is
+	 *  the union of all per-file missing-mandatory lists across the item's files.
+	 *  Empty for fully-resolved items. Blocks plan creation (FR-048/SC-015).
+	 */
+	missingMandatory?: string[],
+	/**
+	 *  The item's own identity, restated as its "group" id for symmetry with
+	 *  `group_key`/`group_label`. Equals `inbox_item_id`.
+	 */
+	groupId: string,
+	/**
+	 *  Deterministic canonical group key (R-11). Empty string for legacy
+	 *  pre-Phase-12 rows that have not yet been materialized into a
+	 *  single-type sub-item (e.g. the original leaf-folder row).
+	 */
+	groupKey: string,
+	/**
+	 *  Human-readable label `"(root) · <type> · <dims>"` (R-12). `None` until
+	 *  classified.
+	 */
+	groupLabel?: string | null,
+	/**
+	 *  Id of the `inbox_source_groups` row (leaf folder) this sub-item was
+	 *  materialized from (FR-043 provenance). `None` for legacy rows that
+	 *  predate source groups.
+	 */
+	sourceGroupId?: string | null,
+	/**
+	 *  Authoritative frame type, singular — items are single-type post
+	 *  materialization (T066), so this is a real value rather than the
+	 *  aggregate-with-"Mixed"-fallback `group_frame_type` above. `None`
+	 *  until classified.
+	 */
+	frameType?: string | null,
 };
 
 /**  Response from `inbox.list`. */
@@ -3065,6 +3800,81 @@ export type InboxPlanView = {
 	actions: InboxPlanAction[],
 };
 
+/**  The sky pointing a recommendation set was computed from (decimal degrees). */
+export type InboxPointing = {
+	/**  Right ascension, ICRS J2000 decimal degrees. */
+	raDeg: number | null,
+	/**  Declination, ICRS J2000 decimal degrees. */
+	decDeg: number | null,
+};
+
+/**
+ *  One bulk "set all" entry: apply one value to many files at once.
+ * 
+ *  `file_paths` is optional: when absent the value is applied to **all** files
+ *  in the source group (the "set all" affordance). When present only the listed
+ *  paths are updated.
+ */
+export type InboxReclassifyBulk = InboxReclassifyBulk_Serialize | InboxReclassifyBulk_Deserialize;
+
+/**
+ *  One bulk "set all" entry: apply one value to many files at once.
+ * 
+ *  `file_paths` is optional: when absent the value is applied to **all** files
+ *  in the source group (the "set all" affordance). When present only the listed
+ *  paths are updated.
+ */
+export type InboxReclassifyBulk_Deserialize = {
+	/**  Registry property key (camelCase) to set uniformly. */
+	property: string,
+	/**  Value to apply (JSON scalar; validated against registry `kind`). */
+	value: unknown,
+	/**
+	 *  Subset of file paths to apply to; `None` / absent = all files in the
+	 *  source group.
+	 */
+	filePaths?: string[] | null,
+};
+
+/**
+ *  One bulk "set all" entry: apply one value to many files at once.
+ * 
+ *  `file_paths` is optional: when absent the value is applied to **all** files
+ *  in the source group (the "set all" affordance). When present only the listed
+ *  paths are updated.
+ */
+export type InboxReclassifyBulk_Serialize = {
+	/**  Registry property key (camelCase) to set uniformly. */
+	property: string,
+	/**  Value to apply (JSON scalar; validated against registry `kind`). */
+	value: unknown,
+	/**
+	 *  Subset of file paths to apply to; `None` / absent = all files in the
+	 *  source group.
+	 */
+	filePaths?: string[] | null,
+};
+
+/**
+ *  One per-file property override entry in the field-agnostic reclassify request
+ *  (T068).
+ * 
+ *  `properties` is an open map of registry-validated property keys (camelCase,
+ *  as in `inbox.property_registry`) to their JSON values. Unknown or
+ *  non-overridable keys are rejected by the use case. Only MISSING / unreadable
+ *  header values may be filled; the frame-type correction (`frameType`) is the
+ *  one exception (it is always accepted regardless of header presence — R-13).
+ */
+export type InboxReclassifyFileOverride = {
+	/**  Relative file path within the source group (must match an evidence row). */
+	filePath: string,
+	/**
+	 *  Property map: `{ "exposureS": 300.0, "filter": "Ha", … }`. Values are
+	 *  JSON scalars; the use case validates them against the registry `kind`.
+	 */
+	properties: { [key in string]: unknown },
+};
+
 /**
  *  A single file override in a reclassify request.
  * 
@@ -3156,6 +3966,95 @@ export type InboxReclassifyResponse_Serialize = {
 	breakdown: InboxBreakdownEntry_Serialize[],
 };
 
+/**
+ *  Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
+ * 
+ *  Scope is the **source group** (R-13): a reclassify may re-partition files
+ *  across sub-items, so operating at sub-item scope is unsafe. Identify the
+ *  group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
+ *  owning source group from the item).
+ */
+export type InboxReclassifyV2Request = InboxReclassifyV2Request_Serialize | InboxReclassifyV2Request_Deserialize;
+
+/**
+ *  Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
+ * 
+ *  Scope is the **source group** (R-13): a reclassify may re-partition files
+ *  across sub-items, so operating at sub-item scope is unsafe. Identify the
+ *  group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
+ *  owning source group from the item).
+ */
+export type InboxReclassifyV2Request_Deserialize = {
+	/**  Identify the source group directly. */
+	sourceGroupId?: string | null,
+	/**  Alternatively, identify the group by one of its sub-item IDs. */
+	inboxItemId?: string | null,
+	/**
+	 *  Per-file property overrides. Each entry targets one file; multiple
+	 *  entries may target the same file (last-writer-wins per `property_key`).
+	 */
+	overrides?: InboxReclassifyFileOverride[],
+	/**  Bulk operations applied after per-file overrides. Processed in order. */
+	bulk?: InboxReclassifyBulk_Deserialize[],
+};
+
+/**
+ *  Request for `inbox.reclassify` — field-agnostic + bulk form (spec 041 T068).
+ * 
+ *  Scope is the **source group** (R-13): a reclassify may re-partition files
+ *  across sub-items, so operating at sub-item scope is unsafe. Identify the
+ *  group by either `sourceGroupId` or `inboxItemId` (the use case looks up the
+ *  owning source group from the item).
+ */
+export type InboxReclassifyV2Request_Serialize = {
+	/**  Identify the source group directly. */
+	sourceGroupId?: string | null,
+	/**  Alternatively, identify the group by one of its sub-item IDs. */
+	inboxItemId?: string | null,
+	/**
+	 *  Per-file property overrides. Each entry targets one file; multiple
+	 *  entries may target the same file (last-writer-wins per `property_key`).
+	 */
+	overrides: InboxReclassifyFileOverride[],
+	/**  Bulk operations applied after per-file overrides. Processed in order. */
+	bulk?: InboxReclassifyBulk_Serialize[],
+};
+
+/**  Response from `inbox.reclassify` v2 — field-agnostic + bulk (T068). */
+export type InboxReclassifyV2Response = InboxReclassifyV2Response_Serialize | InboxReclassifyV2Response_Deserialize;
+
+/**  Response from `inbox.reclassify` v2 — field-agnostic + bulk (T068). */
+export type InboxReclassifyV2Response_Deserialize = {
+	/**  Source group that was operated on. */
+	sourceGroupId: string,
+	/**
+	 *  Re-materialized single-type sub-items after applying overrides +
+	 *  re-running classification + grouping (R-14 re-split loop).
+	 */
+	subItems: InboxSubItemSummary_Deserialize[],
+	/**
+	 *  Number of sub-items (or files) that still land in the needs-review
+	 *  sentinel bucket (= still have missing mandatory attributes).
+	 */
+	needsReviewCount: number,
+};
+
+/**  Response from `inbox.reclassify` v2 — field-agnostic + bulk (T068). */
+export type InboxReclassifyV2Response_Serialize = {
+	/**  Source group that was operated on. */
+	sourceGroupId: string,
+	/**
+	 *  Re-materialized single-type sub-items after applying overrides +
+	 *  re-running classification + grouping (R-14 re-split loop).
+	 */
+	subItems: InboxSubItemSummary_Serialize[],
+	/**
+	 *  Number of sub-items (or files) that still land in the needs-review
+	 *  sentinel bucket (= still have missing mandatory attributes).
+	 */
+	needsReviewCount: number,
+};
+
 /**  Request to scan a root directory and discover inbox items. */
 export type InboxScanFolderRequest = {
 	rootId: string,
@@ -3210,12 +4109,154 @@ export type InboxStatsTotals = {
 	images: number,
 };
 
+/**  Summary of one re-materialized sub-item returned after reclassify (T068). */
+export type InboxSubItemSummary = InboxSubItemSummary_Serialize | InboxSubItemSummary_Deserialize;
+
+/**  Summary of one re-materialized sub-item returned after reclassify (T068). */
+export type InboxSubItemSummary_Deserialize = {
+	/**
+	 *  The stable `inbox_items.id` for this sub-item (new UUID if it was
+	 *  just created, or the existing one if it matched the upsert key).
+	 */
+	inboxItemId: string,
+	/**  Deterministic canonical group key (R-11). */
+	groupKey: string,
+	/**  Human-readable label `"(root) · <type> · <dims>"`. */
+	groupLabel: string,
+	/**  Authoritative frame type; `None` for the needs-review sentinel bucket. */
+	frameType: string | null,
+	/**  Number of files belonging to this sub-item after re-split. */
+	fileCount: number,
+	/**
+	 *  Missing mandatory attributes across the sub-item's files (T070 gate).
+	 *  Empty when the sub-item can proceed to confirm.
+	 */
+	missingMandatory?: string[],
+};
+
+/**  Summary of one re-materialized sub-item returned after reclassify (T068). */
+export type InboxSubItemSummary_Serialize = {
+	/**
+	 *  The stable `inbox_items.id` for this sub-item (new UUID if it was
+	 *  just created, or the existing one if it matched the upsert key).
+	 */
+	inboxItemId: string,
+	/**  Deterministic canonical group key (R-11). */
+	groupKey: string,
+	/**  Human-readable label `"(root) · <type> · <dims>"`. */
+	groupLabel: string,
+	/**  Authoritative frame type; `None` for the needs-review sentinel bucket. */
+	frameType?: string | null,
+	/**  Number of files belonging to this sub-item after re-split. */
+	fileCount: number,
+	/**
+	 *  Missing mandatory attributes across the sub-item's files (T070 gate).
+	 *  Empty when the sub-item can proceed to confirm.
+	 */
+	missingMandatory?: string[],
+};
+
+/**  One ranked target candidate (R-17 coordinate nearest-neighbour). */
+export type InboxTargetCandidate = {
+	/**  Persisted `canonical_target.id` (UUID string). */
+	targetId: string,
+	/**  Effective display name (`display_alias ?? primary_designation`). */
+	name: string,
+	/**  Great-circle angular separation from the sub-group's pointing, in degrees. */
+	separationDeg: number | null,
+};
+
+/**
+ *  Request for `inbox.target_recommendations`.
+ * 
+ *  Identify a light sub-group by **either** its `inboxItemId` **or** its
+ *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+ *  one should be set; if both are present, `inboxItemId` takes precedence.
+ */
+export type InboxTargetRecommendationsRequest = InboxTargetRecommendationsRequest_Serialize | InboxTargetRecommendationsRequest_Deserialize;
+
+/**
+ *  Request for `inbox.target_recommendations`.
+ * 
+ *  Identify a light sub-group by **either** its `inboxItemId` **or** its
+ *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+ *  one should be set; if both are present, `inboxItemId` takes precedence.
+ */
+export type InboxTargetRecommendationsRequest_Deserialize = {
+	/**  The single-type inbox item (light sub-group) to resolve a target for. */
+	inboxItemId?: string | null,
+	/**  Alternatively, the originating source group (R-12 provenance). */
+	sourceGroupId?: string | null,
+};
+
+/**
+ *  Request for `inbox.target_recommendations`.
+ * 
+ *  Identify a light sub-group by **either** its `inboxItemId` **or** its
+ *  `sourceGroupId` (R-17: a sub-group is one homogeneous light group). Exactly
+ *  one should be set; if both are present, `inboxItemId` takes precedence.
+ */
+export type InboxTargetRecommendationsRequest_Serialize = {
+	/**  The single-type inbox item (light sub-group) to resolve a target for. */
+	inboxItemId?: string | null,
+	/**  Alternatively, the originating source group (R-12 provenance). */
+	sourceGroupId?: string | null,
+};
+
+/**
+ *  Response from `inbox.target_recommendations`.
+ * 
+ *  `candidates` is ranked ascending by angular separation within the configured
+ *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+ *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+ *  carries the raw `OBJECT` header for **display only** — never used for
+ *  matching/search (R-17).
+ */
+export type InboxTargetRecommendationsResponse = InboxTargetRecommendationsResponse_Serialize | InboxTargetRecommendationsResponse_Deserialize;
+
+/**
+ *  Response from `inbox.target_recommendations`.
+ * 
+ *  `candidates` is ranked ascending by angular separation within the configured
+ *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+ *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+ *  carries the raw `OBJECT` header for **display only** — never used for
+ *  matching/search (R-17).
+ */
+export type InboxTargetRecommendationsResponse_Deserialize = {
+	candidates: InboxTargetCandidate[],
+	pointing: InboxPointing | null,
+	objectHint: string | null,
+};
+
+/**
+ *  Response from `inbox.target_recommendations`.
+ * 
+ *  `candidates` is ranked ascending by angular separation within the configured
+ *  FOV-aware (or fixed-fallback) radius; empty when no pointing is available.
+ *  `pointing` is `None` when the light sub-group has no RA/Dec. `objectHint`
+ *  carries the raw `OBJECT` header for **display only** — never used for
+ *  matching/search (R-17).
+ */
+export type InboxTargetRecommendationsResponse_Serialize = {
+	candidates: InboxTargetCandidate[],
+	pointing?: InboxPointing | null,
+	objectHint?: string | null,
+};
+
 export type IngestionSettings = {
 	watcherEnabled: boolean,
 	scanOnStartup: boolean,
 	followSymlinks: boolean,
 	followJunctions: boolean,
-	eagerHashing: boolean,
+	/**
+	 *  Hashing strategy: `"lazy"` | `"eager"` | `"off"` — same vocabulary as
+	 *  the spec-018 `hashOnScan` settings key (data-sources scope). This is a
+	 *  distinct, ingestion-scoped setting (not a read of `hashOnScan`); the
+	 *  package-P12 UI wiring intentionally keeps them independent per-scope
+	 *  values rather than aliasing one to the other.
+	 */
+	hashingMode: string,
 	metadataExtraction: boolean,
 	exposureGroupingToleranceS: number | null,
 	temperatureGroupingToleranceC: number | null,
@@ -3225,9 +4266,10 @@ export type IngestionSettings = {
 /**
  *  Frame type for an inventory session.
  *  `DarkFlat` is reserved but never returned in v1.
- *  `Mixed` is a server-derived sentinel for post-promotion regressions.
+ *  (`Mixed` removed 2026-07-03: Inbox single-type ingest — spec 041 — splits
+ *  mixed folders into single-type items at ingest, so a session is never mixed.)
  */
-export type InventoryFrameType = "light" | "dark" | "flat" | "bias" | "mixed";
+export type InventoryFrameType = "light" | "dark" | "flat" | "bias";
 
 /**  Outbound references shown in the drawer's "Linked" section. */
 export type InventoryLinkedRefs = InventoryLinkedRefs_Serialize | InventoryLinkedRefs_Deserialize;
@@ -3255,12 +4297,6 @@ export type InventoryListFilters_Deserialize = {
 	sourceFilter: string | null,
 	/**  When set, limits sessions to the given frame type. */
 	frameFilter: InventoryFrameType | null,
-	/**
-	 *  When set, limits sessions to the given canonical state.
-	 *  `ignored` sessions are excluded from the default ledger.
-	 *  Use `reviewFilter=ignored` to surface them (FR-010).
-	 */
-	reviewFilter: string | null,
 };
 
 /**  Optional filters for `inventory.list`. */
@@ -3269,12 +4305,6 @@ export type InventoryListFilters_Serialize = {
 	sourceFilter?: string | null,
 	/**  When set, limits sessions to the given frame type. */
 	frameFilter?: InventoryFrameType | null,
-	/**
-	 *  When set, limits sessions to the given canonical state.
-	 *  `ignored` sessions are excluded from the default ledger.
-	 *  Use `reviewFilter=ignored` to surface them (FR-010).
-	 */
-	reviewFilter?: string | null,
 };
 
 /**  Request envelope for `inventory.list`. */
@@ -3343,127 +4373,21 @@ export type InventoryProvenanceSummary_Serialize = {
 	confirmedBy?: string | null,
 };
 
-/**  Error payload for `inventory.session.review`. */
-export type InventoryReviewError = InventoryReviewError_Serialize | InventoryReviewError_Deserialize;
-
-/**  Error payload for `inventory.session.review`. */
-export type InventoryReviewError_Deserialize = {
-	code: string,
-	message: string,
-	details: unknown | null,
-};
-
-/**  Error payload for `inventory.session.review`. */
-export type InventoryReviewError_Serialize = {
-	code: string,
-	message: string,
-	details?: unknown | null,
-};
-
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
+ * 
+ *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
+ *  inventory with no review lifecycle.
  */
 export type InventorySession = InventorySession_Serialize | InventorySession_Deserialize;
 
-/**  Request envelope for `inventory.session.review`. */
-export type InventorySessionReviewRequest = InventorySessionReviewRequest_Serialize | InventorySessionReviewRequest_Deserialize;
-
-/**  Request envelope for `inventory.session.review`. */
-export type InventorySessionReviewRequest_Deserialize = {
-	contractVersion: string,
-	requestId: string,
-	sessionId: string,
-	/**  Target canonical state. When equal to current state → noop (no error). */
-	nextState: InventorySessionState,
-	actionLabel: string | null,
-	/**  "user" or "system" */
-	actor: string,
-};
-
-/**  Request envelope for `inventory.session.review`. */
-export type InventorySessionReviewRequest_Serialize = {
-	contractVersion: string,
-	requestId: string,
-	sessionId: string,
-	/**  Target canonical state. When equal to current state → noop (no error). */
-	nextState: InventorySessionState,
-	actionLabel?: string | null,
-	/**  "user" or "system" */
-	actor: string,
-};
-
-/**
- *  Response envelope for `inventory.session.review`.
- *  Status is "success", "noop", or "error".
- */
-export type InventorySessionReviewResponse = InventorySessionReviewResponse_Serialize | InventorySessionReviewResponse_Deserialize;
-
-/**
- *  Response envelope for `inventory.session.review`.
- *  Status is "success", "noop", or "error".
- */
-export type InventorySessionReviewResponse_Deserialize = {
-	status: string,
-	contractVersion: string,
-	requestId: string,
-	appliedAt: string | null,
-	entityType: string | null,
-	priorState: InventorySessionState | null,
-	newState: InventorySessionState | null,
-	auditId: string | null,
-	error: InventoryReviewError_Deserialize | null,
-};
-
-/**
- *  Response envelope for `inventory.session.review`.
- *  Status is "success", "noop", or "error".
- */
-export type InventorySessionReviewResponse_Serialize = {
-	status: string,
-	contractVersion: string,
-	requestId: string,
-	appliedAt?: string | null,
-	entityType?: string | null,
-	priorState?: InventorySessionState | null,
-	newState?: InventorySessionState | null,
-	auditId?: string | null,
-	error?: InventoryReviewError_Serialize | null,
-};
-
-/**
- *  Canonical spec 002 session state. Six values; no presentational projection.
- *  UI maps display labels locally: `discovered` and `candidate` → "Needs review".
- */
-export type InventorySessionState = "discovered" | "candidate" | "needs_review" | "confirmed" | "rejected" | "ignored";
-
-export type InventorySessionTransitionRequest = InventorySessionTransitionRequest_Serialize | InventorySessionTransitionRequest_Deserialize;
-
-export type InventorySessionTransitionRequest_Deserialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel: string | null,
-	actor: TransitionActor,
-};
-
-export type InventorySessionTransitionRequest_Serialize = {
-	contractVersion: string,
-	requestId: string,
-	entityType: string,
-	entityId: string,
-	currentState: SessionState,
-	nextState: SessionState,
-	actionLabel?: string | null,
-	actor: TransitionActor,
-};
-
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
+ * 
+ *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
+ *  inventory with no review lifecycle.
  */
 export type InventorySession_Deserialize = {
 	id: string,
@@ -3474,7 +4398,6 @@ export type InventorySession_Deserialize = {
 	target: string | null,
 	filter: string | null,
 	exposure: string | null,
-	state: InventorySessionState,
 	camera: string | null,
 	gain: string | null,
 	binning: string | null,
@@ -3487,6 +4410,9 @@ export type InventorySession_Deserialize = {
 /**
  *  One row in the inventory ledger. Projects one `AcquisitionSession` OR one
  *  `CalibrationSession` into a unified DTO.
+ * 
+ *  Spec 041 FR-051: no `state` field — sessions are derived, already-confirmed
+ *  inventory with no review lifecycle.
  */
 export type InventorySession_Serialize = {
 	id: string,
@@ -3497,7 +4423,6 @@ export type InventorySession_Serialize = {
 	target: string | null,
 	filter: string | null,
 	exposure: string | null,
-	state: InventorySessionState,
 	camera?: string | null,
 	gain?: string | null,
 	binning?: string | null,
@@ -4118,6 +5043,63 @@ export type OpticalTrain = {
 export type OrganizationState = "organized" | "unorganized";
 
 /**
+ *  Request for `pattern.path_preview` — preview a per-type destination
+ *  **path-string** pattern (e.g. `masters/flats/{filter}/`) against sample
+ *  metadata, for the Settings per-frame-type destination pattern editor.
+ * 
+ *  Unlike [`PatternPreviewRequest`] (which carries the `PatternPart[]`
+ *  token/separator model), `pattern` here is a raw path string that may
+ *  interleave `{token}` placeholders with literal directory segments — the
+ *  form produced by [`crate::patterns`] (this module) is not applicable;
+ *  resolution is delegated to `crates/patterns::resolver::resolve_pattern_str`,
+ *  which reuses the v1 token registry as the single token-name authority.
+ */
+export type PathPatternPreviewRequest = PathPatternPreviewRequest_Serialize | PathPatternPreviewRequest_Deserialize;
+
+/**
+ *  Request for `pattern.path_preview` — preview a per-type destination
+ *  **path-string** pattern (e.g. `masters/flats/{filter}/`) against sample
+ *  metadata, for the Settings per-frame-type destination pattern editor.
+ * 
+ *  Unlike [`PatternPreviewRequest`] (which carries the `PatternPart[]`
+ *  token/separator model), `pattern` here is a raw path string that may
+ *  interleave `{token}` placeholders with literal directory segments — the
+ *  form produced by [`crate::patterns`] (this module) is not applicable;
+ *  resolution is delegated to `crates/patterns::resolver::resolve_pattern_str`,
+ *  which reuses the v1 token registry as the single token-name authority.
+ */
+export type PathPatternPreviewRequest_Deserialize = {
+	pattern: string,
+	sampleMetadata: MetadataBundleDto_Deserialize,
+};
+
+/**
+ *  Request for `pattern.path_preview` — preview a per-type destination
+ *  **path-string** pattern (e.g. `masters/flats/{filter}/`) against sample
+ *  metadata, for the Settings per-frame-type destination pattern editor.
+ * 
+ *  Unlike [`PatternPreviewRequest`] (which carries the `PatternPart[]`
+ *  token/separator model), `pattern` here is a raw path string that may
+ *  interleave `{token}` placeholders with literal directory segments — the
+ *  form produced by [`crate::patterns`] (this module) is not applicable;
+ *  resolution is delegated to `crates/patterns::resolver::resolve_pattern_str`,
+ *  which reuses the v1 token registry as the single token-name authority.
+ */
+export type PathPatternPreviewRequest_Serialize = {
+	pattern: string,
+	sampleMetadata: MetadataBundleDto_Serialize,
+};
+
+/**  Successful response for `pattern.path_preview`. */
+export type PathPatternPreviewResponse = {
+	/**  The resolved relative path for display. */
+	resolvedPath: string,
+	/**  Token names resolved via fallback (shown as dim segments in the UI). */
+	missingTokens: string[],
+	warnings: string[],
+};
+
+/**
  *  One element of an ordered token pattern (data-model.md §PatternPart).
  * 
  *  Re-exported from `crates/contracts/core` so the Tauri command layer can
@@ -4404,7 +5386,9 @@ export type PlanOrigin = "inbox" | "restructure" | "cleanup" | "archive" | "proj
 /**  Spec 026 — generated source view removal plan. */
 "prepared_view_removal" | 
 /**  Spec 026 — generated source view regeneration plan. */
-"prepared_view_regeneration";
+"prepared_view_regeneration" | 
+/**  Spec 049 — generated source view first-materialization (generation) plan. */
+"prepared_view_generation";
 
 /**  Response DTO for `plan.protection.check`. */
 export type PlanProtectionCheckResponse = PlanProtectionCheckResponse_Serialize | PlanProtectionCheckResponse_Deserialize;
@@ -4529,7 +5513,9 @@ export type PlanType = "split" | "restructure" | "cleanup" | "archive" | "source
 /**  Spec 026 — removes generated source view links/copies. */
 "source_view_removal" | 
 /**  Spec 026 — re-creates previously removed source view. */
-"source_view_regeneration";
+"source_view_regeneration" | 
+/**  Spec 049 — first-materializes a project source view. */
+"source_view_generation";
 
 export type PreparedSourceState = "not_created" | "planned" | "ready" | "stale" | "retired";
 
@@ -4657,6 +5643,17 @@ export type ProjectChannelDto_Deserialize = {
 	/**  `"inferred"` or `"manual"` */
 	source: string,
 	addedAt: string | null,
+	/**
+	 *  Total sub-frame (light) count across all linked sources whose
+	 *  `filter_snapshot` matches this channel's `label` (P7: server-side
+	 *  aggregation, previously derived client-side).
+	 */
+	subFrames: number,
+	/**
+	 *  Total integration time in seconds across the same matching sources
+	 *  (`frames_snapshot * parse(exposure_snapshot)` summed per source).
+	 */
+	totalIntegrationS: number,
 };
 
 /**  A project channel (inferred or manually added). */
@@ -4665,6 +5662,17 @@ export type ProjectChannelDto_Serialize = {
 	/**  `"inferred"` or `"manual"` */
 	source: string,
 	addedAt?: string | null,
+	/**
+	 *  Total sub-frame (light) count across all linked sources whose
+	 *  `filter_snapshot` matches this channel's `label` (P7: server-side
+	 *  aggregation, previously derived client-side).
+	 */
+	subFrames: number,
+	/**
+	 *  Total integration time in seconds across the same matching sources
+	 *  (`frames_snapshot * parse(exposure_snapshot)` summed per source).
+	 */
+	totalIntegrationS: number,
 };
 
 /**  Request body for `projects.channels.dismiss_drift`. */
@@ -4757,6 +5765,22 @@ export type ProjectCreateResult_Deserialize = {
 	channels: ProjectChannelDto_Deserialize[],
 	auditId: string,
 	createdAt: string,
+	/**
+	 *  Outcome of the mkdir-only scaffolding auto-apply (user decision
+	 *  2026-07-04, supersedes handover D16). The folder-structure plan and its
+	 *  audit rows are still written (constitution II reviewability-as-record);
+	 *  only the approval click is skipped, and only when every plan action is
+	 *  directory creation.
+	 * 
+	 *  - `Some(true)`  — the scaffolding plan auto-applied cleanly; the
+	 *    project folders exist on disk.
+	 *  - `Some(false)` — auto-apply was attempted but did not complete
+	 *    cleanly; the plan remains reviewable via the normal plan surfaces,
+	 *    exactly like a failed manual apply.
+	 *  - `None`        — the plan requires manual review (it contains a
+	 *    non-mkdir action) or no plan was generated.
+	 */
+	scaffoldApplied?: boolean | null,
 };
 
 /**  Successful result from `projects.create`. */
@@ -4771,6 +5795,22 @@ export type ProjectCreateResult_Serialize = {
 	channels: ProjectChannelDto_Serialize[],
 	auditId: string,
 	createdAt: string,
+	/**
+	 *  Outcome of the mkdir-only scaffolding auto-apply (user decision
+	 *  2026-07-04, supersedes handover D16). The folder-structure plan and its
+	 *  audit rows are still written (constitution II reviewability-as-record);
+	 *  only the approval click is skipped, and only when every plan action is
+	 *  directory creation.
+	 * 
+	 *  - `Some(true)`  — the scaffolding plan auto-applied cleanly; the
+	 *    project folders exist on disk.
+	 *  - `Some(false)` — auto-apply was attempted but did not complete
+	 *    cleanly; the plan remains reviewable via the normal plan surfaces,
+	 *    exactly like a failed manual apply.
+	 *  - `None`        — the plan requires manual review (it contains a
+	 *    non-mkdir action) or no plan was generated.
+	 */
+	scaffoldApplied?: boolean | null,
 };
 
 /**  A project detail (sources + channels included). */
@@ -5089,6 +6129,144 @@ export type ProjectionTransitionRequest_Serialize = {
 	nextState: ProjectionState,
 	actionLabel?: string | null,
 	actor: TransitionActor,
+};
+
+/**
+ *  Discriminant for the value kind of a property in the property registry.
+ * 
+ *  Mirrors the `kind` column in the R-13 property table.  The UI uses this to
+ *  select the appropriate editor widget (number input, enum dropdown, etc.).
+ */
+export type PropertyKind = 
+/**  Free-form text (e.g. camera name, filter label). */
+"string" | 
+/**  IEEE-754 double (e.g. exposureS, raDeg). */
+"number" | 
+/**  Whole number (e.g. offset in ADU). */
+"integer" | 
+/**  Either a numeric or text representation (e.g. gain on some cameras). */
+"numberOrString" | 
+/**  One of a fixed set of string values (e.g. frameType). */
+"enum" | 
+/**  Calendar date (`YYYY-MM-DD`). */
+"date" | 
+/**  ISO-8601 date-time (e.g. obsTimeUtc, dateEnd). */
+"datetime";
+
+/**
+ *  One entry in the property registry exposed by `inbox.property_registry`.
+ * 
+ *  Describes a named inbox-file property that the field-agnostic reclassifier
+ *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
+ *  The UI uses this registry to render a generic metadata editor without
+ *  hard-coding field names.
+ * 
+ *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
+ *  during extraction; empty for derived or resolve-only properties.
+ * 
+ *  `overridable` — when `false` the property is informational or derived and
+ *  the reclassify endpoint will reject an explicit override for it.
+ * 
+ *  `appliesTo` — frame types for which this property is meaningful; the UI
+ *  SHOULD hide non-applicable properties rather than blocking on them.
+ * 
+ *  `validation` — optional human-readable constraint description shown in the
+ *  UI tooltip; not a machine-parseable expression (use for display only).
+ */
+export type PropertyRegistryEntry = PropertyRegistryEntry_Serialize | PropertyRegistryEntry_Deserialize;
+
+/**
+ *  One entry in the property registry exposed by `inbox.property_registry`.
+ * 
+ *  Describes a named inbox-file property that the field-agnostic reclassifier
+ *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
+ *  The UI uses this registry to render a generic metadata editor without
+ *  hard-coding field names.
+ * 
+ *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
+ *  during extraction; empty for derived or resolve-only properties.
+ * 
+ *  `overridable` — when `false` the property is informational or derived and
+ *  the reclassify endpoint will reject an explicit override for it.
+ * 
+ *  `appliesTo` — frame types for which this property is meaningful; the UI
+ *  SHOULD hide non-applicable properties rather than blocking on them.
+ * 
+ *  `validation` — optional human-readable constraint description shown in the
+ *  UI tooltip; not a machine-parseable expression (use for display only).
+ */
+export type PropertyRegistryEntry_Deserialize = {
+	/**  Registry key, camelCase (e.g. `"frameType"`, `"exposureS"`). */
+	key: string,
+	/**  Value kind discriminant used by the UI for widget selection. */
+	kind: PropertyKind,
+	/**
+	 *  Physical unit label for display (e.g. `"s"`, `"deg"`, `"ADU"`).  `None`
+	 *  when the property is dimensionless or a free-form string.
+	 */
+	unit: string | null,
+	/**
+	 *  FITS/XISF source header keyword(s), in priority order.  Empty for
+	 *  properties that are derived or resolved from external sources (e.g.
+	 *  `target`, `opticTrain`).
+	 */
+	sourceHeaders: string[],
+	/**  Whether a user override is accepted by the reclassify use case. */
+	overridable: boolean,
+	/**  Frame types for which this property is applicable. */
+	appliesTo: string[],
+	/**
+	 *  Human-readable validation constraint for display in the UI.  `None`
+	 *  means no documented constraint beyond the `kind` type.
+	 */
+	validation: string | null,
+};
+
+/**
+ *  One entry in the property registry exposed by `inbox.property_registry`.
+ * 
+ *  Describes a named inbox-file property that the field-agnostic reclassifier
+ *  (spec 041 R-13) can accept, validate, and persist as an index-side override.
+ *  The UI uses this registry to render a generic metadata editor without
+ *  hard-coding field names.
+ * 
+ *  `sourceHeaders` — the FITS/XISF header keywords that feed this property
+ *  during extraction; empty for derived or resolve-only properties.
+ * 
+ *  `overridable` — when `false` the property is informational or derived and
+ *  the reclassify endpoint will reject an explicit override for it.
+ * 
+ *  `appliesTo` — frame types for which this property is meaningful; the UI
+ *  SHOULD hide non-applicable properties rather than blocking on them.
+ * 
+ *  `validation` — optional human-readable constraint description shown in the
+ *  UI tooltip; not a machine-parseable expression (use for display only).
+ */
+export type PropertyRegistryEntry_Serialize = {
+	/**  Registry key, camelCase (e.g. `"frameType"`, `"exposureS"`). */
+	key: string,
+	/**  Value kind discriminant used by the UI for widget selection. */
+	kind: PropertyKind,
+	/**
+	 *  Physical unit label for display (e.g. `"s"`, `"deg"`, `"ADU"`).  `None`
+	 *  when the property is dimensionless or a free-form string.
+	 */
+	unit?: string | null,
+	/**
+	 *  FITS/XISF source header keyword(s), in priority order.  Empty for
+	 *  properties that are derived or resolved from external sources (e.g.
+	 *  `target`, `opticTrain`).
+	 */
+	sourceHeaders: string[],
+	/**  Whether a user override is accepted by the reclassify use case. */
+	overridable: boolean,
+	/**  Frame types for which this property is applicable. */
+	appliesTo: string[],
+	/**
+	 *  Human-readable validation constraint for display in the UI.  `None`
+	 *  means no documented constraint beyond the `kind` type.
+	 */
+	validation?: string | null,
 };
 
 /**
@@ -5590,7 +6768,6 @@ export type SessionDetail = SessionDetail_Serialize | SessionDetail_Deserialize;
 export type SessionDetail_Deserialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -5609,7 +6786,6 @@ export type SessionDetail_Deserialize = {
 export type SessionDetail_Serialize = {
 	id: string,
 	sessionKey: SessionKey,
-	state: SessionState,
 	confidence: ConfidenceLevel,
 	opticalTrainId: string,
 	frameCount: number,
@@ -5659,8 +6835,6 @@ export type SessionSplitResult_Serialize = {
 	new: AcquisitionSession_Serialize,
 };
 
-export type SessionState = "discovered" | "candidate" | "needs_review" | "confirmed" | "rejected" | "ignored";
-
 /**  Sessions grouping mode. */
 export type SessionsGroupBy = "none" | "target" | "month" | "filter" | "train";
 
@@ -5694,6 +6868,9 @@ export type SettingsData = {
 	scope: string,
 	values: unknown,
 };
+
+/**  Visibility tier for the audit event (FR-008). */
+export type Severity = "workflow" | "diagnostic";
 
 /**
  *  Kind of a registered source directory.
@@ -5826,6 +7003,43 @@ export type SourceRole = "light" | "dark" | "flat" | "bias";
  *  Canonical definition for this spec. Re-exported from `projects.rs`.
  */
 export type SourceSelection = "selected" | "candidate";
+
+/**
+ *  Request: create a `prepared_view_generation` plan first-materializing a
+ *  project's selected lights + matched calibration as link actions.
+ */
+export type SourceViewGenerateRequest = {
+	projectId: string,
+	/**
+	 *  Workflow/processing profile selecting the tree layout (spec 011).
+	 *  Defaults to the project's active profile (WBPP first).
+	 */
+	profileId?: string | null,
+	/**  Optional per-generation destination path override (FR-021b). */
+	destinationOverride?: string | null,
+	/**
+	 *  Explicit opt-in to copy materialization when no link kind is
+	 *  achievable. Default `false` — the app never silently copies (FR-003).
+	 */
+	copyOptIn?: boolean,
+	/**
+	 *  When `true`, any missing/unresolved source fails the whole plan; when
+	 *  `false` (default), unresolved sources are skipped and flagged (FR-019).
+	 */
+	strict?: boolean,
+};
+
+/**  Success response for `sourceview.generate`. */
+export type SourceViewGenerateResponse = {
+	/**
+	 *  The id of the produced generation plan (`FilesystemPlan` with origin
+	 *  `prepared_view_generation`, plan type `source_view_generation`). Enters
+	 *  the standard spec 017/025 pipeline: approve, then apply.
+	 */
+	planId: string,
+	/**  Non-blocking review warnings surfaced with the plan. */
+	warnings?: GenerationWarning[],
+};
 
 export type StatusSummary = {
 	inboxCount: number,
@@ -6349,7 +7563,9 @@ export type TargetSearchResponse_Serialize = {
  *  - `created_at` — RFC 3339 UTC timestamp the row was created.
  *  - `frame_count` — length of the `frame_ids` JSON array (computed via
  *    `json_array_length`; 0 for legacy rows with the default `'[]'`).
- *  - `state` — session lifecycle state string (e.g. `"confirmed"`, `"candidate"`).
+ * 
+ *  Spec 041 FR-051 (T076): no `state` field — sessions are derived,
+ *  already-confirmed inventory with no review lifecycle.
  */
 export type TargetSessionItem = {
 	id: string,
@@ -6359,8 +7575,6 @@ export type TargetSessionItem = {
 	createdAt: string,
 	/**  Number of frames in `frame_ids` JSON array. */
 	frameCount: number,
-	/**  Lifecycle state (e.g. `"confirmed"`, `"candidate"`, `"needs_review"`). */
-	state: string,
 };
 
 /**  Request for `target.sessions.list` (spec 023 US2). */
@@ -6525,6 +7739,12 @@ export type ToolProfileSummary = {
 	autoDetected: boolean,
 	/**  Current executable path (from Settings). `None` when not configured. */
 	executablePath: string | null,
+	/**
+	 *  Effective artifact-watch extension allow-list (spec 012 T007b): the
+	 *  per-tool Settings override when configured, else
+	 *  `workflow_artifacts::DEFAULT_WATCH_EXTENSIONS`.
+	 */
+	watchExtensions: string[],
 };
 
 /**  Tour completion state tracking. */
@@ -6558,40 +7778,32 @@ export type TransitionRequest = TransitionRequest_Serialize | TransitionRequest_
 /**  Discriminated request — one variant per entity family. */
 export type TransitionRequest_Deserialize = ({ project: {
 	entityType: "project",
-} & ProjectTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
+} & ProjectTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
 	entityType: "plan",
-} & PlanTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; prepared_source?: never; project?: never; projection?: never } | ({ inventory_session: {
-	entityType: "inventory_session",
-} & InventorySessionTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ calibration_session: {
-	entityType: "calibration_session",
-} & CalibrationSessionTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
+} & PlanTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
 	entityType: "data_source",
-} & DataSourceTransitionRequest_Deserialize }) & { calibration_session?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
+} & DataSourceTransitionRequest_Deserialize }) & { file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
 	entityType: "prepared_source",
-} & PreparedSourceTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
+} & PreparedSourceTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
 	entityType: "projection",
-} & ProjectionTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
+} & ProjectionTransitionRequest_Deserialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
 	entityType: "file_record",
-} & FileRecordTransitionRequest_Deserialize }) & { calibration_session?: never; data_source?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
+} & FileRecordTransitionRequest_Deserialize }) & { data_source?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
 
 /**  Discriminated request — one variant per entity family. */
 export type TransitionRequest_Serialize = ({ project: {
 	entityType: "project",
-} & ProjectTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
+} & ProjectTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; projection?: never } | ({ plan: {
 	entityType: "plan",
-} & PlanTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; prepared_source?: never; project?: never; projection?: never } | ({ inventory_session: {
-	entityType: "inventory_session",
-} & InventorySessionTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ calibration_session: {
-	entityType: "calibration_session",
-} & CalibrationSessionTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
+} & PlanTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; prepared_source?: never; project?: never; projection?: never } | ({ data_source: {
 	entityType: "data_source",
-} & DataSourceTransitionRequest_Serialize }) & { calibration_session?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
+} & DataSourceTransitionRequest_Serialize }) & { file_record?: never; plan?: never; prepared_source?: never; project?: never; projection?: never } | ({ prepared_source: {
 	entityType: "prepared_source",
-} & PreparedSourceTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
+} & PreparedSourceTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; plan?: never; project?: never; projection?: never } | ({ projection: {
 	entityType: "projection",
-} & ProjectionTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; file_record?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
+} & ProjectionTransitionRequest_Serialize }) & { data_source?: never; file_record?: never; plan?: never; prepared_source?: never; project?: never } | ({ file_record: {
 	entityType: "file_record",
-} & FileRecordTransitionRequest_Serialize }) & { calibration_session?: never; data_source?: never; inventory_session?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
+} & FileRecordTransitionRequest_Serialize }) & { data_source?: never; plan?: never; prepared_source?: never; project?: never; projection?: never };
 
 export type TransitionResponse = TransitionResponse_Serialize | TransitionResponse_Deserialize;
 
@@ -6628,6 +7840,7 @@ export type UpdateCalibrationTolerances = {
 	requireSameCamera: boolean,
 	requireSameGain: boolean,
 	requireSameBinning: boolean,
+	requireSameOffset: boolean,
 };
 
 export type UpdateCamera = {
@@ -6652,7 +7865,8 @@ export type UpdateIngestionSettings = {
 	scanOnStartup: boolean,
 	followSymlinks: boolean,
 	followJunctions: boolean,
-	eagerHashing: boolean,
+	/**  See [`IngestionSettings::hashing_mode`]. */
+	hashingMode: string,
 	metadataExtraction: boolean,
 	exposureGroupingToleranceS: number | null,
 	temperatureGroupingToleranceC: number | null,
@@ -6671,6 +7885,12 @@ export type UpdateProcessingTool = {
 	id: string,
 	path: string | null,
 	enabled: boolean,
+	/**
+	 *  Custom artifact-watch extension allow-list (spec 012 T007b, R-ExtAllow).
+	 *  `None` leaves the existing setting (or default) unchanged. Entries MUST
+	 *  start with `.` (e.g. `.xisf`).
+	 */
+	watchExtensions?: string[] | null,
 };
 
 export type UpdateTelescope = {

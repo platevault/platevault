@@ -123,11 +123,20 @@ pub trait LifecycleRepository {
     /// code + message in `payload`. Required by data-model.md §242 and §378
     /// — refused transitions MUST be durable, not just observable via the
     /// response envelope.
+    ///
+    /// `refusal_params` (D23 upgrade, campaign task #45): optional structured
+    /// display parameters (a flat JSON object of string values) stored as
+    /// `payload.refusal.params`. When present they identify the exact message
+    /// template behind `refusal_code`, so the frontend can localize the
+    /// refusal detail at display time instead of showing the write-time
+    /// English `refusal_message`. Rows without params keep the English
+    /// message as their only rendering (fallback path).
     fn record_refused_transition(
         &self,
         transition: TransitionRequest,
         refusal_code: &'static str,
         refusal_message: &str,
+        refusal_params: Option<serde_json::Value>,
     ) -> impl std::future::Future<Output = DbResult<AuditId>> + Send;
 
     /// Read the winning `ProvenanceTag` per `field_path` for an entity.
@@ -149,9 +158,6 @@ pub trait LifecycleRepository {
 fn table_for(entity_type: EntityType) -> &'static str {
     match entity_type {
         EntityType::FileRecord => "file_record",
-        // InventorySession shares the acquisition_session table
-        EntityType::AcquisitionSession | EntityType::InventorySession => "acquisition_session",
-        EntityType::CalibrationSession => "calibration_session",
         // FR-019 / T052: canonical project lifecycle lives in `projects.lifecycle`
         // (spec-008 table). The legacy spec-002 `project.state` was removed in
         // migration 0036.
@@ -453,6 +459,7 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         transition: TransitionRequest,
         refusal_code: &'static str,
         refusal_message: &str,
+        refusal_params: Option<serde_json::Value>,
     ) -> DbResult<AuditId> {
         // Per data-model.md §AuditLogEntry invariants:
         //   - `outcome == refused` MUST have `to_state == null`
@@ -475,12 +482,19 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         // Payload carries the refusal code + message so consumers reading the
         // audit table can reconstruct the refusal envelope without joining
         // against the response log. JSON form matches the contract's
-        // dotted-form error codes.
+        // dotted-form error codes. `params` (when provided) additionally
+        // carries the structured display parameters for catalog-based
+        // localization of the detail text (D23 upgrade) — the stored English
+        // `message` remains the durable fallback.
+        let mut refusal = serde_json::json!({
+            "code": refusal_code,
+            "message": refusal_message,
+        });
+        if let (Some(obj), Some(params)) = (refusal.as_object_mut(), refusal_params) {
+            obj.insert("params".to_owned(), params);
+        }
         let payload = serde_json::json!({
-            "refusal": {
-                "code": refusal_code,
-                "message": refusal_message,
-            },
+            "refusal": refusal,
             "attempted_to_state": transition.to_state,
         })
         .to_string();
@@ -512,9 +526,7 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         entity_type: EntityType,
     ) -> DbResult<HashMap<String, ProvenanceTag>> {
         // Provenance rows are stored under the SQL table's canonical asset
-        // tag (see `table_for`), which can differ from `EntityType::as_str()`
-        // for families that share a table (e.g. `inventory_session` shares
-        // `acquisition_session`). Reuse `load_provenance` so origin
+        // tag (see `table_for`). Reuse `load_provenance` so origin
         // resolution stays in one place (priority + superseded_by rules).
         let asset_type = provenance_asset_type(entity_type);
         let (per_field, _truncated) = load_provenance(&self.pool, entity_id, asset_type).await?;
@@ -526,7 +538,6 @@ impl LifecycleRepository for SqliteLifecycleRepository {
 /// archive rows. Mirrors `table_for` for families that share a storage table.
 fn provenance_asset_type(entity_type: EntityType) -> &'static str {
     match entity_type {
-        EntityType::InventorySession => "acquisition_session",
         EntityType::Plan => "filesystem_plan",
         EntityType::LibraryRoot => "data_source",
         other => other.as_str(),
@@ -536,8 +547,6 @@ fn provenance_asset_type(entity_type: EntityType) -> &'static str {
 fn parse_entity_type(s: &str) -> EntityType {
     match s {
         "file_record" => EntityType::FileRecord,
-        "acquisition_session" | "inventory_session" => EntityType::AcquisitionSession,
-        "calibration_session" => EntityType::CalibrationSession,
         "filesystem_plan" | "plan" => EntityType::FilesystemPlan,
         "prepared_source" => EntityType::PreparedSource,
         "processing_artifact" => EntityType::ProcessingArtifact,
@@ -595,6 +604,7 @@ impl LifecycleRepository for InMemoryLifecycleRepository {
         _transition: TransitionRequest,
         _refusal_code: &'static str,
         _refusal_message: &str,
+        _refusal_params: Option<serde_json::Value>,
     ) -> DbResult<AuditId> {
         // In-memory stub: no durable storage. Tests that need to assert the
         // refused audit row exists should use `SqliteLifecycleRepository`.

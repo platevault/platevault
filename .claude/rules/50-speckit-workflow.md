@@ -18,6 +18,14 @@ paths:
   requiring review. Present them to the user and resolve together first.
 - Never silently deviate from spec. Material deviation: stop, explain, get
   approval, route through iterate. Minor deviation: flag in commit.
+- Record every architecture/design decision as an ADR. When a non-trivial,
+  hard-to-reverse decision is made (a technology choice, a constraint, an
+  approach picked over alternatives), capture it with the
+  `/architecture-decision-records` skill as a one-file MADR-format ADR under
+  `docs/adr/NNNN-title.md` (status proposed/accepted/superseded; never delete a
+  superseded ADR, mark it). This is a continuous process, not a workflow stage:
+  do it at the moment the decision lands, in any phase. Reference the ADR from
+  the spec/plan and from the roadmap entry's `governed-by:` field.
 - `/speckit.implement` is deprecated; do not invoke it. Use the agent-assign
   flow (`assign` -> `validate` -> `execute`), which routes each task to a
   specialized sub-agent for better quality.
@@ -46,9 +54,9 @@ the triggering step.
 |------|---------|------|-------|
 | 1 | `/speckit.specify` | auto -> approval | Creates spec.md |
 | 2 | `/speckit.clarify` | interactive | Ask questions, incorporate feedback |
-| 3 | `/speckit.checklist` | interactive | Quality gate on requirements |
-| 4 | `/speckit.plan` | auto -> approval | Architecture and approach |
-| 5 | `/speckit.tasks` | auto -> approval | Task breakdown with dependencies |
+| 3 | `/speckit.plan` | auto -> approval | Architecture and approach |
+| 4 | `/speckit.tasks` | auto -> approval | Task breakdown with dependencies |
+| 5 | `/speckit.checklist` | interactive | Requirements-quality gate over spec + plan + tasks |
 | 5b | `/speckit.critique.run` | parallel with 5c | Plan + task quality gate |
 | 5c | `/speckit.security-review` | parallel with 5b | Security review of plan/tasks |
 | 6 | `/speckit.analyze` | interactive | Risk analysis, resolve before impl |
@@ -91,12 +99,39 @@ the relevant earlier step directly.
 3. `/speckit.iterate.apply` -> updates spec/plan/tasks
 4. Update issues for changed/removed/new tasks
 5. If cross-spec impact: `/speckit.sync.conflicts` immediately
-6. `/speckit.checkpoint.commit`
-7. Resume at the step where the change was triggered
+6. `/speckit.roadmap.write` -> re-sync the roadmap entry to the iterated
+   spec/plan/tasks. MANDATORY after every iterate: an iteration changes scope,
+   so the roadmap (and each entry's `governed-by:` field) is stale until
+   rewritten. Do not commit the iteration without it.
+7. `/speckit.checkpoint.commit`
+8. Resume at the step where the change was triggered
+
+## Gap Closing (converge)
+
+Trigger: during Phase 3 QA, a step (verify, verify-tasks, sync.analyze) finds
+that the code does not yet implement everything the spec/plan/tasks call for,
+and the gap is unbuilt work -- not a scope change and not a defect in built
+code. Conditional, not a mandatory step: skip it when verify/verify-tasks pass
+clean. Converge is a no-op when the code already satisfies the spec.
+
+Use the right tool for the gap:
+- Spec is right, code is incomplete -> `converge` (this section).
+- Spec/intent must change -> `iterate` (edits spec/plan/tasks).
+- Built code has a defect -> `bugfix`.
+- Review/QA surfaced findings to fix -> `fix-findings`.
+
+1. `/speckit.converge` -> assesses code vs spec/plan/tasks and appends the
+   remaining work as new tasks under a `## Phase N: Convergence` heading in
+   `tasks.md`. Append-only: it never edits spec/plan or existing tasks, and
+   leaves `tasks.md` byte-for-byte unchanged when nothing is missing.
+2. If it appended tasks, implement them via the agent-assign flow
+   (`assign` -> `validate` -> `execute`), not `/speckit.implement`. Then re-run
+   the Phase 3 QA steps.
+3. If it reported clean, resume the QA step you came from.
 
 ## On Resume
 
-1. Determine the last completed step; `/speckit.status.show` shows current
+1. Determine the last completed step; `/speckit.status-report.show` shows current
    spec state
 2. Resume at the appropriate workflow step
 
@@ -122,20 +157,11 @@ Commands outside the numbered workflow above.
 ### Process
 - `qa.run` -- QA cycle (step 11c in the numbered workflow)
 - `fix-findings` -- fix issues from verify/review/qa
-- `reconcile.reconcile` -- reconcile divergent state
+- `reconcile.run` -- reconcile divergent state
 - `doctor.check` -- diagnose speckit health
-
-### Memory
-- `memory-md.init` -- initialize layered memory
-- `memory-md.capture` -- capture findings to memory
-- `memory-md.capture-from-diff` -- capture from git diff
-- `memory-md.prepare-context` -- load relevant memory before work
-- `memory-md.plan-with-memory` -- plan using memory context
-- `memory-md.log-finding` -- log a single finding
-- `memory-md.audit` -- audit memory health
-- `memory-md.token-report` -- memory token usage
-- `memory-md.share-lesson` -- share lesson across projects
-- `memory-md.sync-shared` -- sync shared lessons
+- `status-report.show` -- read-only workflow progress (active feature, artifact
+  status, task completion, next-action recommendation). Anytime/advisory. Writes
+  a regenerated `specs/spec-status.md` on each run (gitignored).
 
 ### Diagrams
 - `diagram.status` -- status diagram
@@ -146,7 +172,7 @@ Commands outside the numbered workflow above.
 - `worktree.create` -- create isolated worktree
 - `worktree.list` -- list active worktrees
 - `worktree.clean` -- clean up worktrees
-- `archive.archive` -- archive completed spec
+- `archive.run` -- archive completed spec
 
 ### GitHub Issues
 - `github-issues.link` -- link issues to spec
@@ -174,7 +200,7 @@ Commands outside the numbered workflow above.
 - `optimize.learn` -- learn from optimization
 
 ### Fleet
-- `fleet.fleet` -- fleet operations
+- `fleet.run` -- fleet operations
 - `fleet.review` -- fleet review
 
 ### Refine
@@ -184,5 +210,8 @@ Commands outside the numbered workflow above.
 - `refine.status` -- refinement status
 
 ### Governance
-- `conduct.conduct` -- code of conduct check
+- `conduct.run` -- code of conduct check
 - `constitution` -- constitution review
+- `/architecture-decision-records` (skill, not a speckit command) -- record an ADR
+  for every non-trivial decision, as `docs/adr/NNNN-title.md` (MADR). Continuous
+  process; see the ADR rule under "Rules" above.

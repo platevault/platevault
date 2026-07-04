@@ -92,6 +92,24 @@ pub struct FirstRunCompleted {
 
 pub const TOPIC_FIRST_RUN_COMPLETED: &str = "first_run.completed";
 
+/// Payload for the `root.remapped` topic (P6a — Data Sources "Remap" flow).
+///
+/// Emitted after a root's stored path is updated via `roots.remap.apply`.
+/// `verified` mirrors the `allVerified` flag from the `roots.remap` preview
+/// the operator reviewed before applying (constitution Principle II: every
+/// filesystem-affecting mutation is audited, with confidence recorded where
+/// inference/sampling was used).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RootRemapped {
+    pub root_id: String,
+    pub original_path: String,
+    pub new_path: String,
+    pub verified: bool,
+}
+
+pub const TOPIC_ROOT_REMAPPED: &str = "root.remapped";
+
 // ── Native filesystem control audit events (spec 004) ─────────────────────
 
 /// Kind of picker that failed.

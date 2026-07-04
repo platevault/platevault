@@ -21,10 +21,17 @@ const { mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
   mockResolveTarget: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  searchTargets: mockSearchTargets,
-  resolveTarget: mockResolveTarget,
-  TARGET_SEARCH_CONTRACT_VERSION: '1.0',
+/** Wrap a value in the generated `{ status: 'ok' }` Result envelope. */
+const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
+
+// AddTargetDialog and its TargetSearch child both call the generated bindings
+// now (spec 037): TargetSearch -> commands.targetSearch, AddTargetDialog ->
+// commands.targetResolve. The real unwrap runs against these Result envelopes.
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    targetSearch: mockSearchTargets,
+    targetResolve: mockResolveTarget,
+  },
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -32,7 +39,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 import { AddTargetDialog } from './AddTargetDialog';
-import type { TargetSuggestion } from '@/api/commands';
+import type { TargetSuggestion } from '@/bindings/aliases';
 
 const M31: TargetSuggestion = {
   targetId: 'tgt-m31',
@@ -77,12 +84,14 @@ function unresolved(reason = 'unknown') {
 beforeEach(() => {
   vi.clearAllMocks();
   // Default: search returns M31
-  mockSearchTargets.mockResolvedValue({
-    contractVersion: '1.0',
-    requestId: 'r',
-    suggestions: [M31],
-  });
-  mockResolveTarget.mockResolvedValue(resolved('tgt-m31'));
+  mockSearchTargets.mockResolvedValue(
+    ok({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [M31],
+    }),
+  );
+  mockResolveTarget.mockResolvedValue(ok(resolved('tgt-m31')));
 });
 
 describe('AddTargetDialog', () => {
@@ -151,7 +160,7 @@ describe('AddTargetDialog', () => {
   it('4. resolved status calls onAdded with the target id', async () => {
     const onAdded = vi.fn();
     const onClose = vi.fn();
-    mockResolveTarget.mockResolvedValue(resolved('tgt-m31-persisted'));
+    mockResolveTarget.mockResolvedValue(ok(resolved('tgt-m31-persisted')));
 
     render(<AddTargetDialog open onClose={onClose} onAdded={onAdded} />);
 
@@ -175,7 +184,7 @@ describe('AddTargetDialog', () => {
 
   it('5. unresolved status shows error and does not call onAdded', async () => {
     const onAdded = vi.fn();
-    mockResolveTarget.mockResolvedValue(unresolved('unknown'));
+    mockResolveTarget.mockResolvedValue(ok(unresolved('unknown')));
 
     render(<AddTargetDialog open onClose={vi.fn()} onAdded={onAdded} />);
 

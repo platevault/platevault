@@ -17,7 +17,8 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import { getSettings, updateSettings } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import type { LogLevel, LogEntrySource } from '@/data/logStore';
 
 export type LevelFilter = 'all' | LogLevel;
@@ -59,7 +60,9 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
 
   // Load persisted settings on mount (T012, T032).
   useEffect(() => {
-    getSettings({ scope: 'advanced' })
+    commands
+      .settingsGet('advanced')
+      .then(unwrap)
       .then((data) => {
         const vals = data.values as Record<string, unknown>;
         if (vals?.logLevel && typeof vals.logLevel === 'string') {
@@ -88,7 +91,7 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
   const setFollowLogs = useCallback((v: boolean) => {
     setFollowLogsState(v);
     // Persist via settings.update (spec 018).
-    void updateSettings({ scope: 'advanced', values: { rememberFollowLogs: v } });
+    void commands.settingsUpdate('advanced', { rememberFollowLogs: v }).then(unwrap);
   }, []);
 
   return (

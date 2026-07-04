@@ -6,28 +6,30 @@
 
 **Feature Branch**: `011-processing-tool-launch`
 **Created**: 2026-05-09
-**Last Amended**: 2026-05-22
-**Status**: Draft
+**Last Amended**: 2026-07-03
+**Status**: **Implemented** (closed 2026-07-03). Launch pipeline, per-tool profiles, cwd-containment guard, detach + pid tracking, and UI (launch CTA + relaunch modal in `ProjectDetail.tsx`, launch-history `ToolLaunchesAccordion`) shipped and tested (FakeSpawner unit + integration; migration `0024_tool_launches.sql`). FR-001…FR-011 satisfied. T021 (one-time cwd-anchored first-launch hint) implemented in closeout; doc cross-links (X-1/X-2) done. Remaining open tasks are DEFERRED — env-blocked test infra only: T018 Playwright settings-flow smoke and T022 stub-binary real-spawn tests (both blocked on WSL/sandbox, not missing logic). Satisfies spec 012's dependencies (`launch_id` handle, `tool_launches.completed_at`, accordion surface).
 **Input**: User description: "Specify direct tool launch for project workflows,
 including configured paths for PixInsight, Siril, and future tools, with
 project-level actions."
 
-## Implementation Status: CTA visual only
+## Implementation Status: Implemented (2026-07-03)
 
-The `Open in {tool}` button (and the matching row-overflow entry) is wired in
-`apps/desktop/src/features/projects/ProjectsPage.tsx` via
-`projectFooter()` / `rowMenuGroupsForLifecycle()`, but the click handler does
-not yet spawn a process — it dispatches an in-memory `setProjectLifecycle`
-call (or no-ops in row overflow). No tool path is read from settings, no
-project working directory is passed, and no audit record is written. The
-button label, gating, and disabled-state copy on the mockup MUST remain the
-authoritative UX target for this spec; the implementation work covered here is
-behavioural wiring (settings → use case → OS process → audit), not new UI.
+Superseding the original "CTA visual only" note: tool launch is fully wired and
+spawns a real OS process. The launch CTA and relaunch modal live in
+`apps/desktop/src/features/projects/ProjectDetail.tsx` → `useToolLaunch`
+(`tool-launch.ts`); the Tauri command `tools_launch`
+(`apps/desktop/src-tauri/src/commands/tools.rs`) uses the production
+**`RealSpawner`** (`crates/workflow/profiles/src/launch.rs`), which calls
+`std::process::Command::new(executable).spawn()` with platform detach handling
+(Windows `DETACHED_PROCESS`, unix `process_group`), reads the resolved tool
+path, sets the project working directory (cwd-containment guarded), tracks the
+pid, and writes an audit record. FR-001…FR-011 are satisfied and tested
+(FakeSpawner unit + integration; migration `0024_tool_launches.sql`).
 
-**IMPORTANT (E5)**: The mockup's `setProjectLifecycle('processing')` call
-MUST be removed during implementation. Tool launch does NOT mutate project
-lifecycle state. The `ready → processing` transition is a separate explicit
-user action governed by spec 009.
+**E5 (satisfied)**: `setProjectLifecycle('processing')` was removed — tool
+launch does not mutate lifecycle state (zero references remain in
+`features/projects/`); the `ready → processing` transition stays a separate
+explicit user action governed by spec 009.
 
 ## User Scenarios & Testing *(mandatory)*
 

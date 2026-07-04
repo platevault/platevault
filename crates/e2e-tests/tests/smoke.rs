@@ -1,9 +1,11 @@
 //! Spec 037 Layer-2 real-UI smoke test stubs.
 //!
 //! Verifies that every top-level route loads without a JS error.
-//! Ignored until the `__APP_E2E__` bridge and tauri-driver caps are wired in.
+//! Ignored until the backend commands the other journeys assert against are
+//! de-stubbed (research D9). The harness (`window.__ALM_E2E__` bridge,
+//! tauri-webdriver capabilities) is wired.
 //!
-//! Run (once wired):
+//! Run (once un-ignored):
 //! ```text
 //! cargo nextest run -p e2e_tests --profile e2e --run-ignored all
 //! ```

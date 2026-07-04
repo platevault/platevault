@@ -1,0 +1,1140 @@
+/* === INBOX LIST === */
+
+/* ── Controls bar ─────────────────────────────────────────────────────────── */
+
+.alm-inbox-list__controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+}
+
+.alm-inbox-list__group-row {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.alm-inbox-list__sort-row {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+}
+
+/* ── Virtual sizer (position + width only; height stays inline) ───────────── */
+
+.alm-inbox-list__sizer {
+  position: relative;
+  width: 100%;
+}
+
+/* ── Inbox row meta grid ──────────────────────────────────────────────────── */
+
+.alm-inbox-list__meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0 var(--alm-sp-2);
+  align-items: baseline;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-top: var(--alm-sp-0);
+}
+
+.alm-inbox-list__meta-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--alm-text-secondary);
+}
+
+.alm-inbox-list__meta-count {
+  white-space: nowrap;
+}
+
+.alm-inbox-list__meta-format {
+  white-space: nowrap;
+
+  letter-spacing: 0.02em;
+}
+
+/* ── Group header button ──────────────────────────────────────────────────── */
+/*
+ * paddingLeft is NOT set here — it is dynamically computed per depth as
+ * `8 + depth * INDENT_PER_DEPTH` and stays in an inline style on the element.
+ * All other button-reset and typographic styles are captured here.
+ */
+
+.alm-inbox-list__group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  font: inherit;
+  color: var(--alm-text-secondary);
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+}
+
+.alm-inbox-list__group-header:hover {
+  background: var(--alm-hover-bg);
+}
+
+.alm-inbox-list__group-caret {
+  width: 0.7em;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.alm-inbox-list__group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alm-inbox-list__group-count {
+  color: var(--alm-text-muted);
+  font-weight: var(--alm-weight-normal);
+  margin-left: auto;
+}
+
+/* === SESSION INSPECTOR === */
+
+/* Target link card — name line */
+.alm-session-inspector__target-name {
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Target link card — subtitle (linked count) */
+.alm-session-inspector__target-subtitle {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Calibration match card — header row (kind + score) */
+.alm-session-inspector__cal-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Calibration match card — kind label */
+.alm-session-inspector__cal-kind {
+  flex: 1;
+  font-weight: var(--alm-weight-medium);
+  font-size: var(--alm-text-sm);
+}
+
+/* Calibration match card — score badge */
+.alm-session-inspector__cal-score {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+
+/* Calibration match card — decision row */
+.alm-session-inspector__cal-decision {
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Projects — empty state note */
+.alm-session-inspector__projects-empty {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-1) 0;
+}
+
+/* Projects — linked project id label */
+.alm-session-inspector__project-label {
+  font-weight: var(--alm-weight-medium);
+}
+
+/* Immutable note — heading */
+.alm-session-inspector__immutable-heading {
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-secondary);
+}
+
+/* Immutable note — body */
+.alm-session-inspector__immutable-body {
+  margin-top: 3px;
+}
+
+/* === TARGET DETAIL (legacy) === */
+
+/* Common-name span in DetailHeader title */
+.alm-target-detail-legacy__common-name {
+  color: var(--alm-text-muted);
+  font-weight: var(--alm-weight-normal);
+}
+
+/* Coverage warning Banner top margin */
+.alm-target-detail-legacy__coverage-warn {
+  margin-top: var(--alm-sp-2);
+}
+
+/* "No coverage data" faint label */
+.alm-target-detail-legacy__no-coverage {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+/* Observing plans list container */
+.alm-target-detail-legacy__obs-plans {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+}
+
+/* Observing plan metadata line (software · date) */
+.alm-target-detail-legacy__obs-plan-meta {
+  color: var(--alm-text-muted);
+}
+
+/* Em-dash placeholder when a session has no linked projects */
+.alm-target-detail-legacy__no-projects-dash {
+  color: var(--alm-text-faint);
+}
+
+/* Sessions summary text (simplified, non-detail view) */
+.alm-target-detail-legacy__sessions-summary {
+  color: var(--alm-text-faint);
+  font-size: var(--alm-text-sm);
+}
+
+/* Projects empty state text */
+.alm-target-detail-legacy__projects-empty {
+  color: var(--alm-text-faint);
+  font-size: var(--alm-text-sm);
+}
+
+/* === SETTINGS CALIBRATION MATCHING (criteria table) === */
+
+/* Criteria table: inherit alm-table base; pin column widths to match mock */
+.alm-calmatch__table {
+  margin-block: var(--alm-sp-3) var(--alm-sp-2);
+}
+
+.alm-calmatch__col-required {
+  width: 140px;
+}
+
+.alm-calmatch__col-tolerance {
+  width: 160px;
+}
+
+/* Inline flex span that wraps a number input + unit label inside a td */
+.alm-calmatch__tol-input-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Fixed-width number input for tolerance fields */
+.alm-calmatch__num-input {
+  width: 72px;
+}
+
+/* Unit label ("°C", "d") that follows a tolerance input */
+.alm-calmatch__unit {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* Footer help line below the criteria table */
+.alm-calmatch__help {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  margin-block-start: var(--alm-sp-2);
+}
+
+/* Legacy aliases — kept so old .alm-calib-matching__* refs compile if any remain */
+.alm-calib-matching__input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+.alm-calib-matching__num-input {
+  width: 80px;
+}
+
+.alm-calib-matching__unit-label {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* === PROJECT CALIBRATION MATCH PANEL === */
+
+/* Loading state */
+.alm-calib-match-panel__loading {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-1);
+}
+
+/* Error state */
+.alm-calib-match-panel__error {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Outer column — one entry per session */
+.alm-calib-match-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Per-session card */
+.alm-calib-match-panel__session {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-2);
+  background: var(--alm-bg3);
+  border-radius: var(--alm-radius-md);
+}
+
+/* Short session-id label */
+.alm-calib-match-panel__session-id {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+
+}
+
+/* Row of calibration-type pills */
+.alm-calib-match-panel__type-row {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+}
+
+/* Individual type+status+confidence cluster */
+.alm-calib-match-panel__type-item {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+
+/* Confidence percentage */
+.alm-calib-match-panel__confidence {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+
+/* Footer hint */
+.alm-calib-match-panel__hint {
+  margin-top: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+/* === PROJECT NOTES SECTION === */
+
+/* Root layout — shared between view and edit modes */
+.alm-project-notes__root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Notes body (pre-wrap text block) */
+.alm-project-notes__body {
+  white-space: pre-wrap;
+  font-size: var(--alm-text-sm);
+}
+
+/* Empty-state placeholder */
+.alm-project-notes__empty {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* "Saved" indicator */
+.alm-project-notes__saved {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Textarea — resize handle only; theming via existing .alm-input */
+.alm-project-notes__textarea {
+  resize: vertical;
+}
+
+/* Toolbar row: byte counter + action buttons */
+.alm-project-notes__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--alm-text-xs);
+}
+
+/* Button group (Cancel / Save) */
+.alm-project-notes__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+}
+
+/* Byte counter — normal state */
+.alm-project-notes__byte-counter {
+  color: var(--alm-text-muted);
+}
+
+/* Byte counter — approaching limit */
+.alm-project-notes__byte-counter--near {
+  color: var(--alm-warn);
+}
+
+/* Byte counter — over limit */
+.alm-project-notes__byte-counter--over {
+  color: var(--alm-danger);
+}
+
+/* === PROJECTS LIST === */
+
+/* Loading state placeholder */
+.alm-projects-list__loading {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+}
+
+/* Empty state placeholder (no results) */
+.alm-projects-list__empty {
+  padding: var(--alm-sp-4);
+  color: var(--alm-text-muted);
+}
+
+/* Controls bar wrapping sort-select and lifecycle filter */
+.alm-projects-list__controls {
+  display: flex;
+  gap: var(--alm-sp-1);
+  flex-wrap: wrap;
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+}
+
+/* Lifecycle filter trigger — inherits alm-select base; adds pointer + min-width */
+.alm-projects-list__filter-trigger {
+  cursor: pointer;
+  min-width: 110px;
+  text-align: left;
+}
+
+/* Footer row — count on the left, actions on the right */
+.alm-projects-list__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Blocked-state icon inline with project name */
+.alm-projects-list__blocked-icon {
+  color: var(--alm-danger);
+  margin-right: var(--alm-sp-1);
+  display: inline;
+  vertical-align: middle;
+}
+
+/* Channel-drift inline badge */
+.alm-projects-list__drift-badge {
+  color: var(--alm-warn);
+  margin-left: var(--alm-sp-1);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-0);
+}
+
+/* === CALIBRATION MASTER RAIL (consistency) === */
+/* Rail uses shared .alm-kv / .alm-rail__card-h primitives — no bespoke classes needed. */
+
+/* === SETUP WIZARD === */
+
+/* Outer page wrapper — fills the main content area without overflow */
+.alm-setup-wizard {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* WizardShell root — must flex-fill the page content area */
+.alm-setup-wizard__shell {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Footer spacer — pushes action buttons to the right */
+.alm-setup-wizard__footer-spacer {
+  flex: 1;
+}
+
+/* Folder-count summary shown in the footer on the Source Folders step */
+.alm-setup-wizard__folder-count {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Step eyebrow label — "Setup · Step N of M" */
+.alm-setup-wizard__step-label {
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--alm-text-muted);
+}
+
+/* Step heading */
+.alm-setup-wizard__heading {
+  margin: var(--alm-sp-1) 0 0;
+  font-size: var(--alm-text-2xl);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+
+/* Step description paragraph */
+.alm-setup-wizard__description {
+  margin: var(--alm-sp-2) 0 var(--alm-sp-5);
+  font-size: var(--alm-text-base);
+  line-height: var(--alm-leading-normal);
+  color: var(--alm-text-secondary);
+}
+
+/* === SETUP STEP CATALOGS === */
+
+/* Root container for the Configuration step */
+.alm-step-catalogs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+}
+
+/* A single labelled config row (stacks header + description) */
+.alm-setup-catalogs__option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Title + control on one line */
+.alm-setup-catalogs__option-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-3);
+}
+
+/* Row label text */
+.alm-setup-catalogs__option-title {
+  font-weight: var(--alm-weight-semibold);
+  white-space: nowrap;
+}
+
+/* === TOAST CONTAINER === */
+
+/* Fixed viewport anchor — bottom-right, above all other layers */
+.alm-toast__container {
+  position: fixed;
+  bottom: var(--alm-sp-4);
+  right: var(--alm-sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  z-index: 9999;
+  pointer-events: none;
+  max-width: 400px;
+}
+
+/* Individual toast item */
+.alm-toast__item {
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  border-radius: var(--alm-radius-sm);
+  border: 1px solid var(--alm-border);
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  font-size: var(--alm-text-sm);
+  line-height: var(--alm-leading-normal);
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--alm-sp-3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--alm-ink) 30%, transparent);
+}
+
+/* Variant accent borders */
+.alm-toast__item--info {
+  border-left: 3px solid var(--alm-info);
+}
+
+.alm-toast__item--error {
+  border-left: 3px solid var(--alm-danger);
+}
+
+.alm-toast__item--success {
+  border-left: 3px solid var(--alm-ok);
+}
+
+.alm-toast__item--warn {
+  border-left: 3px solid var(--alm-warn);
+}
+
+/* Message text fills remaining space */
+.alm-toast__message {
+  flex: 1;
+}
+
+/* Right-side controls row (action button + dismiss) */
+.alm-toast__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-shrink: 0;
+}
+
+/* Optional action button */
+.alm-toast__action-btn {
+  background: transparent;
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  color: var(--alm-text);
+  font-size: var(--alm-text-xs);
+  padding: var(--alm-sp-0) var(--alm-sp-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--alm-transition-fast);
+}
+
+/* Dismiss (×) button */
+.alm-toast__dismiss-btn {
+  background: transparent;
+  border: none;
+  color: var(--alm-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  display: inline-flex;
+  transition: color var(--alm-transition-fast);
+}
+
+/* === SETTINGS RESOLVER === */
+
+/* Compact mode: outer column stack */
+.alm-resolver-settings__compact-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Compact mode: label + toggle row */
+.alm-resolver-settings__compact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-3);
+}
+
+/* Compact mode: label text */
+.alm-resolver-settings__compact-label {
+  font-weight: var(--alm-weight-semibold);
+  white-space: nowrap;
+}
+
+/* Narrow number inputs (debounce ms, timeout s) */
+.alm-resolver-settings__narrow-input {
+  max-width: 120px;
+}
+
+/* === APP ERROR BOUNDARY === */
+
+.alm-error-boundary__overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: var(--alm-sp-4);
+  padding: var(--alm-sp-6);
+
+  color: var(--alm-text);
+  background: var(--alm-bg);
+}
+
+.alm-error-boundary__heading {
+  font-size: var(--alm-text-xl);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-danger);
+  margin: 0;
+}
+
+.alm-error-boundary__body {
+  font-size: var(--alm-text-base);
+  color: var(--alm-text-secondary);
+  margin: 0;
+  max-width: 480px;
+  text-align: center;
+}
+
+.alm-error-boundary__detail {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  padding: var(--alm-sp-3);
+  max-width: 480px;
+  overflow: auto;
+  margin: 0;
+}
+
+.alm-error-boundary__reset-btn {
+  padding: var(--alm-sp-2) var(--alm-sp-4);
+  background: var(--alm-accent);
+  color: var(--alm-on-accent);
+  border: 1px solid transparent;
+  border-radius: var(--alm-radius-sm);
+  cursor: pointer;
+  font-size: var(--alm-text-base);
+  font-weight: var(--alm-weight-medium);
+  transition: background var(--alm-transition-fast);
+}
+
+.alm-error-boundary__reset-btn:hover {
+  background: var(--alm-accent-hover);
+}
+
+.alm-error-boundary__reset-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--alm-focus-ring);
+}
+
+/* === SESSION DETAIL === */
+
+/* Pill row inside the Linked projects rail card */
+.alm-session-detail__linked-pills {
+  display: flex;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+
+/* "None" placeholder when no linked projects exist */
+.alm-session-detail__no-linked {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+/* === SESSIONS REVIEW STATE (consistency) === */
+/* Locked-metadata notice shown inside the Linked projects rail card
+   when the session is linked to a project. Actions (Confirm / Re-open /
+   Reject) live exclusively in the TopActionBar on SessionsPage; the
+   Review state rail card is read-only (Pill only), matching the pattern
+   used by Calibration (MasterDetail) and Projects (ProjectDetail). */
+.alm-session-detail__lock-notice {
+  margin-top: var(--alm-sp-2);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* === PROJECT SOURCE VIEWS SECTION === */
+
+/* Expandable inventory-refs disclosure widget */
+.alm-source-views__refs-details {
+  margin-top: var(--alm-sp-1);
+}
+
+/* Disclosure summary — pointer cursor, no text selection on click */
+.alm-source-views__refs-summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Inventory-ref path list inside the disclosure */
+.alm-source-views__refs-list {
+  margin-top: var(--alm-sp-1);
+  padding-left: var(--alm-sp-3);
+  list-style: disc;
+
+}
+
+/* Individual inventory-ref path item */
+.alm-source-views__refs-item {
+  padding: 1px 0;
+  word-break: break-all;
+}
+
+/* === SETTINGS CLEANUP === */
+
+/* Select control height override for the Default Protection dropdown */
+.alm-cleanup__protection-select {
+  height: 28px;
+}
+
+/* Per-type table: action column width */
+.alm-cleanup__action-col {
+  width: 220px;
+}
+
+/* Per-type table cell: type name + Pill badge row */
+.alm-cleanup__type-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Per-type table: process-stage group subheader row */
+.alm-cleanup__group-row td {
+  padding-top: var(--alm-sp-3);
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Impact warning banner above the per-type table */
+.alm-cleanup__warning {
+  margin-bottom: var(--alm-sp-3);
+}
+
+/* === SOURCE PROTECTION OVERRIDE (spec 016 — per-root protection control) === */
+
+.alm-source-protect__root {
+  margin-top: var(--alm-sp-2);
+}
+
+.alm-source-protect__status {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-source-protect__view-row,
+.alm-source-protect__edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+.alm-source-protect__edit-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+.alm-source-protect__label {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-source-protect__select {
+  width: auto;
+  height: 28px;
+}
+
+.alm-source-protect__hint {
+  flex-basis: 100%;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-source-protect__error {
+  color: var(--alm-danger);
+  font-size: var(--alm-text-xs);
+}
+
+.alm-source-protect__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+}
+
+/* === EDIT PROJECT PANE === */
+
+/* Banner action row — drift banner button group */
+.alm-edit-project__drift-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-2);
+}
+
+/* Form — main layout column */
+.alm-edit-project__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+  padding: var(--alm-sp-4);
+}
+
+/* Channels pill row */
+.alm-edit-project__channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+  margin-top: var(--alm-sp-1);
+}
+
+/* Sources panel — sits between the read-only banner and the <form> below;
+ * mirrors .alm-edit-project__form's horizontal/top padding since it lives
+ * outside that flex column (WP-008-C). */
+.alm-edit-project__sources-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-4) var(--alm-sp-4) 0;
+}
+
+/* Sources — linked-source list + add-sources flow (WP-008-C) */
+.alm-edit-project__sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-1);
+}
+
+.alm-edit-project__sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alm-edit-project__source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border: 1px solid var(--alm-border);
+  border-radius: 4px;
+}
+
+.alm-edit-project__source-name {
+  font-size: var(--alm-text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alm-edit-project__source-confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+.alm-edit-project__add-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  border: 1px solid var(--alm-border);
+  border-radius: 6px;
+  padding: var(--alm-sp-3);
+}
+
+.alm-edit-project__add-sources-actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  justify-content: flex-end;
+}
+
+/* Actions row — right-aligned Save / Cancel */
+.alm-edit-project__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  justify-content: flex-end;
+}
+
+/* === CREATE PROJECT DIALOG === */
+
+/*
+ * Scoped to the create-project dialog. All values use --alm-* design tokens.
+ * No raw colors, no raw ms durations.
+ */
+
+/* Dialog popup width cap */
+.alm-create-project__popup {
+  max-width: 520px;
+}
+
+/* Body stack: vertical flex with standard field gap */
+.alm-create-project__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+}
+
+/* Selected-target pill row: horizontal flex */
+.alm-create-project__target-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* === ADD TARGET DIALOG === */
+
+/* Constrain dialog popup width */
+.alm-add-target__popup {
+  max-width: 480px;
+}
+
+/* Body: vertical stack with standard gap */
+.alm-add-target__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+}
+
+/* Selected-target row: pill + hint + change button inline */
+.alm-add-target__selected-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* === SESSIONS CALENDAR SCROLL === */
+
+/*
+ * Scoped to the CalendarScroll virtualised timeline.
+ * All values use --alm-* design tokens.
+ * No raw colors, no raw ms durations.
+ * Dynamic values (virtualizer height/transform) remain inline in the component.
+ */
+
+/* Outer scroll container — fills its parent and enables overflow scroll */
+.alm-calendar-scroll {
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Inner positioning canvas — height is set inline (virtualizer.getTotalSize()) */
+.alm-calendar-scroll__inner {
+  position: relative;
+}
+
+/* Sticky month header row — absolute inside the virtualizer canvas */
+.alm-calendar-scroll__month-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--alm-sp-3);
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text-muted);
+  background: var(--alm-surface);
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+/* Night row — absolute inside the virtualizer canvas */
+.alm-calendar-scroll__night {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: 0 var(--alm-sp-3);
+  cursor: pointer;
+  border-bottom: 1px solid var(--alm-border-subtle);
+  transition: background var(--alm-transition-fast);
+}
+
+.alm-calendar-scroll__night:hover {
+  background: var(--alm-hover-bg);
+}
+
+.alm-calendar-scroll__night:focus-visible {
+  outline: none;
+  box-shadow: var(--alm-focus-ring);
+}
+
+/* Date label — monospace, fixed-width column */
+.alm-calendar-scroll__date {
+  flex-shrink: 0;
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+}
+
+/* Session badge row — grows to fill remaining space */
+.alm-calendar-scroll__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-1);
+  flex: 1;
+  min-width: 0;
+}
+
+/* Frame count — monospace, right-aligned */
+.alm-calendar-scroll__frame-count {
+  flex-shrink: 0;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* === BLOCKED BANNER === */
+
+.alm-blocked-banner__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+.alm-blocked-banner__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+}
+
+/* === STATIC LEFTOVERS === */
+
+/* 1. Lifecycle.tsx — blocked label */
+.alm-lifecycle__label--danger {
+  color: var(--alm-danger);
+}
+
+/* 2. SettingsPage.tsx — auto-save indicator */
+.alm-settings__saved-indicator {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-ok);
+}
+
+/* 3. SetupPage.tsx — loading state */
+.alm-setup-page__loading {
+  justify-content: center;
+  align-items: center;
+  color: var(--alm-text-muted);
+}
+
+/* 5. MastersList.tsx — loading status div */
+.alm-masters-list__status {
+  padding: var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* 6a. DirPicker.tsx — mono path span */
+.alm-dir-picker__path {
+
+  font-size: var(--alm-text-xs);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 6b. DirPicker.tsx — error div (leaks fixed: --alm-space-1 → --alm-sp-1; raw hex fallback removed) */
+.alm-dir-picker__error {
+  margin-top: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+  line-height: 1.4;
+}

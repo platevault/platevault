@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { TargetListItem } from '@/api/commands';
+import type { TargetListItem, TargetObjectType } from '@/bindings/index';
 import { ListSidebar } from '@/components';
 import { Pill, SegControl } from '@/ui';
 import { m } from '@/lib/i18n';
+import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 
 /**
  * Estimated row height (px) for the virtualizer's initial measurement.
@@ -20,7 +21,6 @@ const ROW_ESTIMATE_DENSE = 34;
 const ROW_ESTIMATE_RICH = 54;
 
 type RowDensity = 'Dense' | 'Rich';
-const DENSITY_OPTIONS: RowDensity[] = ['Dense', 'Rich'];
 
 interface Props {
   targets: TargetListItem[];
@@ -36,9 +36,9 @@ function matchesSearch(t: TargetListItem, query: string): boolean {
   );
 }
 
-/** Formats the objectType string into a readable label. */
+/** Formats the objectType string into a readable, localized label. */
 function formatType(objectType: string): string {
-  return objectType.replace(/_/g, ' ');
+  return objectTypeLabel(objectType as TargetObjectType);
 }
 
 export function TargetList({ targets, selected, onSelect }: Props) {
@@ -70,7 +70,10 @@ export function TargetList({ targets, selected, onSelect }: Props) {
       controls={
         <>
           <SegControl
-            options={DENSITY_OPTIONS}
+            options={[
+              { value: 'Dense', label: m.targets_legacy_density_dense() },
+              { value: 'Rich', label: m.targets_legacy_density_rich() },
+            ]}
             value={density}
             onChange={(v) => setDensity(v as RowDensity)}
             aria-label={m.targets_legacy_row_density_aria()}
@@ -80,7 +83,7 @@ export function TargetList({ targets, selected, onSelect }: Props) {
           </select>
         </>
       }
-      footer={`${filtered.length} items`}
+      footer={m.common_item_count({ count: filtered.length })}
     >
       <div
         className="alm-virtual-inner"

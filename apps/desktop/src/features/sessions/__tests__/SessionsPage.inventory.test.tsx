@@ -5,43 +5,40 @@
  *
  * The Sessions surface is now a dense full-width table (SessionsTable) grouped
  * by target (fixed — Group-by was removed: sessions contain 1–few frame types
- * by definition), with search + a review filter in the shared top bar
- * (PageTopBar + FilterToolbar). The legacy frame-type filter was removed
- * (sessions are light frames). These tests target the new components.
+ * by definition), with search in the shared top bar (PageTopBar +
+ * FilterToolbar). The legacy frame-type filter was removed (sessions are
+ * light frames). These tests target the new components.
  *
- * Tests (jsdom, mock @/api/commands and @/features/sessions/store):
+ * Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
+ * inventory. The review-state column/filter and the Confirm/Re-open/Reject/
+ * Ignore action tests were removed along with the review-state machine. The
+ * Reveal action (FR-007) is unrelated to the review lifecycle and is retained.
+ *
+ * Tests (jsdom, mock @/features/sessions/store):
  *
  * 1. SessionsTable renders a target group header for each distinct target.
- * 2. SessionsTable renders session rows with target/filter content.
- * 3. SessionsTable discovered/candidate rows map to "Needs review" state label.
- * 4. SessionsTable renders empty-state when sources is empty.
- * 5b-6b+6d. FilterToolbar (Sessions toolbar): review filter, search.
- * 7. SessionDetail renders empty-state when session is null.
- * 8-11b. SessionDetail review-state rail (read-only Pills, no action buttons).
+ * 2. SessionsTable renders session rows with filter content.
+ * 3. SessionsTable renders empty-state when sources is empty.
+ * 4-5. SessionsTable sort headers.
+ * 6-8. FilterToolbar (Sessions toolbar): search, no frame-type filter, group-by.
+ * 9. SessionDetail renders empty-state when session is null.
+ * 10-11. SessionDetail Reveal action (contextual header action).
  * 12-15. SessionDetail Facts / Provenance / Linked sections.
- * 16-20. Review action dispatch + toast contract.
- * 21-24. SessionsTable live fixture data + sort headers + footer.
+ * 16-20. SessionsTable live fixture data + sort headers + footer.
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { InventorySource, InventorySession } from '@/api/commands';
+import { describe, it, expect, vi } from 'vitest';
+import type { InventorySource, InventorySession } from '@/bindings/index';
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
-
-const { mockInventoryList, mockInventorySessionReview, mockAddToast } = vi.hoisted(() => ({
-  mockInventoryList: vi.fn(),
-  mockInventorySessionReview: vi.fn(),
-  mockAddToast: vi.fn(),
-}));
-
-vi.mock('@/api/commands', () => ({
-  inventoryList: mockInventoryList,
-  inventorySessionReview: mockInventorySessionReview,
-}));
+// The store hook is fully mocked below, so the real IPC layer never runs; we
+// only need the toast spy here (spec 037: no @/api/commands mock required).
+// Spec 041 FR-051 (T076): the review-action dispatch/toast tests that needed
+// to inspect toast calls are removed, so no hoisted addToast spy is needed.
 
 vi.mock('@/shared/toast', () => ({
-  addToast: mockAddToast,
+  addToast: vi.fn(),
   useToasts: () => ({ toasts: [], dismiss: vi.fn() }),
 }));
 
@@ -52,9 +49,6 @@ const mockStoreState: {
   error: Error | undefined;
 } = { data: undefined, loading: false, error: undefined };
 
-const mockReview = vi.fn();
-const mockPending = { value: null as string | null };
-
 vi.mock('../store', async (importOriginal) => {
   const original = await importOriginal<typeof import('../store')>();
   return {
@@ -62,10 +56,6 @@ vi.mock('../store', async (importOriginal) => {
     useInventorySources: vi.fn(() => mockStoreState),
     setInventoryFilters: vi.fn(),
     invalidateInventory: vi.fn(),
-    useSessionReview: vi.fn(() => ({
-      review: mockReview,
-      pending: mockPending.value,
-    })),
   };
 });
 
@@ -75,13 +65,11 @@ vi.stubEnv('VITE_USE_MOCKS', 'true');
 
 import { INVENTORY_SOURCES, INVENTORY_LIST_RESPONSE } from '@/data/fixtures/inventory';
 
-// Build a minimal session for use in specific-state tests.
+// Build a minimal session for use in specific tests.
 function makeSession(overrides: Partial<InventorySession>): InventorySession {
   const base = INVENTORY_SOURCES[0].sessions[0];
   return { ...base, ...overrides };
 }
-
-const ROOT_ID = INVENTORY_SOURCES[0].id;
 
 // ── Import components after mocks are in place ────────────────────────────────
 
@@ -102,19 +90,17 @@ function renderList(props: Partial<React.ComponentProps<typeof SessionsTable>> =
       loading={false}
       sort={DEFAULT_SESSION_SORT}
       onSort={noop}
+      dims={['target']}
       {...props}
     />,
   );
 }
 
-// Mirror the FilterToolbar configuration SessionsPage builds: a search box, a
-// "Review" labeled-select field. Spies are supplied
-// per-test so we can assert the change handlers fire with typed values.
+// Mirror the FilterToolbar configuration SessionsPage builds: a search box.
+// Spec 041 FR-051 (T076): the review filter field is removed.
 function renderToolbar(opts: {
   search?: string;
-  reviewValue?: string;
   onSearch?: (v: string) => void;
-  onReview?: (v: string) => void;
 } = {}) {
   return render(
     <FilterToolbar
@@ -124,24 +110,11 @@ function renderToolbar(opts: {
         ariaLabel: 'Search sessions',
         placeholder: 'Search target, filter, camera…',
       }}
-      fields={[
-        {
-          key: 'review',
-          label: 'Review',
-          value: opts.reviewValue ?? '',
-          allLabel: 'Default',
-          options: [
-            { value: 'confirmed', label: 'Confirmed' },
-            { value: 'rejected', label: 'Rejected' },
-          ],
-          onChange: opts.onReview ?? noop,
-        },
-      ]}
     />,
   );
 }
 
-// SessionDetail no longer accepts action callbacks — actions live in TopActionBar.
+// SessionDetail no longer accepts review-action callbacks — only Reveal (FR-007).
 function renderDetail(
   session: InventorySession | null,
   props: Partial<React.ComponentProps<typeof SessionDetail>> = {},
@@ -165,35 +138,24 @@ describe('SessionsTable — target group headers and rows', () => {
     }
   });
 
-  it('2. renders session rows with filter and state content', () => {
+  it('2. renders session rows with filter content', () => {
     renderList();
-    // A confirmed state Pill is present for at least one row.
-    expect(screen.getAllByText('Confirmed').length).toBeGreaterThan(0);
+    // A session's filter Pill (e.g. "Ha") is present for at least one row.
+    expect(screen.getAllByText('Ha').length).toBeGreaterThan(0);
   });
 
-  it('3. discovered/candidate state maps to "Needs review" label', () => {
-    const discoveredSession = makeSession({ state: 'discovered', id: 'disc-1' });
-    const src: InventorySource = {
-      ...INVENTORY_SOURCES[0],
-      id: ROOT_ID,
-      sessions: [discoveredSession],
-    };
-    renderList({ sources: [src] });
-    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
-  });
-
-  it('4. empty-state appears when sources array is empty', () => {
+  it('3. empty-state appears when sources array is empty', () => {
     renderList({ sources: [] });
     expect(screen.getByText(/No sessions match/)).toBeDefined();
   });
 
-  it('5. sortable column headers are rendered as buttons', () => {
+  it('4. sortable column headers are rendered as buttons', () => {
     renderList();
     expect(screen.getByRole('button', { name: /Sort by Target/ })).toBeDefined();
     expect(screen.getByRole('button', { name: /Sort by Night/ })).toBeDefined();
   });
 
-  it('6. clicking a column header calls onSort with that column', () => {
+  it('5. clicking a column header calls onSort with that column', () => {
     const onSort = vi.fn();
     renderList({ onSort });
     fireEvent.click(screen.getByRole('button', { name: /Sort by Frames/ }));
@@ -201,24 +163,8 @@ describe('SessionsTable — target group headers and rows', () => {
   });
 });
 
-describe('FilterToolbar (Sessions toolbar) — search, review filter', () => {
-  it('5b. review-filter select calls onChange with the selected value', () => {
-    const onReview = vi.fn();
-    renderToolbar({ onReview });
-    const select = screen.getByRole('combobox', { name: /Review/ });
-    fireEvent.change(select, { target: { value: 'confirmed' } });
-    expect(onReview).toHaveBeenCalledWith('confirmed');
-  });
-
-  it('6b. clearing the review filter calls onChange with empty string (Default)', () => {
-    const onReview = vi.fn();
-    renderToolbar({ onReview, reviewValue: 'confirmed' });
-    const select = screen.getByRole('combobox', { name: /Review/ });
-    fireEvent.change(select, { target: { value: '' } });
-    expect(onReview).toHaveBeenCalledWith('');
-  });
-
-  it('6d. typing in search calls onChange', () => {
+describe('FilterToolbar (Sessions toolbar) — search', () => {
+  it('6. typing in search calls onChange', () => {
     const onSearch = vi.fn();
     renderToolbar({ onSearch });
     const input = screen.getByRole('searchbox', { name: /Search sessions/ });
@@ -226,69 +172,62 @@ describe('FilterToolbar (Sessions toolbar) — search, review filter', () => {
     expect(onSearch).toHaveBeenCalledWith('M31');
   });
 
-  it('6e. there is no frame-type filter in the Sessions toolbar', () => {
+  it('7. there is no frame-type filter in the Sessions toolbar', () => {
     renderToolbar();
     expect(screen.queryByRole('combobox', { name: /Frame/i })).toBeNull();
   });
 
-  it('6f. there is no group-by control in the Sessions toolbar', () => {
-    renderToolbar();
-    expect(screen.queryByRole('combobox', { name: /Group by/i })).toBeNull();
+  it('8. the "Group by" grouping control IS present in the Sessions toolbar', () => {
+    render(
+      <FilterToolbar
+        search={{ value: '', onChange: noop, ariaLabel: 'Search sessions' }}
+        grouping={{
+          dimensions: [
+            { value: 'target', label: 'Target' },
+            { value: 'filter', label: 'Filter' },
+          ],
+          dims: ['target'],
+          setSlot: noop,
+        }}
+      />,
+    );
+    // The grouping control renders multiple slots; the first has aria-label "Group by".
+    // getAllByRole to handle multiple grouping selects in the toolbar.
+    const groupBySelects = screen.getAllByRole('combobox', { name: /Group by/i });
+    expect(groupBySelects.length).toBeGreaterThan(0);
   });
 });
 
 // ── Tests: SessionDetail ──────────────────────────────────────────────────────
 
 describe('SessionDetail — empty state', () => {
-  it('7. renders empty-state when session is null', () => {
+  it('9. renders empty-state when session is null', () => {
     renderDetail(null);
     expect(screen.getByText('Select a session')).toBeDefined();
   });
 });
 
-// The rail's "Review state" card shows a read-only Pill (consistent with
-// MasterDetail and ProjectDetail rail patterns). Contextual review actions
-// (Confirm / Re-open / Reject) live in the SessionDetail HEADER and are gated by
-// visibility props the page supplies (task #79). With no visibility props set
-// (the default), no action buttons render anywhere in the detail.
-// Task #79: review actions are CONTEXTUAL and render in the SessionDetail
-// header (not the global PageTopBar). Visibility is driven by props the page
-// computes from the session's canonical state; clicking dispatches the handler.
+// Spec 041 FR-051 (T076): the Confirm/Re-open/Reject/Ignore contextual header
+// actions are removed along with the review-state machine. Reveal (FR-007) is
+// unrelated to the review lifecycle and is retained — it renders in the same
+// SessionDetail header slot, gated by the `revealVisible` prop the page
+// supplies (task #79).
 describe('SessionDetail — contextual header actions (task #79)', () => {
-  it('11c. renders Confirm/Reject in the header when their visibility props are set', () => {
-    renderDetail(makeSession({ state: 'needs_review' }), {
-      confirmVisible: true,
-      rejectVisible: true,
-      onConfirm: noop,
-      onReject: noop,
+  // T410/T411 (spec 006 FR-007): per-row Reveal in OS.
+  it('10. renders Reveal when revealVisible; clicking dispatches onReveal', () => {
+    const onReveal = vi.fn();
+    renderDetail(makeSession({}), {
+      revealVisible: true,
+      onReveal,
     });
-    expect(screen.getByRole('button', { name: /confirm/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /reject/i })).toBeDefined();
-    expect(screen.queryByRole('button', { name: /re.?open/i })).toBeNull();
-  });
-
-  it('11d. renders Re-open when reopenVisible; clicking dispatches onReopen', () => {
-    const onReopen = vi.fn();
-    renderDetail(makeSession({ state: 'confirmed' }), {
-      reopenVisible: true,
-      onReopen,
-    });
-    fireEvent.click(screen.getByRole('button', { name: /re.?open/i }));
-    expect(onReopen).toHaveBeenCalledTimes(1);
-  });
-
-  it('11e. clicking Confirm dispatches onConfirm; pending disables the button', () => {
-    const onConfirm = vi.fn();
-    renderDetail(makeSession({ state: 'needs_review' }), {
-      confirmVisible: true,
-      onConfirm,
-      pending: true,
-    });
-    const btn = screen.getByRole('button', { name: /confirm/i });
-    expect(btn).toBeDisabled();
+    const btn = screen.getByRole('button', { name: /reveal in os/i });
     fireEvent.click(btn);
-    // Disabled button does not fire its handler.
-    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it('11. Reveal is absent when revealVisible is not set (no source path)', () => {
+    renderDetail(makeSession({}));
+    expect(screen.queryByRole('button', { name: /reveal in os/i })).toBeNull();
   });
 });
 
@@ -343,74 +282,14 @@ describe('SessionDetail — Facts section (spec 006 FR-005; task #79 provenance 
   });
 });
 
-// ── Tests: review action wiring ───────────────────────────────────────────────
-// Actions now live in the TopActionBar on SessionsPage. Coverage is provided
-// by testing the store's review() call contract directly, matching how
-// SessionsPage.handleConfirm / handleReopen / handleReject dispatch to it.
-
-describe('useSessionReview — action dispatch contract (spec 006 FR-006)', () => {
-  beforeEach(() => {
-    mockAddToast.mockClear();
-    mockReview.mockClear();
-  });
-
-  it('16. confirm action dispatches review(id, "confirm") to store', async () => {
-    mockReview.mockResolvedValue({ ok: true, noop: false });
-    const { useSessionReview } = await import('../store');
-    const { review } = useSessionReview();
-    await review('session-1', 'confirm');
-    expect(mockReview).toHaveBeenCalledWith('session-1', 'confirm');
-  });
-
-  it('17. reopen action dispatches review(id, "reopen") to store', async () => {
-    mockReview.mockResolvedValue({ ok: true, noop: false });
-    const { useSessionReview } = await import('../store');
-    const { review } = useSessionReview();
-    await review('session-1', 'reopen');
-    expect(mockReview).toHaveBeenCalledWith('session-1', 'reopen');
-  });
-
-  it('18. reject action dispatches review(id, "reject") to store', async () => {
-    mockReview.mockResolvedValue({ ok: true, noop: false });
-    const { useSessionReview } = await import('../store');
-    const { review } = useSessionReview();
-    await review('session-1', 'reject');
-    expect(mockReview).toHaveBeenCalledWith('session-1', 'reject');
-  });
-});
-
-// ── Tests: store mutation hooks ───────────────────────────────────────────────
-
-describe('useSessionReview — toast feedback (via store mock)', () => {
-  beforeEach(() => {
-    mockAddToast.mockClear();
-    mockReview.mockClear();
-  });
-
-  it('19. noop result suppresses toast', async () => {
-    mockReview.mockResolvedValue({ ok: true, noop: true });
-    const { useSessionReview } = await import('../store');
-    // Direct call through the mocked hook shape.
-    const { review } = useSessionReview();
-    const result = await review('session-1', 'confirm');
-    expect(result.noop).toBe(true);
-    expect(mockAddToast).not.toHaveBeenCalled();
-  });
-
-  it('20. error result returns error message', async () => {
-    mockReview.mockResolvedValue({ ok: false, noop: false, error: 'source_disabled' });
-    const { useSessionReview } = await import('../store');
-    const { review } = useSessionReview();
-    const result = await review('session-1', 'confirm');
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe('source_disabled');
-  });
-});
+// Spec 041 FR-051 (T076): `useSessionReview` and its action-dispatch/toast
+// contract tests are removed along with the review-state machine — there is
+// no review mutation left to dispatch.
 
 // ── Tests: SessionsTable with live InventorySource data ───────────────────────
 
 describe('SessionsTable — live inventory fixture data (T106)', () => {
-  it('21. renders sessions from every fixture target', () => {
+  it('16. renders sessions from every fixture target', () => {
     renderList({ sources: INVENTORY_LIST_RESPONSE.sources });
     // Distinct targets from the fixture all appear as group headers.
     for (const target of ['NGC 7000', 'M31', 'M42']) {
@@ -418,14 +297,14 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     }
   });
 
-  it('22. selected session row has selected styling marker', () => {
+  it('17. selected session row has selected styling marker', () => {
     const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
     const { container } = renderList({ selected: session.id });
     const selectedRow = container.querySelector('.alm-sessions-table__row--selected');
     expect(selectedRow).not.toBeNull();
   });
 
-  it('23. clicking a session row calls onSelect with its id', () => {
+  it('18. clicking a session row calls onSelect with its id', () => {
     const onSelect = vi.fn();
     const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
     const { container } = renderList({ onSelect });
@@ -436,7 +315,7 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     void session;
   });
 
-  it('24. no in-table footer count line (count moved to the bottom status bar, task #80)', () => {
+  it('19. no in-table footer count line (count moved to the bottom status bar, task #80)', () => {
     // The total count moved to the bottom status bar; the table no longer
     // renders a footer count line, even during load.
     const { container } = renderList({
@@ -447,11 +326,11 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     expect(screen.queryByText('Loading…')).toBeNull();
   });
 
-  it('25. groupBy="camera" headlines groups by camera instead of target', () => {
+  it('20. dims=["camera"] headlines groups by camera instead of target', () => {
     const camera = INVENTORY_LIST_RESPONSE.sources[0].sessions.find((s) => s.camera)?.camera;
     expect(camera).toBeTruthy();
-    renderList({ sources: INVENTORY_LIST_RESPONSE.sources, groupBy: 'camera' });
-    // The camera value heads a group row.
+    renderList({ sources: INVENTORY_LIST_RESPONSE.sources, dims: ['camera'] });
+    // The camera value heads a group row (data-testid sessions-group-camera-<camera>).
     expect(screen.getAllByText(new RegExp(camera as string)).length).toBeGreaterThan(0);
   });
 });

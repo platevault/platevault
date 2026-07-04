@@ -46,12 +46,20 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      # shared-key lets jobs on the same OS reuse one warm cache; cache-on-failure
-      # populates it even when a later step (test/clippy) fails.
+      # shared-key lets jobs on the same OS reuse one warm cache. cache-on-failure
+      # is intentionally left at its default (false): a cancelled or killed job
+      # (e.g. from this workflow's cancel-in-progress concurrency group) can leave
+      # a torn/partial target/ dir, and saving that on failure/cancellation poisons
+      # the shared cache for every subsequent PR that restores it. On Windows this
+      # previously manifested as a permanently-cached, half-linked
+      # `commands-*.exe` failing every run with STATUS_ENTRYPOINT_NOT_FOUND
+      # (0xc0000139) until the cache key below was bumped to escape it.
+      # If this key is ever bumped again to escape a similarly poisoned cache,
+      # also purge the stale `v0-rust-rust-windows-latest-*` entries via
+      # `gh cache list` / `gh cache delete` so open PRs stop restoring them.
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "rust-${{ matrix.os }}"
-          cache-on-failure: true
+          shared-key: "rust-${{ matrix.os }}-v2"
 
       - uses: pnpm/action-setup@v4
         with:

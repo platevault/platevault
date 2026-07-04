@@ -18,7 +18,8 @@ export interface StepCalibrationProps {
 
 interface FlatOption {
   id: string;
-  label: string;
+  /** Render-time thunk so the label re-reads the active locale (spec 046 #8). */
+  label: () => string;
   isDefault: boolean;
 }
 
@@ -35,9 +36,9 @@ const MOCK_FLAT_ROWS: FlatRow[] = [
     filter: 'Ha',
     lightsCovered: 'NGC 7000 · Ha · 11-30 (54×) · NGC 7000 · Ha · 12-15 (30×)',
     options: [
-      { id: 'm-7', label: m.projects_wizard_mock_flat_ha_2024_11(), isDefault: true },
-      { id: 'm-5', label: m.projects_wizard_mock_flat_ha_2024_12(), isDefault: false },
-      { id: 'skip-ha', label: m.projects_wizard_mock_skip_ha(), isDefault: false },
+      { id: 'm-7', label: () => m.projects_wizard_mock_flat_ha_2024_11(), isDefault: true },
+      { id: 'm-5', label: () => m.projects_wizard_mock_flat_ha_2024_12(), isDefault: false },
+      { id: 'skip-ha', label: () => m.projects_wizard_mock_skip_ha(), isDefault: false },
     ],
     score: '0.88',
     notes: 'filter-matched · same camera',
@@ -46,9 +47,9 @@ const MOCK_FLAT_ROWS: FlatRow[] = [
     filter: 'OIII',
     lightsCovered: 'NGC 7000 · OIII · 11-30 (38×)',
     options: [
-      { id: 'm-8', label: m.projects_wizard_mock_flat_oiii_2024_11(), isDefault: true },
-      { id: 'm-6', label: m.projects_wizard_mock_flat_oiii_2024_12(), isDefault: false },
-      { id: 'skip-oiii', label: m.projects_wizard_mock_skip_oiii(), isDefault: false },
+      { id: 'm-8', label: () => m.projects_wizard_mock_flat_oiii_2024_11(), isDefault: true },
+      { id: 'm-6', label: () => m.projects_wizard_mock_flat_oiii_2024_12(), isDefault: false },
+      { id: 'skip-oiii', label: () => m.projects_wizard_mock_skip_oiii(), isDefault: false },
     ],
     score: '0.88',
     notes: 'filter-matched · same camera',
@@ -60,7 +61,7 @@ const MOCK_FLAT_ROWS: FlatRow[] = [
 interface SharedRow {
   role: 'dark' | 'bias' | 'dark flat';
   field: 'sharedDarkId' | 'sharedBiasId' | 'sharedDarkFlatId';
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: string; label: () => string }>;
   defaultValue: string;
   score: string;
   scoreWarn: boolean;
@@ -73,9 +74,9 @@ const SHARED_ROWS: SharedRow[] = [
     role: 'dark',
     field: 'sharedDarkId',
     options: [
-      { value: 'm-1', label: m.projects_wizard_mock_dark_recommended() },
-      { value: 'cal-sess', label: m.projects_wizard_mock_use_cal_session() },
-      { value: '', label: m.projects_wizard_mock_skip_darks() },
+      { value: 'm-1', label: () => m.projects_wizard_mock_dark_recommended() },
+      { value: 'cal-sess', label: () => m.projects_wizard_mock_use_cal_session() },
+      { value: '', label: () => m.projects_wizard_mock_skip_darks() },
     ],
     defaultValue: 'm-1',
     score: '0.92',
@@ -87,8 +88,8 @@ const SHARED_ROWS: SharedRow[] = [
     role: 'bias',
     field: 'sharedBiasId',
     options: [
-      { value: 'm-10', label: m.projects_wizard_mock_bias_aging() },
-      { value: '', label: m.projects_wizard_mock_skip_bias() },
+      { value: 'm-10', label: () => m.projects_wizard_mock_bias_aging() },
+      { value: '', label: () => m.projects_wizard_mock_skip_bias() },
     ],
     defaultValue: 'm-10',
     score: '0.71',
@@ -100,7 +101,7 @@ const SHARED_ROWS: SharedRow[] = [
     role: 'dark flat',
     field: 'sharedDarkFlatId',
     options: [
-      { value: '', label: m.projects_wizard_mock_skip_dark_flats() },
+      { value: '', label: () => m.projects_wizard_mock_skip_dark_flats() },
     ],
     defaultValue: '',
     score: '—',
@@ -156,7 +157,7 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                       aria-label={m.projects_wizard_flat_master_for_aria({ filter: row.filter })}
                     >
                       {row.options.map((opt) => (
-                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                        <option key={opt.id} value={opt.id}>{opt.label()}</option>
                       ))}
                     </select>
                   </td>
@@ -195,25 +196,20 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
                       aria-label={m.projects_wizard_pick_role_aria({ role: row.role })}
                     >
                       {row.options.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        <option key={opt.value} value={opt.value}>{opt.label()}</option>
                       ))}
                     </select>
                   </td>
                   <td
-                    className="alm-mono alm-wizard-calib__cell-score"
-                    // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color for score warning / faint states
-                    style={{
-                      color: row.scoreWarn ? 'var(--alm-warn)' : row.score === '—' ? 'var(--alm-text-faint)' : undefined,
-                    }}
+                    className={
+                      'alm-mono alm-wizard-calib__cell-score' +
+                      (row.scoreWarn ? ' alm-wizard-calib__cell-score--warn' : row.score === '—' ? ' alm-wizard-calib__cell-score--faint' : '')
+                    }
                   >
                     {row.score}
                   </td>
                   <td
-                    className="alm-wizard-calib__cell-notes-dyn"
-                    // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token color for notes warning state
-                    style={{
-                      color: row.notesWarn ? 'var(--alm-warn)' : 'var(--alm-text-muted)',
-                    }}
+                    className={'alm-wizard-calib__cell-notes-dyn' + (row.notesWarn ? ' alm-wizard-calib__cell-notes-dyn--warn' : '')}
                   >
                     {row.notes}
                   </td>

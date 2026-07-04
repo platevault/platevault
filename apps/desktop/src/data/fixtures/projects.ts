@@ -345,8 +345,10 @@ export const mockProjectDetail008: ProjectDetailDto = {
     },
   ],
   channels: [
-    { label: 'Ha', source: 'inferred', addedAt: '2026-05-01T10:05:00Z' },
-    { label: 'OIII', source: 'inferred', addedAt: '2026-05-01T10:06:00Z' },
+    // subFrames/totalIntegrationS mirror the sources above (54 * 120s, 38 * 120s) —
+    // server-aggregated fields (P7), no longer derived client-side.
+    { label: 'Ha', source: 'inferred', addedAt: '2026-05-01T10:05:00Z', subFrames: 54, totalIntegrationS: 6480 },
+    { label: 'OIII', source: 'inferred', addedAt: '2026-05-01T10:06:00Z', subFrames: 38, totalIntegrationS: 4560 },
   ],
   createdAt: '2026-05-01T10:00:00Z',
   updatedAt: '2026-05-20T22:15:00Z',

@@ -14,11 +14,15 @@ import { m } from '@/lib/i18n';
 type Kind = 'dark' | 'flat' | 'bias';
 
 const KIND_ORDER: Kind[] = ['dark', 'flat', 'bias'];
-const GROUP_LABELS: Record<Kind, string> = {
-  dark: 'DARKS',
-  flat: 'FLATS',
-  bias: 'BIAS',
-};
+
+// Render-time function (spec 046 #8) so group headers re-read the active locale.
+function groupLabel(kind: Kind): string {
+  switch (kind) {
+    case 'dark': return m.calibration_group_darks();
+    case 'flat': return m.calibration_group_flats();
+    case 'bias': return m.calibration_group_bias();
+  }
+}
 
 function kindLabel(kind: string): Kind | null {
   if (kind === 'dark' || kind === 'flat' || kind === 'bias') return kind;
@@ -39,7 +43,7 @@ function usageSummary(master: CalibrationMaster): string {
   const parts: string[] = [];
   if (sessions > 0) parts.push(m.calibration_usage_sessions({ count: sessions }));
   if (projects > 0) parts.push(m.calibration_usage_projects({ count: projects }));
-  return parts.length > 0 ? parts.join(' · ') : 'unused';
+  return parts.length > 0 ? parts.join(' · ') : m.calibration_usage_unused();
 }
 
 interface Props {
@@ -76,7 +80,7 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
 
   if (masters.length === 0) {
     return (
-      <ListSidebar footer="0 items">
+      <ListSidebar footer={m.common_item_count({ count: 0 })}>
         <EmptyState
           title={m.calibration_empty_title()}
           desc={m.calibration_empty_desc()}
@@ -106,11 +110,11 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
           </select>
         </>
       }
-      footer={`${masters.length} items`}
+      footer={m.common_item_count({ count: masters.length })}
     >
       {grouped.map((group) => (
         <div key={group.kind}>
-          <div className="alm-group-header">{GROUP_LABELS[group.kind]}</div>
+          <div className="alm-group-header">{groupLabel(group.kind)}</div>
           {group.items.map((master) => {
             const isAging = master.ageDays > agingThresholdDays;
             // Fingerprint may be absent on real master rows (e.g. metadata not yet
@@ -121,7 +125,7 @@ export function MastersList({ masters, loading, error, selected, onSelect, aging
             const expStr = fp?.exposureS != null ? `${fp.exposureS}s` : '';
             const filterStr = fp?.filter ?? '';
             const discriminator = group.kind === 'dark' ? expStr : group.kind === 'flat' ? filterStr : '';
-            const titleText = discriminator ? `Master ${kindCap} · ${discriminator}` : `Master ${kindCap}`;
+            const titleText = discriminator ? m.calibration_master_title_disc({ kind: kindCap, disc: discriminator }) : m.calibration_master_title({ kind: kindCap });
             const metaParts = [
               fp?.tempC != null ? `${fp.tempC}°C` : '',
               fp?.gain != null ? `g${fp.gain}` : '',

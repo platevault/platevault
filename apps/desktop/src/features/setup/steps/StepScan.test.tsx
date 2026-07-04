@@ -3,8 +3,9 @@
  * StepScan tests — first-run wizard "Scan" step (spec 038).
  *
  * Covers: scanning/done/empty/error states and the onAllDoneChange callback
- * contract.  Mocks inboxScanFolder + inboxClassify at the @/api/commands layer
- * (same pattern as SetupWizard.test.tsx).
+ * contract.  Mocks commands.inboxScanFolder + commands.inboxClassify at the
+ * generated @/bindings/index layer (spec 037 caller migration; same pattern
+ * as SetupWizard.test.tsx), with unwrap() as the throw-on-error passthrough.
  *
  * NOTE: Back and Finish buttons now live in the SetupWizard footer, not inside
  * StepScan.  Tests for those buttons are in SetupWizard.test.tsx.  This file
@@ -22,10 +23,16 @@ const { mockInboxScanFolder, mockInboxClassify } = vi.hoisted(() => ({
   mockInboxClassify: vi.fn(),
 }));
 
-vi.mock('@/api/commands', () => ({
-  inboxScanFolder: mockInboxScanFolder,
-  inboxClassify: mockInboxClassify,
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    inboxScanFolder: mockInboxScanFolder,
+    inboxClassify: mockInboxClassify,
+  },
 }));
+
+// unwrap() is the real implementation (@/api/ipc) — it throws `result.error`
+// on `{ status: 'error' }`, so a mocked rejection is expressed as a resolved
+// error-status result rather than mockRejectedValue.
 
 // ── Component under test ─────────────────────────────────────────────────────
 
@@ -160,8 +167,8 @@ describe('StepScan', () => {
     });
 
     it('calls inboxScanFolder for each source on mount', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_WITH_ITEMS });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       renderStep();
 
@@ -178,8 +185,8 @@ describe('StepScan', () => {
     });
 
     it('calls inboxClassify for each discovered item', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_WITH_ITEMS });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       renderStep();
 
@@ -193,8 +200,8 @@ describe('StepScan', () => {
 
   describe('accordion — collapsed by default', () => {
     it('table rows are hidden by default before the accordion is expanded', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_WITH_ITEMS });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       renderStep({ sources: [SOURCES[0]] });
 
@@ -208,8 +215,8 @@ describe('StepScan', () => {
     });
 
     it('reveals table rows after clicking the source header', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_WITH_ITEMS });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       renderStep({ sources: [SOURCES[0]] });
 
@@ -223,8 +230,8 @@ describe('StepScan', () => {
     });
 
     it('shows ▸ when collapsed and ▾ when expanded', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_WITH_ITEMS });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       renderStep({ sources: [SOURCES[0]] });
 
@@ -243,8 +250,8 @@ describe('StepScan', () => {
     });
 
     it('collapses again on second click', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_WITH_ITEMS });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       renderStep({ sources: [SOURCES[0]] });
 
@@ -272,8 +279,8 @@ describe('StepScan', () => {
 
   describe('done state with detections', () => {
     it('shows detected items and frame-type breakdown when scan completes (after expanding)', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_WITH_ITEMS });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       renderStep({ sources: [SOURCES[0]] });
 
@@ -294,8 +301,8 @@ describe('StepScan', () => {
     });
 
     it('renders a Master pill and the frame type for individual masters (spec 040 FR-006)', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_MASTER);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_WITH_MASTER });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       renderStep({ sources: [SOURCES[0]] });
 
@@ -315,8 +322,8 @@ describe('StepScan', () => {
     });
 
     it('shows the scan summary when all sources are done', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_WITH_ITEMS });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       renderStep();
 
@@ -326,8 +333,8 @@ describe('StepScan', () => {
     });
 
     it('calls onAllDoneChange(true) once all sources finish', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_WITH_ITEMS });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       const onAllDoneChange = vi.fn();
       renderStep({ onAllDoneChange });
@@ -340,8 +347,8 @@ describe('StepScan', () => {
 
   describe('empty state', () => {
     it('shows empty-state message when no items are detected', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_EMPTY);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE); // not called for empty
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_EMPTY });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE }); // not called for empty
 
       renderStep({ sources: [SOURCES[0]] });
 
@@ -351,7 +358,7 @@ describe('StepScan', () => {
     });
 
     it('does not show scan-item rows when empty', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_EMPTY);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_EMPTY });
 
       renderStep({ sources: [SOURCES[0]] });
 
@@ -364,7 +371,7 @@ describe('StepScan', () => {
 
   describe('error state', () => {
     it('shows error state for a failing source', async () => {
-      mockInboxScanFolder.mockRejectedValue(new Error('disk read error'));
+      mockInboxScanFolder.mockResolvedValue({ status: 'error', error: new Error('disk read error') });
 
       renderStep({ sources: [SOURCES[0]] });
 
@@ -376,9 +383,9 @@ describe('StepScan', () => {
     it('completes other sources even when one fails (FR-005)', async () => {
       // First source fails, second succeeds
       mockInboxScanFolder
-        .mockRejectedValueOnce(new Error('disk read error'))
-        .mockResolvedValueOnce(SCAN_RESPONSE_WITH_ITEMS);
-      mockInboxClassify.mockResolvedValue(CLASSIFY_RESPONSE);
+        .mockResolvedValueOnce({ status: 'error', error: new Error('disk read error') })
+        .mockResolvedValueOnce({ status: 'ok', data: SCAN_RESPONSE_WITH_ITEMS });
+      mockInboxClassify.mockResolvedValue({ status: 'ok', data: CLASSIFY_RESPONSE });
 
       renderStep();
 
@@ -398,8 +405,8 @@ describe('StepScan', () => {
 
     it('calls onAllDoneChange(true) even when a source has errored (FR-005)', async () => {
       mockInboxScanFolder
-        .mockRejectedValueOnce(new Error('disk read error'))
-        .mockResolvedValueOnce(SCAN_RESPONSE_EMPTY);
+        .mockResolvedValueOnce({ status: 'error', error: new Error('disk read error') })
+        .mockResolvedValueOnce({ status: 'ok', data: SCAN_RESPONSE_EMPTY });
 
       const onAllDoneChange = vi.fn();
       renderStep({ onAllDoneChange });
@@ -433,7 +440,7 @@ describe('StepScan', () => {
 
   describe('re-entry guard', () => {
     it('does not re-trigger scans when re-rendered with the same props', async () => {
-      mockInboxScanFolder.mockResolvedValue(SCAN_RESPONSE_EMPTY);
+      mockInboxScanFolder.mockResolvedValue({ status: 'ok', data: SCAN_RESPONSE_EMPTY });
 
       const { rerender } = renderStep({ sources: [SOURCES[0]] });
 

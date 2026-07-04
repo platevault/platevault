@@ -4,7 +4,8 @@
  *
  * Adopts the Sessions REFERENCE layout: a pinned `PageTopBar` over a
  * `ListPageLayout` body — a dense FULL-WIDTH sortable masters table
- * (MastersTable, grouped by Kind) as primary, with the existing MasterDetail
+ * (MastersTable, flat by default, groupable via the top-bar Group-by control)
+ * as primary, with the existing MasterDetail
  * (fingerprint rail + compatible-sessions match table) hosted in the right-side
  * detail pane that mounts on selection.
  *
@@ -24,18 +25,26 @@ import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import { m } from '@/lib/i18n';
 import type { FilterOption } from '@/components';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
+import { useGrouping } from '@/lib/use-grouping';
 import { MasterDetail } from './MasterDetail';
 import {
   MastersTable,
   DEFAULT_MASTER_SORT,
-  DEFAULT_MASTER_GROUP_BY,
 } from './MastersTable';
-import type { MasterSort, MasterSortCol, MasterGroupBy } from './MastersTable';
+import type { MasterSort, MasterSortCol } from './MastersTable';
 import { useCalibrationMasters, useCalibrationSettings } from './useCalibration';
 
 // ── Toolbar vocab ─────────────────────────────────────────────────────────────
 
-const GROUP_BY_OPTIONS: FilterOption[] = [{ value: 'kind', label: m.calibration_fp_kind() }];
+// Render-time factory (spec 046 #8b) so dimension labels re-read the active locale.
+const CALIB_DIMENSIONS = (): FilterOption[] => [
+  { value: 'kind', label: m.calibration_fp_kind() },
+  { value: 'camera', label: m.settings_calmatch_camera() },
+  { value: 'instrument', label: m.calibration_dim_instrument() },
+  { value: 'filter', label: m.common_filter() },
+  { value: 'night', label: m.sessions_col_night() },
+  { value: 'month', label: m.sessions_dim_month() },
+];
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -47,9 +56,17 @@ export function CalibrationPage() {
 
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<MasterSort>(DEFAULT_MASTER_SORT);
-  // Group-by is fixed to Kind in v1 (only meaningful grouping); the control is
-  // still surfaced for layout consistency with the other list pages.
-  const [groupBy, setGroupBy] = useState<MasterGroupBy>(DEFAULT_MASTER_GROUP_BY);
+  // Kind filter (bias / dark / flat / …) — options derived from the masters present.
+  const [kindFilter, setKindFilter] = useState('');
+  const kindOptions = [...new Set(masters.map((mm) => mm.kind.toLowerCase()))]
+    .sort()
+    .map((k) => ({ value: k, label: k }));
+
+  const { dims, setSlot } = useGrouping({
+    storageKey: 'calibration.grouping.dims.v1',
+    validIds: ['kind', 'camera', 'instrument', 'filter', 'night', 'month'],
+    defaultDims: [],
+  });
 
   const master = masters.find((m) => m.id === selected) ?? null;
 
@@ -75,7 +92,7 @@ export function CalibrationPage() {
 
   // Client-side text search across the visible master fields.
   const q = search.trim().toLowerCase();
-  const visibleMasters =
+  const searchedMasters =
     q === ''
       ? masters
       : masters.filter((m) => {
@@ -93,6 +110,9 @@ export function CalibrationPage() {
             .toLowerCase();
           return haystack.includes(q);
         });
+  const visibleMasters = kindFilter
+    ? searchedMasters.filter((m) => m.kind.toLowerCase() === kindFilter)
+    : searchedMasters;
 
   const topBar = (
     <PageTopBar
@@ -104,10 +124,24 @@ export function CalibrationPage() {
             placeholder: m.calibration_search_masters_placeholder(),
             ariaLabel: m.calibration_search_masters_aria(),
           }}
-          groupBy={{
-            value: groupBy,
-            options: GROUP_BY_OPTIONS,
-            onChange: (v) => setGroupBy(v as MasterGroupBy),
+          fields={
+            kindOptions.length > 1
+              ? [
+                  {
+                    key: 'kind',
+                    label: m.calibration_fp_kind(),
+                    value: kindFilter,
+                    options: kindOptions,
+                    onChange: setKindFilter,
+                    allLabel: m.calibration_filter_all_kinds(),
+                  },
+                ]
+              : undefined
+          }
+          grouping={{
+            dimensions: CALIB_DIMENSIONS(),
+            dims,
+            setSlot,
           }}
         />
       }
@@ -127,7 +161,7 @@ export function CalibrationPage() {
         ) : undefined
       }
       onCloseDetail={master != null ? clearSelection : undefined}
-      detailLabel="Master details"
+      detailLabel={m.calibration_master_details_label()}
     >
       <MastersTable
         masters={visibleMasters}
@@ -138,6 +172,7 @@ export function CalibrationPage() {
         sort={sort}
         onSort={handleSort}
         agingThresholdDays={agingThresholdDays}
+        dims={dims}
       />
     </ListPageLayout>
   );

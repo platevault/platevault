@@ -10,8 +10,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Pill, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
-import { planProtectionCheck, protectionPlanAcknowledged } from '@/api/commands';
-import type { ProtectedPlanItem, PlanProtectionCheckResponse } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { ProtectedPlanItem, PlanProtectionCheckResponse } from '@/bindings/index';
 
 interface PlanProtectionGateProps {
   planId: string;
@@ -36,7 +37,9 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
 
   const load = useCallback(() => {
     setLoadState('loading');
-    planProtectionCheck(planId)
+    commands
+      .planProtectionCheckCmd(planId)
+      .then(unwrap)
       .then((resp) => {
         setCheckResult(resp);
         setLoadState('ready');
@@ -57,12 +60,14 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
   const handleAcknowledge = useCallback(
     async (item: ProtectedPlanItem) => {
       try {
-        await protectionPlanAcknowledged(
-          planId,
-          item.itemId,
-          item.sourceId ?? null,
-          item.level,
-          item.reason,
+        unwrap(
+          await commands.protectionPlanAcknowledged(
+            planId,
+            item.itemId,
+            item.sourceId ?? null,
+            item.level,
+            item.reason,
+          ),
         );
         setAcknowledged((prev) => {
           const next = new Set(prev);
@@ -118,9 +123,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
   return (
     <div className="alm-plan-gate__root">
       <div
-        className="alm-plan-gate__summary-bar"
-        // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token background (all-done vs pending state)
-        style={{ background: allDone ? 'var(--alm-surface)' : 'var(--alm-bg3)' }}
+        className={'alm-plan-gate__summary-bar' + (allDone ? ' alm-plan-gate__summary-bar--done' : '')}
       >
         <Pill variant={allDone ? 'ok' : 'warn'}>
           {allDone ? m.plans_all_acknowledged() : m.plans_gate_require_ack({ done: total - doneCount, total })}
@@ -137,12 +140,7 @@ export function PlanProtectionGate({ planId, onAcknowledgedChange }: PlanProtect
         return (
           <div
             key={item.itemId}
-            className="alm-plan-gate__item"
-            // eslint-disable-next-line no-restricted-syntax -- dynamic: conditional token background + opacity for acknowledged item state
-            style={{
-              background: isDone ? 'var(--alm-surface)' : undefined,
-              opacity: isDone ? 0.7 : 1,
-            }}
+            className={'alm-plan-gate__item' + (isDone ? ' alm-plan-gate__item--done' : '')}
           >
             <div className="alm-plan-gate__item-header">
               <Pill variant="ok">{item.level}</Pill>

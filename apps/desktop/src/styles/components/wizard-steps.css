@@ -1,0 +1,1650 @@
+/* === WIZARD PAGE === */
+
+/* Root page wrapper */
+.alm-wizard-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Primary toolbar */
+.alm-wizard-page__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: 0 var(--alm-sp-4);
+  height: var(--alm-toolbar-height, 44px);
+  border-bottom: 1px solid var(--alm-border);
+}
+
+/* Toolbar title text */
+.alm-wizard-page__toolbar-title {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Toolbar flex spacer */
+.alm-wizard-page__spacer {
+  flex: 1;
+}
+
+/* Sub-toolbar / breadcrumb bar */
+.alm-wizard-page__subbbar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-1) var(--alm-sp-4);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  border-bottom: 1px solid var(--alm-border);
+}
+
+/* Trailing note in sub-toolbar pushed to the right */
+.alm-wizard-page__subbar-note {
+  margin-left: auto;
+  color: var(--alm-text-faint);
+}
+
+/* Step title area */
+.alm-wizard-page__step-header {
+  margin-bottom: var(--alm-sp-5);
+}
+
+/* Step heading */
+.alm-wizard-page__step-title {
+  font-size: 18px;
+  font-weight: var(--alm-weight-semibold);
+  margin: 0;
+}
+
+/* ── Summary panel ── */
+
+/* Summary panel root */
+.alm-wizard-page__summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+  font-size: var(--alm-text-xs);
+}
+
+/* Section heading inside the summary (e.g. "PROJECT SUMMARY", "WHAT'S SELECTED") */
+.alm-wizard-page__summary-heading {
+  color: var(--alm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Section heading without letter-spacing (e.g. "COMING UP", "WHAT'S SELECTED SO FAR") */
+.alm-wizard-page__summary-section-heading {
+  color: var(--alm-text-muted);
+  text-transform: uppercase;
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Project name in summary */
+.alm-wizard-page__summary-project-name {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Profile label below project name */
+.alm-wizard-page__summary-profile {
+  color: var(--alm-text-muted);
+}
+
+/* Indented list below a section heading */
+.alm-wizard-page__summary-list {
+  margin-top: var(--alm-sp-2);
+}
+
+/* "Coming up" step item — default (no border on last item) */
+.alm-wizard-page__coming-up-item {
+  padding: 3px 0;
+}
+
+/* "Coming up" step item — separator shown between items (not last) */
+.alm-wizard-page__coming-up-item--sep {
+  border-bottom: 1px dotted var(--alm-border);
+}
+
+/* Flex-fill utility used in WizardPage summary nav buttons */
+.alm-wizard-page__flex-fill {
+  flex: 1;
+}
+
+/* Flex-fill with min-height:0 — used to prevent flex overflow on WizardShell */
+.alm-wizard-page__flex-fill--noscroll {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Footprint estimate box */
+.alm-wizard-page__footprint {
+  padding: var(--alm-sp-3);
+  background: var(--alm-bg);
+  border: 1px solid var(--alm-border);
+}
+
+/* Label inside footprint box */
+.alm-wizard-page__footprint-label {
+  color: var(--alm-text-muted);
+}
+
+/* Large number inside footprint box */
+.alm-wizard-page__footprint-value {
+  font-size: 16px;
+  font-weight: var(--alm-weight-semibold);
+  margin-top: var(--alm-sp-0);
+}
+
+/* Fine-print note inside footprint box */
+.alm-wizard-page__footprint-note {
+  font-size: 10.5px;
+  color: var(--alm-text-muted);
+}
+
+/* Navigation button row at the bottom of the summary rail */
+.alm-wizard-page__summary-nav {
+  display: flex;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-3);
+}
+
+/* ── SummaryRow ── */
+
+/* Each label/value row in the counts table */
+.alm-wizard-page__summary-row {
+  padding: 3px 0;
+  border-bottom: 1px dotted var(--alm-border);
+  display: flex;
+}
+
+/* Label cell (grows to fill) */
+.alm-wizard-page__summary-row-label {
+  flex: 1;
+}
+
+/* === MATCH CANDIDATES PANEL === */
+
+/* ── ConfidenceBar ──────────────────────────────────────────────────────────── */
+
+.alm-match-candidates__conf-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+
+.alm-match-candidates__conf-track {
+  width: 60px;
+  height: 6px;
+  background: var(--alm-bg3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.alm-match-candidates__conf-fill {
+  height: 100%;
+  border-radius: 3px;
+  /* width and background are set via inline style (dynamic per confidence value) */
+}
+
+.alm-match-candidates__conf-label {
+  font-size: var(--alm-text-xs);
+  min-width: 32px;
+}
+
+/* ── DimensionBreakdown ─────────────────────────────────────────────────────── */
+
+.alm-match-candidates__dim-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-0);
+}
+
+.alm-match-candidates__dim-matched {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+
+.alm-match-candidates__dim-check {
+  display: inline;
+  vertical-align: middle;
+  color: var(--alm-ok);
+}
+
+.alm-match-candidates__dim-delta {
+  color: var(--alm-text-faint);
+}
+
+.alm-match-candidates__dim-mismatch {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-warn);
+}
+
+.alm-match-candidates__dim-mismatch-icon {
+  display: inline;
+  vertical-align: middle;
+}
+
+/* ── AssignButton ───────────────────────────────────────────────────────────── */
+
+.alm-match-candidates__assign-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+.alm-match-candidates__assign-row {
+  display: flex;
+  gap: var(--alm-sp-1);
+}
+
+.alm-match-candidates__override-warning {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-warn);
+}
+
+.alm-match-candidates__override-dims {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+/* ── Main panel ─────────────────────────────────────────────────────────────── */
+
+.alm-match-candidates__loading {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-2);
+}
+
+.alm-match-candidates__status-row {
+  margin-bottom: var(--alm-sp-1);
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+
+.alm-match-candidates__ambiguous-hint {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+.alm-match-candidates__rank {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+.alm-match-candidates__master-id {
+  font-size: var(--alm-text-xs);
+}
+
+.alm-match-candidates__reason {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+
+/* === WIZARD STEP NAME === */
+
+/* Root layout */
+.alm-wizard-name {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+}
+
+/* Field group (name + profile sections) */
+.alm-wizard-name__field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+.alm-wizard-name__profile-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* Labels / headings */
+.alm-wizard-name__label {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Project name input */
+.alm-wizard-name__input {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border: 1px solid var(--alm-border);
+  border-radius: 4px;
+  font-size: var(--alm-text-sm);
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  outline: none;
+  transition: border-color var(--alm-transition-fast);
+}
+
+.alm-wizard-name__input:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+.alm-wizard-name__input::placeholder {
+  color: var(--alm-text-faint);
+}
+
+/* Error message */
+.alm-wizard-name__error {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-danger);
+}
+
+/* Radio group container */
+.alm-wizard-name__radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Profile option label (radio card) */
+.alm-wizard-name__profile-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-3);
+  border: 1px solid var(--alm-border);
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  transition: border-color var(--alm-transition-fast);
+}
+
+.alm-wizard-name__profile-option[data-selected="true"] {
+  border-color: var(--alm-ink);
+  background: var(--alm-surface);
+}
+
+/* Profile label text */
+.alm-wizard-name__profile-label {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-medium);
+}
+
+/* Profile description text */
+.alm-wizard-name__profile-description {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* === SHARED SESSION SOURCE PICKER ===
+ * Used by the project-creation wizard's StepSources AND EditProjectPane's
+ * post-creation "add sources" flow (WP-008-C) — one component, one class set.
+ */
+
+/* Loading state */
+.alm-source-picker__loading {
+  color: var(--alm-text-muted);
+}
+
+/* Root flex column */
+.alm-source-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+}
+
+/* Filter row */
+.alm-source-picker__filter-row {
+  display: flex;
+  gap: var(--alm-sp-2);
+}
+
+/* Filter inputs */
+.alm-source-picker__filter-input {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  border: 1px solid var(--alm-border);
+  border-radius: 4px;
+  font-size: var(--alm-text-xs);
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  transition: border-color var(--alm-transition-fast);
+}
+
+.alm-source-picker__filter-input:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+.alm-source-picker__filter-input::placeholder {
+  color: var(--alm-text-faint);
+}
+
+/* Summary bar */
+.alm-source-picker__summary {
+  display: flex;
+  gap: var(--alm-sp-4);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Session list container */
+.alm-source-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--alm-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* List header */
+.alm-source-picker__list-header {
+  display: grid;
+  grid-template-columns: 32px 1fr 80px 80px 100px;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  background: var(--alm-surface);
+  border-bottom: 1px solid var(--alm-border);
+  font-size: var(--alm-text-xs);
+  font-weight: 600;
+  color: var(--alm-text-muted);
+}
+
+/* Session row */
+.alm-source-picker__row {
+  display: grid;
+  grid-template-columns: 32px 1fr 80px 80px 100px;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-bottom: 1px solid var(--alm-border);
+  font-size: var(--alm-text-xs);
+  cursor: pointer;
+  background: transparent;
+}
+
+/* Session row — selected */
+.alm-source-picker__row--selected {
+  background: var(--alm-surface);
+}
+
+/* Train ID cell — mono + truncate */
+.alm-source-picker__train-id {
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Empty state */
+.alm-source-picker__empty {
+  padding: var(--alm-sp-4);
+  text-align: center;
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-xs);
+}
+
+/* === WIZARD STEP CALIBRATION === */
+
+/* Root layout */
+.alm-wizard-calib__root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+}
+
+/* Step description paragraph */
+.alm-wizard-calib__desc {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  max-width: 640px;
+}
+
+/* Flats section subtitle */
+.alm-wizard-calib__flat-subtitle {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-3);
+}
+
+/* Table column widths */
+.alm-wizard-calib__col-score {
+  width: 60px;
+}
+
+.alm-wizard-calib__col-role {
+  width: 70px;
+}
+
+/* Lights-covered cell */
+.alm-wizard-calib__cell-lights {
+  font-size: var(--alm-text-xs);
+}
+
+/* Inline select inside table cells */
+.alm-wizard-calib__select {
+  width: 100%;
+  padding: var(--alm-sp-1) 6px;
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+
+  background: var(--alm-bg);
+  color: var(--alm-text);
+  transition: border-color var(--alm-transition-fast);
+}
+
+.alm-wizard-calib__select:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+/* Score and notes cells — small text */
+.alm-wizard-calib__cell-score {
+  font-size: var(--alm-text-xs);
+}
+
+/* Notes cell in flats table (static muted color) */
+.alm-wizard-calib__cell-notes {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Notes cell in shared table — default muted color */
+.alm-wizard-calib__cell-notes-dyn {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Notes cell — warning state */
+.alm-wizard-calib__cell-notes-dyn--warn {
+  color: var(--alm-warn);
+}
+
+/* Score cell — warning state */
+.alm-wizard-calib__cell-score--warn {
+  color: var(--alm-warn);
+}
+
+/* Score cell — faint/dash state (score === '—') */
+.alm-wizard-calib__cell-score--faint {
+  color: var(--alm-text-faint);
+}
+
+/* Footer action row below shared calibration table */
+.alm-wizard-calib__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-3) 0;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Warning span pushed to the far right */
+.alm-wizard-calib__footer-warn {
+  margin-left: auto;
+  color: var(--alm-warn);
+}
+
+/* Add-flat button spacing */
+.alm-wizard-calib__add-flat-btn {
+  margin-top: var(--alm-sp-3);
+}
+
+/* Why-recommended list */
+.alm-wizard-calib__why-list {
+  margin: 0;
+  padding-left: var(--alm-sp-4);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+
+/* === WIZARD STEP VIEWS === */
+
+/* Root layout */
+.alm-wizard-views {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+}
+
+/* Step description */
+.alm-wizard-views__desc {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  max-width: 640px;
+}
+
+/* Shared link style used in multiple boxes */
+.alm-wizard-views__link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  color: var(--alm-accent);
+  text-decoration: underline;
+}
+
+.alm-wizard-views__link:hover {
+  color: var(--alm-accent-hover);
+}
+
+/* Box header row — right-aligned action link */
+.alm-wizard-views__box-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--alm-sp-1);
+}
+
+.alm-wizard-views__box-link {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+
+  font-size: var(--alm-text-xs);
+  color: var(--alm-accent);
+  text-decoration: underline;
+}
+
+.alm-wizard-views__box-link:hover {
+  color: var(--alm-accent-hover);
+}
+
+/* Strategy row — pill + label + meta */
+.alm-wizard-views__strategy-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+.alm-wizard-views__strategy-label {
+  font-size: var(--alm-text-sm);
+}
+
+.alm-wizard-views__strategy-meta {
+  margin-left: auto;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+.alm-wizard-views__strategy-note {
+  margin-top: 6px;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Views to generate — hint text above table */
+.alm-wizard-views__table-hint {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  margin-bottom: var(--alm-sp-3);
+}
+
+/* View name input in table cell */
+.alm-wizard-views__name-input {
+  width: 160px;
+
+  font-size: var(--alm-text-xs);
+  padding: 3px 6px;
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  background: var(--alm-bg);
+  color: var(--alm-text);
+  transition: border-color var(--alm-transition-fast);
+}
+
+.alm-wizard-views__name-input:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+.alm-wizard-views__name-input::placeholder {
+  color: var(--alm-text-faint);
+}
+
+/* Table cell — scope column */
+.alm-wizard-views__td-scope {
+  font-size: var(--alm-text-xs);
+}
+
+/* Table cell — items / size columns (11px is component-intrinsic) */
+.alm-wizard-views__td-small {
+  font-size: 11px;
+}
+
+/* Add-view button spacing */
+.alm-wizard-views__add-btn {
+  margin-top: var(--alm-sp-3);
+}
+
+/* Conflict policy radio group */
+.alm-wizard-views__radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Individual radio label */
+.alm-wizard-views__radio-label {
+  display: block;
+  font-size: var(--alm-text-xs);
+  padding: var(--alm-sp-0) 0;
+  cursor: pointer;
+}
+
+/* Dark-theme overrides for the name input */
+[data-theme="observatory-dark"] .alm-wizard-views__name-input,
+[data-theme="espresso-dark"] .alm-wizard-views__name-input {
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  border-color: var(--alm-border);
+}
+
+/* === WIZARD STEP LAYOUT === */
+
+/* Root layout */
+.alm-wizard-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+}
+
+/* Section group (naming pattern + directory preview) */
+.alm-wizard-layout__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Labels / headings */
+.alm-wizard-layout__label {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Naming pattern input */
+.alm-wizard-layout__input {
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border: 1px solid var(--alm-border);
+  border-radius: 4px;
+  font-size: var(--alm-text-sm);
+
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  outline: none;
+  transition: border-color var(--alm-transition-fast);
+}
+
+.alm-wizard-layout__input:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+.alm-wizard-layout__input::placeholder {
+  color: var(--alm-text-faint);
+}
+
+/* Token chip row */
+.alm-wizard-layout__token-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-1);
+}
+
+/* Individual token chip */
+.alm-wizard-layout__token-chip {
+  padding: var(--alm-sp-0) 6px;
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border);
+  border-radius: 4px;
+  font-size: var(--alm-text-2xs);
+
+  color: var(--alm-text-muted);
+  cursor: help;
+}
+
+/* Directory structure preview box */
+.alm-wizard-layout__preview {
+  padding: var(--alm-sp-3) var(--alm-sp-4);
+  background: var(--alm-surface);
+  border: 1px solid var(--alm-border);
+  border-radius: 6px;
+
+  font-size: var(--alm-text-xs);
+  line-height: 1.8;
+  overflow: auto;
+}
+
+/* Per-path row — paddingLeft stays inline (computed from depth).
+   Color is driven by data-dir attribute so no color leaks inline. */
+.alm-wizard-layout__path-row {
+  color: var(--alm-text);
+}
+
+.alm-wizard-layout__path-row[data-dir="true"] {
+  color: var(--alm-info);
+}
+
+/* === WIZARD STEP REVIEW === */
+
+/* Root flex column */
+.alm-wizard-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+}
+
+/* Success banner */
+.alm-wizard-review__banner {
+  padding: var(--alm-sp-3);
+  background: var(--alm-ok-bg);
+  border: 1px solid var(--alm-ok-border);
+}
+
+/* Banner inner row */
+.alm-wizard-review__banner-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Checkmark icon */
+.alm-wizard-review__banner-icon {
+  color: var(--alm-ok);
+  font-size: var(--alm-text-md);
+}
+
+/* Banner text */
+.alm-wizard-review__banner-text {
+  flex: 1;
+  font-size: var(--alm-text-sm);
+}
+
+/* 2-column grid: plan table (2fr) + right panel (1fr) */
+.alm-wizard-review__grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+}
+
+/* Plan table: action column */
+.alm-wizard-review__col-action {
+  width: 80px;
+}
+
+/* Plan table: mono path cells */
+.alm-wizard-review__cell-path {
+  font-size: var(--alm-text-xs);
+}
+
+/* Plan table: faint em-dash for null source */
+.alm-wizard-review__source-none {
+  color: var(--alm-text-faint);
+}
+
+/* Plan table: mono source path */
+.alm-wizard-review__source-path {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Plan table: truncation row */
+.alm-wizard-review__truncation {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-1);
+}
+
+/* Right column */
+.alm-wizard-review__right {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Disk tree pre */
+.alm-wizard-review__disk-tree {
+  font-size: 10.5px;
+  margin: 0;
+  line-height: var(--alm-leading-normal);
+  color: var(--alm-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* After-creating ordered list */
+.alm-wizard-review__after-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--alm-text-xs);
+}
+
+/* === SETUP STEP SCAN === */
+
+/* ── StepScan root ───────────────────────────────────────────────────────── */
+
+.alm-setup-scan {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.alm-setup-scan__empty-msg {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+.alm-setup-scan__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.alm-setup-scan__summary {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
+  margin: var(--alm-sp-3) 0 0;
+  flex-shrink: 0;
+}
+
+/* ── SourceSummary card ──────────────────────────────────────────────────── */
+
+.alm-setup-scan__card {
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  margin-bottom: var(--alm-sp-3);
+  background: var(--alm-surface);
+  overflow: hidden;
+}
+
+/* ── Card header row ─────────────────────────────────────────────────────── */
+
+.alm-setup-scan__header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-4);
+  cursor: default;
+  user-select: none;
+}
+
+/* Card header — expandable (pointer cursor) */
+.alm-setup-scan__header--expandable {
+  cursor: pointer;
+}
+
+.alm-setup-scan__chevron {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.alm-setup-scan__path {
+  flex: 1;
+  font-weight: var(--alm-weight-medium);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+  word-break: break-all;
+}
+
+.alm-setup-scan__kind {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  flex-shrink: 0;
+}
+
+.alm-setup-scan__count {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+  flex-shrink: 0;
+}
+
+/* ── Transient state paragraphs ──────────────────────────────────────────── */
+
+.alm-setup-scan__msg {
+  font-size: var(--alm-text-sm);
+  margin: 0;
+  padding: 0 var(--alm-sp-4) var(--alm-sp-4);
+}
+
+.alm-setup-scan__msg--error {
+  color: var(--alm-danger);
+}
+
+.alm-setup-scan__msg--scanning {
+  color: var(--alm-text-secondary);
+}
+
+.alm-setup-scan__msg--empty {
+  color: var(--alm-text-muted);
+}
+
+/* ── Collapsible detail panel ────────────────────────────────────────────── */
+
+.alm-setup-scan__detail {
+  padding: 0 var(--alm-sp-4) var(--alm-sp-4);
+}
+
+/* Kind-count chip strip */
+.alm-setup-scan__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--alm-sp-2);
+  margin-bottom: var(--alm-sp-3);
+}
+
+.alm-setup-scan__chip {
+  font-size: var(--alm-text-xs);
+  background: var(--alm-bg3);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  padding: var(--alm-sp-0) var(--alm-sp-2);
+  color: var(--alm-text-secondary);
+}
+
+/* Scrollable table wrapper */
+.alm-setup-scan__table-wrap {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--alm-border-subtle);
+  border-radius: var(--alm-radius-sm);
+}
+
+/* Detection table */
+.alm-setup-scan__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-secondary);
+}
+
+.alm-setup-scan__thead-row {
+  position: sticky;
+  top: 0;
+  background: var(--alm-surface-raised);
+  color: var(--alm-text);
+}
+
+.alm-setup-scan__cell {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  text-align: left;
+}
+
+.alm-setup-scan__cell--path {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  text-align: left;
+  word-break: break-all;
+}
+
+.alm-setup-scan__tbody-row {
+  border-top: 1px solid var(--alm-border-subtle);
+}
+
+.alm-setup-scan__path-cell-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* === SETUP STEP CONFIRM === */
+
+/* Root stack */
+.alm-setup-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-5);
+}
+
+/* Section wrapper */
+.alm-setup-confirm__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* Section title */
+.alm-setup-confirm__section-title {
+  font-weight: var(--alm-weight-semibold);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text);
+}
+
+/* Kind list (sources grouped by kind) */
+.alm-setup-confirm__kind-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-4);
+}
+
+/* Per-kind group */
+.alm-setup-confirm__kind-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+}
+
+/* Kind category label (e.g. "LIGHTS", "DARKS") */
+.alm-setup-confirm__kind-label {
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--alm-text-muted);
+}
+
+/* A single folder row or tool row */
+.alm-setup-confirm__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-3);
+}
+
+/* Folder path text — truncates long paths */
+.alm-setup-confirm__path {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--alm-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Scan depth label ("Recursive" / "Single level") */
+.alm-setup-confirm__scan-depth {
+  white-space: nowrap;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Empty-state message (no sources / no tools) */
+.alm-setup-confirm__empty {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
+
+/* Tool list */
+.alm-setup-confirm__tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Tool name label */
+.alm-setup-confirm__tool-name {
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Tool path + pill wrapper */
+.alm-setup-confirm__tool-path-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  min-width: 0;
+}
+
+/* Tool path text — truncates */
+.alm-setup-confirm__tool-path {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What-happens-next bullet list */
+.alm-setup-confirm__next-list {
+  margin: 0;
+  padding-left: var(--alm-sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  font-size: var(--alm-text-sm);
+}
+
+/* Muted note (safety reassurance + submitting message) */
+.alm-setup-confirm__note {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+}
+
+/* === SETUP STEP SOURCE FOLDERS === */
+
+/*
+ * Token policy: all colors reference --alm-* tokens from tokens.css.
+ * Component-intrinsic 1px borders are raw geometry, not spacing scale.
+ * Dynamic border/background states are driven by data-attributes already
+ * present in the JSX (data-required, data-requirement-met).
+ * Row separators and header separators use :last-child / :has() selectors
+ * to avoid requiring extra data-attributes or JSX changes.
+ */
+
+/* ── Root container ── */
+.alm-step-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* ── Intro paragraph ── */
+.alm-step-sources__intro {
+  margin: 0;
+  font-size: var(--alm-text-sm);
+  line-height: var(--alm-leading-normal);
+  color: var(--alm-text-secondary);
+}
+
+/* ── Groups wrapper ── */
+.alm-step-sources__groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* ── Group card — neutral (optional or default) ── */
+.alm-step-sources__group {
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  background: var(--alm-bg);
+  overflow: hidden;
+}
+
+/* ── Group card — required + met (ok accent) ── */
+.alm-step-sources__group[data-required="true"][data-requirement-met="true"] {
+  border-color: var(--alm-ok-border);
+  background: var(--alm-ok-bg);
+}
+
+/* ── Group card — required + unmet (warn accent) ── */
+.alm-step-sources__group[data-required="true"][data-requirement-met="false"] {
+  border-color: var(--alm-warn-border);
+  background: var(--alm-warn-bg);
+}
+
+/* ── Group header row ── */
+.alm-step-sources__group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  min-height: var(--alm-row-height);
+  /* No bottom border when the group has no folder rows */
+  border-bottom: none;
+}
+
+/* Header separator: shown only when folder rows exist below it */
+.alm-step-sources__group:has(.alm-step-sources__row) .alm-step-sources__group-header {
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+/* Header separator colour matches the card accent when required */
+.alm-step-sources__group[data-required="true"][data-requirement-met="true"]:has(.alm-step-sources__row)
+  .alm-step-sources__group-header {
+  border-bottom-color: var(--alm-ok-border);
+}
+.alm-step-sources__group[data-required="true"][data-requirement-met="false"]:has(.alm-step-sources__row)
+  .alm-step-sources__group-header {
+  border-bottom-color: var(--alm-warn-border);
+}
+
+/* ── Header label (kind name) ── */
+.alm-step-sources__group-header-label {
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text-secondary);
+}
+
+/* ── Header count badge ── */
+.alm-step-sources__group-header-count {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-muted);
+}
+
+/* ── "optional" label ── */
+.alm-step-sources__group-header-optional {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-text-faint);
+}
+
+/* ── Header spacer (pushes Add button to the right) ── */
+.alm-step-sources__group-header-spacer {
+  flex: 1;
+}
+
+/* ── Source row ── */
+.alm-step-sources__row {
+  padding: var(--alm-sp-1) var(--alm-sp-2);
+  background: var(--alm-surface-raised);
+}
+
+/* Row separator: all rows except the last get a bottom border */
+.alm-step-sources__row:not(:last-child) {
+  border-bottom: 1px solid var(--alm-border-subtle);
+}
+
+/* ── Row main line (path + controls) ── */
+.alm-step-sources__row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  min-height: var(--alm-row-height);
+}
+
+/* ── Path text ── */
+.alm-step-sources__row-path {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--alm-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Selects (org-state + scan-depth) ── */
+.alm-step-sources__org-select,
+.alm-step-sources__depth-select {
+  font-size: var(--alm-text-2xs);
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  padding: 1px var(--alm-sp-1);
+  transition: border-color var(--alm-transition-fast);
+}
+
+.alm-step-sources__org-select:focus,
+.alm-step-sources__depth-select:focus {
+  outline: none;
+  border-color: var(--alm-accent);
+}
+
+/* ── Inline validation error ── */
+.alm-step-sources__row-error {
+  margin-top: var(--alm-sp-0);
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-danger);
+}
+
+/* ── Picker error (below Add button) ── */
+.alm-step-sources__picker-error {
+  font-size: var(--alm-text-2xs);
+  color: var(--alm-danger);
+}
+
+/* === SETUP STEP TOOLS === */
+
+/* Root container */
+.alm-step-tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* Intro paragraph */
+.alm-step-tools__intro {
+  margin: 0;
+  font-size: var(--alm-text-sm);
+  line-height: var(--alm-leading-normal);
+  color: var(--alm-text-secondary);
+}
+
+/* Tool list wrapper */
+.alm-step-tools__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+/* Footer note */
+.alm-step-tools__note {
+  margin: 0;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
+/* Individual tool card */
+.alm-step-tools__card {
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  background: var(--alm-bg);
+  overflow: hidden;
+}
+
+/* Card header row: name + pill + description + toggle */
+.alm-step-tools__header {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  min-height: var(--alm-row-height);
+}
+
+/* Left info column (name+pill row + description) */
+.alm-step-tools__tool-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-0);
+}
+
+/* Name + detected-pill inline row */
+.alm-step-tools__name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Tool display name */
+.alm-step-tools__tool-name {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-semibold);
+  color: var(--alm-text);
+}
+
+/* Tool description */
+.alm-step-tools__tool-desc {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Right controls column (redetect btn + toggle, stacked) */
+.alm-step-tools__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--alm-sp-1);
+}
+
+/* Redetect button + toggle inline row */
+.alm-step-tools__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* "No installation found" feedback text */
+.alm-step-tools__not-found {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Executable path picker row (shown when tool is enabled) */
+.alm-step-tools__path-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-top: 1px solid var(--alm-border-subtle);
+  background: var(--alm-surface-raised);
+}
+
+/* "EXECUTABLE" label */
+.alm-step-tools__path-label {
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+}
+
+/* Path display span — no path set (faint placeholder) */
+.alm-step-tools__path-value {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--alm-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--alm-text-faint);
+}
+
+/* Path display span — path is set (secondary color) */
+.alm-step-tools__path-value--set {
+  color: var(--alm-text-secondary);
+}
+
+/* === WIZARD SHELL === */
+
+/* Root shell: full-height flex column */
+.alm-wizard {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Rail progress bar (sidebar layout mode) ── */
+.alm-wizard__rail {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-4) var(--alm-sp-5);
+  border-bottom: 1px solid var(--alm-border);
+  flex-shrink: 0;
+}
+
+/* Step row inside the rail */
+.alm-wizard__step {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+/* Numbered badge — base geometry; color/background applied inline (dynamic per step state) */
+.alm-wizard__step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: var(--alm-text-xs);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Step label — muted (non-active steps) */
+.alm-wizard__step-label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* Step label — active step */
+.alm-wizard__step-label--active {
+  color: var(--alm-text);
+}
+
+/* Connector line between steps */
+.alm-wizard__step-connector {
+  width: 16px;
+  height: 1px;
+  background: var(--alm-border-subtle);
+  display: inline-block;
+}
+
+/* ── Sidebar layout (project wizard) ── */
+.alm-wizard__body--sidebar {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.alm-wizard__content--sidebar {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--alm-sp-5);
+}
+
+.alm-wizard__summary {
+  width: var(--alm-rail-width);
+  border-left: 1px solid var(--alm-border);
+  padding: var(--alm-sp-5);
+  overflow: auto;
+  background: var(--alm-surface);
+}
+
+/* ── Centered layout (setup wizard) ── */
+.alm-wizard__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--alm-sp-6) var(--alm-sp-5);
+}
+
+.alm-wizard__content--centered {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* Inline step bar rendered inside the centered scroll area */
+.alm-wizard__steps-bar {
+  display: flex;
+  gap: var(--alm-sp-1);
+  margin-bottom: var(--alm-sp-6);
+}
+
+/* Individual step card — future (default) */
+.alm-wizard__steps-card {
+  flex: 1;
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-sm);
+  font-size: var(--alm-text-xs);
+  text-align: center;
+  background: var(--alm-bg);
+  color: var(--alm-text-muted);
+  font-weight: var(--alm-weight-normal);
+}
+
+/* Step card — past (visited) */
+.alm-wizard__steps-card--past {
+  background: var(--alm-surface);
+}
+
+/* Step card — active (current step) */
+.alm-wizard__steps-card--active {
+  background: var(--alm-surface);
+  color: var(--alm-text);
+  font-weight: var(--alm-weight-semibold);
+}
+
+/* Pinned navigation footer */
+.alm-wizard__footer {
+  border-top: 1px solid var(--alm-border);
+  padding: var(--alm-sp-4) var(--alm-sp-5);
+  flex-shrink: 0;
+  background: var(--alm-surface);
+}
+
+.alm-wizard__footer-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-4);
+}

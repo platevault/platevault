@@ -22,50 +22,6 @@ export const DATA_SOURCES: DataSourceRoot[] = [
   { id: 6, path: 'E:\\AstroOverflow', type: 'Raw', online: true, files: 7931, size: '180 GB', lastScan: '2h ago' },
 ];
 
-// ─── Equipment ───────────────────────────────────────────────────────────────
-
-export interface OpticalTrainFixture {
-  id: number;
-  name: string;
-  camera: string;
-  telescope: string;
-  focalLength: string;
-  pixelScale: string;
-}
-
-export interface CameraFixture {
-  id: number;
-  model: string;
-  sensor: string;
-  pixelSize: string;
-  resolution: string;
-  cooled: boolean;
-  color: boolean;
-}
-
-export interface TelescopeFixture {
-  id: number;
-  model: string;
-  aperture: string;
-  focalLength: string;
-  fRatio: string;
-}
-
-export const OPTICAL_TRAINS: OpticalTrainFixture[] = [
-  { id: 1, name: 'FSQ-106 + ASI2600MM', camera: 'ASI2600MM Pro', telescope: 'Takahashi FSQ-106EDX4', focalLength: '530 mm', pixelScale: '1.74″/px' },
-  { id: 2, name: 'GT81 + ASI533MC', camera: 'ASI533MC Pro', telescope: 'William Optics GT81', focalLength: '478 mm', pixelScale: '2.20″/px' },
-];
-
-export const CAMERAS: CameraFixture[] = [
-  { id: 1, model: 'ZWO ASI2600MM Pro', sensor: 'Sony IMX571', pixelSize: '3.76 μm', resolution: '6248 × 4176', cooled: true, color: false },
-  { id: 2, model: 'ZWO ASI533MC Pro', sensor: 'Sony IMX533', pixelSize: '3.76 μm', resolution: '3008 × 3008', cooled: true, color: true },
-];
-
-export const TELESCOPES: TelescopeFixture[] = [
-  { id: 1, model: 'Takahashi FSQ-106EDX4', aperture: '106 mm', focalLength: '530 mm', fRatio: 'f/5' },
-  { id: 2, model: 'William Optics GT81', aperture: '81 mm', focalLength: '478 mm', fRatio: 'f/5.9' },
-];
-
 // ─── Processing Tools ─────────────────────────────────────────────────────────
 
 export interface ProcessingToolFixture {
@@ -183,29 +139,6 @@ export const CLEANUP_TYPES: CleanupTypeFixture[] = [
   { id: 18, type: 'Process icons / tool config', action: 'Keep', stage: 'Project metadata' },
   { id: 19, type: 'Manual notes', action: 'Keep', stage: 'Project metadata' },
   { id: 20, type: 'Unknown files', action: 'Keep', stage: 'Project metadata' },
-];
-
-// ─── Audit Log Events ─────────────────────────────────────────────────────────
-
-export interface AuditEventFixture {
-  id: number;
-  timestamp: string;
-  event: string;
-  entity: string;
-  outcome: 'ok' | 'warn' | 'error';
-  actor: 'user' | 'system';
-  detail: string;
-}
-
-export const AUDIT_EVENTS: AuditEventFixture[] = [
-  { id: 1, timestamp: '2026-04-18T21:42:00Z', event: 'session.confirmed', entity: 'NGC 7000 · SII · 2026-04-18', outcome: 'ok', actor: 'user', detail: 'Session confirmed via review queue' },
-  { id: 2, timestamp: '2026-04-18T21:40:00Z', event: 'session.discovered', entity: 'NGC 7000 · SII · 2026-04-18', outcome: 'ok', actor: 'system', detail: 'Inbox scan found 14 new FITS files' },
-  { id: 3, timestamp: '2026-04-16T09:12:00Z', event: 'session.confirmed', entity: 'NGC 7000 · OIII · 2026-04-15', outcome: 'ok', actor: 'user', detail: 'Session confirmed via review queue' },
-  { id: 4, timestamp: '2026-04-15T21:06:00Z', event: 'session.candidate', entity: 'NGC 7000 · OIII · 2026-04-15', outcome: 'ok', actor: 'system', detail: 'Metadata extraction completed; target and filter resolved' },
-  { id: 5, timestamp: '2026-04-12T08:30:00Z', event: 'project.source_added', entity: 'NGC 7000 · SHO mosaic', outcome: 'ok', actor: 'user', detail: 'Session NGC 7000 · Ha · 2026-04-12 added as source' },
-  { id: 6, timestamp: '2026-04-10T14:05:00Z', event: 'calibration.master_imported', entity: 'MasterDark_300s_-10C_g100', outcome: 'ok', actor: 'system', detail: 'Master dark imported from scan #14' },
-  { id: 7, timestamp: '2026-03-30T22:18:00Z', event: 'session.confirmed', entity: 'M31 · R · 2026-03-30', outcome: 'ok', actor: 'user', detail: 'Session confirmed via review queue' },
-  { id: 8, timestamp: '2026-03-28T20:00:00Z', event: 'session.discovered', entity: 'M31 · L · 2026-03-28', outcome: 'warn', actor: 'system', detail: 'Filter origin is inferred — needs review' },
 ];
 
 // ─── Legacy / existing settings shape (retained) ──────────────────────────────

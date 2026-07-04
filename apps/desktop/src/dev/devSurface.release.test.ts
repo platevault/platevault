@@ -43,7 +43,7 @@ describe('T072: release build dev surface gate', () => {
   });
 
   it('setInvokeOverride with null restores pass-through behaviour', async () => {
-    const { setInvokeOverride } = await import('@/api/commands');
+    const { setInvokeOverride } = await import('@/api/ipc');
     // Ensure no override is active (simulates release build state)
     setInvokeOverride(null);
     // No assertion needed beyond no throw — confirms the API accepts null safely

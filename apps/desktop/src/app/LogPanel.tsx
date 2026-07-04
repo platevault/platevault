@@ -25,7 +25,8 @@ import {
   type LogEntrySource,
 } from '@/data/logStore';
 import { startLogSubscription } from '@/data/logSubscription';
-import { logExport } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import type { LevelFilter } from './LogPanelContext';
 import { errMessage } from '@/lib/errors';
 import { formatTimeOfDay } from '@/lib/datetime';
@@ -33,12 +34,13 @@ import { useHotkeys } from '@/lib/useHotkeys';
 
 // ── Level chip display helpers ────────────────────────────────────────────────
 
-const LEVEL_CHIPS: { value: LevelFilter; label: string }[] = [
-  { value: 'all', label: m.log_level_all() },
-  { value: 'error', label: m.settings_advanced_log_error() },
-  { value: 'warn', label: m.settings_advanced_log_warn() },
-  { value: 'info', label: m.settings_advanced_log_info() },
-  { value: 'debug', label: m.settings_advanced_log_debug() },
+// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
+const LEVEL_CHIPS: { value: LevelFilter; label: () => string }[] = [
+  { value: 'all', label: () => m.log_level_all() },
+  { value: 'error', label: () => m.settings_advanced_log_error() },
+  { value: 'warn', label: () => m.settings_advanced_log_warn() },
+  { value: 'info', label: () => m.settings_advanced_log_info() },
+  { value: 'debug', label: () => m.settings_advanced_log_debug() },
 ];
 
 function passesLevelFilter(entryLevel: LogLevel, filter: LevelFilter): boolean {
@@ -220,12 +222,9 @@ export function LogPanel() {
         return;
       }
 
-      await logExport({
-        requestId,
-        filePath,
-        format: 'json',
-        includeDiagnostics: showDiagnostics,
-      });
+      unwrap(
+        await commands.logExport(requestId, filePath, 'json', null, null, null, showDiagnostics),
+      );
     } catch (err) {
       setExportError(errMessage(err));
     }
@@ -265,7 +264,7 @@ export function LogPanel() {
                 onClick={() => setLevelFilter(chip.value)}
                 aria-pressed={levelFilter === chip.value}
               >
-                {chip.label}
+                {chip.label()}
               </button>
             ))}
 
@@ -449,7 +448,7 @@ function LogEntryRow({
       >
         {entry.level}
       </span>
-      <span className="alm-logpanel__event-source alm-logpanel__event-source--{entry.source}">
+      <span className={`alm-logpanel__event-source alm-logpanel__event-source--${entry.source}`}>
         {entry.source}
       </span>
       <span className="alm-logpanel__event-msg">{entry.message}</span>

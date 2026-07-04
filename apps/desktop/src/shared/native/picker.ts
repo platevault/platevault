@@ -12,6 +12,7 @@ import { useState, useCallback } from 'react';
 import { dirname } from 'pathe';
 import { commands } from '@/bindings';
 import { errMessage } from '@/lib/errors';
+import { m } from '@/lib/i18n';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,13 +50,17 @@ export interface PickerError {
 // Canonical calibration file filters (from data-model.md)
 // ---------------------------------------------------------------------------
 
-export const CALIBRATION_FILE_FILTERS: FileFilter[] = [
-  { name: 'All supported', extensions: ['xisf', 'fits', 'fit', 'fts', 'tif', 'tiff'] },
-  { name: 'FITS', extensions: ['fit', 'fits', 'fts'] },
-  { name: 'XISF', extensions: ['xisf'] },
-  { name: 'TIFF', extensions: ['tif', 'tiff'] },
-  { name: 'All files', extensions: ['*'] },
-];
+// Call-time function, not a module-level const, so the filter names re-read
+// the active locale (spec 046 #8) instead of freezing it at import.
+export function calibrationFileFilters(): FileFilter[] {
+  return [
+    { name: m.picker_filter_all_supported(), extensions: ['xisf', 'fits', 'fit', 'fts', 'tif', 'tiff'] },
+    { name: 'FITS', extensions: ['fit', 'fits', 'fts'] },
+    { name: 'XISF', extensions: ['xisf'] },
+    { name: 'TIFF', extensions: ['tif', 'tiff'] },
+    { name: m.picker_filter_all_files(), extensions: ['*'] },
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Last-path localStorage helpers (T012)

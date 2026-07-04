@@ -13,8 +13,8 @@
  *    correctly — regression guard.
  *
  * Mocking pattern mirrors InboxDetail.test.tsx:
- * - Mock '@/api/commands' (inboxReclassify vi.fn()) so the real store hook
- *   picks it up; classifyStore.invalidateAll() is harmless in jsdom.
+ * - Mock '@/bindings/index' (commands.inboxReclassify vi.fn()) so the real
+ *   store hook picks it up; classifyStore.invalidateAll() is harmless in jsdom.
  * - Render InboxDetail directly with fixture props — no InboxPage wrapper
  *   (avoids OOM from the full page tree).
  */
@@ -46,11 +46,17 @@ const mockInboxReclassify = vi.fn().mockResolvedValue({
   remainingUnclassified: 2,
 });
 
-vi.mock('@/api/commands', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@/api/commands')>();
+vi.mock('@/bindings/index', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/bindings/index')>();
   return {
     ...mod,
-    inboxReclassify: (...args: unknown[]) => mockInboxReclassify(...args),
+    commands: {
+      ...mod.commands,
+      inboxReclassify: async (...args: unknown[]) => ({
+        status: 'ok',
+        data: await mockInboxReclassify(...args),
+      }),
+    },
   };
 });
 

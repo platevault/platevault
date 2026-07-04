@@ -43,12 +43,14 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { listTargets } from '@/api/commands';
-import type { TargetListItem } from '@/api/commands';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import type { TargetListItem } from '@/bindings/index';
 import { PageTopBar, FilterToolbar, ListPageLayout } from '@/components';
 import type { FilterOption } from '@/components';
 import { m } from '@/lib/i18n';
 import { Btn, EmptyState } from '@/ui';
+import { useGrouping } from '@/lib/use-grouping';
 import { AddTargetDialog } from './AddTargetDialog';
 import { TargetDetailV2 } from './TargetDetailV2';
 import {
@@ -63,9 +65,8 @@ import {
 import {
   TargetsTable,
   DEFAULT_TARGET_SORT,
-  DEFAULT_TARGET_GROUP_BY,
 } from './TargetsTable';
-import type { TargetSort, TargetSortCol, TargetGroupBy } from './TargetsTable';
+import type { TargetSort, TargetSortCol } from './TargetsTable';
 import { rowAltitudeFor, type FilterBand } from './planner-altitude';
 import { useAltitudeThreshold } from './altitude-settings';
 import { useFavourites } from './useFavourites';
@@ -97,16 +98,19 @@ const MY_TARGETS_VALUE = 'my';
  */
 const MY_TARGETS_EMPTY: TargetListItem[] = [];
 
-/** Group-by options for the Planner top bar (mirrors the other list pages). */
-const GROUP_BY_OPTIONS: FilterOption[] = [
+/** Multi-level grouping dimensions for the Planner top bar. */
+// Render-time factory (spec 046 #8b) so labels re-read the active locale.
+const TARGETS_DIMENSIONS = (): FilterOption[] => [
   { value: 'catalogue', label: m.cmp_target_search_catalogue_label() },
   { value: 'type', label: m.targets_groupby_object_type() },
+  { value: 'constellation', label: m.targets_dim_constellation() },
+  { value: 'filters', label: m.targets_dim_applicable_filters() },
 ];
 
 /** Catalogue multi-select options, in canonical display order. */
 const CATALOGUE_OPTIONS: FilterOption[] = PLANNER_CATALOGS.map((c) => ({
   value: c.id,
-  label: c.label,
+  label: c.label(),
 }));
 
 /**
@@ -154,7 +158,8 @@ export function matchesSearch(t: TargetListItem, query: string): boolean {
 }
 
 /** My Targets filter options for the FilterToolbar single-select (#91). */
-const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
+// Render-time factory (spec 046 #8b) so the label re-reads the active locale.
+const MY_TARGETS_FILTER_OPTIONS = (): FilterOption[] => [
   { value: MY_TARGETS_VALUE, label: m.nav_my_targets() },
 ];
 
@@ -167,7 +172,8 @@ const MY_TARGETS_FILTER_OPTIONS: FilterOption[] = [
  * shows only rows where both are recommended — which in the simple mock means
  * any narrowband-possible target. MOCK — not astronomy.
  */
-const FILTER_BAND_OPTIONS: FilterOption[] = [
+// Render-time factory (spec 046 #8b) so band labels re-read the active locale.
+const FILTER_BAND_OPTIONS = (): FilterOption[] => [
   { value: 'L', label: m.targets_band_l_lum() },
   { value: 'R', label: m.targets_band_r() },
   { value: 'G', label: m.targets_band_g() },
@@ -186,7 +192,14 @@ export function TargetsPage() {
   const [myTargetsFilter, setMyTargetsFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<TargetSort>(DEFAULT_TARGET_SORT);
-  const [groupBy, setGroupBy] = useState<TargetGroupBy>(DEFAULT_TARGET_GROUP_BY);
+  const { dims, setSlot } = useGrouping({
+    storageKey: 'targets.grouping.dims.v1',
+    validIds: ['catalogue', 'type', 'constellation', 'filters'],
+    // defaultDims is empty: when no dims are selected the table falls back to
+    // the legacy single-tier groupBy='catalogue' path which preserves the
+    // sort-group ordering that the existing tests exercise.
+    defaultDims: [],
+  });
   // Catalogue multi-select: initialized from the persisted default-enabled
   // catalogues (Settings → Target Resolution), falling back to the in-code
   // default subset until that load resolves.
@@ -229,7 +242,9 @@ export function TargetsPage() {
 
   const load = useCallback(() => {
     setListState({ status: 'loading' });
-    listTargets()
+    commands
+      .targetList()
+      .then(unwrap)
       .then((items) => setListState({ status: 'loaded', items }))
       .catch(() => setListState({ status: 'error', message: m.targets_page_error_load() }));
   }, []);
@@ -325,7 +340,7 @@ export function TargetsPage() {
               key: 'myTargets',
               label: m.targets_filter_show_label(),
               value: myTargetsFilter,
-              options: MY_TARGETS_FILTER_OPTIONS,
+              options: MY_TARGETS_FILTER_OPTIONS(),
               onChange: setMyTargetsFilter,
               allLabel: m.targets_page_filter_all_targets(),
             },
@@ -349,14 +364,14 @@ export function TargetsPage() {
               key: 'filterBands',
               label: m.common_filters(),
               value: filterBands,
-              options: FILTER_BAND_OPTIONS,
+              options: FILTER_BAND_OPTIONS(),
               onChange: (v) => setFilterBands(v as FilterBand[]),
             },
           ]}
-          groupBy={{
-            value: groupBy,
-            options: GROUP_BY_OPTIONS,
-            onChange: (v) => setGroupBy(v as TargetGroupBy),
+          grouping={{
+            dimensions: TARGETS_DIMENSIONS(),
+            dims,
+            setSlot,
           }}
         />
       }
@@ -400,7 +415,7 @@ export function TargetsPage() {
             loading={listState.status === 'loading'}
             sort={sort}
             onSort={handleSort}
-            groupBy={groupBy}
+            dims={dims}
             usableAltDeg={usableAltDeg}
             // task #18: pass the local favourite set down so the star column renders correctly.
             // STUB: localStorage only until task #54 backend linkage lands.

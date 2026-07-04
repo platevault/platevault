@@ -20,7 +20,6 @@ import {
   INBOX_GROUPS,
   PROJECT_STATES,
   INVENTORY_FRAME_FILTERS,
-  REVIEW_FILTERS,
 } from '@/lib/route-contract';
 
 /** String `selected` redirect for routes where IDs are UUIDs (e.g. sessions). */
@@ -51,7 +50,6 @@ const sessionsRoute = createRoute({
     // Spec 006 inventory filters — applied server-side by inventory.list.
     sourceFilter: parseEnum(['all'] as const),
     frameFilter: parseEnum(INVENTORY_FRAME_FILTERS),
-    reviewFilter: parseEnum(REVIEW_FILTERS),
   }),
   component: lazyRouteComponent(
     () => import('@/features/sessions/SessionsPage'),
@@ -171,7 +169,9 @@ const projectNewRoute = createRoute({
 const archiveRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/archive',
-  validateSearch: makeValidateSearch({ selected: parseNumber }),
+  // spec 017 WP-B: archive ids are project UUID strings, not the legacy
+  // numeric fixture index.
+  validateSearch: makeValidateSearch({ selected: parseString }),
   component: lazyRouteComponent(
     () => import('@/features/archive/ArchivePage'),
     'ArchivePage',
@@ -212,6 +212,21 @@ const devContractsRoute = DEV_TOOLS_ENABLED
       component: lazyRouteComponent(
         () => import('@/dev/ContractsPage'),
         'ContractsPage',
+      ),
+    })
+  : null;
+
+// Hidden devMode toggle (spec 021 T032). Deliberately NOT added to the
+// command palette's DEV_PAGES and NOT linked from Settings — reachable only
+// by typing `/dev/settings` directly. Same compile-time gate as
+// `devContractsRoute` above.
+const devSettingsRoute = DEV_TOOLS_ENABLED
+  ? createRoute({
+      getParentRoute: () => shellRoute,
+      path: '/dev/settings',
+      component: lazyRouteComponent(
+        () => import('@/dev/DevSettingsPage'),
+        'DevSettingsPage',
       ),
     })
   : null;
@@ -265,6 +280,8 @@ const routeTree = rootRoute.addChildren([
     settingsPaneRoute,
     // Developer Contract Diagnostics (spec 021 / T075): only present in dev-tools builds.
     ...(devContractsRoute ? [devContractsRoute] : []),
+    // Hidden devMode toggle (spec 021 / T032): only present in dev-tools builds.
+    ...(devSettingsRoute ? [devSettingsRoute] : []),
   ]),
 ]);
 

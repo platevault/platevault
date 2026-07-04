@@ -42,12 +42,15 @@ use contracts_core::calibration_match::{
     contract_to_kind, kind_to_contract, match_to_dto, AssignErrorDetails, AssignErrorDto,
     AssignedDto, BatchErrorDto, BatchSessionResultDto, CalibrationMatchAssignRequest,
     CalibrationMatchAssignResponse, CalibrationMatchBatchRequest, CalibrationMatchBatchResponse,
-    CalibrationMatchSuggestRequest, CalibrationMatchSuggestResponse, SuggestErrorDto,
-    SuggestStatus, ASSIGN_CONTRACT_VERSION, BATCH_CONTRACT_VERSION, SUGGEST_CONTRACT_VERSION,
+    CalibrationMatchDto, CalibrationMatchSuggestRequest, CalibrationMatchSuggestResponse,
+    SuggestErrorDto, SuggestStatus, ASSIGN_CONTRACT_VERSION, BATCH_CONTRACT_VERSION,
+    SUGGEST_CONTRACT_VERSION,
 };
 use domain_core::ids::Timestamp;
 use persistence_db::repositories::calibration_assignment::{self as assign_repo, UpsertParams};
+use persistence_db::repositories::inventory::{get_session_context_by_ids, SessionContextRow};
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -111,7 +114,16 @@ pub async fn suggest(
                 "ambiguous" => SuggestStatus::Ambiguous,
                 _ => SuggestStatus::NoMatch,
             };
-            let dto_matches: Vec<_> = matches.iter().filter_map(match_to_dto).collect();
+            // P9: enrich with session context (target/filter/night/frame
+            // count) — one batched lookup, not N+1. All candidates share the
+            // same `req.session_id` here (single-session suggest).
+            let session_ctx =
+                load_session_contexts(pool, std::slice::from_ref(&req.session_id)).await;
+            let dto_matches: Vec<_> = matches
+                .iter()
+                .filter_map(match_to_dto)
+                .map(|dto| apply_session_context(dto, &session_ctx))
+                .collect();
             Ok(CalibrationMatchSuggestResponse {
                 status: "success".to_owned(),
                 contract_version: SUGGEST_CONTRACT_VERSION.to_owned(),
@@ -164,6 +176,11 @@ pub async fn batch_suggest(
 
     let masters = load_masters(pool, &types_ref).await?;
 
+    // P9: one batched session-context lookup for the whole request, keyed by
+    // every requested session id — not a per-session (N+1) query inside the
+    // loop below.
+    let session_ctx = load_session_contexts(pool, &req.session_ids).await;
+
     let mut results: Vec<BatchSessionResultDto> = Vec::new();
     let mut errors: Vec<BatchErrorDto> = Vec::new();
 
@@ -207,6 +224,7 @@ pub async fn batch_suggest(
                                         .iter()
                                         .filter(|m| m.calibration_type == *kind)
                                         .filter_map(match_to_dto)
+                                        .map(|dto| apply_session_context(dto, &session_ctx))
                                         .collect();
                                     let kind_matches: Vec<_> = matches
                                         .iter()
@@ -436,6 +454,55 @@ fn error_assign_response(
             details: dimensions.map(|d| AssignErrorDetails { dimensions: d }),
         }),
     }
+}
+
+// ── Session context enrichment (spec P9) ──────────────────────────────────────
+//
+// `calibration_core::suggest` is pure domain (no DB access — see module docs).
+// Target/filter/night/frame-count context is resolved here, in the same layer
+// that already loads sessions and masters from persistence, as a
+// post-processing pass over the DTOs `match_to_dto` produced with those
+// fields left `None`.
+
+/// Batch-load session context for a set of session ids and index it by id.
+///
+/// Always a single query (`persistence_db::repositories::inventory::
+/// get_session_context_by_ids`) regardless of how many ids are requested.
+/// Ids that don't resolve (unknown session, or a session with no context)
+/// are simply absent from the returned map — callers must treat a missing
+/// key the same as "no context available", not an error.
+async fn load_session_contexts(
+    pool: &SqlitePool,
+    session_ids: &[String],
+) -> HashMap<String, SessionContextRow> {
+    // Dedup before querying — batch callers (batch_suggest) may pass the same
+    // id from overlapping calibration types.
+    let mut seen = std::collections::HashSet::new();
+    let unique_ids: Vec<String> =
+        session_ids.iter().filter(|id| seen.insert((*id).clone())).cloned().collect();
+
+    match get_session_context_by_ids(pool, &unique_ids).await {
+        Ok(rows) => rows.into_iter().map(|row| (row.id.clone(), row)).collect(),
+        // A lookup failure degrades to "no context" rather than failing the
+        // whole suggest response — context is presentational, not load-bearing.
+        Err(_) => HashMap::new(),
+    }
+}
+
+/// Apply resolved session context onto a `CalibrationMatchDto`, keyed by
+/// `dto.session_id`. Leaves the DTO's context fields as `None` when the
+/// session id has no entry in `ctx` (unknown session, or missing metadata).
+fn apply_session_context(
+    mut dto: CalibrationMatchDto,
+    ctx: &HashMap<String, SessionContextRow>,
+) -> CalibrationMatchDto {
+    if let Some(row) = ctx.get(&dto.session_id) {
+        dto.target_name = row.target_name.clone();
+        dto.filter = row.filter.clone();
+        dto.acquisition_night = row.acquisition_night.clone();
+        dto.frame_count = u32::try_from(row.frame_count).ok();
+    }
+    dto
 }
 
 // ── DB loading helpers ────────────────────────────────────────────────────────
@@ -679,6 +746,15 @@ async fn load_master_by_id(
 /// Load `MatchingRuleConfig` from persisted settings keys, falling back to defaults.
 async fn load_config(pool: &SqlitePool) -> MatchingRuleConfig {
     let mut config = MatchingRuleConfig::default();
+
+    // `require_same_offset` is persisted on the `calibration_tolerances`
+    // singleton row (migration 0051), not the generic settings key/value
+    // store — it's user-controlled via the Settings > Calibration Matching
+    // "Offset match required" toggle (spec 043 P8). Falls back to
+    // `MatchingRuleConfig::default()` (true) on read failure.
+    if let Ok(row) = persistence_db::repositories::calibration_tolerances::get(pool).await {
+        config.require_same_offset = row.require_same_offset;
+    }
 
     if let Ok(Some(v)) = persistence_db::repositories::settings::get_raw(pool, KEY_DARK_TEMP).await
     {
@@ -927,8 +1003,8 @@ mod masters_tests {
         let db = test_db().await;
 
         sqlx::query(
-            "INSERT INTO calibration_session (id, session_key, kind, state, created_at) \
-             VALUES ('cal-t1', 'dark-300s', 'dark', 'confirmed', '2026-06-01T00:00:00Z')",
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES ('cal-t1', 'dark-300s', 'dark', '2026-06-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await
@@ -965,8 +1041,8 @@ mod masters_tests {
         let db = test_db().await;
 
         sqlx::query(
-            "INSERT INTO calibration_session (id, session_key, kind, state, created_at) \
-             VALUES ('cal-t2', 'flat-2s-Ha', 'flat', 'confirmed', '2026-05-15T00:00:00Z')",
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES ('cal-t2', 'flat-2s-Ha', 'flat', '2026-05-15T00:00:00Z')",
         )
         .execute(db.pool())
         .await
@@ -1002,8 +1078,8 @@ mod masters_tests {
 
         // Insert acquisition session + fingerprint.
         sqlx::query(
-            "INSERT INTO acquisition_session (id, session_key, state, created_at) \
-             VALUES ('acq-t1', 'M31/L/2026-03-01/100/1x1', 'confirmed', '2026-03-01T00:00:00Z')",
+            "INSERT INTO acquisition_session (id, session_key, created_at) \
+             VALUES ('acq-t1', 'M31/L/2026-03-01/100/1x1', '2026-03-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await
@@ -1021,8 +1097,8 @@ mod masters_tests {
 
         // Insert calibration master fingerprint.
         sqlx::query(
-            "INSERT INTO calibration_session (id, session_key, kind, state, created_at) \
-             VALUES ('cal-t3', 'dark-300s-gain100', 'dark', 'confirmed', '2026-03-01T00:00:00Z')",
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES ('cal-t3', 'dark-300s-gain100', 'dark', '2026-03-01T00:00:00Z')",
         )
         .execute(db.pool())
         .await
@@ -1041,5 +1117,41 @@ mod masters_tests {
         let masters = masters_list(db.pool()).await.unwrap();
         assert_eq!(masters.len(), 1);
         assert_eq!(masters[0].id, "cal-t3");
+    }
+
+    /// Spec 043 P8: `load_config` defaults `require_same_offset` to true on a
+    /// fresh DB, matching `MatchingRuleConfig::default()` (migration 0008/0051
+    /// seed row).
+    #[tokio::test]
+    async fn load_config_defaults_require_same_offset_true() {
+        let db = test_db().await;
+        let config = load_config(db.pool()).await;
+        assert!(config.require_same_offset);
+    }
+
+    /// Spec 043 P8: the Settings > Calibration Matching "Offset match
+    /// required" toggle persists via `calibration_tolerances` and must feed
+    /// `MatchingRuleConfig::require_same_offset` on the next `load_config`
+    /// call — this is the engine-side half of closing the STUB-OFFSET-REQUIRED
+    /// gap.
+    #[tokio::test]
+    async fn load_config_reads_require_same_offset_from_tolerances_table() {
+        let db = test_db().await;
+
+        let row = persistence_db::repositories::calibration_tolerances::CalibrationTolerancesRow {
+            temperature_tolerance_c: 5.0,
+            exposure_tolerance_s: 2.0,
+            aging_limit_days: 365,
+            require_same_camera: true,
+            require_same_gain: true,
+            require_same_binning: true,
+            require_same_offset: false,
+        };
+        persistence_db::repositories::calibration_tolerances::update(db.pool(), &row)
+            .await
+            .unwrap();
+
+        let config = load_config(db.pool()).await;
+        assert!(!config.require_same_offset, "toggling off must reach MatchingRuleConfig");
     }
 }
