@@ -285,7 +285,15 @@ research/specs, not snap calls.
   queued). Revert path: if the user prefers a pure lifecycle flip, relax the
   archived→ready requires_plan edge instead. USER QUESTION on return.
 
-## Conflicts registry
+- **D24 (2026-07-04, autonomous — WP-B/PR #401)**: archive plans move files to an
+  app-managed archive folder (`.astro-plan-archive/<planId>/`) instead of the spec-015
+  token-pattern destination, so management ops (trash/delete) key O(1) off
+  `archived_via_plan_id`. Deviates from 017 FR-008's letter; documented in the
+  archive_generator module header. Revert path: swap `to_relative_path` for a
+  pattern-resolved destination in `archive_generator::generate`. Spec 017 amendment must
+  record this (task #14 lane). Companion note: #401 also implemented the entity-filtered
+  `audit.list` read (D6 dependency) which overlapped #388's broad-path wiring — resolved
+  at rebase by keeping both capabilities.
 
 - **C1 — RESOLVED 18:47Z (by fleet)**: the two i18n commits were byte-identical patches
   (`git patch-id` match); the "3-line difference" was parent-inherited, not real. PR #381
