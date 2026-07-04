@@ -463,6 +463,8 @@ export async function mockInvoke(
         channels: [],
         auditId: 'mock-audit-id',
         createdAt: new Date().toISOString(),
+        // mkdir-only scaffolding auto-applies (user decision 2026-07-04).
+        scaffoldApplied: true,
       } satisfies ProjectCreateResult_Serialize;
     }
     case 'projects_update': {

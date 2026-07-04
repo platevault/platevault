@@ -319,6 +319,62 @@ describe('T078c: create project end-to-end', () => {
     });
   });
 
+  it('confirms folder creation when the scaffolding plan auto-applied (scaffoldApplied: true)', async () => {
+    mockCallCreateProject.mockResolvedValue({
+      projectId: 'proj-new-003',
+      lifecycle: 'setup_incomplete',
+      planId: 'plan-003',
+      channels: [],
+      auditId: 'audit-003',
+      createdAt: '2026-07-04T00:00:00Z',
+      scaffoldApplied: true,
+    });
+
+    render(<WizardPage />);
+    await advanceToReview('NGC 891');
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('wizard-create-btn'));
+    });
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'success',
+          message: expect.stringContaining('project folders created'),
+        }),
+      );
+    });
+  });
+
+  it('shows the failure toast when scaffolding auto-apply failed (scaffoldApplied: false)', async () => {
+    mockCallCreateProject.mockResolvedValue({
+      projectId: 'proj-new-004',
+      lifecycle: 'setup_incomplete',
+      planId: 'plan-004',
+      channels: [],
+      auditId: 'audit-004',
+      createdAt: '2026-07-04T00:00:00Z',
+      scaffoldApplied: false,
+    });
+
+    render(<WizardPage />);
+    await advanceToReview('IC 1396');
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('wizard-create-btn'));
+    });
+
+    await waitFor(() => {
+      expect(mockAddToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'error',
+          message: expect.stringContaining('folder creation failed'),
+        }),
+      );
+    });
+  });
+
   it('routes a name.* backend error back to the name step instead of a toast', async () => {
     mockCallCreateProject.mockRejectedValue(new Error('name.duplicate'));
 
@@ -392,4 +448,3 @@ describe('T078c: create project end-to-end', () => {
     expect(mockCallCreateProject).not.toHaveBeenCalled();
   });
 });
-
