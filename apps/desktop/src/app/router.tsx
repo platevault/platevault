@@ -169,7 +169,9 @@ const projectNewRoute = createRoute({
 const archiveRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/archive',
-  validateSearch: makeValidateSearch({ selected: parseNumber }),
+  // spec 017 WP-B: archive ids are project UUID strings, not the legacy
+  // numeric fixture index.
+  validateSearch: makeValidateSearch({ selected: parseString }),
   component: lazyRouteComponent(
     () => import('@/features/archive/ArchivePage'),
     'ArchivePage',
