@@ -4,7 +4,7 @@
 
 **Created**: 2026-07-04
 
-**Status**: Draft
+**Status**: Clarified (all open questions resolved 2026-07-04)
 
 **Input**: User description: "Restore source-view generation: the app generates a
 processing-tool-ready (WBPP/PixInsight-first) project input directory on disk —
@@ -115,8 +115,9 @@ confirm the tree structure changes accordingly without touching canonical data.
    pattern is changed, **Then** regenerating the view produces the new folder
    structure using the same canonical sources, with no image processing performed.
 3. **Given** two source frames would map to the same destination path under a
-   layout, **When** the plan is built, **Then** the collision is surfaced and
-   deterministically disambiguated (never silently merged or dropped).
+   layout, **When** the plan is built, **Then** it is refused with a validation
+   error that points at the offending pattern (collisions are impossible by
+   construction — never silently suffixed, merged, or dropped).
 
 ---
 
@@ -181,25 +182,30 @@ filesystem mutation and without auto-repair.
   (junction for directories / hardlink for same-volume files) or **refuses** with
   a clear reason — it never silently copies. Copy requires explicit per-generation
   opt-in.
-- **Cross-drive selection**: selected lights span multiple volumes but the
-  destination can only hardlink same-volume files → surfaced to the user; the app
-  does not silently produce a mixed-kind view (see Open Question OQ-2 and the
-  spec 026 single-kind invariant).
+- **Cross-drive selection**: selected lights span multiple volumes. The link kind
+  is resolved per drive-scope from the settings pair (intra-drive default vs
+  cross-drive default) and recorded per item; the cross-drive selector never offers
+  `hardlink`. A capability-drift fallback (e.g., symlink privilege lost) is surfaced
+  as a non-silent plan-time notice (FR-004b) — the app never silently copies or
+  produces an unrecorded kind.
 - **Missing / unresolved source frame at generation time**: surfaced (skipped and
   flagged); the whole view is not failed for one missing item unless the user
   chooses strict mode.
 - **Moved or remapped library root**: sources resolve via root + relative path
   (Constitution I), not stale absolute paths.
 - **Case-insensitive / case-preserving destination filesystem**: two sources
-  differing only by case must not silently collide; the collision is surfaced and
-  disambiguated or refused, never silently merged.
+  differing only by case must not silently collide; the collision is a plan
+  validation error (FR-009a/FR-017) that refuses the plan — never silently merged
+  or suffixed.
 - **Windows long paths (> 260 chars)**: surfaced as a plan warning/failure with a
   clear reason rather than a truncated or partially-created tree.
 - **Destination path already exists as a user-owned file/folder**: surfaced in the
   plan; never silently overwritten (Constitution II — never overwrite silently).
-- **Duplicate frame filenames across sessions** mapped into the same grouping
-  folder: disambiguated deterministically (e.g., session/night token in the path);
-  the mapping is recorded, never dropped.
+- **Duplicate frame filenames across sessions**: each session links into its own
+  directory by construction; where a profile layout aggregates across sessions the
+  pattern MUST carry a session/night/setup token. Any residual same-path collision
+  is a plan validation error (FR-009a) that refuses and points at the pattern —
+  never a silent suffix.
 - **Generated links treated as originals by cleanup**: prevented — link nature is
   recorded so spec 016/017 protection never offers a generated link as an original
   cleanup candidate.
@@ -220,11 +226,33 @@ filesystem mutation and without auto-repair.
 - **FR-003**: Generation MUST default to **link** materialization (symlink) and
   MUST NOT copy by default. Copy materialization MUST require an explicit
   per-generation user opt-in.
-- **FR-004**: The link strategy MUST be resolved by a **filesystem-capability
-  check** of the destination and each source's volume, choosing in order:
-  `symlink` → `junction` (Windows directories) → `hardlink` (same-volume files) →
-  refuse (or explicit copy opt-in). The detected capability and the chosen kind
-  MUST be shown to the user before apply.
+- **FR-004**: The link strategy MUST be resolved **deterministically at plan time**
+  from a **settings pair** — a default link kind for **intra-drive**
+  (source and destination on the same volume) and a default link kind for
+  **cross-drive** (source and destination on different volumes) — applied per
+  `(view × drive-scope)`. Each source item is classified by drive-scope, the
+  matching default kind is chosen, and the resolved kind is **recorded per item**
+  (`PreparedSourceViewItem.materialization`). The detected capability and the
+  resolved kind(s) MUST be shown to the user before apply.
+- **FR-004a**: The settings surface (settings pane **and** the generation dialog)
+  MUST offer only **currently-valid** kinds so an invalid choice is impossible by
+  construction: (a) the **cross-drive** selector MUST NOT offer `hardlink`
+  (hardlinks cannot cross volumes by definition); (b) `symlink` options MUST be
+  **greyed out with Developer Mode guidance** when symlink creation is unavailable
+  on the platform (Windows without the symlink privilege), consistent with FR-004c.
+  Because the saved settings are already capability-constrained, the plan-time
+  fallback is a **rare edge path**, not a routine prompt.
+- **FR-004b**: When, at plan time, a saved link kind is no longer achievable for a
+  source's drive-scope (**capability drift** — e.g., Developer Mode revoked since
+  the setting was saved, or the target volume is FAT/exFAT/SMB lacking support),
+  the system MUST resolve the documented fallback for that drive-scope and surface
+  a **non-silent plan-time notice** naming the affected items, the requested kind,
+  and the applied fallback. It MUST NOT silently copy and MUST NOT silently produce
+  an unrecorded kind.
+- **FR-004c**: When symlink creation is unavailable on the platform, the symlink
+  option MUST be **disabled (greyed out) with Developer Mode instructions** at
+  selection time in both the settings pane and the generation dialog — it MUST NOT
+  be a hard error raised only after the user selects it.
 - **FR-005**: Every generated link MUST be recorded as an **app-created
   projection** (not original data) so inventory, cleanup, and protection
   (specs 016/017/048) never treat it as an original file.
@@ -243,8 +271,25 @@ filesystem mutation and without auto-repair.
 - **FR-009**: The tree grouping (e.g., WBPP: session/night → filter → exposure)
   MUST be expressed via the shared **token-pattern resolver** (crate `patterns`,
   spec 015) so grouping is configurable per profile rather than fixed in code.
+  Each session's frames MUST link into their **own directory**; where a profile
+  layout aggregates frames across sessions, the pattern MUST carry a
+  session/night/setup token so collisions are impossible by construction (FR-009a).
+- **FR-009a**: Destination-path collisions MUST be **impossible by construction**.
+  If two source frames resolve to the same destination path under a layout (e.g.,
+  an aggregating pattern missing a session/night/setup token), plan building MUST
+  raise a **validation error** that refuses the plan and points at the offending
+  pattern. The system MUST NOT apply a silent suffix, MUST NOT silently merge, and
+  MUST NOT drop either frame.
 - **FR-010**: Matched calibration frames/masters MUST be placed in the active
-  profile's expected calibration location within the generated tree.
+  profile's expected calibration location within the generated tree. Whether raw
+  calibration frames or masters are linked MUST follow the **active profile and the
+  resolved calibration match** — masters when the match resolved masters (spec 040),
+  otherwise the matched raw calibration sets.
+- **FR-010a**: Calibration matching MUST NOT be a prerequisite for generation. When
+  a project has selected lights but no (or partial) calibration matches, the system
+  MUST still generate the light-frame view and MUST surface a **plan-review warning
+  "no calibration applied"** listing the unmatched light groups. Generation MUST NOT
+  auto-run matching.
 - **FR-011**: The system MUST NOT generate any WBPP/PixInsight configuration,
   process-icon, `.xpsm`, `.xosm`, or equivalent tool-control files — **only** the
   input image tree (Constitution III — PixInsight boundary).
@@ -273,7 +318,8 @@ filesystem mutation and without auto-repair.
   silently clobbered.
 - **FR-017**: On case-insensitive/case-preserving destination filesystems, two
   sources differing only by case MUST NOT silently collide; the collision MUST be
-  surfaced and disambiguated or refused.
+  surfaced as a plan **validation error** (per FR-009a) — refused, never silently
+  suffixed or merged.
 - **FR-018**: On Windows, destination paths exceeding the classic 260-character
   limit MUST be surfaced as a clear plan warning/failure rather than producing a
   truncated or partial tree.
@@ -287,10 +333,24 @@ filesystem mutation and without auto-repair.
 - **FR-021**: Generation MUST be permitted only for project lifecycle states
   consistent with spec 026 (FR-012 there); the plan MUST route through the spec
   017/025 review→approve→apply pipeline and MUST NOT bypass it.
-- **FR-022**: A single generated view MUST have a single materialization kind per
-  spec 026 FR-008. Where a cross-drive or capability situation would force mixed
-  kinds, the system MUST surface it and MUST NOT silently produce a mixed-kind view
-  (see OQ-2).
+- **FR-021a**: The generation plan MUST use a distinct plan origin
+  `prepared_view_generation` (plan type `source_view_generation`), separate from
+  spec 026's `prepared_view_regeneration`, so first-materialization is routed and
+  audited distinctly from regeneration-after-removal (regeneration stays on spec
+  026's origin).
+- **FR-021b**: The generated view's destination MUST default to an app-owned
+  project-envelope subfolder `<project>/source-views/<view>/` (spec 024). A
+  **per-project override** MUST be persistable, and a **per-generation override**
+  MUST be settable in the generation dialog. Destination overrides MUST still obey
+  all cross-platform safety FRs (no silent overwrite, collision refusal, long-path
+  handling).
+- **FR-022**: A generated view's materialization kind MUST be **resolved
+  deterministically per drive-scope** from the settings pair (FR-004) and
+  **recorded per item**. This relaxes spec 026 FR-008's single-kind-per-view
+  invariant to *deterministic kind per drive-scope, recorded* (spec 026 amended
+  accordingly). The system MUST NOT produce an **unrecorded or non-deterministic**
+  mixed-kind view: every item's kind is chosen by rule and stored, and any
+  capability-drift fallback is surfaced non-silently (FR-004b).
 
 ### Key Entities *(include if feature involves data)*
 
@@ -305,10 +365,17 @@ filesystem mutation and without auto-repair.
   materialization kind.
 - **View Generation Plan** (new `FilesystemPlan` variant): a reviewable plan whose
   actions are per-item link-creation (or, with opt-in, copy) resolved against
-  current inventory paths; parallels spec 026's `ViewRegenerationPlan` (see OQ-1).
+  current inventory paths, carrying the distinct origin `prepared_view_generation`
+  (plan type `source_view_generation`); parallels spec 026's `ViewRegenerationPlan`.
+- **Link-Kind Settings Pair** (spec 018 KV): two persisted settings —
+  `source_view_link_kind_intra_drive` (default `hardlink`) and
+  `source_view_link_kind_cross_drive` (default `symlink`) — that supply the
+  deterministic per-drive-scope link kind resolved at plan time. Stored as flat
+  `SettingsState` fields (no migration; spec 018 settings KV).
 - **Filesystem Capability Result**: the destination/volume link-capability probe
   outcome (symlink/junction/hardlink availability, privilege, cross-volume
-  constraints) shown to the user before apply.
+  constraints) used to constrain the settings/dialog choices and to detect
+  capability drift at plan time.
 - **Workflow Profile** (spec 011): selects the tree layout; WBPP is the first
   profile.
 - **Layout Pattern** (spec 015 token pattern): the per-profile grouping expression
@@ -338,9 +405,11 @@ filesystem mutation and without auto-repair.
 
 ## Assumptions
 
-- The project already has a selection of light frames and existing calibration
-  matches (specs 007/040); this feature **consumes** matches, it does not compute
-  them. If no matches exist, the user is prompted to run matching first.
+- The project already has a selection of light frames; this feature **consumes**
+  calibration matches (specs 007/040), it does not compute them. Matching is **not**
+  a prerequisite: when no (or partial) matches exist the light view is still
+  generated and a "no calibration applied" warning lists the unmatched groups
+  (FR-010a); matching is never auto-run.
 - Per-frame selection granularity depends on spec **048** per-frame inventory;
   where per-frame records exist, selection and linking are per frame (missing
   frames excluded per 048 FR-009); otherwise selection falls back to session level.
@@ -349,9 +418,10 @@ filesystem mutation and without auto-repair.
   executor.
 - Removal, regeneration-after-removal, and stale detection are provided by spec 026
   and reused unchanged.
-- The generated view lives in the app-owned project workspace/envelope (crate
-  `project/structure`, spec 024) by default; a user-chosen destination is a
-  configurable override (OQ-6).
+- The generated view lives in the app-owned project envelope subfolder
+  `<project>/source-views/<view>/` (crate `project/structure`, spec 024) by
+  default; a per-project override is persistable and a per-generation override is
+  settable in the dialog (FR-021b).
 - WBPP is the first and only profile shipped with a defined layout; other tools'
   layouts are future profiles.
 
@@ -372,45 +442,44 @@ filesystem mutation and without auto-repair.
 - **The `hardlink`-as-primary strategy details and the settings UI for per-root
   behavior** beyond what the capability check needs.
 
-## Clarifications / Open Questions (documented defaults — not blocking)
+## Clarifications
 
-Per SpecKit clarify discipline, the following are recorded with a chosen default so
-review can proceed. Each default is what implementation should assume absent a
-different decision.
+All nine open questions were resolved by the user on 2026-07-04 and folded into the
+requirements above. Resolutions (traceability):
 
-- **OQ-1 — Generation plan origin.** Add a distinct
-  `PlanOrigin::PreparedViewGeneration` (`prepared_view_generation`) for
-  first-materialization, or reuse spec 026's `prepared_view_regeneration`?
-  **Default:** add a distinct `prepared_view_generation` origin — parallel to
-  removal/regeneration, clearer audit routing; regeneration-after-removal stays on
-  spec 026's origin.
-- **OQ-2 — Cross-drive mixed-kind (conflict with spec 026 FR-008).** Spec 026
-  requires a single materialization kind per view. When selected lights span
-  multiple volumes and the destination can only hardlink same-volume files, one
-  uniform kind may be impossible. **Default:** resolve one kind for the whole view;
-  if impossible, **refuse** generation with a clear reason and let the user choose
-  copy-opt-in or a different destination — never auto-produce a mixed-kind view.
-  Relaxing 026 (per-item kind, or per-volume sub-views) would require a **spec 026
-  amendment** — flagged below.
-- **OQ-3 — No link type available at all.** **Default:** refuse and require explicit
-  per-generation copy opt-in; never silently copy.
-- **OQ-4 — Which calibration to link (raw frames vs masters).** **Default:** follow
-  the active profile and the resolved calibration match — masters when the match
-  resolved masters (spec 040), else the matched raw calibration sets; expose both to
-  the user.
-- **OQ-5 — Filename collisions across sessions in a flat grouping.** **Default:**
-  disambiguate via a session/night token in the layout pattern; if still colliding,
-  suffix deterministically and record the mapping — never drop.
-- **OQ-6 — Destination location.** **Default:** an app-owned project workspace
-  subfolder (spec 024 envelope), overridable to a user-chosen folder per generation.
-- **OQ-7 — Matching prerequisite.** **Default:** consume existing spec 007/040
-  matches; if none exist, prompt the user to run matching first — never auto-match
-  silently.
-- **OQ-8 — Windows symlink privilege.** **Default:** the capability check detects
-  lack of privilege and falls back to junction (dirs) / hardlink (same-volume
-  files); if neither works, refuse with guidance (e.g., enable Developer Mode) —
-  never silent copy.
-- **OQ-9 — Selection granularity vs spec 048.** **Default:** per-frame selection
+- **CL-1 (was OQ-1) — Generation plan origin.** Add a distinct
+  `prepared_view_generation` plan origin (plan type `source_view_generation`) for
+  first-materialization, separate from spec 026's `prepared_view_regeneration`;
+  regeneration-after-removal stays on spec 026's origin. → FR-021a; requires
+  migration `0061` to expand the `plans.origin` / `plan_type` CHECK constraints.
+- **CL-2 (was OQ-2) — Per-drive-scope link kind (relaxes spec 026 FR-008).** A
+  **settings pair** supplies the default link kind for **intra-drive** and for
+  **cross-drive**, resolved deterministically at plan time per `(view × drive-scope)`
+  and recorded per item, with a non-silent plan-time notice on capability-drift
+  fallback. The settings UI is **capability-constrained** so invalid choices are
+  impossible: the cross-drive selector never offers `hardlink`; symlink is greyed
+  out with Developer Mode guidance where unavailable (settings pane and dialog).
+  The plan-time fallback is therefore a rare drift-only edge path. → FR-004,
+  FR-004a, FR-004b, FR-004c, FR-022. **This relaxes spec 026 FR-008 (single kind
+  per view) → spec 026 amended** (deterministic kind per drive-scope, recorded).
+- **CL-3 (was OQ-3) — No link kind available.** Refuse with a clear error; copy is
+  an explicit per-generation opt-in only, never silent. → FR-003, FR-004b.
+- **CL-4 (was OQ-4) — Raw vs masters.** Follow the active profile and the resolved
+  calibration match — masters when the match resolved masters (spec 040), else the
+  matched raw calibration sets. → FR-010.
+- **CL-5 (was OQ-5) — Collisions.** Collisions are **impossible by construction**:
+  each session links into its own directory; aggregating layouts MUST carry a
+  session/night/setup token; any plan-time collision is a **validation error**
+  (refuse, point at the pattern) — never a silent suffix. → FR-009, FR-009a, FR-017.
+- **CL-6 (was OQ-6) — Destination.** Default `<project>/source-views/<view>/`
+  (project envelope, spec 024); per-project override persisted; per-generation
+  override in the dialog. → FR-021b.
+- **CL-7 (was OQ-7) — Matching not a prerequisite.** Generate anyway; plan review
+  shows a "no calibration applied" warning listing unmatched groups. → FR-010a.
+- **CL-8 (was OQ-8) — Symlink capability.** Capability check; where symlinks are
+  unavailable, grey out the symlink option in settings and dialog with Developer
+  Mode instructions (not a hard error at selection time). → FR-004a, FR-004c.
+- **CL-9 (was OQ-9) — Selection granularity vs spec 048.** Per-frame selection
   where 048 per-frame inventory exists (missing frames excluded per 048 FR-009);
   session-level fallback where per-frame records are absent.
 
@@ -421,8 +490,11 @@ different decision.
   2026-07-04). A cross-reference note is recorded in spec 026's spec.md. **Revert
   note:** if the product decision is reversed and generation is retired again, drop
   this spec and restore spec 026's obsolete banner.
-- **Spec 026 FR-008 single-kind tension** (OQ-2): recorded here and in spec 026.
-  Best-effort resolution: keep single-kind, refuse cross-drive-forced mixed rather
-  than violate the invariant. A future 026 amendment may relax this.
+- **Spec 026 FR-008 amended (CL-2).** The single-kind-per-view invariant is relaxed
+  to *deterministic kind per drive-scope, recorded per item*. Spec 026's spec.md and
+  data-model.md carry the amendment and a revert note. **Revert note:** to restore
+  the strict single-kind invariant, re-tighten spec 026 FR-008 and change this
+  spec's FR-004/FR-022 to refuse cross-drive-forced mixed views instead of resolving
+  per drive-scope.
 - **Spec 048 dependency**: per-frame selection depends on 048 per-frame inventory
-  (OQ-9). No conflict; this spec degrades gracefully to session-level selection.
+  (CL-9). No conflict; this spec degrades gracefully to session-level selection.
