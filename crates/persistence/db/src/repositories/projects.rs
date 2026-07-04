@@ -486,7 +486,7 @@ pub async fn update_project_lifecycle_unblock(
 }
 
 /// Record the archive plan that drove a project into the `archived` lifecycle
-/// state (spec 017 C5, migration 0051). Idempotent overwrite; does not touch
+/// state (spec 017 C5, migration 0053). Idempotent overwrite; does not touch
 /// `updated_at` so the archived timestamp set by the lifecycle transition is
 /// preserved.
 ///

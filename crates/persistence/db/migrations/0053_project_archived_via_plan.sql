@@ -1,4 +1,4 @@
--- Migration 0051: Spec 017 C5 archive support.
+-- Migration 0053: Spec 017 C5 archive support.
 --
 -- Two changes:
 --   1. Record which archive plan drove a project into the `archived` lifecycle
@@ -20,7 +20,7 @@ ALTER TABLE projects ADD COLUMN archived_via_plan_id TEXT;
 -- 2. plans.origin CHECK: add 'archive'.
 PRAGMA foreign_keys = OFF;
 
-CREATE TABLE plans_0051 (
+CREATE TABLE plans_0053 (
     id                       TEXT    NOT NULL PRIMARY KEY,
     number                   INTEGER NOT NULL,
     title                    TEXT    NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE plans_0051 (
     plan_type                TEXT    NOT NULL CHECK (plan_type IN ('split','restructure','cleanup','archive','source_map','project_create','source_view_removal','source_view_regeneration')),
     destructive_destination  TEXT    NOT NULL DEFAULT 'archive'
                                CHECK (destructive_destination IN ('archive','trash')),
-    parent_plan_id           TEXT    REFERENCES plans_0051(id),
+    parent_plan_id           TEXT    REFERENCES plans_0053(id),
     items_total              INTEGER NOT NULL DEFAULT 0,
     items_applied            INTEGER NOT NULL DEFAULT 0,
     items_failed             INTEGER NOT NULL DEFAULT 0,
@@ -44,9 +44,9 @@ CREATE TABLE plans_0051 (
     created_at               TEXT    NOT NULL
 );
 
-INSERT INTO plans_0051 SELECT * FROM plans;
+INSERT INTO plans_0053 SELECT * FROM plans;
 DROP TABLE plans;
-ALTER TABLE plans_0051 RENAME TO plans;
+ALTER TABLE plans_0053 RENAME TO plans;
 
 CREATE INDEX IF NOT EXISTS plans_state_created ON plans (state, created_at DESC);
 CREATE INDEX IF NOT EXISTS plans_parent        ON plans (parent_plan_id);
