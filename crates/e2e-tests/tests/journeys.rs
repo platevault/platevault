@@ -21,7 +21,8 @@
 //! trail) and `lifecycle_ledger_list` — those read paths sit closest to the
 //! mutations being proved, which stays the more robust assertion regardless.
 //!
-//! Run (CI): `cargo nextest run -p e2e_tests --profile e2e` (serial,
+//! Run (CI): `cargo nextest run -p e2e_tests --profile e2e
+//! --run-ignored all` (serial,
 //! `.config/nextest.toml`). Locally: build `desktop_shell --features e2e`,
 //! `cargo install tauri-webdriver --locked`, serve the frontend on :5173 with
 //! `VITE_E2E=1`, then run the same command — see `README.md`.
@@ -46,6 +47,7 @@ const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
 /// deterministic, network-free cache hit — no `wiremock`/`FakeResolver`
 /// needed at this layer.
 #[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn first_run_resolve_create_project() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
 
@@ -140,6 +142,7 @@ async fn first_run_resolve_create_project() -> anyhow::Result<()> {
 /// function `plans.apply_real` uses, just without a progress `Channel` — the
 /// exact real, channel-free equivalent this journey needs (see module docs).
 #[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
 
@@ -299,6 +302,7 @@ async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
 /// pipeline's target resolution is a real, network-free cache hit
 /// (`canonical_target_id` gets linked inline, not left pending).
 #[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn ingestion_sessions_search() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
 
@@ -455,6 +459,7 @@ async fn ingestion_sessions_search() -> anyhow::Result<()> {
 /// Backend REAL: `projects.create`, `lifecycle.transition.apply`,
 /// `lifecycle.ledger.list`.
 #[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn lifecycle_integrity() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
 
@@ -567,6 +572,7 @@ async fn lifecycle_integrity() -> anyhow::Result<()> {
 /// apply step as a follow-up once a channel-free apply path or a real UI
 /// Apply button exists.
 #[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn cleanup_plan_review() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
 

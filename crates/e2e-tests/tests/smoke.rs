@@ -6,7 +6,8 @@
 //! `main.tsx`) rather than an invented `window.__alm_lastError` global (that
 //! name never existed in the frontend — checked before wiring this up).
 //!
-//! Run: `cargo nextest run -p e2e_tests --profile e2e` (serial,
+//! Run: `cargo nextest run -p e2e_tests --profile e2e --run-ignored all`
+//! (serial,
 //! `.config/nextest.toml`).
 
 mod common;
@@ -32,6 +33,7 @@ const TOP_LEVEL_ROUTES: &[(&str, &str)] = &[
 /// Navigate to every top-level route and assert no uncaught render error
 /// surfaced the shared `AppErrorBoundary` fallback (FR-007).
 #[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn all_top_level_screens_load() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
 

@@ -18,9 +18,12 @@
 # - Journeys are real (spec 037 WP-C, 2026-07-04): first-run resolve+create,
 #   filesystem plan review->apply+durable-record, ingest->session->calibration
 #   ->search, lifecycle transition+ledger, cleanup plan review, and the
-#   all-top-level-screens-load smoke. `--no-tests=warn` is kept only as a
-#   defensive fallback (e.g. a future platform-specific #[ignore]); it should
-#   never actually trigger since every journey runs on all 3 OS uniformly.
+#   all-top-level-screens-load smoke. They are `#[ignore]`d in-source so the
+#   Layer-1 `cargo test --workspace` job (ci.yml) — which has no
+#   tauri-webdriver CLI, no e2e-feature app build, and no served frontend —
+#   skips them; this workflow opts back in with `--run-ignored all`.
+#   `--no-tests=warn` is kept only as a defensive fallback; it should never
+#   actually trigger since every journey runs on all 3 OS uniformly.
 # - The 3-OS matrix proves the runner AND the journeys work on every platform.
 # - This workflow runs independently of ci.yml (Layer-1 integration). Ordering /
 #   merge-gating is enforced by branch-protection required checks, not a
@@ -118,8 +121,8 @@ jobs:
       # Linux wraps in xvfb-run for a headless display; Windows/macOS run natively.
       - name: Run E2E (Linux — xvfb)
         if: runner.os == 'Linux'
-        run: xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --no-tests=warn
+        run: xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
 
       - name: Run E2E (Windows / macOS)
         if: runner.os != 'Linux'
-        run: cargo nextest run -p e2e_tests --profile e2e --no-tests=warn
+        run: cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn

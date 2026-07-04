@@ -11,7 +11,11 @@ Six journeys run against the real app + real SQLite + real filesystem:
 `first_run_resolve_create_project`, `plan_review_apply_with_audit`,
 `ingestion_sessions_search`, `lifecycle_integrity`, `cleanup_plan_review`
 (`tests/journeys.rs`), and `all_top_level_screens_load`
-(`tests/smoke.rs`). None are `#[ignore]`d. Durable-record proofs use
+(`tests/smoke.rs`). All six are `#[ignore]`d in-source purely so the
+Layer-1 `cargo test --workspace` job (ci.yml) — which has no
+`tauri-webdriver` CLI, no e2e-feature app build, and no served frontend —
+skips them; the e2e workflow opts back in with `--run-ignored all`.
+Durable-record proofs use
 `plans.apply.status` (`plan_apply_events`) and `lifecycle.ledger.list` — the
 read paths closest to the mutations being proved. (`audit.list`/
 `audit.export` were stubs when these were authored; PR #388 wired them to
@@ -25,7 +29,7 @@ matrix) is the first real verification point; iterate there.
 ## How to run
 
 ```sh
-cargo nextest run -p e2e_tests --profile e2e
+cargo nextest run -p e2e_tests --profile e2e --run-ignored all
 ```
 
 ## Mechanism

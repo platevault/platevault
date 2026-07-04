@@ -1,9 +1,10 @@
 //! Shared harness for spec 037 Layer-2 real-UI E2E journeys.
 //!
-//! All journeys are `#[ignore]`d. They are compiled stubs that appear in
-//! `cargo nextest list` but execution is deferred while the backend commands
-//! they'd assert against are still stubs (research D9) — not because this
-//! harness is unwired.
+//! All journeys are real (WP-C) but `#[ignore]`d: they need the
+//! `tauri-webdriver` CLI, a `desktop_shell --features e2e` build, and a
+//! served frontend — none of which exist in the Layer-1 `cargo test
+//! --workspace` job (ci.yml). The dedicated e2e.yml workflow runs them with
+//! `--run-ignored all` after standing that environment up.
 //!
 //! Mechanism (mirrors `.github/workflows/e2e.yml`, research D10):
 //! - `desktop_shell` is built with `cargo build -p desktop_shell --features
@@ -115,11 +116,17 @@ impl E2eApp {
     /// slow boot yields `no such window` (404) even though the app is healthy
     /// and seconds away from ready.
     ///
-    /// The CLI relaunches the app on every `POST /session` that carries a
-    /// non-empty `tauri:options.application` (killing the prior instance),
-    /// but **skips the relaunch when the path is empty** and just forwards to
-    /// the already-running app. So: attempt 1 sends the real path (launch);
-    /// retries send an empty path (reuse the booting instance) until the
+    /// The CLI (`tauri-webdriver` 0.1.1, `src/server.rs::handle_plugin`)
+    /// kills any prior app instance and relaunches on every `POST /session`
+    /// whose capabilities carry a `tauri:options.application` value — and an
+    /// **empty string still counts**: `extract_app_path` returns
+    /// `Some("".into())`, so the CLI kills the booting app and then fails
+    /// `Command::new("")` with ENOENT ("Failed to launch Tauri app: No such
+    /// file or directory", CI run 28695295960). The only no-relaunch path is
+    /// to omit `tauri:options` entirely (`extract_app_path` → `None`), which
+    /// forwards the session-create straight to the plugin in the running
+    /// app. So: attempt 1 sends the real path (launch); retries send **no
+    /// `tauri:options` at all** (reuse the booting instance) until the
     /// window exists or [`LAUNCH_TIMEOUT`] elapses. Connection-level errors
     /// (`RequestFailed`) mean the CLI never received the POST — the app was
     /// not launched — so the real path is kept for the next attempt.
@@ -138,12 +145,19 @@ impl E2eApp {
         let mut launched = false;
 
         let driver = loop {
-            let application =
-                if launched { String::new() } else { app_binary.to_string_lossy().into_owned() };
             let mut caps = Capabilities::new();
-            if let Err(e) = caps.set("tauri:options", json!({ "application": application })) {
-                kill_driver_proc(&mut driver_proc);
-                return Err(e).context("failed to set the tauri:options.application capability");
+            if !launched {
+                // Only the launching attempt may carry tauri:options: the CLI
+                // treats ANY present `application` value (even "") as "kill
+                // the current app and relaunch". Retries must omit the key so
+                // the POST is forwarded to the already-booting instance.
+                if let Err(e) = caps
+                    .set("tauri:options", json!({ "application": app_binary.to_string_lossy() }))
+                {
+                    kill_driver_proc(&mut driver_proc);
+                    return Err(e)
+                        .context("failed to set the tauri:options.application capability");
+                }
             }
 
             match WebDriver::new(TAURI_WEBDRIVER_URL, caps).await {
