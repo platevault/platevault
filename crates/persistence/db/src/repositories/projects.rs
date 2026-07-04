@@ -485,6 +485,82 @@ pub async fn update_project_lifecycle_unblock(
     Ok(now)
 }
 
+/// Record the archive plan that drove a project into the `archived` lifecycle
+/// state (spec 017 C5, migration 0051). Idempotent overwrite; does not touch
+/// `updated_at` so the archived timestamp set by the lifecycle transition is
+/// preserved.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn set_archived_via_plan_id(
+    pool: &SqlitePool,
+    project_id: &str,
+    plan_id: &str,
+) -> DbResult<()> {
+    sqlx::query("UPDATE projects SET archived_via_plan_id = ? WHERE id = ?")
+        .bind(plan_id)
+        .bind(project_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// One archived-project row for the Archive surface (spec 017 `archive.list`).
+///
+/// Joined with the owning archive plan so the row can surface the plan title
+/// (as the archive reason) and the bytes moved into the app-managed archive.
+#[derive(Debug, Clone)]
+pub struct ArchivedProjectRow {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    /// `updated_at` at the time the project reached `archived`.
+    pub archived_at: String,
+    pub archived_via_plan_id: Option<String>,
+    /// Owning plan's title, when the plan row still exists.
+    pub plan_title: Option<String>,
+    /// Bytes the owning plan moved into the archive (`total_bytes_required`).
+    pub archived_bytes: Option<i64>,
+}
+
+type ArchivedProjectTuple =
+    (String, String, String, String, Option<String>, Option<String>, Option<i64>);
+
+/// List every project currently in the `archived` lifecycle state, most-recent
+/// first (spec 017 C5 — projects-only Archive surface).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_archived_projects(pool: &SqlitePool) -> DbResult<Vec<ArchivedProjectRow>> {
+    let rows: Vec<ArchivedProjectTuple> = sqlx::query_as(
+        "SELECT p.id, p.name, p.path, p.updated_at, p.archived_via_plan_id, \
+                pl.title, pl.total_bytes_required \
+         FROM projects p \
+         LEFT JOIN plans pl ON pl.id = p.archived_via_plan_id \
+         WHERE p.lifecycle = 'archived' \
+         ORDER BY p.updated_at DESC, p.id ASC",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(id, name, path, archived_at, archived_via_plan_id, plan_title, archived_bytes)| {
+            ArchivedProjectRow {
+                id,
+                name,
+                path,
+                archived_at,
+                archived_via_plan_id,
+                plan_title,
+                archived_bytes,
+            }
+        })
+        .collect())
+}
+
 /// Set channel_drift flag on a project.
 ///
 /// # Errors
