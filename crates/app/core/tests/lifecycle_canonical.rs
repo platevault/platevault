@@ -26,11 +26,38 @@ use uuid::Uuid;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/// Absolute path of the project folder registered by [`setup`].
+///
+/// A relative request path is anchored to the registered project folder at
+/// creation (Constitution I). Registering a root here — rather than passing a
+/// leading-slash path — keeps the fixtures cross-platform: `/library/...` is
+/// absolute on Unix but NOT on Windows (no drive letter), so a leading-slash
+/// path would fall into the relative-anchoring branch and be rejected on
+/// Windows. Registering a project root and using a relative path is portable.
+const TEST_PROJECT_ROOT: &str = "/library/projects-root";
+
 async fn setup() -> (SqlitePool, EventBus) {
     let db = Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let bus = EventBus::with_pool(db.pool().clone());
-    (db.pool().clone(), bus)
+    let pool = db.pool().clone();
+    register_project_root(&pool, TEST_PROJECT_ROOT).await;
+    (pool, bus)
+}
+
+/// Register a project-kind source so relative request paths have an anchor
+/// (mirrors the first-run wizard registering a project folder).
+async fn register_project_root(pool: &SqlitePool, path: &str) {
+    sqlx::query(
+        "INSERT INTO registered_sources \
+         (id, kind, path, scan_depth, created_at, created_via, organization_state) \
+         VALUES (?, 'project', ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run', 'organized')",
+    )
+    .bind(new_id())
+    .bind(path)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 fn new_id() -> String {
@@ -43,7 +70,7 @@ async fn create_project(pool: &SqlitePool, bus: &EventBus, name: &str) -> String
         request_id: new_id(),
         name: name.to_owned(),
         tool: ProjectTool::PixInsight,
-        path: format!("/library/projects/{name}"),
+        path: format!("projects/{name}"),
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,
@@ -412,4 +439,36 @@ async fn t048e_unblocking_clears_blocked_reason() {
     assert_eq!(row.lifecycle, "ready");
     assert!(row.blocked_reason_kind.is_none(), "blocked_reason_kind must be cleared after unblock");
     assert!(row.blocked_reason_note.is_none(), "blocked_reason_note must be cleared after unblock");
+}
+
+// ── Path anchoring invariant (Constitution I) ─────────────────────────────────
+
+/// A relative project path with no registered project folder must be rejected
+/// with `PathInvalid` — there is no unambiguous location to anchor to. This is
+/// the spec-intended invariant the fixtures above satisfy by registering a root.
+#[tokio::test]
+async fn relative_project_path_without_registered_root_is_rejected() {
+    use contracts_core::projects_v2::ProjectCreateRequest;
+
+    // Fresh DB WITHOUT a registered project folder (bypass the `setup` helper).
+    let db = Database::in_memory().await.unwrap();
+    db.migrate().await.unwrap();
+    let bus = EventBus::with_pool(db.pool().clone());
+
+    let req = ProjectCreateRequest {
+        request_id: new_id(),
+        name: "No Root".to_owned(),
+        tool: ProjectTool::PixInsight,
+        path: "projects/no-root".to_owned(),
+        initial_sources: vec![],
+        notes: None,
+        canonical_target_id: None,
+    };
+
+    let err = project_setup::create(db.pool(), &bus, &req).await.unwrap_err();
+    assert_eq!(
+        err.code,
+        contracts_core::error_code::ErrorCode::PathInvalid,
+        "relative path with no registered project folder must be rejected"
+    );
 }
