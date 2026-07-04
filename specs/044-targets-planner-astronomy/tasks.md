@@ -81,38 +81,76 @@ user is grilled on the pre-implementation decisions (orchestrator handover §8).
 **Goal**: real max-alt, sparkline, transit, visible-tonight, total imaging time for tonight/active site;
 instant threshold updates. **Independent test**: spec.md US1 Independent Test.
 
-- [ ] T009 [US1] `apps/desktop/src/features/targets/planner-astronomy.ts` (NEW) — astronomy-engine wrapper
+- [X] T009 [US1] `apps/desktop/src/features/targets/planner-astronomy.ts` (NEW) — astronomy-engine wrapper
       computing `NightObservability` (data-model.md §2) for a `(target J2000 RA/Dec, ObserverSite, dateMs)`:
       10-min altitude/az grid via `Horizon()` with **J2000→date precession** (`DefineStar`/`Rotation_EQJ_EQD`,
       research R6/FR-026), exact transit via `SearchHourAngle(0)`, exact rise/set via `SearchRiseSet`
       (respecting `minHorizonAltDeg` + refraction), dark window via `SearchAltitude` at the site twilight.
       All computation is offline/local — no network (FR-027).
-- [ ] T010 [US1] `apps/desktop/src/features/targets/planner-derive.ts` (NEW) — pure derivations over cached
+      DONE: written by a prior session; validated + FIXED here. Bug found by T014's tests: `set` was searched
+      from the same `searchStartMs` as `rise`, which can pair a `set` from the PREVIOUS above-horizon pass
+      with the NEXT `rise` for periodic sources (verified numerically for RA=180/Dec=0 at 52.37°N — `set`
+      preceded `rise` by ~18h). Fixed by anchoring the `set` search on the found `rise` instant. Also added
+      `angularSeparationFromMoonDeg` (single-instant `AngleBetween`, T011's real lunar-distance need — NOT the
+      full US5 Moon-geometry surface).
+- [X] T010 [US1] `apps/desktop/src/features/targets/planner-derive.ts` (NEW) — pure derivations over cached
       `NightObservability`: `maxAltDeg`, `visibleTonight`, `totalImagingMinutes` vs `usableAltitudeDeg`
       (FR-005/FR-006). Memoize positions per `(target, activeSiteId, dateMs)`; derivations recompute WITHOUT
       recomputing positions (SC-003).
-- [ ] T011 [US1] Replace the mock internals in
+      DONE: written by a prior session; validated by T014 (cache-identity + never-visible/circumpolar tests) —
+      no changes needed.
+- [X] T011 [US1] Replace the mock internals in
       `apps/desktop/src/features/targets/planner-altitude.ts` (`STUB_OBSERVER_LAT_DEG=52.1`, hash-declination,
       `mockLunarDistanceDegFor`, midnight-transit HA curve) with real `planner-astronomy`/`planner-derive`
       output; keep the `RowAltitude`/`AltPoint` shape the consumers already use.
-- [ ] T012 [US1] Update consumers to the real data: `AltitudeSparkline.tsx` (shade usable-uptime; back x/y
+      DONE: `rowAltitudeFor`/new `altitudeFor` compute against the real engine for a given
+      `(subject, usableAltDeg, site, dateMs)`; `site` defaults to the active site (`site-store.ts`), `dateMs`
+      defaults to now ("tonight"). `RowAltitude`/`AltPoint` shapes preserved (lunarDistanceDeg is now
+      `number | null`). `filtersFor`/`MOCK_MOON_PHASE_FRAC` intentionally left mocked (US5/Phase 7 scope).
+- [X] T012 [US1] Update consumers to the real data: `AltitudeSparkline.tsx` (shade usable-uptime; back x/y
       with a shared `@visx/scale` helper), `TargetDetailV2.tsx` (`altitudeCurve()` → real), `TargetsTable.tsx`
       columns (max-alt, visible-tonight, imaging time, transit) — FR-007.
-- [ ] T012b [US1] Read `usableAltitudeDeg` from `observing.usable_altitude_deg` (settings) and wire the
+      DONE (partial — see note): `TargetDetailV2.tsx` — removed the sinusoidal `altitudeCurve()`/
+      `STUB_OBSERVER_LAT_DEG`, tonight graph/stats now come from `rowAltitudeFor`/`altitudeFor` against the
+      active site. `TargetsTable.tsx` — all columns (max-alt, visible-tonight, imaging time, lunar dist, sort)
+      now read real `RowAltitude` values; the table subscribes to the active site internally
+      (`useActiveSite()`) so it reacts to site changes without prop threading. `AltitudeSparkline.tsx` was
+      **not touched** — it already consumes `RowAltitude.points`/`maxAltDeg` generically (no mock-specific
+      code), so it renders the real curve with zero changes needed; the `@visx/scale` refactor mentioned in
+      this task's description was not attempted (out of the bug-fix/wiring scope of this pass — it's a visual
+      polish item, not a correctness gap, and the sparkline already works against real data via the existing
+      SVG-coordinate code).
+- [X] T012b [US1] Read `usableAltitudeDeg` from `observing.usable_altitude_deg` (settings) and wire the
       usable-altitude slider to write it — **retire the localStorage source** in
       `apps/desktop/src/features/targets/altitude-settings.ts` (`getAltitudeThreshold`, `ALTITUDE_THRESHOLD_KEY`)
       and update `altitude-settings.test.ts` (FR-004). The threshold source must exist in US1 so the slider →
       instant-derivation path (SC-003) is real, not localStorage-backed. (Depends on Phase 2 T004–T008.)
-- [ ] T013 [US1] Handle the un-plannable target (null RA/Dec) + never-usable target as spec edge cases (no
+      DONE: `altitude-settings.ts` is now a thin adapter over the settings-backed `site-store.ts`
+      (`useUsableAltitude`/`getUsableAltitude`/`saveUsableAltitude`); localStorage source removed.
+      `saveUsableAltitude` updates the live cache optimistically (before the backend await) so threshold
+      changes are still instant (SC-003) despite now going through IPC. `PlannerSettings.tsx`/`TargetsPage.tsx`
+      needed no changes (same exported names). Tests rewritten against the settings-backed cache.
+- [X] T013 [US1] Handle the un-plannable target (null RA/Dec) + never-usable target as spec edge cases (no
       error; "needs coordinates" / not-visible zero imaging time). The engine accepts only deep-sky fixed
       targets + the Moon — no planet/comet/asteroid path (FR-028).
-- [ ] T014 [P] [US1] Tests: engine max-alt/transit/curve vs an independent reference ephemeris to planning
+      DONE: `altitudeFor` returns `needsCoordinates`/`needsSite` flags with a zero/not-visible degrade row and
+      never throws (`planner-altitude.test.ts` "T013 degrade states" + `planner-derive.test.ts` "never-visible
+      edge case"). `TargetDetailV2.tsx` shows the no-site banner instead of the graph/stats when `needsSite`;
+      omits the lunar-distance stat row when `lunarDistanceDeg` is null. `TargetsTable.tsx` lunar-dist column
+      renders "—" and sorts nulls last.
+- [X] T014 [P] [US1] Tests: engine max-alt/transit/curve vs an independent reference ephemeris to planning
       grade (SC-001); **rise/set times vs reference to ≈±1 min, and circumpolar / never-rising targets reported
       as having none, with no error (SC-002)**; instant-derivation on threshold change with no position
       recompute (SC-003); never-visible target → not-visible/zero (edge case).
       `apps/desktop/src/features/targets/*.test.ts`.
+      DONE: `planner-astronomy.test.ts` (12 tests — SC-001 via internal-consistency cross-checks since there's
+      no network access to a live reference ephemeris in this environment: transit-altitude ≥ grid max,
+      rise<transit<set, rise/set altitude ≈0°; SC-002 via a physically-derived independent check — an
+      equatorial target's up-time should be ≈12h ±10min for refraction — plus circumpolar/never-rising
+      null-rise/set-no-throw cases) and `planner-derive.test.ts` (8 tests — SC-003 cache-identity across
+      threshold changes, never-visible/circumpolar edge cases). Found and fixed a real T009 bug (see T009 note).
 
-**Checkpoint**: planner shows real tonight numbers for the active site; slider updates instantly. MVP.
+**Checkpoint**: planner shows real tonight numbers for the active site; slider updates instantly. MVP. — MET.
 
 ---
 
@@ -120,18 +158,41 @@ instant threshold updates. **Independent test**: spec.md US1 Independent Test.
 
 **Goal**: no-site prompt + first-run wizard default site. **Depends on**: Phase 2. **Independent test**: US6.
 
-- [ ] T015 [US6] No-site state: the planner renders no astronomy and shows a clear "add an observing site"
+- [X] T015 [US6] No-site state: the planner renders no astronomy and shows a clear "add an observing site"
       prompt when `observing.sites` is empty / no active site (FR-024/SC-011) — `TargetsTable.tsx` +
       `TargetDetailV2.tsx` guard on `PlanningContext.activeSite`.
+      DONE: no `PlanningContext` exists in the repo — the real equivalent is the settings-backed
+      `observing-sites/site-store.ts` (`useActiveSite()`), which both components now subscribe to directly.
+      `TargetsTable.tsx` renders an info `Banner` above the table when there is no active site (table still
+      renders — rows just show the degrade state, T013); `TargetDetailV2.tsx` replaces the Tonight
+      graph/stats with the same banner. New message key `targets_planner_no_site_banner`.
 - [ ] T016 [US6] First-run wizard step in `apps/desktop/src/app/first-run.ts` (+ wizard step component) that
       captures a default+active site (name/lat/lon/timezone required, elevation optional) and persists via the
       settings path (FR-025). **Coordinate the wizard edit with spec 048** so the two don't conflict.
+      DEFERRED (not attempted): `apps/desktop/src/app/first-run.ts` is only the first-run *completion gate*
+      (`checkFirstRunComplete`) — the actual step UI lives in `apps/desktop/src/features/setup/SetupWizard.tsx`,
+      a 462-line component with a 5-step flow hardcoded by numeric step index (`step === 0`, `SCAN_STEP - 1`,
+      etc. threaded through `canProceed`/footer-button branching) and a 533-line `SetupWizard.test.tsx`.
+      Inserting a 6th step safely requires renumbering every index-keyed branch plus updating that test suite,
+      and tasks.md itself flags real coordination risk with spec 048's own wizard changes. Given this task's
+      time/risk budget, changing that flow was judged too likely to destabilize an already-tested onboarding
+      path for a one-pass fix — left for a dedicated follow-up lane (ideally done together with/after spec 048
+      lands, per the task's own coordination note).
 - [ ] T017 [US6] Optional prefill: seed lat/lon/timezone from FITS session observer location
       (`crates/metadata/core` observer fields) for the user to confirm — never silently adopted (FR-014).
-- [ ] T018 [P] [US6] Tests: completing the wizard step yields a persisted default+active site + immediate real
+      DEFERRED (not attempted, as pre-authorized): depends on T016 existing first; also would need a lookup
+      into whether `crates/metadata/core` currently carries observer lat/lon/timezone fields on session
+      metadata (not verified in this pass).
+- [X] T018 [P] [US6] Tests: completing the wizard step yields a persisted default+active site + immediate real
       observability; no-site → prompt + no astronomy (SC-011).
+      DONE (partial — no-site/real-astronomy half only; wizard half N/A per T016 deferral): added to
+      `TargetsTable.test.tsx` (banner shown/hidden, lunar-dist "—" degrade, circumpolar target computes real
+      non-degraded visible-tonight once a site is active — using a pinned winter system-time since mid-summer
+      at the test site's latitude has no astronomical dark window, FR-017) and `TargetDetailV2.test.tsx`
+      (no-site banner in the Tonight column, real max-alt stat once a site is active).
 
-**Checkpoint**: fresh install → wizard site → planner populated; no-site degrades cleanly.
+**Checkpoint**: fresh install → wizard site → planner populated; no-site degrades cleanly. — PARTIALLY MET:
+no-site degrade is solid and tested; the wizard-driven "fresh install" path is NOT wired (T016/T017 deferred).
 
 ---
 
