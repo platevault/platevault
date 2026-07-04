@@ -5711,6 +5711,12 @@ export type ProjectCreateRequest_Deserialize = {
 	requestId: string,
 	name: string,
 	tool: ProjectTool,
+	/**
+	 *  Desired project folder. Either an absolute path, or a path relative to
+	 *  the registered project folder (`registered_sources.kind = 'project'`)
+	 *  which the backend anchors at creation — `projects.path` is always
+	 *  stored absolute (Constitution I: no CWD-dependent resolution).
+	 */
 	path: string,
 	initialSources?: string[],
 	notes: string | null,
@@ -5728,6 +5734,12 @@ export type ProjectCreateRequest_Serialize = {
 	requestId: string,
 	name: string,
 	tool: ProjectTool,
+	/**
+	 *  Desired project folder. Either an absolute path, or a path relative to
+	 *  the registered project folder (`registered_sources.kind = 'project'`)
+	 *  which the backend anchors at creation — `projects.path` is always
+	 *  stored absolute (Constitution I: no CWD-dependent resolution).
+	 */
 	path: string,
 	initialSources: string[],
 	notes?: string | null,

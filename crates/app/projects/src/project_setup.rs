@@ -38,6 +38,7 @@ use contracts_core::projects_v2::{
     ProjectUpdateResult,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use domain_core::first_run::SourceKind;
 use domain_core::ids::{new_id, Timestamp};
 use domain_core::project::channels::{
     infer_channels, merge_channels, reinfer_channels as domain_reinfer, Channel,
@@ -45,6 +46,7 @@ use domain_core::project::channels::{
 use domain_core::project::validate::{
     is_read_only, is_source_remove_locked, is_tool_locked, validate_name, validate_tool,
 };
+use persistence_db::repositories::first_run as first_run_repo;
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::projects as repo;
 use project_structure::{required_folders, ProcessingTool as StructureTool, MARKER_FILENAME};
@@ -239,6 +241,65 @@ async fn maybe_regress_to_incomplete(
     Ok(Some("setup_incomplete".to_owned()))
 }
 
+// ── Path anchoring (Constitution I) ───────────────────────────────────────────
+
+/// Resolve the requested project path to an unambiguous absolute location.
+///
+/// `projects.path` is consumed as an absolute path by every downstream reader
+/// (scaffolding `mkdir` executor, spec-011 tool-launch cwd, artifact watcher,
+/// spec-024 manifests). The creation wizard historically submitted a
+/// library-relative path (`projects/<slug>`) which was stored verbatim and
+/// silently resolved against the process CWD at each consumer. Constitution I
+/// models roots separately from relative paths, so a relative request path is
+/// anchored here — at creation — to the registered project folder
+/// (`registered_sources.kind = 'project'`, earliest registration wins).
+///
+/// Rules:
+/// - `..` components are rejected (`path.invalid`) — a project path must not
+///   escape its anchor;
+/// - an absolute path is used as-is (validated downstream by containment);
+/// - a relative path is joined onto the registered project folder;
+/// - a relative path with no registered project folder is rejected
+///   (`path.invalid`) — there is no unambiguous location to anchor to.
+async fn anchor_project_path(pool: &SqlitePool, raw: &str) -> Result<String, ContractError> {
+    let trimmed = raw.trim();
+    let candidate = std::path::Path::new(trimmed);
+
+    if candidate.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        return Err(ContractError::new(
+            ErrorCode::PathInvalid,
+            "Project path must not contain '..' components.",
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
+    if candidate.is_absolute() {
+        return Ok(trimmed.to_owned());
+    }
+
+    let project_root = first_run_repo::list_sources(pool)
+        .await
+        .map_err(db_err)?
+        .into_iter()
+        .find(|s| s.kind == SourceKind::Project)
+        .map(|s| s.path);
+
+    let Some(root) = project_root else {
+        return Err(ContractError::new(
+            ErrorCode::PathInvalid,
+            "Project path is relative and no project folder is registered; \
+             register a project folder in setup or provide an absolute path.",
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    };
+
+    // Join with '/' (valid on all supported platforms); strip trailing
+    // separators from the root so the stored path has a single separator.
+    Ok(format!("{}/{}", root.trim_end_matches(['/', '\\']), trimmed))
+}
+
 // ── Folder plan builder (Constitution II) ─────────────────────────────────────
 
 /// Build and persist a reviewable `FilesystemPlan` for the project folder
@@ -341,7 +402,10 @@ async fn build_folder_plan(
 /// Create a new project.
 ///
 /// Validates name (non-empty, ≤120 chars, unique), tool (canonical value),
-/// path (unique within library). Persists the project in `setup_incomplete`,
+/// path (unique within library). A relative request path is anchored to the
+/// registered project folder before storage so `projects.path` is always an
+/// unambiguous absolute location (Constitution I; see [`anchor_project_path`]).
+/// Persists the project in `setup_incomplete`,
 /// links any `initial_sources`, infers channels, checks the auto-ready trigger,
 /// and emits a `project.created` audit event.
 ///
@@ -400,8 +464,12 @@ pub async fn create(
         ));
     }
 
-    // 4. Check path uniqueness.
-    if let Some(collide_id) = repo::path_exists(pool, &req.path, None).await.map_err(db_err)? {
+    // 3b. Anchor a relative path to the registered project folder so the
+    //     stored path is an unambiguous absolute location (Constitution I).
+    let project_path = anchor_project_path(pool, &req.path).await?;
+
+    // 4. Check path uniqueness (on the anchored path).
+    if let Some(collide_id) = repo::path_exists(pool, &project_path, None).await.map_err(db_err)? {
         return Err(ContractError::new(
             ErrorCode::PathCollision,
             "Another project already uses this path.",
@@ -448,7 +516,7 @@ pub async fn create(
         name: &req.name,
         tool: req.tool.as_db_str(),
         lifecycle: "setup_incomplete",
-        path: &req.path,
+        path: &project_path,
         notes: req.notes.as_deref(),
         canonical_target_id: req.canonical_target_id.as_deref(),
     };
@@ -517,7 +585,7 @@ pub async fn create(
 
     // 10. Generate the folder-structure FilesystemPlan (Constitution II).
     //     plan_id is returned so the UI can link to the spec 017 review surface.
-    let plan_id = build_folder_plan(pool, &project_id, &req.path, req.tool.as_db_str())
+    let plan_id = build_folder_plan(pool, &project_id, &project_path, req.tool.as_db_str())
         .await
         .map_err(db_err)?;
 
@@ -1071,13 +1139,18 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ProjectDetailDto, Contra
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{abs, register_project_root, TEST_PROJECT_ROOT};
     use persistence_db::Database;
 
     async fn setup() -> (SqlitePool, EventBus) {
         let db = Database::in_memory().await.unwrap();
         db.migrate().await.unwrap();
         let bus = EventBus::with_pool(db.pool().clone());
-        (db.pool().clone(), bus)
+        let pool = db.pool().clone();
+        // Register a project-kind source so relative request paths have an
+        // anchor (mirrors the first-run wizard registering a project folder).
+        register_project_root(&pool, TEST_PROJECT_ROOT).await;
+        (pool, bus)
     }
 
     // ── P7: exposure parsing + channel aggregation (pure helpers) ─────────────
@@ -1194,6 +1267,90 @@ mod tests {
         let req2 = ProjectCreateRequest { name: "Other Name".to_owned(), ..req };
         let err = create(&pool, &bus, &req2).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PathCollision);
+    }
+
+    // ── Constitution I: path anchoring tests ──────────────────────────────────
+
+    #[tokio::test]
+    async fn create_anchors_relative_path_to_registered_project_root() {
+        let (pool, bus) = setup().await;
+        let req = make_create_req("M31 LRGB", ProjectTool::PixInsight);
+        let result = create(&pool, &bus, &req).await.unwrap();
+
+        let detail = get(&pool, &result.project_id).await.unwrap();
+        assert_eq!(
+            detail.path,
+            format!("{TEST_PROJECT_ROOT}/projects/M31 LRGB"),
+            "relative wizard path must be anchored to the registered project folder"
+        );
+        assert!(
+            std::path::Path::new(&detail.path).is_absolute(),
+            "stored project path must be absolute (CWD-independent)"
+        );
+    }
+
+    /// CWD-independence proof at this layer: every scaffolding plan item
+    /// destination is absolute, so the mkdir executor and every other
+    /// consumer resolve the same location regardless of process CWD.
+    #[tokio::test]
+    async fn create_folder_plan_items_are_absolute_regardless_of_cwd() {
+        use persistence_db::repositories::plans as plans_repo;
+
+        let (pool, bus) = setup().await;
+        let req = make_create_req("NGC 7000 CWD", ProjectTool::PixInsight);
+        let result = create(&pool, &bus, &req).await.unwrap();
+
+        let plan_id = result.plan_id.expect("plan_id must be present");
+        let items = plans_repo::list_plan_items(&pool, &plan_id).await.unwrap();
+        assert!(!items.is_empty());
+        for item in items {
+            assert!(
+                std::path::Path::new(&item.to_relative_path).is_absolute(),
+                "scaffolding destination must be absolute, got: {}",
+                item.to_relative_path
+            );
+            assert!(
+                item.to_relative_path.starts_with(TEST_PROJECT_ROOT),
+                "scaffolding destination must live under the project root, got: {}",
+                item.to_relative_path
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn create_absolute_path_stored_as_is() {
+        let (pool, bus) = setup().await;
+        // Platform-absolute: "/elsewhere/m101" alone is not absolute on
+        // Windows and would be anchored instead of stored as-is.
+        let req = ProjectCreateRequest {
+            path: abs("/elsewhere/m101"),
+            ..make_create_req("M101 Abs", ProjectTool::PixInsight)
+        };
+        let result = create(&pool, &bus, &req).await.unwrap();
+        let detail = get(&pool, &result.project_id).await.unwrap();
+        assert_eq!(detail.path, abs("/elsewhere/m101"));
+    }
+
+    #[tokio::test]
+    async fn create_relative_path_without_project_root_rejected() {
+        // Fresh DB WITHOUT a registered project folder.
+        let db = Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let bus = EventBus::with_pool(db.pool().clone());
+        let req = make_create_req("No Root", ProjectTool::PixInsight);
+        let err = create(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::PathInvalid);
+    }
+
+    #[tokio::test]
+    async fn create_parent_dir_components_rejected() {
+        let (pool, bus) = setup().await;
+        let req = ProjectCreateRequest {
+            path: "projects/../../etc".to_owned(),
+            ..make_create_req("Escape Attempt", ProjectTool::PixInsight)
+        };
+        let err = create(&pool, &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::PathInvalid);
     }
 
     #[tokio::test]

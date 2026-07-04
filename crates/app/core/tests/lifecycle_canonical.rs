@@ -5,6 +5,8 @@
 //! T048: auto block / ready / unarchive write audit rows; `project.unarchived`
 //!       emitted (FR-021).
 
+mod support;
+
 use std::sync::{Arc, Mutex};
 
 use app_core::lifecycle_use_case::build_edge_table;
@@ -26,11 +28,16 @@ use uuid::Uuid;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/// In-memory DB + bus with a registered project folder, so relative request
+/// paths anchor portably on every platform (see [`support::TEST_PROJECT_ROOT`]
+/// for why leading-slash paths are not used).
 async fn setup() -> (SqlitePool, EventBus) {
     let db = Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let bus = EventBus::with_pool(db.pool().clone());
-    (db.pool().clone(), bus)
+    let pool = db.pool().clone();
+    support::register_project_root(&pool, support::TEST_PROJECT_ROOT).await;
+    (pool, bus)
 }
 
 fn new_id() -> String {
@@ -411,4 +418,36 @@ async fn t048e_unblocking_clears_blocked_reason() {
     assert_eq!(row.lifecycle, "ready");
     assert!(row.blocked_reason_kind.is_none(), "blocked_reason_kind must be cleared after unblock");
     assert!(row.blocked_reason_note.is_none(), "blocked_reason_note must be cleared after unblock");
+}
+
+// ── Path anchoring invariant (Constitution I) ─────────────────────────────────
+
+/// A relative project path with no registered project folder must be rejected
+/// with `PathInvalid` — there is no unambiguous location to anchor to. This is
+/// the spec-intended invariant the fixtures above satisfy by registering a root.
+#[tokio::test]
+async fn relative_project_path_without_registered_root_is_rejected() {
+    use contracts_core::projects_v2::ProjectCreateRequest;
+
+    // Fresh DB WITHOUT a registered project folder (bypass the `setup` helper).
+    let db = Database::in_memory().await.unwrap();
+    db.migrate().await.unwrap();
+    let bus = EventBus::with_pool(db.pool().clone());
+
+    let req = ProjectCreateRequest {
+        request_id: new_id(),
+        name: "No Root".to_owned(),
+        tool: ProjectTool::PixInsight,
+        path: "projects/no-root".to_owned(),
+        initial_sources: vec![],
+        notes: None,
+        canonical_target_id: None,
+    };
+
+    let err = project_setup::create(db.pool(), &bus, &req).await.unwrap_err();
+    assert_eq!(
+        err.code,
+        contracts_core::error_code::ErrorCode::PathInvalid,
+        "relative path with no registered project folder must be rejected"
+    );
 }

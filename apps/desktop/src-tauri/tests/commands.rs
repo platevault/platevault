@@ -200,7 +200,14 @@ async fn projects_create_and_list() {
         request_id: uuid::Uuid::new_v4().to_string(),
         name: "NGC 7000 NB".to_owned(),
         tool: contracts_core::projects_v2::ProjectTool::PixInsight,
-        path: "projects/NGC7000_NB".to_owned(),
+        // Platform-absolute: a bare leading-slash path is not absolute on
+        // Windows and would be rejected by project-root anchoring.
+        path: if cfg!(windows) {
+            "C:/library/projects/NGC7000_NB"
+        } else {
+            "/library/projects/NGC7000_NB"
+        }
+        .to_owned(),
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,
