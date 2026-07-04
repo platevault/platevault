@@ -17,6 +17,8 @@
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
@@ -134,7 +136,13 @@ function setupStore(project: Partial<ProjectDetailDto> = {}) {
  * immediately visible without expanding.
  */
 function renderDetail(projectId = 'proj-m1') {
-  return render(<ProjectBottomDetail projectId={projectId} />);
+  // The bottom panel now hosts the live CleanupSection (spec 017 WP-E), whose
+  // TanStack mutation hooks need a QueryClient in scope.
+  function wrapper({ children }: { children: ReactNode }) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  }
+  return render(<ProjectBottomDetail projectId={projectId} />, { wrapper });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

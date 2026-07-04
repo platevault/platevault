@@ -651,8 +651,77 @@ export async function mockInvoke(
       return plans[0];
     }
     case 'plans_approve': {
-      const { plans } = await import('@/data/fixtures/plans');
-      return plans[0];
+      // Real contract shape (PlanApproveResponse): the overlay consumes
+      // `approvalToken` and hands it to `plans_apply_real`.
+      const planId = (_args as { id?: string } | undefined)?.id ?? 'mock-plan';
+      return {
+        planId,
+        newState: 'approved',
+        approvalToken: `tok-${planId}-mock`,
+        approvedAt: new Date().toISOString(),
+      };
+    }
+    case 'plan_protection_check_cmd': {
+      // One protected item so the spec-016 gate is exercised in mock mode.
+      const planId = (_args as { planId?: string } | undefined)?.planId ?? 'mock-plan';
+      return {
+        planId,
+        hasProtectedItems: true,
+        protectedItems: [
+          {
+            itemId: `${planId}-item-0`,
+            sourceId: 'mock-project-1',
+            level: 'protected',
+            reason: 'Default protection level is protected; no per-source override.',
+            matchedCategories: ['masters'],
+            originalAction: 'archive',
+            rewrittenAction: null,
+          },
+        ],
+        nonBlockingSummary: { normalCount: 2, unprotectedCount: 0 },
+      };
+    }
+    case 'protection_plan_acknowledged': {
+      return 'mock-audit-ack';
+    }
+    case 'cleanup_scan': {
+      // D11 step 1: pure read-only preview. Reason strings follow the backend
+      // generator format (see cleanup_generator.rs::scan_with_policy).
+      const projectId = (_args as { projectId?: string } | undefined)?.projectId ?? 'mock-project-1';
+      return {
+        projectId,
+        candidates: [
+          {
+            filePath: 'processing/calibrated/Ha_300s_c_0001.xisf',
+            dataType: 'intermediate',
+            sizeBytes: 268_435_456,
+            reason:
+              'intermediate artifact (classified by rule, 90% confidence); protection: normal; policy: archive',
+          },
+          {
+            filePath: 'processing/calibrated/Ha_300s_c_0002.xisf',
+            dataType: 'intermediate',
+            sizeBytes: 268_435_456,
+            reason:
+              'intermediate artifact (classified by rule, 90% confidence); protection: normal; policy: archive',
+          },
+          {
+            filePath: 'masters/master_dark_300s.xisf',
+            dataType: 'master',
+            sizeBytes: 536_870_912,
+            reason:
+              'master artifact (classified by rule, 95% confidence); protection: protected; policy: archive',
+          },
+        ],
+        totalReclaimableBytes: 1_073_741_824,
+      };
+    }
+    case 'cleanup_plan_generate': {
+      return {
+        planId: 'plan-cleanup-mock',
+        itemCount: 3,
+        protectedItemCount: 1,
+      };
     }
     case 'plans_apply_real': {
       // Spec 042 US16 (T240): drive the live long-op channel if a subscriber
