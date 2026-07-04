@@ -180,14 +180,19 @@ pub enum TransitionActor {
 
 // ── Per-family request DTOs ───────────────────────────────────────────────────
 
+// NOTE (issue #423): these structs deliberately carry NO `entity_type` field.
+// The discriminant lives solely in `TransitionRequest`'s `#[serde(tag =
+// "entityType")]` attribute. A previous duplicated `entity_type: String` field
+// made the whole enum impossible to deserialize (serde consumes the tag key
+// during variant dispatch, so the inner struct's required field could never be
+// filled) and made serialization emit `entityType` twice.
 macro_rules! transition_request_base {
-    ($name:ident, $entity_type_str:literal, $state_ty:ty) => {
+    ($name:ident, $state_ty:ty) => {
         #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
         #[serde(rename_all = "camelCase")]
         pub struct $name {
             pub contract_version: String,
             pub request_id: Uuid,
-            pub entity_type: String,
             pub entity_id: Uuid,
             pub current_state: $state_ty,
             pub next_state: $state_ty,
@@ -208,7 +213,6 @@ macro_rules! transition_request_base {
                 Self {
                     contract_version: CONTRACT_VERSION.to_owned(),
                     request_id,
-                    entity_type: $entity_type_str.to_owned(),
                     entity_id,
                     current_state,
                     next_state,
@@ -220,12 +224,12 @@ macro_rules! transition_request_base {
     };
 }
 
-transition_request_base!(ProjectTransitionRequest, "project", ProjectState);
-transition_request_base!(PlanTransitionRequest, "plan", PlanState);
-transition_request_base!(DataSourceTransitionRequest, "data_source", DataSourceState);
-transition_request_base!(PreparedSourceTransitionRequest, "prepared_source", PreparedSourceState);
-transition_request_base!(ProjectionTransitionRequest, "projection", ProjectionState);
-transition_request_base!(FileRecordTransitionRequest, "file_record", FileRecordState);
+transition_request_base!(ProjectTransitionRequest, ProjectState);
+transition_request_base!(PlanTransitionRequest, PlanState);
+transition_request_base!(DataSourceTransitionRequest, DataSourceState);
+transition_request_base!(PreparedSourceTransitionRequest, PreparedSourceState);
+transition_request_base!(ProjectionTransitionRequest, ProjectionState);
+transition_request_base!(FileRecordTransitionRequest, FileRecordState);
 
 // ── Discriminated request enum ────────────────────────────────────────────────
 

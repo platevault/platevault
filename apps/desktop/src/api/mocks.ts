@@ -623,10 +623,11 @@ export async function mockInvoke(
     // ---------- Mutation Commands ----------
 
     case 'lifecycle_transition_apply': {
-      // Mock: always succeeds. The request carries the desired nextState inside
-      // `args.request.project.nextState` — echo it back so the UI can update.
-      const req = (_args as { request?: { project?: { nextState?: string; currentState?: string; entityId?: string } } } | undefined)
-        ?.request?.project;
+      // Mock: always succeeds. The request is the canonical FLAT discriminated
+      // envelope (issue #423): `nextState` sits beside the `entityType` tag —
+      // there is no `{ project: {...} }` wrapper. Echo it back for the UI.
+      const req = (_args as { request?: { nextState?: string; currentState?: string; entityId?: string } } | undefined)
+        ?.request;
       return {
         status: 'success',
         contractVersion: '2.0.0',

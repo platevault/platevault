@@ -2547,7 +2547,6 @@ export type DataSourceTransitionRequest = DataSourceTransitionRequest_Serialize 
 export type DataSourceTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: DataSourceState,
 	nextState: DataSourceState,
@@ -2558,7 +2557,6 @@ export type DataSourceTransitionRequest_Deserialize = {
 export type DataSourceTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: DataSourceState,
 	nextState: DataSourceState,
@@ -2857,7 +2855,6 @@ export type FileRecordTransitionRequest = FileRecordTransitionRequest_Serialize 
 export type FileRecordTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: FileRecordState,
 	nextState: FileRecordState,
@@ -2868,7 +2865,6 @@ export type FileRecordTransitionRequest_Deserialize = {
 export type FileRecordTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: FileRecordState,
 	nextState: FileRecordState,
@@ -5487,7 +5483,6 @@ export type PlanTransitionRequest = PlanTransitionRequest_Serialize | PlanTransi
 export type PlanTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PlanState,
 	nextState: PlanState,
@@ -5498,7 +5493,6 @@ export type PlanTransitionRequest_Deserialize = {
 export type PlanTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PlanState,
 	nextState: PlanState,
@@ -5522,7 +5516,6 @@ export type PreparedSourceTransitionRequest = PreparedSourceTransitionRequest_Se
 export type PreparedSourceTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PreparedSourceState,
 	nextState: PreparedSourceState,
@@ -5533,7 +5526,6 @@ export type PreparedSourceTransitionRequest_Deserialize = {
 export type PreparedSourceTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PreparedSourceState,
 	nextState: PreparedSourceState,
@@ -6055,7 +6047,6 @@ export type ProjectTransitionRequest = ProjectTransitionRequest_Serialize | Proj
 export type ProjectTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectState,
 	nextState: ProjectState,
@@ -6066,7 +6057,6 @@ export type ProjectTransitionRequest_Deserialize = {
 export type ProjectTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectState,
 	nextState: ProjectState,
@@ -6110,7 +6100,6 @@ export type ProjectionTransitionRequest = ProjectionTransitionRequest_Serialize 
 export type ProjectionTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectionState,
 	nextState: ProjectionState,
@@ -6121,7 +6110,6 @@ export type ProjectionTransitionRequest_Deserialize = {
 export type ProjectionTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectionState,
 	nextState: ProjectionState,
