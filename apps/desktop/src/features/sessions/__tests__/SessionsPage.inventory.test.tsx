@@ -213,21 +213,43 @@ describe('SessionDetail — empty state', () => {
 // SessionDetail header slot, gated by the `revealVisible` prop the page
 // supplies (task #79).
 describe('SessionDetail — contextual header actions (task #79)', () => {
-  // T410/T411 (spec 006 FR-007): per-row Reveal in OS.
+  // T410/T411 (spec 006 FR-007): per-row Reveal. The button carries the shared
+  // platform-native revealLabel(); jsdom reports no platform → Linux-generic.
   it('10. renders Reveal when revealVisible; clicking dispatches onReveal', () => {
     const onReveal = vi.fn();
     renderDetail(makeSession({}), {
       revealVisible: true,
       onReveal,
     });
-    const btn = screen.getByRole('button', { name: /reveal in os/i });
+    const btn = screen.getByRole('button', { name: /show in file manager/i });
     fireEvent.click(btn);
     expect(onReveal).toHaveBeenCalledTimes(1);
   });
 
   it('11. Reveal is absent when revealVisible is not set (no source path)', () => {
     renderDetail(makeSession({}));
-    expect(screen.queryByRole('button', { name: /reveal in os/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /show in file manager/i })).toBeNull();
+  });
+
+  it('11b. Reveal label follows the platform (Windows and macOS)', () => {
+    // Mock the platform source both ways: revealLabel() reads
+    // navigator.platform (jsdom exposes no userAgentData).
+    const setPlatform = (v: string) =>
+      Object.defineProperty(window.navigator, 'platform', { value: v, configurable: true });
+
+    try {
+      setPlatform('Win32');
+      const { unmount } = renderDetail(makeSession({}), { revealVisible: true, onReveal: vi.fn() });
+      expect(screen.getByRole('button', { name: 'Show in File Explorer' })).toBeDefined();
+      unmount();
+
+      setPlatform('MacIntel');
+      renderDetail(makeSession({}), { revealVisible: true, onReveal: vi.fn() });
+      expect(screen.getByRole('button', { name: 'Reveal in Finder' })).toBeDefined();
+    } finally {
+      // Drop the instance override so later tests see jsdom's prototype default.
+      delete (window.navigator as unknown as Record<string, unknown>).platform;
+    }
   });
 });
 

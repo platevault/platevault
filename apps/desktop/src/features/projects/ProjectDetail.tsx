@@ -15,7 +15,7 @@
  * They benefit from the horizontal room the bottom strip provides and were
  * collapsed by default in the narrow 420px side column.
  *
- * Per-project actions (Reveal in Explorer · Open in {tool} · lifecycle
+ * Per-project actions (Reveal · Open in {tool} · lifecycle
  * transitions) live ONLY in the detail action bar (data-testid="lifecycle-actions").
  * The transition buttons carry the data-testid="transition-btn-*" hooks. The
  * previous duplicate bottom footer was removed to de-duplicate these actions.
@@ -29,6 +29,7 @@
 
 import { useState } from 'react';
 import { m } from '@/lib/i18n';
+import { revealLabel } from '@/lib/reveal-label';
 import {
   DetailHeader,
   DetailPane,
@@ -356,7 +357,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         title=""
         right={
           /* Per-project actions live ONLY here (the detail action bar):
-             Reveal in Explorer · Open in {tool} · lifecycle transitions.
+             Reveal · Open in {tool} · lifecycle transitions.
              The transition buttons carry the data-testid="transition-btn-*"
              hooks (previously on a separate bottom footer that has been
              removed to de-duplicate the per-project actions). */
@@ -364,9 +365,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             className="alm-project-detail__bar-actions"
             data-testid="lifecycle-actions"
           >
-            {/* Reveal in Explorer */}
+            {/* Reveal — platform-native label (shared revealLabel()) */}
             <Btn size="sm" variant="ghost" data-testid="action-reveal">
-              {m.projects_detail_reveal_btn()}
+              {revealLabel()}
             </Btn>
 
             {/* Open in processing tool */}

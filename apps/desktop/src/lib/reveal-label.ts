@@ -1,13 +1,14 @@
 /**
- * Platform-native "reveal in file manager" label — the SINGLE shared helper
- * for the product convention:
+ * Platform-native file-manager Reveal label — the SINGLE shared helper for
+ * the product convention:
  *
- *   Windows → "Show in File Explorer"   (primary platform)
- *   macOS   → "Reveal in Finder"
- *   Linux   → "Show in file manager"    (generic; no single native brand)
+ *   Windows → reveal_label_windows   (File Explorer wording; primary platform)
+ *   macOS   → reveal_label_macos     (Finder wording)
+ *   Linux   → reveal_label_linux     (generic file-manager wording)
  *
- * Strings live in the Paraglide catalog (three keys, selected at runtime by
- * platform). Never hardcode a per-feature reveal label; call `revealLabel()`.
+ * Strings live in the Paraglide catalog (the three keys above, selected at
+ * runtime by platform). Never hardcode a per-feature reveal label; call
+ * `revealLabel()`.
  *
  * Platform detection reads the webview's navigator (userAgentData.platform
  * with a navigator.platform fallback) — identical in the Tauri webview and
