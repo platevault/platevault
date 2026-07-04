@@ -19,13 +19,28 @@ rules), migration `0025_artifacts.sql`, repository
 `crates/app/lifecycle/src/artifact.rs` (`detect`/`list`/`classify_override`/
 `mark_resolved`/`mark_missing`/`reattribute`/`complete_run`) are in place, with
 Tauri commands (`artifact_list`/`classify`/`mark_resolved`) + generated
-bindings, a live notify-rs OS watcher (`crates/fs/inventory/src/artifact_watcher.rs`,
-wired at `src-tauri/src/lib.rs`), and the `ToolLaunchesAccordion` drawer UI.
+bindings, a live notify-rs OS watcher (`crates/fs/inventory/src/artifact_watcher.rs`),
+and the `ToolLaunchesAccordion` drawer component.
 Detection, classification, override, missing-state, attribution, persistence,
-contracts, and Tauri wiring all exist (T008's notify-rs watcher, marked deferred
-in tasks.md, is in fact done). Remaining open items are peripheral: integration/
-e2e/contract tests, a research doc, cross-spec sign-off (011/017/024), and a
-per-profile `watch_extensions` override (blocked on spec 018) — not core build.
+and contracts all exist.
+
+**Correction (2026-07-04, WP-012-A)**: a prior revision of this note claimed
+"T008's notify-rs watcher, marked deferred in tasks.md, is in fact done" —
+that was inaccurate. What existed was a single always-on watcher spawned once
+at app startup over every registered library root (never per-project,
+never attached/detached, and it stamped the *library root* id onto
+`ProcessingArtifact.project_id`, not the real project). T008 (drawer
+attach/detach lifecycle) and T007b (`watch_extensions` setting) were
+genuinely open; both are now implemented: a per-project
+`ArtifactWatcherRegistry` attached via `artifact.watcher.attach`/detached via
+`artifact.watcher.detach` from `ProjectDetailContent`'s own mount lifecycle
+(runs the T005 on-attach reconciliation pass first), and a
+`tools.<tool_id>.watch_extensions` Settings key applied by both the live
+watcher and reconciliation. Remaining open items are still peripheral:
+integration/e2e/contract tests, a research doc, cross-spec sign-off
+(011/017/024), and mounting `ToolLaunchesAccordion` into the drawer UI (T023
+is checked in tasks.md but the component is not actually rendered anywhere —
+see WP-012-A handover) — not core build.
 
 ## User Scenarios & Testing *(mandatory)*
 

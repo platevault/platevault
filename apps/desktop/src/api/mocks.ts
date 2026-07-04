@@ -888,6 +888,14 @@ export async function mockInvoke(
       return { planId: 'mock-plan-regen-001', unresolvedItemCount: 0 };
     }
 
+    // spec 012 T008: watcher attach/detach — no real filesystem watching in
+    // mock mode; the project drawer's mount/unmount effect still calls these,
+    // so they must resolve rather than throw "unknown mock command".
+    case 'artifact_watcher_attach':
+    case 'artifact_watcher_detach': {
+      return null;
+    }
+
     // ── Equipment CRUD (spec 030) ───────────────────────────────────────────
 
     case 'equipment_cameras_create': {

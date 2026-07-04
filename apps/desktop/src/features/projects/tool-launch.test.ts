@@ -74,6 +74,7 @@ function makeProfile(overrides: Partial<ToolProfileSummary> = {}): ToolProfileSu
     enabled: true,
     autoDetected: false,
     executablePath: '/usr/bin/pixinsight',
+    watchExtensions: ['.xisf', '.fits'],
     ...overrides,
   };
 }

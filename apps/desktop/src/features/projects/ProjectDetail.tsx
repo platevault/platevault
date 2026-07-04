@@ -59,6 +59,9 @@ import {
   useToolProfiles,
   useToolLaunch,
 } from './tool-launch';
+// spec 012 T008: filesystem artifact watcher, attached/detached with this
+// drawer's own mount lifecycle.
+import { useProjectArtifactWatcher } from './artifacts';
 import type { ProjectSourceDto_Deserialize } from '@/bindings/index';
 // Secondary sections (Notes, Manifests, Calibration, Source views, Outputs,
 // Cleanup) have moved to ProjectBottomDetail (task #104 — bottom panel).
@@ -147,6 +150,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [channelWorking, setChannelWorking] = useState(false);
   const [transitionWorking, setTransitionWorking] = useState(false);
+
+  // spec 012 T008: attach the project's filesystem artifact watcher for as
+  // long as this drawer is open; detaches on close/project switch.
+  useProjectArtifactWatcher(projectId);
 
   // spec 011: tool launch (hooks must be called unconditionally)
   const projectToolStr = typeof project?.tool === 'string' ? project.tool : '';

@@ -26,6 +26,7 @@ fs_executor = { path = "../../fs/executor" }
 patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
+workflow_artifacts = { path = "../../workflow/artifacts" }
 workflow_profiles = { path = "../../workflow/profiles" }
 camino = { workspace = true }
 dashmap = { workspace = true }

@@ -1,19 +1,23 @@
-//! Processing artifact Tauri commands (spec 012 TX01).
+//! Processing artifact Tauri commands (spec 012 TX01/T008).
 //!
 //! ## Commands
 //!
-//! - `artifact.list`           — list observed artifacts for a project, grouped by tool launch.
-//! - `artifact.classify`       — apply / clear a manual classification override.
-//! - `artifact.mark_resolved`  — mark a missing artifact as user-resolved.
+//! - `artifact.list`             — list observed artifacts for a project, grouped by tool launch.
+//! - `artifact.classify`         — apply / clear a manual classification override.
+//! - `artifact.mark_resolved`    — mark a missing artifact as user-resolved.
+//! - `artifact.watcher.attach`   — attach the live filesystem watcher for a project (T008).
+//! - `artifact.watcher.detach`   — detach it (project drawer close lifecycle, T008).
 
 use app_core::artifact;
 use contracts_core::tools::{
     ArtifactClassifyRequest, ArtifactClassifyResponse, ArtifactListRequest, ArtifactListResponse,
-    ArtifactMarkResolvedRequest,
+    ArtifactMarkResolvedRequest, ArtifactWatcherRequest,
 };
+use sqlx::SqlitePool;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
+use crate::watcher::ArtifactWatcherRegistry;
 use contracts_core::ContractError;
 
 // ── artifact.list ─────────────────────────────────────────────────────────────
@@ -97,4 +101,49 @@ pub async fn artifact_mark_resolved(
     )
     .await
     .map_err(ContractError::internal)
+}
+
+// ── artifact.watcher.attach / artifact.watcher.detach ────────────────────────
+
+/// `artifact.watcher.attach` — attach the live filesystem watcher for a
+/// project's output folder (spec 012 T008: project drawer open lifecycle).
+///
+/// Idempotent: attaching an already-attached project is a no-op. Runs an
+/// on-attach reconciliation pass first so files written while detached are
+/// still detected.
+///
+/// # Errors
+/// Returns `Err(ContractError)` on DB failure or if the watcher cannot be
+/// started. An unavailable output folder (e.g. a removed drive) is NOT an
+/// error — attach succeeds and simply does not watch until a later retry.
+#[tauri::command]
+#[specta::specta]
+pub async fn artifact_watcher_attach(
+    pool: State<'_, SqlitePool>,
+    state: State<'_, AppState>,
+    registry: State<'_, ArtifactWatcherRegistry>,
+    request: ArtifactWatcherRequest,
+) -> Result<(), ContractError> {
+    tracing::debug!("artifact.watcher.attach project={}", request.project_id);
+    crate::watcher::attach_project_watcher(&pool, &state.bus, &registry, &request.project_id)
+        .await
+        .map_err(ContractError::internal)
+}
+
+/// `artifact.watcher.detach` — detach the live filesystem watcher for a
+/// project (spec 012 T008: project drawer close lifecycle).
+///
+/// Idempotent: detaching an unattached project is a silent no-op.
+///
+/// # Errors
+/// Never fails; the `Result` return type matches the shared command shape.
+#[tauri::command]
+#[specta::specta]
+pub async fn artifact_watcher_detach(
+    registry: State<'_, ArtifactWatcherRegistry>,
+    request: ArtifactWatcherRequest,
+) -> Result<(), ContractError> {
+    tracing::debug!("artifact.watcher.detach project={}", request.project_id);
+    crate::watcher::detach_project_watcher(&registry, &request.project_id).await;
+    Ok(())
 }

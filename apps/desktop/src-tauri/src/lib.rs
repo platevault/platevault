@@ -15,7 +15,10 @@ use sqlx::SqlitePool;
 use tauri::Manager;
 use tauri_specta::{collect_commands, Builder};
 
-use crate::commands::artifacts::{artifact_classify, artifact_list, artifact_mark_resolved};
+use crate::commands::artifacts::{
+    artifact_classify, artifact_list, artifact_mark_resolved, artifact_watcher_attach,
+    artifact_watcher_detach,
+};
 use crate::commands::audit::{audit_export, audit_list};
 use crate::commands::calibration::{
     calibration_masters_get, calibration_masters_list, calibration_match_assign,
@@ -337,6 +340,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         artifact_list,
         artifact_classify,
         artifact_mark_resolved,
+        artifact_watcher_attach,
+        artifact_watcher_detach,
         // manifests + notes (spec 024)
         manifest_list,
         manifest_get,
@@ -537,6 +542,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         artifact_list,
         artifact_classify,
         artifact_mark_resolved,
+        artifact_watcher_attach,
+        artifact_watcher_detach,
         // manifests + notes (spec 024)
         manifest_list,
         manifest_get,
@@ -707,8 +714,11 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
     // spec 024: manifest auto-generation on workflow-run completion.
     // The JoinHandle is intentionally dropped — the task runs independently.
     drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));
-    // spec 012: artifact filesystem watcher → artifact.detected + artifact.classified events.
-    crate::watcher::spawn_artifact_watcher(pool.clone(), bus.clone());
+    // spec 012 T008: per-project artifact filesystem watchers, attached/detached
+    // via the `artifact.watcher.attach`/`artifact.watcher.detach` commands as the
+    // project drawer opens/closes. No watcher runs until a project is attached.
+    let artifact_watcher_registry = crate::watcher::new_artifact_watcher_registry();
+    app.manage(artifact_watcher_registry);
 
     // spec 018 T020: emit a settings.snapshot at session start, then every 5 minutes.
     // This gives the audit log a durable record of the active configuration even when

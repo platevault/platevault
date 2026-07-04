@@ -1323,6 +1323,30 @@ export const commands = {
 	 */
 	artifactMarkResolved: (request: ArtifactMarkResolvedRequest) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("artifact_mark_resolved", { request })),
 	/**
+	 *  `artifact.watcher.attach` — attach the live filesystem watcher for a
+	 *  project's output folder (spec 012 T008: project drawer open lifecycle).
+	 * 
+	 *  Idempotent: attaching an already-attached project is a no-op. Runs an
+	 *  on-attach reconciliation pass first so files written while detached are
+	 *  still detected.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(ContractError)` on DB failure or if the watcher cannot be
+	 *  started. An unavailable output folder (e.g. a removed drive) is NOT an
+	 *  error — attach succeeds and simply does not watch until a later retry.
+	 */
+	artifactWatcherAttach: (request: ArtifactWatcherRequest) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("artifact_watcher_attach", { request })),
+	/**
+	 *  `artifact.watcher.detach` — detach the live filesystem watcher for a
+	 *  project (spec 012 T008: project drawer close lifecycle).
+	 * 
+	 *  Idempotent: detaching an unattached project is a silent no-op.
+	 * 
+	 *  # Errors
+	 *  Never fails; the `Result` return type matches the shared command shape.
+	 */
+	artifactWatcherDetach: (request: ArtifactWatcherRequest) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("artifact_watcher_detach", { request })),
+	/**
 	 *  `project.manifest.list` — list manifest snapshots for a project.
 	 * 
 	 *  Returns summaries ordered newest first, with cursor-based pagination.
@@ -1631,6 +1655,15 @@ export type ArtifactSummary = {
 	/**  `rule` | `manual_override` | `fallback` */
 	classificationSource: string,
 	sizeBytes: number,
+};
+
+/**
+ *  Request DTO for `artifact.watcher.attach` / `artifact.watcher.detach`
+ *  (spec 012 T008): wires the filesystem watcher to the project drawer
+ *  open/close lifecycle.
+ */
+export type ArtifactWatcherRequest = {
+	projectId: string,
 };
 
 export type AssetType = "file_record" | "acquisition_session" | "calibration_session" | "project" | "prepared_source" | "processing_artifact" | "filesystem_plan" | "data_source" | 
@@ -7263,6 +7296,12 @@ export type ToolProfileSummary = {
 	autoDetected: boolean,
 	/**  Current executable path (from Settings). `None` when not configured. */
 	executablePath: string | null,
+	/**
+	 *  Effective artifact-watch extension allow-list (spec 012 T007b): the
+	 *  per-tool Settings override when configured, else
+	 *  `workflow_artifacts::DEFAULT_WATCH_EXTENSIONS`.
+	 */
+	watchExtensions: string[],
 };
 
 /**  Tour completion state tracking. */
@@ -7401,6 +7440,12 @@ export type UpdateProcessingTool = {
 	id: string,
 	path: string | null,
 	enabled: boolean,
+	/**
+	 *  Custom artifact-watch extension allow-list (spec 012 T007b, R-ExtAllow).
+	 *  `None` leaves the existing setting (or default) unchanged. Entries MUST
+	 *  start with `.` (e.g. `.xisf`).
+	 */
+	watchExtensions?: string[] | null,
 };
 
 export type UpdateTelescope = {

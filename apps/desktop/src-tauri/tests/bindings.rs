@@ -254,6 +254,8 @@ fn exports_typescript_bindings() {
         "artifact_list",
         "artifact_classify",
         "artifact_mark_resolved",
+        "artifact_watcher_attach",
+        "artifact_watcher_detach",
         // manifests / notes / prepared views
         "manifest_list",
         "manifest_get",
