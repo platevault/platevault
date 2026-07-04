@@ -204,17 +204,31 @@ correct fields.
       `MAX_PAYLOAD_BYTES=64*1024`, monotonic `state.seq` counter,
       `redactPayload()` with always-sensitive set + per-contract
       sensitiveFields. JSON-length check for truncation._
-- [ ] T021 [US2] Install the wrapped dispatcher at app boot only when
+- [x] T021 [US2] Install the wrapped dispatcher at app boot only when
       `devMode = true`; bypass at module load otherwise. Wire in
       `apps/desktop/src/data/tauriDispatch.ts` (or current dispatcher
       module).
-      _Deferred: The existing `commands.ts` `invoke()` function is a private
-      module-scoped function — wrapping it at boot requires either exposing it
-      or restructuring the API layer. The ring buffer and recorder are fully
-      implemented and tested; wiring at boot dispatch is a follow-up.
-      `ContractsPage` calls `devCallsList` directly (reading from the
-      Rust-side `CallBuffer` state) so the page works without T021. T021
-      would enable auto-capture of all calls._
+      _Evidence (audit 2026-07-04, impl-021-tail): superseded by spec 037's
+      IPC migration (PR #378, `9ab16f46`/`eea705a0` "feat(037): migrate
+      dev-tools area to generated IPC bindings"), which replaced the old
+      `commands.ts` with the generated `bindings/index.ts` + `api/ipc.ts`
+      dispatcher and added the exact boot-wiring this task called for.
+      `apps/desktop/src/dev/bootRecorder.ts` `installRecorder()` reads the
+      backend `devMode` setting, and when true builds the real Tauri
+      `invoke` as the base dispatch, wraps it via `recorder.wrap()`, and
+      installs it via `setInvokeOverride()` in `apps/desktop/src/api/ipc.ts`.
+      Wired at boot in `apps/desktop/src/main.tsx`:
+      `if (import.meta.env.VITE_DEV_TOOLS === 'true') { import('./dev/bootRecorder')... }`
+      — statically false (and tree-shaken) in release builds. Covered by
+      `apps/desktop/src/dev/devSurface.capture.test.ts` (T073, 5 tests: wrap
+      captures calls, no-op when devMode=false, ordering, setInvokeOverride
+      wiring, absolute-path requirement) and
+      `apps/desktop/src/dev/devSurface.release.test.ts` (T072, 4 tests:
+      DEV_TOOLS_ENABLED false by default, wrap no-op, setInvokeOverride(null)
+      safe, route not registered). Full suite green: `pnpm test` — 107 files,
+      1023 tests passed. This was a stale not-implemented claim; the previous
+      deferral note (about `commands.ts` being a private module-scoped
+      function) no longer applies post-037._
 - [x] T022 [US2] Implement `list_calls` use case to read the buffer over a
       Tauri state handle and the Tauri command `dev_calls_list`.
       _Evidence: `list_calls` in `dev_contracts.rs`; `dev_calls_list` Tauri
