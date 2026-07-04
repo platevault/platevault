@@ -40,7 +40,6 @@ import type {
   PatternPreviewResponse,
   ResolverSettings,
   ResolverSettingsResponse,
-  IpcOperationHandle,
   FirstRunRestartResponse,
   Camera,
   Telescope,
@@ -55,6 +54,7 @@ import type {
   UpdateOpticalTrain,
   CreateFilter,
   UpdateFilter,
+  RemapVerification,
 } from '@/bindings/index';
 
 export type {
@@ -78,6 +78,7 @@ export type {
   UpdateOpticalTrain,
   CreateFilter,
   UpdateFilter,
+  RemapVerification,
 };
 export type { PatternPartDto as PatternPart };
 export type { PatternValidateResponse, PatternPreviewResponse };
@@ -165,10 +166,54 @@ export async function registerRoot(args: {
   unwrap(await commands.rootsRegister(args.path, args.category, args.scanSettings));
 }
 
-export async function startScan(args?: { root_ids?: string[] }): Promise<IpcOperationHandle> {
-  // Backend expects camelCase `rootIds`; sending `root_ids` is silently ignored
-  // and scans ALL roots instead of the requested subset.
-  return unwrap(await commands.scanStart(args?.root_ids ?? null));
+/**
+ * `inbox.scan_folder` — rescan one registered root (P6a).
+ *
+ * Replaces the former `startScan`/`scan.start` wrapper: `scan.start` is a
+ * dead stub that never touched the database (silent no-op), so the Settings
+ * "Rescan" button now calls the same real scan command the setup wizard and
+ * the Inbox page's "Rescan all" use. Persists/refreshes the root's
+ * `inbox_source_groups` rows (which `roots.list`'s `lastScanned` is derived
+ * from) — no classification is run, matching `useInboxRescan`'s per-root
+ * scope (classification stays a separate, explicit Inbox-page step).
+ */
+export async function rescanRoot(args: {
+  rootId: string;
+  rootAbsolutePath: string;
+}): Promise<void> {
+  unwrap(
+    await commands.inboxScanFolder({
+      rootId: args.rootId,
+      rootAbsolutePath: args.rootAbsolutePath,
+      followSymlinks: false,
+    }),
+  );
+}
+
+/**
+ * `roots.remap` — preview a root path remap. Verifies whether a set of
+ * sample relative paths from the current root can be found under `newPath`
+ * (P6a). Does NOT mutate anything; call `applyRootRemap` after review.
+ */
+export async function remapRoot(args: {
+  rootId: string;
+  newPath: string;
+}): Promise<RemapVerification> {
+  return unwrap(await commands.rootsRemap(args.rootId, args.newPath));
+}
+
+/**
+ * `roots.remap.apply` — apply a previously previewed root remap (P6a).
+ * The backend has no server-side memory of a pending preview, so `newPath`
+ * must be resent (and is re-validated) alongside the `verified` flag, which
+ * should be the `allVerified` value from the matching `remapRoot` preview.
+ */
+export async function applyRootRemap(args: {
+  rootId: string;
+  newPath: string;
+  verified: boolean;
+}): Promise<void> {
+  unwrap(await commands.rootsRemapApply(args.rootId, args.newPath, args.verified));
 }
 
 // ── Calibration tolerances (spec 007) ─────────────────────────────────────────

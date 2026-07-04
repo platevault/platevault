@@ -12,16 +12,24 @@
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
 use audit::bus::EventBus;
-use audit::event_bus::{FirstRunCompleted, Source, SourceCountByKind, TOPIC_FIRST_RUN_COMPLETED};
+use audit::event_bus::{
+    FirstRunCompleted, RootRemapped, Source, SourceCountByKind, TOPIC_FIRST_RUN_COMPLETED,
+    TOPIC_ROOT_REMAPPED,
+};
 use contracts_core::first_run::{
     FirstRunCompleteResponse, FirstRunRestartResponse, FirstRunStateResponse, OrganizationState,
     RegisterSourceBatchRequest, RegisterSourceBatchResponse, RegisterSourceRequest,
     RegisterSourceResponse, SetSourceOrganizationStateRequest, SetSourceOrganizationStateResponse,
     SourceKind, ERR_SOURCE_INVALID_ORGANIZATION_STATE,
 };
+use contracts_core::roots::{RemapSample, RemapVerification};
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity, JsonAny};
 use persistence_db::repositories::first_run as repo;
 use sqlx::SqlitePool;
+
+/// Maximum number of previously-recorded relative paths sampled by
+/// `remap_root` to preview whether they resolve under a candidate new path.
+const REMAP_SAMPLE_LIMIT: i64 = 5;
 
 // ── Path validation ─────────────────────────────────────────────────────────
 
@@ -369,6 +377,122 @@ pub async fn restart_first_run(
     repo::restart_first_run(pool).await.map_err(db_to_contract)
 }
 
+// ── Root remap (P6a) ──────────────────────────────────────────────────────────
+
+/// Look up a root's kind + path, mapping a missing row to `source.not_found`.
+async fn get_root_or_not_found(
+    pool: &SqlitePool,
+    root_id: &str,
+) -> Result<(SourceKind, String), ContractError> {
+    repo::get_source_kind_and_path(pool, root_id).await.map_err(db_to_contract)?.ok_or_else(|| {
+        ContractError::new(
+            ErrorCode::SourceNotFound,
+            format!("root not found: {root_id}"),
+            ErrorSeverity::Blocking,
+            false,
+        )
+    })
+}
+
+/// Preview a root path remap (`roots.remap`, P6a).
+///
+/// Validates that `new_path` exists, is a directory, and is readable, then
+/// samples up to [`REMAP_SAMPLE_LIMIT`] relative paths previously recorded for
+/// `root_id` (via `file_record`) and reports whether each resolves under
+/// `new_path`. Does NOT mutate anything — call [`apply_root_remap`] after
+/// review.
+///
+/// Roots with no `file_record` rows (calibration/project roots, or raw roots
+/// registered directly without an inbox ingest) report zero samples;
+/// `all_verified` then reflects only `new_path`'s own validity. There is no
+/// generic per-root file inventory in the current schema to sample from more
+/// broadly.
+///
+/// # Errors
+///
+/// - `source.not_found` — no root with `root_id`.
+/// - `path.not_exists` / `path.not_directory` / `path.permission_denied` —
+///   `new_path` fails validation.
+/// - `internal.database` — query failure.
+pub async fn remap_root(
+    pool: &SqlitePool,
+    root_id: &str,
+    new_path: &str,
+) -> Result<RemapVerification, ContractError> {
+    let (_, original_path) = get_root_or_not_found(pool, root_id).await?;
+
+    validate_path(new_path).map_err(|e| *e)?;
+
+    let relative_paths = repo::sample_relative_paths(pool, root_id, REMAP_SAMPLE_LIMIT)
+        .await
+        .map_err(db_to_contract)?;
+
+    let new_root = std::path::Path::new(new_path);
+    let samples: Vec<RemapSample> = relative_paths
+        .into_iter()
+        .map(|relative_path| {
+            let found = new_root.join(&relative_path).exists();
+            RemapSample { relative_path, found }
+        })
+        .collect();
+    let all_verified = samples.iter().all(|s| s.found);
+
+    Ok(RemapVerification {
+        root_id: root_id.to_owned(),
+        original_path,
+        new_path: new_path.to_owned(),
+        samples,
+        all_verified,
+    })
+}
+
+/// Apply a previously previewed root remap (`roots.remap.apply`, P6a).
+///
+/// Updates the root's stored path in `registered_sources` (metadata only —
+/// no files are moved) and publishes a best-effort `root.remapped` audit
+/// event recording the prior path, new path, and the caller-supplied
+/// `verified` flag (expected to be the `all_verified` value from a matching
+/// [`remap_root`] preview), per constitution Principle II.
+///
+/// Re-validates `new_path` so an apply cannot silently succeed against a path
+/// that no longer exists between preview and apply (e.g. an unmounted drive).
+///
+/// # Errors
+///
+/// - `source.not_found` — no root with `root_id`.
+/// - `path.not_exists` / `path.not_directory` / `path.permission_denied` —
+///   `new_path` fails validation.
+/// - `internal.database` — persistence failure.
+pub async fn apply_root_remap(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    root_id: &str,
+    new_path: &str,
+    verified: bool,
+) -> Result<(), ContractError> {
+    let (_, original_path) = get_root_or_not_found(pool, root_id).await?;
+
+    validate_path(new_path).map_err(|e| *e)?;
+
+    repo::set_source_path(pool, root_id, new_path).await.map_err(db_to_contract)?;
+
+    // Publish audit event (best-effort; do not fail the operation if the bus drops).
+    let _ = bus
+        .publish(
+            TOPIC_ROOT_REMAPPED,
+            Source::User,
+            RootRemapped {
+                root_id: root_id.to_owned(),
+                original_path,
+                new_path: new_path.to_owned(),
+                verified,
+            },
+        )
+        .await;
+
+    Ok(())
+}
+
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -451,5 +575,147 @@ mod tests {
 
         let err = complete_first_run(&pool, &bus).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::FirstrunIncomplete);
+    }
+
+    // ── P6a: root remap use cases ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn remap_root_missing_root_returns_not_found() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+
+        let err = remap_root(&pool, "nonexistent-root", "/tmp").await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::SourceNotFound);
+    }
+
+    #[tokio::test]
+    async fn remap_root_invalid_new_path_returns_path_not_exists() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::LightFrames,
+            path: "/tmp".to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        let resp = repo::register_source(&pool, &req).await.unwrap();
+
+        let err = remap_root(&pool, &resp.source_id, "/nonexistent/path/that/does/not/exist")
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, ErrorCode::PathNotExists);
+    }
+
+    #[tokio::test]
+    async fn remap_root_with_no_file_records_is_verified_by_path_existence_alone() {
+        // Needs a real, existing directory to remap into; "/tmp" is Unix-only.
+        if !cfg!(unix) {
+            return;
+        }
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::Calibration,
+            path: "/tmp".to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        let resp = repo::register_source(&pool, &req).await.unwrap();
+
+        let preview = remap_root(&pool, &resp.source_id, "/tmp").await.unwrap();
+        assert_eq!(preview.original_path, "/tmp");
+        assert_eq!(preview.new_path, "/tmp");
+        assert!(preview.samples.is_empty());
+        assert!(preview.all_verified);
+    }
+
+    #[tokio::test]
+    async fn apply_root_remap_missing_root_returns_not_found() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let err =
+            apply_root_remap(&pool, &bus, "nonexistent-root", "/tmp", true).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::SourceNotFound);
+    }
+
+    #[tokio::test]
+    async fn apply_root_remap_invalid_new_path_returns_path_not_exists() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::LightFrames,
+            path: "/tmp".to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        let resp = repo::register_source(&pool, &req).await.unwrap();
+
+        let err = apply_root_remap(
+            &pool,
+            &bus,
+            &resp.source_id,
+            "/nonexistent/path/that/does/not/exist",
+            true,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.code, ErrorCode::PathNotExists);
+
+        // Apply-without-verify semantics: a failed apply must never mutate the
+        // stored path — the root still reports its original location.
+        let (_, path) =
+            repo::get_source_kind_and_path(&pool, &resp.source_id).await.unwrap().unwrap();
+        assert_eq!(path, "/tmp");
+    }
+
+    #[tokio::test]
+    async fn apply_root_remap_updates_path_and_publishes_audit_event() {
+        // Needs two real, existing directories; "/tmp" and "/var/tmp" are Unix-only.
+        if !cfg!(unix) {
+            return;
+        }
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::Project,
+            path: "/tmp".to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        let resp = repo::register_source(&pool, &req).await.unwrap();
+
+        apply_root_remap(&pool, &bus, &resp.source_id, "/var/tmp", true).await.unwrap();
+
+        let (_, path) =
+            repo::get_source_kind_and_path(&pool, &resp.source_id).await.unwrap().unwrap();
+        assert_eq!(path, "/var/tmp");
+
+        // A durable `root.remapped` audit event was written (constitution §II).
+        let row: (String,) =
+            sqlx::query_as("SELECT payload FROM events WHERE topic = 'root.remapped'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(row.0.contains(&resp.source_id));
+        assert!(row.0.contains("/tmp"));
+        assert!(row.0.contains("/var/tmp"));
     }
 }

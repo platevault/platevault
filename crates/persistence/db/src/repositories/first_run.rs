@@ -287,6 +287,25 @@ pub async fn get_source_path(pool: &SqlitePool, source_id: &str) -> DbResult<Opt
     Ok(row.map(|(p,)| p))
 }
 
+/// Look up a registered source's kind + current path by id (P6a — `roots.remap`
+/// preview and `roots.remap.apply` both need the kind-and-path pair to report
+/// `original_path` and to resolve sample relative paths).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_source_kind_and_path(
+    pool: &SqlitePool,
+    source_id: &str,
+) -> DbResult<Option<(SourceKind, String)>> {
+    let row: Option<(String, String)> =
+        sqlx::query_as("SELECT kind, path FROM registered_sources WHERE id = ?")
+            .bind(source_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map(|(kind, path)| (str_to_source_kind(&kind), path)))
+}
+
 /// Set a source's organization state by id (spec 041, T030 persistence half).
 ///
 /// Enforces the invariant that `inbox`-kind sources are always `unorganized`:
@@ -327,6 +346,57 @@ pub async fn set_source_organization_state(
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Update a registered source's stored path by id (P6a — `roots.remap.apply`).
+///
+/// This is a metadata-only update: no files are moved, copied, or touched on
+/// disk (Constitution §I — the filesystem is user-owned; the app only
+/// re-points its own record of where the root now lives).
+///
+/// # Errors
+///
+/// Returns [`DbError::NotFound`] if the ID does not exist.
+pub async fn set_source_path(pool: &SqlitePool, source_id: &str, new_path: &str) -> DbResult<()> {
+    let result = sqlx::query("UPDATE registered_sources SET path = ? WHERE id = ?")
+        .bind(new_path)
+        .bind(source_id)
+        .execute(pool)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(DbError::NotFound(format!("registered_source not found: {source_id}")));
+    }
+
+    Ok(())
+}
+
+/// Sample up to `limit` relative paths previously recorded for a root, for use
+/// as `roots.remap` preview candidates.
+///
+/// Reads `file_record` (populated as light frames are ingested through inbox
+/// plan-apply — see `app_targets::ingest_sessions`), ordered for determinism.
+/// Roots with no `file_record` rows (calibration/project roots, or raw roots
+/// registered directly without ever receiving an inbox ingest) simply yield an
+/// empty sample set; there is no broader per-root file inventory in the
+/// current schema to sample from.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn sample_relative_paths(
+    pool: &SqlitePool,
+    root_id: &str,
+    limit: i64,
+) -> DbResult<Vec<String>> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT relative_path FROM file_record WHERE root_id = ? ORDER BY relative_path ASC LIMIT ?",
+    )
+    .bind(root_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(p,)| p).collect())
 }
 
 /// Remove a registered source by ID.
@@ -894,6 +964,137 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, DbError::NotFound(_)));
+    }
+
+    // ── P6a: root remap repository functions ────────────────────────────────
+
+    #[tokio::test]
+    async fn get_source_kind_and_path_roundtrips() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::LightFrames,
+                path: "/astro/raw".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+
+        let (kind, path) = get_source_kind_and_path(&pool, &resp.source_id).await.unwrap().unwrap();
+        assert_eq!(kind, SourceKind::LightFrames);
+        assert_eq!(path, "/astro/raw");
+    }
+
+    #[tokio::test]
+    async fn get_source_kind_and_path_missing_returns_none() {
+        let pool = setup_db().await;
+        let result = get_source_kind_and_path(&pool, "nonexistent-id").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn set_source_path_updates_row() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::LightFrames,
+                path: "/astro/raw".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+
+        set_source_path(&pool, &resp.source_id, "/mnt/new/raw").await.unwrap();
+
+        let (_, path) = get_source_kind_and_path(&pool, &resp.source_id).await.unwrap().unwrap();
+        assert_eq!(path, "/mnt/new/raw");
+    }
+
+    #[tokio::test]
+    async fn set_source_path_missing_returns_not_found() {
+        let pool = setup_db().await;
+        let result = set_source_path(&pool, "nonexistent-id", "/mnt/new").await;
+        assert!(matches!(result, Err(DbError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn sample_relative_paths_empty_when_no_file_records() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Calibration,
+                path: "/astro/cals".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+
+        let samples = sample_relative_paths(&pool, &resp.source_id, 5).await.unwrap();
+        assert!(samples.is_empty());
+    }
+
+    #[tokio::test]
+    async fn sample_relative_paths_respects_limit_and_order() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::LightFrames,
+                path: "/astro/raw".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+
+        // `file_record.root_id` FKs the legacy `library_root` table, not
+        // `registered_sources` (see `app_targets::ingest_sessions` doc
+        // comment). The real ingest pipeline mirrors the `registered_sources`
+        // row into `library_root` under the SAME id before inserting
+        // `file_record` rows; mirror that here so the FK constraint holds.
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
+             VALUES (?, ?, ?, 'local', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&resp.source_id)
+        .bind(&resp.source_id)
+        .bind(&resp.path)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        for (i, relative_path) in
+            ["M31/light_003.fits", "M31/light_001.fits", "M31/light_002.fits"].iter().enumerate()
+        {
+            sqlx::query(
+                "INSERT INTO file_record \
+                 (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+                 VALUES (?, ?, ?, 0, '2026-01-01T00:00:00Z', 'observed', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            )
+            .bind(format!("fr-{i}"))
+            .bind(&resp.source_id)
+            .bind(relative_path)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let samples = sample_relative_paths(&pool, &resp.source_id, 2).await.unwrap();
+        assert_eq!(samples, vec!["M31/light_001.fits", "M31/light_002.fits"]);
     }
 }
 

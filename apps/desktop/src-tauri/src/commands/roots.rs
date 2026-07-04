@@ -1,14 +1,19 @@
 //! Root/scan/equipment commands exposed to the Tauri webview.
 //!
-//! `roots.register` and `roots.list` delegate to the persistence layer.
-//! Remaining commands are stubs until the real persistence layer is wired.
+//! `roots.register`, `roots.list`, `roots.remap`, and `roots.remap.apply`
+//! delegate to the persistence layer via `app_core::first_run`.
+//! `roots.list`'s `lastScanned` is derived from `inbox_source_groups`
+//! (populated by the real `inbox.scan_folder` command the frontend "Rescan"
+//! button now calls — P6a). `scan.start` remains a stub (unused by the
+//! frontend as of P6a; kept for forward-compat) and `equipment.list` is a
+//! stub until the real persistence layer is wired.
 
 use contracts_core::first_run::{
     OrganizationState, RegisterSourceRequest, RegisterSourceResponse, ScanDepth,
     SetSourceOrganizationStateRequest, SetSourceOrganizationStateResponse, SourceKind,
 };
 use contracts_core::roots::{
-    Equipment, IpcOperationHandle, LibraryRoot, RemapSample, RemapVerification, RootCategory,
+    Equipment, IpcOperationHandle, LibraryRoot, RemapVerification, RootCategory,
 };
 use contracts_core::ContractError;
 use contracts_core::JsonAny;
@@ -31,6 +36,14 @@ pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, 
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
+    // `lastScanned` is derived from `inbox_source_groups.last_scanned_at`
+    // (P6a): every root kind is scanned through `inbox.scan_folder` (setup
+    // wizard + Settings "Rescan"), so a root with no source-group rows simply
+    // has never been scanned yet.
+    let last_scanned = persistence_db::repositories::inbox::last_scanned_by_root(state.repo.pool())
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+
     let roots = sources
         .into_iter()
         .map(|s| {
@@ -41,13 +54,14 @@ pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, 
                 contracts_core::first_run::SourceKind::Inbox => RootCategory::Inbox,
                 contracts_core::first_run::SourceKind::LightFrames => RootCategory::Raw,
             };
+            let last_scanned = last_scanned.get(&s.source_id).cloned();
             LibraryRoot {
                 id: s.source_id,
                 path: s.path,
                 category,
                 online,
                 file_count: 0,
-                last_scanned: None,
+                last_scanned,
             }
         })
         .collect();
@@ -131,39 +145,51 @@ pub async fn sources_set_organization_state(
         .map_err(|e| e.message)
 }
 
-/// `roots.remap` — preview a root path remap.
+/// `roots.remap` — preview a root path remap (P6a).
+///
+/// Delegates to `app_core::first_run::remap_root` for path validation and
+/// sample-path verification against the real `registered_sources` row.
 ///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `ContractError` (`source.not_found`, `path.not_exists`,
+/// `path.not_directory`, `path.permission_denied`, or `internal.database`).
 #[tauri::command]
 #[specta::specta]
 pub async fn roots_remap(
+    state: State<'_, AppState>,
     root_id: String,
     new_path: String,
 ) -> Result<RemapVerification, ContractError> {
-    tracing::debug!("stub: roots.remap root_id={root_id} new_path={new_path}");
-    Ok(RemapVerification {
-        root_id,
-        original_path: "/old/path".to_owned(),
-        new_path,
-        samples: vec![
-            RemapSample { relative_path: "M31/light_001.fits".to_owned(), found: true },
-            RemapSample { relative_path: "M31/light_002.fits".to_owned(), found: true },
-            RemapSample { relative_path: "M31/dark_001.fits".to_owned(), found: true },
-        ],
-        all_verified: true,
-    })
+    tracing::debug!("roots.remap root_id={root_id} new_path={new_path}");
+    app_core::first_run::remap_root(state.repo.pool(), &root_id, &new_path).await
 }
 
-/// `roots.remap.apply` — apply a verified root remap.
+/// `roots.remap.apply` — apply a previously previewed root remap (P6a).
+///
+/// Delegates to `app_core::first_run::apply_root_remap`, which updates the
+/// root's stored path in `registered_sources` and publishes a `root.remapped`
+/// audit event.
 ///
 /// # Errors
-/// Returns `Err(String)` on failure; the stub never fails.
+/// Returns `ContractError` (`source.not_found`, `path.not_exists`,
+/// `path.not_directory`, `path.permission_denied`, or `internal.database`).
 #[tauri::command]
 #[specta::specta]
-pub async fn roots_remap_apply(root_id: String, verified: bool) -> Result<(), ContractError> {
-    tracing::debug!("stub: roots.remap.apply root_id={root_id} verified={verified}");
-    Ok(())
+pub async fn roots_remap_apply(
+    state: State<'_, AppState>,
+    root_id: String,
+    new_path: String,
+    verified: bool,
+) -> Result<(), ContractError> {
+    tracing::debug!("roots.remap.apply root_id={root_id} new_path={new_path} verified={verified}");
+    app_core::first_run::apply_root_remap(
+        state.repo.pool(),
+        &state.bus,
+        &root_id,
+        &new_path,
+        verified,
+    )
+    .await
 }
 
 /// `scan.start` — start a filesystem scan, optionally for specific roots.

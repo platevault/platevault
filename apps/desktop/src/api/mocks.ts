@@ -582,11 +582,16 @@ export async function mockInvoke(
     case 'roots_remap': {
       // Generated `RemapVerification` is camelCase; mirror the real contract so
       // the verification UI (which reads `samples`/`allVerified`) works in mock
-      // mode exactly as it does against the backend.
+      // mode exactly as it does against the backend. The generated `rootsRemap`
+      // binding invokes with `{ rootId, newPath }` (camelCase) — NOT
+      // `root_id`/`new_path` — so read those keys here.
+      const rootId = (_args?.rootId as string) ?? 'root-001';
+      const newPath = (_args?.newPath as string) ?? '/new/path';
+      const originalPath = mockRoots.find((r) => r.id === rootId)?.path ?? '/old/path';
       return {
-        rootId: (_args?.root_id as string) ?? 'root-1',
-        originalPath: '/old/path',
-        newPath: (_args?.new_path as string) ?? '/new/path',
+        rootId,
+        originalPath,
+        newPath,
         samples: [
           { relativePath: 'M31/light_001.fits', found: true },
           { relativePath: 'M31/light_002.fits', found: true },
