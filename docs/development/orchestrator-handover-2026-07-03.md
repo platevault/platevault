@@ -56,7 +56,10 @@ details, branch/commit info, and test results.
   report, and go IDLE keeping their context (not exit). One dedicated CI-shepherd agent
   (own reserved slot outside the worker cap) batches CI watching across all open convoy
   PRs, rebases+merges green ones, and returns per-PR failure lists to the orchestrator,
-  who messages the idle author agent to fix its own PR with warm context.
+  who messages the idle author agent to fix its own PR with warm context. The shepherd is
+  EVENT-DRIVEN (2026-07-04): blocking `gh pr checks --watch` per queued PR instead of
+  sleep loops; fully idle on empty queue; the orchestrator prods it on each
+  writer-completion/PR event.
 - **i18n review (USER RULE, 2026-07-03)**: every completed implementation package gets a
   dedicated reviewer pass over its PR diff for hardcoded user-facing strings that belong in
   the Paraglide catalog — including gate-evading spots (attributes, aria-labels, title=,
