@@ -175,7 +175,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         if: needs.changes.outputs.rust == 'true'
         with:
-          tool: just
+          tool: just,nextest
 
       - name: Install JS deps
         if: needs.changes.outputs.frontend == 'true'
@@ -227,17 +227,25 @@ jobs:
         shell: bash
         # CHANGED_FILES is passed via env (never interpolated into the script
         # body) so an attacker-crafted filename cannot inject shell commands.
+        # nextest --profile ci: fail-fast off (report every failing leg), JUnit
+        # output, and retries=2 scoped to the real-SQLite integration binaries
+        # only (see .config/nextest.toml). Unit tests are not retried.
         env:
           CHANGED_FILES: ${{ needs.changes.outputs.all_files }}
         run: |
           args=$(printf '%s' "$CHANGED_FILES" | tr ',' '\n' | bash scripts/ci-affected-crates.sh)
           if [ "$(printf '%s' "$args" | tr -d '[:space:]')" = "ALL" ] || [ -z "$(printf '%s' "$args" | tr -d '[:space:]')" ]; then
             echo "Running full workspace test suite."
-            cargo test --workspace
+            cargo nextest run --workspace --profile ci
           else
             echo "Running scoped tests for: $args"
-            cargo test $args
+            cargo nextest run --profile ci $args
           fi
+
+      # nextest does not run doctests; keep them in a dedicated step.
+      - name: Rust doctests
+        if: needs.changes.outputs.rust == 'true'
+        run: cargo test --workspace --doc
 
       - name: Frontend unit tests
         if: needs.changes.outputs.frontend == 'true'
