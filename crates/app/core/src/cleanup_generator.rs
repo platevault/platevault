@@ -168,9 +168,20 @@ pub async fn get_policy(pool: &SqlitePool) -> Result<CleanupPolicy, ContractErro
         .map_err(db_err)?;
 
     match stored {
-        Some(value) => {
-            Ok(serde_json::from_value(value).unwrap_or_else(|_| default_cleanup_policy()))
-        }
+        Some(value) => match serde_json::from_value(value) {
+            Ok(policy) => Ok(policy),
+            Err(e) => {
+                // A stored-but-undecodable policy means the row was corrupted
+                // or written by an incompatible version — worth noticing, not
+                // hiding. Fall back to the all-Keep default (safe: nothing is
+                // proposed for cleanup), leaving the stored row untouched.
+                tracing::warn!(
+                    "stored cleanup policy is corrupted ({e}); \
+                     falling back to the all-Keep default policy"
+                );
+                Ok(default_cleanup_policy())
+            }
+        },
         None => Ok(default_cleanup_policy()),
     }
 }
@@ -230,7 +241,18 @@ fn action_label(action: CleanupAction) -> &'static str {
 /// Returns `ContractError` on database failure.
 pub async fn scan(pool: &SqlitePool, project_id: &str) -> Result<CleanupScanResult, ContractError> {
     let policy = get_policy(pool).await?;
-    let actions = action_map(&policy);
+    scan_with_policy(pool, project_id, &policy).await
+}
+
+/// [`scan`] against an already-loaded policy. [`generate`] uses this to avoid
+/// reading the policy twice (and to guarantee scan + item-building see the
+/// same policy snapshot).
+async fn scan_with_policy(
+    pool: &SqlitePool,
+    project_id: &str,
+    policy: &CleanupPolicy,
+) -> Result<CleanupScanResult, ContractError> {
+    let actions = action_map(policy);
 
     // Load global protection once so we can surface protection status per file.
     let global = protection::load_global_protection(pool).await?;
@@ -257,9 +279,19 @@ pub async fn scan(pool: &SqlitePool, project_id: &str) -> Result<CleanupScanResu
         let size = u64::try_from(row.size_bytes).unwrap_or(0);
         total_reclaimable_bytes = total_reclaimable_bytes.saturating_add(size);
 
-        // Resolve protection so the preview surfaces it (constitution II). No
-        // per-source override exists for artifacts, so this reflects the
-        // global default with protected-category elevation.
+        // Resolve protection so the preview surfaces it (constitution II).
+        //
+        // DECISION NOTE (constitution IV — pinned by test
+        // `project_level_unprotected_override_blankets_protected_categories`):
+        // the generator keys protection off the PROJECT id as the source id
+        // for every item, and `resolve_protection` gives a per-source override
+        // row unconditional precedence — the item's category is NOT consulted
+        // in the override branch. Consequence: a project-level `unprotected`
+        // override would also un-gate master/final items in that project. No
+        // shipped path creates project-level overrides today; if project
+        // wiring lands (see SourceProtectionOverride.tsx), revisit whether
+        // protected-category elevation should survive an override before
+        // relying on it here. Do not change resolver semantics silently.
         let resolved = prot_repo::resolve_protection(
             pool,
             project_id,
@@ -317,8 +349,11 @@ pub async fn generate(
     title: Option<&str>,
     destructive_destination: Option<&str>,
 ) -> Result<GenerateCleanupPlanResult, ContractError> {
-    let scan_result = scan(pool, project_id).await?;
+    // Load the policy once and reuse the snapshot for both the scan and the
+    // item-building action map, so a concurrent policy update cannot make the
+    // candidate set and the per-item actions disagree.
     let policy = get_policy(pool).await?;
+    let scan_result = scan_with_policy(pool, project_id, &policy).await?;
     let actions = action_map(&policy);
 
     let plan_id = new_id();
