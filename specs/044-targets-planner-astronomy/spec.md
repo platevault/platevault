@@ -1,31 +1,31 @@
 # Feature Specification: Targets Planner — Ephemeris & Observer-Location Engine (Track B)
 
-**Feature Branch**: `044-targets-planner-astronomy`
+**Feature Branch**: `044-targets-planner-track-b`
 
 **Created**: 2026-07-04
 
 **Status**: Draft
 
-**Input**: User description: "Give the Targets planner real, per-site, per-date observability. For each deep-sky target (and the Moon), compute where it is in the sky over a chosen night from a chosen observing site: altitude over time, when it transits, when it rises/sets, its best imaging date, and its angular separation from the Moon. Let the user keep several named observing sites, pick which one is active, choose how dark 'night' has to be, set the lowest usable altitude, and plan any date — not just tonight — so the planner table's max-altitude, altitude sparkline, visible-tonight, and imaging-time columns show real numbers instead of placeholders."
+**Input**: User description: "Give the Targets planner real, per-site, per-date observability. For each deep-sky target (and the Moon), compute where it is in the sky over a chosen night from a chosen observing site: altitude over time, when it transits, when it rises/sets, its best imaging date, and its geometry against the Moon — so the planner can show real max-altitude, altitude sparkline, visible-tonight, imaging-time and per-filter moon-free time instead of placeholders. Let the user keep several named observing sites, pick which is active, choose how dark 'night' must be and how low the horizon reaches, set the lowest usable altitude, and plan any date — with a default site created in the first-run wizard so the planner works out of the box."
 
 ## Context & Motivation
 
-The Targets planner table and the target detail view already expose columns and an altitude graph for observability — maximum altitude, an altitude sparkline over the night, a "visible tonight" flag, imaging time above a usable altitude, transit / best-date, and a filter recommendation — but those values are currently driven by placeholder logic. The usable-altitude cutoff is a hardcoded constant (`USABLE_ALT_DEG`), there is no real observing site behind the numbers, "tonight" is the only planning horizon, and the Moon-separation figure is not a real angular separation. The planner looks like a planning tool without yet being one.
+The Targets planner table and the target detail view already expose columns and an altitude graph for observability — maximum altitude, an altitude sparkline over the night, a "visible tonight" flag, imaging time above a usable altitude, transit / best-date, Moon distance, and a filter recommendation — but those values are currently driven by placeholder logic. The usable-altitude cutoff is a hardcoded constant (`USABLE_ALT_DEG`), there is no real observing site behind the numbers, "tonight" is the only planning horizon, and the Moon figure is not a real angular separation. The planner looks like a planning tool without yet being one.
 
-This feature (Track B) provides the real **ephemeris and observer-location engine** behind those surfaces: given an observing site and a date, it computes the threshold-independent facts about each target's night (altitude samples, transit, rise, set, best imaging date, Moon separation over time) so the planner and target detail can show truthful, testable observability for the site and date the user actually cares about. It also introduces the user-facing model the engine needs: multiple named observing sites with a default and an active choice, a per-site definition of how dark "night" must be, and a configurable lowest-usable-altitude threshold that replaces the hardcoded constant.
+This feature (Track B) provides the real **ephemeris and observer-location engine** behind those surfaces: given an observing site and a date, it computes where each target is over the night — altitude samples, transit, rise, set, best imaging date — and the Moon's real geometry over that night (its altitude and its angular separation from each target). From that geometry it derives the total imaging time above the usable altitude and, integrating the filter track's per-band Moon-avoidance rule over the night, a **per-filter moon-free imaging time**. It also introduces the user-facing model the engine needs: multiple named observing sites with a default and an active choice, a per-site definition of how dark "night" must be and how low the horizon reaches, a configurable usable-altitude threshold, and a **default site created in the first-run wizard** so the planner is populated from the start.
 
-### Track A / Track B boundary
+### Track A (spec 047) / Track B (this spec) boundary
 
-The astronomy work for the planner is split into two independently specified tracks that share a common astronomy-math dependency:
+The astronomy work for the planner is split into two independently specified tracks that share one common astronomy-math capability and one shared Moon-avoidance rule:
 
-- **Track B (this spec)** owns everything about **time × position**: per-target altitude over the night, transit / rise / set times, best imaging date, the night-darkness window, the observing-site model, the usable-altitude threshold, and **target-to-Moon angular separation at a given time**. Its outputs are threshold-independent facts about a (site, date).
-- **Track A (separate spec)** owns **Moon phase and illumination guidance and filter recommendation** — how bright the Moon is on a night and what that implies for filter choice (the `FiltersRecommendation` the detail view consumes). Track A consumes the Moon position/separation that Track B produces but is not specified here.
+- **Track B (this spec)** owns everything about **time × observer-location × position**: per-target altitude over the night, transit / rise / set times, best imaging date, the night-darkness window, the observing-site model (incl. the first-run wizard default site), the usable-altitude threshold, the **Moon's geometry over the night** (its altitude and its angular separation from each target, three summary separation figures, and Moon-up windows), the band-free **total imaging time**, and — by integrating Track A's Moon-avoidance rule over that geometry — the **per-filter moon-free imaging time**.
+- **Track A (spec 047)** owns the **Moon-avoidance product rule** — the per-band Lorentzian `min_sep(moonAge) = distance / (1 + (moonAge/width)²)` with user-tunable per-band `(distance, width)` parameters (Ha/SII/OIII/L/R/G/B) — plus Moon phase / illumination, the per-band viability pills, and the filter recommendation. The rule and its parameters live in one shared frontend module and shared settings; Track B **consumes** that rule to integrate per-band moon-free time, but does not define the filter tolerances or the recommendation.
 
-Both tracks depend on a single shared astronomy-math capability. The internals of that shared capability (how positions and times are computed, whether by a ported algorithm or a third-party library) are a **plan / research concern** and are intentionally not specified in this document, which stays user- and workflow-focused per the constitution.
+The rule of thumb: anything that needs the Moon *above the user's horizon* or a target's *position for a specific site and time* — including integrating a tolerance over the night — is Track B; the *definition* of the per-band tolerance and the filter advice is Track A. Both tracks draw on one shared astronomy-math capability whose internals (which algorithms or library) are a **plan / research concern**, intentionally unspecified here so this document stays user- and workflow-focused per the constitution.
 
-### Compute boundary (hybrid)
+### Instant threshold updates
 
-Observability has a threshold-independent part (where a target is, and when) and a threshold-dependent part (how that reads against *this user's* usable-altitude cutoff). To keep the usable-altitude slider instant, the engine computes and returns the **threshold-independent** facts for a (site, date) — the altitude samples across the night and the transit / rise / set times — while the **threshold-dependent** values (imaging time above the usable altitude, and the visible-tonight flag) are derived from those samples against the current threshold **without recomputing positions**. Where the derivation runs is a plan concern; the user-facing requirement is that changing the threshold updates the derived columns immediately.
+Observability has a part that depends only on *where a target is and when* (altitude samples, transit, rise, set, Moon geometry) and a part that depends on *thresholds*. Changing the **usable-altitude threshold** MUST update the total-imaging-time and visible-tonight columns immediately, and changing Track A's **per-band Moon-avoidance parameters** MUST update the per-filter moon-free times immediately — both derived from the already-computed positions without recomputing where anything is in the sky. (How and where the derivation runs is a plan concern.)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -40,7 +40,7 @@ An astrophotographer opens the Targets planner for their default observing site 
 **Acceptance Scenarios**:
 
 1. **Given** a default observing site and a target with known coordinates, **When** the planner loads for tonight, **Then** the target's maximum altitude, transit time, and altitude sparkline match an independent ephemeris to planning-grade accuracy.
-2. **Given** the planner is showing tonight's observability, **When** the user changes the usable-altitude threshold, **Then** the imaging-time-above-threshold and visible-tonight values recompute immediately from the existing samples with no position recomputation.
+2. **Given** the planner is showing tonight's observability, **When** the user changes the usable-altitude threshold, **Then** the total-imaging-time and visible-tonight values recompute immediately from the existing positions with no position recomputation.
 3. **Given** a target that never rises above the usable altitude tonight from the active site, **When** the planner loads, **Then** the target is marked not visible tonight with zero imaging time, without error.
 
 ---
@@ -57,64 +57,84 @@ The user is deciding which night next month to image a target. They pick a futur
 
 1. **Given** the planner is set to the active site, **When** the user selects a future date, **Then** all observability values and the altitude graph reflect that date's night for that site.
 2. **Given** a target with a computed best imaging date, **When** the user navigates to that date, **Then** the target transits near local midnight (anti-solar) as indicated.
+3. **Given** the app has just been (re)launched, **When** the planner opens, **Then** the planning date defaults to "tonight" for the active site (the date is not carried over from a prior session).
 
 ---
 
 ### User Story 3 - Manage observing sites (Priority: P2)
 
-The user keeps more than one observing location (a home site and a dark-sky site). They add, edit, and delete named sites, mark one as the default, and switch which site the planner is currently computing for. Observability across the whole planner follows the active site.
+The user keeps more than one observing location (a home site and a dark-sky site). They add, edit, and delete named sites — entering latitude, longitude, elevation, and picking a timezone from a list — mark one as the default, and switch which site the planner is currently computing for. Observability across the whole planner follows the active site, and the active site persists across relaunches.
 
 **Why this priority**: Multiple sites are essential for real users but a single default site is enough to deliver US1; full site management is the next increment.
 
-**Independent Test**: Create two sites with different coordinates, set one active, verify the planner's numbers match that site; switch to the other and verify the numbers change to match the second site; delete a non-default site and confirm it is gone and the active/default selection remains valid.
+**Independent Test**: Create two sites with different coordinates, set one active, verify the planner's numbers match that site; switch to the other and verify the numbers change; relaunch and confirm the active site is remembered; delete a non-default site and confirm the active/default selection remains valid.
 
 **Acceptance Scenarios**:
 
-1. **Given** no sites exist, **When** the user adds a site with a name, latitude, longitude, elevation, and timezone, **Then** it is persisted and can be marked default and made active.
+1. **Given** at least one site exists, **When** the user adds another site with a name, latitude, longitude, elevation, and a timezone chosen from a list, **Then** it is persisted and can be marked default and made active — with no online lookup required.
 2. **Given** two sites exist, **When** the user switches the active site, **Then** every observability value in the planner recomputes for the newly active site.
 3. **Given** a site is marked default, **When** the user deletes a different (non-default) site, **Then** the default and active selections remain valid and the deleted site no longer appears.
-4. **Given** the app extracted an observer location from imported session metadata, **When** no site exists yet, **Then** the app MAY offer to seed a first site from that location for the user to confirm.
+4. **Given** an active site was chosen, **When** the app is relaunched, **Then** the same site is active.
 
 ---
 
-### User Story 4 - Choose how dark "night" must be (Priority: P3)
+### User Story 4 - Choose how dark "night" is and how low the horizon reaches (Priority: P3)
 
-The user sets, per site, whether the observable night is bounded by astronomical twilight (a fully dark sky) or nautical twilight (a looser bound), and the night window used for imaging-time and the altitude graph shading follows that choice.
+The user sets, per site, whether the observable night is bounded by astronomical twilight (a fully dark sky) or nautical twilight (a looser bound), and a minimum usable horizon altitude for local obstructions (trees, buildings). The night window used for imaging-time and the altitude graph shading follows the twilight choice, and rise/visibility respect the minimum horizon.
 
-**Why this priority**: A sensible default (astronomical twilight) works for most users; per-site override is a refinement that matters mainly for high-latitude or bright-target cases.
+**Why this priority**: A sensible default (astronomical twilight, flat 0° horizon) works for most users; per-site overrides are refinements that matter mainly for high-latitude, bright-target, or obstructed-site cases.
 
-**Independent Test**: For a site and date, switch the twilight definition from astronomical to nautical and confirm the night window (and therefore imaging-time-above-threshold and the graph's night shading) widens accordingly.
+**Independent Test**: For a site and date, switch the twilight definition from astronomical to nautical and confirm the night window (and therefore imaging-time and the graph's night shading) widens; raise the site's minimum horizon altitude and confirm a low-transiting target's usable/visible time shrinks accordingly.
 
 **Acceptance Scenarios**:
 
 1. **Given** a site set to astronomical twilight, **When** the planner computes the night window, **Then** the window runs between the sun reaching −18° in the evening and rising back to −18° in the morning.
 2. **Given** the user switches that site to nautical twilight, **When** the planner recomputes, **Then** the night window uses the sun at −12° and the imaging-time figures update to the wider window.
+3. **Given** a site with a raised minimum horizon altitude, **When** a target only ever reaches just above the true horizon, **Then** its usable/visible time reflects the raised horizon rather than a flat 0°.
 
 ---
 
-### User Story 5 - Real target-to-Moon separation (Priority: P2)
+### User Story 5 - Real Moon geometry and per-filter moon-free time (Priority: P2)
 
-For each target, the user sees the real angular separation between the target and the Moon over the planned night (for the active site and date), so they can judge how much the Moon will interfere.
+For each target, the user sees the real Moon geometry for the planned night from the active site — the target-to-Moon separation (at transit, closest approach during dark, and at the dark-window midpoint) and when the Moon is above the horizon — and a **per-filter moon-free imaging time** (e.g. "Ha 4.2h · OIII 2.1h · LRGB 0h"): the hours above the usable altitude in the dark window during which the Moon is not close enough to hurt that band, according to the filter track's per-band Moon-avoidance rule. The altitude sparkline shades usable-uptime and, for a chosen band, the Moon-interference intervals.
 
-**Why this priority**: Moon proximity is a primary go/no-go factor for a night, and it is a distinct, independently valuable slice from raw altitude.
+**Why this priority**: Moon proximity is a primary go/no-go factor, and it differs sharply by filter — a single number misleads. The per-filter moon-free time is what turns "how close is the Moon" into "how much of tonight is usable, for the filter I'll actually shoot."
 
-**Independent Test**: For a target and the Moon on a given night and site, confirm the reported angular separation matches an independent ephemeris to planning-grade accuracy, and that a target near the Moon reports a small separation while a target on the opposite side of the sky reports a large one.
+**Independent Test**: For a target and the Moon on a given night and site, confirm the three separation figures and the Moon-up windows match an independent ephemeris; confirm each band's moon-free time equals the summed dark-window intervals where the target is above the usable altitude and NOT (Moon above horizon AND separation below that band's Moon-avoidance minimum for the night's Moon age), using Track A's rule and parameters.
 
 **Acceptance Scenarios**:
 
-1. **Given** a target and a date/site, **When** the planner computes Moon separation, **Then** the reported separation matches an independent ephemeris to planning-grade accuracy.
-2. **Given** the Moon is below the horizon for the whole night, **When** separation is computed, **Then** the surface indicates the Moon is not up rather than reporting a misleading number.
+1. **Given** a target and a date/site, **When** the planner computes Moon geometry, **Then** the target-to-Moon separation at transit, its minimum over the dark window, and its value at the dark-window midpoint each match an independent ephemeris to planning-grade accuracy.
+2. **Given** the Moon is above the horizon and within a band's Moon-avoidance minimum during part of the dark window, **When** that band's moon-free time is computed, **Then** it excludes that interval; a more Moon-tolerant band (e.g. Ha) excludes less than a sensitive one (e.g. OIII or LRGB).
+3. **Given** the Moon is below the horizon for the whole night, **When** moon-free time is computed, **Then** every band's moon-free time equals the band-free total imaging time and separation reads "Moon not up" where relevant.
+4. **Given** the user changes a band's Moon-avoidance `(distance, width)` parameters, **When** the planner recomputes, **Then** that band's moon-free time updates immediately without recomputing positions.
+
+---
+
+### User Story 6 - Works out of the box: default site from the setup wizard (Priority: P1)
+
+On first run the setup wizard captures a default observing site (name, latitude, longitude, timezone; elevation optional, prefilled from imported session metadata when available), so the planner has real astronomy immediately. If somehow no site exists, the planner shows a clear "add an observing site" prompt and no fabricated astronomy rather than blank or wrong numbers.
+
+**Why this priority**: Without a site there is no observer, so no real observability at all — the entire feature is gated on a site existing. Capturing it in the wizard is what makes US1 true "out of the box," so this is co-P1 with US1.
+
+**Independent Test**: Run the first-run wizard, complete the observing-site step, and confirm a default+active site is persisted and the planner immediately shows real numbers; separately, with no site configured, confirm the planner shows the add-a-site prompt and no astronomy.
+
+**Acceptance Scenarios**:
+
+1. **Given** a first run, **When** the user completes the wizard's observing-site step (name, lat, lon, timezone; elevation optional), **Then** a site is persisted as both default and active and the planner shows real observability with no further setup.
+2. **Given** the wizard step and available imported session observer metadata, **When** the step opens, **Then** it MAY prefill latitude/longitude/timezone for the user to confirm and complete.
+3. **Given** no observing site exists, **When** the planner is opened, **Then** it shows a clear prompt to add a site and renders no astronomy values rather than placeholders.
 
 ---
 
 ### Edge Cases
 
-- **No astronomical dark (high-latitude summer)**: At high latitudes in summer the sun never reaches −18° (or even −12°); the night window is empty. The engine MUST report that there is no dark window for that site/date rather than fabricating one, and imaging-time MUST be zero (or reflect the looser twilight if the user chose nautical and it applies).
-- **Circumpolar targets**: A target that never sets from the active site has no rise/set time; the engine MUST represent transit and altitude samples normally and mark rise/set as not applicable rather than erroring.
-- **Never-rises targets**: A target that never clears the horizon (or the usable altitude) from the active site MUST be marked not visible with zero imaging time, with no rise/set/transit failure.
-- **Missing or no default site**: With no sites configured (or none marked default/active), the planner MUST degrade to a clear "choose or add an observing site" state rather than showing wrong or blank numbers.
+- **No astronomical dark (high-latitude summer)**: When the sun never reaches the chosen twilight depression, the night window is empty. The engine MUST report that there is no dark window for that site/date rather than fabricating one; total imaging time and every band's moon-free time MUST be zero.
+- **Circumpolar targets**: A target that never sets has no rise/set time; the engine MUST represent transit and altitude samples normally and mark rise/set as not applicable rather than erroring.
+- **Never-rises / never-usable targets**: A target that never clears the horizon (or the usable altitude / minimum horizon) MUST be marked not visible with zero imaging time, with no rise/set/transit failure.
+- **No active/default site**: With no sites configured, the planner MUST degrade to a clear "add an observing site" state (US6) rather than showing wrong or blank numbers.
 - **DST / timezone boundaries on arbitrary dates**: When a planned night crosses a daylight-saving transition (or the site's timezone rules differ from the app host's), rise/set/transit and the night window MUST be reported in the site's local time correctly across the transition.
-- **Moon below the horizon**: When the Moon is not up during (part of) the night, separation for that interval MUST be presented as "Moon not up" rather than a raw angle that implies interference.
+- **Moon up but far from target**: The Moon-up windows and separation series MUST be reported as raw geometry; whether that proximity costs a given band is the per-band rule's integration, and a band with a small `distance` may be unaffected while a sensitive band is not.
 - **Target coordinates missing**: A target without resolved coordinates cannot be placed; the planner MUST show it as un-plannable (needs coordinates) rather than computing against a default.
 
 ## Requirements *(mandatory)*
@@ -123,93 +143,107 @@ For each target, the user sees the real angular separation between the target an
 
 **Tonight observability (US1)**
 
-- **FR-001**: For a given observing site and date, the system MUST compute, for each deep-sky target with known coordinates, a set of altitude samples across the night sufficient to render an altitude curve and to derive maximum altitude.
+- **FR-001**: For a given observing site and date, the system MUST compute, for each deep-sky target with known coordinates, altitude samples across the night sufficient to render an altitude curve and to derive maximum altitude.
 - **FR-002**: The system MUST compute each target's transit time (moment of maximum altitude) for the site and date.
-- **FR-003**: The system MUST compute each target's rise and set times for the site and date where they exist, and MUST represent their absence for circumpolar and never-rising targets without error.
-- **FR-004**: The system MUST expose a configurable **usable-altitude threshold** (the lowest altitude at which imaging is considered worthwhile), defaulting to 30°, replacing the current hardcoded constant. The threshold is a user setting.
-- **FR-005**: The system MUST derive, for each target, the imaging time spent above the usable-altitude threshold during the night's dark window, and a "visible tonight" indication, from the computed altitude samples and the night window.
-- **FR-006**: The threshold-dependent values (imaging time above threshold, visible-tonight) MUST be derived from the already-computed threshold-independent samples so that changing the usable-altitude threshold updates them immediately, without recomputing target positions.
-- **FR-007**: The altitude samples and derived observability MUST be presented in the planner table and the target detail altitude graph (maximum altitude, altitude sparkline/curve, visible-tonight, imaging time, transit), replacing placeholder values.
+- **FR-003**: The system MUST compute each target's rise and set times where they exist (respecting the site's minimum horizon altitude and standard atmospheric refraction), and MUST represent their absence for circumpolar and never-rising targets without error.
+- **FR-004**: The system MUST expose a configurable **usable-altitude threshold** (lowest altitude at which imaging is worthwhile), a **global** user setting defaulting to 30°, replacing the current hardcoded constant.
+- **FR-005**: The system MUST derive, for each target, the band-free **total imaging time** above the usable-altitude threshold during the night's dark window, and a **visible-tonight** indication, from the computed altitude samples and the night window.
+- **FR-006**: The usable-altitude-dependent values (total imaging time, visible-tonight) MUST derive from already-computed positions so that changing the usable-altitude threshold updates them immediately, without recomputing target or Moon positions.
+- **FR-007**: The altitude samples and derived observability MUST be presented in the planner table and the target detail altitude graph (maximum altitude, altitude sparkline/curve, visible-tonight, imaging time, transit), replacing placeholder values. The sparkline MUST shade usable-uptime windows and, for a chosen band (default: the band with the most moon-free time, pending a later global band picker), the Moon-interference intervals.
 
 **Arbitrary-date planning (US2)**
 
-- **FR-008**: The planner MUST let the user choose the planning date (not only "tonight"), and all observability outputs MUST be computed for that chosen date and the active site.
-- **FR-009**: The system MUST compute, for each target, a **best imaging date** defined as the date on which the target transits at local midnight (anti-solar / opposition-to-the-sun in the imaging sense), and MUST present it as the target's best-imaging date. This is the best-imaging date, not planetary opposition.
+- **FR-008**: The planner MUST let the user choose the planning date (not only "tonight"); all observability outputs MUST be computed for that chosen date and the active site. The date MUST default to "tonight" on each launch and is not persisted across sessions.
+- **FR-009**: The system MUST compute, for each target, a **best imaging date** — the date on which the target transits at local midnight (anti-solar; best-imaging sense, NOT planetary opposition, and with no magnitude/size change attached) — and present it as a date with a relative "in N days", sortable by days-until.
 - **FR-010**: Observability computation MUST be parameterized by (site, date); the same target MUST yield different, date-appropriate results as the planning date changes.
 
 **Observing sites (US3)**
 
-- **FR-011**: The system MUST let the user create, edit, and delete named observing sites, each with a name, latitude, longitude, elevation, and timezone, persisted alongside the existing application settings.
-- **FR-012**: The system MUST let the user mark exactly one site as the default and choose which site is currently active for planning; all planner observability MUST follow the active site.
-- **FR-013**: The system MUST keep the default and active selections valid across site edits and deletions (e.g. deleting the active or default site MUST leave a valid selection or a clear "no site" state).
-- **FR-014**: The system MAY offer to seed a first observing site from an observer location extracted from imported session metadata, with the user confirming before it is saved (never silently adopted).
+- **FR-011**: The system MUST let the user create, edit, and delete named observing sites, each with a name, latitude, longitude, elevation, timezone, twilight definition, and minimum horizon altitude, persisted alongside the existing application settings. Site entry MUST be fully offline: coordinates and elevation are entered manually and the timezone is chosen from a bundled list of IANA zones (no online geocoding).
+- **FR-012**: The system MUST let the user mark exactly one site as the default and choose which site is currently active for planning; all planner observability MUST follow the active site, and the active selection MUST persist across relaunches.
+- **FR-013**: The system MUST keep the default and active selections valid across site edits and deletions (deleting the active or default site MUST leave a valid selection or the clear no-site state of US6).
+- **FR-014**: The system MAY offer to seed a site from an observer location extracted from imported session metadata (latitude/longitude/timezone), with the user confirming and completing it (e.g. elevation) before it is saved — never silently adopted.
 
-**Night-darkness definition (US4)**
+**Night-darkness & horizon definition (US4)**
 
-- **FR-015**: The system MUST bound the observable night by a twilight definition, defaulting to astronomical twilight (sun 18° below the horizon), and MUST let the user switch it to nautical twilight (sun 12° below the horizon) per site.
-- **FR-016**: The chosen twilight definition MUST determine the night window used for imaging-time-above-threshold and for the altitude graph's night shading.
-- **FR-017**: When no qualifying dark window exists for a site and date under the chosen twilight definition (e.g. high-latitude summer), the system MUST report the absence of a dark window rather than fabricating one, and imaging-time MUST reflect that absence.
+- **FR-015**: The system MUST bound the observable night by a **per-site** twilight definition, defaulting to astronomical twilight (sun 18° below the horizon), switchable to nautical twilight (sun 12° below the horizon).
+- **FR-016**: The chosen twilight definition MUST determine the night window used for imaging-time (total and per-band) and the altitude graph's night shading.
+- **FR-017**: When no qualifying dark window exists for a site and date under the chosen twilight definition, the system MUST report the absence of a dark window rather than fabricating one; total and per-band imaging time MUST be zero.
+- **FR-018**: Each site MUST carry a **minimum horizon altitude** (default 0°) for local obstructions; rise/set, visibility, usable time, and Moon-up determinations MUST respect it, and standard atmospheric refraction MUST be applied at the true horizon.
 
-**Target-to-Moon separation (US5)**
+**Moon geometry & per-filter moon-free time (US5)**
 
-- **FR-018**: The system MUST compute the angular separation between each target and the Moon for the active site and planned date, over the night, treating the Moon as the single moving body in scope.
-- **FR-019**: When the Moon is below the horizon during (part of) the night, the system MUST present that interval as "Moon not up" rather than reporting a separation that implies interference.
+- **FR-019**: The system MUST compute, over the planned night for the active site, the **Moon's altitude** at each sample and the **target-to-Moon angular separation** at each sample, treating the Moon as the single moving body in scope.
+- **FR-020**: The system MUST expose, per target, three separation figures — at the target's transit, the minimum over the dark window, and at the dark-window midpoint — presenting "Moon not up" where the Moon is below the horizon at the reference time.
+- **FR-021**: The system MUST expose, for the planned night, the **Moon-up windows** (contiguous intervals the Moon is above the site's horizon) intersected with the dark window, and the dark window itself, as raw geometry.
+- **FR-022**: The system MUST derive, per target and per band, a **moon-free imaging time** = the summed dark-window intervals where the target is above the usable altitude AND NOT (Moon above the horizon AND target-to-Moon separation below that band's Moon-avoidance minimum for the night's Moon age). The per-band minimum comes from Track A's Moon-avoidance rule; Track B performs the integration over its geometry.
+- **FR-023**: The **Moon-avoidance rule** (per-band Lorentzian) and its per-band `(distance, width)` parameters are owned by Track A (spec 047) as a shared module and shared settings; Track B MUST consume that rule/those parameters but MUST NOT define the per-band tolerances, the per-band viability pills, or the filter recommendation.
+
+**Site-first & setup wizard (US6)**
+
+- **FR-024**: The planner MUST render no astronomy and show a clear "add an observing site" prompt whenever no observing site exists, rather than fabricating or blanking values.
+- **FR-025**: The first-run setup wizard MUST include a step that creates a default (and active) observing site — name, latitude, longitude, timezone required; elevation optional — and MAY prefill latitude/longitude/timezone from imported session observer metadata for the user to confirm. (This wizard step must be coordinated with any other wizard additions so the wizard is not edited in conflicting ways.)
 
 **Accuracy & scope discipline (cross-cutting)**
 
-- **FR-020**: All computed positions and times MUST be **planning-grade**: approximately 1 arcminute in altitude and approximately ±1 minute for rise, set, and transit. The engine MUST NOT claim or attempt pointing-grade precision.
-- **FR-021**: The engine MUST operate fully locally (no online ephemeris service or network dependency) for all in-scope computations, consistent with local-first custody.
-- **FR-022**: Target scope MUST be limited to deep-sky (fixed RA/Dec) targets and the Moon; the engine MUST NOT compute planets, comets, asteroids, or other moving bodies.
+- **FR-026**: All computed positions and times MUST be **planning-grade**: approximately 1 arcminute in altitude and approximately ±1 minute for rise, set, and transit. The engine MUST NOT claim or attempt pointing-grade precision. Stored target coordinates (J2000) MUST be corrected to the date of observation before horizontal-coordinate computation.
+- **FR-027**: The engine MUST operate fully locally (no online ephemeris service or network dependency) for all in-scope computations, consistent with local-first custody.
+- **FR-028**: Target scope MUST be limited to deep-sky (fixed RA/Dec) targets and the Moon; the engine MUST NOT compute planets, comets, asteroids, or other moving bodies.
 
 ### Key Entities *(include if feature involves data)*
 
-- **Observing site**: A named location the user observes from — name, latitude, longitude, elevation, timezone, and its chosen twilight definition. One site is the default; one is active for planning. New persisted entity extending the existing settings store.
-- **Usable-altitude threshold**: A user setting (default 30°) for the lowest altitude at which a target is considered worth imaging; drives the threshold-dependent observability derivation. Replaces the hardcoded `USABLE_ALT_DEG` constant.
-- **Twilight definition**: A per-site choice of how dark the sky must be (astronomical −18° default, or nautical −12°) that bounds the observable night window.
-- **Night observability (per target, per site, per date)**: The threshold-independent result set — altitude samples across the night, transit time, rise time, set time, best imaging date, and Moon separation over time — from which threshold-dependent values are derived.
-- **Derived observability (per target)**: The threshold-dependent read of the night observability against the current usable-altitude threshold — maximum altitude, visible-tonight, imaging time above threshold.
-- **Planning context**: The (active site, planning date, twilight definition, usable-altitude threshold) under which the planner is currently computing.
+- **Observing site**: A named location — name, latitude, longitude, elevation, timezone (IANA), twilight definition (astronomical/nautical), and minimum horizon altitude. One site is default; one is active for planning. New persisted entity extending the existing settings store; entered manually and offline; a first one is created in the setup wizard.
+- **Usable-altitude threshold**: A global user setting (default 30°) — the lowest altitude at which a target is worth imaging. Replaces the hardcoded `USABLE_ALT_DEG`.
+- **Moon-avoidance rule + per-band parameters**: Owned by Track A (047); the per-band Lorentzian `(distance, width)` tolerances consumed by this engine to integrate per-band moon-free time. Not defined here.
+- **Night observability (per target, per site, per date)**: The position/time result set — altitude samples, transit, rise, set, best imaging date, Moon altitude over time, target-to-Moon separation over time, Moon-up windows, and dark window — from which derived values come.
+- **Derived observability (per target)**: Maximum altitude, visible-tonight, band-free total imaging time, the three separation figures, and the per-band moon-free imaging time.
+- **Planning context**: The single, shared (active site, planning date, per-site twilight, minimum horizon, usable-altitude threshold, chosen sparkline band) under which the planner and target detail both compute; active site persists, date defaults to tonight.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: For a configured site and date, each in-scope target's maximum altitude and transit time match an independent reference ephemeris to within planning-grade accuracy (≈1 arcmin altitude, ≈±1 min transit) in 100% of sampled cases.
-- **SC-002**: Rise and set times for targets that have them match an independent reference to within ≈±1 minute; circumpolar and never-rising targets are correctly reported as having none, with zero errors.
-- **SC-003**: Changing the usable-altitude threshold updates the imaging-time and visible-tonight columns for all targets without any recomputation of positions and without a perceptible delay (updates reflect immediately from existing samples).
+- **SC-001**: For a configured site and date, each in-scope target's maximum altitude and transit time match an independent reference ephemeris to within planning-grade accuracy (≈1 arcmin altitude, ≈±1 min transit) in 100% of sampled cases, with J2000→date correction applied.
+- **SC-002**: Rise and set times for targets that have them match an independent reference to within ≈±1 minute (accounting for the site's minimum horizon and refraction); circumpolar and never-rising targets are correctly reported as having none, with zero errors.
+- **SC-003**: Changing the usable-altitude threshold updates the total-imaging-time and visible-tonight columns for all targets without any recomputation of positions and without perceptible delay.
 - **SC-004**: Selecting a different planning date changes every target's observability to that date's values (distinct from tonight's) in 100% of cases, matching the reference ephemeris for the chosen date.
-- **SC-005**: Switching the active observing site recomputes all planner observability for the new site's coordinates in 100% of cases; the numbers differ appropriately between two sites with materially different latitude/longitude.
-- **SC-006**: A user can create, edit, delete, set-default, and activate observing sites, and the default/active selection remains valid after any such change in 100% of operations.
-- **SC-007**: Switching a site between astronomical and nautical twilight changes the night window and the resulting imaging-time figures consistently with the chosen sun-depression angle.
-- **SC-008**: At a high-latitude site/date with no dark window under the chosen twilight, the planner reports no dark window and zero imaging time rather than fabricating a window, with no error.
-- **SC-009**: Target-to-Moon angular separation matches an independent reference ephemeris to planning-grade accuracy; a target adjacent to the Moon reads a small separation and one across the sky reads a large one.
-- **SC-010**: With no observing site configured, the planner shows a clear prompt to choose or add a site rather than blank or incorrect observability values, in 100% of cases.
-- **SC-011**: Rise/set/transit and the night window are reported correctly in the site's local time across a daylight-saving transition on an arbitrary planned date.
+- **SC-005**: Switching the active observing site recomputes all planner observability for the new site's coordinates in 100% of cases; numbers differ appropriately between two sites with materially different latitude/longitude, and the active site is remembered after relaunch.
+- **SC-006**: A user can create, edit, delete, set-default, and activate observing sites entirely offline (manual coordinates + IANA-timezone pick), and the default/active selection remains valid after any such change in 100% of operations.
+- **SC-007**: Switching a site between astronomical and nautical twilight changes the night window and the resulting imaging-time figures consistently with the chosen sun-depression angle; raising the minimum horizon reduces a low target's usable time accordingly.
+- **SC-008**: At a high-latitude site/date with no dark window under the chosen twilight, the planner reports no dark window and zero total/per-band imaging time rather than fabricating a window, with no error.
+- **SC-009**: The three target-to-Moon separation figures match an independent reference ephemeris to planning-grade accuracy; a target adjacent to the Moon reads a small separation and one across the sky reads a large one.
+- **SC-010**: Per-band moon-free imaging time equals, for each band, the summed dark-window intervals where the target is above the usable altitude and NOT (Moon above the horizon AND separation below that band's Moon-avoidance minimum for the night's Moon age), in 100% of sampled cases; a more Moon-tolerant band never reports less moon-free time than a stricter band for the same target/night.
+- **SC-011**: On first run, completing the wizard's observing-site step yields a persisted default+active site and immediate real planner observability; with no site configured, the planner shows the add-a-site prompt and no astronomy, in 100% of cases.
+- **SC-012**: Rise/set/transit and the night window are reported correctly in the site's local time across a daylight-saving transition on an arbitrary planned date.
+- **SC-013**: The Moon geometry (altitude-over-time, separation-over-time, Moon-up windows, dark window) and Track A's shared Moon-avoidance rule are computed once and shared, with no duplicate Moon-geometry computation between the tracks.
 
 ## Out of Scope / Non-Goals
 
-- **Planets, comets, asteroids, and other moving bodies** — only deep-sky fixed targets and the Moon are in scope (FR-022).
-- **Planetary opposition** — "best date" is best-imaging date (transit at local midnight / anti-solar), not planetary opposition (FR-009).
-- **Pointing-grade astrometry** — no precession, nutation, aberration, or proper-motion correction; pointing is the mount's / PixInsight's job, respecting the PixInsight boundary (FR-020).
-- **Online ephemeris / catalog services** — all computation is local (FR-021).
-- **Moon phase / illumination and filter recommendation** — owned by Track A, a separate spec; this spec provides only Moon position and separation.
-- **The shared astronomy-math implementation choice** (ported algorithm vs. library) — a plan / research concern, not specified here.
-- **Target coordinate resolution / catalog lookup** — supplied by the existing target-identity/resolution features; this engine consumes coordinates, it does not resolve them.
+- **Planets, comets, asteroids, and other moving bodies** — only deep-sky fixed targets and the Moon are in scope (FR-028).
+- **Planetary opposition** — "best date" is best-imaging date (transit at local midnight / anti-solar), not planetary opposition, and carries no magnitude/size change for a DSO (FR-009).
+- **Pointing-grade astrometry** — no nutation/aberration/proper-motion correction beyond the J2000→date correction needed for planning-grade horizontal coordinates; pointing is the mount's / PixInsight's job (FR-026).
+- **Online ephemeris / geocoding / catalog services** — all computation and site entry are local (FR-027, FR-011).
+- **The Moon-avoidance rule definition, per-band `(distance, width)` parameters, per-band viability pills, filter recommendation, and Moon phase / illumination** — all owned by Track A (spec 047). Track B integrates the rule over its geometry (FR-022/FR-023) but does not define it.
+- **The shared astronomy-math implementation choice** and the JS-frontend/Rust-core compute-boundary rationale — plan-stage concerns (the latter recorded as an ADR at plan time and referenced here).
+- **Target coordinate resolution / catalog lookup** — supplied by existing target-identity features; this engine consumes coordinates, it does not resolve them.
+- **Broader first-run wizard redesign** — this spec adds only the observing-site step/hook; other wizard steps are out of scope and must be coordinated (see Dependencies).
 
 ## Assumptions
 
-- **Observing site is a new persisted entity**: The existing settings store gains a named-site collection (name, lat, lon, elevation, timezone, twilight definition) with a default and an active selection; the existing per-session `ObserverLocation` (tz, lat, lon) remains the acquisition-time record and MAY seed a first site.
-- **Threshold-independent / threshold-dependent split**: The engine returns altitude samples and rise/set/transit (threshold-independent) for a (site, date); imaging-time and visible-tonight are derived against the current usable-altitude threshold so the slider stays instant. Where the derivation executes is a plan concern.
-- **Planning-grade, not pointing-grade**: ≈1 arcmin altitude and ≈±1 min times are sufficient for planning; the engine deliberately omits pointing-grade corrections (constitution III — the PixInsight boundary).
-- **Local-first**: All computation is offline; no network ephemeris dependency (constitution I).
-- **Shared math with Track A**: Both tracks depend on one shared astronomy-math capability; Track A consumes the Moon position/separation this track computes. The shared capability's internals are specified at plan time.
-- **Target coordinates already available**: Targets carry resolved coordinates from existing target-identity features; targets without coordinates are shown as un-plannable rather than computed against a default.
-- **Existing planner surfaces consume the outputs**: The planner table columns and the target-detail altitude graph already exist and are wired to placeholder logic; this feature replaces the placeholder inputs with real engine outputs rather than redesigning those surfaces.
+- **Observing site is a new persisted entity**: The existing settings store gains a named-site collection (name, lat, lon, elevation, timezone, twilight definition, minimum horizon) with a default and an active selection; the existing per-session `ObserverLocation` (tz, lat, lon) remains the acquisition-time record and MAY seed a site.
+- **Instant threshold updates**: Positions/times are computed once per (site, date); total imaging time and visible-tonight derive against the current usable-altitude threshold, and per-band moon-free time derives against Track A's per-band parameters — all without recomputing positions. Where the derivation executes is a plan concern.
+- **Shared Moon-avoidance rule**: Track A (047) exposes the per-band Lorentzian rule and parameters as a shared module/settings; Track B integrates it. The default per-band parameters and the single-knob retirement are Track A's to set.
+- **Planning-grade, not pointing-grade**: ≈1 arcmin altitude and ≈±1 min times suffice; the engine applies the J2000→date correction required for that grade and omits pointing-grade corrections (constitution III — the PixInsight boundary).
+- **Local-first**: All computation and site entry are offline; no network dependency (constitution I).
+- **Target coordinates available**: Targets carry resolved J2000 coordinates from existing target-identity features; targets without coordinates are shown as un-plannable. (Whether the current targets list endpoint actually populates those coordinates is verified at plan time.)
+- **Existing planner surfaces consume the outputs**: The planner table columns and the target-detail altitude graph already exist wired to placeholder logic; this feature replaces the placeholder inputs with real engine outputs rather than redesigning those surfaces.
 
 ## Dependencies
 
-- Existing settings/configuration store (spec 018) — extended with the observing-site collection, default/active selection, twilight definition, and usable-altitude threshold.
-- Existing acquisition-session `ObserverLocation` model — as an optional seed for a first site.
-- Existing target-identity / coordinate resolution — supplies target RA/Dec.
+- Existing settings/configuration store (spec 018) — extended with the observing-site collection, default/active selection, per-site twilight + minimum horizon, and the global usable-altitude threshold.
+- Existing acquisition-session `ObserverLocation` model — optional seed for a site (incl. wizard prefill).
+- Existing target-identity / coordinate resolution — supplies target J2000 RA/Dec.
 - Existing planner table and target-detail altitude graph surfaces — the consumers of the engine's outputs.
-- A shared astronomy-math capability co-developed with Track A (Moon phase / filter guidance) — internals specified at plan time.
+- Track A (spec 047) — provides the shared Moon-avoidance rule/parameters this engine integrates, and consumes this engine's Moon geometry; co-develops the one shared astronomy-math capability (internals specified at plan time).
+- First-run setup wizard — gains an observing-site step; **must be coordinated with spec 048's wizard hook** so the two do not make conflicting wizard edits (coordinate via the orchestrator).
+- Compute-boundary decision record (ADR) — the JS-frontend vs Rust-core placement of astronomy computation (constitution V) is captured as an ADR at plan time and referenced from this spec.
