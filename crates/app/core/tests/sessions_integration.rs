@@ -116,3 +116,81 @@ async fn get_session_returns_detail_for_seeded_row() {
     assert!(detail.calibration_matches.is_empty(), "no calibration matches on fresh seed");
     assert!(detail.history.is_empty(), "no history on fresh seed");
 }
+
+// ── 7. spec 048 US1/T008: honest frame_count/total_size_bytes ───────────────
+
+/// Insert a `library_root` + `file_record` row with a given size/state.
+async fn insert_file_record(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    root_id: &str,
+    size_bytes: i64,
+    state: &str,
+) {
+    sqlx::query(
+        "INSERT OR IGNORE INTO library_root (id, label, current_path, kind, state, created_at)
+         VALUES (?, ?, '/tmp', 'local', 'active', datetime('now'))",
+    )
+    .bind(root_id)
+    .bind(root_id)
+    .execute(pool)
+    .await
+    .expect("insert library_root");
+
+    sqlx::query(
+        "INSERT INTO file_record
+            (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at)
+         VALUES (?, ?, ?, ?, datetime('now'), ?, datetime('now'), datetime('now'))",
+    )
+    .bind(id)
+    .bind(root_id)
+    .bind(format!("{id}.fits"))
+    .bind(size_bytes)
+    .bind(state)
+    .execute(pool)
+    .await
+    .expect("insert file_record");
+}
+
+#[tokio::test]
+async fn list_sessions_sums_real_frame_sizes() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    insert_file_record(pool, "frame-a", "root-a", 1000, "classified").await;
+    insert_file_record(pool, "frame-b", "root-a", 2500, "classified").await;
+    sqlx::query(
+        "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at)
+         VALUES ('ses-sized', 'KEY', '[\"frame-a\",\"frame-b\"]', '2026-05-01T00:00:00Z')",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let sessions = app_core::sessions::list_sessions(pool).await.unwrap();
+    let ses = sessions.iter().find(|s| s.id == "ses-sized").expect("ses-sized must be in list");
+
+    assert_eq!(ses.frame_count, 2, "both frames are present");
+    assert_eq!(ses.total_size_bytes, 3500, "total must be the real sum, never 0");
+}
+
+#[tokio::test]
+async fn get_session_excludes_missing_frames_from_active_totals() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    insert_file_record(pool, "frame-present", "root-b", 1000, "classified").await;
+    insert_file_record(pool, "frame-gone", "root-b", 9000, "missing").await;
+    sqlx::query(
+        "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at)
+         VALUES ('ses-missing', 'KEY', '[\"frame-present\",\"frame-gone\"]', '2026-05-01T00:00:00Z')",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let detail = app_core::sessions::get_session(pool, "ses-missing").await.unwrap();
+
+    assert_eq!(detail.frame_count, 1, "a missing frame drops out of the active count (INV-5)");
+    assert_eq!(detail.total_size_bytes, 1000, "a missing frame's bytes drop out of the total");
+}
