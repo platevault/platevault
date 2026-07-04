@@ -45,6 +45,12 @@ details, branch/commit info, and test results.
   and silently swap each other's working trees (bit the FR-015 agent; edits reverted
   mid-task, recovered). Agents commit WIP to their own branch instead (fixup/squash
   later). Include in every new implementation brief.
+- **Continuous commit+push (USER RULE, 2026-07-04)**: every agent that writes commits AND
+  pushes to origin after each meaningful step. No accumulated unpushed work; never rely on
+  /tmp worktrees or local-only branches surviving. First action when adopting an existing
+  local branch: push its ref as-is. WIP commits allowed (squash at merge). Derived from the
+  2026-07-04 session-limit kill that stranded impl-p12/wire-p6a as local-only commits and
+  left #388/#390/#395 worktrees ahead of their pushed PR refs.
 - **i18n review (USER RULE, 2026-07-03)**: every completed implementation package gets a
   dedicated reviewer pass over its PR diff for hardcoded user-facing strings that belong in
   the Paraglide catalog — including gate-evading spots (attributes, aria-labels, title=,
