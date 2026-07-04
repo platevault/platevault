@@ -87,7 +87,7 @@ export type {
 };
 export type { PatternPartDto as PatternPart };
 export type { PatternValidateResponse, PatternPreviewResponse };
-export type { UpdateCalibrationTolerances };
+export type { CalibrationTolerances, UpdateCalibrationTolerances };
 export type { IngestionSettings, UpdateIngestionSettings };
 
 // ── Settings scope read/write (spec 018) ──────────────────────────────────────

@@ -9,9 +9,11 @@
 
 pub mod equipment;
 mod matching;
+mod tolerances;
 
 // `app_core::calibration::*` historically resolved to the flat calibration
 // use-case module. Flatten its public surface into this crate root so those
 // paths (e.g. `app_core::calibration::masters_list`) remain stable once
 // `app_core` re-exports this crate.
 pub use matching::*;
+pub use tolerances::*;

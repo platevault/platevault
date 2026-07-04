@@ -2,17 +2,17 @@
 //
 // Authoritative design: platevault-settings-menu.html § [data-pane="calmatch"]
 //
-// Owned backend keys (CalibrationTolerances / UpdateCalibrationTolerances):
+// Owned backend keys (CalibrationTolerances / UpdateCalibrationTolerances),
+// persisted to the `calibration_tolerances` singleton table (migration 0008 +
+// 0051) via `calibration.tolerances.get`/`update`:
 //   - requireSameCamera   (boolean) — Camera "Match required" toggle
 //   - requireSameBinning  (boolean) — Binning "Match required" toggle
 //   - requireSameGain     (boolean) — Gain "Match required" toggle
+//   - requireSameOffset   (boolean) — Offset "Match required" toggle. Also
+//     feeds `calibration_core::ranking::MatchingRuleConfig::require_same_offset`
+//     (the dark/bias hard-rule the matching engine already enforces).
 //   - temperatureToleranceC (number | null) — Sensor temp tolerance in °C
 //   - agingLimitDays      (number) — Dark / bias age tolerance in days
-//
-// STUB: backend CalibrationTolerances has no requireSameOffset field yet.
-//   The Offset "Match required" toggle is local state only and does NOT persist
-//   to the backend.  Wire it when the backend adds the field.
-//   Comment tag: STUB-OFFSET-REQUIRED
 import { useState, useEffect } from 'react';
 import { Toggle, Pill } from '@/ui';
 import { m } from '@/lib/i18n';
@@ -35,7 +35,7 @@ const DEFAULTS = {
   requireSameCamera: true,
   requireSameBinning: true,
   requireSameGain: true,
-  requireSameOffset: true, // STUB-OFFSET-REQUIRED: local only
+  requireSameOffset: true,
   temperatureToleranceC: 5,
   agingLimitDays: 365,
 };
@@ -45,7 +45,6 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
   const [requireCamera, setRequireCamera] = useState(DEFAULTS.requireSameCamera);
   const [requireBinning, setRequireBinning] = useState(DEFAULTS.requireSameBinning);
   const [requireGain, setRequireGain] = useState(DEFAULTS.requireSameGain);
-  // STUB-OFFSET-REQUIRED: no backend field — persists locally only
   const [requireOffset, setRequireOffset] = useState(DEFAULTS.requireSameOffset);
 
   // ── Soft-tolerance inputs ──────────────────────────────────────────────────
@@ -59,6 +58,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
         setRequireCamera(tol.requireSameCamera);
         setRequireBinning(tol.requireSameBinning);
         setRequireGain(tol.requireSameGain);
+        setRequireOffset(tol.requireSameOffset);
         if (tol.temperatureToleranceC !== null) {
           setTempTolerance(tol.temperatureToleranceC);
         }
@@ -75,6 +75,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
       requireSameCamera: requireCamera,
       requireSameBinning: requireBinning,
       requireSameGain: requireGain,
+      requireSameOffset: requireOffset,
       temperatureToleranceC: tempTolerance,
       agingLimitDays: agingLimit,
       exposureToleranceS: null, // not surfaced in this pane
@@ -98,9 +99,9 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
     setRequireGain(val);
     persist({ requireSameGain: val });
   }
-  // STUB-OFFSET-REQUIRED: local only — no persist call
   function handleOffsetToggle(val: boolean) {
     setRequireOffset(val);
+    persist({ requireSameOffset: val });
   }
 
   // ── Tolerance input handlers ───────────────────────────────────────────────
@@ -125,13 +126,14 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
     setRequireCamera(DEFAULTS.requireSameCamera);
     setRequireBinning(DEFAULTS.requireSameBinning);
     setRequireGain(DEFAULTS.requireSameGain);
-    setRequireOffset(DEFAULTS.requireSameOffset); // STUB-OFFSET-REQUIRED: local only
+    setRequireOffset(DEFAULTS.requireSameOffset);
     setTempTolerance(DEFAULTS.temperatureToleranceC);
     setAgingLimit(DEFAULTS.agingLimitDays);
     await calibrationTolerancesUpdate({
       requireSameCamera: DEFAULTS.requireSameCamera,
       requireSameBinning: DEFAULTS.requireSameBinning,
       requireSameGain: DEFAULTS.requireSameGain,
+      requireSameOffset: DEFAULTS.requireSameOffset,
       temperatureToleranceC: DEFAULTS.temperatureToleranceC,
       agingLimitDays: DEFAULTS.agingLimitDays,
       exposureToleranceS: null, // not surfaced in this pane
@@ -181,12 +183,11 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td className="mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
-          {/* Offset — STUB-OFFSET-REQUIRED: local state only, no backend key */}
+          {/* Offset — hard toggle, persists to requireSameOffset and feeds
+              MatchingRuleConfig::require_same_offset in the matching engine */}
           <tr>
             <td>{m.settings_calmatch_offset()}</td>
             <td>
-              {/* STUB: backend MatchingRuleConfig per-field required flags pending
-                  (requireSameOffset) — persists locally only */}
               <Toggle checked={requireOffset} onChange={handleOffsetToggle} />
             </td>
             <td className="mono">{m.settings_calmatch_exact()}</td>
