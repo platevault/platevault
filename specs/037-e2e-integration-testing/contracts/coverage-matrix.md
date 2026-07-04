@@ -94,6 +94,52 @@ multi-root prompt vs single-root auto, missing-date gate) is the recommended
 post-merge verification loop (see the `tauri-mcp-windows-verify-mechanics`
 memory); Layer-1 + vitest coverage above gates the merge.
 
+## Layer-2 real-UI journey status — 2026-07-04 (WP-C, D21/D22)
+
+Six real journeys exist in `crates/e2e-tests/tests/`, none `#[ignore]`d.
+Harness: thirtyfour + `tauri-plugin-webdriver`/`tauri-webdriver`, the
+`window.__ALM_E2E__` invoke bridge (D21 renamed the harness's stale
+`__APP_E2E__` references to match — confirmed landed). CI (`e2e.yml`, 3-OS
+matrix) is the first real run point (no webview in the WSL dev sandbox);
+local gates (compile, clippy, fmt) are clean.
+
+| Journey | File | Areas | Real commands exercised |
+|---|---|---|---|
+| `first_run_resolve_create_project` | `journeys.rs` | #1, #7, #12/#14 | `target.resolve` (offline bundled-seed cache hit), `projects.create`, `projects.list` |
+| `plan_review_apply_with_audit` | `journeys.rs` | #3, #16, #17, #18 | `roots.register`, `sources.set_organization_state`, `inbox.scan.folder`, `inbox.classify`, `inbox.confirm`, `inbox.plan.apply`, `plans.apply.status` |
+| `ingestion_sessions_search` | `journeys.rs` | #3, #4, #6, #5, #12/#14 | inbox pipeline (as above) + `sessions.list` (event-driven session grouping/resolution), `calibration.match.suggest`, `search.global` |
+| `lifecycle_integrity` | `journeys.rs` | #7/#8 | `projects.create`, `lifecycle.transition.apply`, `lifecycle.ledger.list` |
+| `cleanup_plan_review` (NEW, D22) | `journeys.rs` | #10/#11, #17 | `projects.create`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve` |
+| `all_top_level_screens_load` | `smoke.rs` | #21 | real routes + the shipped `AppErrorBoundary` fallback presence check |
+
+**Corrections to prior scaffold claims** (the original stub doc comments were
+partly aspirational, not verified against real code — corrected here per this
+task's brief: "keep it accurate to REAL current behavior, don't trust spec
+prose"):
+
+- `sessions.transition` is NOT exercised by any journey — spec 041 FR-051
+  (T076) deliberately deleted the command; the original `lifecycle_integrity`
+  stub's mention of it is struck (D22).
+- `audit.list`/`audit.export` are STILL fixture stubs returning hardcoded,
+  unrelated data (`apps/desktop/src-tauri/src/commands/audit.rs`) — an
+  in-flight, unrelated PR (#388) is wiring the real read path. No journey
+  asserts through `audit.list`; durable-record proofs instead use
+  `plans.apply.status` (reads the real `plan_apply_events` table) or
+  `lifecycle.ledger.list` (real). The original stubs' references to
+  `events.recent` were aspirational — that command does not exist.
+- **`cleanup_plan_review`'s known, documented gap**: applying the generated
+  plan needs `plans.apply_real`, which takes a `tauri::ipc::Channel` progress
+  argument with no channel-free equivalent for archive/cleanup plans (unlike
+  `inbox.plan.apply` for inbox plans), and the Cleanup/Archive UI does not yet
+  wire an Apply button for `cleanup.plan.generate` output
+  (`apps/desktop/src/features/projects/OutputsCleanupSections.tsx`,
+  `apps/desktop/src/features/archive/*.tsx` — neither calls
+  `cleanupPlanGenerate`). The journey stops at `plans.approve`
+  (`ready_for_review` → `approved`), which is the real, honest boundary of
+  what's testable today without reaching into product frontend code beyond a
+  thin test hook (FR-018). Follow-up: land a channel-free generic apply
+  command, or wire the UI Apply button, then extend the journey.
+
 ## Spec 035 iteration — US4 ingest → session → target — 2026-06-21
 
 Applied light frames create `acquisition_session` records grouped by capture

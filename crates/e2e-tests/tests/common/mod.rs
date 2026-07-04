@@ -30,8 +30,9 @@
 
 #![allow(dead_code)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
 use serde::de::DeserializeOwned;
@@ -160,6 +161,124 @@ impl E2eApp {
         outcome.into_result::<T>()
     }
 
+    /// Poll a command through the `invoke` bridge until `predicate` accepts the
+    /// deserialised value or `timeout` elapses.
+    ///
+    /// Several real backend effects in this app are event-driven rather than
+    /// synchronous with the triggering call (e.g. the inbox plan-apply listener
+    /// creates `acquisition_session` rows asynchronously after a plan-applied
+    /// event, and the artifact watcher's reconciliation pass runs on its own
+    /// task). Polling a real read command until the expected state appears is
+    /// the wait primitive for those cases — never a blind `sleep`.
+    ///
+    /// # Errors
+    /// Returns the last error (invoke failure, or a "predicate never matched"
+    /// message once `timeout` elapses) if the predicate never accepts a value.
+    pub async fn invoke_until<T, P>(
+        &self,
+        command: &str,
+        args: Value,
+        timeout: Duration,
+        mut predicate: P,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+        P: FnMut(&T) -> bool,
+    {
+        let deadline = Instant::now() + timeout;
+        let mut last_err: Option<anyhow::Error> = None;
+        loop {
+            match self.invoke::<T>(command, args.clone()).await {
+                Ok(value) if predicate(&value) => return Ok(value),
+                Ok(_) => {}
+                Err(e) => last_err = Some(e),
+            }
+            if Instant::now() >= deadline {
+                return Err(last_err.unwrap_or_else(|| {
+                    anyhow!(
+                        "invoke_until({command}) timed out after {:?} without a matching value",
+                        timeout
+                    )
+                }));
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    }
+
+    /// Navigate to a top-level SPA route and wait for the shell to settle.
+    ///
+    /// The app does not perform a full page navigation for in-app routes (it's
+    /// a client-side router), but a fresh `driver.goto` to `APP_URL + path` is
+    /// still the simplest deterministic way to land on a known route in a
+    /// thirtyfour session. Waits for `document.readyState == "complete"`
+    /// instead of a fixed sleep.
+    pub async fn goto_route(&self, path: &str) -> Result<()> {
+        let url = format!("{APP_URL}{path}");
+        self.driver.goto(&url).await.with_context(|| format!("goto {url} failed"))?;
+        self.wait_document_ready(Duration::from_secs(10)).await
+    }
+
+    /// Poll `document.readyState` until `"complete"` or `timeout` elapses.
+    pub async fn wait_document_ready(&self, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let state: String = self
+                .driver
+                .execute("return document.readyState", vec![])
+                .await
+                .context("failed to read document.readyState")?
+                .convert()
+                .context("failed to deserialise document.readyState")?;
+            if state == "complete" {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!("document.readyState never reached 'complete'"));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    /// `true` once `window.__ALM_E2E__.invoke` exists — a real signal that
+    /// `main.tsx` finished its top-level module evaluation for the current
+    /// page load (used instead of a blind sleep after `goto_route`).
+    pub async fn bridge_ready(&self) -> Result<bool> {
+        let script = r"
+            return !!(window.__ALM_E2E__ && typeof window.__ALM_E2E__.invoke === 'function');
+        ";
+        let ret =
+            self.driver.execute(script, vec![]).await.context("bridge_ready script failed")?;
+        ret.convert::<bool>().context("failed to deserialise bridge_ready result")
+    }
+
+    /// Wait for [`Self::bridge_ready`] to become `true`.
+    pub async fn wait_bridge_ready(&self, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if self.bridge_ready().await.unwrap_or(false) {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!("window.__ALM_E2E__ bridge never became ready"));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    /// `true` when the shared `AppErrorBoundary` fallback
+    /// (`[data-testid="app-error-boundary-fallback"]`, `apps/desktop/src/app/AppErrorBoundary.tsx`)
+    /// is present in the DOM — the real, shipped signal that a route's
+    /// component tree threw an uncaught render error (FR-007).
+    pub async fn error_boundary_visible(&self) -> Result<bool> {
+        use thirtyfour::error::WebDriverErrorInner;
+
+        match self.driver.find(By::Css("[data-testid='app-error-boundary-fallback']")).await {
+            Ok(_) => Ok(true),
+            Err(e) if matches!(e.as_inner(), WebDriverErrorInner::NoSuchElement(_)) => Ok(false),
+            Err(e) => Err(e).context("failed to query for the error boundary fallback"),
+        }
+    }
+
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
     /// if present. Quitting the session already terminates the app process
     /// that `tauri-webdriver` launched on our behalf.
@@ -284,4 +403,52 @@ fn reset_database() -> Result<()> {
     }
     // TODO(spec-037 wiring): resolve OS app-data path when ALM_DB_URL is unset.
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// FITS fixture writer
+// ---------------------------------------------------------------------------
+
+/// Write a minimal single-block (2880-byte) FITS file with the given header
+/// cards, so journeys can drive the real inbox classify/confirm/ingest
+/// pipeline against real files on disk (no product code touched).
+///
+/// Mirrors the proven fixture writer already used by
+/// `crates/app/inbox/src/confirm.rs` tests and
+/// `crates/app/core/tests/ingest_sessions_integration.rs` (T045/T046) — same
+/// card set, same padding — so the real classifier/session-grouping code
+/// accepts it exactly as it does at Layer 1.
+pub fn write_minimal_fits(
+    dir: &Path,
+    name: &str,
+    imagetyp: &str,
+    object: Option<&str>,
+    filter: Option<&str>,
+    date_obs: Option<&str>,
+) -> Result<PathBuf> {
+    let path = dir.join(name);
+    let mut block = vec![b' '; 2880];
+    let mut idx = 0usize;
+    let mut write_card = |card: &str| {
+        let bytes = card.as_bytes();
+        let len = bytes.len().min(80);
+        block[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+        idx += 1;
+    };
+    write_card(&format!("{:<80}", format!("IMAGETYP= '{imagetyp}'")));
+    if let Some(o) = object {
+        write_card(&format!("{:<80}", format!("OBJECT  = '{o}'")));
+    }
+    if let Some(f) = filter {
+        write_card(&format!("{:<80}", format!("FILTER  = '{f}'")));
+    }
+    if let Some(d) = date_obs {
+        write_card(&format!("{:<80}", format!("DATE-OBS= '{d}'")));
+    }
+    write_card(&format!("{:<80}", "GAIN    = 100"));
+    write_card(&format!("{:<80}", "XBINNING= 1"));
+    write_card(&format!("{:<80}", "YBINNING= 1"));
+    block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
+    std::fs::write(&path, &block).with_context(|| format!("write fixture FITS {path:?}"))?;
+    Ok(path)
 }

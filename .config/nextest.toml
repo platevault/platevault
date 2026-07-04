@@ -1,11 +1,14 @@
 # Nextest configuration for spec 037 Layer-2 real-UI E2E journeys.
 #
-# Run the E2E suite (once wired) with:
-#   cargo nextest run -p e2e_tests --profile e2e --run-ignored all
+# Run the E2E suite with:
+#   cargo nextest run -p e2e_tests --profile e2e
 #
-# The "e2e" profile enforces serial execution (one app/driver/DB at a time),
-# a generous per-test timeout, one automatic retry, and immediate-final
-# failure output so the first broken journey is visible without scrolling.
+# The "e2e" profile enforces serial execution (one app/driver/DB at a time —
+# journeys are no longer #[ignore]d, so this is what keeps them from racing
+# each other over the shared :4444/:4445 ports and the shared ALM_DB_URL
+# file), a generous per-test timeout, one automatic retry, and
+# immediate-final failure output so the first broken journey is visible
+# without scrolling.
 
 [profile.e2e]
 # One test at a time — a single app instance, driver session, and database.

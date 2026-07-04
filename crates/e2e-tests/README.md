@@ -5,19 +5,25 @@ desktop app.
 
 ## Status
 
-**Ignored stub journeys. Wiring deferred while the backend is still changing.**
+**Real journeys, wired against the real backend (2026-07-04, spec 037 WP-C).**
 
-All tests compile and appear in `cargo nextest list` but are marked
-`#[ignore]`. The harness itself (driver launch, `tauri:options.application`
-capability, `__ALM_E2E__` invoke bridge) is wired — see `tests/common/mod.rs`.
-Journeys stay ignored until the backend commands they'd assert against are
-de-stubbed (research D9): `search.global`, `sessions.list`/`get`, and
-`calibration.masters.list`/`get` currently return hardcoded fixture data.
+Six journeys run against the real app + real SQLite + real filesystem:
+`first_run_resolve_create_project`, `plan_review_apply_with_audit`,
+`ingestion_sessions_search`, `lifecycle_integrity`, `cleanup_plan_review`
+(`tests/journeys.rs`), and `all_top_level_screens_load`
+(`tests/smoke.rs`). None are `#[ignore]`d. `audit.list`/`audit.export` are
+still fixture stubs (unrelated in-flight PR #388) — journeys needing a
+durable-record proof use `plans.apply.status` (`plan_apply_events`) or
+`lifecycle.ledger.list` instead. See each journey's doc comment for exactly
+which real commands it drives and why.
 
-## How to run (once a journey is un-ignored)
+Cannot run in the WSL dev sandbox (no webview/display) — CI (`e2e.yml`, 3-OS
+matrix) is the first real verification point; iterate there.
+
+## How to run
 
 ```sh
-cargo nextest run -p e2e_tests --profile e2e --run-ignored all
+cargo nextest run -p e2e_tests --profile e2e
 ```
 
 ## Mechanism
@@ -53,10 +59,11 @@ D10 and `quickstart.md`).
 - Vite dev server / `vite preview` running on `:5173` with:
   - `VITE_USE_MOCKS=false` — real backend.
   - `VITE_E2E=1` — exposes the `window.__ALM_E2E__` invoke bridge.
-- Optional: set `ALM_DB_URL=sqlite:///path/to/alm.db` to control which
-  database is wiped before each test run.  If unset, the harness will
-  resolve the OS app-data path (wiring deferred — see `reset_database` in
-  `tests/common/mod.rs`).
+- Set `ALM_DB_URL=sqlite:///path/to/alm.db?mode=rwc` to control which database
+  is wiped before each test run and which one the launched app connects to
+  (CI sets this — see `.github/workflows/e2e.yml`). If unset, `reset_database`
+  no-ops and the app falls back to the OS app-data path (wiring deferred —
+  see `tests/common/mod.rs`).
 
 ## Notes
 
