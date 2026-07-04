@@ -31,7 +31,8 @@ use desktop_shell::commands::preferences::{preferences_get, preferences_set};
 use desktop_shell::commands::projects::projects_create_plan;
 use desktop_shell::commands::review::review_queue;
 use desktop_shell::commands::roots::{
-    equipment_list, roots_list, roots_remap, roots_remap_apply, scan_start,
+    equipment_list, roots_delete, roots_list, roots_remap, roots_remap_apply, scan_start,
+    sources_set_active,
 };
 use desktop_shell::commands::search::search_global;
 use desktop_shell::commands::sessions::{
@@ -520,6 +521,131 @@ async fn roots_remap_apply_via_use_case() {
     .expect("query failed")
     .expect("source not found");
     assert_eq!(path, new_path);
+}
+
+// `sources_set_active`/`roots_delete` require `State<'_, AppState>` (P6b real
+// impl). Tested at the use-case layer below; the command imports are kept to
+// prove the new signatures compile.
+#[allow(dead_code)]
+fn _roots_disable_delete_compiles_check() {
+    let _ = sources_set_active;
+    let _ = roots_delete;
+}
+
+#[tokio::test]
+async fn sources_set_active_via_use_case() {
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
+
+    // Path must be absolute and exist on the host OS (validate_path rejects
+    // POSIX-style paths on Windows and any nonexistent path everywhere).
+    #[cfg(windows)]
+    let source_path = "C:\\Temp";
+    #[cfg(not(windows))]
+    let source_path = "/tmp";
+
+    let req = contracts_core::first_run::RegisterSourceRequest {
+        kind: contracts_core::first_run::SourceKind::LightFrames,
+        path: source_path.to_owned(),
+        kind_subtype: None,
+        scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+        organization_state: contracts_core::first_run::OrganizationState::Organized,
+    };
+    let resp = app_core::first_run::register_source(db.pool(), &req)
+        .await
+        .expect("register_source failed");
+
+    app_core::first_run::set_source_active(db.pool(), &bus, &resp.source_id, false)
+        .await
+        .expect("set_source_active failed");
+
+    let flags = persistence_db::repositories::first_run::list_active_flags(db.pool())
+        .await
+        .expect("list_active_flags failed");
+    assert_eq!(flags.get(&resp.source_id), Some(&false));
+}
+
+#[tokio::test]
+async fn roots_delete_via_use_case_blocks_on_dependents() {
+    use persistence_db::repositories::inbox::{insert_inbox_item, InsertInboxItem};
+
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
+
+    #[cfg(windows)]
+    let source_path = "C:\\Temp";
+    #[cfg(not(windows))]
+    let source_path = "/tmp";
+
+    let req = contracts_core::first_run::RegisterSourceRequest {
+        kind: contracts_core::first_run::SourceKind::Inbox,
+        path: source_path.to_owned(),
+        kind_subtype: None,
+        scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+        organization_state: contracts_core::first_run::OrganizationState::Unorganized,
+    };
+    let resp = app_core::first_run::register_source(db.pool(), &req)
+        .await
+        .expect("register_source failed");
+
+    insert_inbox_item(
+        db.pool(),
+        &InsertInboxItem {
+            id: "item-1",
+            root_id: &resp.source_id,
+            relative_path: "2026-01-01/lights",
+            file_count: 2,
+            content_signature: None,
+            lane: "fits",
+        },
+    )
+    .await
+    .expect("insert_inbox_item failed");
+
+    let err = app_core::first_run::delete_source(db.pool(), &bus, &resp.source_id)
+        .await
+        .expect_err("delete_source should block on dependents");
+    assert_eq!(err.code, ErrorCode::RootHasDependents);
+
+    // Root registration must still exist — no cascade, no partial delete.
+    let sources = persistence_db::repositories::first_run::list_sources(db.pool())
+        .await
+        .expect("list_sources failed");
+    assert!(sources.iter().any(|s| s.source_id == resp.source_id));
+}
+
+#[tokio::test]
+async fn roots_delete_via_use_case_succeeds_without_dependents() {
+    let db = Database::in_memory().await.expect("in-memory database");
+    db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
+
+    #[cfg(windows)]
+    let source_path = "C:\\Temp";
+    #[cfg(not(windows))]
+    let source_path = "/tmp";
+
+    let req = contracts_core::first_run::RegisterSourceRequest {
+        kind: contracts_core::first_run::SourceKind::Project,
+        path: source_path.to_owned(),
+        kind_subtype: None,
+        scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+        organization_state: contracts_core::first_run::OrganizationState::Organized,
+    };
+    let resp = app_core::first_run::register_source(db.pool(), &req)
+        .await
+        .expect("register_source failed");
+
+    app_core::first_run::delete_source(db.pool(), &bus, &resp.source_id)
+        .await
+        .expect("delete_source failed");
+
+    let sources = persistence_db::repositories::first_run::list_sources(db.pool())
+        .await
+        .expect("list_sources failed");
+    assert!(sources.iter().all(|s| s.source_id != resp.source_id));
 }
 
 #[tokio::test]

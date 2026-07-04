@@ -58,6 +58,7 @@ function makeRoot(overrides: Partial<LibraryRoot> = {}): LibraryRoot {
     online: true,
     fileCount: 0,
     lastScanned: null,
+    active: true,
     ...overrides,
   };
 }
