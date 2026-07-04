@@ -415,8 +415,13 @@ describe('TargetDetailV2', () => {
       },
     ]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => expect(screen.getByText(/42 frames/i)).toBeInTheDocument());
-  });
+    // Windows CI runners are slow enough to blow the 5s default here (flaked
+    // in Integration Layer 1 on windows-latest while 22 below passed).
+    await waitFor(
+      () => expect(screen.getByText(/42 frames/i)).toBeInTheDocument(),
+      { timeout: 10_000 },
+    );
+  }, 15_000);
 
   it('22. (US2) clicking session row navigates to /sessions with selected=id', async () => {
     mockListTargetSessions.mockResolvedValue(ok([
