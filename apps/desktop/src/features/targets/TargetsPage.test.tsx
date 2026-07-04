@@ -385,4 +385,49 @@ describe('TargetsPage', () => {
     expect(screen.getByTestId('moon-summary')).toBeInTheDocument();
     expect(screen.queryByTestId('planner-site-prompt')).not.toBeInTheDocument();
   });
+
+  // ── Filter-by-recommendation (spec 047 US3, FR-011) ──────────────────────────
+
+  it('FR1. filtering to "Unknown" keeps only targets without coordinates', async () => {
+    __setSiteExistsForTest(true);
+    // NGC 7000 gets real coordinates; M 31 has none — its recommendation is
+    // deterministically 'unknown' regardless of tonight's real Moon state.
+    mockListTargets.mockResolvedValue(
+      ok([
+        { ...listItems[0], raDeg: 314.75, decDeg: 44.37 },
+        { ...listItems[1], raDeg: null, decDeg: null },
+      ]),
+    );
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    fireEvent.click(screen.getByLabelText('Unknown'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+      expect(screen.getByText('M 31')).toBeInTheDocument();
+    });
+  });
+
+  it('FR2. deselecting the recommendation filter restores the full list', async () => {
+    __setSiteExistsForTest(true);
+    mockListTargets.mockResolvedValue(
+      ok([
+        { ...listItems[0], raDeg: 314.75, decDeg: 44.37 },
+        { ...listItems[1], raDeg: null, decDeg: null },
+      ]),
+    );
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    const unknownCheckbox = screen.getByLabelText('Unknown');
+    fireEvent.click(unknownCheckbox);
+    await waitFor(() => expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument());
+
+    fireEvent.click(unknownCheckbox);
+    await waitFor(() => {
+      expect(screen.getByText('NGC 7000')).toBeInTheDocument();
+      expect(screen.getByText('M 31')).toBeInTheDocument();
+    });
+  });
 });

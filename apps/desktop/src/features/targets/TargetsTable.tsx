@@ -43,11 +43,17 @@
  *   observer location (#58); the list endpoint has no coordinates (#57), so these
  *   are derived deterministically from the designation, not from the sky.
  *
- * Spec 044 mock columns (NOT astronomy, per spec 044 §3):
- *   - Lunar dist: mock 0–180° separation from Moon, keyed off designation hash.
- *   - Filters: simple bracketing (bright+close → NB only; else broadband+NB).
- *   - Imaging time: hours above the user-configured altitude threshold tonight.
- *   - Opposition: date stub (renders '—' until backend ephemeris #58 lands).
+ * Spec 047 real Track-A astronomy columns (date/time + catalogued RA/Dec only;
+ * replaces the former spec 044 §3 mock columns):
+ *   - Lunar dist: real target↔Moon separation from the shared `ObservingNight`
+ *     (US2); unknown coordinates/no site → explicit "—", never a number.
+ *   - Filters: real per-band Moon-avoidance viability pills + derived
+ *     recommendation (US3, `GuidanceCell`/`astro/moon-avoidance.ts`), with a
+ *     hover/focus explanation popover.
+ *   - Opposition: real next-opposition date (US4, `astro/opposition.ts`),
+ *     date-level + relative "in N days/months"; unknown → "—".
+ *   - Imaging time: hours above the user-configured altitude threshold tonight
+ *     (Track B placeholder per FR-015 — unchanged).
  *   All are SORTABLE; the usable-altitude threshold is configurable via Settings.
  *
  * Task #82:
@@ -74,8 +80,11 @@ import {
   UNKNOWN_ROW_PLANNING,
   type RowMoonPlanning,
 } from './astro/row-planning';
+import { DEFAULT_MOON_AVOIDANCE, type MoonAvoidanceParams } from './astro/moon-avoidance';
+import { formatOppositionDate, oppositionRelative } from './astro/opposition';
 import { AltitudeSparkline } from './AltitudeSparkline';
-import { FilterBadges } from './FilterBadges';
+import { GuidanceCell } from './GuidanceCell';
+import { recommendationLabel } from './FilterBadges';
 import { m } from '@/lib/i18n';
 import { useFavourites } from './useFavourites';
 import {
@@ -90,12 +99,14 @@ import { useCollapsibleGroups } from '@/lib/use-grouping';
 /**
  * Columns the table can sort by.
  *
- * Spec 044 additions (mock values, sortable):
- *   - maxAlt: sorts by peak altitude tonight (deterministic mock)
+ * Spec 044/047 additions, sortable:
+ *   - maxAlt: sorts by peak altitude tonight (Track B placeholder)
  *   - visible: sorts by visibleTonight flag then hoursAboveUsable
- *   - opposition: stub — all values '—'; sort is a no-op (order preserved)
- *   - lunarDist: sorts by mock lunar distance
- *   - imagingTime: sorts by hoursAboveUsable
+ *   - opposition: sorts by real days-to-next-opposition, soonest first;
+ *     unknown coordinates always sort last regardless of direction (spec 047 US4)
+ *   - lunarDist: sorts by real target↔Moon separation; unknowns sort last
+ *     regardless of direction (spec 047 US2)
+ *   - imagingTime: sorts by hoursAboveUsable (Track B placeholder)
  *   - sessions: stub — all values 0; sort is a no-op
  */
 export type TargetSortCol =
@@ -171,10 +182,18 @@ function compareTargetRows(
         Number(altA.visibleTonight) - Number(altB.visibleTonight) ||
         altA.hoursAboveUsable - altB.hoursAboveUsable;
       break;
-    case 'opposition':
-      // All values are '—' until backend ephemeris lands; preserve input order.
-      cmp = 0;
+    case 'opposition': {
+      // Real next-opposition date (US4). Unknowns (no coordinates / no site)
+      // always sort AFTER known values regardless of direction, mirroring the
+      // lunarDist convention (FR-014), soonest-next first when ascending.
+      const da = moonA.daysToOpposition;
+      const db = moonB.daysToOpposition;
+      if (da === null && db === null) return compareStr(a.effectiveLabel, b.effectiveLabel);
+      if (da === null) return 1;
+      if (db === null) return -1;
+      cmp = da - db || compareStr(a.effectiveLabel, b.effectiveLabel);
       break;
+    }
     case 'lunarDist': {
       // Real lunar separation (US2). Unknowns (no coordinates / no site) always
       // sort AFTER known values regardless of direction, with a deterministic
@@ -214,12 +233,13 @@ function groupTargets(
   groupBy: TargetGroupBy,
   usableAltDeg: number,
   night: ObservingNight | null,
+  guidanceParams: MoonAvoidanceParams,
 ): TargetGroup[] {
   const byKey = new Map<string, Array<{ target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning }>>();
   for (const t of targets) {
     const key = groupHeadlineOf(t, groupBy);
     const alt = rowAltitudeFor(t, usableAltDeg);
-    const moon = deriveRowMoonPlanning(t, night);
+    const moon = deriveRowMoonPlanning(t, night, guidanceParams);
     const bucket = byKey.get(key);
     if (bucket) bucket.push({ target: t, alt, moon });
     else byKey.set(key, [{ target: t, alt, moon }]);
@@ -262,20 +282,31 @@ type FlatRow =
 
 // ── Multi-level grouping accessors ────────────────────────────────────────────
 
-export const TARGET_ACCESSORS: Readonly<Record<string, DimensionAccessor<TargetListItem>>> = {
-  constellation: (t) => (t as TargetListItem & { constellation?: string }).constellation ?? null,
-  type: (t) => t.objectType ? formatType(t.objectType) : null,
-  catalogue: (t) => {
-    const cat = catalogueOf(t);
-    return cat ? catalogueLabel(cat) : m.targets_objtype_other();
-  },
-  // Applicable filters: group by the target's recommended band set (the same
-  // mock recommendation the Filter-bands filter uses), e.g. "Ha OIII SII".
-  filters: (t) => {
-    const bands = rowAltitudeFor(t, USABLE_ALT_DEG).filters.bands;
-    return bands.length > 0 ? bands.join(' ') : null;
-  },
-};
+/**
+ * Build the multi-level grouping accessors for the current night + guidance
+ * params (US3, FR-011): the `filters` dimension groups by the REAL derived
+ * recommendation category, so it must be rebuilt whenever the night or the
+ * live per-band params change rather than being a static module export.
+ */
+function buildTargetAccessors(
+  night: ObservingNight | null,
+  guidanceParams: MoonAvoidanceParams,
+): Readonly<Record<string, DimensionAccessor<TargetListItem>>> {
+  return {
+    constellation: (t) => (t as TargetListItem & { constellation?: string }).constellation ?? null,
+    type: (t) => t.objectType ? formatType(t.objectType) : null,
+    catalogue: (t) => {
+      const cat = catalogueOf(t);
+      return cat ? catalogueLabel(cat) : m.targets_objtype_other();
+    },
+    // Applicable filters: group by the target's REAL derived recommendation
+    // category (broadband-ok / narrowband-only / avoid-tonight / unknown).
+    filters: (t) => {
+      const { recommendation } = deriveRowMoonPlanning(t, night, guidanceParams);
+      return recommendationLabel(recommendation);
+    },
+  };
+}
 
 function flattenGroups(groups: TargetGroup[]): FlatRow[] {
   const rows: FlatRow[] = [];
@@ -298,8 +329,8 @@ function flattenGroups(groups: TargetGroup[]): FlatRow[] {
 // Designation + Type + Sessions are kept. Constellation/Magnitude are replaced
 // by planning columns. Spec 044 adds Lunar dist, Filters possible, Imaging time.
 //
-// Opposition: the next midnight-transit peak date. planner-altitude.ts has no
-// date; blocked on backend ephemeris (#58). Renders '—' until that lands.
+// Opposition: real next midnight-transit peak date (spec 047 US4,
+// astro/opposition.ts); unknown coordinates render '—'.
 // Sessions: linked-session count not on TargetListItem yet (#57). Renders '—'.
 // All non-text columns are sortable on their mock value.
 
@@ -372,6 +403,12 @@ interface Props {
    */
   night?: ObservingNight | null;
   /**
+   * Active per-band Moon-avoidance parameters (spec 047 US3, Settings →
+   * Target Planner). Defaults to the shipped table; pass `useGuidanceParams()`
+   * from the host page so live edits recompute pills/recommendation (SC-008).
+   */
+  guidanceParams?: MoonAvoidanceParams;
+  /**
    * Set of currently-favourited target ids (task #18).
    * When provided the star column renders filled for matched ids.
    * STUB: sourced from localStorage via useFavourites until task #54 lands.
@@ -399,6 +436,7 @@ export function TargetsTable({
   emptyMessage = m.targets_table_no_match(),
   usableAltDeg = USABLE_ALT_DEG,
   night = null,
+  guidanceParams = DEFAULT_MOON_AVOIDANCE,
   favouriteIds,
   onToggleFavourite,
 }: Props) {
@@ -428,7 +466,7 @@ export function TargetsTable({
       const withAlt = targets.map((t) => ({
         target: t,
         alt: rowAltitudeFor(t, usableAltDeg),
-        moon: deriveRowMoonPlanning(t, night),
+        moon: deriveRowMoonPlanning(t, night, guidanceParams),
       }));
       // Sort the flat list first.
       const sortedWithAlt = [...withAlt].sort((a, b) =>
@@ -439,7 +477,7 @@ export function TargetsTable({
       const moonMap = new Map(sortedWithAlt.map((r) => [r.target.id, r.moon]));
 
       // Build the group tree using shared engine.
-      const tree = groupByDimensions(sorted, dims!, TARGET_ACCESSORS);
+      const tree = groupByDimensions(sorted, dims!, buildTargetAccessors(night, guidanceParams));
       // Flatten with collapse state, then map to our FlatRow shape.
       const visRows = flattenVisibleGroups(tree, collapsed);
       return visRows.map((vrow): FlatRow => {
@@ -468,14 +506,14 @@ export function TargetsTable({
     }
     // Single-tier legacy grouping ONLY if a caller explicitly asks for it.
     if (groupBy) {
-      const groups = groupTargets(targets, sort, groupBy, usableAltDeg, night);
+      const groups = groupTargets(targets, sort, groupBy, usableAltDeg, night, guidanceParams);
       return flattenGroups(groups);
     }
     // Default: no grouping selected → FLAT sorted list (no group headers).
     const withAlt = targets.map((t) => ({
       target: t,
       alt: rowAltitudeFor(t, usableAltDeg),
-      moon: deriveRowMoonPlanning(t, night),
+      moon: deriveRowMoonPlanning(t, night, guidanceParams),
     }));
     const sortedWithAlt = [...withAlt].sort((a, b) =>
       compareTargetRows(a.target, a.alt, a.moon, b.target, b.alt, b.moon, sort),
@@ -483,7 +521,7 @@ export function TargetsTable({
     return sortedWithAlt.map(
       (r): FlatRow => ({ kind: 'target', key: r.target.id, target: r.target, alt: r.alt, moon: r.moon, depth: 0 }),
     );
-  }, [targets, sort, groupBy, usableAltDeg, night, useMultiGroup, dims, collapsed]);
+  }, [targets, sort, groupBy, usableAltDeg, night, guidanceParams, useMultiGroup, dims, collapsed]);
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -717,11 +755,32 @@ export function TargetsTable({
                       </span>
                     )}
                   </td>
-                  {/* MOCK (#58): opposition date — next midnight-transit peak.
-                      planner-altitude.ts hash model has no date; blocked on
-                      backend ephemeris (#58). Renders '—' until that lands. */}
+                  {/* Real next-opposition date (spec 047 US4). Unknown
+                      coordinates / no site → explicit "—", never a date. */}
                   <td className="alm-targets-cell--opposition">
-                    <span className="alm-targets-cell--muted" title={m.targets_table_next_opposition()}>—</span>
+                    {moon.nextOppositionDate === null || moon.daysToOpposition === null ? (
+                      <span
+                        className="alm-targets-cell--muted"
+                        title={m.targets_opposition_unknown_title()}
+                      >
+                        —
+                      </span>
+                    ) : (
+                      (() => {
+                        const rel = oppositionRelative(moon.daysToOpposition);
+                        const relText =
+                          rel.unit === 'days'
+                            ? m.targets_opposition_in_days({ count: rel.count })
+                            : m.targets_opposition_in_months({ count: rel.count });
+                        return (
+                          <span title={m.targets_table_next_opposition()}>
+                            {formatOppositionDate(new Date(`${moon.nextOppositionDate}T00:00:00Z`))}
+                            {' · '}
+                            {relText}
+                          </span>
+                        );
+                      })()
+                    )}
                   </td>
                   {/* Real lunar angular separation (spec 047 US2). Unknown
                       coordinates / no site → explicit "—", never a number. */}
@@ -742,9 +801,15 @@ export function TargetsTable({
                       </span>
                     )}
                   </td>
-                  {/* MOCK (spec 044): filter recommendation from moon phase + separation. */}
+                  {/* Real per-band filter guidance from the Moon-avoidance rule
+                      (spec 047 US3): pills + explanation popover. */}
                   <td className="alm-targets-cell--filters">
-                    <FilterBadges recommendation={alt.filters} />
+                    <GuidanceCell
+                      night={night}
+                      moon={moon}
+                      params={guidanceParams}
+                      targetLabel={t.effectiveLabel}
+                    />
                   </td>
                   {/* MOCK (spec 044): hours above the usable-altitude threshold. */}
                   <td className="alm-targets-cell--num">

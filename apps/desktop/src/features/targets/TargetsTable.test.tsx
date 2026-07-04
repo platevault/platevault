@@ -105,11 +105,29 @@ describe('TargetsTable (#84/#85)', () => {
     expect(screen.getByLabelText('Altitude tonight for M 31')).toBeInTheDocument();
   });
 
-  it('renders filter badges with band labels', () => {
+  it('renders the guidance unknown state when no observing night is provided', () => {
+    // Default renderTable() passes no `night`, so real guidance cannot be
+    // computed — the pill strip renders the explicit unknown state, not a
+    // fabricated per-band recommendation.
     renderTable();
-    // Each row has at least one filter badge (Ha is always recommended in the
-    // mock since MOCK_MOON_PHASE_FRAC = 0.55, above the bright-moon threshold).
-    expect(screen.getAllByLabelText('Ha').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Unknown').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders real per-band viability pills with a night (spec 047 US3)', () => {
+    render(
+      <TargetsTable
+        targets={TARGETS}
+        selected={null}
+        onSelect={vi.fn()}
+        sort={DEFAULT_TARGET_SORT}
+        onSort={vi.fn()}
+        night={nightWithMoonAtVernalEquinox()}
+      />,
+    );
+    // Each row has 7 band pills (L/R/G/B/Ha/SII/OIII), each labelled viable or
+    // not-viable — never a fabricated recommendation.
+    const haPills = screen.getAllByLabelText(/^Ha: (viable|not viable) tonight$/);
+    expect(haPills.length).toBeGreaterThanOrEqual(1);
   });
 
   it('fires onSelect when a target row is clicked', () => {
