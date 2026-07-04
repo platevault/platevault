@@ -34,6 +34,8 @@ future extractions across four future repos with no code change here at all.
   branches off `main` only after #349 merges, not before.
 - Source analysis: the campaign's crate-audit (2026-07-04) surveyed all crates
   in this workspace for publishability; the four below are what it approved.
+- The extensible prefix-table API for `astro-target-id` (user-supplied catalog
+  prefixes) is a **v1 API requirement**, not deferred polish.
 
 ## Extraction 1 — `fits-header` (new repo)
 
@@ -118,6 +120,31 @@ is generically useful outside this app.
   crate's typed output (`RA`, `DEC`, `FOCALLEN`, `XPIXSZ`, `NAXIS`) is exactly
   the input shape the coordinate kit consumes — the two crates are designed to
   compose.
+
+**Catalog supply boundary** (user directive, 2026-07-04):
+
+- The crate's matching APIs take `&[TargetCoord]` — **catalog supply is
+  explicitly out of scope**. The published crate ships **no seed catalog** and
+  has **no resolver dependency**. Consumers bring their own catalog rows.
+- **Open question (documented with default)**: should the bundled seed catalog
+  (`seed.json`, built by `crates/tools/seed-builder` from SIMBAD/OpenNGC) also
+  be published — either as an optional data feature of `astro-target-id` or as
+  a separate tiny data crate (e.g. `astro-seed-catalog`)? Considerations:
+  - Licensing/attribution of the SIMBAD/OpenNGC-derived data MUST be verified
+    before any publish (CDS/SIMBAD acknowledgment requirements, OpenNGC
+    license).
+  - Dataset staleness/versioning policy — how a published data crate would be
+    refreshed and versioned.
+  - Size of the bundled data.
+
+  **Default**: do NOT publish the seed in v1 — ship `astro-target-id` pure;
+  revisit only if consumers ask.
+- **Dependency direction with `simbad-resolver`** (the Later-tier candidate):
+  `astro-target-id` NEVER depends on `simbad-resolver`. The inverse holds: a
+  future published `simbad-resolver` would COMPLEMENT `astro-target-id` — it
+  populates a local cache whose rows map to `TargetCoord` — and may depend on
+  it for normalization/identity. This direction is recorded explicitly so the
+  extraction never inverts it.
 
 **Effort**: Small — mostly documentation and API-surface polish on
 already-decoupled code.
