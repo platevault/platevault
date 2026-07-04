@@ -104,40 +104,46 @@ verify sorting orders rows by the displayed values.
 
 ### User Story 3 - Filter guidance from Moon conditions (Priority: P2)
 
-For each target, the planner recommends which filter class is sensible tonight
-— narrowband only (Ha/OIII/SII) when the Moon is bright and close, broadband
-OK (L/R/G/B, plus narrowband) when the Moon is dim or far — and the imager can
-filter the target list to only the targets where their intended filter class
-works tonight. The user can see why a recommendation was made and can adjust
-the brightness/separation thresholds that drive it.
+For each target, the planner shows per-band viability — for each filter band
+in the fixed set L, R, G, B, Ha, SII, OIII, whether that band is workable
+tonight given the Moon's brightness and the target's lunar distance — rendered
+as compact per-band pills, plus a derived summary recommendation (broadband
+OK / narrowband only / avoid tonight). The imager can filter the target list
+to only the targets where their intended filter class works tonight. The user
+can see why a recommendation was made and can tune the per-band avoidance
+parameters that drive it.
 
 **Why this priority**: this is the planner's headline decision-support value
 ("what can I shoot tonight with the Moon up?"), but it depends on Stories 1–2
 landing first.
 
-**Independent Test**: with a bright-Moon date, verify targets close to the
-Moon show "narrowband only" and distant targets show "broadband OK"; change
-the thresholds in Settings and verify recommendations update accordingly.
+**Independent Test**: with a near-full-Moon date, verify targets close to the
+Moon show only the moon-tolerant narrowband pills as viable and distant
+targets show all bands viable; change per-band parameters in Settings and
+verify pills and the derived recommendation update accordingly.
 
 **Acceptance Scenarios**:
 
-1. **Given** tonight's Moon illumination is above the "bright Moon" threshold
-   and a target's lunar distance is below the "close to Moon" threshold,
-   **When** the row renders, **Then** the filter guidance shows narrowband
-   only (Ha/OIII/SII).
-2. **Given** the Moon is below the brightness threshold OR the target is
-   beyond the separation threshold, **When** the row renders, **Then** the
-   guidance shows broadband OK (L/R/G/B and narrowband).
+1. **Given** tonight's Moon is near full and a target's lunar distance is
+   below a band's required minimum separation for tonight, **When** the row
+   renders, **Then** that band's pill shows not-viable while bands whose
+   requirement is met show viable, and the derived summary reads "narrowband
+   only" when no broadband band is viable but at least one narrowband band is.
+2. **Given** the Moon is near new OR the target is far enough from the Moon
+   that every band's requirement is met, **When** the row renders, **Then**
+   all pills show viable and the derived summary reads broadband OK
+   (L/R/G/B and narrowband).
 3. **Given** the user applies the planner's guidance filter set to
    "narrowband only", **When** the list refreshes, **Then** only targets with
-   that recommendation remain visible.
+   that derived recommendation remain visible.
 4. **Given** the user inspects a row's guidance, **When** they hover or focus
    the guidance cell, **Then** an explanation states the inputs that produced
-   it (tonight's illumination and this target's lunar distance versus the
-   active thresholds).
-5. **Given** the user changes the guidance thresholds in Settings, **When**
-   they return to the planner, **Then** recommendations reflect the new
-   thresholds, and a "reset to defaults" action restores the shipped values.
+   it (tonight's Moon illumination/age, this target's lunar distance, and the
+   per-band required separations from the active parameters).
+5. **Given** the user changes any band's avoidance parameters in Settings,
+   **When** they return to the planner, **Then** pills and recommendations
+   reflect the new parameters, and a "reset to defaults" action restores the
+   shipped values.
 6. **Given** a target with unknown coordinates, **When** its row renders,
    **Then** the guidance shows an explicit "unknown" state rather than a
    recommendation.
@@ -178,9 +184,9 @@ by soonest-next-opposition.
 
 ### Edge Cases
 
-- Target exactly at a threshold value (illumination or separation equal to
-  the configured boundary): guidance MUST be deterministic and documented
-  (boundary values count as "bright"/"close").
+- Target exactly at a band's required minimum separation for tonight:
+  viability MUST be deterministic and documented (separation equal to the
+  requirement counts as viable: `separation ≥ min_separation` → viable).
 - Targets missing coordinates (never resolved, or user-created without
   lookup): all Track A columns show an explicit unknown state, never invented
   numbers; unknowns group after known values under any sort.
@@ -193,9 +199,14 @@ by soonest-next-opposition.
   with a fresh one within one rendered view.
 - Extreme dates far in the past/future: values stay plausible (no crashes or
   nonsense such as illumination outside 0–100% or separation outside 0–180°).
-- Threshold settings set to extremes (e.g., "close" = 180°): guidance follows
-  the configured rule literally; the settings surface constrains inputs to
-  valid ranges so no invalid state is storable.
+- Per-band parameters set to extremes (e.g., required separation at full Moon
+  = 180°, or halving width at its minimum): guidance follows the configured
+  rule literally; the settings surface constrains inputs to valid ranges so
+  no invalid state is storable.
+- No observing site configured yet (fresh install pre-wizard, or wizard
+  skipped): the planner presents an explicit "set up your observing site"
+  prompt state instead of rendering astronomy values; no
+  location-independent fallback rendering is offered.
 
 ## Requirements *(mandatory)*
 
@@ -234,21 +245,33 @@ by soonest-next-opposition.
 
 **Filter guidance**
 
-- **FR-009**: The system MUST derive a per-target filter recommendation for
-  tonight by bracketing on (a) tonight's Moon illumination and (b) the
-  target's lunar distance: bright Moon AND close target → narrowband only
-  (Ha/OIII/SII); otherwise → broadband OK (L/R/G/B plus narrowband). This
-  replaces the previous placeholder rule with real inputs.
-- **FR-010**: The two bracketing thresholds ("bright Moon" illumination
-  percentage, default 40%; "close to Moon" separation, default 60°) MUST be
-  user-configurable within valid ranges, MUST persist, and MUST offer a
-  reset-to-defaults action. Boundary values count as bright/close.
+- **FR-009**: The system MUST derive per-band viability for tonight, for the
+  fixed band set L, R, G, B, Ha, SII, OIII, using the Moon-avoidance
+  Lorentzian rule: a band is viable for a target when the target's lunar
+  distance is at least `distance_b / (1 + (age / width_b)²)`, where `age` is
+  days from full Moon (derived from tonight's Moon state), and `distance_b`
+  (required separation at full Moon, degrees) and `width_b` (days from full
+  at which the requirement halves) are per-band parameters. Separation equal
+  to the requirement counts as viable. This replaces the previous placeholder
+  rule with real inputs. The band set is fixed in v1 (not derived from the
+  user's filter inventory) and there is no narrowband/broadband mode
+  selector; target type does not modulate the rule.
+- **FR-009a**: The planner MUST render per-band viability as compact pills in
+  the row's filter-guidance column, plus a derived summary recommendation:
+  broadband OK (all bands workable), narrowband only (no broadband band
+  viable, at least one narrowband band viable), avoid tonight (no band
+  viable), or unknown.
+- **FR-010**: The per-band parameters (`distance_b`, `width_b` for each of
+  the seven bands) MUST be user-configurable via a compact per-band table in
+  Settings → Target Planner, constrained to valid ranges, MUST persist across
+  restarts, and MUST offer a reset-to-defaults action. Shipped defaults:
+  L/R/G/B 120°/14d; Ha/SII 60°/7d; OIII 110°/10d.
 - **FR-011**: The user MUST be able to filter the planner's target list by
-  recommendation category, and the existing group-by-recommendation behavior
-  MUST operate on the real values.
+  derived recommendation category, and the existing group-by-recommendation
+  behavior MUST operate on the real values.
 - **FR-012**: Each recommendation MUST be explainable in place: the user can
-  see the inputs (tonight's illumination, this target's separation) and the
-  active thresholds that produced it.
+  see the inputs (tonight's illumination/Moon age, this target's separation)
+  and the per-band required separations produced by the active parameters.
 - **FR-013**: Targets with unknown coordinates MUST show an unknown guidance
   state, excluded from recommendation-based filters except via an explicit
   "unknown" choice.
@@ -280,6 +303,13 @@ by soonest-next-opposition.
   localization approach, and new columns/controls MUST remain operable
   keyboard-first with correct sort-state announcement, consistent with the
   product's accessibility baseline (WCAG AA).
+- **FR-019**: The planner MUST NOT render Track A astronomy values until an
+  observing site exists (prompt-for-site-first): when no default observer
+  site is configured, the planner shows an explicit prompt to complete site
+  setup instead of the astronomy columns/summary. Track A only CONSUMES the
+  site-existence signal (the default site is created by the setup-wizard work
+  coordinated under Track B/spec 048); Track A does not build the wizard step
+  and does not use the site's coordinates in any computation.
 
 ### Key Entities
 
@@ -291,9 +321,14 @@ by soonest-next-opposition.
   planning attributes: designation/label, catalogued coordinates (may be
   unknown), lunar distance tonight, filter recommendation tonight, next
   opposition date, plus the existing Track-B placeholder fields.
-- **Filter Guidance Policy**: the pair of user-configurable thresholds
-  (bright-Moon illumination, close-to-Moon separation) with shipped defaults
-  and valid ranges; produces one of: narrowband-only, broadband-OK, unknown.
+- **Filter Guidance Policy**: the per-band Moon-avoidance parameter table —
+  for each band in the fixed set {L, R, G, B, Ha, SII, OIII} a
+  (`distance`, `width`) pair with shipped defaults and valid ranges — plus
+  the Lorentzian rule that turns (Moon age, lunar distance) into per-band
+  viability and a derived summary recommendation (broadband-OK,
+  narrowband-only, avoid-tonight, unknown). Shared as ONE frontend rule
+  module with Track B (spec 044), which integrates the same rule over its
+  observer-location geometry; spec 047 owns the rule and its parameters.
 
 ## Success Criteria *(mandatory)*
 
@@ -320,9 +355,9 @@ by soonest-next-opposition.
   columns does not perceptibly degrade planner responsiveness (interaction
   remains under typical desktop-app responsiveness expectations, e.g.,
   sorting completes without visible stall).
-- **SC-008**: Changing either guidance threshold updates every visible
-  recommendation without restart, and reset-to-defaults restores shipped
-  behavior in one action.
+- **SC-008**: Changing any band's guidance parameter updates every visible
+  pill and recommendation without restart, and reset-to-defaults restores
+  shipped behavior in one action.
 
 ## Assumptions
 
@@ -334,17 +369,24 @@ by soonest-next-opposition.
   the nightly Moon state is evaluated once per night at local midnight,
   which is sufficient at planning granularity (the Moon moves ~0.5°/hour;
   well inside the ±2° separation tolerance across a session).
-- **Guidance model is two-tier and Moon-only**: narrowband-only vs
-  broadband-OK, driven solely by Moon illumination and separation. Target
-  type/brightness (e.g., "galaxies don't benefit from narrowband") does NOT
-  influence Track A guidance; a richer Telescopius-style model is a candidate
-  follow-up (flagged as an open question).
-- **Fixed filter vocabulary**: the recommendation vocabulary is the fixed
-  broadband set L/R/G/B and narrowband set Ha/OIII/SII; it is not derived
-  from the user's actual filter inventory in session metadata.
-- **Default thresholds**: bright Moon ≥ 40% illumination; close to Moon
-  < 60° separation — carried over from the placeholder rule's shape and
-  aligned with common community guidance; user-adjustable per FR-010.
+- **Guidance model is per-band Lorentzian and Moon-only**: per-band viability
+  from the Moon-avoidance Lorentzian rule (the model used by ACP Scheduler
+  and NINA's Target Scheduler), driven solely by Moon age/illumination and
+  separation. Target type/brightness (e.g., "galaxies don't benefit from
+  narrowband") does NOT influence Track A guidance — galaxies are handled
+  naturally by reading the L/R/G/B pills; no target-type auto-modulation and
+  no narrowband/broadband selector in v1.
+- **Fixed filter vocabulary**: the band set is the fixed broadband set
+  L/R/G/B and narrowband set Ha/SII/OIII; it is not derived from the user's
+  actual filter inventory in session metadata.
+- **Default parameters**: L/R/G/B `distance` 120° / `width` 14d; Ha/SII
+  60°/7d; OIII 110°/10d (OIII is empirically the most Moon-sensitive
+  narrowband band) — per the spec-044 astronomy-libraries research;
+  user-adjustable per FR-010.
+- **Site gate, not site input**: the planner requires an observing site to
+  exist before rendering astronomy (product decision shared with Track B),
+  but no Track A computation reads the site's coordinates; "tonight" uses the
+  system clock/timezone.
 - **Coordinates are available**: target coordinates (RA/Dec) are already
   supplied per planner row by the existing target list (the former
   enrichment blocker is resolved); Track A consumes them and never looks up
