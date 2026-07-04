@@ -13,7 +13,7 @@ export const Toggle = forwardRef<HTMLLabelElement, ToggleProps>(
     // readers announce the switch; the rest stay on the wrapping label.
     const { 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledby, ...labelRest } = rest;
     return (
-       
+
       <label ref={ref} className={cls} {...labelRest}>
         <input
           type="checkbox"

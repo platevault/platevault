@@ -119,7 +119,7 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
       {!compact && (
         <>
           <SettingsRow
-             
+
             label={<label htmlFor={endpointId}>{m.settings_resolver_endpoint_label()}</label>}
             info={m.settings_resolver_tapurl_info()}
           >
@@ -136,7 +136,7 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
           </SettingsRow>
 
           <SettingsRow
-             
+
             label={<label htmlFor={debounceId}>{m.settings_resolver_debounce_label()}</label>}
             info={m.settings_resolver_debounce_info()}
           >
@@ -157,7 +157,7 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
           </SettingsRow>
 
           <SettingsRow
-             
+
             label={<label htmlFor={timeoutId}>{m.settings_resolver_timeout_label()}</label>}
             info={m.settings_resolver_timeout_info()}
           >
