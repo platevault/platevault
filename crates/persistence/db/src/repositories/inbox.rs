@@ -314,6 +314,29 @@ pub async fn get_inbox_source_group_by_path(
     Ok(row)
 }
 
+/// Most recent `inbox_source_groups.last_scanned_at` per `root_id` (P6a —
+/// `roots.list`'s `lastScanned` field).
+///
+/// `inbox_source_groups.root_id` is not FK-constrained to any legacy table
+/// (unlike `file_record`), so it holds `registered_sources` ids directly for
+/// every root kind that has ever been scanned via `inbox.scan_folder`
+/// (raw/calibration/project/inbox — the setup wizard and Settings "Rescan"
+/// both scan every kind, not just inbox sources). Roots with no source-group
+/// rows (never scanned) are simply absent from the returned map.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn last_scanned_by_root(
+    pool: &SqlitePool,
+) -> DbResult<std::collections::HashMap<String, String>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT root_id, MAX(last_scanned_at) FROM inbox_source_groups GROUP BY root_id",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
 // ── InboxItem CRUD ────────────────────────────────────────────────────────────
 
 /// Insert a new inbox item in `pending_classification` state.
@@ -2641,5 +2664,92 @@ mod tests {
 
         assert_eq!(row.format.as_deref(), Some("video"));
         assert_eq!(row.lane.as_deref(), Some("move"));
+    }
+
+    // ── last_scanned_by_root (P6a) ─────────────────────────────────────────────
+
+    /// No source-group rows for a root → absent from the map (never scanned).
+    #[tokio::test]
+    async fn last_scanned_by_root_empty_when_no_scans() {
+        let db = test_db().await;
+        let map = last_scanned_by_root(db.pool()).await.unwrap();
+        assert!(map.is_empty());
+    }
+
+    /// Rescanning a root's leaf folder advances its `last_scanned_at`, and the
+    /// map reports the MOST RECENT scan across all of that root's leaf folders.
+    #[tokio::test]
+    async fn last_scanned_by_root_reports_max_across_leaf_folders() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-scan-a",
+                root_id: "root-scan",
+                relative_path: "2025-10-10/lights",
+                content_signature: Some("sig-a"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        // A second leaf folder under the same root, scanned slightly later.
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        upsert_inbox_source_group(
+            pool,
+            &UpsertSourceGroup {
+                id: "sg-scan-b",
+                root_id: "root-scan",
+                relative_path: "2025-10-11/lights",
+                content_signature: Some("sig-b"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        let later = get_inbox_source_group_by_path(pool, "root-scan", "2025-10-11/lights")
+            .await
+            .unwrap()
+            .expect("second group must exist");
+
+        let map = last_scanned_by_root(pool).await.unwrap();
+        assert_eq!(
+            map.get("root-scan"),
+            Some(&later.last_scanned_at),
+            "must report the most recent scan across the root's leaf folders"
+        );
+    }
+
+    /// Distinct roots are reported independently.
+    #[tokio::test]
+    async fn last_scanned_by_root_keys_by_root_id() {
+        let db = test_db().await;
+        let pool = db.pool();
+
+        for root_id in ["root-x", "root-y"] {
+            upsert_inbox_source_group(
+                pool,
+                &UpsertSourceGroup {
+                    id: &format!("sg-{root_id}"),
+                    root_id,
+                    relative_path: "leaf",
+                    content_signature: None,
+                    format: Some("fits"),
+                    lane: Some("move"),
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let map = last_scanned_by_root(pool).await.unwrap();
+        assert!(map.contains_key("root-x"));
+        assert!(map.contains_key("root-y"));
     }
 }

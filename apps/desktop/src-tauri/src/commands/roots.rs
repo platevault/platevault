@@ -1,9 +1,12 @@
 //! Root/scan/equipment commands exposed to the Tauri webview.
 //!
 //! `roots.register`, `roots.list`, `roots.remap`, and `roots.remap.apply`
-//! delegate to the persistence layer via `app_core::first_run`. Remaining
-//! commands (`scan.start`, `equipment.list`) are stubs until the real
-//! persistence layer is wired.
+//! delegate to the persistence layer via `app_core::first_run`.
+//! `roots.list`'s `lastScanned` is derived from `inbox_source_groups`
+//! (populated by the real `inbox.scan_folder` command the frontend "Rescan"
+//! button now calls — P6a). `scan.start` remains a stub (unused by the
+//! frontend as of P6a; kept for forward-compat) and `equipment.list` is a
+//! stub until the real persistence layer is wired.
 
 use contracts_core::first_run::{
     OrganizationState, RegisterSourceRequest, RegisterSourceResponse, ScanDepth,
@@ -33,6 +36,14 @@ pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, 
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
+    // `lastScanned` is derived from `inbox_source_groups.last_scanned_at`
+    // (P6a): every root kind is scanned through `inbox.scan_folder` (setup
+    // wizard + Settings "Rescan"), so a root with no source-group rows simply
+    // has never been scanned yet.
+    let last_scanned = persistence_db::repositories::inbox::last_scanned_by_root(state.repo.pool())
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+
     let roots = sources
         .into_iter()
         .map(|s| {
@@ -43,13 +54,14 @@ pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, 
                 contracts_core::first_run::SourceKind::Inbox => RootCategory::Inbox,
                 contracts_core::first_run::SourceKind::LightFrames => RootCategory::Raw,
             };
+            let last_scanned = last_scanned.get(&s.source_id).cloned();
             LibraryRoot {
                 id: s.source_id,
                 path: s.path,
                 category,
                 online,
                 file_count: 0,
-                last_scanned: None,
+                last_scanned,
             }
         })
         .collect();

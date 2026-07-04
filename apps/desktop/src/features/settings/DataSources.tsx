@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Btn, Pill } from '@/ui';
 import { DirPicker } from '@/ui/DirPicker';
-import { listRoots, registerRoot, startScan, settingsSourceOverrideSet, settingsOverridableKeys } from './settingsIpc';
+import { listRoots, registerRoot, rescanRoot, settingsSourceOverrideSet, settingsOverridableKeys } from './settingsIpc';
 import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
@@ -45,6 +45,9 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   const [addingCategory, setAddingCategory] = useState<RootCategory>('raw');
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+
+  // ── Rescan (P6a) ──────────────────────────────────────────────────────────
+  const [rescanningId, setRescanningId] = useState<string | null>(null);
 
   // ── Remap dialog (P6a) ────────────────────────────────────────────────────
   const [remapRoot, setRemapRoot] = useState<LibraryRoot | null>(null);
@@ -121,12 +124,15 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   };
 
   const handleRescan = async (root: LibraryRoot) => {
+    setRescanningId(root.id);
     try {
-      await startScan({ root_ids: [root.id] });
-      // Reload after a short delay to pick up updated lastScanned
-      setTimeout(loadRoots, 800);
+      await rescanRoot({ rootId: root.id, rootAbsolutePath: root.path });
+      // Real scan has already completed — reload immediately (no guess-delay).
+      loadRoots();
     } catch (err: unknown) {
       console.error('Rescan failed:', errMessage(err));
+    } finally {
+      setRescanningId(null);
     }
   };
 
@@ -220,6 +226,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               key={root.id}
               root={root}
               onRescan={handleRescan}
+              rescanning={rescanningId === root.id}
               onRemap={setRemapRoot}
             />
           ))}
@@ -318,10 +325,11 @@ export function DataSources({ save: _save }: DataSourcesProps) {
 interface RootCardProps {
   root: LibraryRoot;
   onRescan: (root: LibraryRoot) => void;
+  rescanning: boolean;
   onRemap: (root: LibraryRoot) => void;
 }
 
-function RootCard({ root, onRescan, onRemap }: RootCardProps) {
+function RootCard({ root, onRescan, rescanning, onRemap }: RootCardProps) {
   const isOffline = !root.online;
 
   const metaParts: string[] = [];
@@ -363,8 +371,8 @@ function RootCard({ root, onRescan, onRemap }: RootCardProps) {
       {/* Right: action buttons */}
       <div className="alm-data-sources__root-actions">
         {!isOffline && (
-          <Btn size="sm" onClick={() => onRescan(root)}>
-            {m.common_rescan()}
+          <Btn size="sm" onClick={() => onRescan(root)} disabled={rescanning}>
+            {rescanning ? m.common_rescanning() : m.common_rescan()}
           </Btn>
         )}
         {!isOffline && (
