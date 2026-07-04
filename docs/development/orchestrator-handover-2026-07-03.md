@@ -51,11 +51,12 @@ details, branch/commit info, and test results.
   local branch: push its ref as-is. WIP commits allowed (squash at merge). Derived from the
   2026-07-04 session-limit kill that stranded impl-p12/wire-p6a as local-only commits and
   left #388/#390/#395 worktrees ahead of their pushed PR refs.
-- **Pipelined CI, no idle-waiting (USER RULE, 2026-07-04)**: writer agents do NOT wait on
+- **Pipelined CI, push-PR-idle (USER RULE, 2026-07-04)**: writer agents do NOT wait on
   full CI runs. They run local gates (fmt/clippy/tests/typecheck/i18n), push, open the PR,
-  report, and exit — releasing their concurrency slot. One dedicated CI-shepherd agent
-  batches CI watching across all open convoy PRs, rebases+merges green ones, and returns
-  per-PR failure lists to the orchestrator for re-delegation.
+  report, and go IDLE keeping their context (not exit). One dedicated CI-shepherd agent
+  (own reserved slot outside the worker cap) batches CI watching across all open convoy
+  PRs, rebases+merges green ones, and returns per-PR failure lists to the orchestrator,
+  who messages the idle author agent to fix its own PR with warm context.
 - **i18n review (USER RULE, 2026-07-03)**: every completed implementation package gets a
   dedicated reviewer pass over its PR diff for hardcoded user-facing strings that belong in
   the Paraglide catalog — including gate-evading spots (attributes, aria-labels, title=,
