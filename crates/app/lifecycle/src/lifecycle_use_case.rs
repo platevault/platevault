@@ -215,4 +215,38 @@ mod tests {
         let envelope = rx.try_recv().expect("event should be published");
         assert_eq!(envelope.topic, TOPIC_LIFECYCLE_TRANSITION_APPLIED);
     }
+
+    // Spec 017 C5: `completed → archived` requires a plan, so the user-driven
+    // `apply_transition` refuses it with PlanRequired (asserted in
+    // `transition_use_case` tests). This primitive — invoked by the plan-apply
+    // path AFTER a successful `origin = archive` apply — is the one legitimate
+    // closure of that gate: `transition_lifecycle` does not re-run the
+    // requires-plan check, so it drives the project into `archived`.
+    #[tokio::test]
+    async fn archive_closure_drives_completed_to_archived() {
+        let repo = InMemoryLifecycleRepository;
+        let bus = test_bus().await;
+        let table = build_edge_table();
+
+        let record = transition_lifecycle(
+            &repo,
+            &bus,
+            TransitionCommand {
+                entity_id: EntityId::new(),
+                entity_type: EntityType::Project,
+                from_state: "completed".to_owned(),
+                to_state: "archived".to_owned(),
+                trigger: "archive.plan.applied".to_owned(),
+                actor: "user".to_owned(),
+                request_id: EntityId::new(),
+            },
+            &table,
+        )
+        .await
+        .expect("closure transition must not error")
+        .expect("a non-noop transition yields a record");
+
+        assert_eq!(record.from_state, "completed");
+        assert_eq!(record.to_state, "archived");
+    }
 }

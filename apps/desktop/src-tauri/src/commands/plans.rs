@@ -12,10 +12,12 @@
 //! The `plans.apply` stub is retained for spec 025 compatibility — it returns
 //! `unimplemented` and will be replaced when spec 025 lands.
 
+use app_core::archive_generator::{generate as generate_archive_plan, list_archived};
 use app_core::plans::{
     approve_plan, discard_plan, get_plan, list_plans, permanently_delete_archive, retry_plan,
     send_archive_to_trash,
 };
+use contracts_core::archive::{ArchiveListResponse, GenerateArchivePlanResult};
 use contracts_core::plans::{
     ArchivePermanentlyDeleteResponse, ArchiveSendToTrashResponse, PlanApproveResponse, PlanDetail,
     PlanDiscardResponse, PlanListRequest, PlanListResponse, PlanRetryResponse, RetryItemsFilter,
@@ -132,6 +134,42 @@ pub async fn plans_retry(
     };
 
     retry_plan(state.repo.pool(), &state.bus, &parent_plan_id, filter).await
+}
+
+// ── archive.list ────────────────────────────────────────────────────────────
+
+/// `archive.list` — list projects currently in the `archived` lifecycle state
+/// (spec 017 C5). Projects-only surface; each row carries `archivedViaPlanId`
+/// so the management commands act on the owning plan.
+///
+/// # Errors
+///
+/// Returns `Err` with the contract error code on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_list(
+    state: State<'_, AppState>,
+) -> Result<ArchiveListResponse, ContractError> {
+    list_archived(state.repo.pool()).await
+}
+
+// ── archive.plan.generate ─────────────────────────────────────────────────────
+
+/// `archive.plan.generate` — build a reviewable whole-project archive plan
+/// (spec 017 US2/WP-B). Creates a `ready_for_review` plan; performs NO
+/// filesystem mutation and never auto-applies (constitution II / FR-002).
+///
+/// # Errors
+///
+/// Returns `Err` with the contract error code on database failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_plan_generate(
+    state: State<'_, AppState>,
+    project_id: String,
+    title: Option<String>,
+) -> Result<GenerateArchivePlanResult, ContractError> {
+    generate_archive_plan(state.repo.pool(), &project_id, title.as_deref()).await
 }
 
 // ── archive.send_to_trash ─────────────────────────────────────────────────────

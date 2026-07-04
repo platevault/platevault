@@ -71,8 +71,8 @@ use crate::commands::plan_apply::{
     plans_resume,
 };
 use crate::commands::plans::{
-    archive_permanently_delete, archive_send_to_trash, plans_approve, plans_discard, plans_get,
-    plans_list, plans_retry,
+    archive_list, archive_permanently_delete, archive_plan_generate, archive_send_to_trash,
+    plans_approve, plans_discard, plans_get, plans_list, plans_retry,
 };
 use crate::commands::preferences::{preferences_get, preferences_set};
 use crate::commands::prepared_views::{
@@ -223,6 +223,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         plans_retry,
         archive_send_to_trash,
         archive_permanently_delete,
+        archive_list,
+        archive_plan_generate,
         // plan apply (spec 025)
         plans_apply_real,
         plans_cancel,
@@ -426,6 +428,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         plans_retry,
         archive_send_to_trash,
         archive_permanently_delete,
+        archive_list,
+        archive_plan_generate,
         // plan apply (spec 025)
         plans_apply_real,
         plans_cancel,

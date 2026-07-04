@@ -36,4 +36,8 @@ export const queryKeys = {
   status: {
     summary: () => ['status'] as const,
   },
+  archive: {
+    list: () => ['archive'] as const,
+    audit: (entityId: string) => ['archive', 'audit', entityId] as const,
+  },
 } as const;

@@ -469,6 +469,29 @@ pub struct GenerateCleanupPlanRequest {
     pub items: Vec<CleanupPlanItem>,
 }
 
+/// Generalised request for generating any protection-resolved plan (D12 shared
+/// helper). [`GenerateCleanupPlanRequest`] is the cleanup-specialised façade
+/// over this; the whole-project archive generator (spec 017 WP-B) reuses the
+/// same protection-resolution tail with `origin`/`plan_type` = `archive`.
+pub struct GeneratePlanRequest {
+    pub plan_id: String,
+    pub title: String,
+    /// Plan origin (`"cleanup"`, `"archive"`, …) — drives the plans-list origin
+    /// filter (FR-010).
+    pub origin: String,
+    /// Plan type (`"cleanup"`, `"archive"`, …).
+    pub plan_type: String,
+    /// Origin context carried on the plan row. The archive generator stores the
+    /// project id here so the apply path can drive the lifecycle closure.
+    pub origin_path: Option<String>,
+    pub destructive_destination: String,
+    /// Per-item `reason` label stored on every item.
+    pub reason: String,
+    /// See [`GenerateCleanupPlanRequest::total_bytes_required`].
+    pub total_bytes_required: i64,
+    pub items: Vec<CleanupPlanItem>,
+}
+
 /// Response from `generate_cleanup_plan`.
 pub struct GenerateCleanupPlanResponse {
     pub plan_id: String,
@@ -492,15 +515,63 @@ pub async fn generate_cleanup_plan(
     pool: &SqlitePool,
     req: &GenerateCleanupPlanRequest,
 ) -> Result<GenerateCleanupPlanResponse, ContractError> {
+    generate_plan(
+        pool,
+        &GeneratePlanRequest {
+            plan_id: req.plan_id.clone(),
+            title: req.title.clone(),
+            origin: "cleanup".to_owned(),
+            plan_type: "cleanup".to_owned(),
+            origin_path: None,
+            destructive_destination: req.destructive_destination.clone(),
+            reason: "cleanup".to_owned(),
+            total_bytes_required: req.total_bytes_required,
+            // CleanupPlanItem is not Clone; move the items in by rebuilding the
+            // request is avoidable — callers hand us a borrowed req, so clone
+            // the item fields into fresh CleanupPlanItems.
+            items: req
+                .items
+                .iter()
+                .map(|i| CleanupPlanItem {
+                    id: i.id.clone(),
+                    name: i.name.clone(),
+                    action: i.action.clone(),
+                    source_id: i.source_id.clone(),
+                    category: i.category.clone(),
+                    from_relative_path: i.from_relative_path.clone(),
+                    from_root_id: i.from_root_id.clone(),
+                    to_relative_path: i.to_relative_path.clone(),
+                })
+                .collect(),
+        },
+    )
+    .await
+}
+
+/// Generalised protection-resolved plan generator (D12 shared tail).
+///
+/// Creates the plan row (in `draft`), inserts each item with its real
+/// `source_id`/`category`/resolved `protection` level, then advances the plan to
+/// `ready_for_review` so [`plan_protection_check`] can fire. Performs NO
+/// filesystem mutation (FR-002). Used by both the cleanup generator (per-file)
+/// and the archive generator (whole-project).
+///
+/// # Errors
+///
+/// Returns `ContractError` on DB failure.
+pub async fn generate_plan(
+    pool: &SqlitePool,
+    req: &GeneratePlanRequest,
+) -> Result<GenerateCleanupPlanResponse, ContractError> {
     // Create the plan in draft state.
     plans_repo::insert_plan(
         pool,
         &plans_repo::InsertPlan {
             id: &req.plan_id,
             title: &req.title,
-            origin: "cleanup",
-            origin_path: None,
-            plan_type: "cleanup",
+            origin: &req.origin,
+            origin_path: req.origin_path.as_deref(),
+            plan_type: &req.plan_type,
             destructive_destination: &req.destructive_destination,
             parent_plan_id: None,
             total_bytes_required: req.total_bytes_required,
@@ -548,7 +619,7 @@ pub async fn generate_cleanup_plan(
                 from_relative_path: &item.from_relative_path,
                 to_root_id: None,
                 to_relative_path: &item.to_relative_path,
-                reason: "cleanup",
+                reason: &req.reason,
                 protection,
                 linked_entity: None,
                 provenance_json: None,

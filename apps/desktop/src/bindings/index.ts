@@ -445,6 +445,26 @@ export const commands = {
 	 */
 	archivePermanentlyDelete: (planId: string, confirmText: string) => typedError<ArchivePermanentlyDeleteResponse, ContractError_Serialize>(__TAURI_INVOKE("archive_permanently_delete", { planId, confirmText })),
 	/**
+	 *  `archive.list` — list projects currently in the `archived` lifecycle state
+	 *  (spec 017 C5). Projects-only surface; each row carries `archivedViaPlanId`
+	 *  so the management commands act on the owning plan.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err` with the contract error code on database failure.
+	 */
+	archiveList: () => typedError<ArchiveListResponse, ContractError_Serialize>(__TAURI_INVOKE("archive_list")),
+	/**
+	 *  `archive.plan.generate` — build a reviewable whole-project archive plan
+	 *  (spec 017 US2/WP-B). Creates a `ready_for_review` plan; performs NO
+	 *  filesystem mutation and never auto-applies (constitution II / FR-002).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err` with the contract error code on database failure.
+	 */
+	archivePlanGenerate: (projectId: string, title: string | null) => typedError<GenerateArchivePlanResult, ContractError_Serialize>(__TAURI_INVOKE("archive_plan_generate", { projectId, title })),
+	/**
 	 *  `plans.apply` — start applying an approved plan (US1, T019; spec 042 US16 T240).
 	 * 
 	 *  Returns immediately with the run id and new state (`"applying"`).
@@ -1597,6 +1617,38 @@ export type AppPreferences = {
 	sessionsView: SessionsView,
 	tourCompleted: TourCompleted,
 	setupCompleted: boolean,
+};
+
+/**  One archived entity row for the Archive page (C5 design: projects only). */
+export type ArchiveEntry = {
+	/**  Archived entity id (a project id in the current design). */
+	id: string,
+	/**  Display name (project name). */
+	name: string,
+	/**
+	 *  Entity kind. Always `"project"` today (D7/D14: no session/master/target
+	 *  tabs until a real archival model for them is designed).
+	 */
+	entityType: string,
+	/**  When the entity reached the `archived` lifecycle state (ISO-8601). */
+	archivedAt: string,
+	/**  Human-readable reason (the archive plan title when available). */
+	reason: string,
+	/**  The entity's original on-disk location (project-relative library path). */
+	originalPath: string,
+	/**  Bytes moved into the app-managed archive by the owning plan. */
+	sizeBytes: number,
+	/**
+	 *  Plan that archived this entity. Drives the management operations
+	 *  (`archive.send_to_trash` / `archive.permanently_delete`). `None` only
+	 *  for legacy rows archived before this column existed.
+	 */
+	archivedViaPlanId: string | null,
+};
+
+/**  Response for `archive.list` — every project currently in `archived`. */
+export type ArchiveListResponse = {
+	entries: ArchiveEntry[],
 };
 
 /**  Response for `archive.permanently_delete`. */
@@ -2782,6 +2834,22 @@ export type Frameset = {
 	filter: string,
 	count: number,
 	integrationS: number | null,
+};
+
+/**
+ *  Result of `archive.plan.generate` — a whole-project archive plan created in
+ *  `ready_for_review` (constitution II: reviewable, never auto-applied).
+ */
+export type GenerateArchivePlanResult = {
+	/**  Id of the newly created archive plan (in `ready_for_review` state). */
+	planId: string,
+	/**  Total number of archive items placed on the plan. */
+	itemCount: number,
+	/**
+	 *  Number of items that resolved to a protected protection level and will
+	 *  gate plan approval until acknowledged (constitution II).
+	 */
+	protectedItemCount: number,
 };
 
 /**
