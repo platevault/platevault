@@ -103,6 +103,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 // ── Import under test ─────────────────────────────────────────────────────────
 
 import { TargetsPage } from './TargetsPage';
+import { __setSiteExistsForTest } from './site-gate';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +140,7 @@ function makeDetail() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __setSiteExistsForTest(null); // default to the real (false) site binding
   mockSelectedId.current = undefined;
   mockListTargets.mockResolvedValue(ok(listItems));
   mockGetTargetDetail.mockResolvedValue(ok(makeDetail()));
@@ -361,5 +363,26 @@ describe('TargetsPage', () => {
     fireEvent.click(designationHeader);
     rowText = within(table).getAllByText(/NGC 7000|M 31/);
     expect(rowText[0]).toHaveTextContent('NGC 7000');
+  });
+
+  // ── Site gate (spec 047 D7) ───────────────────────────────────────────────
+
+  it('SG1. shows the observing-site prompt when no site exists (gated off)', async () => {
+    __setSiteExistsForTest(false);
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+    // The planner bar shows the set-up-site prompt, not the Moon summary.
+    expect(screen.getByTestId('planner-site-prompt')).toBeInTheDocument();
+    expect(screen.queryByTestId('moon-summary')).not.toBeInTheDocument();
+    expect(screen.getByText('Set up your observing site')).toBeInTheDocument();
+  });
+
+  it('SG2. renders the Moon summary when a site exists (gate open)', async () => {
+    __setSiteExistsForTest(true);
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+    // Astronomy renders: the Moon summary is present, the prompt is gone.
+    expect(screen.getByTestId('moon-summary')).toBeInTheDocument();
+    expect(screen.queryByTestId('planner-site-prompt')).not.toBeInTheDocument();
   });
 });

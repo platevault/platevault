@@ -55,12 +55,12 @@ US4 opposition P3), then polish. All paths repo-root-relative.
       key enums; regenerate TS bindings; `cargo test -p app_settings`
       (validation ranges, restore-defaults, descriptor/state-defaults
       parity). NO SQL migration (key/value store). Depends: —.
-- [ ] T006 Create `apps/desktop/src/features/targets/guidance-settings.ts`
+- [X] T006 Create `apps/desktop/src/features/targets/guidance-settings.ts`
       — settings-backed per-band params: hook + non-hook getter over the
       hydrated settings state, falling back to `DEFAULT_MOON_AVOIDANCE`
       + tests `guidance-settings.test.ts` (live update propagation; SC-008
       groundwork). Depends: T004, T005.
-- [ ] T007 Site gate (FR-019, plan D7): `useObserverSiteExists()` selector
+- [X] T007 Site gate (FR-019, plan D7): `useObserverSiteExists()` selector
       (narrow `siteExists(): boolean` binding over the spec-018 settings
       surface; temporary `false`-until-available binding if Track B's
       ObserverSite key has not landed — single swap point, marked with a
@@ -80,20 +80,20 @@ gate in place — user stories can start (in parallel if staffed).
 waning) in the planner. **Independent test**: compare shown phase +
 illumination vs a published almanac on known dates (new/full/quarters).
 
-- [ ] T008 [P] [US1] i18n strings: 8 phase names, waxing/waning, summary
+- [X] T008 [P] [US1] i18n strings: 8 phase names, waxing/waning, summary
       labels, site-gate prompt strings in `apps/desktop/messages/` catalog
       (Paraglide; FR-018). Depends: foundational.
-- [ ] T009 [US1] Create `apps/desktop/src/features/targets/MoonSummary.tsx`
+- [X] T009 [US1] Create `apps/desktop/src/features/targets/MoonSummary.tsx`
       — summary widget (phase name, illumination %, direction; ~30-line
       terminator-ellipse phase SVG per research §7) + BEM `.alm-*` classes in
       the shared stylesheet; keyboard/AT-accessible text equivalent.
       Depends: T003, T008.
-- [ ] T010 [US1] Mount `MoonSummary` in the planner bar of
+- [X] T010 [US1] Mount `MoonSummary` in the planner bar of
       `apps/desktop/src/features/targets/TargetsPage.tsx` behind the site
       gate; memoize `ObservingNight` once per `nightKey` and provide it to
       the table (context or prop) for US2/US3 reuse (FR-005, SC-007).
       Depends: T002, T007, T009.
-- [ ] T011 [US1] Component tests in `TargetsPage.test.tsx` /
+- [X] T011 [US1] Component tests in `TargetsPage.test.tsx` /
       `MoonSummary.test.tsx`: fixed-date renders match fixtures; same-night
       stability across a simulated midnight; gated-off state when no site.
       Depends: T010.

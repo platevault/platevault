@@ -412,6 +412,76 @@
   font-size: var(--alm-text-sm);
 }
 
+/* ── Moon summary (spec 047 US1) ──────────────────────────────────────────── */
+
+/* Nightly Moon summary widget in the planner bar. */
+.alm-moon-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+.alm-moon-summary__glyph {
+  flex: none;
+}
+
+/* Dark limb / disk of the phase glyph. */
+.alm-moon-summary__disk {
+  fill: color-mix(in srgb, var(--alm-text-muted) 22%, transparent);
+  stroke: color-mix(in srgb, var(--alm-text-muted) 45%, transparent);
+  stroke-width: 0.75;
+}
+
+/* Illuminated portion of the phase glyph. */
+.alm-moon-summary__lit {
+  fill: var(--alm-accent);
+  stroke: none;
+}
+
+.alm-moon-summary__text {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: var(--alm-leading-tight);
+}
+
+.alm-moon-summary__title {
+  font-size: var(--alm-text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--alm-text-muted);
+}
+
+.alm-moon-summary__phase {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-primary, var(--alm-text));
+}
+
+.alm-moon-summary__meta {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* ── Planner site-setup prompt (spec 047 D7 site gate) ────────────────────── */
+
+.alm-planner-site-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  max-width: 28rem;
+}
+
+.alm-planner-site-prompt__title {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-primary, var(--alm-text));
+}
+
+.alm-planner-site-prompt__desc {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
 /* === merged from .cssblocks/inbox-detail.css (task D — inbox detail restructure) === */
 /* === inbox-detail.css — task D: breakdown-left / files-right layout =========
  *

@@ -68,6 +68,7 @@ import { SortHeader, ariaSortFor } from '@/components';
 import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
 import { rowAltitudeFor, USABLE_ALT_DEG, type RowAltitude } from './planner-altitude';
+import type { ObservingNight } from './astro/moon-state';
 import { AltitudeSparkline } from './AltitudeSparkline';
 import { FilterBadges } from './FilterBadges';
 import { m } from '@/lib/i18n';
@@ -342,6 +343,14 @@ interface Props {
    * Pass `useAltitudeThreshold()` from the host page.
    */
   usableAltDeg?: number;
+  /**
+   * The memoized observing night (spec 047), or `null` when no observing site
+   * exists (site gate) so real astronomy is suppressed. Drives real per-row
+   * lunar distance (US2), filter guidance (US3), and opposition (US4). One
+   * `ObservingNight` per `nightKey` is computed by the host page and passed
+   * down so per-row work stays O(1) and the Moon state is shared (SC-007).
+   */
+  night?: ObservingNight | null;
   /**
    * Set of currently-favourited target ids (task #18).
    * When provided the star column renders filled for matched ids.

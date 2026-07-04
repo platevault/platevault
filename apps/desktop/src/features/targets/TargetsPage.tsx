@@ -70,6 +70,10 @@ import type { TargetSort, TargetSortCol } from './TargetsTable';
 import { rowAltitudeFor, type FilterBand } from './planner-altitude';
 import { useAltitudeThreshold } from './altitude-settings';
 import { useFavourites } from './useFavourites';
+import { useObservingNight } from './astro/observing-night';
+import { computeObservingNight, type ObservingNight } from './astro/moon-state';
+import { useObserverSiteExists } from './site-gate';
+import { MoonSummary } from './MoonSummary';
 
 type ListState =
   | { status: 'loading' }
@@ -218,6 +222,27 @@ export function TargetsPage() {
    * re-derive imaging-time and visible-tonight for every row.
    */
   const usableAltDeg = useAltitudeThreshold();
+
+  /**
+   * Site gate (spec 047 D7): the planner renders no astronomy until a default
+   * observing site exists. Track B (spec 044/048) owns the ObserverSite key;
+   * until it lands `useObserverSiteExists()` returns false and the planner bar
+   * shows the "set up your observing site" prompt instead of the Moon summary.
+   */
+  const siteExists = useObserverSiteExists();
+  /**
+   * The observing-night anchor, re-checked on focus / hourly (spec 047 D1).
+   * Memoized to one `ObservingNight` per `nightKey` so the Moon state is
+   * computed once per night and reused by the table rows (US2/US3), and nothing
+   * flips at local midnight mid-session (FR-005, SC-007).
+   */
+  const nightAnchor = useObservingNight();
+  const night = useMemo<ObservingNight | null>(
+    () => (siteExists ? computeObservingNight(nightAnchor) : null),
+    // nightAnchor identity is stable per nightKey; guard on the key + gate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nightAnchor.nightKey, siteExists],
+  );
 
   /**
    * task #18: client-side favourite set.
@@ -379,7 +404,28 @@ export function TargetsPage() {
         // "Add target" is a page-level action (creates a new catalog object).
         // Per-item actions ("+ New project here") live in TargetDetailV2's
         // detail body, not the top bar.
-        <Btn size="sm" onClick={() => setAddOpen(true)}>{m.targets_add_target()}</Btn>
+        //
+        // Planner astronomy (spec 047): tonight's Moon summary sits left of the
+        // action, gated behind a default observing site (D7). Until a site
+        // exists the slot shows the set-up-your-site prompt.
+        <>
+          {night ? (
+            <MoonSummary night={night} />
+          ) : (
+            <div
+              className="alm-planner-site-prompt"
+              data-testid="planner-site-prompt"
+            >
+              <span className="alm-planner-site-prompt__title">
+                {m.targets_planner_site_prompt_title()}
+              </span>
+              <span className="alm-planner-site-prompt__desc">
+                {m.targets_planner_site_prompt_desc()}
+              </span>
+            </div>
+          )}
+          <Btn size="sm" onClick={() => setAddOpen(true)}>{m.targets_add_target()}</Btn>
+        </>
       }
     />
   );
@@ -417,6 +463,9 @@ export function TargetsPage() {
             onSort={handleSort}
             dims={dims}
             usableAltDeg={usableAltDeg}
+            // spec 047: the memoized observing night (null when no site) drives
+            // real per-row lunar distance / filter guidance / opposition (US2+).
+            night={night}
             // task #18: pass the local favourite set down so the star column renders correctly.
             // STUB: localStorage only until task #54 backend linkage lands.
             favouriteIds={favouriteIds}
