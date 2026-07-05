@@ -56,6 +56,45 @@ export function SettingsRow({ label, info, children }: SettingsRowProps) {
   );
 }
 
+// ── Shared add/edit form shell ────────────────────────────────────────────────
+
+export interface SettingsFormShellProps {
+  /** Form-level error (wrapped save-error frame or validation message). */
+  error: string | null;
+  /** Disables the actions and switches the save label while a call is in flight. */
+  saving: boolean;
+  onCancel: () => void;
+  onSave: () => void | Promise<void>;
+  /** The entity-specific field controls (each wrapped in `.alm-stack-1`). */
+  children: ReactNode;
+}
+
+/**
+ * The one parameterised add/edit form frame every settings pane's CRUD list
+ * shares: field grid + error line + cancel/save actions. Only the fields
+ * differ per entity type (shared-component mandate — no per-pane clones).
+ * Originally lived only in `Equipment.tsx`; promoted here so other panes
+ * (e.g. observing-site management, spec 044 US3) reuse it verbatim, and to
+ * keep the `.alm-equipment__form*` markup as one generic settings-form frame
+ * rather than a per-feature copy.
+ */
+export function SettingsFormShell({ error, saving, onCancel, onSave, children }: SettingsFormShellProps) {
+  return (
+    <div className="alm-equipment__form">
+      <div className="alm-equipment__form-grid">{children}</div>
+      {error && <span className="alm-field-error">{error}</span>}
+      <div className="alm-equipment__form-actions">
+        <Btn size="sm" variant="ghost" onClick={onCancel} disabled={saving}>
+          {m.common_cancel()}
+        </Btn>
+        <Btn size="sm" onClick={() => void onSave()} disabled={saving}>
+          {saving ? m.common_saving() : m.common_save()}
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
 // ── Restore-defaults action (spec 018 T028) ───────────────────────────────────
 
 export interface RestoreDefaultsBtnProps {

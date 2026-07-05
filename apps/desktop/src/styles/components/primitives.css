@@ -279,6 +279,8 @@
 .alm-banner--warn { background: var(--alm-warn-bg); color: var(--alm-warn); border: 1px solid var(--alm-warn-border); }
 .alm-banner--danger { background: var(--alm-danger-bg); color: var(--alm-danger); border: 1px solid var(--alm-danger-border); }
 .alm-banner--info { background: var(--alm-info-bg); color: var(--alm-info); border: 1px solid var(--alm-info-border); }
+/* Optional inline call-to-action link inside a banner (e.g. "no site" -> Settings). */
+.alm-banner__action-link { color: inherit; font-weight: var(--alm-weight-medium); text-decoration: underline; white-space: nowrap; }
 
 /* === PROPERTY TABLE === */
 .alm-prop-table { width: 100%; }
