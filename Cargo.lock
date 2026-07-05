@@ -98,6 +98,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "app_core_cache"
+version = "0.1.0"
+dependencies = [
+ "moka",
+]
+
+[[package]]
 name = "app_core_calibration"
 version = "0.1.0"
 dependencies = [
