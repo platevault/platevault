@@ -15,8 +15,8 @@
 use std::sync::Arc;
 
 use app_core::plan_apply::{
-    apply_plan, cancel_plan, get_apply_status, resume_plan, retry_plan_item, skip_plan_item,
-    OperationEventSink,
+    apply_plan, apply_plan_channel_free, cancel_plan, get_apply_status, resume_plan,
+    retry_plan_item, skip_plan_item, OperationEventSink,
 };
 use contracts_core::plan_apply::{
     PlanApplyResponse, PlanApplyStatus, PlanCancelResponse, PlanItemRetryResponse,
@@ -68,6 +68,37 @@ pub async fn plans_apply_real(
     });
 
     apply_plan(state.repo.pool(), &state.bus, &plan_id, &approval_token, Some(sink)).await
+}
+
+// ── plans.apply.direct ───────────────────────────────────────────────────────
+
+/// `plans.apply.direct` — channel-free variant of `plans.apply` (spec 037).
+///
+/// Auto-approves the plan if it is still `ready_for_review`, then runs the
+/// same background executor and writes the same durable audit trail as
+/// `plans_apply_real` — it just takes no `tauri::ipc::Channel`, so it can be
+/// invoked directly by the Layer-2 `WebDriver` E2E bridge (which cannot
+/// construct a `Channel` from a test script) or by any UI surface that only
+/// needs a fire-and-poll apply (poll `plans.apply.status` for the durable
+/// terminal counts) rather than a live progress stream.
+///
+/// Intended for archive/cleanup plans, which — unlike inbox plans — have no
+/// `inbox.plan.apply` channel-free equivalent to route through.
+///
+/// # Errors
+///
+/// Returns `Err(ContractError)` with:
+/// - `"plan.not_found"` — plan not found.
+/// - `"plan.invalid_state"` — plan is not `ready_for_review`/`approved` (e.g.
+///   already applied/discarded/applying), or has no items.
+/// - `"plan.conflict.overlap"` — concurrent apply already running.
+#[tauri::command]
+#[specta::specta]
+pub async fn plans_apply_direct(
+    state: State<'_, AppState>,
+    plan_id: String,
+) -> Result<PlanApplyResponse, ContractError> {
+    apply_plan_channel_free(state.repo.pool(), &state.bus, &plan_id).await
 }
 
 // ── plans.cancel ──────────────────────────────────────────────────────────────

@@ -73,8 +73,8 @@ use crate::commands::patterns::{
     pattern_path_preview, pattern_preview, pattern_resolve, pattern_validate,
 };
 use crate::commands::plan_apply::{
-    plans_apply_real, plans_apply_status, plans_cancel, plans_item_retry, plans_item_skip,
-    plans_resume,
+    plans_apply_direct, plans_apply_real, plans_apply_status, plans_cancel, plans_item_retry,
+    plans_item_skip, plans_resume,
 };
 use crate::commands::plans::{
     archive_list, archive_permanently_delete, archive_plan_generate, archive_send_to_trash,
@@ -233,6 +233,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         archive_plan_generate,
         // plan apply (spec 025)
         plans_apply_real,
+        // channel-free plan apply variant (spec 037)
+        plans_apply_direct,
         plans_cancel,
         plans_resume,
         plans_item_skip,
@@ -449,6 +451,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         archive_plan_generate,
         // plan apply (spec 025)
         plans_apply_real,
+        // channel-free plan apply variant (spec 037)
+        plans_apply_direct,
         plans_cancel,
         plans_resume,
         plans_item_skip,
