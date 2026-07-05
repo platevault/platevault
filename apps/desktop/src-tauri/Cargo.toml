@@ -35,6 +35,13 @@ tauri = { workspace = true }
 tauri-plugin-dialog = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tauri-plugin-mcp-bridge = { workspace = true }
+# Spec 051 shell integration plugins (deps only — not yet registered/wired).
+tauri-plugin-single-instance = { workspace = true }
+tauri-plugin-window-state = { workspace = true }
+tauri-plugin-log = { workspace = true }
+tauri-plugin-notification = { workspace = true }
+tauri-plugin-updater = { workspace = true }
+tauri-plugin-prevent-default = { workspace = true }
 tauri-specta = { workspace = true }
 # E2E automation surface — ONLY compiled when the `e2e` feature is enabled.
 # Release binaries MUST omit this feature so the embedded WebDriver server
