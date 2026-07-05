@@ -330,6 +330,7 @@ export function MastersTable({
     const isAging = master.ageDays > agingThresholdDays;
     const kindStr = master.kind.toLowerCase();
     return {
+      _testid: `master-row-${master.id}`,
       _rowClassName:
         'alm-calib-table__row' + (selected === master.id ? ' alm-calib-table__row--selected' : ''),
       _onClick: () => onSelect(master.id),
