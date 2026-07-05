@@ -44,11 +44,39 @@ implementer finds keeps the file count sane): `list_favourites(pool) -> Vec<Targ
 already present), `remove_favourite(pool, target_id) -> Result<(), Error>`
 (no-op if absent).
 
-### Migration SQL (see `crates/persistence/db/migrations/0055_target_favourites.sql`)
+### Migration SQL (planned artifact — implementation creates this file verbatim)
 
 Additive-only; no existing table is altered. No `PRAGMA foreign_keys OFF/ON`
 rebuild dance is needed since this is a brand-new table, not a column/CHECK
-change to an existing one.
+change to an existing one. `0055` is the next free migration number as of this
+writing (`0054_source_view_generation_origin.sql` is the latest on `main`);
+re-check for collisions from concurrent branches before creating the file
+(see the `duplicate-migration-version-collision` lesson from a prior spec).
+
+File: `crates/persistence/db/migrations/0055_target_favourites.sql`
+
+```sql
+-- Migration 0055: target favourites (spec 051 US2).
+--
+-- Replaces the localStorage-only favourites stub
+-- (apps/desktop/src/features/targets/useFavourites.ts) with a durable,
+-- canonical record so favourited status survives restarts/reinstalls and is
+-- inspectable in the database (Constitution Principle V).
+--
+-- One row per favourited target; absence of a row means "not favourited" --
+-- no boolean column needed. ON DELETE CASCADE means a deleted/merged
+-- canonical_target automatically drops its favourite row with no app-level
+-- cleanup required.
+--
+-- Constitution §I : metadata only; no filesystem mutation.
+-- Constitution §V : SQLite is the durable record for this previously
+-- browser-storage-only piece of state.
+
+CREATE TABLE IF NOT EXISTS target_favourite (
+    target_id     TEXT NOT NULL PRIMARY KEY REFERENCES canonical_target(id) ON DELETE CASCADE,
+    favourited_at TEXT NOT NULL
+);
+```
 
 ---
 
