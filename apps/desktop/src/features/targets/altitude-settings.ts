@@ -31,7 +31,13 @@ export const ALTITUDE_THRESHOLD_MAX = 90;
  * backend round-trip completing.
  */
 export function setAltitudeThreshold(degrees: number): void {
-  void saveUsableAltitude(degrees);
+  // Best-effort persist; the live cache already reflects the change optimistically
+  // (SC-003). Swallow the backend-write rejection here so a failed or unavailable
+  // IPC round-trip never escapes as an unhandled promise rejection (matches the
+  // fire-and-forget settings-update convention in CalibrationMatching).
+  saveUsableAltitude(degrees).catch(() => {
+    // Intentionally ignored — optimistic UI already updated.
+  });
 }
 
 /**
