@@ -31,44 +31,18 @@
  *   - `useInboxItemMetadata` always resolves to `[]`, so the per-file FITS
  *     metadata popover and the FR-032 missing-path-attribute gate can never
  *     populate/trigger via this seam.
- * This is a real, fixable gap (add the missing mock cases) — but doing so is
- * a product-code change, out of scope for this additive-test-only batch. Two
- * scenarios are `test.skip`-documented below rather than faked.
+ * ── Harness update (2026-07-05) ──────────────────────────────────────────────
+ * The mock-layer gaps described above are now CLOSED by the shared harness +
+ * enriched `mocks.ts` (`inbox_plan_list_open` seed plans, arg-sensitive
+ * `inbox_confirm`, a first-party Tauri `Channel` polyfill). The two previously
+ * `test.skip`-documented scenarios are un-skipped at the foot of this file.
  */
-import { test, expect } from "@playwright/test";
-
-function seedSetupComplete(page: import("@playwright/test").Page): void {
-	page.addInitScript(() => {
-		window.localStorage.setItem(
-			"alm-preferences",
-			JSON.stringify({ setupCompleted: true }),
-		);
-	});
-}
-
-/**
- * spec 010's guided first-run coach auto-activates whenever
- * `alm-preferences.setupCompleted` is true (any mount runs `activateGuidedFlow`
- * in mock mode, landing on step "inbox.confirm_first"). Its react-joyride
- * spotlight targets `[data-guide-anchor="inbox.confirm-row"]` — the SAME
- * attribute carried by BOTH the per-detection Confirm button and the top-bar
- * bulk-confirm button (InboxDetail.tsx / InboxPage.tsx). Joyride only
- * computes a cutout for the first DOM match, so the OTHER element sharing the
- * selector stays covered by the tour's (real, hit-testable) overlay backdrop —
- * `{ force: true }` alone isn't enough, since Playwright still dispatches the
- * click at the element's screen coordinates and the browser delivers it to
- * whatever is actually on top. Hide the joyride portal outright: it is
- * explicitly documented as non-modal (`blockTargetInteraction: false`,
- * GuidedOverlay.tsx) so this doesn't change the behavior under test, only
- * removes an unrelated onboarding overlay this suite isn't about.
- */
-async function disableGuidedTourOverlay(
-	page: import("@playwright/test").Page,
-): Promise<void> {
-	await page.addStyleTag({
-		content: "#react-joyride-portal { display: none !important; }",
-	});
-}
+import {
+	test,
+	expect,
+	seedSetupComplete,
+	disableGuidedTourOverlay,
+} from "./support/harness";
 
 test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () => {
 	test("cross-root aggregate list renders with reconciled per-type stats (spec 039 SC-001 / spec 041 US6 FR-021)", async ({
@@ -251,37 +225,85 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 		).toBeVisible({ timeout: 5_000 });
 	});
 
-	// ── Documented mock-layer gaps (see file header) — NOT faked ────────────────
+	// ── Previously-skipped mock-layer gaps — now enabled by the enriched harness ─
 
-	test.skip(
-		"plan-approval overlay: review → apply/cancel a generated plan (US1 FR-003/FR-003a/FR-006/FR-007) — requires inbox_plan_list_open/inbox_plan_apply(_all|_selected)/inbox_plan_cancel mock cases that do not exist yet",
-		async () => {
-			// Intentionally skipped: `useOpenInboxPlans` calls `inbox_plan_list_open`,
-			// which has no case in `mockInvoke` (apps/desktop/src/api/mocks.ts) and
-			// throws "Unknown mock command"; the rejection is swallowed into hook
-			// error state, so `openPlans` is always `[]` and the top-bar
-			// "Review plans" trigger never renders in mock mode. Exercising the
-			// PlanApprovalOverlay/PlanPanel apply/cancel/staleness flow needs either
-			// the real backend (Layer-2/tauri-driver) or new mock cases — adding
-			// those mocks is a product-code change outside this additive-tests-only
-			// batch.
-		},
-	);
+	test("plan-approval overlay: review → apply one plan (live progress) → cancel another (US1 FR-003/FR-003a/FR-006/FR-007)", async ({
+		page,
+	}) => {
+		seedSetupComplete(page);
+		await page.goto("/#/inbox");
+		await disableGuidedTourOverlay(page);
+		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
 
-	test.skip(
-		"catalogue-in-place confirm is distinguishable from a move plan (US4 FR-017/FR-018/SC-007) — requires an organizationState:'organized' fixture item and an inbox_confirm mock that branches on it",
-		async () => {
-			// Intentionally skipped: every item in the `inbox_list` mock fixture is
-			// `organizationState: "unorganized"`, and the `inbox_confirm` mock
-			// returns the exact same static response `{ planId, planState:
-			// 'ready_for_review', itemsTotal: 18, registeredAsMaster: false }`
-			// regardless of the confirmed item or its source's organization state.
-			// There is currently no way, at the mock e2e layer, to observe "zero
-			// file movements + a catalogue record" (FR-018) as distinct from the
-			// move-plan path asserted above — both render an identical toast. This
-			// needs either the real backend or a smarter mock (an "organized" fixture
-			// item + branching inbox_confirm logic), which is a product-code change
-			// outside this additive-tests-only batch.
-		},
-	);
+		// The enriched `inbox_plan_list_open` mock seeds two open plans, so the
+		// top-bar "Review plans (2)" trigger now renders (was unreachable before).
+		const reviewBtn = page.getByTestId("inbox-review-plans-btn");
+		await expect(reviewBtn).toBeVisible({ timeout: 8_000 });
+		await expect(reviewBtn).toContainText("Review plans (2)");
+		await reviewBtn.click();
+
+		// The focused plan-approval overlay opens with both seeded plan groups.
+		const overlay = page.getByTestId("plan-approval-overlay");
+		await expect(overlay).toBeVisible({ timeout: 5_000 });
+		await expect(overlay.getByTestId("plan-group-item-002")).toBeVisible();
+		await expect(
+			overlay.getByTestId("plan-group-item-organized-inplace"),
+		).toBeVisible();
+		// Aggregate action count across both plans (2 + 2).
+		await expect(overlay.getByTestId("plan-total-count")).toContainText("4");
+
+		// ── Apply ONE plan with live progress. This drives `plans_apply_real`
+		//    over a real `@tauri-apps/api/core` Channel — proving the first-party
+		//    Channel polyfill lets the streamed OperationEvents reach the UI
+		//    (without it, the Channel ctor throws before any event streams). ──
+		await overlay.getByTestId("plan-apply-one-item-002").click();
+		await expect(page.getByText(/^Plan applied\.$/)).toBeVisible({
+			timeout: 5_000,
+		});
+
+		// ── Cancel the OTHER plan (FR-006). The stateful mock removes it from the
+		//    aggregate surface, so after the refresh its group is gone. ──
+		await overlay.getByTestId("plan-cancel-item-organized-inplace").click();
+		await expect(
+			page.getByText(/Plan discarded\. Item is available for re-confirmation\./i),
+		).toBeVisible({ timeout: 5_000 });
+		await expect(
+			overlay.getByTestId("plan-group-item-organized-inplace"),
+		).toHaveCount(0, { timeout: 5_000 });
+
+		await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+	});
+
+	test("catalogue-in-place plan is distinguishable from a move plan in the review overlay (US4 FR-017/FR-018/SC-007)", async ({
+		page,
+	}) => {
+		seedSetupComplete(page);
+		await page.goto("/#/inbox");
+		await disableGuidedTourOverlay(page);
+		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
+
+		await page.getByTestId("inbox-review-plans-btn").click();
+		const overlay = page.getByTestId("plan-approval-overlay");
+		await expect(overlay).toBeVisible({ timeout: 5_000 });
+
+		// The MOVE plan (unorganized source, seeded all-`move` actions) renders a
+		// move arrow (`.alm-plan-panel__summary-arrow`) — files relocate (FR-017) —
+		// and carries NO "In place" marker.
+		const movePlan = overlay.getByTestId("plan-group-item-002");
+		await expect(movePlan).toBeVisible();
+		await expect(movePlan.locator(".alm-plan-panel__summary-arrow")).toBeVisible();
+		await expect(movePlan.locator(".alm-plan-panel__inplace")).toHaveCount(0);
+
+		// The CATALOGUE-IN-PLACE plan (organized source, seeded all-`catalogue`
+		// actions where destination == source) is explicitly marked "In place"
+		// (`.alm-plan-panel__inplace`) — zero file movements, a catalogue record
+		// only (FR-018 / SC-007) — with NO move arrow.
+		const inPlacePlan = overlay.getByTestId("plan-group-item-organized-inplace");
+		await expect(inPlacePlan).toBeVisible();
+		await expect(inPlacePlan.locator(".alm-plan-panel__inplace")).toBeVisible();
+		await expect(inPlacePlan.getByText("In place", { exact: true })).toBeVisible();
+		await expect(inPlacePlan.locator(".alm-plan-panel__summary-arrow")).toHaveCount(0);
+
+		await expect(page.getByTestId("app-error-boundary-fallback")).not.toBeVisible();
+	});
 });

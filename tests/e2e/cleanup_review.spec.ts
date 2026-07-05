@@ -49,44 +49,15 @@
  * First-run seeding:
  *   Reads `alm-preferences.setupCompleted` from localStorage.
  */
-import { test, expect } from "@playwright/test";
-
-function seedSetupComplete(page: import("@playwright/test").Page): void {
-  page.addInitScript(() => {
-    window.localStorage.setItem(
-      "alm-preferences",
-      JSON.stringify({ setupCompleted: true }),
-    );
-  });
-}
-
-/**
- * `PlanReviewOverlay`'s approve-and-apply path bridges the live apply
- * progress onto a real `@tauri-apps/api/core` `Channel` (see
- * `features/plans/planApply.ts`). `Channel`'s constructor calls
- * `window.__TAURI_INTERNALS__.transformCallback`, which only exists inside an
- * actual Tauri webview — outside one (this Playwright run drives the plain
- * Vite dev server with no Tauri host, same as `usePlanApplyProgress.test.tsx`
- * needs to shim for jsdom) the constructor throws, the apply call fails
- * before `plans_apply_real` ever streams a mock event, and the overlay shows
- * "Plan apply failed." Shim only the one method `Channel` needs, scoped to
- * this test file via `addInitScript` (no production code changes) — the same
- * minimal shim `usePlanApplyProgress.test.tsx` installs for its jsdom
- * environment.
- */
-function shimTauriChannel(page: import("@playwright/test").Page): void {
-  page.addInitScript(() => {
-    let nextId = 1;
-    (window as unknown as { __TAURI_INTERNALS__: { transformCallback: () => number } }).__TAURI_INTERNALS__ =
-      { transformCallback: () => nextId++ };
-  });
-}
+// The Tauri `Channel` polyfill this journey's approve-and-apply path needs is
+// installed globally by the shared harness `test` (see
+// `tests/e2e/support/harness.ts`) — no per-spec shim required.
+import { test, expect, seedSetupComplete } from "./support/harness";
 
 test.describe("cleanup review (spec 017 WP-E / Journey 6)", () => {
   test("scan → review candidates with confidence + protection → generate plan → protection gate → approve & apply", async ({
     page,
   }) => {
-    shimTauriChannel(page);
     seedSetupComplete(page);
     await page.goto("/#/projects");
 
