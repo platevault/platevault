@@ -14,7 +14,21 @@ import type {
   InboxListResponse_Serialize,
   InboxScanFolderResponse_Serialize,
   InboxClassifyResponse_Serialize,
-  InboxConfirmResponse,
+  InboxConfirmResponse_Serialize,
+  InboxConfirmActionsSummary,
+  InboxConfirmDestination,
+  InboxOpenPlansResponse,
+  InboxOpenPlan,
+  InboxPlanAction,
+  InboxPlanView,
+  InboxApplyAllResponse,
+  InboxPlanCancelResponse,
+  InboxStatsResponse,
+  InboxItemMetadataResponse_Serialize,
+  InboxFileMetadata_Serialize,
+  PropertyRegistryEntry_Serialize,
+  GenerateArchivePlanResult,
+  TransitionError_Serialize,
   InboxReclassifyResponse_Serialize,
   TargetListItem,
   TargetDetailV3_Serialize,
@@ -338,6 +352,97 @@ function mockCalibrationMatches(sessionId: string): CalibrationMatchDto_Serializ
     },
   ];
 }
+
+// ── Inbox plan surface (spec 041) — stateful mock ─────────────────────────────
+//
+// `inbox_plan_list_open` previously had no case, so `useOpenInboxPlans` always
+// resolved to `[]` and the top-bar "Review plans" overlay was unreachable in
+// mock mode. These seed plans make the overlay reachable AND make the
+// move-vs-catalogue-in-place distinction observable at the plan-review layer
+// (spec 041 FR-017/FR-018/SC-007):
+//   plan-move-002     → every action is a `move` (unorganized source relocates
+//                       into the library) → PlanPanel renders "→ <dest>".
+//   plan-inplace-org  → every action is a `catalogue` (toPath == fromPath;
+//                       already-organized source, no file moves) → PlanPanel
+//                       renders the "In place · <folder>" label.
+// Apply/cancel MUTATE this array (removing the applied/cancelled plan) so the
+// aggregate surface refresh + auto-close behaviour round-trips like the backend.
+//
+// Shapes are pinned to the generated bindings (`InboxOpenPlan`/`InboxPlanAction`)
+// so a contract change the mock fails to mirror is a compile error.
+
+/** A `move` action: source relocates to a distinct destination path. */
+function mockMoveAction(index: number, file: string): InboxPlanAction {
+  return {
+    index,
+    action: 'move',
+    fromPath: `/astro/raw/2025-10-10/darks/${file}`,
+    toPath: `/astro/library/darks/2025-10-10/${file}`,
+    destinationPreview: 'library/darks/2025-10-10/',
+    requiresDestructiveConfirm: false,
+  };
+}
+
+/** A `catalogue` action: file stays put (toPath == fromPath), no move. */
+function mockCatalogueAction(index: number, file: string): InboxPlanAction {
+  const path = `/astro/library/NGC7000/${file}`;
+  return {
+    index,
+    action: 'catalogue',
+    fromPath: path,
+    toPath: path,
+    destinationPreview: 'library/NGC7000/',
+    requiresDestructiveConfirm: false,
+  };
+}
+
+function seedInboxOpenPlans(): InboxOpenPlan[] {
+  return [
+    {
+      inboxItemId: 'item-002',
+      itemName: '2025-10-10/darks',
+      planId: 'plan-move-002',
+      state: 'plan_open',
+      stale: false,
+      actions: [
+        mockMoveAction(1, 'dark_001.fits'),
+        mockMoveAction(2, 'dark_002.fits'),
+      ],
+    },
+    {
+      inboxItemId: 'item-organized-inplace',
+      itemName: 'Library/NGC7000',
+      planId: 'plan-inplace-org',
+      state: 'plan_open',
+      stale: false,
+      actions: [
+        mockCatalogueAction(1, 'NGC7000_Ha_001.fits'),
+        mockCatalogueAction(2, 'NGC7000_Ha_002.fits'),
+      ],
+    },
+  ];
+}
+
+let mockInboxOpenPlans: InboxOpenPlan[] = seedInboxOpenPlans();
+
+/**
+ * Inbox item ids whose source is already ORGANIZED — `inbox_confirm` produces a
+ * catalogue-in-place result (zero moves) for these, and a move plan otherwise
+ * (spec 041 US4 FR-017/FR-018). Mirrors the backend's per-source
+ * `organization_state` branch. `item-organized-inplace` is the seed plan's item;
+ * confirming it (or any id here) yields the catalogue-in-place shape.
+ */
+const MOCK_ORGANIZED_ITEM_IDS = new Set<string>(['item-organized-inplace']);
+
+/** Plan-required lifecycle edges (mirrors `lifecycle-actions.ts` `requiresPlan`). */
+const MOCK_PLAN_REQUIRED_EDGES = new Set<string>([
+  'ready→prepared',
+  'prepared→ready',
+  'completed→archived',
+  'blocked→archived',
+  'archived→ready',
+  'archived→processing',
+]);
 
 /**
  * Dispatch a mock IPC response for `cmd`.
@@ -670,20 +775,51 @@ export async function mockInvoke(
     // ---------- Mutation Commands ----------
 
     case 'lifecycle_transition_apply': {
-      // Mock: always succeeds. The request is the canonical FLAT discriminated
-      // envelope (issue #423): `nextState` sits beside the `entityType` tag —
-      // there is no `{ project: {...} }` wrapper. Echo it back for the UI.
+      // Arg-sensitive: a plan-required edge (e.g. completed → archived) returns
+      // `status: 'error'` with `error.code: 'plan.required'`, mirroring the
+      // backend — the UI then routes to the plan-create flow (and, for
+      // → archived, calls `archive_plan_generate`). Non-plan edges (e.g.
+      // processing → completed) succeed immediately. The request is the
+      // canonical FLAT discriminated envelope (issue #423): `nextState` sits
+      // beside the `entityType` tag — no `{ project: {...} }` wrapper.
       const req = (_args as { request?: { nextState?: string; currentState?: string; entityId?: string } } | undefined)
         ?.request;
+      const prior = req?.currentState ?? 'processing';
+      const next = req?.nextState ?? 'completed';
+      if (MOCK_PLAN_REQUIRED_EDGES.has(`${prior}→${next}`)) {
+        return {
+          status: 'error',
+          contractVersion: '2.0.0',
+          requestId: crypto.randomUUID(),
+          error: {
+            code: 'plan.required',
+            message: `Transition ${prior} → ${next} requires an approved plan.`,
+            details: null,
+          } satisfies TransitionError_Serialize,
+        } satisfies TransitionResponse_Serialize;
+      }
       return {
         status: 'success',
         contractVersion: '2.0.0',
         requestId: crypto.randomUUID(),
         appliedAt: new Date().toISOString(),
-        priorState: req?.currentState ?? 'processing',
-        newState: req?.nextState ?? 'completed',
+        priorState: prior,
+        newState: next,
         auditId: 'mock-audit-transition',
       } satisfies TransitionResponse_Serialize;
+    }
+
+    case 'archive_plan_generate': {
+      // `archive.plan.generate` — whole-project reviewable archive plan (spec
+      // 017 / constitution II: created in `ready_for_review`, never
+      // auto-applied). Previously ABSENT from the mock switch, so the
+      // completed → archived archive flow dead-ended after the plan.required
+      // toast. One protected item so the spec-016 acknowledge gate is exercised.
+      return {
+        planId: 'plan-archive-mock',
+        itemCount: 4,
+        protectedItemCount: 1,
+      } satisfies GenerateArchivePlanResult;
     }
 
     case 'sessions_split': {
@@ -1071,12 +1207,47 @@ export async function mockInvoke(
       } satisfies InboxClassifyResponse_Serialize;
     }
     case 'inbox_confirm': {
+      // Arg-sensitive: an ORGANIZED source catalogues in place (zero moves —
+      // spec 041 US4/FR-018), an unorganized source produces a move plan
+      // (FR-017). The observable move-vs-catalogue distinction surfaces on the
+      // aggregate plan surface (`inbox_plan_list_open`); the confirm response
+      // itself carries the branch via `actionsSummary`/`organizationState`.
+      const req = (_args as { req?: { inboxItemId?: string; rootAbsolutePath?: string } } | undefined)?.req;
+      const inboxItemId = req?.inboxItemId ?? '';
+      const rootAbsolutePath = req?.rootAbsolutePath ?? '/astro/raw';
+      const organized = MOCK_ORGANIZED_ITEM_IDS.has(inboxItemId);
+      // `itemsTotal` kept at 18 for the existing move-path e2e assertion.
+      const itemsTotal = 18;
+      const actionsSummary: InboxConfirmActionsSummary = organized
+        ? { moveCount: 0, catalogueCount: itemsTotal }
+        : { moveCount: itemsTotal, catalogueCount: 0 };
+      const fromPath = `${rootAbsolutePath}/light_001.fits`;
+      const destinations: InboxConfirmDestination[] = [
+        organized
+          ? {
+              fromPath,
+              toRelativePath: 'light_001.fits',
+              toAbsolutePath: fromPath, // catalogue = no move
+              toRootId: 'root-lights-001',
+              action: 'catalogue',
+            }
+          : {
+              fromPath,
+              toRelativePath: 'darks/2025-10-10/light_001.fits',
+              toAbsolutePath: '/astro/library/darks/2025-10-10/light_001.fits',
+              toRootId: 'root-lights-001',
+              action: 'move',
+            },
+      ];
       return {
         planId: `plan-${Date.now()}`,
         planState: 'ready_for_review',
-        itemsTotal: 18,
+        itemsTotal,
         registeredAsMaster: false,
-      } satisfies InboxConfirmResponse;
+        actionsSummary,
+        organizationState: organized ? 'organized' : 'unorganized',
+        destinations,
+      } satisfies InboxConfirmResponse_Serialize;
     }
     case 'inbox_reclassify': {
       const args = _args as { req: { inboxItemId: string } } | undefined;
@@ -1088,6 +1259,180 @@ export async function mockInvoke(
         appliedCount: 1,
         breakdown: [],
       } satisfies InboxReclassifyResponse_Serialize;
+    }
+
+    // ── Inbox plan surface (spec 041 US2) ─────────────────────────────────────
+    //
+    // These cases were previously ABSENT: every one fell through to `default:
+    // throw new Error('Unknown mock command')`, so the "Review plans" overlay,
+    // per-file metadata popover, and aggregate stats were unreachable in mock
+    // mode. Shapes are pinned to the generated bindings.
+
+    case 'inbox_plan_list_open': {
+      const totalActions = mockInboxOpenPlans.reduce(
+        (sum, p) => sum + p.actions.length,
+        0,
+      );
+      return {
+        plans: mockInboxOpenPlans,
+        totalActions,
+      } satisfies InboxOpenPlansResponse;
+    }
+    case 'inbox_plan': {
+      const inboxItemId = (_args?.inboxItemId as string) ?? '';
+      const plan = mockInboxOpenPlans.find((p) => p.inboxItemId === inboxItemId);
+      if (!plan) {
+        // Mirrors the backend's `inbox.item.no_plan` error branch, which the
+        // hook swallows into an empty state (store.ts `useInboxPlan`).
+        throw 'inbox.item.no_plan';
+      }
+      return {
+        planId: plan.planId,
+        state: plan.state,
+        stale: plan.stale,
+        actions: plan.actions,
+      } satisfies InboxPlanView;
+    }
+    case 'inbox_plan_apply': {
+      // The InboxPage apply-one path streams live progress through
+      // `plans_apply_real` (Channel); this direct binding is retained for
+      // completeness. Removes the applied plan from the aggregate surface.
+      const inboxItemId = (_args?.inboxItemId as string) ?? '';
+      const plan = mockInboxOpenPlans.find((p) => p.inboxItemId === inboxItemId);
+      mockInboxOpenPlans = mockInboxOpenPlans.filter(
+        (p) => p.inboxItemId !== inboxItemId,
+      );
+      return {
+        planId: plan?.planId ?? 'plan-unknown',
+        runId: 'op-inbox-apply-001',
+        newState: 'applied',
+      } satisfies PlanApplyResponse;
+    }
+    case 'inbox_plan_apply_all': {
+      const results = mockInboxOpenPlans.map((p) => ({
+        inboxItemId: p.inboxItemId,
+        planId: p.planId,
+        state: 'applied',
+        error: null,
+      }));
+      mockInboxOpenPlans = [];
+      return { results } satisfies InboxApplyAllResponse;
+    }
+    case 'inbox_plan_apply_selected': {
+      const ids =
+        (_args as { request?: { inboxItemIds?: string[] } } | undefined)?.request
+          ?.inboxItemIds ?? [];
+      const selected = mockInboxOpenPlans.filter((p) =>
+        ids.includes(p.inboxItemId),
+      );
+      const results = selected.map((p) => ({
+        inboxItemId: p.inboxItemId,
+        planId: p.planId,
+        state: 'applied',
+        error: null,
+      }));
+      mockInboxOpenPlans = mockInboxOpenPlans.filter(
+        (p) => !ids.includes(p.inboxItemId),
+      );
+      return { results } satisfies InboxApplyAllResponse;
+    }
+    case 'inbox_plan_cancel': {
+      const inboxItemId = (_args?.inboxItemId as string) ?? '';
+      const plan = mockInboxOpenPlans.find((p) => p.inboxItemId === inboxItemId);
+      mockInboxOpenPlans = mockInboxOpenPlans.filter(
+        (p) => p.inboxItemId !== inboxItemId,
+      );
+      return {
+        inboxItemId,
+        planId: plan?.planId ?? 'plan-unknown',
+        state: 'classified',
+      } satisfies InboxPlanCancelResponse;
+    }
+    case 'inbox_stats': {
+      // Faithful aggregate: 3 folders (item-001/002/003) + 1 master
+      // (item-master-dark), mirroring the `inbox_list` fixture. No component
+      // currently invokes this (the UI derives stats client-side via
+      // `deriveInboxStats`), but future batches can exercise it directly.
+      return {
+        perType: [
+          { frameType: 'dark', folderCount: 0, masterCount: 1, imageCount: 1 },
+          { frameType: 'mixed', folderCount: 3, masterCount: 0, imageCount: 67 },
+        ],
+        totals: { folders: 3, masters: 1, images: 68 },
+      } satisfies InboxStatsResponse;
+    }
+    case 'inbox_item_metadata': {
+      // Per-file extracted metadata for the selected inbox item (spec 041
+      // US2/FR-010). Deliberately carries NO `missingPathAttributes` /
+      // `missingMandatory` so confirm stays enabled in the move-path e2e.
+      const inboxItemId =
+        (_args as { req?: { inboxItemId?: string } } | undefined)?.req
+          ?.inboxItemId ?? 'item-001';
+      const files: InboxFileMetadata_Serialize[] = [
+        {
+          relativeFilePath: 'NGC7000_Ha_001.fits',
+          frameTypeEffective: 'light',
+          imageTyp: 'LIGHT',
+          filter: 'Ha',
+          exposureS: 300,
+          gain: '100',
+          binningX: 1,
+          binningY: 1,
+          temperatureC: -10,
+          object: 'NGC 7000',
+          dateObs: '2025-10-10T22:14:00',
+          instrume: 'ASI2600MM Pro',
+          telescop: 'Esprit 100ED',
+          naxis1: 6248,
+          naxis2: 4176,
+          stackCount: null,
+          isMaster: false,
+          overrideStale: false,
+          missingPathAttributes: [],
+          missingMandatory: [],
+          offset: 10,
+          setTempC: -10,
+          ccdTempC: -10,
+        },
+      ];
+      return {
+        inboxItemId,
+        files,
+      } satisfies InboxItemMetadataResponse_Serialize;
+    }
+    case 'inbox_property_registry': {
+      // Typed property registry (spec 041 R-13/FR-044). No component invokes it
+      // yet; a faithful subset keeps the field-agnostic reclassify editor
+      // mockable for future batches.
+      return [
+        {
+          key: 'frameType',
+          kind: 'enum',
+          unit: null,
+          sourceHeaders: ['IMAGETYP'],
+          overridable: true,
+          appliesTo: ['light', 'dark', 'flat', 'bias'],
+          validation: 'one of: light, dark, flat, bias',
+        },
+        {
+          key: 'exposureS',
+          kind: 'number',
+          unit: 's',
+          sourceHeaders: ['EXPTIME', 'EXPOSURE'],
+          overridable: true,
+          appliesTo: ['light', 'dark', 'flat'],
+          validation: '> 0',
+        },
+        {
+          key: 'filter',
+          kind: 'string',
+          unit: null,
+          sourceHeaders: ['FILTER'],
+          overridable: true,
+          appliesTo: ['light', 'flat'],
+          validation: null,
+        },
+      ] satisfies PropertyRegistryEntry_Serialize[];
     }
 
     // ── Inventory commands (spec 006) ─────────────────────────────────────────
