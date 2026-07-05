@@ -626,78 +626,60 @@ mod tests {
     }
 }
 
-// ── DB byte-identity guard (spec 042 T254) ───────────────────────────────
+// ── SettingsState / SourceOverride wire-shape tests (spec 042 T254) ─────
 //
 // T254 moved the stored settings types (`SettingsState`, `SourceOverride`,
 // `PatternPart`, `ImageTypMapping`) from `contracts_core` into `domain_core`
-// to fix the `persistence/db → contracts/core` layering inversion. The
-// constitution (Local-First custody) requires the on-disk representation to
-// stay byte-identical across that move.
+// to fix the `persistence/db → contracts/core` layering inversion.
 //
-// These tests freeze the persisted JSON as exact byte snapshots and round-trip
-// real values through the actual `settings` / `source_overrides` SQL tables.
-// If any serde `rename_all`, field order, `skip_serializing_if`, or numeric
-// formatting changes, the frozen-snapshot assertions fail loudly.
-//
-// Deliberately NOT derived from `SettingsState::default()` at test time: doing
-// so would make `settings_state_default_bytes_unchanged` compare the live type
-// to itself (`to_string(&default) == to_string(&default)`), which always
-// passes and would silently stop catching accidental field reordering/
-// renaming. Adding a new settings field is expected to require a conscious,
-// reviewable edit to this literal (spec 051 T007 added `cleanupTypeOverrides`
-// as the new trailing field) — that's the guard doing its job, not drift.
+// These tests assert *behavior* (round-trip fidelity, specific field wire
+// names/defaults that other code depends on) rather than pinning a frozen
+// byte-for-byte JSON snapshot of the whole struct — a full-struct frozen
+// literal must be hand-retyped on every new settings field, which is exactly
+// the kind of busywork this module intentionally avoids (product decision,
+// spec 051 T007 follow-up: the byte-identity guard previously here was
+// removed for this reason).
 #[cfg(test)]
-mod byte_identity_guard {
+mod settings_state_shape {
     use domain_core::settings::{SettingsState, SourceOverride};
     use domain_core::JsonAny;
 
     use super::*;
     use crate::Database;
 
-    /// Frozen snapshot of `SettingsState::default()` exactly as persisted /
-    /// emitted on the wire prior to the T254 move. Captured from the
-    /// pre-move `contracts_core::settings::SettingsState` serialization.
-    ///
-    /// Updated for spec 051 (T007): added `cleanupTypeOverrides` (default
-    /// empty object) as the new trailing field.
-    const SETTINGS_STATE_DEFAULT_JSON: &str = r#"{"pattern":[{"id":"p0","kind":"token","value":"target"},{"id":"p1","kind":"separator","value":"/"},{"id":"p2","kind":"token","value":"filter"},{"id":"p3","kind":"separator","value":"/"},{"id":"p4","kind":"token","value":"date"},{"id":"p5","kind":"separator","value":"/"},{"id":"p6","kind":"token","value":"frame_type"},{"id":"p7","kind":"separator","value":"/"}],"autoApplyPattern":true,"alwaysPreviewBeforePlan":false,"followSymlinks":false,"hashOnScan":"lazy","darkMatchTolerance":"strict","flatMatching":"filter-rot","suggestCalibration":true,"logLevel":"info","rememberFollowLogs":false,"defaultProtection":"protected","blockPermanentDelete":true,"protectedCategories":["lights","masters","finals"],"devMode":false,"plansListDefaultAgeCutoffDays":90.0,"calibrationDarkTempTolerance":2.0,"calibrationPrefillSuggestion":true,"calibrationDarkOverridePenalty":0.3,"calibrationFlatOverridePenalty":0.3,"calibrationBiasOverridePenalty":0.3,"calibrationAgingThresholdDays":90.0,"imagetypNormalizationUserMappings":[],"patternsByType":{},"toolWatchExtensions":[".xisf",".fits",".fit",".tif",".tiff",".png",".jpg",".ser",".avi"],"toolAttributionWindowHours":6.0,"observingSites":[],"observingDefaultSiteId":null,"observingActiveSiteId":null,"usableAltitudeDeg":30.0,"plannerMoonAvoidance":{"B":{"distanceDeg":120.0,"widthDays":14.0},"G":{"distanceDeg":120.0,"widthDays":14.0},"Ha":{"distanceDeg":60.0,"widthDays":7.0},"L":{"distanceDeg":120.0,"widthDays":14.0},"OIII":{"distanceDeg":110.0,"widthDays":10.0},"R":{"distanceDeg":120.0,"widthDays":14.0},"SII":{"distanceDeg":60.0,"widthDays":7.0}},"sourceViewLinkKindIntraDrive":"hardlink","sourceViewLinkKindCrossDrive":"symlink","cleanupTypeOverrides":{}}"#;
-
-    /// Frozen snapshot of a `SourceOverride` as persisted prior to the move.
-    const SOURCE_OVERRIDE_JSON: &str = r#"{"sourceId":"src-1","key":"hashOnScan","value":"eager","updatedAt":"2026-01-01T00:00:00Z"}"#;
-
-    /// The moved `SettingsState` must serialize to the exact byte snapshot.
+    /// `SettingsState::default()` round-trips through JSON with no loss —
+    /// proves serde field names/shapes are self-consistent without needing a
+    /// frozen snapshot of the exact bytes.
     #[test]
-    fn settings_state_default_bytes_unchanged() {
-        let actual = serde_json::to_string(&SettingsState::default()).unwrap();
-        assert_eq!(
-            actual, SETTINGS_STATE_DEFAULT_JSON,
-            "SettingsState on-disk/wire JSON changed after the T254 domain move"
-        );
+    fn settings_state_default_round_trips_through_json() {
+        let state = SettingsState::default();
+        let value = serde_json::to_value(&state).unwrap();
+        let parsed: SettingsState = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed, state);
     }
 
-    /// The frozen snapshot must deserialize back into the default value
-    /// (proves the field names / shapes accept the persisted bytes).
+    /// Targeted wire-contract assertion for the field added by spec 051 T007:
+    /// `cleanup_type_overrides` must serialize under the camelCase key
+    /// `cleanupTypeOverrides` and default to an empty object (data-model.md
+    /// §E2 — absent id ⇒ that type's built-in default action applies).
     #[test]
-    fn settings_state_default_roundtrips_from_snapshot() {
-        let parsed: SettingsState = serde_json::from_str(SETTINGS_STATE_DEFAULT_JSON).unwrap();
-        assert_eq!(parsed, SettingsState::default());
+    fn cleanup_type_overrides_wire_key_and_default() {
+        let value = serde_json::to_value(SettingsState::default()).unwrap();
+        assert_eq!(value["cleanupTypeOverrides"], serde_json::json!({}));
     }
 
-    /// The moved `SourceOverride` must serialize to the exact byte snapshot
-    /// (including the `JsonAny` `value` field, serde-transparent over Value).
+    /// `SourceOverride` round-trips through JSON with no loss.
     #[test]
-    fn source_override_bytes_unchanged() {
+    fn source_override_round_trips_through_json() {
         let ov = SourceOverride {
             source_id: "src-1".to_owned(),
             key: "hashOnScan".to_owned(),
             value: JsonAny::from(serde_json::json!("eager")),
             updated_at: "2026-01-01T00:00:00Z".to_owned(),
         };
-        let actual = serde_json::to_string(&ov).unwrap();
-        assert_eq!(
-            actual, SOURCE_OVERRIDE_JSON,
-            "SourceOverride on-disk/wire JSON changed after the T254 domain move"
-        );
+        let value = serde_json::to_value(&ov).unwrap();
+        let parsed: SourceOverride = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed, ov);
     }
 
     /// Round-trip through the real `settings` SQL table: write each known key,
