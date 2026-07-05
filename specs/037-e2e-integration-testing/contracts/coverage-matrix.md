@@ -109,7 +109,8 @@ local gates (compile, clippy, fmt) are clean.
 | `plan_review_apply_with_audit` | `journeys.rs` | #3, #16, #17, #18 | `roots.register`, `sources.set_organization_state`, `inbox.scan.folder`, `inbox.classify`, `inbox.confirm`, `inbox.plan.apply`, `plans.apply.status` |
 | `ingestion_sessions_search` | `journeys.rs` | #3, #4, #6, #5, #12/#14 | inbox pipeline (as above) + `sessions.list` (event-driven session grouping/resolution), `calibration.match.suggest`, `search.global` |
 | `lifecycle_integrity` | `journeys.rs` | #7/#8 | `projects.create`, `lifecycle.transition.apply`, `lifecycle.ledger.list` |
-| `cleanup_plan_review` (NEW, D22) | `journeys.rs` | #10/#11, #17 | `projects.create`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve` |
+| `cleanup_plan_review` (NEW, D22; apply extended 2026-07-05) | `journeys.rs` | #10/#11, #17 | `projects.create`, `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve`, `plans.apply.direct`, `plans.apply.status` |
+| `archive_lifecycle_apply_trash_permanent_delete` (NEW, 2026-07-05) | `archive_journeys.rs` | Journey 7 | `projects.create`, `lifecycle.transition.apply` (x3), `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `archive.plan.generate`, `plans.apply.direct`, `plans.apply.status`, `archive.list`, `archive.send_to_trash`, `settings.update`, `archive.permanently_delete` |
 | `all_top_level_screens_load` | `smoke.rs` | #21 | real routes + the shipped `AppErrorBoundary` fallback presence check |
 
 **Corrections to prior scaffold claims** (the original stub doc comments were
@@ -131,18 +132,48 @@ prose"):
   surfaces by choice (more robust than the general audit feed). The original
   stubs' references to `events.recent` were aspirational — that command does
   not exist.
-- **`cleanup_plan_review`'s known, documented gap**: applying the generated
-  plan needs `plans.apply_real`, which takes a `tauri::ipc::Channel` progress
-  argument with no channel-free equivalent for archive/cleanup plans (unlike
-  `inbox.plan.apply` for inbox plans), and the Cleanup/Archive UI does not yet
-  wire an Apply button for `cleanup.plan.generate` output
-  (`apps/desktop/src/features/projects/OutputsCleanupSections.tsx`,
-  `apps/desktop/src/features/archive/*.tsx` — neither calls
-  `cleanupPlanGenerate`). The journey stops at `plans.approve`
-  (`ready_for_review` → `approved`), which is the real, honest boundary of
-  what's testable today without reaching into product frontend code beyond a
-  thin test hook (FR-018). Follow-up: land a channel-free generic apply
-  command, or wire the UI Apply button, then extend the journey.
+- **RESOLVED 2026-07-05: `cleanup_plan_review`'s apply gap.** The blocker was
+  a missing channel-free apply command for archive/cleanup plans (unlike
+  `inbox.plan.apply` for inbox plans) — `plans.apply_real` takes a
+  `tauri::ipc::Channel` progress argument this WebDriver harness cannot
+  construct. `plans.apply.direct` (a.k.a. `plans_apply_direct`,
+  `app_core::plan_apply::apply_plan_channel_free`) now exists: same executor
+  (`apply_plan`) and durable audit trail as `plans.apply_real`, no `Channel`
+  required. `cleanup_plan_review` now drives a real apply past `plans.approve`
+  and asserts the real filesystem mutation + audit record. **Correction to
+  the original claim**: the Cleanup/Archive UI already had a real Apply
+  affordance before this — `OutputsCleanupSections.tsx`'s `CleanupSection`
+  calls `cleanupPlanGenerate` (via `useGenerateCleanupPlan`) and hands off to
+  the shared `PlanReviewOverlay` (protection gate → `plans.approve` →
+  `plans.apply_real` with live progress), and `ProjectDetail.tsx` wires the
+  same overlay for `archive.plan.generate` — landed by PR #413 (2026-07-04)
+  and PR #438, before this audit's original claim was written. No new UI
+  button was added: the existing Channel-based `PlanReviewOverlay` path is
+  strictly better for a live UI (streamed per-item progress) than a
+  fire-and-poll channel-free call would be, so `plans.apply.direct`'s
+  consumers are the Layer-2 harness and any future non-UI caller, not this
+  overlay. Existing vitest coverage (`PlanReviewOverlay.test.tsx`: "approve &
+  apply drives plans.approve → apply with the token and reports completion")
+  already covers the button's happy path.
+- **Second, previously-undiscovered bug found and fixed while landing the
+  above**: `protection::generate_plan` (the shared persistence tail for both
+  `archive_generator::generate` and `cleanup_generator::generate`) always
+  stored `archive_path: None` for every plan item, regardless of action. The
+  spec-025 executor's fallback for `archive`-action items with no
+  `archive_path` uses `to_relative_path` verbatim — and both generators left
+  that fallback unusable (`archive_generator` sets it equal to the source
+  path, so source == destination and every apply failed with
+  `conflict.destination_exists`; `cleanup_generator` leaves it an empty
+  string). **Every real archive/cleanup apply failed 100% of the time before
+  this fix, with zero prior test coverage to catch it** — exactly the gap
+  this journey work was meant to close. Fixed in
+  `crates/app/core/src/protection.rs::compute_archive_destination` (destination
+  convention: `<parent-dir-of-source>/.astro-plan-archive/<planId>/<itemId>-<fileName>`);
+  regression test:
+  `crates/app/core/src/archive_generator.rs::generate_computes_distinct_archive_destination_per_item`.
+  As a side effect, `archive.send_to_trash`/`archive.permanently_delete`
+  (which count `archive_path.is_some()` items) also went from always
+  reporting `archive.empty` to reporting the real count.
 
 ## Spec 035 iteration — US4 ingest → session → target — 2026-06-21
 
@@ -195,8 +226,8 @@ everything neither automated layer reaches.
 | 3 Ingest → confirm (catalogue-in-place) | ✅ | ❌ (existing journey forces the move branch) | ❌ none | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
 | 4 Sessions review (derived) | ✅ | 🟡 grouping proof only, no UI-invariant checks | 🟡 rows/detail render only | `windows-journeys/journey-04-sessions-review.md` |
 | 5 Project lifecycle | ✅ | 🟡 transition + ledger only, no UI | 🟡 transition button only (pill-refresh `test.skip`) | `windows-journeys/journey-05-project-lifecycle.md` |
-| 6 Cleanup scan→review→apply | ✅ | 🟡 stops at `approved`, **apply step has zero coverage anywhere** | ❌ none | `windows-journeys/journey-06-cleanup-scan-apply.md` |
-| 7 Archive → delete | ✅ (backend only) | ❌ **none at all** | ❌ **none at all** | `windows-journeys/journey-07-archive-delete.md` |
+| 6 Cleanup scan→review→apply | ✅ | ✅ `cleanup_plan_review` now applies past `approved` via `plans.apply.direct` + asserts the real FS move + audit (2026-07-05) | ❌ none | `windows-journeys/journey-06-cleanup-scan-apply.md` |
+| 7 Archive → delete | ✅ (backend only) | ✅ `archive_lifecycle_apply_trash_permanent_delete` (`archive_journeys.rs`, NEW 2026-07-05): real apply + `archive.list` + `archive.send_to_trash`/`archive.permanently_delete` metadata + `blockPermanentDelete` gate | ❌ none | `windows-journeys/journey-07-archive-delete.md` |
 | 8 Calibration masters → matching | ✅ | 🟡 `calibration.match.suggest` shape only | ❌ none | `windows-journeys/journey-08-calibration-masters-matching.md` |
 | 9 Targets & planning | ✅ (backend only) | ❌ **none at all** | ❌ **none at all** | `windows-journeys/journey-09-targets-planning.md` |
 | 10 Settings/appearance/i18n | ✅ | 🟡 route-load smoke only | ❌ none | `windows-journeys/journey-10-settings-appearance-i18n.md` |
@@ -255,7 +286,9 @@ just test the mock, not the product:
 - **Archive/cleanup plan `apply` with a `tauri::ipc::Channel` progress
   argument** — structurally cannot be driven by Playwright at all (no
   Tauri IPC channel in a browser context); this is Layer-2-or-manual-only
-  by construction, not just by current gap.
+  by construction, not just by current gap. (The channel-free sibling,
+  `plans.apply.direct`, is what Journeys 6/7 now drive at Layer-2 — it does
+  not change this bullet, which is about the real UI's Channel-based path.)
 - **Symlink/junction creation for source views (spec 049)** and **OS trash
   semantics (spec 017/025)** — real, OS-specific filesystem behavior; a
   mock can only assert the UI *called* the right command, never that the
@@ -265,14 +298,21 @@ just test the mock, not the product:
 
 ### Batched plan — new Layer-2 (thirtyfour) journeys to author, ordered by risk/value
 
-1. **Archive lifecycle + trash + permanent delete** (Journey 7) — highest
-   product risk (irreversible deletion) with **zero automated coverage at
-   any layer today**. **Blocked** on a channel-free apply command for
-   archive/cleanup plans (shared blocker with #2) — land that first.
-2. **Cleanup plan apply completion** (Journey 6) — extend
-   `cleanup_plan_review` past `plans.approve` once the channel-free apply
-   path (or a real UI Apply button + a thin test hook) exists. Same
-   blocker as #1; land together.
+1. **DONE (2026-07-05). Archive lifecycle + trash + permanent delete**
+   (Journey 7) — highest product risk (irreversible deletion), previously
+   **zero automated coverage at any layer**. The channel-free apply
+   command (`plans.apply.direct`) that blocked this now exists;
+   `crates/e2e-tests/tests/archive_journeys.rs::archive_lifecycle_apply_trash_permanent_delete`
+   covers real lifecycle progression → `archive.plan.generate` → apply →
+   real FS move → `archive.list` → `archive.send_to_trash` →
+   `archive.permanently_delete` (honoring `blockPermanentDelete`, and
+   honestly asserting only the real metadata-level response since neither
+   management command performs real filesystem I/O yet — see
+   coverage-matrix note above).
+2. **DONE (2026-07-05). Cleanup plan apply completion** (Journey 6) —
+   `cleanup_plan_review` now extends past `plans.approve` via
+   `plans.apply.direct` and asserts the real filesystem mutation + audit
+   record.
 3. **Calibration masters ingest → Calibration page → matching → assign**
    (Journey 8, spec 040) — real UI-level masters flow beyond today's
    `calibration.match.suggest`-only proof; spec 040 has the least automated
