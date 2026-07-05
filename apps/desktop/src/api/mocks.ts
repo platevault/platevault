@@ -195,7 +195,13 @@ let mockIngestionSettings: IngestionSettings = {
 // singleton row's real defaults (migration 0008 + 0051), including
 // `requireSameOffset` (STUB-OFFSET-REQUIRED closed: this is now a real,
 // persisted field, not a local-only stub).
-const mockCalibrationTolerances: CalibrationTolerances = {
+//
+// Mutable so `calibration_tolerances_update` round-trips through `_get` in mock
+// mode (mirrors `persistence_db::repositories::calibration_tolerances`'s
+// upsert-then-return): the Calibration-matching settings pane's edited
+// tolerance survives a component remount, exactly like the real singleton row.
+// (Module state resets per page context, so tests stay isolated.)
+let mockCalibrationTolerances: CalibrationTolerances = {
   temperatureToleranceC: 5.0,
   exposureToleranceS: 2.0,
   agingLimitDays: 365,
@@ -962,11 +968,13 @@ export async function mockInvoke(
       return mockIngestionSettings;
     }
     case 'calibration_tolerances_update': {
-      // Echo the request back, mirroring the real `calibration.tolerances.update`
+      // Persist then return, mirroring the real `calibration.tolerances.update`
       // command's upsert-then-return behaviour (persistence_db::repositories::
-      // calibration_tolerances::update).
+      // calibration_tolerances::update). Storing back into the singleton makes a
+      // later `calibration_tolerances_get` observe the edit (round-trip seam).
       const req = (_args as { request?: CalibrationTolerances } | undefined)?.request;
-      return { ...mockCalibrationTolerances, ...req } satisfies CalibrationTolerances;
+      mockCalibrationTolerances = { ...mockCalibrationTolerances, ...req };
+      return mockCalibrationTolerances satisfies CalibrationTolerances;
     }
     case 'roots_register': {
       return mockRoots[0];
