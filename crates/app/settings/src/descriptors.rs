@@ -269,6 +269,25 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         overridable: false,
         validation: ValidationRule::MoonAvoidanceBands,
     },
+    // ── Source Views (spec 049) ──────────────────────────────────────────
+    Descriptor {
+        key: "sourceViewLinkKindIntraDrive",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::EnumStr {
+            allowed: &["hardlink", "symlink", "junction"],
+            expected_msg: "must be \"hardlink\", \"symlink\", or \"junction\"",
+        },
+    },
+    Descriptor {
+        key: "sourceViewLinkKindCrossDrive",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::EnumStr {
+            allowed: &["symlink", "junction"],
+            expected_msg: "must be \"symlink\" or \"junction\"",
+        },
+    },
 ];
 
 /// Look up the descriptor for a stable key, if any.

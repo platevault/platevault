@@ -82,9 +82,16 @@ kind_diverged -> current     (user resolves divergence and regenerates)
   2026-05-22).
 - A view in state `failed` MUST have at least one item with a failure outcome
   recorded in audit.
-- `PreparedSourceView.kind` MUST equal every `PreparedSourceViewItem.materialization`
-  at create time. A create request that would violate this invariant is refused
-  with `view.mixed_kind` (A2, GRILL 2026-05-22).
+- **AMENDED 2026-07-04 (spec 049 CL-2):** A generated view's kind is resolved
+  deterministically per drive-scope (intra-drive vs cross-drive) from the spec 049
+  link-kind settings pair and recorded per item. Every `PreparedSourceViewItem.materialization`
+  MUST be a rule-chosen, recorded value; a view MAY carry more than one recorded
+  kind (e.g., hardlink intra-drive + symlink cross-drive). `PreparedSourceView.kind`
+  records the dominant kind for display; per-item `materialization` is authoritative.
+  Only an unrecorded/non-deterministic kind is refused with `view.mixed_kind`. The
+  original strict invariant (`kind` == every item's `materialization`) is superseded.
+  Revert note: to restore it, re-require equality here and in spec 026 FR-008 and
+  change spec 049 FR-004/FR-022 to refuse cross-drive-forced mixed views.
 - The destructive destination for view removal is always `archive`. No
   `destructiveDestination` field is accepted on the remove request
   (R-026-Dest-Archive, GRILL 2026-05-22).

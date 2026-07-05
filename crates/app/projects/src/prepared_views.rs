@@ -47,7 +47,7 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
     }
 }
 
-fn project_db_err(e: persistence_db::DbError) -> ContractError {
+pub(crate) fn project_db_err(e: persistence_db::DbError) -> ContractError {
     match e {
         persistence_db::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::ProjectNotFound, msg, ErrorSeverity::Blocking, false)
@@ -63,7 +63,13 @@ fn project_db_err(e: persistence_db::DbError) -> ContractError {
 
 /// Check that the owning project's lifecycle is in the allowed set for view
 /// operations (R-026-Lifecycle). Returns `lifecycle.read_only` for `archived`.
-async fn check_project_lifecycle(pool: &SqlitePool, project_id: &str) -> Result<(), ContractError> {
+///
+/// `pub(crate)`: reused by `source_view_generate` (spec 049) — generation
+/// shares the same lifecycle gate as removal/regeneration.
+pub(crate) async fn check_project_lifecycle(
+    pool: &SqlitePool,
+    project_id: &str,
+) -> Result<(), ContractError> {
     let project = projects_repo::get_project(pool, project_id).await.map_err(project_db_err)?;
 
     if ALLOWED_PROJECT_STATES_FOR_VIEW_OPS.contains(&project.lifecycle.as_str()) {

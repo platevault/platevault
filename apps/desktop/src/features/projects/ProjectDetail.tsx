@@ -163,6 +163,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   // long as this drawer is open; detaches on close/project switch.
   useProjectArtifactWatcher(projectId);
 
+  // spec 012 T008: attach the project's filesystem artifact watcher for as
+  // long as this drawer is open; detaches on close/project switch.
+  useProjectArtifactWatcher(projectId);
+
   // spec 011: tool launch (hooks must be called unconditionally)
   const projectToolStr = typeof project?.tool === 'string' ? project.tool : '';
   const toolId = projectToolStr ? toolIdFromProjectTool(projectToolStr) : '';

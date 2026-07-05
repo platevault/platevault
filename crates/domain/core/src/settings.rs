@@ -170,6 +170,18 @@ pub struct SettingsState {
     /// tuning survives, never used for a durable/audited decision. Defaults:
     /// LRGB 120°/14d · Ha/SII 60°/7d · OIII 110°/10d.
     pub planner_moon_avoidance: std::collections::BTreeMap<String, MoonAvoidanceBand>,
+
+    // ── Source Views (spec 049) ──────────────────────────────────────────
+    /// Default link kind when a source and the generated view destination
+    /// share a volume: `"hardlink"` | `"symlink"` | `"junction"` (spec 049
+    /// FR-004). Resolved deterministically per drive-scope at plan time.
+    pub source_view_link_kind_intra_drive: String,
+
+    /// Default link kind when a source and the generated view destination
+    /// are on different volumes: `"symlink"` | `"junction"` (spec 049
+    /// FR-004a — `"hardlink"` is never a valid cross-drive value because
+    /// hardlinks cannot cross volumes).
+    pub source_view_link_kind_cross_drive: String,
 }
 
 impl Default for SettingsState {
@@ -216,6 +228,8 @@ impl Default for SettingsState {
             ],
             tool_attribution_window_hours: 6.0,
             planner_moon_avoidance: default_planner_moon_avoidance(),
+            source_view_link_kind_intra_drive: "hardlink".to_owned(),
+            source_view_link_kind_cross_drive: "symlink".to_owned(),
         }
     }
 }

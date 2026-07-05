@@ -56,6 +56,10 @@ use crate::commands::inbox::{
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
 use crate::commands::inventory::inventory_list;
+use crate::commands::inventory_frame::{
+    inventory_frame_list, inventory_frame_relink, inventory_reconcile_run,
+    inventory_root_config_get, inventory_root_config_set,
+};
 use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
@@ -78,7 +82,7 @@ use crate::commands::plans::{
 };
 use crate::commands::preferences::{preferences_get, preferences_set};
 use crate::commands::prepared_views::{
-    preparedview_list, preparedview_regenerate, preparedview_remove,
+    preparedview_list, preparedview_regenerate, preparedview_remove, sourceview_generate,
 };
 use crate::commands::projects::{
     projects_channels_dismiss_drift, projects_channels_reinfer, projects_create,
@@ -337,6 +341,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_target_recommendations,
         // inventory (spec 006)
         inventory_list,
+        // per-frame inventory (spec 048)
+        inventory_frame_list,
+        inventory_reconcile_run,
+        inventory_frame_relink,
+        inventory_root_config_get,
+        inventory_root_config_set,
         // ingestion settings (spec 030)
         ingestion_settings_get,
         ingestion_settings_update,
@@ -362,6 +372,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         preparedview_list,
         preparedview_remove,
         preparedview_regenerate,
+        // source view generation (spec 049)
+        sourceview_generate,
     ])
 }
 
@@ -545,6 +557,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_target_recommendations,
         // inventory (spec 006)
         inventory_list,
+        // per-frame inventory (spec 048)
+        inventory_frame_list,
+        inventory_reconcile_run,
+        inventory_frame_relink,
+        inventory_root_config_get,
+        inventory_root_config_set,
         // ingestion settings (spec 030)
         ingestion_settings_get,
         ingestion_settings_update,
@@ -570,6 +588,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         preparedview_list,
         preparedview_remove,
         preparedview_regenerate,
+        // source view generation (spec 049)
+        sourceview_generate,
         // developer diagnostics (spec 021) — dev-tools build only
         dev_contracts_list,
         dev_calls_list,
