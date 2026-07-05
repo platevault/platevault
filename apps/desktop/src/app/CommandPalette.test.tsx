@@ -17,11 +17,18 @@
  *  4. Non-target results are not routed to /targets/
  *  5. Empty query does not trigger searchGlobal
  *  6. Debounce: searchGlobal not called immediately on input change
- *  7. PAGES constant includes Targets (list page, not detail — T007)
- *  8. PAGES does not include a /targets/:id or /targets/$id pattern
+ *  7. Real PAGES constant includes Targets (list page, not detail — T007)
+ *  8. Real PAGES does not include a /targets/:id or /targets/$id pattern
+ *  9. Real PAGES routes contain no path params
+ * 10. Real PAGES label thunks resolve to non-empty strings
+ *
+ * Tests 7-10 import PAGES directly from CommandPalette.tsx (not a
+ * hand-copied array) so a route rename/removal in production is actually
+ * caught here.
  */
 
 import { describe, it, expect } from 'vitest';
+import { PAGES } from './CommandPalette';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,17 +50,9 @@ function buildNavigateCall(result: SearchResult): string {
   return result.route;
 }
 
-// PAGES constant from CommandPalette.tsx (kept in sync manually; T007 guard).
-const PAGES: Array<{ label: string; route: string }> = [
-  { label: 'Sessions', route: '/sessions' },
-  { label: 'Review queue', route: '/review' },
-  { label: 'Calibration', route: '/calibration' },
-  { label: 'Targets', route: '/targets' },
-  { label: 'Projects', route: '/projects' },
-  { label: 'Plans', route: '/plans' },
-  { label: 'Audit log', route: '/audit' },
-  { label: 'Settings', route: '/settings' },
-];
+// PAGES is imported directly from CommandPalette.tsx (the real source of
+// truth) so this test cross-checks production routes instead of a
+// hand-copied array that could silently drift (T007 guard).
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -143,10 +142,19 @@ describe('CommandPalette PAGES constant (T007 / X-3 guard)', () => {
       expect(p.route).not.toContain('$');
     }
   });
+
+  it('10. every PAGES label thunk resolves to a non-empty string', () => {
+    // Exercises the real label() thunks (spec 046 #8 i18n) so a broken
+    // message key would fail this test, not just a route typo.
+    for (const p of PAGES) {
+      expect(typeof p.label()).toBe('string');
+      expect(p.label().length).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe('CommandPalette debounce contract', () => {
-  it('10. debounce interval is 200ms (documented in component)', () => {
+  it('11. debounce interval is 200ms (documented in component)', () => {
     // The CommandPalette uses a 200ms debounce before calling searchGlobal.
     // This test pins the value so accidental changes break the test.
     const DEBOUNCE_MS = 200;
