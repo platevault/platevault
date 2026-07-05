@@ -229,7 +229,7 @@ everything neither automated layer reaches.
 | 6 Cleanup scan→review→apply | ✅ | ✅ `cleanup_plan_review` now applies past `approved` via `plans.apply.direct` + asserts the real FS move + audit (2026-07-05) | ❌ none | `windows-journeys/journey-06-cleanup-scan-apply.md` |
 | 7 Archive → delete | ✅ (backend only) | ✅ `archive_lifecycle_apply_trash_permanent_delete` (`archive_journeys.rs`, NEW 2026-07-05): real apply + `archive.list` + `archive.send_to_trash`/`archive.permanently_delete` metadata + `blockPermanentDelete` gate | ❌ none | `windows-journeys/journey-07-archive-delete.md` |
 | 8 Calibration masters → matching | ✅ | 🟡 real-UI (`calibration_ui_journeys.rs`): masters ingest as individual items + kind-conditional detail (Tests 1/2). Matching/assign UI (Tests 3-5) found UNREACHABLE from the real app during this pass — see finding below, not automatable until fixed | ❌ none | `windows-journeys/journey-08-calibration-masters-matching.md` |
-| 9 Targets & planning | ✅ (backend only) | ❌ **none at all** | ❌ **none at all** | `windows-journeys/journey-09-targets-planning.md` |
+| 9 Targets & planning | ✅ (backend only) | 🟡 real-UI (`targets_journeys.rs`): add-target no-dup, stub-disclosure guard (no site), real astronomy after site creation (#440 confirmed landed) | ❌ **none at all** | `windows-journeys/journey-09-targets-planning.md` |
 | 10 Settings/appearance/i18n | ✅ | 🟡 real-UI (`settings_journeys.rs`): no-global-Save + real auto-save round-trip, theme live-apply + cross-relaunch persistence. Remaining sub-tests (altitude clamp, log-panel layout/export, 1100×720 convention, translated backend errors, command palette, sidebar persistence) still route-load-smoke only | ❌ none | `windows-journeys/journey-10-settings-appearance-i18n.md` |
 
 Legend: ✅ solid coverage at that layer · 🟡 partial/IPC-only/smoke-only ·
@@ -350,15 +350,24 @@ just test the mock, not the product:
    file mutation between confirm and apply) are still unautomated at this
    layer.
 7. **Targets catalog + SIMBAD resolve-on-demand + stub-disclosure guard**
-   (Journey 9) — testable today independent of the site-gate blocker; the
-   stub-disclosure requirement is called out as safety-critical in the
-   product journey doc and has zero coverage at any layer.
-8. **Real planner astronomy end-to-end** (Journey 9, specs 044/047) —
-   **blocked** on PR #440 (site-creation UI) merging; until then any new
-   journey here can only prove the gated-off prompt renders correctly, not
-   real astronomy — name it honestly (e.g.
-   `targets_planner_site_gate_prompt`) rather than implying coverage it
-   can't provide yet.
+   (Journey 9) — DONE (2026-07-05, `crates/e2e-tests/tests/targets_journeys.rs`):
+   add-target via the real dialog resolves to the same real id on re-add (no
+   duplicate), and — the safety-critical part — with no observing site
+   configured the real site-setup prompt renders (never a fabricated Moon
+   summary) and the per-target Opposition/Lunar-separation cells show a real
+   explicit "unknown" disclosure rather than a fabricated-looking number.
+   Deliberately does NOT exercise a live SIMBAD network lookup (flaky in CI);
+   uses the bundled offline seed cache instead, matching the repo's existing
+   offline-`FakeResolver` convention for #14.
+8. **Real planner astronomy end-to-end** (Journey 9, specs 044/047) — DONE
+   (2026-07-05, `targets_journeys.rs::targets_planner_real_astronomy_after_site_creation`).
+   **Verified against code while authoring this**: PR #440 has landed —
+   `apps/desktop/src/features/targets/site-gate.ts::readSiteExists()` now
+   reads the real `observing-sites/site-store`, no longer a hardcoded
+   `false` — so this is no longer blocked. The journey creates a real
+   observing site via the real Settings → Target Planner → Observing Sites
+   UI and asserts the Targets page's site-setup prompt is replaced by a real
+   `MoonSummary`, with no reload needed (`useSyncExternalStore` reactivity).
 9. **Sessions derived-view invariants** (Journey 4) — absence of
    review-state controls/pills, notes-edit-doesn't-transition, rescan
    idempotency; low cost, extends the existing
