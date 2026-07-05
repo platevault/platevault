@@ -69,7 +69,7 @@
 import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TargetListItem, TargetObjectType } from '@/bindings/index';
-import { Pill } from '@/ui';
+import { Pill, Banner } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
@@ -87,6 +87,8 @@ import { GuidanceCell } from './GuidanceCell';
 import { recommendationLabel } from './FilterBadges';
 import { m } from '@/lib/i18n';
 import { useFavourites } from './useFavourites';
+import { useActiveSite } from './observing-sites/site-store';
+import type { ObserverSite } from './observing-sites/observer-site';
 import {
   groupByDimensions,
   flattenVisibleGroups,
@@ -232,13 +234,14 @@ function groupTargets(
   sort: TargetSort,
   groupBy: TargetGroupBy,
   usableAltDeg: number,
+  site: ObserverSite | null,
   night: ObservingNight | null,
   guidanceParams: MoonAvoidanceParams,
 ): TargetGroup[] {
   const byKey = new Map<string, Array<{ target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning }>>();
   for (const t of targets) {
     const key = groupHeadlineOf(t, groupBy);
-    const alt = rowAltitudeFor(t, usableAltDeg);
+    const alt = rowAltitudeFor(t, usableAltDeg, site);
     const moon = deriveRowMoonPlanning(t, night, guidanceParams);
     const bucket = byKey.get(key);
     if (bucket) bucket.push({ target: t, alt, moon });
@@ -450,10 +453,18 @@ export function TargetsTable({
   const scrollRef = useRef<HTMLDivElement>(null);
   const { collapsed, toggle: toggleCollapsed } = useCollapsibleGroups();
 
-  // Grouping + sorting + per-row altitude MOCK are all derived here so a filter
+  // US6/T015: the active observing site drives every row's real astronomy.
+  // Self-contained subscription (mirrors useFavourites above) so callers don't
+  // need to thread a `site` prop through — when there is no active site every
+  // row degrades to the "needs a site" zero/not-visible state (T013) and the
+  // banner below prompts the user to add one.
+  const site = useActiveSite();
+
+  // Grouping + sorting + per-row altitude are all derived here so a filter
   // or sort change does one O(n) pass off the render hot path, not per-row work
-  // inside the virtualized render loop. usableAltDeg is included in the dep
-  // array so that changing the altitude threshold re-derives all rows.
+  // inside the virtualized render loop. usableAltDeg + site are included in the
+  // dep array so that changing the altitude threshold or the active site
+  // re-derives all rows.
   //
   // When `dims` is non-empty we use the shared multi-level groupByDimensions
   // engine (with collapsible headers); when empty we fall back to the
@@ -465,7 +476,7 @@ export function TargetsTable({
       // Pre-compute altitude + moon planning for all items (needed for sort + display).
       const withAlt = targets.map((t) => ({
         target: t,
-        alt: rowAltitudeFor(t, usableAltDeg),
+        alt: rowAltitudeFor(t, usableAltDeg, site),
         moon: deriveRowMoonPlanning(t, night, guidanceParams),
       }));
       // Sort the flat list first.
@@ -498,7 +509,7 @@ export function TargetsTable({
           kind: 'target',
           key: t.id,
           target: t,
-          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg),
+          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg, site),
           moon: moonMap.get(t.id) ?? UNKNOWN_ROW_PLANNING,
           depth: vrow.depth,
         };
@@ -506,13 +517,13 @@ export function TargetsTable({
     }
     // Single-tier legacy grouping ONLY if a caller explicitly asks for it.
     if (groupBy) {
-      const groups = groupTargets(targets, sort, groupBy, usableAltDeg, night, guidanceParams);
+      const groups = groupTargets(targets, sort, groupBy, usableAltDeg, site, night, guidanceParams);
       return flattenGroups(groups);
     }
     // Default: no grouping selected → FLAT sorted list (no group headers).
     const withAlt = targets.map((t) => ({
       target: t,
-      alt: rowAltitudeFor(t, usableAltDeg),
+      alt: rowAltitudeFor(t, usableAltDeg, site),
       moon: deriveRowMoonPlanning(t, night, guidanceParams),
     }));
     const sortedWithAlt = [...withAlt].sort((a, b) =>
@@ -521,7 +532,7 @@ export function TargetsTable({
     return sortedWithAlt.map(
       (r): FlatRow => ({ kind: 'target', key: r.target.id, target: r.target, alt: r.alt, moon: r.moon, depth: 0 }),
     );
-  }, [targets, sort, groupBy, usableAltDeg, night, guidanceParams, useMultiGroup, dims, collapsed]);
+  }, [targets, sort, groupBy, usableAltDeg, site, night, guidanceParams, useMultiGroup, dims, collapsed]);
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -582,6 +593,11 @@ export function TargetsTable({
 
   return (
     <div className="alm-targets-table__wrap">
+      {!site && (
+        <Banner variant="info" className="alm-targets-table__no-site-banner">
+          {m.targets_planner_no_site_banner()}
+        </Banner>
+      )}
       <div ref={scrollRef} className="alm-targets-table__scroll">
         <table className="alm-table alm-targets-table">
           {/* Fixed-layout colgroup: column widths are pinned so the table

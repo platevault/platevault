@@ -49,6 +49,11 @@ pub(crate) enum ValidationRule {
     /// Per-frame-type destination patterns: JSON object mapping `FrameTypeClass`
     /// names to pattern strings (spec 041 FR-026b).
     PatternsByType,
+    /// Observing sites (spec 044 `observingSites`): JSON array of site objects,
+    /// each with required `id`/`name`/`latitudeDeg`/`longitudeDeg`/`timezone`/
+    /// `twilight`/`minHorizonAltDeg` in range, plus optional `elevationM`; site
+    /// ids must be unique.
+    ObserverSites,
     /// Per-band Moon-avoidance parameters (spec 047 `plannerMoonAvoidance`):
     /// JSON object with exactly the seven fixed band keys, each
     /// `{ distanceDeg ∈ [0,180], widthDays ∈ [0.5,30] }`.
@@ -262,6 +267,36 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         overridable: false,
         validation: ValidationRule::NumberMinZero,
     },
+    // ── Observing sites (spec 044 Track B) ───────────────────────────────
+    Descriptor {
+        key: "observingSites",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::ObserverSites,
+    },
+    Descriptor {
+        key: "observingDefaultSiteId",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::NullableString,
+    },
+    Descriptor {
+        key: "observingActiveSiteId",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::NullableString,
+    },
+    Descriptor {
+        key: "usableAltitudeDeg",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::NumberRangeInclusive {
+            lo: 0.0,
+            hi: 90.0,
+            msg: "must be a number",
+            want_msg: "must be in [0, 90]",
+        },
+    },
     // ── Target planner (spec 047 FR-010) ─────────────────────────────────
     Descriptor {
         key: "plannerMoonAvoidance",
@@ -384,6 +419,7 @@ pub(crate) fn check_rule(
                 }
             }
         }
+        ValidationRule::ObserverSites => check_observer_sites(value, invalid)?,
         ValidationRule::MoonAvoidanceBands => {
             const BANDS: [&str; 7] = ["L", "R", "G", "B", "Ha", "SII", "OIII"];
             let obj = value.as_object().ok_or_else(|| invalid("must be an object"))?;
@@ -430,6 +466,67 @@ pub(crate) fn check_rule(
                 contracts_core::ErrorSeverity::Warning,
                 false,
             ));
+        }
+    }
+    Ok(())
+}
+
+/// Validate the `observingSites` array (spec 044 Track B). Each entry must carry
+/// the required site fields in range, ids must be unique, and `elevationM` (when
+/// present) must be a number or null.
+fn check_observer_sites(
+    value: &Value,
+    invalid: &impl Fn(&str) -> ContractError,
+) -> Result<(), ContractError> {
+    let arr = value.as_array().ok_or_else(|| invalid("must be an array"))?;
+    let mut ids = std::collections::HashSet::new();
+    for (i, site) in arr.iter().enumerate() {
+        let obj =
+            site.as_object().ok_or_else(|| invalid(&format!("site {i} must be an object")))?;
+        let str_field = |name: &str| -> Result<String, ContractError> {
+            let s = obj
+                .get(name)
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid(&format!("site {i}: {name} must be a string")))?;
+            if s.is_empty() {
+                return Err(invalid(&format!("site {i}: {name} must be non-empty")));
+            }
+            Ok(s.to_owned())
+        };
+        let num_field = |name: &str| -> Result<f64, ContractError> {
+            obj.get(name)
+                .and_then(Value::as_f64)
+                .ok_or_else(|| invalid(&format!("site {i}: {name} must be a number")))
+        };
+        let id = str_field("id")?;
+        if !ids.insert(id.clone()) {
+            return Err(invalid(&format!("duplicate site id: {id}")));
+        }
+        str_field("name")?;
+        let lat = num_field("latitudeDeg")?;
+        if !(-90.0..=90.0).contains(&lat) {
+            return Err(invalid(&format!("site {i}: latitudeDeg must be in [-90, 90]")));
+        }
+        let lon = num_field("longitudeDeg")?;
+        if !(-180.0..=180.0).contains(&lon) {
+            return Err(invalid(&format!("site {i}: longitudeDeg must be in [-180, 180]")));
+        }
+        str_field("timezone")?;
+        let twilight = str_field("twilight")?;
+        if twilight != "astronomical" && twilight != "nautical" {
+            return Err(invalid(&format!(
+                "site {i}: twilight must be \"astronomical\" or \"nautical\""
+            )));
+        }
+        let horizon = num_field("minHorizonAltDeg")?;
+        if !(0.0..=90.0).contains(&horizon) {
+            return Err(invalid(&format!("site {i}: minHorizonAltDeg must be in [0, 90]")));
+        }
+        // elevationM is optional; when present it must be a number or null.
+        if let Some(elev) = obj.get("elevationM") {
+            if !elev.is_null() && elev.as_f64().is_none() {
+                return Err(invalid(&format!("site {i}: elevationM must be a number or null")));
+            }
         }
     }
     Ok(())
