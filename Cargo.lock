@@ -1484,6 +1484,7 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
+ "tempfile",
  "thirtyfour",
  "tokio",
 ]
@@ -1736,7 +1737,6 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "domain_core",
- "fs_planner",
  "path-clean",
  "serde",
  "serde_json",
@@ -1766,15 +1766,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
-]
-
-[[package]]
-name = "fs_planner"
-version = "0.1.0"
-dependencies = [
- "domain_core",
- "serde",
- "thiserror 2.0.18",
 ]
 
 [[package]]

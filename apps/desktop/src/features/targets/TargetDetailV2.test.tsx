@@ -33,8 +33,20 @@
  * 28. (US4) Save error shows banner message.
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { configure, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Windows-CI headroom (same flake class as PR #412's settings hydration races):
+// every test in this file waits on content that only renders after mocked async
+// hydration (detail/sessions/projects/notes effects). The waits are already
+// deterministic — they target non-default, post-hydration content — but the
+// RTL default asyncUtilTimeout (1s) and vitest default testTimeout (5s) are
+// too tight for the very slow windows-latest runners (test 21 flaked there
+// while identical siblings passed). Raise both file-wide instead of per-test
+// so no sibling is left behind on tight defaults. Both settings are scoped to
+// this file (vitest isolates test files; vi.setConfig is per-runtime).
+configure({ asyncUtilTimeout: 10_000 });
+vi.setConfig({ testTimeout: 15_000 });
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
 
@@ -415,6 +427,8 @@ describe('TargetDetailV2', () => {
       },
     ]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
+    // Slow-runner headroom now comes from the file-wide configure/setConfig
+    // above (this test flaked on windows-latest while 22 below passed).
     await waitFor(() => expect(screen.getByText(/42 frames/i)).toBeInTheDocument());
   });
 

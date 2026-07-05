@@ -1,0 +1,226 @@
+name: Release Gate
+
+# Single-verdict release verification gate.
+#
+# Runs against a release-please release PR (head branch `release-please--*`)
+# and against pushed release tags (`v*`). Individual checks are SOFT-FAILING
+# (continue-on-error) and record a pass/warn/fail line into the job summary;
+# the final `verdict` step is the ONE required check whose exit code decides
+# mergeability.
+#
+# Hard/soft policy is configured in the `env` block below. Start policy:
+#   version-sync ...... HARD  (the four version fields must agree)
+#   build ............. HARD  (release build compiles, dev-tools OFF)
+#   devtools-off ...... HARD  (dev-tools feature is not a default; release binary omits it)
+#   tests ............. SOFT  (full suite; warns but does not block)
+#   changelog ......... SOFT  (cosmetic: CHANGELOG updated on the release PR)
+#
+# The shepherd/user reads the "Release Gate / verdict" check: green = safe to
+# merge; red = a HARD invariant failed (see the table in the run summary).
+# SOFT warnings surface in the summary table (status: warn) without blocking,
+# so a release can still be cut with visible, non-lost warnings.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Per-check gating policy: "hard" fails the verdict, "soft" only warns.
+  POLICY_VERSION_SYNC: hard
+  POLICY_BUILD: hard
+  POLICY_DEVTOOLS_OFF: hard
+  POLICY_TESTS: soft
+  POLICY_CHANGELOG: soft
+
+jobs:
+  release-gate:
+    name: Release Gate
+    # Only meaningful on release-please PRs, release tags, or manual dispatch.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      startsWith(github.head_ref, 'release-please--')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Tauri Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "release-gate-ubuntu"
+
+      # --- Check 1: version-sync (HARD) ---
+      # manifest == tauri.conf.json == package.json == src-tauri/Cargo.toml.
+      - name: Check version sync
+        id: version_sync
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          MANIFEST=$(jq -r '.["."]' .release-please-manifest.json)
+          TAURI=$(jq -r '.version' apps/desktop/src-tauri/tauri.conf.json)
+          PKG=$(jq -r '.version' apps/desktop/package.json)
+          CARGO=$(awk '/^\[package\]/{p=1} p&&/^version[[:space:]]*=/{gsub(/[" ]/,"",$3); split($0,a,"\""); print a[2]; exit}' apps/desktop/src-tauri/Cargo.toml)
+          echo "manifest=$MANIFEST tauri=$TAURI package=$PKG cargo=$CARGO"
+          DETAIL="tauri=$TAURI pkg=$PKG cargo=$CARGO manifest=$MANIFEST"
+          echo "detail=$DETAIL" >> "$GITHUB_OUTPUT"
+          # The manifest is 0.0.0 only until the very first release lands; ignore
+          # it in the equality check while it is still the bootstrap sentinel.
+          if [ "$TAURI" = "$PKG" ] && [ "$PKG" = "$CARGO" ] \
+             && { [ "$MANIFEST" = "$TAURI" ] || [ "$MANIFEST" = "0.0.0" ]; }; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --- Check 2: build (HARD) ---
+      # Release build with default features (dev-tools OFF) must compile.
+      - name: Release build (dev-tools off)
+        id: build
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if cargo build --workspace --release; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "detail=cargo build --workspace --release succeeded" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "detail=release build failed" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --- Check 3: dev-tools OFF invariant (HARD) ---
+      # The dev-tools feature MUST NOT be a default feature, and the release
+      # build of the app crate MUST NOT resolve it (Constitution Principle V).
+      - name: Assert dev-tools feature is not enabled by default
+        id: devtools_off
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          STATUS=pass
+          DETAIL="dev-tools absent from default features"
+          # Static: no `default = [...]` line may enable dev-tools.
+          if grep -RInE '^\s*default\s*=\s*\[' \
+               apps/desktop/src-tauri/Cargo.toml crates/app/core/Cargo.toml 2>/dev/null \
+               | grep -q 'dev-tools'; then
+            STATUS=fail
+            DETAIL="a default feature enables dev-tools"
+          fi
+          # Resolved: release feature graph of the app crate must not pull dev-tools.
+          if cargo tree -p desktop_shell --release -e features -f '{p} {f}' 2>/dev/null \
+               | grep -qi 'dev-tools'; then
+            STATUS=fail
+            DETAIL="release feature graph resolves dev-tools"
+          fi
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          echo "detail=$DETAIL" >> "$GITHUB_OUTPUT"
+
+      # --- Check 4: full test suite (SOFT) ---
+      - name: Workspace tests
+        id: tests
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if cargo test --workspace; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "detail=cargo test --workspace passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "detail=one or more tests failed" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --- Check 5: changelog sanity (SOFT) ---
+      # On a release-please PR, CHANGELOG.md should be part of the diff.
+      - name: Changelog sanity
+        id: changelog
+        continue-on-error: true
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "detail=not a PR; changelog check skipped" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BASE="origin/${BASE_REF}"
+          git fetch --no-tags --depth=1 origin "${BASE_REF}" >/dev/null 2>&1 || true
+          if git diff --name-only "$BASE"...HEAD | grep -qx 'CHANGELOG.md'; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "detail=CHANGELOG.md updated in this release PR" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "detail=CHANGELOG.md not updated in this PR" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --- Verdict: the single required check ---
+      - name: Verdict
+        env:
+          VS_STATUS: ${{ steps.version_sync.outputs.status }}
+          VS_DETAIL: ${{ steps.version_sync.outputs.detail }}
+          BUILD_STATUS: ${{ steps.build.outputs.status }}
+          BUILD_DETAIL: ${{ steps.build.outputs.detail }}
+          DT_STATUS: ${{ steps.devtools_off.outputs.status }}
+          DT_DETAIL: ${{ steps.devtools_off.outputs.detail }}
+          TESTS_STATUS: ${{ steps.tests.outputs.status }}
+          TESTS_DETAIL: ${{ steps.tests.outputs.detail }}
+          CL_STATUS: ${{ steps.changelog.outputs.status }}
+          CL_DETAIL: ${{ steps.changelog.outputs.detail }}
+        run: |
+          set -euo pipefail
+          HARD_FAIL=0
+
+          emit() {
+            # name policy status detail
+            local name="$1" policy="$2" status="$3" detail="$4"
+            local icon verdict
+            if [ "$status" = "pass" ]; then
+              icon="✅"; verdict="pass"
+            elif [ "$policy" = "hard" ]; then
+              icon="❌"; verdict="FAIL (blocking)"; HARD_FAIL=1
+            else
+              icon="⚠️"; verdict="warn (non-blocking)"
+            fi
+            echo "| $name | $policy | $icon $verdict | ${detail:-} |" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          {
+            echo "## Release Gate verdict"
+            echo ""
+            echo "| Check | Policy | Result | Detail |"
+            echo "| --- | --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          emit "version-sync" "$POLICY_VERSION_SYNC" "${VS_STATUS:-fail}" "$VS_DETAIL"
+          emit "build (release, dev-tools off)" "$POLICY_BUILD" "${BUILD_STATUS:-fail}" "$BUILD_DETAIL"
+          emit "dev-tools-off" "$POLICY_DEVTOOLS_OFF" "${DT_STATUS:-fail}" "$DT_DETAIL"
+          emit "tests" "$POLICY_TESTS" "${TESTS_STATUS:-fail}" "$TESTS_DETAIL"
+          emit "changelog" "$POLICY_CHANGELOG" "${CL_STATUS:-fail}" "$CL_DETAIL"
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$HARD_FAIL" -eq 1 ]; then
+            echo "**Verdict: BLOCKED** — a hard invariant failed. Do not merge until fixed." >> "$GITHUB_STEP_SUMMARY"
+            echo "Release gate BLOCKED: a hard invariant failed."
+            exit 1
+          fi
+          echo "**Verdict: PASS** — safe to merge (soft warnings, if any, are shown above)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Release gate PASS."

@@ -42,6 +42,23 @@ pub struct ImageTypMapping {
     pub frame_type: String,
 }
 
+// ── MoonAvoidanceBand (spec 047 plannerMoonAvoidance) ─────────────────────
+
+/// Per-band Lorentzian Moon-avoidance parameters (spec 047 data-model.md).
+///
+/// `distance_deg` is the required target↔Moon separation at full Moon (deg);
+/// `width_days` is the Lorentzian half-width in Moon-age days. The frontend
+/// planner derives per-band filter viability from these; they are never used
+/// for durable/audited decisions (ADR-0001).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MoonAvoidanceBand {
+    /// Required separation at full Moon, degrees in [0, 180].
+    pub distance_deg: f64,
+    /// Lorentzian half-width in Moon-age days, in [0.5, 30].
+    pub width_days: f64,
+}
+
 // ── SettingsState v1 ──────────────────────────────────────────────────────
 
 /// Complete v1 settings bag (data-model.md §`SettingsState` v1).
@@ -144,6 +161,16 @@ pub struct SettingsState {
     /// that session (spec 018 T043). Default: 6.0 hours.
     pub tool_attribution_window_hours: f64,
 
+    // ── Target planner (spec 047 FR-010) ────────────────────────────────
+    /// Per-band Moon-avoidance Lorentzian parameters for the Targets planner.
+    ///
+    /// Maps each of the seven fixed filter bands (`L`, `R`, `G`, `B`, `Ha`,
+    /// `SII`, `OIII`) to its `{ distanceDeg, widthDays }`. Consumed frontend-only
+    /// by the spec 047 filter-guidance rule (ADR-0001); persisted so the user's
+    /// tuning survives, never used for a durable/audited decision. Defaults:
+    /// LRGB 120°/14d · Ha/SII 60°/7d · OIII 110°/10d.
+    pub planner_moon_avoidance: std::collections::BTreeMap<String, MoonAvoidanceBand>,
+
     // ── Source Views (spec 049) ──────────────────────────────────────────
     /// Default link kind when a source and the generated view destination
     /// share a volume: `"hardlink"` | `"symlink"` | `"junction"` (spec 049
@@ -200,10 +227,31 @@ impl Default for SettingsState {
                 ".avi".to_owned(),
             ],
             tool_attribution_window_hours: 6.0,
+            planner_moon_avoidance: default_planner_moon_avoidance(),
             source_view_link_kind_intra_drive: "hardlink".to_owned(),
             source_view_link_kind_cross_drive: "symlink".to_owned(),
         }
     }
+}
+
+/// Shipped default per-band Moon-avoidance parameters (spec 047 data-model.md).
+///
+/// LRGB 120°/14d · Ha/SII 60°/7d · OIII 110°/10d. Keys are the seven fixed
+/// filter bands; `BTreeMap` keeps the serialised order stable.
+#[must_use]
+pub fn default_planner_moon_avoidance() -> std::collections::BTreeMap<String, MoonAvoidanceBand> {
+    use std::collections::BTreeMap;
+    let mut m = BTreeMap::new();
+    let broadband = MoonAvoidanceBand { distance_deg: 120.0, width_days: 14.0 };
+    let narrowband = MoonAvoidanceBand { distance_deg: 60.0, width_days: 7.0 };
+    let oiii = MoonAvoidanceBand { distance_deg: 110.0, width_days: 10.0 };
+    for band in ["L", "R", "G", "B"] {
+        m.insert(band.to_owned(), broadband.clone());
+    }
+    m.insert("Ha".to_owned(), narrowband.clone());
+    m.insert("SII".to_owned(), narrowband);
+    m.insert("OIII".to_owned(), oiii);
+    m
 }
 
 fn default_pattern() -> Vec<PatternPart> {

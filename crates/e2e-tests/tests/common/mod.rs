@@ -1,9 +1,10 @@
 //! Shared harness for spec 037 Layer-2 real-UI E2E journeys.
 //!
-//! All journeys are `#[ignore]`d. They are compiled stubs that appear in
-//! `cargo nextest list` but execution is deferred while the backend commands
-//! they'd assert against are still stubs (research D9) — not because this
-//! harness is unwired.
+//! All journeys are real (WP-C) but `#[ignore]`d: they need the
+//! `tauri-webdriver` CLI, a `desktop_shell --features e2e` build, and a
+//! served frontend — none of which exist in the Layer-1 `cargo test
+//! --workspace` job (ci.yml). The dedicated e2e.yml workflow runs them with
+//! `--run-ignored all` after standing that environment up.
 //!
 //! Mechanism (mirrors `.github/workflows/e2e.yml`, research D10):
 //! - `desktop_shell` is built with `cargo build -p desktop_shell --features
@@ -30,8 +31,9 @@
 
 #![allow(dead_code)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
 use serde::de::DeserializeOwned;
@@ -51,6 +53,14 @@ pub const TAURI_WEBDRIVER_URL: &str = "http://127.0.0.1:4444";
 /// journeys that need to assert the current URL or navigate within the SPA.
 pub const APP_URL: &str = "http://127.0.0.1:5173";
 
+/// Overall deadline for WebDriver session creation in [`E2eApp::launch`].
+///
+/// Must comfortably cover a debug-build app boot on a cold CI runner: DB
+/// connect + migrations + the ~13k-row bundled target-seed load all happen
+/// BEFORE the window exists (observed ~30 s on ubuntu-latest, CI run
+/// 28694907445), and the plugin's own per-attempt window-wait is only 10 s.
+pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(120);
+
 // ---------------------------------------------------------------------------
 // Private deserialization target for invoke() responses
 // ---------------------------------------------------------------------------
@@ -69,8 +79,11 @@ struct InvokeOutcome {
 impl InvokeOutcome {
     fn into_result<T: DeserializeOwned>(self) -> Result<T> {
         if self.ok {
-            let raw =
-                self.value.ok_or_else(|| anyhow!("invoke succeeded but returned no value"))?;
+            // Unit-returning commands (`Result<(), _>` — e.g.
+            // `artifact_watcher_attach`) legitimately resolve with `null`/
+            // `undefined`; `Option<Value>` deserialises JSON null to `None`, so
+            // treat an absent value as `Value::Null` rather than an error.
+            let raw = self.value.unwrap_or(Value::Null);
             serde_json::from_value(raw).context("failed to deserialise invoke value into T")
         } else {
             Err(anyhow!("invoke error: {}", self.error.unwrap_or_else(|| "unknown error".into())))
@@ -92,9 +105,34 @@ pub struct E2eApp {
 
 impl E2eApp {
     /// Launch a full E2E session: preflight → reset DB → spawn the
-    /// `tauri-webdriver` CLI proxy → connect WebDriver with the
-    /// `tauri:options.application` capability pointing at the built
-    /// `desktop_shell` binary.
+    /// `tauri-webdriver` CLI proxy → create the WebDriver session with a
+    /// deadline-bounded retry loop.
+    ///
+    /// Why the retry loop (CI evidence: run 28694907445, ubuntu):
+    /// `desktop_shell` initialises the webdriver **plugin** in `build_app()`
+    /// but only creates its **window** when `run_app()` starts the event loop
+    /// — after DB connect, migrations, and the ~13k-row bundled-seed load
+    /// (`apps/desktop/src-tauri/src/main.rs`). A debug build on a CI runner
+    /// spends tens of seconds in that gap. The `tauri-webdriver` CLI's
+    /// session handler only waits for the plugin *port* (30 s), then forwards
+    /// session-create to the plugin, whose own window-wait is 10 s — so a
+    /// slow boot yields `no such window` (404) even though the app is healthy
+    /// and seconds away from ready.
+    ///
+    /// The CLI (`tauri-webdriver` 0.1.1, `src/server.rs::handle_plugin`)
+    /// kills any prior app instance and relaunches on every `POST /session`
+    /// whose capabilities carry a `tauri:options.application` value — and an
+    /// **empty string still counts**: `extract_app_path` returns
+    /// `Some("".into())`, so the CLI kills the booting app and then fails
+    /// `Command::new("")` with ENOENT ("Failed to launch Tauri app: No such
+    /// file or directory", CI run 28695295960). The only no-relaunch path is
+    /// to omit `tauri:options` entirely (`extract_app_path` → `None`), which
+    /// forwards the session-create straight to the plugin in the running
+    /// app. So: attempt 1 sends the real path (launch); retries send **no
+    /// `tauri:options` at all** (reuse the booting instance) until the
+    /// window exists or [`LAUNCH_TIMEOUT`] elapses. Connection-level errors
+    /// (`RequestFailed`) mean the CLI never received the POST — the app was
+    /// not launched — so the real path is kept for the next attempt.
     ///
     /// The app auto-loads its frontend from the Tauri `devUrl` on launch, so
     /// no `driver.goto(...)` call is needed here (see module docs).
@@ -102,21 +140,61 @@ impl E2eApp {
         preflight()?;
         reset_database()?;
 
-        let driver_proc = spawn_tauri_webdriver()
+        let mut driver_proc = spawn_tauri_webdriver()
             .context("failed to spawn the tauri-webdriver CLI on port 4444")?;
 
         let app_binary = app_binary_path()?;
-        let mut caps = Capabilities::new();
-        caps.set("tauri:options", json!({ "application": app_binary.to_string_lossy() }))
-            .context("failed to set the tauri:options.application capability")?;
+        let deadline = Instant::now() + LAUNCH_TIMEOUT;
+        let mut launched = false;
 
-        let driver = WebDriver::new(TAURI_WEBDRIVER_URL, caps).await.with_context(|| {
-            format!(
-                "WebDriver::new failed against {TAURI_WEBDRIVER_URL} — is `tauri-webdriver` \
-                 running, and was {} built with `--features e2e`?",
-                app_binary.display()
-            )
-        })?;
+        let driver = loop {
+            let mut caps = Capabilities::new();
+            if !launched {
+                // Only the launching attempt may carry tauri:options: the CLI
+                // treats ANY present `application` value (even "") as "kill
+                // the current app and relaunch". Retries must omit the key so
+                // the POST is forwarded to the already-booting instance.
+                if let Err(e) = caps
+                    .set("tauri:options", json!({ "application": app_binary.to_string_lossy() }))
+                {
+                    kill_driver_proc(&mut driver_proc);
+                    return Err(e)
+                        .context("failed to set the tauri:options.application capability");
+                }
+            }
+
+            match WebDriver::new(TAURI_WEBDRIVER_URL, caps).await {
+                Ok(driver) => break driver,
+                Err(e) => {
+                    // Any typed WebDriver response means the CLI handled the
+                    // POST — and therefore already spawned the app process.
+                    // Only a transport-level RequestFailed means it didn't.
+                    use thirtyfour::error::WebDriverErrorInner;
+                    if !matches!(e.as_inner(), WebDriverErrorInner::RequestFailed(_)) {
+                        launched = true;
+                    }
+                    if Instant::now() >= deadline {
+                        // Ask the CLI to kill the app it launched (any
+                        // DELETE /session/{id} triggers that), then kill the
+                        // CLI itself — otherwise the leaked pair holds ports
+                        // 4444/4445 and poisons every subsequent test in the
+                        // serial run (exactly what CI's TRY-2 "can not
+                        // listen to address" failure was).
+                        blocking_session_delete();
+                        kill_driver_proc(&mut driver_proc);
+                        return Err(e).with_context(|| {
+                            format!(
+                                "WebDriver session not created within {LAUNCH_TIMEOUT:?} \
+                                 against {TAURI_WEBDRIVER_URL} — is `tauri-webdriver` \
+                                 running, and was {} built with `--features e2e`?",
+                                app_binary.display()
+                            )
+                        });
+                    }
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                }
+            }
+        };
 
         Ok(Self { driver, driver_proc: Some(driver_proc) })
     }
@@ -160,21 +238,227 @@ impl E2eApp {
         outcome.into_result::<T>()
     }
 
+    /// Poll a command through the `invoke` bridge until `predicate` accepts the
+    /// deserialised value or `timeout` elapses.
+    ///
+    /// Several real backend effects in this app are event-driven rather than
+    /// synchronous with the triggering call (e.g. the inbox plan-apply listener
+    /// creates `acquisition_session` rows asynchronously after a plan-applied
+    /// event, and the artifact watcher's reconciliation pass runs on its own
+    /// task). Polling a real read command until the expected state appears is
+    /// the wait primitive for those cases — never a blind `sleep`.
+    ///
+    /// # Errors
+    /// Returns the last error (invoke failure, or a "predicate never matched"
+    /// message once `timeout` elapses) if the predicate never accepts a value.
+    pub async fn invoke_until<T, P>(
+        &self,
+        command: &str,
+        args: Value,
+        timeout: Duration,
+        mut predicate: P,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+        P: FnMut(&T) -> bool,
+    {
+        let deadline = Instant::now() + timeout;
+        let mut last_err: Option<anyhow::Error> = None;
+        loop {
+            match self.invoke::<T>(command, args.clone()).await {
+                Ok(value) if predicate(&value) => return Ok(value),
+                Ok(_) => {}
+                Err(e) => last_err = Some(e),
+            }
+            if Instant::now() >= deadline {
+                return Err(last_err.unwrap_or_else(|| {
+                    anyhow!(
+                        "invoke_until({command}) timed out after {:?} without a matching value",
+                        timeout
+                    )
+                }));
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    }
+
+    /// Navigate to a top-level SPA route and wait for the shell to settle.
+    ///
+    /// The app does not perform a full page navigation for in-app routes (it's
+    /// a client-side router), but a fresh `driver.goto` to `APP_URL + path` is
+    /// still the simplest deterministic way to land on a known route in a
+    /// thirtyfour session. Waits for `document.readyState == "complete"`
+    /// instead of a fixed sleep.
+    pub async fn goto_route(&self, path: &str) -> Result<()> {
+        let url = format!("{APP_URL}{path}");
+        self.driver.goto(&url).await.with_context(|| format!("goto {url} failed"))?;
+        self.wait_document_ready(Duration::from_secs(10)).await
+    }
+
+    /// Poll `document.readyState` until `"complete"` or `timeout` elapses.
+    pub async fn wait_document_ready(&self, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let state: String = self
+                .driver
+                .execute("return document.readyState", vec![])
+                .await
+                .context("failed to read document.readyState")?
+                .convert()
+                .context("failed to deserialise document.readyState")?;
+            if state == "complete" {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!("document.readyState never reached 'complete'"));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    /// Poll `current_url()` until it contains `needle` or `timeout` elapses.
+    ///
+    /// The index route's first-run gate (`apps/desktop/src/app/router.tsx`)
+    /// redirects to `/setup` from an **async** `beforeLoad`:
+    /// `checkFirstRunComplete` does a dynamic `import('@/bindings/index')` plus a
+    /// `firstrun_state` IPC round-trip, so the redirect lands slightly *after*
+    /// the page's `__ALM_E2E__` bridge becomes ready. Asserting the URL the
+    /// instant `wait_bridge_ready` returns races that redirect — poll for it.
+    pub async fn wait_url_contains(&self, needle: &str, timeout: Duration) -> Result<String> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let url = self.driver.current_url().await.context("failed to read current_url")?;
+            let current = url.to_string();
+            if current.contains(needle) {
+                return Ok(current);
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "URL never contained {needle:?} within {timeout:?} (last: {current})"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// `true` once `window.__ALM_E2E__.invoke` exists — a real signal that
+    /// `main.tsx` finished its top-level module evaluation for the current
+    /// page load (used instead of a blind sleep after `goto_route`).
+    pub async fn bridge_ready(&self) -> Result<bool> {
+        let script = r"
+            return !!(window.__ALM_E2E__ && typeof window.__ALM_E2E__.invoke === 'function');
+        ";
+        let ret =
+            self.driver.execute(script, vec![]).await.context("bridge_ready script failed")?;
+        ret.convert::<bool>().context("failed to deserialise bridge_ready result")
+    }
+
+    /// Wait for [`Self::bridge_ready`] to become `true`.
+    pub async fn wait_bridge_ready(&self, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if self.bridge_ready().await.unwrap_or(false) {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!("window.__ALM_E2E__ bridge never became ready"));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    /// `true` when the shared `AppErrorBoundary` fallback
+    /// (`[data-testid="app-error-boundary-fallback"]`, `apps/desktop/src/app/AppErrorBoundary.tsx`)
+    /// is present in the DOM — the real, shipped signal that a route's
+    /// component tree threw an uncaught render error (FR-007).
+    pub async fn error_boundary_visible(&self) -> Result<bool> {
+        use thirtyfour::error::WebDriverErrorInner;
+
+        match self.driver.find(By::Css("[data-testid='app-error-boundary-fallback']")).await {
+            Ok(_) => Ok(true),
+            Err(e) if matches!(e.as_inner(), WebDriverErrorInner::NoSuchElement(_)) => Ok(false),
+            Err(e) => Err(e).context("failed to query for the error boundary fallback"),
+        }
+    }
+
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
-    /// if present. Quitting the session already terminates the app process
-    /// that `tauri-webdriver` launched on our behalf.
+    /// if present. Quitting the session (a `DELETE /session/{id}` through the
+    /// CLI) makes the CLI terminate the app process it launched on our
+    /// behalf; killing the CLI afterwards frees port 4444.
     pub async fn shutdown(mut self) -> Result<()> {
-        let _ = self.driver.quit().await;
+        // `quit()` consumes the WebDriver, which can't be moved out of a
+        // Drop-implementing type; WebDriver is a cheap Arc-backed handle, so
+        // quitting a clone quits the same underlying session.
+        let _ = self.driver.clone().quit().await;
         if let Some(mut child) = self.driver_proc.take() {
-            let _ = child.kill();
+            kill_driver_proc(&mut child);
         }
         Ok(())
+    }
+}
+
+impl Drop for E2eApp {
+    /// Best-effort teardown for journeys that bail mid-way with `?` and never
+    /// reach [`E2eApp::shutdown`]. Without this, the failed test leaks the
+    /// `tauri-webdriver` CLI (port 4444) AND the app it launched (port 4445),
+    /// which poisons every subsequent test in the serial run — this is
+    /// exactly what CI run 28694907445's TRY-2 `can not listen to address:
+    /// 127.0.0.1:4444` / `Plugin server not ready after timeout` cascade was.
+    ///
+    /// `driver.quit()` is async and cannot be awaited here, so the app-kill
+    /// is requested with a synchronous raw-HTTP `DELETE /session/…` instead:
+    /// the CLI kills its app process after ANY session-delete round trip,
+    /// regardless of the session id being real.
+    fn drop(&mut self) {
+        if let Some(mut child) = self.driver_proc.take() {
+            blocking_session_delete();
+            kill_driver_proc(&mut child);
+        }
     }
 }
 
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
+
+/// Kill and reap the `tauri-webdriver` CLI child process (best-effort).
+///
+/// `std::process::Child` does NOT kill on drop — letting it fall out of scope
+/// leaves the CLI alive and port 4444 occupied (the CI TRY-2 leak).
+fn kill_driver_proc(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Synchronously send `DELETE /session/e2e-cleanup` to the `tauri-webdriver`
+/// CLI over a raw std TCP socket (best-effort, short timeouts, no async and
+/// no extra HTTP-client dependency — this must be callable from `Drop`).
+///
+/// The CLI kills the app process it launched after ANY `/session/{id}` DELETE
+/// round trip (it does not validate the id) — this is the only handle we have
+/// on the app's lifetime, since the CLI spawned it, not the harness.
+fn blocking_session_delete() {
+    let attempt = || -> std::io::Result<()> {
+        let addr = "127.0.0.1:4444";
+        let timeout = Duration::from_secs(5);
+        let mut stream = std::net::TcpStream::connect_timeout(&addr.parse().unwrap(), timeout)?;
+        stream.set_read_timeout(Some(timeout))?;
+        stream.set_write_timeout(Some(timeout))?;
+        use std::io::{Read, Write};
+        stream.write_all(
+            b"DELETE /session/e2e-cleanup HTTP/1.1\r\n\
+              Host: 127.0.0.1:4444\r\n\
+              Content-Length: 0\r\n\
+              Connection: close\r\n\r\n",
+        )?;
+        // Wait for the response (the CLI kills the app only AFTER the
+        // forwarded round trip completes); the body content is irrelevant.
+        let mut buf = Vec::new();
+        let _ = stream.read_to_end(&mut buf);
+        Ok(())
+    };
+    let _ = attempt();
+}
 
 /// Pre-flight check: verify the `tauri-webdriver` CLI is on `$PATH` and the
 /// `desktop_shell` binary has been built, with a named, actionable error for
@@ -284,4 +568,52 @@ fn reset_database() -> Result<()> {
     }
     // TODO(spec-037 wiring): resolve OS app-data path when ALM_DB_URL is unset.
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// FITS fixture writer
+// ---------------------------------------------------------------------------
+
+/// Write a minimal single-block (2880-byte) FITS file with the given header
+/// cards, so journeys can drive the real inbox classify/confirm/ingest
+/// pipeline against real files on disk (no product code touched).
+///
+/// Mirrors the proven fixture writer already used by
+/// `crates/app/inbox/src/confirm.rs` tests and
+/// `crates/app/core/tests/ingest_sessions_integration.rs` (T045/T046) — same
+/// card set, same padding — so the real classifier/session-grouping code
+/// accepts it exactly as it does at Layer 1.
+pub fn write_minimal_fits(
+    dir: &Path,
+    name: &str,
+    imagetyp: &str,
+    object: Option<&str>,
+    filter: Option<&str>,
+    date_obs: Option<&str>,
+) -> Result<PathBuf> {
+    let path = dir.join(name);
+    let mut block = vec![b' '; 2880];
+    let mut idx = 0usize;
+    let mut write_card = |card: &str| {
+        let bytes = card.as_bytes();
+        let len = bytes.len().min(80);
+        block[idx * 80..idx * 80 + len].copy_from_slice(&bytes[..len]);
+        idx += 1;
+    };
+    write_card(&format!("{:<80}", format!("IMAGETYP= '{imagetyp}'")));
+    if let Some(o) = object {
+        write_card(&format!("{:<80}", format!("OBJECT  = '{o}'")));
+    }
+    if let Some(f) = filter {
+        write_card(&format!("{:<80}", format!("FILTER  = '{f}'")));
+    }
+    if let Some(d) = date_obs {
+        write_card(&format!("{:<80}", format!("DATE-OBS= '{d}'")));
+    }
+    write_card(&format!("{:<80}", "GAIN    = 100"));
+    write_card(&format!("{:<80}", "XBINNING= 1"));
+    write_card(&format!("{:<80}", "YBINNING= 1"));
+    block[idx * 80..idx * 80 + 3].copy_from_slice(b"END");
+    std::fs::write(&path, &block).with_context(|| format!("write fixture FITS {path:?}"))?;
+    Ok(path)
 }

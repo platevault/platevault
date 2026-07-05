@@ -8,6 +8,15 @@ name: CI
 # runs on ALL three OS via tauri-plugin-webdriver (Choochmeque) embedded in
 # desktop_shell under the `e2e` feature flag — no external per-OS WebDriver
 # binary required. WebdriverIO has been retired.
+#
+# Path-aware gating (see the `changes` job): heavy Rust/frontend/E2E steps are
+# skipped for changes that cannot affect them (e.g. docs-only PRs), while every
+# job STILL RUNS and reports success. We deliberately gate *inside* the jobs
+# rather than skipping whole jobs, so each job name keeps reporting a green
+# status check on every PR (this repo's merge flow keys on all status checks
+# being green; a skipped job/workflow would leave a check pending/absent and
+# block the merge). Full-suite triggers (workflows, Cargo/lockfiles, package
+# manifests, justfile, scripts) force everything to run via `force_full`.
 
 on:
   pull_request:
@@ -23,8 +32,95 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
+  # Cheap change-detection gate (dorny/paths-filter). Downstream jobs read its
+  # outputs to decide which heavy steps to run. Outputs:
+  #   rust      — run Rust steps (a *.rs / crate / src-tauri / tests change, OR
+  #               any force_full trigger).
+  #   frontend  — run frontend steps (a TS/TSX/CSS / desktop-src / packages
+  #               change, OR any force_full trigger).
+  #   docs_only — informational: the change touched only docs and nothing that
+  #               drives Rust or frontend (fast-pass path).
+  #   scripts   — a scripts/** change (drives the DB-boundary ratchet).
+  #   all_files — CSV of every changed path, consumed by the changed-crate
+  #               scoping step for `cargo test -p`.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.decide.outputs.rust }}
+      frontend: ${{ steps.decide.outputs.frontend }}
+      docs_only: ${{ steps.decide.outputs.docs_only }}
+      scripts: ${{ steps.filter.outputs.scripts }}
+      all_files: ${{ steps.filter.outputs.all_files }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          list-files: csv
+          filters: |
+            all:
+              - '**'
+            # force_full: any of these means "run the whole suite" — the build
+            # graph, dependency set, or CI itself may have changed.
+            force_full:
+              - '.github/workflows/**'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - '**/package.json'
+              - 'pnpm-lock.yaml'
+              - 'justfile'
+              - 'scripts/**'
+            rust:
+              - 'crates/**'
+              - 'apps/desktop/src-tauri/**'
+              - 'tests/**'
+              - '**/*.rs'
+            frontend:
+              - 'apps/desktop/src/**'
+              - 'apps/desktop/public/**'
+              - 'apps/desktop/index.html'
+              - 'packages/**'
+              - '**/*.ts'
+              - '**/*.tsx'
+              - '**/*.css'
+            scripts:
+              - 'scripts/**'
+            docs:
+              - 'docs/**'
+              - 'e2e-agentic-test/**'
+              - 'specs/**'
+              - '**/*.md'
+              - '.apm/**'
+              - 'PRODUCT.md'
+              - 'CLAUDE.md'
+              - 'AGENTS.md'
+      - id: decide
+        shell: bash
+        run: |
+          rust=false
+          frontend=false
+          if [ "${{ steps.filter.outputs.force_full }}" = "true" ] || [ "${{ steps.filter.outputs.rust }}" = "true" ]; then
+            rust=true
+          fi
+          if [ "${{ steps.filter.outputs.force_full }}" = "true" ] || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
+            frontend=true
+          fi
+          # docs_only: at least one doc changed and nothing drives Rust/frontend.
+          docs_only=false
+          if [ "$rust" = "false" ] && [ "$frontend" = "false" ] && [ "${{ steps.filter.outputs.docs }}" = "true" ]; then
+            docs_only=true
+          fi
+          {
+            echo "rust=$rust"
+            echo "frontend=$frontend"
+            echo "docs_only=$docs_only"
+          } >> "$GITHUB_OUTPUT"
+          echo "changes: rust=$rust frontend=$frontend docs_only=$docs_only scripts=${{ steps.filter.outputs.scripts }}"
+
   integration:
     name: Integration (Layer 1) — ${{ matrix.os }}
+    needs: changes
     strategy:
       fail-fast: false # report each platform distinctly (FR-011)
       matrix:
@@ -35,7 +131,7 @@ jobs:
 
       # Tauri's desktop_shell crate needs system webview libs to build on Linux.
       - name: Install Tauri Linux system deps
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -43,6 +139,7 @@ jobs:
             libayatana-appindicator3-dev
 
       - uses: dtolnay/rust-toolchain@stable
+        if: needs.changes.outputs.rust == 'true'
         with:
           components: rustfmt, clippy
 
@@ -58,23 +155,30 @@ jobs:
       # also purge the stale `v0-rust-rust-windows-latest-*` entries via
       # `gh cache list` / `gh cache delete` so open PRs stop restoring them.
       - uses: Swatinem/rust-cache@v2
+        if: needs.changes.outputs.rust == 'true'
         with:
           shared-key: "rust-${{ matrix.os }}-v2"
 
       - uses: pnpm/action-setup@v4
+        if: needs.changes.outputs.frontend == 'true'
         with:
           version: 10.33.0
 
       - uses: actions/setup-node@v4
+        if: needs.changes.outputs.frontend == 'true'
         with:
           node-version: 20
           cache: pnpm
 
+      # `just` drives the DB-boundary ratchet and the generated-drift gate, both
+      # of which run under the Rust lane.
       - uses: taiki-e/install-action@v2
+        if: needs.changes.outputs.rust == 'true'
         with:
-          tool: just
+          tool: just,nextest
 
       - name: Install JS deps
+        if: needs.changes.outputs.frontend == 'true'
         run: pnpm install --frozen-lockfile
 
       # --- Fast checks first (FR-012) ---
@@ -82,50 +186,109 @@ jobs:
       # which fails the build on any hardcoded user-facing string (SC-001/SC-002).
       # Without this step the i18n catalog gate has no teeth in CI.
       - name: Frontend ESLint (i18n catalog gate)
+        if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop run lint:eslint
 
       - name: Rust format
+        if: needs.changes.outputs.rust == 'true'
         run: cargo fmt --all --check
 
+      # Self-test the changed-crate scoping helper's mapping/closure logic
+      # (runs once, on Linux, under the Rust lane).
+      - name: Affected-crates helper self-test
+        if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
+        run: bash scripts/ci-affected-crates.sh --self-test
+
+      # DB boundary ratchet (parked in PR #384, wired in here): fails if raw
+      # sqlx query/exec sites outside crates/persistence/db exceed the
+      # checked-in baseline. Pure grep, no compile — runs once on Linux only
+      # per the design doc's guidance (docs/development/persistence-layer-hardening.md).
+      # Gated to run whenever Rust or scripts change (skipped on docs-only).
+      - name: DB boundary ratchet
+        if: runner.os == 'Linux' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true')
+        run: just db-boundary
+
       - name: Clippy (workspace, all targets, deny warnings)
+        if: needs.changes.outputs.rust == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       # --- Layer 1: real-backend integration + unit tests ---
       - name: Build workspace
+        if: needs.changes.outputs.rust == 'true'
         run: cargo build --workspace
 
+      # Scope `cargo test` to the changed workspace members plus their
+      # reverse-dependency closure (see scripts/ci-affected-crates.sh). Any
+      # force_full trigger (Cargo.lock, workflows, …) or a rust-relevant file
+      # outside every member yields the full-workspace fallback. Build/clippy
+      # stay workspace-wide — conservative: when in doubt, run more.
       - name: Rust tests (Layer 1 — real SQLite, real migrations)
-        run: cargo test --workspace
+        if: needs.changes.outputs.rust == 'true'
+        shell: bash
+        # CHANGED_FILES is passed via env (never interpolated into the script
+        # body) so an attacker-crafted filename cannot inject shell commands.
+        # nextest --profile ci: fail-fast off (report every failing leg), JUnit
+        # output, and retries=2 scoped to the real-SQLite integration binaries
+        # only (see .config/nextest.toml). Unit tests are not retried.
+        env:
+          CHANGED_FILES: ${{ needs.changes.outputs.all_files }}
+        run: |
+          args=$(printf '%s' "$CHANGED_FILES" | tr ',' '\n' | bash scripts/ci-affected-crates.sh)
+          if [ "$(printf '%s' "$args" | tr -d '[:space:]')" = "ALL" ] || [ -z "$(printf '%s' "$args" | tr -d '[:space:]')" ]; then
+            echo "Running full workspace test suite."
+            cargo nextest run --workspace --profile ci
+          else
+            echo "Running scoped tests for: $args"
+            cargo nextest run --profile ci $args
+          fi
+
+      # nextest does not run doctests; keep them in a dedicated step.
+      - name: Rust doctests
+        if: needs.changes.outputs.rust == 'true'
+        run: cargo test --workspace --doc
 
       - name: Frontend unit tests
+        if: needs.changes.outputs.frontend == 'true'
         run: pnpm -r --if-present test
 
       - name: TypeScript typecheck
+        if: needs.changes.outputs.frontend == 'true'
         run: pnpm -r --if-present typecheck
 
       # --- Generated contract / binding drift gate (review finding W1) ---
+      # Regenerates Rust->TS bindings and contracts and fails on drift. Compiles
+      # Rust, so it belongs to the Rust lane.
       - name: Generated contract/binding drift
+        if: needs.changes.outputs.rust == 'true'
         run: just check-generated
 
   # Mock-mode UI regression: fast Playwright run (Vite + chromium, mocks on, no
   # backend/Tauri build). The real UI->IPC->backend journeys run in the dedicated
   # WebdriverIO + tauri-driver workflow (e2e.yml). Not gated on `integration` so
   # UI regressions surface even when the Rust workspace gate is unrelatedly red.
+  # Heavy steps skip when the change cannot affect the frontend; the job still
+  # runs and reports success.
   ui-e2e:
     name: UI E2E (mock-mode Playwright)
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        if: needs.changes.outputs.frontend == 'true'
         with:
           version: 10.33.0
       - uses: actions/setup-node@v4
+        if: needs.changes.outputs.frontend == 'true'
         with:
           node-version: 20
           cache: pnpm
       - name: Install JS deps
+        if: needs.changes.outputs.frontend == 'true'
         run: pnpm install --frozen-lockfile
       - name: Install Playwright chromium
+        if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop exec playwright install --with-deps chromium
       - name: Mock-mode UI tests
+        if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop test:e2e

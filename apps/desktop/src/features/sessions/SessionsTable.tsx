@@ -9,8 +9,16 @@
  * synthetic "All" header).
  *
  * Columns: Target · Filter · Frames · Integration · Night · Camera · Projects.
- * Sortable column headers call `onSort`. Selecting a row opens the existing
- * SessionDetail in a right-side drawer on SessionsPage.
+ * Sortable column headers call `onSort`; the active column's `<th>` announces
+ * `aria-sort` via the shared Table + `ariaSortFor`. Selecting a row opens the
+ * existing SessionDetail in the bottom detail panel on SessionsPage.
+ *
+ * Inbox-parity (spec 043 §4): the table renders inside the shared
+ * `.alm-listtable` viewport, windows its rows via the shared Table's
+ * `virtualized` padding-spacer mode (sticky header included), carries a
+ * per-row `sessions-row-<id>` testid, shows the row's target identity in the
+ * Target cell even when flat (the default), and pins a grouping-hint footer
+ * when grouping is active.
  *
  * Spec 041 FR-051 (T076, Phase 13): the State column and the "needs review"
  * warning icon were removed along with the session review-state machine —
@@ -20,7 +28,7 @@
 import { useMemo, type ReactNode } from 'react';
 import type { InventorySource, InventorySession } from '@/bindings/index';
 import { Table, Pill } from '@/ui';
-import { SortHeader } from '@/components';
+import { SortHeader, ariaSortFor } from '@/components';
 import { m } from '@/lib/i18n';
 import type { TableColumn, TableRow } from '@/ui';
 import {
@@ -56,6 +64,19 @@ export const SESSION_ACCESSORS: Readonly<Record<string, DimensionAccessor<Invent
   night: (s) => s.capturedOn,
   camera: (s) => s.camera,
   month: (s) => s.capturedOn?.slice(0, 7),
+};
+
+/**
+ * Locale-aware label per grouping dimension — the single source for the page's
+ * Group-by options AND the table's grouping-hint footer (render-time thunks so
+ * labels re-read the active locale, spec 046 #8).
+ */
+export const SESSION_DIM_LABELS: Readonly<Record<string, () => string>> = {
+  target: () => m.projects_create_target_label(),
+  filter: () => m.common_filter(),
+  night: () => m.sessions_col_night(),
+  camera: () => m.settings_calmatch_camera(),
+  month: () => m.sessions_dim_month(),
 };
 
 // ── Sort helpers ────────────────────────────────────────────────────────────────
@@ -97,10 +118,10 @@ function compareSessions(a: InventorySession, b: InventorySession, sort: Session
 const COLUMNS: Array<{ key: string; label: () => string; sort?: SessionSortCol; className?: string }> = [
   { key: 'target', label: () => m.projects_create_target_label(), sort: 'target' },
   { key: 'filter', label: () => m.common_filter(), sort: 'filter' },
-  { key: 'frames', label: () => m.projects_wizard_col_frames(), sort: 'frames', className: 'alm-sessions-cell--num' },
-  { key: 'integration', label: () => m.projects_wizard_col_integration(), sort: 'exposure', className: 'alm-sessions-cell--mono' },
-  { key: 'night', label: () => m.sessions_col_night(), sort: 'night', className: 'alm-sessions-cell--mono' },
-  { key: 'camera', label: () => m.settings_calmatch_camera(), sort: 'camera', className: 'alm-sessions-cell--muted' },
+  { key: 'frames', label: () => m.projects_wizard_col_frames(), sort: 'frames', className: 'alm-cell--num' },
+  { key: 'integration', label: () => m.projects_wizard_col_integration(), sort: 'exposure', className: 'alm-cell--mono' },
+  { key: 'night', label: () => m.sessions_col_night(), sort: 'night', className: 'alm-cell--mono' },
+  { key: 'camera', label: () => m.settings_calmatch_camera(), sort: 'camera', className: 'alm-cell--muted' },
   { key: 'projects', label: () => m.common_projects() },
 ];
 
@@ -149,21 +170,30 @@ export function SessionsTable({
     return [...flat].sort((a, b) => compareSessions(a, b, sort));
   }, [sources, sort]);
 
-  // Build the group tree (or a flat pass-through when dims is empty).
+  const grouped = dims.length > 0;
+
+  // Build the group tree when grouping is active. When dims is empty the
+  // table is a TRUE flat list (Inbox-parity): plain item rows, no synthetic
+  // "All" group header (groupByDimensions would emit an `__all__` node).
   const tree = useMemo(
-    () => groupByDimensions(allSessions, dims, SESSION_ACCESSORS),
-    [allSessions, dims],
+    () => (grouped ? groupByDimensions(allSessions, dims, SESSION_ACCESSORS) : []),
+    [grouped, allSessions, dims],
   );
 
   const visualRows = useMemo(
-    () => flattenVisibleGroups(tree, collapsed),
-    [tree, collapsed],
+    () =>
+      grouped
+        ? flattenVisibleGroups(tree, collapsed)
+        : allSessions.map((s) => ({ kind: 'item' as const, item: s, depth: 0 })),
+    [grouped, tree, collapsed, allSessions],
   );
 
-  // Build sortable column headers.
+  // Build sortable column headers. aria-sort is emitted on the <th> by the
+  // shared Table (ariaSortFor) — the SortHeader button only shows the arrow.
   const columns: TableColumn[] = COLUMNS.map((c) => ({
     key: c.key,
     className: c.className,
+    ariaSort: c.sort ? ariaSortFor(sort.col === c.sort, sort.dir) : undefined,
     label: c.sort ? (
       <SortHeader
         label={c.label()}
@@ -176,8 +206,6 @@ export function SessionsTable({
       c.label()
     ),
   }));
-
-  const grouped = dims.length > 0;
 
   const rows: TableRow[] = useMemo(
     () =>
@@ -207,17 +235,28 @@ export function SessionsTable({
           };
         }
 
-        // Flat item or grouped leaf.
+        // Flat item or grouped leaf. The session's TARGET IDENTITY is the row
+        // headline (spec 043 §4) — rendered in the Target cell whether the
+        // table is flat (the default) or a grouped leaf (indented under its
+        // header). Inbox-parity: rows carry a stable per-row testid.
         const s = row.item;
         const indentPx = grouped ? 8 + row.depth * INDENT_PER_DEPTH : 0;
         const projects = s.linked?.projects ?? [];
         return {
+          _testid: `sessions-row-${s.id}`,
           _rowClassName:
             'alm-sessions-table__row' +
             (selected === s.id ? ' alm-sessions-table__row--selected' : ''),
           _onClick: () => onSelect(s.id),
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
-          target: indentPx ? <span style={{ paddingLeft: indentPx }} /> : '',
+          target: (
+            <span
+              className="alm-sessions-cell--target"
+              // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
+              style={indentPx ? { paddingLeft: indentPx } : undefined}
+            >
+              {s.target ?? s.name}
+            </span>
+          ),
           filter: s.filter ?? '—',
           frames: s.frames,
           integration: s.exposure ?? '—',
@@ -233,18 +272,40 @@ export function SessionsTable({
                 ))}
               </span>
             ) : (
-              <span className="alm-sessions-cell--muted">—</span>
+              <span className="alm-cell--muted">—</span>
             ),
         };
       }),
     [visualRows, selected, onSelect, toggle, grouped],
   );
 
-  if (allSessions.length === 0 && !loading) {
-    return (
-      <div className="alm-sessions-table__empty">{m.sessions_no_match()}</div>
-    );
-  }
+  // Inbox-parity: grouping-state hint footer under the table when grouped.
+  const groupingHint = grouped
+    ? m.sessions_grouping_hint({
+        dims: dims.map((d) => SESSION_DIM_LABELS[d]?.() ?? d).join(' › '),
+      })
+    : null;
 
-  return <Table className="alm-sessions-table" columns={columns} rows={rows} />;
+  return (
+    <div className="alm-listtable" data-testid="sessions-list">
+      {visualRows.length === 0 && !loading ? (
+        <div className="alm-listtable__empty">{m.sessions_no_match()}</div>
+      ) : (
+        <Table
+          className="alm-sessions-table"
+          columns={columns}
+          rows={rows}
+          virtualized
+          estimateRowHeight={36}
+          scrollClassName="alm-listtable__scroll"
+          scrollTestId="sessions-virtual-sizer"
+        />
+      )}
+      {groupingHint && (
+        <div className="alm-listtable__foot" data-testid="sessions-grouping-hint">
+          {groupingHint}
+        </div>
+      )}
+    </div>
+  );
 }

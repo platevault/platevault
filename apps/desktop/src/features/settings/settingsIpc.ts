@@ -223,6 +223,28 @@ export async function applyRootRemap(args: {
   unwrap(await commands.rootsRemapApply(args.rootId, args.newPath, args.verified));
 }
 
+/**
+ * `sources.set_active` — enable or disable a registered source (P6b).
+ * Disabled roots are excluded from scan/ingest surfaces; their history
+ * (sessions, plan items, file records) is retained untouched.
+ */
+export async function setRootActive(args: {
+  rootId: string;
+  active: boolean;
+}): Promise<void> {
+  unwrap(await commands.sourcesSetActive(args.rootId, args.active));
+}
+
+/**
+ * `roots.delete` — permanently remove a root's registration (P6b, decision D8).
+ * Blocks with `root.has_dependents` when dependent records (inbox items, plan
+ * items, file records, sessions) still reference the root — the caller must
+ * surface that block reason to the user. Files on disk are never touched.
+ */
+export async function deleteRoot(args: { rootId: string }): Promise<void> {
+  unwrap(await commands.rootsDelete(args.rootId));
+}
+
 // ── Calibration tolerances (spec 007) ─────────────────────────────────────────
 
 export async function calibrationTolerancesGet(): Promise<CalibrationTolerances> {

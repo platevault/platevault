@@ -156,6 +156,11 @@ pub enum ErrorCode {
     PlanApprovalRequired,
     #[serde(rename = "plan.approval.stale")]
     PlanApprovalStale,
+    /// Concurrent apply rejected: the plan's (source ∪ destination ∪ archive)
+    /// path set overlaps an active apply run's path set (spec 025 FR-017,
+    /// R-Concur-1).
+    #[serde(rename = "plan.conflict.overlap")]
+    PlanConflictOverlap,
     #[serde(rename = "plan.invalid_state")]
     PlanInvalidState,
     #[serde(rename = "plan.not_found")]
@@ -252,6 +257,13 @@ pub enum ErrorCode {
     SourceNotFound,
     #[serde(rename = "source.invalid_organization_state")]
     SourceInvalidOrganizationState,
+
+    // ── Root ─────────────────────────────────────────────────────────────────
+    /// Returned by `roots.delete` (P6b, decision D8) when dependent records
+    /// (inbox items, plan items, file records, sessions) still reference the
+    /// root; deletion is blocked rather than cascade-nullified.
+    #[serde(rename = "root.has_dependents")]
+    RootHasDependents,
 
     // ── Tool ────────────────────────────────────────────────────────────────
     #[serde(rename = "tool.locked")]

@@ -34,7 +34,10 @@ import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
-import { FilterBadges } from './FilterBadges';
+import { GuidanceCell } from './GuidanceCell';
+import { deriveRowMoonPlanning } from './astro/row-planning';
+import type { ObservingNight } from './astro/moon-state';
+import { useGuidanceParams } from './guidance-settings';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -44,6 +47,12 @@ interface Props {
   item?: TargetListItem | null;
   /** Usable-altitude threshold (from Settings) for img-time / visible-tonight. */
   usableAltDeg?: number;
+  /**
+   * The shared observing night (spec 047), or `null` when no observing site
+   * exists (site gate). Drives the real lunar distance + filter guidance
+   * shown alongside the (still-placeholder) tonight altitude graph.
+   */
+  night?: ObservingNight | null;
 }
 
 type LoadState =
@@ -338,7 +347,8 @@ function AltitudeGraph({ points }: AltitudeGraphProps) {
 
 // ── TargetDetailV2 ────────────────────────────────────────────────────────────
 
-export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_ALT_DEG }: Props) {
+export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_ALT_DEG, night = null }: Props) {
+  const guidanceParams = useGuidanceParams();
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const [aliasInput, setAliasInput] = useState('');
   const [aliasError, setAliasError] = useState<string | null>(null);
@@ -534,9 +544,17 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
 
   // Tonight planner data — shared with the list row (same rowAltitudeFor source
   // so the graph peak and the "Max alt" stat agree). Falls back to an RA/Dec
-  // curve when the list item isn't available.
+  // curve when the list item isn't available. The altitude/imaging-time model
+  // stays a Track B placeholder (FR-015); lunar distance + filter guidance
+  // below are the real spec 047 Track A values, derived from the detail's
+  // catalogued coordinates (available even when `item` is null).
   const rowAlt = item ? rowAltitudeFor(item, usableAltDeg) : null;
   const tonightPoints: AltPoint[] = rowAlt?.points ?? altitudeCurve(detail.raDeg, detail.decDeg);
+  const moon = deriveRowMoonPlanning(
+    { raDeg: detail.raDeg, decDeg: detail.decDeg },
+    night,
+    guidanceParams,
+  );
 
   const raDecStr =
     detail.raDeg != null && detail.decDeg != null
@@ -559,11 +577,17 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   ];
 
   // Tonight stats (numeric) — Filters render separately (a component, not a value).
+  // Lunar distance is the real spec 047 value; unknown → "—" (PropertyTable's
+  // null handling), never a fabricated number.
   const tonightStats: PropertyDef[] = rowAlt
     ? [
         { key: 'maxalt', label: m.targets_col_max_alt(), value: `${Math.round(rowAlt.maxAltDeg)}°` },
         { key: 'imgtime', label: m.targets_col_img_time(), value: `${rowAlt.hoursAboveUsable.toFixed(1)} h` },
-        { key: 'lunar', label: m.targets_col_lunar(), value: `${Math.round(rowAlt.lunarDistanceDeg)}°` },
+        {
+          key: 'lunar',
+          label: m.targets_col_lunar(),
+          value: moon.lunarSeparationDeg != null ? `${Math.round(moon.lunarSeparationDeg)}°` : null,
+        },
       ]
     : [];
 
@@ -630,7 +654,12 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               <PropertyTable mode="view" properties={tonightStats} />
               <div className="alm-planner__tonight-filters">
                 <span className="alm-planner__tonight-filters-label">{m.common_filters()}</span>
-                <FilterBadges recommendation={rowAlt.filters} />
+                <GuidanceCell
+                  night={night}
+                  moon={moon}
+                  params={guidanceParams}
+                  targetLabel={detail.effectiveLabel}
+                />
               </div>
             </>
           )}

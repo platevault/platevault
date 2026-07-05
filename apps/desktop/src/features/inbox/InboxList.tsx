@@ -21,7 +21,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { InboxListItem } from '@/bindings/index';
 import { Table, type TableColumn, type TableRow } from '@/ui';
-import { SortHeader } from '@/components';
+import { SortHeader, ariaSortFor } from '@/components';
 import { groupByDimensions, type GroupNode } from './grouping';
 import { ACCESSORS, dimLabel } from './InboxControls';
 import { m } from '@/lib/i18n';
@@ -259,27 +259,33 @@ export function InboxList({
       ariaLabel={ariaLabel}
     />
   );
+  // aria-sort lives on the <th> (shared Table), not the SortHeader button.
+  const thSort = (col: InboxSortCol) => ariaSortFor(sort.col === col, sort.dir);
 
   // Build columns with sortable headers.
   const COLUMNS: TableColumn[] = [
     {
       key: 'detection',
       label: makeSortHeader('detection', m.inbox_col_detection(), m.inbox_sort_detection_aria()),
+      ariaSort: thSort('detection'),
     },
     {
       key: 'type',
       label: makeSortHeader('type', m.inbox_col_type(), m.inbox_sort_type_aria()),
+      ariaSort: thSort('type'),
       style: { width: '7.5rem' },
     },
     {
       key: 'count',
       label: makeSortHeader('count', m.inbox_col_files(), m.inbox_sort_files_aria()),
+      ariaSort: thSort('count'),
       className: 'num',
       style: { width: '5rem' },
     },
     {
       key: 'format',
       label: makeSortHeader('format', m.inbox_dim_format(), m.inbox_sort_format_aria()),
+      ariaSort: thSort('format'),
       className: 'alm-inbox-cell--right',
       style: { width: '7rem' },
     },
@@ -362,9 +368,9 @@ export function InboxList({
     : null;
 
   return (
-    <div className="alm-inbox-list" data-testid="inbox-list">
+    <div className="alm-listtable" data-testid="inbox-list">
       {visualRows.length === 0 ? (
-        <div className="alm-inbox-list__empty">{m.inbox_no_detections()}</div>
+        <div className="alm-listtable__empty">{m.inbox_no_detections()}</div>
       ) : (
         <Table
           className="alm-inbox-table"
@@ -372,12 +378,12 @@ export function InboxList({
           rows={rows}
           virtualized
           estimateRowHeight={40}
-          scrollClassName="alm-inbox-table__scroll"
+          scrollClassName="alm-listtable__scroll"
           scrollTestId="inbox-virtual-sizer"
         />
       )}
       {groupingHint && (
-        <div className="alm-inbox-list__footer" data-testid="inbox-grouping-hint">
+        <div className="alm-listtable__foot" data-testid="inbox-grouping-hint">
           {groupingHint}
         </div>
       )}

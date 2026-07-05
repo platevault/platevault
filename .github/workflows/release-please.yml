@@ -1,0 +1,40 @@
+name: Release Please
+
+# Maintains a release PR from Conventional Commits (feat/fix/...), updates
+# CHANGELOG.md, bumps the desktop app version in three synced files
+# (apps/desktop/src-tauri/tauri.conf.json, apps/desktop/package.json,
+# apps/desktop/src-tauri/Cargo.toml), and tags a plain `v{version}` release on
+# merge. Runs ONLY on main: releases are cut from main, never from the
+# redesign integration branch. The first release PR appears once this config
+# lands on main (via #349) and a subsequent feat/fix is pushed.
+#
+# The release PR is verified by release-gate.yml, which posts the single
+# "Release Gate / verdict" check the shepherd reads before merging.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

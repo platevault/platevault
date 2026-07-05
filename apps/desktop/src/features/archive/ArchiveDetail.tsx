@@ -8,23 +8,16 @@ import type { ArchiveEntry } from '@/bindings/index';
 // ─── Component ───────────────────────────────────────────────────────────────
 
 interface Props {
-  item: ArchiveEntry | null;
+  /**
+   * The selected entry. Non-null by contract: ArchivePage mounts this detail
+   * (in the ListPageLayout bottom panel) only when an entry is selected —
+   * no empty-selection dashboard (spec 043).
+   */
+  item: ArchiveEntry;
 }
 
 export function ArchiveDetail({ item }: Props) {
-  // Hooks must run unconditionally — call before the early null-item return.
-  const { data: history = [], loading, error } = useArchiveAudit(item?.id);
-
-  if (!item) {
-    return (
-      <DetailPane>
-        <EmptyState
-          title={m.archive_select_item_title()}
-          desc={m.archive_select_item_desc()}
-        />
-      </DetailPane>
-    );
-  }
+  const { data: history = [], loading, error } = useArchiveAudit(item.id);
 
   return (
     <DetailPane fill>

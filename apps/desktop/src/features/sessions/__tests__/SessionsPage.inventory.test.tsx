@@ -213,21 +213,43 @@ describe('SessionDetail — empty state', () => {
 // SessionDetail header slot, gated by the `revealVisible` prop the page
 // supplies (task #79).
 describe('SessionDetail — contextual header actions (task #79)', () => {
-  // T410/T411 (spec 006 FR-007): per-row Reveal in OS.
+  // T410/T411 (spec 006 FR-007): per-row Reveal. The button carries the shared
+  // platform-native revealLabel(); jsdom reports no platform → Linux-generic.
   it('10. renders Reveal when revealVisible; clicking dispatches onReveal', () => {
     const onReveal = vi.fn();
     renderDetail(makeSession({}), {
       revealVisible: true,
       onReveal,
     });
-    const btn = screen.getByRole('button', { name: /reveal in os/i });
+    const btn = screen.getByRole('button', { name: /show in file manager/i });
     fireEvent.click(btn);
     expect(onReveal).toHaveBeenCalledTimes(1);
   });
 
   it('11. Reveal is absent when revealVisible is not set (no source path)', () => {
     renderDetail(makeSession({}));
-    expect(screen.queryByRole('button', { name: /reveal in os/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /show in file manager/i })).toBeNull();
+  });
+
+  it('11b. Reveal label follows the platform (Windows and macOS)', () => {
+    // Mock the platform source both ways: revealLabel() reads
+    // navigator.platform (jsdom exposes no userAgentData).
+    const setPlatform = (v: string) =>
+      Object.defineProperty(window.navigator, 'platform', { value: v, configurable: true });
+
+    try {
+      setPlatform('Win32');
+      const { unmount } = renderDetail(makeSession({}), { revealVisible: true, onReveal: vi.fn() });
+      expect(screen.getByRole('button', { name: 'Show in File Explorer' })).toBeDefined();
+      unmount();
+
+      setPlatform('MacIntel');
+      renderDetail(makeSession({}), { revealVisible: true, onReveal: vi.fn() });
+      expect(screen.getByRole('button', { name: 'Reveal in Finder' })).toBeDefined();
+    } finally {
+      // Drop the instance override so later tests see jsdom's prototype default.
+      delete (window.navigator as unknown as Record<string, unknown>).platform;
+    }
   });
 });
 
@@ -332,5 +354,94 @@ describe('SessionsTable — live inventory fixture data (T106)', () => {
     renderList({ sources: INVENTORY_LIST_RESPONSE.sources, dims: ['camera'] });
     // The camera value heads a group row (data-testid sessions-group-camera-<camera>).
     expect(screen.getAllByText(new RegExp(camera as string)).length).toBeGreaterThan(0);
+  });
+});
+
+// ── Tests: Inbox-parity (spec 043 §4 — Sessions ⇄ Inbox interaction parity) ────
+
+describe('SessionsTable — Inbox-parity (spec 043 §4)', () => {
+  it('21. FLAT (default) rows show the target identity in the Target cell', () => {
+    const { container } = renderList({ dims: [] });
+    // No group headers in flat mode…
+    expect(container.querySelector('[data-testid^="sessions-group-"]')).toBeNull();
+    // …yet every distinct target is still readable per row (the row headline).
+    for (const target of ['NGC 7000', 'M31', 'M42']) {
+      expect(screen.getAllByText(new RegExp(target)).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('22. rows carry a stable per-row testid (sessions-row-<id>)', () => {
+    const session = INVENTORY_LIST_RESPONSE.sources[0].sessions[0];
+    renderList({ dims: [] });
+    expect(screen.getByTestId(`sessions-row-${session.id}`)).toBeInTheDocument();
+  });
+
+  it('23. renders inside the shared .alm-listtable viewport with a windowed scroll container', () => {
+    renderList({ dims: [] });
+    expect(screen.getByTestId('sessions-list')).toBeInTheDocument();
+    // The shared Table's virtualized scroll wrapper (padding-spacer windowing).
+    expect(screen.getByTestId('sessions-virtual-sizer')).toBeInTheDocument();
+  });
+
+  it('24. grouping-state hint footer names the active dimensions when grouped', () => {
+    renderList({ dims: ['target', 'filter'] });
+    expect(screen.getByTestId('sessions-grouping-hint').textContent).toMatch(
+      /Target › Filter/,
+    );
+  });
+
+  it('25. no grouping hint footer in the flat default', () => {
+    renderList({ dims: [] });
+    expect(screen.queryByTestId('sessions-grouping-hint')).toBeNull();
+  });
+});
+
+// ── Tests: aria-sort emission on the <th> (a11y — shared Table + ariaSortFor) ─
+
+describe('SessionsTable — aria-sort on the column header <th>', () => {
+  it('26. exactly one th carries aria-sort: the active column, with its direction', () => {
+    const { container } = renderList({ dims: [], sort: { col: 'night', dir: 'desc' } });
+    const marked = container.querySelectorAll('th[aria-sort]');
+    expect(marked.length).toBe(1);
+    expect(marked[0].getAttribute('aria-sort')).toBe('descending');
+    expect(marked[0].textContent).toMatch(/Night/);
+  });
+
+  it('27. ascending sort maps to aria-sort="ascending"', () => {
+    const { container } = renderList({ dims: [], sort: { col: 'frames', dir: 'asc' } });
+    const th = container.querySelector('th[aria-sort]');
+    expect(th).not.toBeNull();
+    expect(th?.getAttribute('aria-sort')).toBe('ascending');
+    expect(th?.textContent).toMatch(/Frames/);
+  });
+});
+
+// ── Tests: SessionsPage toolbar field filters (Inbox-parity helpers) ──────────
+
+import { filterSources, fieldOptions } from '../SessionsPage';
+
+describe('SessionsPage — field-filter helpers (Inbox-parity toolbar)', () => {
+  it('28. filterSources narrows by optical filter and camera', () => {
+    const all = INVENTORY_LIST_RESPONSE.sources;
+    const somefilter = all.flatMap((s) => s.sessions).find((s) => s.filter)?.filter as string;
+    const filtered = filterSources(all, '', somefilter, '');
+    expect(filtered.length).toBeGreaterThan(0);
+    for (const src of filtered) {
+      for (const s of src.sessions) expect(s.filter).toBe(somefilter);
+    }
+    // A camera value that exists must keep only its sessions.
+    const someCamera = all.flatMap((s) => s.sessions).find((s) => s.camera)?.camera as string;
+    const byCam = filterSources(all, '', '', someCamera);
+    for (const src of byCam) {
+      for (const s of src.sessions) expect(s.camera).toBe(someCamera);
+    }
+  });
+
+  it('29. fieldOptions derives unique sorted options from the response', () => {
+    const opts = fieldOptions(INVENTORY_LIST_RESPONSE.sources, (s) => s.filter);
+    const values = opts.map((o) => o.value);
+    expect(values.length).toBeGreaterThan(0);
+    expect(new Set(values).size).toBe(values.length);
+    expect([...values].sort((a, b) => a.localeCompare(b))).toEqual(values);
   });
 });

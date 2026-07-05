@@ -12,15 +12,31 @@
  * Accessibility: the active sort direction is shown visually via the arrow. NOTE
  * `aria-sort` is intentionally NOT set here — per ARIA it is only valid on the
  * `columnheader`/`th` element, not on a `button`, so setting it on this button
- * is a no-op (and was on every table before this was centralized). Announcing
- * sort state to assistive tech belongs on the enclosing `<th>` and is a future
- * enhancement to the shared Table column API.
+ * is a no-op. Announcing sort state to assistive tech lives on the enclosing
+ * `<th>`: pass `ariaSort: ariaSortFor(active, dir)` (exported below) in the
+ * shared `TableColumn`, and the shared `Table` emits it on the `<th>`. Tables
+ * that render their own `<th>` (Targets) apply the same helper directly.
  *
  * Non-sortable columns should render their plain label node directly rather than
  * using this component.
  */
 
 import type { ReactNode } from 'react';
+
+/**
+ * The single shared `aria-sort` mapping for sortable column headers: the
+ * ACTIVE sort column announces its direction; every other column omits the
+ * attribute (per ARIA, only one header should carry aria-sort at a time).
+ * Feed the result to `TableColumn.ariaSort` (shared Table) or straight onto a
+ * hand-rendered `<th aria-sort={…}>`.
+ */
+export function ariaSortFor(
+  active: boolean,
+  dir: 'asc' | 'desc',
+): 'ascending' | 'descending' | undefined {
+  if (!active) return undefined;
+  return dir === 'asc' ? 'ascending' : 'descending';
+}
 
 export interface SortHeaderProps {
   /** Column label content (string or rich node). */

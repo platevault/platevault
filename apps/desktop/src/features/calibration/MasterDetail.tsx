@@ -4,7 +4,7 @@
  * Left-packed flat tabular layout matching SessionDetail exactly:
  *   [props A] [props B] [sessions column: "Used by" + "Compatible" stacked]
  *
- * Actions (Use in project / Replace master / Reveal in Explorer) are inline-left
+ * Actions (Use in project / Replace master / Reveal) are inline-left
  * in the title via titleExtra, wrapped in alm-session-detail2__actions — same
  * pattern as SessionDetail's actionButtons. No `actions` prop passed to
  * DetailPanel. No subtitle (kind is already in the title, size is redundant).
@@ -28,6 +28,7 @@ import {
 } from "@/components";
 import { Btn, EmptyState } from "@/ui";
 import { m } from "@/lib/i18n";
+import { revealLabel } from "@/lib/reveal-label";
 import { SessionListPopover } from "./SessionListPopover";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -182,7 +183,8 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 					{m.calibration_action_replace_master()}
 				</Btn>
 			)}
-			<Btn size="sm">{m.calibration_action_reveal_explorer()}</Btn>
+			{/* Platform-native label via the shared revealLabel() helper. */}
+			<Btn size="sm">{revealLabel()}</Btn>
 		</span>
 	);
 

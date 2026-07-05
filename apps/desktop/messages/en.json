@@ -79,11 +79,16 @@
   "archive_restore_project_btn": "Restore project",
   "archive_restore_session_btn": "Restore session",
   "archive_search_placeholder": "Search archive…",
-  "archive_select_item_desc": "Choose an item from the list to view its details.",
-  "archive_select_item_title": "Select an archived item",
   "archive_status_pill": "archived",
   "archive_subtitle_no_path": "No original path recorded",
-  "archive_item_archived_on": "Archived {date}",
+  "archive_col_name": "Name",
+  "archive_col_type": "Type",
+  "archive_sort_by_aria": "Sort by {col}",
+  "archive_no_match": "No archived items match the current filters.",
+  "archive_reveal_unavailable_title": "Reveal isn't available yet — the archive location isn't exposed by the backend.",
+  "reveal_label_windows": "Show in File Explorer",
+  "reveal_label_macos": "Reveal in Finder",
+  "reveal_label_linux": "Show in file manager",
   "archive_send_to_trash_btn": "Send to trash",
   "archive_load_error": "Could not load archived items.",
   "archive_empty_title": "No archived projects yet",
@@ -170,9 +175,12 @@
   "common_clear": "Clear",
   "common_confirm": "Confirm",
   "common_coverage": "Coverage",
+  "common_deleting": "Deleting…",
   "common_details": "Details",
   "common_detecting": "Detecting…",
+  "common_disabling": "Disabling…",
   "common_edit": "Edit",
+  "common_enabling": "Enabling…",
   "common_filter": "Filter",
   "common_filters": "Filters",
   "common_loading": "Loading…",
@@ -259,6 +267,7 @@
   "err_plan_approval_required": "Approve the plan before applying it.",
   "err_plan_approval_stale": "The plan changed since you reviewed it. Review it again.",
   "err_plan_blocked_by_protection": "This plan is blocked by a protected item. Resolve the protection first.",
+  "err_plan_conflict_overlap": "Another plan is currently working on the same files or folders. Wait for it to finish, then try again.",
   "err_plan_in_progress": "This plan is already running.",
   "err_plan_invalid_state": "This plan can't be used in its current state.",
   "err_plan_items_empty": "This plan has no items to apply.",
@@ -269,6 +278,7 @@
   "err_project_read_only": "This project is read-only and can't be changed.",
   "err_range_invalid": "That date range isn't valid.",
   "err_resolver_endpoint_invalid": "That resolver address isn't valid.",
+  "err_root_has_dependents": "This source still has related records (sessions, plan items, or inbox items) and can't be deleted.",
   "err_root_unavailable": "That library root isn't available right now. Check that its drive is connected.",
   "err_run_not_found": "That run could not be found.",
   "err_run_not_paused": "This run isn't paused.",
@@ -384,7 +394,6 @@
   "projects_calib_readiness_title": "Calibration readiness",
   "projects_channels_in_sync": "in sync",
   "projects_channels_palette_title": "{channels} — {palette} palette",
-  "projects_cleanup_no_preview": "No cleanup preview yet — available after the project is verified.",
   "projects_cleanup_protected_label": "Protected — never proposed for cleanup",
   "projects_cleanup_title": "Cleanup preview",
   "projects_create_btn": "Create project",
@@ -406,7 +415,6 @@
   "projects_detail_load_error": "Could not load project.",
   "projects_detail_loading": "Loading project…",
   "projects_detail_reinfer_btn": "Re-infer channels",
-  "projects_detail_reveal_btn": "Reveal in Explorer",
   "projects_edit_archived_notice": "This project is archived. Settings are read-only.",
   "projects_edit_channels_auto_tag": "Auto",
   "projects_edit_channels_empty": "No channels inferred yet.",
@@ -425,7 +433,6 @@
   "projects_manifests_load_error": "Could not load manifests.",
   "projects_manifests_notes_label": "Notes snapshot:",
   "projects_manifests_reveal_btn": "Reveal",
-  "projects_manifests_reveal_title": "Reveal in file manager",
   "projects_manifests_title": "Manifests",
   "projects_manifests_workflow_label": "Workflow:",
   "projects_name_label": "Project name",
@@ -567,6 +574,7 @@
   "sessions_linked_projects_heading": "Linked projects",
   "sessions_load_error": "Failed to load sessions.",
   "sessions_needs_review_aria": "Needs review",
+  "sessions_grouping_hint": "Grouped by {dims}",
   "sessions_no_match": "No sessions match the current filters.",
   "sessions_ignore_btn": "Ignore",
   "sessions_reject_btn": "Reject",
@@ -579,7 +587,6 @@
   "sessions_review_filter_default_label": "Default",
   "sessions_review_filter_label": "Review",
   "sessions_review_needs_review_state": "Needs review ({state})",
-  "sessions_reveal_btn": "Reveal in OS",
   "sessions_reveal_title": "Open the session's source location in the OS file browser",
   "sessions_search_aria": "Search sessions",
   "sessions_search_placeholder": "Search target, filter, camera…",
@@ -672,8 +679,14 @@
   "settings_datasources_category_project": "Project",
   "settings_datasources_category_raw": "Raw",
   "settings_datasources_delete": "Delete",
+  "settings_datasources_delete_confirm_desc": "\"{path}\" will no longer be tracked. Files on disk are never touched — this only removes the registration.",
+  "settings_datasources_delete_confirm_title": "Delete this source?",
   "settings_datasources_disable": "Disable",
+  "settings_datasources_disable_confirm_desc": "The source will be excluded from scans and ingest until re-enabled. Its history is kept.",
+  "settings_datasources_disable_confirm_title": "Disable this source?",
+  "settings_datasources_disabled_pill": "Disabled",
   "settings_datasources_empty": "No source folders registered yet. Add one above.",
+  "settings_datasources_enable": "Enable",
   "settings_datasources_folder_label": "Folder",
   "settings_datasources_load_error": "Could not load roots: {error}",
   "settings_datasources_remap": "Remap…",
@@ -693,11 +706,8 @@
   "settings_datasources_source_override_error": "Failed to set override: {error}",
   "settings_datasources_source_override_key_aria": "Override key",
   "settings_datasources_source_override_source_aria": "Source for override",
-  "settings_datasources_source_override_source_placeholder": "— select source —",
   "settings_datasources_source_override_title": "Per-source setting override",
   "settings_datasources_source_override_value_aria": "Override value",
-  "settings_datasources_source_override_value_false": "false",
-  "settings_datasources_source_override_value_true": "true",
   "settings_density_legend": "Display density",
   "settings_equipment_auto_detected": "Auto-detected",
   "settings_equipment_cameras_add": "+ Add camera",
@@ -783,6 +793,13 @@
   "settings_planner_altitude_label": "Usable altitude threshold (°)",
   "settings_planner_altitude_title": "ALTITUDE THRESHOLD",
   "settings_planner_altitude_unit": "degrees above horizon",
+  "settings_planner_moon_avoidance_title": "MOON AVOIDANCE (PER BAND)",
+  "settings_planner_moon_avoidance_info": "Per-band Moon-avoidance thresholds that drive the Planner's filter guidance pills tonight. A band is viable when the target's lunar distance is at least Distance ÷ (1 + (Moon age from full ÷ Width)²). Higher distance/width = more Moon-sensitive.",
+  "settings_planner_moon_avoidance_band_col": "Band",
+  "settings_planner_moon_avoidance_distance_col": "Distance at full (°)",
+  "settings_planner_moon_avoidance_width_col": "Half-width (days)",
+  "settings_planner_moon_avoidance_distance_aria": "{band} required separation at full Moon, in degrees",
+  "settings_planner_moon_avoidance_width_aria": "{band} half-width, in days",
   "settings_resolver_catalogues_title": "DEFAULT CATALOGUES",
   "settings_resolver_debounce_label": "Typeahead debounce (ms)",
   "settings_resolver_endpoint_label": "SIMBAD endpoint",
@@ -1026,6 +1043,37 @@
   "targets_page_search_placeholder": "Search targets...",
   "targets_table_approx_max_alt": "Approximate max altitude tonight",
   "targets_table_next_opposition": "Next opposition date",
+  "targets_opposition_unknown_title": "Opposition date unknown — this target has no coordinates.",
+  "targets_opposition_in_days": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "in {count} day",
+        "countPlural=other": "in {count} days"
+      }
+    }
+  ],
+  "targets_opposition_in_months": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "in {count} month",
+        "countPlural=other": "in {count} months"
+      }
+    }
+  ],
   "targets_table_no_match": "No targets match the current filters.",
   "targets_table_target_count": "{count} targets",
   "targets_table_visible_low": "low",
@@ -1080,6 +1128,8 @@
   "projects_toast_reinfer_failed": "Re-infer failed.",
   "projects_toast_dismiss_failed": "Dismiss failed.",
   "projects_toast_plan_required": "A filesystem plan is required before this transition. Create or approve a plan first.",
+  "projects_archive_generate_failed": "Could not generate the archive plan.",
+  "projects_archive_review_title": "Review archive plan",
   "projects_toast_transition_failed": "Transition failed.",
   "projects_toast_transitioned": "Project {state}.",
   "projects_toast_archived_readonly": "This project is archived. Notes cannot be edited.",
@@ -1383,7 +1433,35 @@
   "targets_detail_alias_kind_title": "kind: {kind}",
   "targets_detail_alias_remove_aria": "Remove alias {alias}",
   "targets_filters_narrowband_only": "Narrowband only",
-  "targets_filters_broadband_nb": "Broadband + NB",
+  "targets_filters_broadband_nb": "Broadband OK",
+  "targets_filters_avoid_tonight": "Avoid tonight",
+  "targets_recommendation_unknown": "Unknown",
+  "targets_filter_badge_viable_aria": "{band}: viable tonight",
+  "targets_filter_badge_not_viable_aria": "{band}: not viable tonight",
+  "targets_guidance_unknown_title": "Filter guidance unavailable — this target has no catalogued coordinates.",
+  "targets_guidance_explain_title": "Why this guidance",
+  "targets_guidance_explain_moon": "Moon tonight: {phase}, {pct}% illuminated, {age} days from full",
+  "targets_guidance_explain_separation": "This target: {deg}° from the Moon tonight",
+  "targets_guidance_explain_band_row": "{band}: needs ≥ {deg}°",
+  "targets_guidance_state_viable": "viable",
+  "targets_guidance_state_not_viable": "not viable",
+  "targets_guidance_explain_unknown": "No catalogued coordinates for this target — filter guidance cannot be computed.",
+  "targets_planner_site_prompt_title": "Set up your observing site",
+  "targets_planner_site_prompt_desc": "Add a default observing location so the planner can compute the Moon, lunar distances, and the best imaging season for tonight.",
+  "targets_moon_phase_new": "New Moon",
+  "targets_moon_phase_waxing_crescent": "Waxing crescent",
+  "targets_moon_phase_first_quarter": "First quarter",
+  "targets_moon_phase_waxing_gibbous": "Waxing gibbous",
+  "targets_moon_phase_full": "Full Moon",
+  "targets_moon_phase_waning_gibbous": "Waning gibbous",
+  "targets_moon_phase_last_quarter": "Last quarter",
+  "targets_moon_phase_waning_crescent": "Waning crescent",
+  "targets_moon_waxing": "waxing",
+  "targets_moon_waning": "waning",
+  "targets_moon_summary_title": "Moon tonight",
+  "targets_moon_illumination": "{pct}% illuminated",
+  "targets_moon_summary_aria": "Moon tonight: {phase}, {pct} percent illuminated, {direction}.",
+  "targets_lunar_unknown_title": "Lunar distance unknown — this target has no coordinates.",
   "targets_catalog_ngc": "NGC",
   "targets_catalog_sharpless": "Sharpless",
   "targets_catalog_lbn": "LBN",
@@ -1488,7 +1566,6 @@
   "calibration_col_usage": "Usage",
   "calibration_action_use_in_project": "Use in project",
   "calibration_action_replace_master": "Replace master",
-  "calibration_action_reveal_explorer": "Reveal in Explorer",
   "calibration_col_session": "Session",
   "calibration_col_match": "Match",
   "calibration_col_dimensions": "Dimensions",
@@ -1914,21 +1991,6 @@
       }
     }
   ],
-  "archive_subtitle_item_count": [
-    {
-      "declarations": [
-        "input count",
-        "local pp = count: plural"
-      ],
-      "selectors": [
-        "pp"
-      ],
-      "match": {
-        "pp=one": "{count} archived item",
-        "pp=other": "{count} archived items"
-      }
-    }
-  ],
   "data_sources_file_count": [
     {
       "declarations": [
@@ -2026,5 +2088,136 @@
   "dev_settings_toggle_info": "When on, the recording proxy captures contract calls and Developer / Contracts becomes reachable from the command palette (Cmd+K / Ctrl+K).",
   "dev_settings_restart_hint": "Turning developer mode off here stops new contract calls from being recorded immediately, but the recording proxy itself is only fully removed after the app restarts.",
   "dev_settings_saving": "Saving…",
-  "dev_settings_error": "Could not update developer mode: {message}"
+  "dev_settings_error": "Could not update developer mode: {message}",
+  "projects_cleanup_scan_btn": "Scan for cleanup candidates",
+  "projects_cleanup_scanning": "Scanning…",
+  "projects_cleanup_scan_prompt": "Scan this project to preview cleanup candidates. Scanning is read-only — nothing is removed without explicit plan approval.",
+  "projects_cleanup_scan_failed": "Cleanup scan failed.",
+  "projects_cleanup_reclaimable": "{size} reclaimable",
+  "projects_cleanup_no_candidates_title": "No cleanup candidates",
+  "projects_cleanup_no_candidates_desc": "The cleanup policy keeps every data type, or no processing artifacts have been observed for this project.",
+  "projects_cleanup_type_intermediate": "Intermediates",
+  "projects_cleanup_type_master": "Masters",
+  "projects_cleanup_type_final": "Finals",
+  "projects_cleanup_col_file": "File",
+  "projects_cleanup_col_size": "Size",
+  "projects_cleanup_col_confidence": "Confidence",
+  "projects_cleanup_col_protection": "Protection",
+  "projects_cleanup_confidence_pct": "{pct}%",
+  "projects_cleanup_row_protected_hint": "Protected — requires explicit acknowledgement during plan review before it can be applied",
+  "projects_cleanup_dest_label": "Destructive destination",
+  "projects_cleanup_dest_archive_hint": "App-managed archive folder — reversible until you empty it",
+  "projects_cleanup_dest_trash_hint": "OS-native recycle bin / trash",
+  "projects_cleanup_generate_btn": "Generate cleanup plan",
+  "projects_cleanup_generating": "Generating…",
+  "projects_cleanup_generate_failed": "Could not generate the cleanup plan.",
+  "projects_cleanup_review_title": "Review cleanup plan",
+  "plans_dest_archive": "Archive folder",
+  "plans_dest_trash": "System trash",
+  "plans_review_overlay_title": "Review plan",
+  "plans_review_load_error": "Could not load the plan.",
+  "plans_review_no_mutation_note": "Nothing has been changed on disk. Review every proposed item below; applying requires explicit approval.",
+  "plans_review_bytes_required": "Requires {size} at the destination.",
+  "plans_review_col_item": "Item",
+  "plans_review_col_action": "Action",
+  "plans_review_col_from": "Source path",
+  "plans_review_col_protection": "Protection",
+  "plans_review_approve_apply_btn": "Approve & apply",
+  "plans_review_approving": "Approving…",
+  "plans_review_discard_btn": "Discard plan",
+  "plans_review_discarded_toast": "Plan discarded.",
+  "plans_review_apply_success_toast": "Cleanup plan applied.",
+  "plans_review_apply_failed": "Plan apply failed.",
+  "plans_review_progress_running": "Applying {applied} of {total}…",
+  "projects_cleanup_group_meta": [
+    {
+      "declarations": [
+        "input count",
+        "input size",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} file · {size}",
+        "pp=other": "{count} files · {size}"
+      }
+    }
+  ],
+  "projects_archive_plan_created_toast": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "Archive plan created with {count} item — review before anything is moved.",
+        "pp=other": "Archive plan created with {count} items — review before anything is moved."
+      }
+    }
+  ],
+  "projects_cleanup_plan_created_toast": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "Cleanup plan created with {count} item — review before anything is applied.",
+        "pp=other": "Cleanup plan created with {count} items — review before anything is applied."
+      }
+    }
+  ],
+  "plans_review_item_count": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} item",
+        "pp=other": "{count} items"
+      }
+    }
+  ],
+  "plans_review_progress_done": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} item applied",
+        "pp=other": "{count} items applied"
+      }
+    }
+  ],
+  "plans_review_progress_failed": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "{count} item failed",
+        "pp=other": "{count} items failed"
+      }
+    }
+  ]
 }

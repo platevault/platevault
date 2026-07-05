@@ -1,5 +1,5 @@
 /**
- * Sessions "Reveal in OS" IPC helper (spec 037 caller migration).
+ * Sessions row-Reveal IPC helper (spec 037 caller migration).
  *
  * Moves the inventory-row reveal glue off the hand-written `@/api/commands`
  * wrapper onto the generated `commands.nativeReveal` binding (FR-004: the

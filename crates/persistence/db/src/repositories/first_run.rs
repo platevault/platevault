@@ -371,6 +371,48 @@ pub async fn set_source_path(pool: &SqlitePool, source_id: &str, new_path: &str)
     Ok(())
 }
 
+/// Read the `active` flag for every registered source, keyed by source id
+/// (P6b — `roots.list` merges this into each `LibraryRoot.active`, mirroring
+/// how `lastScanned` is merged from `inbox_source_groups`).
+///
+/// Sources with no matching row simply do not appear in the map; callers
+/// should default to `true` (active) for any id absent from it.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_active_flags(
+    pool: &SqlitePool,
+) -> DbResult<std::collections::HashMap<String, bool>> {
+    let rows: Vec<(String, i64)> =
+        sqlx::query_as("SELECT id, active FROM registered_sources").fetch_all(pool).await?;
+    Ok(rows.into_iter().map(|(id, active)| (id, active != 0)).collect())
+}
+
+/// Set a registered source's `active` flag by id (P6b — `sources.set_active`).
+///
+/// Disabling a root excludes it from scan/ingest surfaces but does not touch
+/// its history: `file_record`, `plan_items`, `inbox_items`, and session rows
+/// referencing it are left completely untouched (constitution §I — a
+/// visibility flag, not a deletion).
+///
+/// # Errors
+///
+/// Returns [`DbError::NotFound`] if the ID does not exist.
+pub async fn set_source_active(pool: &SqlitePool, source_id: &str, active: bool) -> DbResult<()> {
+    let result = sqlx::query("UPDATE registered_sources SET active = ? WHERE id = ?")
+        .bind(i64::from(active))
+        .bind(source_id)
+        .execute(pool)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(DbError::NotFound(format!("registered_source not found: {source_id}")));
+    }
+
+    Ok(())
+}
+
 /// Sample up to `limit` relative paths previously recorded for a root, for use
 /// as `roots.remap` preview candidates.
 ///
@@ -399,10 +441,64 @@ pub async fn sample_relative_paths(
     Ok(rows.into_iter().map(|(p,)| p).collect())
 }
 
+/// Count dependent records referencing a root, for the `roots.delete`
+/// dependents-guard (P6b, decision D8: block rather than cascade-nullify).
+///
+/// `registered_sources` has no FK cascade, so every table that stores a root
+/// id must be checked explicitly: `inbox_items.root_id`, `plan_items.source_id`,
+/// `file_record.root_id`, `acquisition_session.root_id`, and
+/// `calibration_session.root_id`.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn count_root_dependents(
+    pool: &SqlitePool,
+    root_id: &str,
+) -> DbResult<domain_core::first_run::RootDependencyCounts> {
+    fn to_u32(count: i64) -> u32 {
+        u32::try_from(count.max(0)).unwrap_or(u32::MAX)
+    }
+
+    let inbox_items: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM inbox_items WHERE root_id = ?")
+        .bind(root_id)
+        .fetch_one(pool)
+        .await?;
+    let plan_items: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM plan_items WHERE source_id = ?")
+        .bind(root_id)
+        .fetch_one(pool)
+        .await?;
+    let file_records: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM file_record WHERE root_id = ?")
+        .bind(root_id)
+        .fetch_one(pool)
+        .await?;
+    let acquisition_sessions: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM acquisition_session WHERE root_id = ?")
+            .bind(root_id)
+            .fetch_one(pool)
+            .await?;
+    let calibration_sessions: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM calibration_session WHERE root_id = ?")
+            .bind(root_id)
+            .fetch_one(pool)
+            .await?;
+
+    Ok(domain_core::first_run::RootDependencyCounts {
+        inbox_items: to_u32(inbox_items.0),
+        plan_items: to_u32(plan_items.0),
+        file_records: to_u32(file_records.0),
+        acquisition_sessions: to_u32(acquisition_sessions.0),
+        calibration_sessions: to_u32(calibration_sessions.0),
+    })
+}
+
 /// Remove a registered source by ID.
 ///
 /// Also deletes any `inbox_items` whose `root_id` references this source so
 /// that no orphaned rows remain after removal (H1 — no FK cascade in schema).
+/// Callers MUST check [`count_root_dependents`] first (P6b, decision D8) —
+/// this function does not itself guard against dependents; it is also used by
+/// the pre-existing (dependents-free by construction) removal paths.
 ///
 /// # Errors
 ///
@@ -1095,6 +1191,227 @@ mod tests {
 
         let samples = sample_relative_paths(&pool, &resp.source_id, 2).await.unwrap();
         assert_eq!(samples, vec!["M31/light_001.fits", "M31/light_002.fits"]);
+    }
+
+    // ── P6b: active flag repository functions ────────────────────────────────
+
+    #[tokio::test]
+    async fn new_sources_default_active() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::LightFrames,
+                path: "/astro/raw".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+
+        let flags = list_active_flags(&pool).await.unwrap();
+        assert_eq!(flags.get(&resp.source_id), Some(&true));
+    }
+
+    #[tokio::test]
+    async fn set_source_active_round_trips() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::LightFrames,
+                path: "/astro/raw".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+
+        set_source_active(&pool, &resp.source_id, false).await.unwrap();
+        let flags = list_active_flags(&pool).await.unwrap();
+        assert_eq!(flags.get(&resp.source_id), Some(&false));
+
+        set_source_active(&pool, &resp.source_id, true).await.unwrap();
+        let flags = list_active_flags(&pool).await.unwrap();
+        assert_eq!(flags.get(&resp.source_id), Some(&true));
+    }
+
+    #[tokio::test]
+    async fn set_source_active_missing_returns_not_found() {
+        let pool = setup_db().await;
+        let result = set_source_active(&pool, "nonexistent-id", false).await;
+        assert!(matches!(result, Err(DbError::NotFound(_))));
+    }
+
+    // ── P6b: root dependents repository function ─────────────────────────────
+
+    #[tokio::test]
+    async fn count_root_dependents_all_zero_for_fresh_source() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Project,
+                path: "/astro/projects".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+
+        let counts = count_root_dependents(&pool, &resp.source_id).await.unwrap();
+        assert!(counts.is_empty(), "fresh source should have zero dependents: {counts:?}");
+        assert_eq!(counts.total(), 0);
+    }
+
+    #[tokio::test]
+    async fn count_root_dependents_counts_inbox_items() {
+        use crate::repositories::inbox::{insert_inbox_item, InsertInboxItem};
+
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            },
+        )
+        .await
+        .unwrap();
+
+        insert_inbox_item(
+            &pool,
+            &InsertInboxItem {
+                id: "item-1",
+                root_id: &resp.source_id,
+                relative_path: "2026-01-01/lights",
+                file_count: 5,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        let counts = count_root_dependents(&pool, &resp.source_id).await.unwrap();
+        assert_eq!(counts.inbox_items, 1);
+        assert_eq!(counts.total(), 1);
+        assert!(!counts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn count_root_dependents_counts_sessions_and_file_records() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::LightFrames,
+                path: "/astro/raw".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+
+        // `file_record.root_id`/`acquisition_session.root_id` FK the legacy
+        // `library_root` table (mirrored under the SAME id — see
+        // `sample_relative_paths_respects_limit_and_order` above).
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
+             VALUES (?, ?, ?, 'local', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&resp.source_id)
+        .bind(&resp.source_id)
+        .bind(&resp.path)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO file_record \
+             (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+             VALUES ('fr-1', ?, 'M31/light_001.fits', 0, '2026-01-01T00:00:00Z', 'observed', \
+             '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .bind(&resp.source_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, root_id, created_at) \
+             VALUES ('acq-1', 'sess-key-1', ?, '2026-01-01T00:00:00Z')",
+        )
+        .bind(&resp.source_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, kind, root_id, created_at) \
+             VALUES ('cal-1', 'cal-key-1', 'dark', ?, '2026-01-01T00:00:00Z')",
+        )
+        .bind(&resp.source_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let counts = count_root_dependents(&pool, &resp.source_id).await.unwrap();
+        assert_eq!(counts.file_records, 1);
+        assert_eq!(counts.acquisition_sessions, 1);
+        assert_eq!(counts.calibration_sessions, 1);
+        assert_eq!(counts.plan_items, 0);
+        assert_eq!(counts.total(), 3);
+    }
+
+    #[tokio::test]
+    async fn count_root_dependents_counts_plan_items() {
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            },
+        )
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO plans (id, number, title, origin, state, plan_type, created_at) \
+             VALUES ('plan-1', 1, 'Test plan', 'inbox', 'draft', 'restructure', '2026-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO plan_items \
+             (id, plan_id, item_index, name, action, created_at, source_id) \
+             VALUES ('pi-1', 'plan-1', 0, 'item', 'move', '2026-01-01T00:00:00Z', ?)",
+        )
+        .bind(&resp.source_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let counts = count_root_dependents(&pool, &resp.source_id).await.unwrap();
+        assert_eq!(counts.plan_items, 1);
+        assert_eq!(counts.total(), 1);
     }
 }
 

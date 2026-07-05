@@ -208,6 +208,10 @@ pub struct ProjectCreateRequest {
     pub request_id: String,
     pub name: String,
     pub tool: ProjectTool,
+    /// Desired project folder. Either an absolute path, or a path relative to
+    /// the registered project folder (`registered_sources.kind = 'project'`)
+    /// which the backend anchors at creation — `projects.path` is always
+    /// stored absolute (Constitution I: no CWD-dependent resolution).
     pub path: String,
     #[serde(default)]
     pub initial_sources: Vec<String>,
