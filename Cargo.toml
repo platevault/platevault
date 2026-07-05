@@ -74,6 +74,18 @@ tauri-plugin-opener = "2"
 # @hypothesi/tauri-mcp-server MCP server. Requires the dev-only tauri.dev.conf.json
 # overlay (withGlobalTauri).
 tauri-plugin-mcp-bridge = "0.11"
+# Spec 051 (Tauri Shell Integration & Platform Polish) — deps added here
+# (Phase 1 Setup); not yet registered in any `build_app()`/`run_app()` (that
+# is per-story work in later phases). Versions re-confirmed live against
+# crates.io on 2026-07-05 (research.md §c) — all still current.
+tauri-plugin-single-instance = "2.4.2"
+tauri-plugin-window-state = "2.4.1"
+tauri-plugin-log = "2.8.0"
+tauri-plugin-notification = "2.3.3"
+tauri-plugin-updater = "2.10.1"
+# Community plugin (ferreira-tb, not the tauri-apps org) — scope to release
+# builds only via `#[cfg(not(debug_assertions))]` when registered (US9).
+tauri-plugin-prevent-default = "5.0.2"
 tauri-specta = { version = "2.0.0-rc.25", features = ["typescript"] }
 schemars = { version = "1", features = ["uuid1"] }
 serde = { version = "1", features = ["derive"] }
