@@ -22,6 +22,10 @@ import { m } from '@/lib/i18n';
 
 // ── Shared limits (kept in sync with the prior manual validation) ─────────────
 
+// Parity with crates/domain/core/src/project/validate.rs MAX_NAME_LEN.
+// No generated tauri-specta binding exposes this constant today; if one is
+// added, prefer asserting against it instead of this duplicated literal.
+// schemas.test.ts pins this value so a drift is caught on either side.
 export const MAX_NAME_LEN = 120;
 export const MAX_NOTES_LEN = 4096;
 
