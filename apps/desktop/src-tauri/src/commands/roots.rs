@@ -4,9 +4,15 @@
 //! delegate to the persistence layer via `app_core::first_run`.
 //! `roots.list`'s `lastScanned` is derived from `inbox_source_groups`
 //! (populated by the real `inbox.scan_folder` command the frontend "Rescan"
-//! button now calls — P6a). `scan.start` remains a stub (unused by the
-//! frontend as of P6a; kept for forward-compat) and `equipment.list` is a
+//! button now calls — P6a) and its `active` flag is derived from
+//! `registered_sources.active` (P6b). `scan.start` remains a stub (unused by
+//! the frontend as of P6a; kept for forward-compat) and `equipment.list` is a
 //! stub until the real persistence layer is wired.
+//!
+//! `sources.set_active` and `roots.delete` (P6b) delegate to
+//! `app_core::first_run::set_source_active`/`delete_source`. `roots.delete`
+//! blocks with `root.has_dependents` when dependent records exist (decision
+//! D8) — it never cascades or touches files on disk (constitution §I).
 
 use contracts_core::first_run::{
     OrganizationState, RegisterSourceRequest, RegisterSourceResponse, ScanDepth,
@@ -44,6 +50,14 @@ pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, 
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
+    // `active` is derived from `registered_sources.active` (P6b — Data
+    // Sources Disable/Enable). Sources absent from the map (should not
+    // happen post-migration, but defensive) default to active.
+    let active_flags =
+        persistence_db::repositories::first_run::list_active_flags(state.repo.pool())
+            .await
+            .map_err(|e| ContractError::internal(e.to_string()))?;
+
     let roots = sources
         .into_iter()
         .map(|s| {
@@ -55,6 +69,7 @@ pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, 
                 contracts_core::first_run::SourceKind::LightFrames => RootCategory::Raw,
             };
             let last_scanned = last_scanned.get(&s.source_id).cloned();
+            let active = active_flags.get(&s.source_id).copied().unwrap_or(true);
             LibraryRoot {
                 id: s.source_id,
                 path: s.path,
@@ -62,6 +77,7 @@ pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, 
                 online,
                 file_count: 0,
                 last_scanned,
+                active,
             }
         })
         .collect();
@@ -190,6 +206,45 @@ pub async fn roots_remap_apply(
         verified,
     )
     .await
+}
+
+/// `sources.set_active` — enable or disable a registered source (P6b).
+///
+/// Delegates to `app_core::first_run::set_source_active`. Disabled roots are
+/// excluded from scan/ingest surfaces but retain their full history; this is
+/// a visibility flag, not a deletion.
+///
+/// # Errors
+/// Returns `ContractError` (`source.not_found` or `internal.database`).
+#[tauri::command]
+#[specta::specta]
+pub async fn sources_set_active(
+    state: State<'_, AppState>,
+    root_id: String,
+    active: bool,
+) -> Result<(), ContractError> {
+    tracing::debug!("sources.set_active root_id={root_id} active={active}");
+    app_core::first_run::set_source_active(state.repo.pool(), &state.bus, &root_id, active).await
+}
+
+/// `roots.delete` — permanently remove a root's registration (P6b, decision D8).
+///
+/// Delegates to `app_core::first_run::delete_source`, which blocks with
+/// `root.has_dependents` when dependent records (inbox items, plan items,
+/// file records, sessions) still reference the root — no cascade-nullify.
+/// Files on disk are never touched (constitution §I).
+///
+/// # Errors
+/// Returns `ContractError` (`source.not_found`, `root.has_dependents`, or
+/// `internal.database`).
+#[tauri::command]
+#[specta::specta]
+pub async fn roots_delete(
+    state: State<'_, AppState>,
+    root_id: String,
+) -> Result<(), ContractError> {
+    tracing::debug!("roots.delete root_id={root_id}");
+    app_core::first_run::delete_source(state.repo.pool(), &state.bus, &root_id).await
 }
 
 /// `scan.start` — start a filesystem scan, optionally for specific roots.

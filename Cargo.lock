@@ -191,6 +191,7 @@ dependencies = [
  "domain_core",
  "fs_inventory",
  "moka",
+ "patterns",
  "persistence_db",
  "project_structure",
  "serde_json",
@@ -201,6 +202,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "workflow_profiles",
 ]
 
 [[package]]
@@ -1491,6 +1493,7 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
+ "tempfile",
  "thirtyfour",
  "tokio",
 ]
@@ -1743,7 +1746,6 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "domain_core",
- "fs_planner",
  "path-clean",
  "serde",
  "serde_json",
@@ -1773,15 +1775,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
-]
-
-[[package]]
-name = "fs_planner"
-version = "0.1.0"
-dependencies = [
- "domain_core",
- "serde",
- "thiserror 2.0.18",
 ]
 
 [[package]]

@@ -175,7 +175,8 @@ pub async fn projects_channels_dismiss_drift(
 ///
 /// This stub is retained for UI compatibility until spec 025 folder-plan
 /// integration is wired into `project_setup::create`. The real flow will
-/// call into `crates/fs/planner/` and return a live `PlanDetail`.
+/// build on `domain_core::lifecycle::plan::FilesystemPlan` +
+/// `persistence_db::repositories::plans` and return a live `PlanDetail`.
 ///
 /// # Errors
 ///

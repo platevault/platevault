@@ -160,7 +160,7 @@ export function Cleanup({ save }: CleanupProps) {
       </SettingsSection>
 
       {/* Per-type cleanup actions — fixture mockup, not yet wired to backend */}
-      {/* TODO(cleanup-plan-spec): replace CLEANUP_TYPES fixture with backend data */}
+      {/* TODO(spec 017 US2): replace CLEANUP_TYPES fixture with the archive plan generator once it lands */}
       <SettingsSection title={m.settings_cleanup_pertype_title()}>
         {warnedTypes.length > 0 && (
           <Banner variant="danger" className="alm-cleanup__warning">

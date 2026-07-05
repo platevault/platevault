@@ -460,6 +460,27 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.tool_attribution_window_hours = v;
             }
         }
+        "observingSites" => {
+            if let Ok(v) = serde_json::from_value(value) {
+                state.observing_sites = v;
+            }
+        }
+        "observingDefaultSiteId" => {
+            state.observing_default_site_id = value.as_str().map(str::to_owned);
+        }
+        "observingActiveSiteId" => {
+            state.observing_active_site_id = value.as_str().map(str::to_owned);
+        }
+        "usableAltitudeDeg" => {
+            if let Some(v) = value.as_f64() {
+                state.usable_altitude_deg = v;
+            }
+        }
+        "plannerMoonAvoidance" => {
+            if let Ok(v) = serde_json::from_value(value) {
+                state.planner_moon_avoidance = v;
+            }
+        }
         "sourceViewLinkKindIntraDrive" => {
             if let Some(v) = value.as_str() {
                 state.source_view_link_kind_intra_drive = v.to_owned();
@@ -528,6 +549,13 @@ fn default_value_for_key(key: &str) -> Value {
         }
         "toolAttributionWindowHours" => {
             serde_json::json!(defaults.tool_attribution_window_hours)
+        }
+        "observingSites" => serde_json::to_value(&defaults.observing_sites).unwrap_or(Value::Null),
+        // Nullable-by-design (no default site until the user/wizard creates one).
+        "observingDefaultSiteId" | "observingActiveSiteId" => Value::Null,
+        "usableAltitudeDeg" => serde_json::json!(defaults.usable_altitude_deg),
+        "plannerMoonAvoidance" => {
+            serde_json::to_value(&defaults.planner_moon_avoidance).unwrap_or(Value::Null)
         }
         "sourceViewLinkKindIntraDrive" => Value::String(defaults.source_view_link_kind_intra_drive),
         "sourceViewLinkKindCrossDrive" => Value::String(defaults.source_view_link_kind_cross_drive),
@@ -929,6 +957,7 @@ mod tests {
     use persistence_db::Database;
     use proptest::prelude::*;
     use rstest::rstest;
+    use serde_json::json;
 
     /// US11 T144 guard: every key in the descriptor table is a valid key, has a
     /// non-null in-code default (except the nullable `currentLibraryId`), and
@@ -936,11 +965,14 @@ mod tests {
     /// drift from `default_value_for_key` / `SettingsState`.
     #[test]
     fn descriptor_keys_match_state_defaults() {
+        // Keys whose in-code default is legitimately null (nullable by design).
+        const NULLABLE_KEYS: &[&str] =
+            &["currentLibraryId", "observingDefaultSiteId", "observingActiveSiteId"];
         for key in descriptors::all_keys() {
             assert!(is_valid_key(key), "descriptor key {key} not accepted by is_valid_key");
             let default = default_value_for_key(key);
-            if key == "currentLibraryId" {
-                assert!(default.is_null(), "currentLibraryId default should be null");
+            if NULLABLE_KEYS.contains(&key) {
+                assert!(default.is_null(), "{key} default should be null");
             } else {
                 assert!(!default.is_null(), "descriptor key {key} has no in-code default");
             }
@@ -1315,6 +1347,23 @@ mod tests {
     #[case("tools.siril.enabled", serde_json::json!(true))]
     #[case("workflow_profile.p.watch_extensions", serde_json::json!([".fits"]))]
     #[case("workflow_profile.p.launch_attribution_window_hours", serde_json::json!(2))]
+    #[case("observingSites", serde_json::json!([]))]
+    #[case("observingSites", serde_json::json!([{
+        "id": "s1", "name": "Home", "latitudeDeg": 52.1, "longitudeDeg": 5.3,
+        "elevationM": 12.0, "timezone": "Europe/Amsterdam",
+        "twilight": "astronomical", "minHorizonAltDeg": 0.0
+    }]))]
+    #[case("observingSites", serde_json::json!([{
+        "id": "s2", "name": "Dark", "latitudeDeg": -30.0, "longitudeDeg": -70.0,
+        "elevationM": null, "timezone": "America/Santiago",
+        "twilight": "nautical", "minHorizonAltDeg": 15.0
+    }]))]
+    #[case("observingDefaultSiteId", serde_json::json!(null))]
+    #[case("observingDefaultSiteId", serde_json::json!("s1"))]
+    #[case("observingActiveSiteId", serde_json::json!("s1"))]
+    #[case("usableAltitudeDeg", serde_json::json!(30))]
+    #[case("usableAltitudeDeg", serde_json::json!(0))]
+    #[case("usableAltitudeDeg", serde_json::json!(90))]
     fn validate_value_accepts(#[case] key: &str, #[case] value: Value) {
         assert!(validate_value(key, &value).is_ok(), "expected {key}={value} to be accepted");
     }
@@ -1339,9 +1388,77 @@ mod tests {
     #[case("protectedCategories", serde_json::json!({}))] // object, not array
     #[case("tools.siril.enabled", serde_json::json!("yes"))] // not a boolean
     #[case("workflow_profile.p.watch_extensions", serde_json::json!("x"))] // not an array
+    #[case("observingSites", serde_json::json!("nope"))] // not an array
+    #[case("observingSites", serde_json::json!([{"id": "s1"}]))] // missing required fields
+    #[case("observingSites", serde_json::json!([{
+        "id": "s1", "name": "A", "latitudeDeg": 91.0, "longitudeDeg": 0.0,
+        "timezone": "UTC", "twilight": "astronomical", "minHorizonAltDeg": 0.0
+    }]))] // latitude out of range
+    #[case("observingSites", serde_json::json!([{
+        "id": "s1", "name": "A", "latitudeDeg": 0.0, "longitudeDeg": 0.0,
+        "timezone": "UTC", "twilight": "civil", "minHorizonAltDeg": 0.0
+    }]))] // invalid twilight
+    #[case("observingSites", serde_json::json!([
+        {"id": "dup", "name": "A", "latitudeDeg": 0.0, "longitudeDeg": 0.0,
+         "timezone": "UTC", "twilight": "astronomical", "minHorizonAltDeg": 0.0},
+        {"id": "dup", "name": "B", "latitudeDeg": 1.0, "longitudeDeg": 1.0,
+         "timezone": "UTC", "twilight": "astronomical", "minHorizonAltDeg": 0.0}
+    ]))] // duplicate ids
+    #[case("observingDefaultSiteId", serde_json::json!(5))] // not string/null
+    #[case("usableAltitudeDeg", serde_json::json!(-1))] // below [0,90]
+    #[case("usableAltitudeDeg", serde_json::json!(91))] // above [0,90]
+    #[case("usableAltitudeDeg", serde_json::json!("x"))] // not a number
     fn validate_value_rejects(#[case] key: &str, #[case] value: Value) {
         let err = validate_value(key, &value).expect_err("expected rejection");
         assert_eq!(err.code, ErrorCode::ValueInvalid, "key {key} value {value}");
+    }
+
+    /// A fully-populated valid `plannerMoonAvoidance` value (all seven bands).
+    fn valid_planner_moon_avoidance() -> Value {
+        default_value_for_key("plannerMoonAvoidance")
+    }
+
+    /// spec 047 T005: `plannerMoonAvoidance` structured-object validation.
+    #[test]
+    fn planner_moon_avoidance_accepts_full_valid_bands() {
+        assert!(validate_value("plannerMoonAvoidance", &valid_planner_moon_avoidance()).is_ok());
+    }
+
+    #[test]
+    fn planner_moon_avoidance_default_is_the_shipped_table() {
+        let v = valid_planner_moon_avoidance();
+        let obj = v.as_object().expect("object");
+        assert_eq!(obj.len(), 7);
+        assert_eq!(obj["L"]["distanceDeg"], serde_json::json!(120.0));
+        assert_eq!(obj["Ha"]["widthDays"], serde_json::json!(7.0));
+        assert_eq!(obj["OIII"]["distanceDeg"], serde_json::json!(110.0));
+    }
+
+    #[rstest]
+    #[case(serde_json::json!("nope"))] // not an object
+    #[case(serde_json::json!({"L": {"distanceDeg": 120.0, "widthDays": 14.0}}))] // missing bands
+    #[case(serde_json::json!({"X": {"distanceDeg": 1.0, "widthDays": 1.0}}))] // unknown band
+    fn planner_moon_avoidance_rejects_shape(#[case] value: Value) {
+        let err = validate_value("plannerMoonAvoidance", &value).expect_err("expected rejection");
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
+    }
+
+    #[test]
+    fn planner_moon_avoidance_rejects_out_of_range() {
+        let mut v = valid_planner_moon_avoidance();
+        v["L"]["distanceDeg"] = serde_json::json!(181.0); // > 180
+        assert!(validate_value("plannerMoonAvoidance", &v).is_err());
+
+        let mut v2 = valid_planner_moon_avoidance();
+        v2["Ha"]["widthDays"] = serde_json::json!(0.1); // < 0.5
+        assert!(validate_value("plannerMoonAvoidance", &v2).is_err());
+    }
+
+    #[test]
+    fn planner_moon_avoidance_rejects_extra_property() {
+        let mut v = valid_planner_moon_avoidance();
+        v["L"]["bogus"] = serde_json::json!(1);
+        assert!(validate_value("plannerMoonAvoidance", &v).is_err());
     }
 
     /// Unknown / unconstrained keys impose no additional value validation.
@@ -1350,6 +1467,81 @@ mod tests {
     #[case("anotherUnknown", serde_json::json!(42))]
     fn validate_value_passes_unconstrained_keys(#[case] key: &str, #[case] value: Value) {
         assert!(validate_value(key, &value).is_ok());
+    }
+
+    // ── spec 044 T008: observing.* settings round-trip + invariants ──────
+
+    /// A fully-populated valid site value.
+    fn sample_site(id: &str, lat: f64) -> Value {
+        serde_json::json!({
+            "id": id, "name": format!("Site {id}"), "latitudeDeg": lat,
+            "longitudeDeg": 5.3, "elevationM": 12.0, "timezone": "Europe/Amsterdam",
+            "twilight": "astronomical", "minHorizonAltDeg": 0.0
+        })
+    }
+
+    #[tokio::test]
+    async fn observing_sites_round_trip_through_db() {
+        let (db, bus) = setup().await;
+
+        // Defaults: empty sites, null pointers, threshold 30.
+        assert_eq!(resolve_setting(db.pool(), "observingSites", None).await.unwrap(), json!([]));
+        assert!(resolve_setting(db.pool(), "observingActiveSiteId", None).await.unwrap().is_null());
+        assert_eq!(
+            resolve_setting(db.pool(), "usableAltitudeDeg", None).await.unwrap(),
+            json!(30.0)
+        );
+
+        // Persist two sites + active pointer + a custom threshold.
+        let sites = json!([sample_site("s1", 52.1), sample_site("s2", -30.0)]);
+        for (key, value) in [
+            ("observingSites", sites.clone()),
+            ("observingDefaultSiteId", json!("s1")),
+            ("observingActiveSiteId", json!("s2")),
+            ("usableAltitudeDeg", json!(40.0)),
+        ] {
+            update_setting(
+                db.pool(),
+                &bus,
+                &SettingsUpdateRequest { key: key.to_owned(), value: value.into() },
+            )
+            .await
+            .expect("update ok");
+        }
+
+        // Read back — the whole ObserverSite[] survives the round-trip.
+        assert_eq!(resolve_setting(db.pool(), "observingSites", None).await.unwrap(), sites);
+        assert_eq!(
+            resolve_setting(db.pool(), "observingActiveSiteId", None).await.unwrap(),
+            json!("s2")
+        );
+        assert_eq!(
+            resolve_setting(db.pool(), "usableAltitudeDeg", None).await.unwrap(),
+            json!(40.0)
+        );
+
+        // Full-state hydration maps the keys onto SettingsState fields.
+        let resp = get_settings(db.pool(), &bus).await.unwrap();
+        assert_eq!(resp.settings.observing_sites.len(), 2);
+        assert_eq!(resp.settings.observing_active_site_id.as_deref(), Some("s2"));
+        assert!((resp.settings.usable_altitude_deg - 40.0).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn observing_settings_reject_invalid_values() {
+        let (db, bus) = setup().await;
+        // Out-of-range threshold is rejected as value.invalid.
+        let err = update_setting(
+            db.pool(),
+            &bus,
+            &SettingsUpdateRequest {
+                key: "usableAltitudeDeg".to_owned(),
+                value: json!(120).into(),
+            },
+        )
+        .await
+        .expect_err("out-of-range threshold rejected");
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
     }
 
     // ── T056: aging_threshold_days persists + consumer reads it (FR-023) ──

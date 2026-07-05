@@ -48,3 +48,4 @@ transitionable = "transitionable"
 # comment prose pluralising SQL keywords ("UNIONs", "LIKEs")
 UNIO = "UNIO"
 LIK = "LIK"
+Desig = "Desig"

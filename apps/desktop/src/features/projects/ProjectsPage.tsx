@@ -13,7 +13,7 @@
  * page-level "+ New project" CTA.
  *
  * Top-bar actions: a page-level "+ New project" CTA. Per-project actions
- * (Reveal in Explorer · Open in {tool} · lifecycle transitions incl. Mark as
+ * (Reveal · Open in {tool} · lifecycle transitions incl. Mark as
  * Completed) live in the detail pane's action bar, which only mounts when a
  * project is selected — so they are, by construction, shown only on selection
  * and carry the canonical `transition-btn-*` / `lifecycle-actions` testids.

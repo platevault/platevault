@@ -128,9 +128,17 @@ describe('AuditLog', () => {
   it('advances pagination.offset on Next', async () => {
     mockList.mockResolvedValue({ status: 'ok', data: { entries: ENTRIES, total: 20 } });
     render(<AuditLog />);
-    await waitFor(() => expect(mockList).toHaveBeenCalled());
+    // Wait for the initial load to RESOLVE, not merely for auditList to have been
+    // called: the Next button is disabled until `total` is set (totalPages > 1),
+    // so clicking while the load promise is still pending is a no-op that leaves
+    // offset at 0 (the source of the parallel-run flake). Rows only render after
+    // loading flips false, so finding an entry proves total=20 landed and Next
+    // is enabled.
+    await screen.findByText('session.confirmed');
+    const nextBtn = screen.getByText('Next');
+    expect(nextBtn).toBeEnabled();
 
-    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(nextBtn);
 
     await waitFor(() => expect(mockList).toHaveBeenLastCalledWith(null, { limit: 8, offset: 8 }));
   });

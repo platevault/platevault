@@ -1374,6 +1374,39 @@
   color: var(--alm-danger);
 }
 
+/* === SETUP STEP SITE (spec 044 T016) === */
+
+/* Root container */
+.alm-step-site {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+/* Intro paragraph -- shares the tools-step intro/note type scale below. */
+.alm-step-site__intro {
+  margin: 0;
+  font-size: var(--alm-text-sm);
+  line-height: var(--alm-leading-normal);
+  color: var(--alm-text-secondary);
+}
+
+/* Field grid reuses the generic settings-form grid rule
+   (`.alm-equipment__form-grid`, settings-detail.css) via the same class name
+   pattern; declared standalone here only because this step isn't nested
+   inside a `SettingsFormShell`. */
+.alm-step-site__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--alm-sp-3);
+}
+
+.alm-step-site__note {
+  margin: 0;
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-faint);
+}
+
 /* === SETUP STEP TOOLS === */
 
 /* Root container */

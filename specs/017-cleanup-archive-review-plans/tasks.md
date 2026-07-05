@@ -96,11 +96,17 @@ protection, linked entity, and provenance.
 - [ ] T015 [MOCKUP-DONE] [US1] `apps/desktop/src/features/plans/PlansListPage.tsx`
   implements failed-first ordering, state/origin filters, three-branch empty
   state. Migrate from mock store to Tauri IPC binding.
-  <!-- DEFERRED: frontend UI wiring task; types updated in types.ts + fixtures updated; UI page wiring needs separate pass -->
+  <!-- OBSOLETE-BY-DESIGN (v4 reconciliation): no standalone Plans routes exist.
+       Contextual review shipped instead: cleanup plans review via the shared
+       PlanReviewOverlay (WP-E, features/plans/PlanReviewOverlay.tsx); inbox
+       plans via PlanApprovalOverlay. Left unticked pending a spec-owner
+       decision to strike or re-scope. -->
 - [ ] T016 [MOCKUP-DONE] [US1]
   `apps/desktop/src/features/plans/PlanDetailPage.tsx` implements two-pane
   review. Migrate from mock store to Tauri IPC binding.
-  <!-- DEFERRED: frontend UI wiring task; same reason as T015 -->
+  <!-- OBSOLETE-BY-DESIGN (v4): same as T015. Item-level review (source path,
+       action, protection, FR-003) is rendered by PlanReviewOverlay off the
+       real plans.get command (WP-E). -->
 
 **Checkpoint**: Review surface fully usable read-only.
 
@@ -162,11 +168,15 @@ state. Trigger apply; observe single transition to `applying`. Reopen from
   <!-- crates/app/core/src/plans.rs approve_plan; preconditions: ready_for_review + items_total > 0 -->
 - [x] T026 [US3] Audit event on approve, including the actor and prior state.
   <!-- PlanApproved emitted with plan_id, prior_state, actor, approved_at -->
-- [ ] T027 [MOCKUP-DONE] [US3] Action bar contextualization in
+- [x] T027 [MOCKUP-DONE] [US3] Action bar contextualization in
   `PlanDetailPage.tsx` already handles draft → Approve & Apply, approved →
   Apply now, applying → Pause/Cancel, etc. Migrate to real `plan.approve`
   command.
-  <!-- DEFERRED: frontend UI wiring -->
+  <!-- WP-E: satisfied contextually (v4: no PlanDetailPage). PlanReviewOverlay
+       drives real plans.approve → plans.apply (approval token threaded), with
+       the spec-016 protection gate blocking approve until acknowledged and
+       live per-item apply progress via usePlanApplyProgress. Covered by
+       PlanReviewOverlay.test.tsx. -->
 
 **Checkpoint**: Review-to-apply handoff agreed and gated.
 
@@ -194,9 +204,11 @@ refusal.
 - [x] T030 [US4] Implement `discard_plan` use case with state guard against
   `applying`.
   <!-- crates/app/core/src/plans.rs discard_plan; guards against applying + paused; idempotent for already-discarded -->
-- [ ] T031 [MOCKUP-DONE] [US4] `discardPlan` in `apps/desktop/src/data/store.ts`
+- [x] T031 [MOCKUP-DONE] [US4] `discardPlan` in `apps/desktop/src/data/store.ts`
   already wires the action; migrate to Tauri IPC.
-  <!-- DEFERRED: frontend UI wiring -->
+  <!-- WP-E: real plans.discard wired via the PlanReviewOverlay "Discard plan"
+       CTA (features/plans/PlanReviewOverlay.tsx); covered by
+       PlanReviewOverlay.test.tsx (discard calls plans.discard and closes). -->
 
 **Checkpoint**: Stale plans cleared without losing history.
 
@@ -262,10 +274,12 @@ the user can send the archive subtree to OS trash or permanently delete it.
   <!-- permanently_delete_archive; "DELETE" guard + blockPermanentDelete guard + ArchivePermanentlyDeleted audit -->
 - [x] T047 [US6] Wire Tauri command bindings for the two new contracts.
   <!-- archive_send_to_trash + archive_permanently_delete in commands/plans.rs; registered in lib.rs -->
-- [ ] T048 [US6] Add "Send to Trash" / "Permanently Delete" CTAs in
+- [x] T048 [US6] Add "Send to Trash" / "Permanently Delete" CTAs in
   `PlanDetailPage.tsx` for plans with `state: applied` and
   `destructiveDestination: archive`.
-  <!-- DEFERRED: frontend UI wiring -->
+  <!-- WP-B (#401): shipped contextually on the Archive page (v4: no
+       PlanDetailPage) — features/archive/ArchivePage.tsx has both CTAs, gated
+       on archivedViaPlanId, with the type-DELETE confirm modal. -->
 
 **Checkpoint**: Archive management fully usable from the UI.
 
@@ -284,9 +298,16 @@ the user can send the archive subtree to OS trash or permanently delete it.
   written only by the apply executor.
 - [ ] T053 Quickstart walkthrough in `specs/017-cleanup-archive-review-plans/`
   if the team chooses to add one.
-- [ ] T054 [P] Add `destructiveDestination` picker to plan-review UI: radio
+- [x] T054 [P] Add `destructiveDestination` picker to plan-review UI: radio
   group "Archive (default) / OS Trash" shown only when plan contains
   destructive items.
+  <!-- WP-E: per-plan radio (Archive default / System trash) in the cleanup
+       section, shown only when destructive candidates exist. NOTE deviation:
+       the shipped cleanup.plan.generate contract fixes the destination at
+       GENERATE time (request field), so the picker sits at the generate step
+       rather than inside the review overlay; the chosen destination is
+       displayed read-only in the overlay subtitle. Covered by
+       OutputsCleanupSections.test.tsx (archive + trash both flow through). -->
 - [x] T055 [P] Verify `plan.state_machine` in `crates/fs/planner/` includes
   all 10 states including `paused` and `discarded` with correct allowed
   transitions.

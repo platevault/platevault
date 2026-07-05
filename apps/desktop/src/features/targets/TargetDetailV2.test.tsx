@@ -33,8 +33,20 @@
  * 28. (US4) Save error shows banner message.
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { configure, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Windows-CI headroom (same flake class as PR #412's settings hydration races):
+// every test in this file waits on content that only renders after mocked async
+// hydration (detail/sessions/projects/notes effects). The waits are already
+// deterministic — they target non-default, post-hydration content — but the
+// RTL default asyncUtilTimeout (1s) and vitest default testTimeout (5s) are
+// too tight for the very slow windows-latest runners (test 21 flaked there
+// while identical siblings passed). Raise both file-wide instead of per-test
+// so no sibling is left behind on tight defaults. Both settings are scoped to
+// this file (vitest isolates test files; vi.setConfig is per-runtime).
+configure({ asyncUtilTimeout: 10_000 });
+vi.setConfig({ testTimeout: 15_000 });
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
 
@@ -80,6 +92,13 @@ vi.mock('@/bindings/index', () => ({
 const mockNavigate = vi.fn();
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
+  // Minimal stub: the no-site banner's "Add a site" link (spec 044 US3) just
+  // needs to render as a link, not exercise real routing under test.
+  Link: ({ children, to, ...rest }: { children?: import('react').ReactNode; to: string }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -415,6 +434,8 @@ describe('TargetDetailV2', () => {
       },
     ]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
+    // Slow-runner headroom now comes from the file-wide configure/setConfig
+    // above (this test flaked on windows-latest while 22 below passed).
     await waitFor(() => expect(screen.getByText(/42 frames/i)).toBeInTheDocument());
   });
 
@@ -587,5 +608,50 @@ describe('TargetDetailV2', () => {
     await waitFor(() =>
       expect(screen.getByText('Failed to save notes.')).toBeInTheDocument(),
     );
+  });
+});
+
+// ── spec 044 Track B: US6/T015 no-site prompt, T018 tests ──────────────────────
+
+describe('TargetDetailV2 — no-site prompt (US6/T015/T018)', () => {
+  beforeEach(async () => {
+    const { __setObservingStateForTest } = await import('./observing-sites/site-store');
+    __setObservingStateForTest({});
+  });
+
+  it('31. shows a no-site prompt in the Tonight column when there is no active site', async () => {
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => {
+      const els = screen.getAllByText(/Add an observing site.*see tonight's real altitude/i);
+      expect(els.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('32. hides the no-site prompt and shows real tonight stats once a site is active', async () => {
+    const { __setObservingStateForTest } = await import('./observing-sites/site-store');
+    __setObservingStateForTest({
+      sites: [
+        {
+          id: 'site-1',
+          name: 'Test Site',
+          latitudeDeg: 52.37,
+          longitudeDeg: 4.9,
+          elevationM: 0,
+          timezone: 'Europe/Amsterdam',
+          twilight: 'astronomical',
+          minHorizonAltDeg: 0,
+        },
+      ],
+      activeSiteId: 'site-1',
+      defaultSiteId: 'site-1',
+    });
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/Add an observing site.*see tonight's real altitude/i),
+      ).not.toBeInTheDocument();
+      // Real max-alt stat renders once a site is active.
+      expect(screen.getByText(/^Max alt/)).toBeInTheDocument();
+    });
   });
 });

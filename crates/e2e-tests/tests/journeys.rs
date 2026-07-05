@@ -1,104 +1,690 @@
-//! Spec 037 Layer-2 real-UI E2E journey stubs.
+//! Spec 037 Layer-2 real-UI E2E journeys.
 //!
-//! All journeys are `#[ignore]`d. They compile and appear in
-//! `cargo nextest list` but execution is deferred until the backend commands
-//! they assert against are de-stubbed (research D9). The harness
-//! (`window.__ALM_E2E__` bridge, tauri-webdriver capabilities) is wired.
+//! Every journey launches the real `desktop_shell` binary (built with
+//! `--features e2e`) behind `tauri-plugin-webdriver`/`tauri-webdriver`, and
+//! asserts against the REAL backend (real SQLite, real filesystem, real
+//! command handlers) — never a fixture/mock. Setup and assertion steps use
+//! the `window.__ALM_E2E__.invoke(...)` bridge (real IPC, no channel-taking
+//! commands); mutating steps that require a `tauri::ipc::Channel` argument
+//! (`plans.apply` a.k.a. `plans_apply_real`) are deliberately routed through
+//! the channel-free command variants that exist for exactly this purpose
+//! (`inbox.plan.apply`, `plans.approve`) rather than reaching into product
+//! frontend code to fabricate a Channel from a WebDriver script — see each
+//! journey's doc comment for the specific reasoning.
 //!
-//! Run (once un-ignored):
-//! ```text
-//! cargo nextest run -p e2e_tests --profile e2e --run-ignored all
-//! ```
+//! Per research D9/D22: `sessions.transition` was deliberately deleted by
+//! spec 041 FR-051 (T076) and is NOT exercised here. `audit.list`/
+//! `audit.export` were fixture stubs when these journeys were first authored;
+//! PR #388 has since wired them to the real `audit_log_entry` table (with
+//! #401 adding entity-filtered reads). The journeys keep their durable-record
+//! proofs on `plans.apply.status` (the plan executor's own `plan_apply_events`
+//! trail) and `lifecycle_ledger_list` — those read paths sit closest to the
+//! mutations being proved, which stays the more robust assertion regardless.
+//!
+//! Run (CI): `cargo nextest run -p e2e_tests --profile e2e
+//! --run-ignored all` (serial,
+//! `.config/nextest.toml`). Locally: build `desktop_shell --features e2e`,
+//! `cargo install tauri-webdriver --locked`, serve the frontend on :5173 with
+//! `VITE_E2E=1`, then run the same command — see `README.md`.
 
 mod common;
-use common::E2eApp;
 
-/// First-run wizard → SIMBAD target resolve → project creation.
+use std::time::Duration;
+
+use common::{write_minimal_fits, E2eApp};
+use serde_json::json;
+
+const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// First-run wizard state → SIMBAD target resolve (offline, bundled-seed
+/// cache hit) → project creation linked to the resolved target.
 ///
-/// Backend REAL: search.global, targeting.resolve, projects.create.
+/// Backend REAL: `target.resolve`, `projects.create`, `projects.list`.
 ///
-/// Steps:
-/// 1. Launch app in first-run state (fresh DB).
-/// 2. Complete wizard (library root, organisation state choice).
-/// 3. Navigate to Targets; invoke search.global with a known target name.
-/// 4. Invoke targeting.resolve; assert RA/Dec round-trips from real backend (FR-008).
-/// 5. Create a project linked to the resolved target; assert project appears in list.
+/// `main.rs` loads the bundled Messier/Caldwell/NGC seed into the target
+/// resolution cache on every fresh boot, before the UI starts (see
+/// `apps/desktop/src-tauri/src/main.rs`), so resolving "M 31" is a real,
+/// deterministic, network-free cache hit — no `wiremock`/`FakeResolver`
+/// needed at this layer.
 #[tokio::test]
-#[ignore = "spec-037: thirtyfour journey scaffold; wiring deferred"]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn first_run_resolve_create_project() -> anyhow::Result<()> {
-    let _app = E2eApp::launch().await?;
-    // TODO step 1: assert wizard screen is visible.
-    // TODO step 2: fill wizard form fields and submit.
-    // TODO step 3: navigate to Targets; search for "M42".
-    // TODO step 4: invoke search.global, assert result count > 0.
-    // TODO step 5: invoke targeting.resolve, assert ra/dec fields present.
-    // TODO step 6: create project; invoke projects.list, assert record present.
-    todo!("spec-037: first_run_resolve_create_project journey not yet wired")
+    let app = E2eApp::launch().await?;
+
+    // Real UI: a fresh DB has no registered sources, so the router redirects
+    // to the first-run wizard. This is the journey's real-UI proof (FR-007
+    // adjacent) — the rest of the journey proves the UI -> backend round trip
+    // via the invoke bridge, since the native folder picker the wizard's
+    // "Add folder" buttons open cannot be driven by WebDriver (documented
+    // constraint, see `e2e-agentic-test/003-first-run-source-setup/`).
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    // The index route's first-run gate redirects to /setup from an *async*
+    // `beforeLoad` (dynamic import + a `firstrun_state` IPC round-trip), so the
+    // redirect lands shortly after the bridge is ready — poll for it rather than
+    // racing the immediate assertion (which non-deterministically caught the URL
+    // still at "/").
+    app.wait_url_contains("/setup", Duration::from_secs(15))
+        .await
+        .map_err(|e| anyhow::anyhow!("expected a fresh DB to redirect to /setup: {e}"))?;
+
+    // Real backend round-trip (FR-008): resolve a bundled-seed target.
+    let resolve: serde_json::Value = app
+        .invoke(
+            "target_resolve",
+            json!({
+                "req": {
+                    "contractVersion": "1.0",
+                    "requestId": "e2e-first-run-resolve",
+                    "query": "M 31",
+                    "override": null,
+                }
+            }),
+        )
+        .await?;
+    anyhow::ensure!(
+        resolve["status"] == "resolved",
+        "expected M 31 to resolve from the bundled offline seed cache: {resolve}"
+    );
+    let target = &resolve["target"];
+    let target_id = target["targetId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("resolved target has no targetId: {resolve}"))?
+        .to_owned();
+    let ra_deg = target["raDeg"]
+        .as_f64()
+        .ok_or_else(|| anyhow::anyhow!("resolved target has no raDeg: {resolve}"))?;
+    anyhow::ensure!(
+        (5.0..15.0).contains(&ra_deg),
+        "M 31 RA out of the expected bundled-seed range (~10.68): {ra_deg}"
+    );
+
+    // Real backend round-trip: create a project linked to the resolved
+    // target, then confirm it via a fresh `projects.list` read.
+    let project_dir = tempfile::tempdir()?;
+    let create: serde_json::Value = app
+        .invoke(
+            "projects_create",
+            json!({
+                "req": {
+                    "requestId": "e2e-first-run-create",
+                    "name": "E2E M31 Project",
+                    "tool": "PixInsight",
+                    "path": project_dir.path().to_string_lossy(),
+                    "initialSources": [],
+                    "notes": null,
+                    "canonicalTargetId": target_id,
+                }
+            }),
+        )
+        .await?;
+    let project_id = create["projectId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("projects.create returned no projectId: {create}"))?
+        .to_owned();
+
+    let projects: serde_json::Value =
+        app.invoke("projects_list", json!({ "filters": null })).await?;
+    let found = projects
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("projects.list did not return an array: {projects}"))?
+        .iter()
+        .any(|p| p["id"] == project_id);
+    anyhow::ensure!(found, "expected project {project_id} in projects.list: {projects}");
+
+    app.shutdown().await
 }
 
-/// Filesystem plan review → apply → audit record assertion.
+/// Filesystem plan review → apply → durable-record assertion.
 ///
-/// Backend REAL: fs planner/executor + audit.
+/// Backend REAL: `roots.register`, `sources.set_organization_state`,
+/// `inbox.scan.folder`, `inbox.classify`, `inbox.confirm`,
+/// `inbox.plan.apply`, `plans.apply.status`.
 ///
-/// Steps:
-/// 1. Register a disposable test library root with known temp files.
-/// 2. Trigger plan generation; assert plan appears in Plan panel.
-/// 3. Apply the plan via UI; assert the real filesystem side effect (FR-009).
-/// 4. Invoke audit.list; assert a matching audit record exists (FR-016).
-/// 5. Clean up temp files.
+/// `inbox.plan.apply` (not `plans.apply_real`) is the mutating step: it
+/// auto-approves the confirmed plan and calls the SAME `apply_plan` core
+/// function `plans.apply_real` uses, just without a progress `Channel` — the
+/// exact real, channel-free equivalent this journey needs (see module docs).
 #[tokio::test]
-#[ignore = "spec-037: thirtyfour journey scaffold; wiring deferred"]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
-    let _app = E2eApp::launch().await?;
-    // TODO step 1: create temp dir + files; register as library root.
-    // TODO step 2: navigate to Inbox/Plan panel; assert plan item visible.
-    // TODO step 3: click Apply; assert file moved/created on disk.
-    // TODO step 4: invoke audit.list; assert record with matching path.
-    // TODO step 5: remove temp dir.
-    todo!("spec-037: plan_review_apply_with_audit journey not yet wired")
+    let app = E2eApp::launch().await?;
+    // The `__ALM_E2E__` invoke bridge is installed by an async dynamic import in
+    // `apps/desktop/src/main.tsx`, so it is not present the instant the session
+    // is created — wait for it before the first `invoke` (FR-008).
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+
+    // 1. Register a disposable light-frames root with one real FITS file.
+    let root_dir = tempfile::tempdir()?;
+    let file_name = "light_001.fits";
+    let original_path = write_minimal_fits(
+        root_dir.path(),
+        file_name,
+        "Light Frame",
+        Some("M 42"),
+        Some("Ha"),
+        Some("2026-01-10T22:00:00"),
+    )?;
+    anyhow::ensure!(original_path.exists(), "fixture FITS file was not written");
+
+    let register: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({
+                "path": root_dir.path().to_string_lossy(),
+                "category": "light_frames",
+                "scanSettings": null,
+            }),
+        )
+        .await?;
+    let root_id = register["sourceId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("roots.register returned no sourceId: {register}"))?
+        .to_owned();
+
+    // `roots.register` defaults non-inbox sources to "organized" (already in
+    // place, nothing to reorganize). This journey needs a real move, so flip
+    // the source to "unorganized" — a real, documented state transition
+    // (spec 041 R-7/T030), not a workaround around the backend.
+    let _: serde_json::Value = app
+        .invoke(
+            "sources_set_organization_state",
+            json!({ "sourceId": root_id, "organizationState": "unorganized" }),
+        )
+        .await?;
+
+    // 2. Scan + classify + confirm — this is the real reviewable plan (FR-009
+    // requires the plan to exist and be reviewable before it applies).
+    let scan: serde_json::Value = app
+        .invoke(
+            "inbox_scan_folder",
+            json!({
+                "req": {
+                    "rootId": root_id,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                    "followSymlinks": false,
+                }
+            }),
+        )
+        .await?;
+    let items = scan["items"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder returned no items array: {scan}"))?;
+    anyhow::ensure!(
+        !items.is_empty(),
+        "expected inbox.scan.folder to discover the fixture file: {scan}"
+    );
+    let inbox_item_id = items[0]["inboxItemId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("scanned item has no inboxItemId: {scan}"))?
+        .to_owned();
+
+    let classify: serde_json::Value = app
+        .invoke(
+            "inbox_classify",
+            json!({
+                "req": {
+                    "inboxItemId": inbox_item_id,
+                    "forceRescan": false,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                }
+            }),
+        )
+        .await?;
+    let content_signature = classify["contentSignature"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("inbox.classify returned no contentSignature: {classify}"))?
+        .to_owned();
+
+    let confirm: serde_json::Value = app
+        .invoke(
+            "inbox_confirm",
+            json!({
+                "req": {
+                    "inboxItemId": inbox_item_id,
+                    "contentSignature": content_signature,
+                    "destructiveDestination": null,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                    "rootId": null,
+                }
+            }),
+        )
+        .await?;
+    let plan_id = confirm["planId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("inbox.confirm returned no planId: {confirm}"))?
+        .to_owned();
+    anyhow::ensure!(!plan_id.is_empty(), "expected a real (non-empty) plan id: {confirm}");
+
+    // 3. Apply — the real filesystem mutation (FR-009).
+    let apply: serde_json::Value =
+        app.invoke("inbox_plan_apply", json!({ "inboxItemId": inbox_item_id })).await?;
+    anyhow::ensure!(
+        apply["planId"] == json!(plan_id),
+        "inbox.plan.apply applied a different plan than confirm created: {apply}"
+    );
+
+    // 4. Poll the real, durable apply status until the executor finishes —
+    // `plans.apply.status` reads `plan_apply_events`, the plan executor's own
+    // durable audit trail for filesystem mutation (FR-016) and the read path
+    // closest to the mutation being proved.
+    let status: serde_json::Value = app
+        .invoke_until(
+            "plans_apply_status",
+            json!({ "planId": plan_id }),
+            INVOKE_TIMEOUT,
+            |v: &serde_json::Value| {
+                matches!(
+                    v["planState"].as_str(),
+                    Some("applied" | "partially_applied" | "failed" | "cancelled")
+                )
+            },
+        )
+        .await?;
+    anyhow::ensure!(
+        status["planState"] == "applied",
+        "expected the plan to apply cleanly, got: {status}"
+    );
+    anyhow::ensure!(
+        status["itemsApplied"].as_i64().unwrap_or(0) >= 1,
+        "expected at least 1 durably-recorded applied item: {status}"
+    );
+
+    // 5. Real filesystem side effect: the original path is gone (moved).
+    anyhow::ensure!(
+        !original_path.exists(),
+        "expected the source file to have moved away from {original_path:?}"
+    );
+
+    app.shutdown().await
 }
 
-/// Inbox confirm → sessions grouped → calibration suggest → search by alias.
+/// Inbox confirm → ingest session grouping (async, event-driven) →
+/// calibration suggest → global search by alias.
 ///
-/// Backend REAL: sessions.list, calibration.match.suggest, search.global.
+/// Backend REAL: `inbox.plan.apply` (triggers the real `plan_listener` ->
+/// `ingest_light_frames` session-grouping pipeline, spec 035 US4),
+/// `sessions.list`, `calibration.match.suggest`, `search.global`.
 ///
-/// Steps:
-/// 1. Seed inbox with a known FITS file path via env/fixture.
-/// 2. Confirm the inbox item; assert session list shows root_id set.
-/// 3. Invoke calibration.match.suggest; assert real candidate list returned.
-/// 4. Invoke search.global with a target alias; assert alias resolves (FR-008).
+/// The OBJECT header is "M 31" — a bundled-seed entry — so the ingest
+/// pipeline's target resolution is a real, network-free cache hit
+/// (`canonical_target_id` gets linked inline, not left pending).
 #[tokio::test]
-#[ignore = "spec-037: thirtyfour journey scaffold; wiring deferred"]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn ingestion_sessions_search() -> anyhow::Result<()> {
-    let _app = E2eApp::launch().await?;
-    // TODO step 1: pre-seed inbox item (fixture path set via env).
-    // TODO step 2: navigate to Inbox; confirm item; invoke sessions.list.
-    // TODO step 3: assert session.root_id is set (not null).
-    // TODO step 4: invoke calibration.match.suggest; assert candidates.len() >= 0.
-    // TODO step 5: invoke search.global with alias; assert result.slug matches.
-    todo!("spec-037: ingestion_sessions_search journey not yet wired")
+    let app = E2eApp::launch().await?;
+    // Bridge is installed by an async dynamic import (`main.tsx`) — wait for it.
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+
+    let root_dir = tempfile::tempdir()?;
+    let original_path = write_minimal_fits(
+        root_dir.path(),
+        "light_m31_001.fits",
+        "Light Frame",
+        Some("M 31"),
+        Some("Ha"),
+        Some("2026-01-11T21:30:00"),
+    )?;
+    anyhow::ensure!(original_path.exists(), "fixture FITS file was not written");
+
+    let register: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({
+                "path": root_dir.path().to_string_lossy(),
+                "category": "light_frames",
+                "scanSettings": null,
+            }),
+        )
+        .await?;
+    let root_id = register["sourceId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("roots.register returned no sourceId: {register}"))?
+        .to_owned();
+    let _: serde_json::Value = app
+        .invoke(
+            "sources_set_organization_state",
+            json!({ "sourceId": root_id, "organizationState": "unorganized" }),
+        )
+        .await?;
+
+    let scan: serde_json::Value = app
+        .invoke(
+            "inbox_scan_folder",
+            json!({
+                "req": {
+                    "rootId": root_id,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                    "followSymlinks": false,
+                }
+            }),
+        )
+        .await?;
+    let inbox_item_id = scan["items"][0]["inboxItemId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
+        .to_owned();
+
+    let classify: serde_json::Value = app
+        .invoke(
+            "inbox_classify",
+            json!({
+                "req": {
+                    "inboxItemId": inbox_item_id,
+                    "forceRescan": false,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                }
+            }),
+        )
+        .await?;
+    let content_signature = classify["contentSignature"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("inbox.classify returned no contentSignature: {classify}"))?
+        .to_owned();
+
+    let _: serde_json::Value = app
+        .invoke(
+            "inbox_confirm",
+            json!({
+                "req": {
+                    "inboxItemId": inbox_item_id,
+                    "contentSignature": content_signature,
+                    "destructiveDestination": null,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                    "rootId": null,
+                }
+            }),
+        )
+        .await?;
+
+    let _: serde_json::Value =
+        app.invoke("inbox_plan_apply", json!({ "inboxItemId": inbox_item_id })).await?;
+
+    // Session grouping is event-driven (the plan-listener reacts to the
+    // plan-applied event asynchronously) — poll `sessions.list` for the real,
+    // grouped-and-resolved session instead of a blind sleep.
+    let sessions: serde_json::Value = app
+        .invoke_until("sessions_list", json!({}), INVOKE_TIMEOUT, |v: &serde_json::Value| {
+            v.as_array().is_some_and(|arr| {
+                arr.iter().any(|s| s["targetIds"].as_array().is_some_and(|t| !t.is_empty()))
+            })
+        })
+        .await?;
+    let session = sessions
+        .as_array()
+        .and_then(|arr| {
+            arr.iter().find(|s| s["targetIds"].as_array().is_some_and(|t| !t.is_empty()))
+        })
+        .ok_or_else(|| anyhow::anyhow!("no resolved session found: {sessions}"))?;
+    let session_id = session["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("session has no id: {session}"))?
+        .to_owned();
+
+    // Real backend round-trip: calibration suggest against the real session
+    // (candidates may legitimately be empty — no calibration masters were
+    // seeded — the proof here is a real, non-error response, not a fixture).
+    let suggest: serde_json::Value = app
+        .invoke(
+            "calibration_match_suggest",
+            json!({
+                "req": {
+                    "contractVersion": "1.0",
+                    "requestId": "e2e-ingest-suggest",
+                    "sessionId": session_id,
+                    "calibrationTypes": null,
+                }
+            }),
+        )
+        .await?;
+    anyhow::ensure!(
+        suggest.get("status").is_some(),
+        "expected a real calibration.match.suggest response shape: {suggest}"
+    );
+
+    // Real backend round-trip (FR-008): the bundled M31 seed carries the
+    // "Andromeda Galaxy" common-name alias; search must resolve it.
+    let search: serde_json::Value =
+        app.invoke("search_global", json!({ "query": "Andromeda" })).await?;
+    let alias_hit = search
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("search.global did not return an array: {search}"))?
+        .iter()
+        .any(|r| r["kind"] == "target");
+    anyhow::ensure!(
+        alias_hit,
+        "expected the Andromeda alias to resolve to a target result: {search}"
+    );
+
+    app.shutdown().await
 }
 
-/// Lifecycle integrity: blockedReason from real DTO, auto-block audit row,
-/// unarchive event.
+/// Lifecycle integrity: a real refusal/blocked `TransitionResponse`, and a
+/// real ledger read. The original scaffold's `events.recent` mention was
+/// aspirational (no such command exists); `lifecycle.ledger.list` is the
+/// real durable read path for lifecycle state (and `audit.list` — a stub
+/// when this was authored, wired to `audit_log_entry` by PR #388 since —
+/// remains available as a future complementary assertion surface).
 ///
-/// Backend: lifecycle (note: sessions.transition is still a STUB, so
-/// transition-driven asserts remain TODO inside the body).
-///
-/// Steps:
-/// 1. Create a project and advance it to a state that triggers auto-block.
-/// 2. Invoke lifecycle DTO; assert blockedReason is present and non-empty.
-/// 3. Invoke audit.list; assert auto-block event record exists.
-/// 4. Trigger unarchive; assert an event is emitted (invoke events.recent).
+/// Backend REAL: `projects.create`, `lifecycle.transition.apply`,
+/// `lifecycle.ledger.list`.
 #[tokio::test]
-#[ignore = "spec-037: thirtyfour journey scaffold; wiring deferred"]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn lifecycle_integrity() -> anyhow::Result<()> {
-    let _app = E2eApp::launch().await?;
-    // TODO step 1: create project + advance state via UI or invoke.
-    // TODO step 2: invoke lifecycle DTO; assert blockedReason field present.
-    // TODO step 3: invoke audit.list; assert auto-block row exists.
-    // TODO step 4: invoke unarchive; assert events.recent contains unarchive event.
-    // NOTE: sessions.transition is still a STUB — transition-driven asserts
-    // must remain TODO until that backend command is real.
-    todo!("spec-037: lifecycle_integrity journey not yet wired")
+    let app = E2eApp::launch().await?;
+    // Bridge is installed by an async dynamic import (`main.tsx`) — wait for it.
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+
+    // 1. Create a project with no sources — it starts life "setup_incomplete"
+    // (real, per `projects.create`'s documented lifecycle rule) and does NOT
+    // auto-advance since `initialSources` is empty.
+    let project_dir = tempfile::tempdir()?;
+    let create: serde_json::Value = app
+        .invoke(
+            "projects_create",
+            json!({
+                "req": {
+                    "requestId": "e2e-lifecycle-create",
+                    "name": "E2E Lifecycle Project",
+                    "tool": "PixInsight",
+                    "path": project_dir.path().to_string_lossy(),
+                    "initialSources": [],
+                    "notes": null,
+                    "canonicalTargetId": null,
+                }
+            }),
+        )
+        .await?;
+    let project_id = create["projectId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("projects.create returned no projectId: {create}"))?
+        .to_owned();
+    anyhow::ensure!(
+        create["lifecycle"] == "setup_incomplete",
+        "expected a sourceless project to start setup_incomplete: {create}"
+    );
+
+    // 2. Real DTO: attempt an explicit setup_incomplete -> ready transition.
+    // Whether the real business rule allows or refuses this (it may require
+    // sources first) is NOT asserted here — the point is that the response
+    // is a real, well-formed `TransitionResponse`, not a fixture.
+    let transition: serde_json::Value = app
+        .invoke(
+            "lifecycle_transition_apply",
+            json!({
+                "request": {
+                    "entityType": "project",
+                    "contractVersion": "2.0.0",
+                    // `TransitionRequest.request_id` is a real `Uuid` on the
+                    // wire (crates/contracts/core/src/lifecycle.rs), unlike the
+                    // free-form String requestIds elsewhere — a slug here fails
+                    // arg deserialisation before the command runs.
+                    "requestId": "e2e00000-0000-4000-8000-000000000001",
+                    "entityId": project_id,
+                    "currentState": "setup_incomplete",
+                    "nextState": "ready",
+                    "actionLabel": null,
+                    "actor": "user",
+                }
+            }),
+        )
+        .await?;
+    let transition_status = transition["status"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("transition response has no status: {transition}"))?;
+    anyhow::ensure!(
+        matches!(transition_status, "success" | "noop" | "error"),
+        "unexpected transition status: {transition}"
+    );
+    if transition_status == "error" {
+        let error = &transition["error"];
+        anyhow::ensure!(
+            error["code"].is_string() && !error["message"].as_str().unwrap_or_default().is_empty(),
+            "refused transition must carry a real error code + message, not a placeholder: {transition}"
+        );
+    }
+
+    // 3. Real read: the ledger carries a row for this project (durable
+    // record proof via the lifecycle-owned read path).
+    let ledger: serde_json::Value = app
+        .invoke(
+            "lifecycle_ledger_list",
+            json!({
+                "filter": {
+                    "entityTypes": ["project"],
+                    "projectId": project_id,
+                }
+            }),
+        )
+        .await?;
+    let has_row = ledger
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("lifecycle.ledger.list did not return an array: {ledger}"))?
+        .iter()
+        .any(|row| row["entityId"] == project_id);
+    anyhow::ensure!(has_row, "expected a ledger row for project {project_id}: {ledger}");
+
+    app.shutdown().await
+}
+
+/// Cleanup plan review: real artifact observation -> scan -> generate ->
+/// approve (spec 017/037 D22 — newly in scope now that the WP-A generator
+/// (#389) is merged).
+///
+/// Backend REAL: `projects.create`, `artifact.watcher.attach` (spec 012,
+/// #400), `artifact.list`, `cleanup.policy.update`, `cleanup.scan`,
+/// `cleanup.plan.generate`, `plans.approve`.
+///
+/// KNOWN GAP (documented, not faked): applying the generated plan requires
+/// `plans.apply_real`, which takes a `tauri::ipc::Channel` progress argument.
+/// There is no channel-free apply command for archive/cleanup plans (unlike
+/// `inbox.plan.apply` for inbox plans), and the Cleanup/Archive UI does not
+/// yet wire an "Apply" affordance for generator-produced plans (`git grep
+/// cleanupPlanGenerate apps/desktop/src/features/projects
+/// apps/desktop/src/features/archive` finds no caller). Fabricating a
+/// `Channel` from a WebDriver script would mean reaching into product
+/// frontend code beyond a thin test hook (FR-018), so this journey stops at
+/// the reviewable, `ready_for_review` -> `approved` plan and documents the
+/// apply step as a follow-up once a channel-free apply path or a real UI
+/// Apply button exists.
+#[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
+async fn cleanup_plan_review() -> anyhow::Result<()> {
+    let app = E2eApp::launch().await?;
+    // Bridge is installed by an async dynamic import (`main.tsx`) — wait for it.
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+
+    // The artifact watcher's attach-time reconciliation pass requires the
+    // project's output folder to already exist on disk.
+    let project_dir = tempfile::tempdir()?;
+
+    let create: serde_json::Value = app
+        .invoke(
+            "projects_create",
+            json!({
+                "req": {
+                    "requestId": "e2e-cleanup-create",
+                    "name": "E2E Cleanup Project",
+                    "tool": "PixInsight",
+                    "path": project_dir.path().to_string_lossy(),
+                    "initialSources": [],
+                    "notes": null,
+                    "canonicalTargetId": null,
+                }
+            }),
+        )
+        .await?;
+    let project_id = create["projectId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("projects.create returned no projectId: {create}"))?
+        .to_owned();
+
+    // Real output file, named per PixInsight's real "integration_*" naming
+    // convention (`crates/workflow/artifacts/src/default_rules.rs`), which
+    // classifies as `ArtifactKind::Intermediate` — eligible for cleanup once
+    // the policy allows it (below).
+    std::fs::write(project_dir.path().join("integration_M31_Ha.xisf"), b"not-a-real-xisf-file")?;
+
+    // Attaching the watcher runs a real, synchronous-enough reconciliation
+    // pass over existing files (spec 012 T005) — poll `artifact.list` for it
+    // rather than assuming it lands before the next call returns.
+    let _: serde_json::Value = app
+        .invoke("artifact_watcher_attach", json!({ "request": { "projectId": project_id } }))
+        .await?;
+    let artifacts: serde_json::Value = app
+        .invoke_until(
+            "artifact_list",
+            json!({ "request": { "projectId": project_id, "includeStates": [] } }),
+            INVOKE_TIMEOUT,
+            |v: &serde_json::Value| v["artifacts"].as_array().is_some_and(|a| !a.is_empty()),
+        )
+        .await?;
+    anyhow::ensure!(
+        artifacts["artifacts"][0]["kind"] == "intermediate",
+        "expected the fixture output to classify as intermediate: {artifacts}"
+    );
+
+    // Default cleanup policy is all-Keep (safe default) — opt Intermediate
+    // into Archive so the generator has a real candidate (not a fixture).
+    let _: serde_json::Value = app
+        .invoke(
+            "cleanup_policy_update",
+            json!({
+                "request": {
+                    "entries": [
+                        { "dataType": "intermediate", "action": "archive" },
+                        { "dataType": "master", "action": "keep" },
+                        { "dataType": "final", "action": "keep" },
+                    ],
+                    "autoOnCompletion": false,
+                }
+            }),
+        )
+        .await?;
+
+    let scan: serde_json::Value =
+        app.invoke("cleanup_scan", json!({ "projectId": project_id })).await?;
+    anyhow::ensure!(
+        !scan["candidates"].as_array().unwrap_or(&Vec::new()).is_empty(),
+        "expected a real cleanup candidate for the intermediate artifact: {scan}"
+    );
+
+    let generate: serde_json::Value = app
+        .invoke("cleanup_plan_generate", json!({ "request": { "projectId": project_id } }))
+        .await?;
+    let plan_id = generate["planId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("cleanup.plan.generate returned no planId: {generate}"))?
+        .to_owned();
+    anyhow::ensure!(
+        generate["itemCount"].as_i64().unwrap_or(0) >= 1,
+        "expected at least 1 real cleanup item on the generated plan: {generate}"
+    );
+
+    let approve: serde_json::Value = app.invoke("plans_approve", json!({ "id": plan_id })).await?;
+    anyhow::ensure!(
+        approve["planId"] == json!(plan_id) && approve["newState"] == "approved",
+        "expected plans.approve to move the generated plan to approved: {approve}"
+    );
+
+    app.shutdown().await
 }

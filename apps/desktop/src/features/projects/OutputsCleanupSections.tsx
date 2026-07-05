@@ -1,31 +1,32 @@
 /**
- * OutputsCleanupSections — spec 043 §4 Projects detail (task #44).
+ * OutputsCleanupSections — spec 043 §4 Projects detail (task #44) +
+ * spec 017 WP-E cleanup review flow.
  *
- * Two project-detail sections that the PlateVault mock calls for:
- *   1. Outputs           — accepted processing outputs with verification pills.
- *   2. Cleanup preview   — themed Banner alert summarising what a cleanup plan
- *                          WOULD do, with protected categories shown LOCKED.
- *
- * STUB DATA POLICY (constitution principle II — no fabricated data):
- * The current backend exposes neither an accepted-output model nor a
- * per-project cleanup-preview projection on ProjectDetailDto. `cleanup.scan`
- * exists as a separate, on-demand command (CleanupScanResult), but no preview
- * is carried on the detail read path. Until those land, BOTH sections render
- * teaching EMPTY states — never invented rows or byte counts.
- *
- * When the backend lands:
- *   - Outputs:  map project.outputs[] → output rows (name · format · verified
- *     pill). The `verified` boolean drives the pill variant; replace the
- *     EmptyState branch with a Table of real rows.
- *   - Cleanup:  call cleanup.scan (or read a detail-carried preview) and fill
- *     reclaimableBytes + candidate counts; the protected categories below are
- *     intentionally LOCKED (constitution: protected categories must be
- *     documented before any cleanup plan is generated).
+ * Two project-detail sections:
+ *   1. Outputs — accepted processing outputs with verification pills.
+ *      STUB DATA POLICY (constitution principle II — no fabricated data): the
+ *      backend exposes no accepted-output model on ProjectDetailDto yet, so
+ *      this section renders a teaching EMPTY state — never invented rows.
+ *   2. Cleanup — LIVE two-step cleanup flow (D11): "Scan" calls the pure,
+ *      read-only `cleanup.scan` preview on demand (no plan row, no mutation);
+ *      candidates render grouped by classification with confidence, per-file
+ *      protection, and reclaimable bytes. "Generate cleanup plan" materialises
+ *      the reviewable plan (`cleanup.plan.generate`) and hands off to the
+ *      shared {@link PlanReviewOverlay} (protection gate → approve → apply
+ *      with live progress).
  */
 
-import { Section, Pill, Banner, Table, EmptyState, KV, Lock } from '@/ui';
+import { useState } from 'react';
+import { Section, Pill, Banner, Table, EmptyState, KV, Lock, RadioGroup, Btn } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { m } from '@/lib/i18n';
+import { formatBytes } from '@/lib/format';
+import { addToast } from '@/shared/toast';
+import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
+import { useCleanupScan, useGenerateCleanupPlan } from './cleanupStore';
+import type { DestructiveDestinationChoice } from './cleanupStore';
+import { groupCandidates, parseCandidateReason } from './cleanupCandidates';
+import type { CleanupCandidate } from '@/bindings/index';
 
 // ── Outputs ───────────────────────────────────────────────────────────────────
 
@@ -89,13 +90,13 @@ export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSect
   );
 }
 
-// ── Cleanup preview ─────────────────────────────────────────────────────────────
+// ── Cleanup (spec 017 WP-E) ──────────────────────────────────────────────────
 
 /**
- * Protected categories shown LOCKED in the cleanup preview.
- * STUB: these mirror the documented protected-category intent (constitution
- * principle II / spec 042 cleanup). They are NOT live policy values; when the
- * cleanup policy read path is wired, derive these from CleanupPolicy entries.
+ * Protected categories shown LOCKED under the candidate list. These document
+ * the protected-category intent (constitution II: protected categories must be
+ * documented before any cleanup plan is generated); the live per-file
+ * protection state additionally arrives on each scanned candidate.
  */
 // Render-time factory so category labels re-read the active locale (spec 046 #8).
 function protectedCategories(): readonly string[] {
@@ -106,42 +107,209 @@ function protectedCategories(): readonly string[] {
   ];
 }
 
-/**
- * Cleanup preview summary, as the future backend will expose it
- * (derived from cleanup.scan / a detail-carried preview projection).
- * STUB: no preview is carried on ProjectDetailDto yet.
- */
-export interface CleanupPreviewView {
-  /** Number of files the cleanup plan would propose to archive/trash. */
-  candidateCount: number;
-  /** Bytes the cleanup plan would reclaim. */
-  reclaimableBytes: number;
+/** Localised label for a candidate group's data-type classification. */
+function dataTypeLabel(dataType: string): string {
+  switch (dataType) {
+    case 'intermediate':
+      return m.projects_cleanup_type_intermediate();
+    case 'master':
+      return m.projects_cleanup_type_master();
+    case 'final':
+      return m.projects_cleanup_type_final();
+    default:
+      return dataType;
+  }
 }
 
-export interface CleanupPreviewSectionProps {
-  /** STUB: undefined until cleanup-preview data lands on the read path. */
-  preview?: CleanupPreviewView;
+// Render-time factory so column labels re-read the active locale (spec 046 #8).
+function candidateColumns() {
+  return [
+    { key: 'file', label: m.projects_cleanup_col_file() },
+    { key: 'size', label: m.projects_cleanup_col_size() },
+    { key: 'confidence', label: m.projects_cleanup_col_confidence() },
+    { key: 'protection', label: m.projects_cleanup_col_protection() },
+  ];
+}
+
+/**
+ * One candidate row. Protected candidates are clearly marked and carry NO
+ * affordance for inclusion — they gate plan approval via the spec-016
+ * acknowledgement flow instead (constitution II).
+ */
+function candidateRow(candidate: CleanupCandidate, index: number) {
+  const parsed = parseCandidateReason(candidate.reason);
+  const isProtected = parsed?.protection === 'protected';
+  return {
+    _testid: `cleanup-candidate-${index}`,
+    _rowClassName: isProtected ? 'alm-cleanup-scan__row--protected' : undefined,
+    file: (
+      <span className="alm-mono" title={candidate.reason}>
+        {candidate.filePath}
+      </span>
+    ),
+    size: formatBytes(candidate.sizeBytes),
+    // Tolerant of reason-format drift: show the raw reason when unparseable
+    // rather than fabricating a confidence (constitution II).
+    confidence: parsed
+      ? m.projects_cleanup_confidence_pct({ pct: parsed.confidencePct })
+      : candidate.reason,
+    protection: isProtected ? (
+      <span className="alm-cleanup-scan__protected-cell">
+        <Lock reason={m.projects_cleanup_row_protected_hint()} />
+        <Pill variant="warn">{m.settings_cleanup_protection_protected()}</Pill>
+      </span>
+    ) : parsed ? (
+      <Pill variant="ghost">{parsed.protection}</Pill>
+    ) : null,
+  };
+}
+
+export interface CleanupSectionProps {
+  /** Project whose observed artifacts are scanned for cleanup candidates. */
+  projectId: string;
   /** Whether the collapsible section starts open. Default true. */
   defaultOpen?: boolean;
 }
 
-export function CleanupPreviewSection({ preview, defaultOpen = true }: CleanupPreviewSectionProps) {
+export function CleanupSection({ projectId, defaultOpen = true }: CleanupSectionProps) {
+  const scan = useCleanupScan();
+  const generate = useGenerateCleanupPlan();
+  const [destination, setDestination] = useState<DestructiveDestinationChoice>('archive');
+  const [reviewPlanId, setReviewPlanId] = useState<string | null>(null);
+
+  const result = scan.data;
+  const groups = result ? groupCandidates(result.candidates) : [];
+  const hasCandidates = (result?.candidates.length ?? 0) > 0;
+
+  const handleGenerate = () => {
+    generate.mutate(
+      { projectId, destructiveDestination: destination },
+      {
+        onSuccess: (res) => {
+          addToast({
+            message: m.projects_cleanup_plan_created_toast({ count: res.itemCount }),
+            variant: 'info',
+          });
+          setReviewPlanId(res.planId);
+        },
+      },
+    );
+  };
+
   return (
-    <Section title={m.projects_cleanup_title()} defaultOpen={defaultOpen} data-testid="project-cleanup-preview">
+    <Section
+      title={m.projects_cleanup_title()}
+      count={result ? result.candidates.length : undefined}
+      defaultOpen={defaultOpen}
+      data-testid="project-cleanup-preview"
+    >
       {/* Themed alert: cleanup is reviewable + reversible, never silent. */}
       <Banner variant="warn" role="status" aria-live="polite">
         <div className="alm-project-detail__cleanup-preview">
-          {preview ? (
-            // STUB: this branch is currently unreachable (preview is always
-            // undefined). Kept so wiring is trivial once the backend lands.
-            <span className="alm-project-detail__cleanup-note">{m.projects_cleanup_candidate_count({ count: preview.candidateCount })}</span>
-          ) : (
-            <span className="alm-project-detail__cleanup-note">
-              {m.projects_cleanup_no_preview()}
-            </span>
-          )}
+          <span className="alm-project-detail__cleanup-note">
+            {result
+              ? m.projects_cleanup_candidate_count({ count: result.candidates.length })
+              : m.projects_cleanup_scan_prompt()}
+          </span>
         </div>
       </Banner>
+
+      {/* Scan is on-demand and read-only (D11 step 1). */}
+      <div className="alm-cleanup-scan__controls">
+        <Btn
+          size="sm"
+          onClick={() => scan.mutate(projectId)}
+          disabled={scan.isPending}
+          data-testid="cleanup-scan-btn"
+        >
+          {scan.isPending
+            ? m.projects_cleanup_scanning()
+            : m.projects_cleanup_scan_btn()}
+        </Btn>
+        {hasCandidates && (
+          <span className="alm-cleanup-scan__reclaimable" data-testid="cleanup-reclaimable">
+            {m.projects_cleanup_reclaimable({
+              size: formatBytes(result?.totalReclaimableBytes ?? 0),
+            })}
+          </span>
+        )}
+      </div>
+
+      {scan.isError && (
+        <Banner variant="danger">{m.projects_cleanup_scan_failed()}</Banner>
+      )}
+
+      {result && !hasCandidates && (
+        <EmptyState
+          title={m.projects_cleanup_no_candidates_title()}
+          desc={m.projects_cleanup_no_candidates_desc()}
+        />
+      )}
+
+      {/* Candidates grouped by classification (intermediate → master → final). */}
+      {groups.map((group) => (
+        <div
+          key={group.dataType}
+          className="alm-cleanup-scan__group"
+          data-testid={`cleanup-group-${group.dataType}`}
+        >
+          <div className="alm-cleanup-scan__group-head">
+            <span className="alm-cleanup-scan__group-title">{dataTypeLabel(group.dataType)}</span>
+            <span className="alm-cleanup-scan__group-meta">
+              {m.projects_cleanup_group_meta({
+                count: group.candidates.length,
+                size: formatBytes(group.totalBytes),
+              })}
+            </span>
+          </div>
+          <Table
+            columns={candidateColumns()}
+            rows={group.candidates.map((candidate, index) => candidateRow(candidate, index))}
+          />
+        </div>
+      ))}
+
+      {/* Generate the reviewable plan (D11 step 2) — never applies anything. */}
+      {hasCandidates && (
+        <div className="alm-cleanup-scan__generate">
+          <div className="alm-stack-1">
+            <span className="alm-cleanup-scan__dest-label">
+              {m.projects_cleanup_dest_label()}
+            </span>
+            <RadioGroup
+              aria-label={m.projects_cleanup_dest_label()}
+              options={[
+                {
+                  value: 'archive',
+                  label: m.plans_dest_archive(),
+                  desc: m.projects_cleanup_dest_archive_hint(),
+                },
+                {
+                  value: 'trash',
+                  label: m.plans_dest_trash(),
+                  desc: m.projects_cleanup_dest_trash_hint(),
+                },
+              ]}
+              value={destination}
+              onChange={(v) => setDestination(v as DestructiveDestinationChoice)}
+            />
+          </div>
+          <Btn
+            size="sm"
+            variant="danger"
+            onClick={handleGenerate}
+            disabled={generate.isPending}
+            data-testid="cleanup-generate-btn"
+          >
+            {generate.isPending
+              ? m.projects_cleanup_generating()
+              : m.projects_cleanup_generate_btn()}
+          </Btn>
+          {generate.isError && (
+            <Banner variant="danger">{m.projects_cleanup_generate_failed()}</Banner>
+          )}
+        </div>
+      )}
 
       {/* Protected categories — always shown LOCKED (never proposed for cleanup). */}
       <div className="alm-project-detail__cleanup-protected" data-testid="cleanup-protected">
@@ -158,6 +326,17 @@ export function CleanupPreviewSection({ preview, defaultOpen = true }: CleanupPr
           ))}
         </div>
       </div>
+
+      {/* Focused review overlay — shared plan kit (protection gate → approve →
+          apply with live progress). Re-scan after apply so the section reflects
+          the post-apply filesystem truth. */}
+      <PlanReviewOverlay
+        planId={reviewPlanId}
+        open={reviewPlanId !== null}
+        onClose={() => setReviewPlanId(null)}
+        title={m.projects_cleanup_review_title()}
+        onApplied={() => scan.mutate(projectId)}
+      />
     </Section>
   );
 }

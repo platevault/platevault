@@ -3,22 +3,20 @@
  *
  * The "usable altitude" is the minimum elevation above the horizon (in degrees)
  * that the user considers acceptable for imaging. It gates the
- * `hoursAboveUsable` and `visibleTonight` columns in the Planner table and the
- * guide line in AltitudeSparkline.
+ * `hoursAboveUsable`/`totalImagingMinutes` and `visibleTonight` columns in the
+ * Planner table and the guide line in AltitudeSparkline.
  *
- * Persisted as a UI preference in localStorage under ALTITUDE_THRESHOLD_KEY so
- * the value survives page reloads without a backend round-trip. When the real
- * ephemeris backend (#57/#58) lands the value will be threaded into the real
- * computation unchanged.
- *
- * Default: USABLE_ALT_DEG (30°) from planner-altitude.ts.
+ * T012b (spec 044 Track B): the threshold is now persisted through the
+ * settings-backed `observing-sites/site-store.ts` (`usableAltitudeDeg` key,
+ * `observing` scope — T004–T008), NOT localStorage. This module is kept as a
+ * thin, name-stable adapter over `site-store.ts` so existing call sites
+ * (`PlannerSettings.tsx`, `TargetsPage.tsx`) do not need to change; it exists
+ * to preserve the settings-durability requirement (FR-004/SC-006 — the
+ * threshold now survives relaunch and is not device-local-only).
  */
 
-import { useSyncExternalStore } from 'react';
+import { useUsableAltitude, getUsableAltitude, saveUsableAltitude } from './observing-sites/site-store';
 import { USABLE_ALT_DEG } from './planner-altitude';
-
-/** localStorage key for the usable altitude threshold setting. */
-export const ALTITUDE_THRESHOLD_KEY = 'alm:planner:usableAltDeg';
 
 /** Minimum allowed threshold value (degrees). */
 export const ALTITUDE_THRESHOLD_MIN = 0;
@@ -26,75 +24,34 @@ export const ALTITUDE_THRESHOLD_MIN = 0;
 /** Maximum allowed threshold value (degrees). */
 export const ALTITUDE_THRESHOLD_MAX = 90;
 
-// ── Storage helpers ────────────────────────────────────────────────────────────
-
-/** Read the raw stored value and coerce it to a valid integer degree. */
-function readFromStorage(): number {
-  try {
-    const raw = localStorage.getItem(ALTITUDE_THRESHOLD_KEY);
-    if (raw === null) return USABLE_ALT_DEG;
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return USABLE_ALT_DEG;
-    return Math.max(ALTITUDE_THRESHOLD_MIN, Math.min(ALTITUDE_THRESHOLD_MAX, Math.round(n)));
-  } catch {
-    return USABLE_ALT_DEG;
-  }
-}
-
-/** Persist a new threshold and notify all subscribers. */
+/**
+ * Persist a new threshold through the settings store. Fire-and-forget: the
+ * live cache in `site-store.ts` updates optimistically and notifies
+ * subscribers immediately (SC-003 instant-derivation), independent of the
+ * backend round-trip completing.
+ */
 export function setAltitudeThreshold(degrees: number): void {
-  const clamped = Math.max(
-    ALTITUDE_THRESHOLD_MIN,
-    Math.min(ALTITUDE_THRESHOLD_MAX, Math.round(degrees)),
-  );
-  try {
-    localStorage.setItem(ALTITUDE_THRESHOLD_KEY, String(clamped));
-  } catch {
-    // localStorage unavailable (SSR / tests without shim) — skip persist.
-  }
-  // Emit a storage event so useSyncExternalStore subscribers update.
-  // `storageArea` is omitted: the jsdom Storage shim is not a real `Storage`
-  // instance and jsdom rejects StorageEventInit.storageArea that isn't one.
-  // Subscribers only check `e.key`, so omitting storageArea is safe.
-  try {
-    window.dispatchEvent(
-      new StorageEvent('storage', {
-        key: ALTITUDE_THRESHOLD_KEY,
-        newValue: String(clamped),
-      }),
-    );
-  } catch {
-    // StorageEvent construction failed (non-browser env). Subscribers that
-    // registered via window.addEventListener won't be notified, but
-    // useSyncExternalStore will re-read on next render regardless.
-  }
-}
-
-// ── useSyncExternalStore wiring ────────────────────────────────────────────────
-
-type Listener = () => void;
-const listeners = new Set<Listener>();
-
-function subscribe(fn: Listener): () => void {
-  listeners.add(fn);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === ALTITUDE_THRESHOLD_KEY || e.key === null) fn();
-  };
-  window.addEventListener('storage', onStorage);
-  return () => {
-    listeners.delete(fn);
-    window.removeEventListener('storage', onStorage);
-  };
+  // Best-effort persist; the live cache already reflects the change optimistically
+  // (SC-003). Swallow the backend-write rejection here so a failed or unavailable
+  // IPC round-trip never escapes as an unhandled promise rejection (matches the
+  // fire-and-forget settings-update convention in CalibrationMatching).
+  saveUsableAltitude(degrees).catch(() => {
+    // Intentionally ignored — optimistic UI already updated.
+  });
 }
 
 /**
  * React hook: subscribe to the user-configured usable-altitude threshold.
- * Updates automatically when `setAltitudeThreshold` is called from any tab or
- * component.
+ * Updates automatically whenever `setAltitudeThreshold` is called anywhere in
+ * the app (settings-backed live cache, not per-tab localStorage).
  */
 export function useAltitudeThreshold(): number {
-  return useSyncExternalStore(subscribe, readFromStorage, () => USABLE_ALT_DEG);
+  return useUsableAltitude();
 }
 
 /** Non-hook read for use outside React (e.g., sort comparators, tests). */
-export { readFromStorage as getAltitudeThreshold };
+export function getAltitudeThreshold(): number {
+  return getUsableAltitude();
+}
+
+export { USABLE_ALT_DEG };

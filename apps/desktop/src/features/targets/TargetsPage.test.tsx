@@ -94,6 +94,14 @@ const mockSelectedId = { current: undefined as string | undefined };
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
   useSearch: () => ({ selected: mockSelectedId.current }),
+  // The no-site banner (spec 044 US3) links to Settings via `Link`, which
+  // needs a router context this test doesn't provide. Stub it as a plain
+  // anchor, consistent with TargetsTable.test.tsx/TargetDetailV2.test.tsx.
+  Link: ({ children, to, ...rest }: { children?: import('react').ReactNode; to: string }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -103,6 +111,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 // ── Import under test ─────────────────────────────────────────────────────────
 
 import { TargetsPage } from './TargetsPage';
+import { __setSiteExistsForTest } from './site-gate';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +148,7 @@ function makeDetail() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __setSiteExistsForTest(null); // default to the real (false) site binding
   mockSelectedId.current = undefined;
   mockListTargets.mockResolvedValue(ok(listItems));
   mockGetTargetDetail.mockResolvedValue(ok(makeDetail()));
@@ -361,5 +371,71 @@ describe('TargetsPage', () => {
     fireEvent.click(designationHeader);
     rowText = within(table).getAllByText(/NGC 7000|M 31/);
     expect(rowText[0]).toHaveTextContent('NGC 7000');
+  });
+
+  // ── Site gate (spec 047 D7) ───────────────────────────────────────────────
+
+  it('SG1. shows the observing-site prompt when no site exists (gated off)', async () => {
+    __setSiteExistsForTest(false);
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+    // The planner bar shows the set-up-site prompt, not the Moon summary.
+    expect(screen.getByTestId('planner-site-prompt')).toBeInTheDocument();
+    expect(screen.queryByTestId('moon-summary')).not.toBeInTheDocument();
+    expect(screen.getByText('Set up your observing site')).toBeInTheDocument();
+  });
+
+  it('SG2. renders the Moon summary when a site exists (gate open)', async () => {
+    __setSiteExistsForTest(true);
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+    // Astronomy renders: the Moon summary is present, the prompt is gone.
+    expect(screen.getByTestId('moon-summary')).toBeInTheDocument();
+    expect(screen.queryByTestId('planner-site-prompt')).not.toBeInTheDocument();
+  });
+
+  // ── Filter-by-recommendation (spec 047 US3, FR-011) ──────────────────────────
+
+  it('FR1. filtering to "Unknown" keeps only targets without coordinates', async () => {
+    __setSiteExistsForTest(true);
+    // NGC 7000 gets real coordinates; M 31 has none — its recommendation is
+    // deterministically 'unknown' regardless of tonight's real Moon state.
+    mockListTargets.mockResolvedValue(
+      ok([
+        { ...listItems[0], raDeg: 314.75, decDeg: 44.37 },
+        { ...listItems[1], raDeg: null, decDeg: null },
+      ]),
+    );
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    fireEvent.click(screen.getByLabelText('Unknown'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument();
+      expect(screen.getByText('M 31')).toBeInTheDocument();
+    });
+  });
+
+  it('FR2. deselecting the recommendation filter restores the full list', async () => {
+    __setSiteExistsForTest(true);
+    mockListTargets.mockResolvedValue(
+      ok([
+        { ...listItems[0], raDeg: 314.75, decDeg: 44.37 },
+        { ...listItems[1], raDeg: null, decDeg: null },
+      ]),
+    );
+    render(<TargetsPage />);
+    await waitFor(() => screen.getByText('NGC 7000'));
+
+    const unknownCheckbox = screen.getByLabelText('Unknown');
+    fireEvent.click(unknownCheckbox);
+    await waitFor(() => expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument());
+
+    fireEvent.click(unknownCheckbox);
+    await waitFor(() => {
+      expect(screen.getByText('NGC 7000')).toBeInTheDocument();
+      expect(screen.getByText('M 31')).toBeInTheDocument();
+    });
   });
 });

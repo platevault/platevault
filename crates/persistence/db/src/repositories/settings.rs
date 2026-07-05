@@ -215,6 +215,22 @@ fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbR
             state.tool_attribution_window_hours =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
+        // Spec 049 T006: these two keys were wired into `crates/app/settings`
+        // (the `settings.update` command path) but missed here — `load_settings`
+        // (which `sourceview.generate` calls directly, not through the Tauri
+        // command layer) silently ignored a stored override and always
+        // returned the in-code default. Found while writing the spec 049 US3
+        // regeneration integration test, which needs a non-default link kind
+        // to exercise the "hardlink unsupported" refusal path in
+        // `preparedview.regenerate`.
+        "sourceViewLinkKindIntraDrive" => {
+            state.source_view_link_kind_intra_drive =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
+        "sourceViewLinkKindCrossDrive" => {
+            state.source_view_link_kind_cross_drive =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
         _ => {
             // Structured-path keys (tools.*, workflow_profile.*) are not in the
             // static SettingsState bag; they are readable via resolve_setting.
@@ -438,6 +454,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn load_settings_honors_stored_source_view_link_kind_overrides() {
+        // Spec 049 T006/US2 regression: `load_settings` (used directly by
+        // `sourceview.generate`, not just the `settings.update` Tauri command
+        // path) must apply a stored override for these two keys instead of
+        // silently keeping the in-code default (found via the US3
+        // regeneration integration test, which needs a non-default kind to
+        // exercise the "hardlink unsupported" refusal path).
+        let db = setup().await;
+        set_raw(db.pool(), "sourceViewLinkKindIntraDrive", &serde_json::json!("symlink"))
+            .await
+            .unwrap();
+        set_raw(db.pool(), "sourceViewLinkKindCrossDrive", &serde_json::json!("junction"))
+            .await
+            .unwrap();
+
+        let loaded = load_settings(db.pool()).await.unwrap();
+        assert_eq!(loaded.source_view_link_kind_intra_drive, "symlink");
+        assert_eq!(loaded.source_view_link_kind_cross_drive, "junction");
+    }
+
+    #[tokio::test]
     async fn delete_key_removes_stored_row() {
         let db = setup().await;
         set_raw(db.pool(), "logLevel", &serde_json::json!("debug")).await.unwrap();
@@ -612,7 +649,7 @@ mod byte_identity_guard {
     /// Frozen snapshot of `SettingsState::default()` exactly as persisted /
     /// emitted on the wire prior to the T254 move. Captured from the
     /// pre-move `contracts_core::settings::SettingsState` serialization.
-    const SETTINGS_STATE_DEFAULT_JSON: &str = r#"{"pattern":[{"id":"p0","kind":"token","value":"target"},{"id":"p1","kind":"separator","value":"/"},{"id":"p2","kind":"token","value":"filter"},{"id":"p3","kind":"separator","value":"/"},{"id":"p4","kind":"token","value":"date"},{"id":"p5","kind":"separator","value":"/"},{"id":"p6","kind":"token","value":"frame_type"},{"id":"p7","kind":"separator","value":"/"}],"autoApplyPattern":true,"alwaysPreviewBeforePlan":false,"followSymlinks":false,"hashOnScan":"lazy","darkMatchTolerance":"strict","flatMatching":"filter-rot","suggestCalibration":true,"logLevel":"info","rememberFollowLogs":false,"defaultProtection":"protected","blockPermanentDelete":true,"protectedCategories":["lights","masters","finals"],"devMode":false,"plansListDefaultAgeCutoffDays":90.0,"calibrationDarkTempTolerance":2.0,"calibrationPrefillSuggestion":true,"calibrationDarkOverridePenalty":0.3,"calibrationFlatOverridePenalty":0.3,"calibrationBiasOverridePenalty":0.3,"calibrationAgingThresholdDays":90.0,"imagetypNormalizationUserMappings":[],"patternsByType":{},"toolWatchExtensions":[".xisf",".fits",".fit",".tif",".tiff",".png",".jpg",".ser",".avi"],"toolAttributionWindowHours":6.0,"sourceViewLinkKindIntraDrive":"hardlink","sourceViewLinkKindCrossDrive":"symlink"}"#;
+    const SETTINGS_STATE_DEFAULT_JSON: &str = r#"{"pattern":[{"id":"p0","kind":"token","value":"target"},{"id":"p1","kind":"separator","value":"/"},{"id":"p2","kind":"token","value":"filter"},{"id":"p3","kind":"separator","value":"/"},{"id":"p4","kind":"token","value":"date"},{"id":"p5","kind":"separator","value":"/"},{"id":"p6","kind":"token","value":"frame_type"},{"id":"p7","kind":"separator","value":"/"}],"autoApplyPattern":true,"alwaysPreviewBeforePlan":false,"followSymlinks":false,"hashOnScan":"lazy","darkMatchTolerance":"strict","flatMatching":"filter-rot","suggestCalibration":true,"logLevel":"info","rememberFollowLogs":false,"defaultProtection":"protected","blockPermanentDelete":true,"protectedCategories":["lights","masters","finals"],"devMode":false,"plansListDefaultAgeCutoffDays":90.0,"calibrationDarkTempTolerance":2.0,"calibrationPrefillSuggestion":true,"calibrationDarkOverridePenalty":0.3,"calibrationFlatOverridePenalty":0.3,"calibrationBiasOverridePenalty":0.3,"calibrationAgingThresholdDays":90.0,"imagetypNormalizationUserMappings":[],"patternsByType":{},"toolWatchExtensions":[".xisf",".fits",".fit",".tif",".tiff",".png",".jpg",".ser",".avi"],"toolAttributionWindowHours":6.0,"observingSites":[],"observingDefaultSiteId":null,"observingActiveSiteId":null,"usableAltitudeDeg":30.0,"plannerMoonAvoidance":{"B":{"distanceDeg":120.0,"widthDays":14.0},"G":{"distanceDeg":120.0,"widthDays":14.0},"Ha":{"distanceDeg":60.0,"widthDays":7.0},"L":{"distanceDeg":120.0,"widthDays":14.0},"OIII":{"distanceDeg":110.0,"widthDays":10.0},"R":{"distanceDeg":120.0,"widthDays":14.0},"SII":{"distanceDeg":60.0,"widthDays":7.0}},"sourceViewLinkKindIntraDrive":"hardlink","sourceViewLinkKindCrossDrive":"symlink"}"#;
 
     /// Frozen snapshot of a `SourceOverride` as persisted prior to the move.
     const SOURCE_OVERRIDE_JSON: &str = r#"{"sourceId":"src-1","key":"hashOnScan","value":"eager","updatedAt":"2026-01-01T00:00:00Z"}"#;

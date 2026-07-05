@@ -17,9 +17,24 @@
  */
 
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TargetListItem } from '@/bindings/index';
+
+// The no-site banner (spec 044 US3) links to Settings via `Link`, which needs
+// a router context this test doesn't provide. Stub it as a plain anchor —
+// consistent with TargetDetailV2.test.tsx's `@tanstack/react-router` mock.
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to, ...rest }: { children?: import('react').ReactNode; to: string }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 import { TargetsTable, DEFAULT_TARGET_SORT } from './TargetsTable';
+import { __setObservingStateForTest } from './observing-sites/site-store';
+import type { ObserverSite } from './observing-sites/observer-site';
+import type { ObservingNight } from './astro/moon-state';
 
 function item(primaryDesignation: string, objectType = 'other'): TargetListItem {
   return {
@@ -104,11 +119,29 @@ describe('TargetsTable (#84/#85)', () => {
     expect(screen.getByLabelText('Altitude tonight for M 31')).toBeInTheDocument();
   });
 
-  it('renders filter badges with band labels', () => {
+  it('renders the guidance unknown state when no observing night is provided', () => {
+    // Default renderTable() passes no `night`, so real guidance cannot be
+    // computed — the pill strip renders the explicit unknown state, not a
+    // fabricated per-band recommendation.
     renderTable();
-    // Each row has at least one filter badge (Ha is always recommended in the
-    // mock since MOCK_MOON_PHASE_FRAC = 0.55, above the bright-moon threshold).
-    expect(screen.getAllByLabelText('Ha').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Unknown').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders real per-band viability pills with a night (spec 047 US3)', () => {
+    render(
+      <TargetsTable
+        targets={TARGETS}
+        selected={null}
+        onSelect={vi.fn()}
+        sort={DEFAULT_TARGET_SORT}
+        onSort={vi.fn()}
+        night={nightWithMoonAtVernalEquinox()}
+      />,
+    );
+    // Each row has 7 band pills (L/R/G/B/Ha/SII/OIII), each labelled viable or
+    // not-viable — never a fabricated recommendation.
+    const haPills = screen.getAllByLabelText(/^Ha: (viable|not viable) tonight$/);
+    expect(haPills.length).toBeGreaterThanOrEqual(1);
   });
 
   it('fires onSelect when a target row is clicked', () => {
@@ -157,5 +190,170 @@ describe('TargetsTable (#84/#85)', () => {
   it('shows the loading footer while loading', () => {
     renderTable({ loading: true });
     expect(screen.getByText('Loading…')).toBeInTheDocument();
+  });
+});
+
+// ── spec 044 Track B: US6/T015 no-site prompt, T018 tests ──────────────────────
+
+const SITE: ObserverSite = {
+  id: 'site-test',
+  name: 'Test Site',
+  latitudeDeg: 52.37,
+  longitudeDeg: 4.9,
+  elevationM: 0,
+  timezone: 'Europe/Amsterdam',
+  twilight: 'astronomical',
+  minHorizonAltDeg: 0,
+};
+
+describe('TargetsTable — no-site prompt (US6/T015/T018)', () => {
+  beforeEach(() => {
+    __setObservingStateForTest({});
+  });
+
+  it('shows a no-site prompt banner when there is no active observing site', () => {
+    renderTable();
+    expect(
+      screen.getByText(/Add an observing site.*see tonight's real altitude/i),
+    ).toBeInTheDocument();
+  });
+
+  it('degrades lunar-distance cells to "—" (no throw) when there is no active site', () => {
+    renderTable();
+    // Every row's lunar-distance cell shows the null-degrade placeholder.
+    expect(screen.queryAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('hides the no-site banner once an active site is set', () => {
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+    renderTable();
+    expect(
+      screen.queryByText(/Add an observing site.*see tonight's real altitude/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('computes real (non-degraded) astronomy for a circumpolar target once a site is active', () => {
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+    const circumpolar: TargetListItem = {
+      id: 'circumpolar',
+      effectiveLabel: 'Circumpolar Target',
+      primaryDesignation: 'Circumpolar Target',
+      objectType: 'other',
+      raDeg: 0,
+      decDeg: 85, // circumpolar at 52°N regardless of date/time
+      aliases: [],
+    };
+    // Pin "now" to a winter night: mid-summer at 52°N never reaches
+    // astronomical twilight, so visibleTonight would be false regardless of
+    // altitude (FR-017) — not a useful test of the real-astronomy wiring.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-15T20:00:00Z'));
+    try {
+      renderTable({ targets: [circumpolar] });
+      // A circumpolar target is visible-tonight (real astronomy, not the
+      // needsSite degrade state).
+      expect(document.querySelector('.alm-targets-vis--yes')).not.toBeNull();
+      expect(document.querySelector('.alm-targets-vis--no')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// ── US2: real lunar distance + sorting (spec 047 T013/T014) ──────────────────
+
+/** Build a controllable observing night with the Moon pointing at RA0/Dec0. */
+function nightWithMoonAtVernalEquinox(): ObservingNight {
+  return {
+    nightKey: '2026-07-05',
+    midnight: new Date('2026-07-05T00:00:00Z'),
+    phaseName: 'full',
+    waxing: false,
+    illuminationFrac: 1,
+    moonAgeFromFullDays: 0,
+    moonVec: { x: 1, y: 0, z: 0 }, // RA 0h, Dec 0°
+  };
+}
+
+/** A target row with explicit coordinates (or null for the unknown case). */
+function coordItem(desig: string, raDeg: number | null, decDeg: number | null): TargetListItem {
+  return {
+    id: desig,
+    effectiveLabel: desig,
+    primaryDesignation: desig,
+    objectType: 'other',
+    raDeg,
+    decDeg,
+    aliases: [],
+  };
+}
+
+describe('TargetsTable — lunar distance (US2)', () => {
+  const night = nightWithMoonAtVernalEquinox();
+  // Sep from Moon@RA0/Dec0: NEAR=0°, MID=90°, FAR=180°, UNK=unknown.
+  const NEAR = coordItem('NEAR', 0, 0);
+  const MID = coordItem('MID', 90, 0);
+  const FAR = coordItem('FAR', 180, 0);
+  const UNK = coordItem('UNK', null, null);
+
+  function renderWithNight(sortDir: 'asc' | 'desc', targets: TargetListItem[]) {
+    render(
+      <TargetsTable
+        targets={targets}
+        selected={null}
+        onSelect={vi.fn()}
+        sort={{ col: 'lunarDist', dir: sortDir }}
+        onSort={vi.fn()}
+        night={night}
+      />,
+    );
+  }
+
+  function rowOrder(): string[] {
+    const table = screen.getByRole('table');
+    return within(table)
+      .getAllByText(/^(NEAR|MID|FAR|UNK)$/)
+      .map((el) => el.textContent as string);
+  }
+
+  it('renders whole-degree separations and "—" for unknown coordinates', () => {
+    renderWithNight('asc', [MID, UNK]);
+    // MID is 90° from the Moon.
+    expect(screen.getByText('90°')).toBeInTheDocument();
+    // UNK shows an explicit dash, never a number.
+    const table = screen.getByRole('table');
+    expect(within(table).getAllByText('—').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('sorts ascending by real separation with unknowns last', () => {
+    renderWithNight('asc', [FAR, UNK, NEAR, MID]);
+    expect(rowOrder()).toEqual(['NEAR', 'MID', 'FAR', 'UNK']);
+  });
+
+  it('sorts descending by real separation, unknowns STILL last', () => {
+    renderWithNight('desc', [FAR, UNK, NEAR, MID]);
+    expect(rowOrder()).toEqual(['FAR', 'MID', 'NEAR', 'UNK']);
+  });
+
+  it('gates off (all "—") when no observing night is provided', () => {
+    render(
+      <TargetsTable
+        targets={[NEAR, MID]}
+        selected={null}
+        onSelect={vi.fn()}
+        sort={DEFAULT_TARGET_SORT}
+        onSort={vi.fn()}
+      />,
+    );
+    // No numeric lunar separations; both rows show the unknown dash.
+    expect(screen.queryByText('90°')).not.toBeInTheDocument();
   });
 });

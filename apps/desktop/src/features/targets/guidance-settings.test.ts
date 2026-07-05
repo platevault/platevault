@@ -1,0 +1,100 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { DEFAULT_MOON_AVOIDANCE } from './astro/moon-avoidance';
+
+// Mock the generated command surface so we can drive settings I/O.
+const { settingsGet, settingsUpdate, settingsRestoreDefaults } = vi.hoisted(() => ({
+  settingsGet: vi.fn(),
+  settingsUpdate: vi.fn(),
+  settingsRestoreDefaults: vi.fn(),
+}));
+vi.mock('@/bindings/index', () => ({
+  commands: { settingsGet, settingsUpdate, settingsRestoreDefaults },
+}));
+vi.mock('@/api/ipc', () => ({ unwrap: (v: unknown) => v }));
+
+import {
+  coerceParams,
+  loadGuidanceParams,
+  saveGuidanceParams,
+  restoreGuidanceDefaults,
+  getGuidanceParams,
+  __resetGuidanceParamsForTest,
+  DISTANCE_MAX,
+  WIDTH_MIN,
+  MOON_AVOIDANCE_KEY,
+  PLANNER_SCOPE,
+} from './guidance-settings';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  __resetGuidanceParamsForTest();
+});
+afterEach(() => {
+  __resetGuidanceParamsForTest();
+});
+
+describe('coerceParams', () => {
+  it('returns all seven bands with defaults for empty input', () => {
+    const p = coerceParams(undefined);
+    expect(Object.keys(p).sort()).toEqual(['B', 'G', 'Ha', 'L', 'OIII', 'R', 'SII']);
+    expect(p.L).toEqual(DEFAULT_MOON_AVOIDANCE.L);
+    expect(p.OIII).toEqual(DEFAULT_MOON_AVOIDANCE.OIII);
+  });
+
+  it('clamps out-of-range values into the valid ranges', () => {
+    const p = coerceParams({
+      L: { distanceDeg: 999, widthDays: 0.01 },
+    });
+    expect(p.L.distanceDeg).toBe(DISTANCE_MAX);
+    expect(p.L.widthDays).toBe(WIDTH_MIN);
+  });
+
+  it('falls back per-field on non-numeric input', () => {
+    const p = coerceParams({ Ha: { distanceDeg: 'x', widthDays: 5 } });
+    expect(p.Ha.distanceDeg).toBe(DEFAULT_MOON_AVOIDANCE.Ha.distanceDeg);
+    expect(p.Ha.widthDays).toBe(5);
+  });
+});
+
+describe('loadGuidanceParams', () => {
+  it('hydrates the cache from the planner scope', async () => {
+    settingsGet.mockResolvedValue({
+      scope: PLANNER_SCOPE,
+      values: { [MOON_AVOIDANCE_KEY]: { L: { distanceDeg: 90, widthDays: 10 } } },
+    });
+    const p = await loadGuidanceParams();
+    expect(settingsGet).toHaveBeenCalledWith(PLANNER_SCOPE);
+    expect(p.L).toEqual({ distanceDeg: 90, widthDays: 10 });
+    expect(getGuidanceParams().L.distanceDeg).toBe(90);
+  });
+
+  it('falls back to defaults when the backend throws', async () => {
+    settingsGet.mockRejectedValue(new Error('offline'));
+    const p = await loadGuidanceParams();
+    expect(p).toEqual(DEFAULT_MOON_AVOIDANCE);
+  });
+});
+
+describe('saveGuidanceParams (live propagation, SC-008)', () => {
+  it('persists via settings.update and updates the cache immediately', async () => {
+    settingsUpdate.mockResolvedValue(null);
+    const next = { ...DEFAULT_MOON_AVOIDANCE, L: { distanceDeg: 100, widthDays: 12 } };
+    await saveGuidanceParams(next);
+    expect(settingsUpdate).toHaveBeenCalledWith(PLANNER_SCOPE, {
+      [MOON_AVOIDANCE_KEY]: expect.objectContaining({
+        L: { distanceDeg: 100, widthDays: 12 },
+      }),
+    });
+    expect(getGuidanceParams().L).toEqual({ distanceDeg: 100, widthDays: 12 });
+  });
+});
+
+describe('restoreGuidanceDefaults', () => {
+  it('calls restore-defaults for the key then reloads', async () => {
+    settingsRestoreDefaults.mockResolvedValue({ restored: [MOON_AVOIDANCE_KEY] });
+    settingsGet.mockResolvedValue({ scope: PLANNER_SCOPE, values: {} });
+    await restoreGuidanceDefaults();
+    expect(settingsRestoreDefaults).toHaveBeenCalledWith({ keys: [MOON_AVOIDANCE_KEY] });
+    expect(getGuidanceParams()).toEqual(DEFAULT_MOON_AVOIDANCE);
+  });
+});

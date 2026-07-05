@@ -110,6 +110,39 @@ pub struct RootRemapped {
 
 pub const TOPIC_ROOT_REMAPPED: &str = "root.remapped";
 
+/// Payload for the `root.active_changed` topic (P6b — Data Sources
+/// Disable/Enable flow).
+///
+/// Emitted after a root's `active` flag is toggled via `sources.set_active`.
+/// Disabling excludes the root from scan/ingest surfaces while its history
+/// (sessions, plan items, file records) stays fully intact — this is a
+/// visibility flag, not a deletion.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RootActiveChanged {
+    pub root_id: String,
+    pub path: String,
+    pub active: bool,
+}
+
+pub const TOPIC_ROOT_ACTIVE_CHANGED: &str = "root.active_changed";
+
+/// Payload for the `root.deleted` topic (P6b — Data Sources Delete flow).
+///
+/// Emitted after a root's registration is removed from `registered_sources`.
+/// Only fires when the root had no dependent records — `roots.delete` blocks
+/// with `root.has_dependents` otherwise (decision D8, no cascade-nullify).
+/// Files on disk are never touched (constitution Principle I).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RootDeleted {
+    pub root_id: String,
+    pub path: String,
+    pub kind: String,
+}
+
+pub const TOPIC_ROOT_DELETED: &str = "root.deleted";
+
 // ── Native filesystem control audit events (spec 004) ─────────────────────
 
 /// Kind of picker that failed.

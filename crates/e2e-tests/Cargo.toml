@@ -18,3 +18,6 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 anyhow = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Disposable roots/project folders for real-file journey fixtures (never a DB
+# reader/writer — see `common/mod.rs` module docs on that boundary).
+tempfile = { workspace = true }

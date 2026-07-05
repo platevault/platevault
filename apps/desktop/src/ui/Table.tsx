@@ -9,6 +9,13 @@ export interface TableColumn {
   className?: string;
   style?: CSSProperties;
   cellStyle?: CSSProperties;
+  /**
+   * ARIA sort state emitted on the `<th>` (NOT on the inner SortHeader button,
+   * where it would be invalid). Sortable tables pass
+   * `ariaSortFor(active, dir)` from `@/components` so only the active sort
+   * column announces its direction.
+   */
+  ariaSort?: 'ascending' | 'descending' | 'none' | 'other';
 }
 
 export type TableRow = {
@@ -103,7 +110,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
         <tr>
           {columns.map((c, i) => (
             // eslint-disable-next-line no-restricted-syntax -- dynamic: caller-provided column header style passthrough
-            <th key={i} className={c.className} style={c.style}>
+            <th key={i} className={c.className} style={c.style} aria-sort={c.ariaSort}>
               {c.label}
             </th>
           ))}
@@ -135,6 +142,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(
         ref={scrollRef}
         className={['alm-table__scroll', scrollClassName].filter(Boolean).join(' ')}
         data-testid={scrollTestId}
+        data-virtual-scroll="true"
       >
         <table ref={ref} className={cls} {...rest}>
           {head}

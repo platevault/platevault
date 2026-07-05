@@ -8,8 +8,9 @@
  * - Empty state when the project has no manifests yet.
  * - Each row shows reason label + formatted timestamp. Clicking a row loads
  *   the full body via `project.manifest.get` and shows an expandable panel.
- * - "Reveal in OS" button on each row calls `project.manifest.reveal_in_os`
- *   and shows an error toast on failure.
+ * - The Reveal button on each row calls `project.manifest.reveal_in_os`
+ *   and shows an error toast on failure (tooltip = shared platform-native
+ *   revealLabel()).
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -25,6 +26,7 @@ import {
 import type { ManifestSummaryDto } from './manifests';
 import type { ManifestBodyDto_Serialize as ManifestBodyDto } from '@/bindings/index';
 import { m } from '@/lib/i18n';
+import { revealLabel } from '@/lib/reveal-label';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -168,7 +170,7 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
                   disabled={revealWorking === manifest.id}
                   onClick={() => void handleReveal(manifest)}
                   data-testid={`manifest-reveal-${manifest.id}`}
-                  title={m.projects_manifests_reveal_title()}
+                  title={revealLabel()}
                 >
                   {m.projects_manifests_reveal_btn()}
                 </Btn>

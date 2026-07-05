@@ -17,6 +17,9 @@
 //! - `"sources"`  → `followSymlinks`, `hashOnScan`
 //! - `"calibration"` → `darkMatchTolerance`, `flatMatching`, `suggestCalibration`,
 //!   `calibrationDarkTempTolerance`, `calibrationPrefillSuggestion`
+//! - `"sourceViews"` → `sourceViewLinkKindIntraDrive`, `sourceViewLinkKindCrossDrive`
+//!   (spec 049 US2 T029 — read-only display in the generation dialog; the
+//!   editable Settings pane for these two keys is spec 049 T030, deferred)
 //! - `""` (empty) → reads the full settings bag (all known keys).
 //!
 //! Unknown `values` keys from the frontend that are not valid settings keys are
@@ -66,6 +69,14 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibrationAgingThresholdDays",
         ],
         "plans" => &["plansListDefaultAgeCutoffDays"],
+        "sourceViews" => &["sourceViewLinkKindIntraDrive", "sourceViewLinkKindCrossDrive"],
+        "observing" => &[
+            "observingSites",
+            "observingDefaultSiteId",
+            "observingActiveSiteId",
+            "usableAltitudeDeg",
+        ],
+        "planner" => &["plannerMoonAvoidance"],
         // Empty scope or "global" returns every stable key.
         _ => &[
             "logLevel",
@@ -91,6 +102,13 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "calibrationAgingThresholdDays",
             "plansListDefaultAgeCutoffDays",
             "currentLibraryId",
+            "sourceViewLinkKindIntraDrive",
+            "sourceViewLinkKindCrossDrive",
+            "observingSites",
+            "observingDefaultSiteId",
+            "observingActiveSiteId",
+            "usableAltitudeDeg",
+            "plannerMoonAvoidance",
         ],
     }
 }

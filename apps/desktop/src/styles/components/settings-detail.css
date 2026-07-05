@@ -296,6 +296,12 @@
   border-color: var(--alm-border-subtle);
 }
 
+/* Disabled root (P6b) — reduced opacity to signal it is excluded from
+   scan/ingest without implying it is unreachable (that's --offline). */
+.alm-data-sources__root-card--disabled {
+  opacity: 0.7;
+}
+
 /* Left column: path row + meta line */
 .alm-data-sources__root-info {
   min-width: 0;
@@ -319,6 +325,11 @@
 
 /* Offline warn pill — aligned inline with path */
 .alm-data-sources__offline-pill {
+  flex-shrink: 0;
+}
+
+/* Disabled neutral pill (P6b) — aligned inline with path */
+.alm-data-sources__disabled-pill {
   flex-shrink: 0;
 }
 

@@ -40,4 +40,7 @@ export const queryKeys = {
     list: () => ['archive'] as const,
     audit: (entityId: string) => ['archive', 'audit', entityId] as const,
   },
+  plans: {
+    detail: (id: string) => ['plans', 'detail', id] as const,
+  },
 } as const;

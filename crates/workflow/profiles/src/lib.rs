@@ -46,6 +46,41 @@ pub enum DetachStrategy {
     Setsid,
 }
 
+/// Per-tool source-view directory layout (spec 049 US2 T025).
+///
+/// Describes the token-pattern directory layout a generated source view
+/// (`crates/app/projects::source_view_generate`) should use for this tool,
+/// instead of the US1 MVP flat `Lights/<session_id>/` tree. Pattern strings
+/// use the `{token}` placeholder syntax already established by
+/// `crates/patterns::per_type` (spec 041) and are resolved with
+/// `crates/patterns::resolve_pattern_str` against the shared v1 token
+/// registry (`crates/patterns::V1_REGISTRY`) — this crate does not hand-roll
+/// a second path-building language.
+///
+/// Patterns describe a **directory**, not a filename: the generation builder
+/// appends the source file's basename after resolving the pattern.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SourceViewLayout {
+    /// Directory pattern for light frames, grouping by session/night → filter
+    /// → exposure (spec 049 US2 AS1), e.g. `"{date}/{filter}/{exposure}/"`.
+    /// `{date}` resolves to the session's observing night (spec 002 T033a),
+    /// which is this codebase's existing session/night grouping concept.
+    pub light_pattern: &'static str,
+    /// Directory pattern for calibration frames, placed at "the profile's
+    /// expected calibration location" (FR-010). `{frame_type}` is supplied by
+    /// the builder as the calibration kind (`flat`/`dark`/`bias`) rather than
+    /// read from frame metadata.
+    pub calibration_pattern: &'static str,
+}
+
+/// The WBPP/PixInsight source-view layout — the spec 049 US2 fallback used
+/// whenever the active project profile has no `source_view_layout` of its own
+/// (unmatched tool, or a seeded profile that hasn't opted in yet).
+pub const DEFAULT_SOURCE_VIEW_LAYOUT: SourceViewLayout = SourceViewLayout {
+    light_pattern: "{date}/{filter}/{exposure}/",
+    calibration_pattern: "calibration/{frame_type}/",
+};
+
 /// Per-tool descriptor seeded by [`seed`].
 ///
 /// Mutable fields (`executable_path`, `enabled`) are stored in Settings under
@@ -64,6 +99,9 @@ pub struct ToolProfile {
     pub supports_open_folder: bool,
     /// Preferred detach strategy for this tool.
     pub detach_strategy: DetachStrategy,
+    /// Source-view directory layout (spec 049 US2 T025). `None` means "use
+    /// [`DEFAULT_SOURCE_VIEW_LAYOUT`]" — see [`seed::resolve_source_view_layout`].
+    pub source_view_layout: Option<SourceViewLayout>,
 }
 
 impl ToolProfile {

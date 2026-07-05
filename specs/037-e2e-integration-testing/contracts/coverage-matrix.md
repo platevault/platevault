@@ -94,6 +94,56 @@ multi-root prompt vs single-root auto, missing-date gate) is the recommended
 post-merge verification loop (see the `tauri-mcp-windows-verify-mechanics`
 memory); Layer-1 + vitest coverage above gates the merge.
 
+## Layer-2 real-UI journey status — 2026-07-04 (WP-C, D21/D22)
+
+Six real journeys exist in `crates/e2e-tests/tests/`, none `#[ignore]`d.
+Harness: thirtyfour + `tauri-plugin-webdriver`/`tauri-webdriver`, the
+`window.__ALM_E2E__` invoke bridge (D21 renamed the harness's stale
+`__APP_E2E__` references to match — confirmed landed). CI (`e2e.yml`, 3-OS
+matrix) is the first real run point (no webview in the WSL dev sandbox);
+local gates (compile, clippy, fmt) are clean.
+
+| Journey | File | Areas | Real commands exercised |
+|---|---|---|---|
+| `first_run_resolve_create_project` | `journeys.rs` | #1, #7, #12/#14 | `target.resolve` (offline bundled-seed cache hit), `projects.create`, `projects.list` |
+| `plan_review_apply_with_audit` | `journeys.rs` | #3, #16, #17, #18 | `roots.register`, `sources.set_organization_state`, `inbox.scan.folder`, `inbox.classify`, `inbox.confirm`, `inbox.plan.apply`, `plans.apply.status` |
+| `ingestion_sessions_search` | `journeys.rs` | #3, #4, #6, #5, #12/#14 | inbox pipeline (as above) + `sessions.list` (event-driven session grouping/resolution), `calibration.match.suggest`, `search.global` |
+| `lifecycle_integrity` | `journeys.rs` | #7/#8 | `projects.create`, `lifecycle.transition.apply`, `lifecycle.ledger.list` |
+| `cleanup_plan_review` (NEW, D22) | `journeys.rs` | #10/#11, #17 | `projects.create`, `artifact.watcher.attach`, `artifact.list`, `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`, `plans.approve` |
+| `all_top_level_screens_load` | `smoke.rs` | #21 | real routes + the shipped `AppErrorBoundary` fallback presence check |
+
+**Corrections to prior scaffold claims** (the original stub doc comments were
+partly aspirational, not verified against real code — corrected here per this
+task's brief: "keep it accurate to REAL current behavior, don't trust spec
+prose"):
+
+- `sessions.transition` is NOT exercised by any journey — spec 041 FR-051
+  (T076) deliberately deleted the command; the original `lifecycle_integrity`
+  stub's mention of it is struck (D22).
+- `audit.list`/`audit.export` were fixture stubs when the journeys were
+  authored; **PR #388 (merged) wired them to the real `audit_log_entry`
+  table** (`apps/desktop/src-tauri/src/commands/audit.rs` now reads via
+  `persistence_db::repositories::audit`), and PR #401 (in flight) adds
+  entity-filtered audit reads. No journey asserts through `audit.list`;
+  durable-record proofs use `plans.apply.status` (reads the real
+  `plan_apply_events` table) and `lifecycle.ledger.list` — the read paths
+  closest to the mutations being proved, kept as the primary assertion
+  surfaces by choice (more robust than the general audit feed). The original
+  stubs' references to `events.recent` were aspirational — that command does
+  not exist.
+- **`cleanup_plan_review`'s known, documented gap**: applying the generated
+  plan needs `plans.apply_real`, which takes a `tauri::ipc::Channel` progress
+  argument with no channel-free equivalent for archive/cleanup plans (unlike
+  `inbox.plan.apply` for inbox plans), and the Cleanup/Archive UI does not yet
+  wire an Apply button for `cleanup.plan.generate` output
+  (`apps/desktop/src/features/projects/OutputsCleanupSections.tsx`,
+  `apps/desktop/src/features/archive/*.tsx` — neither calls
+  `cleanupPlanGenerate`). The journey stops at `plans.approve`
+  (`ready_for_review` → `approved`), which is the real, honest boundary of
+  what's testable today without reaching into product frontend code beyond a
+  thin test hook (FR-018). Follow-up: land a channel-free generic apply
+  command, or wire the UI Apply button, then extend the journey.
+
 ## Spec 035 iteration — US4 ingest → session → target — 2026-06-21
 
 Applied light frames create `acquisition_session` records grouped by capture
@@ -112,3 +162,160 @@ identity and link a resolved `canonical_target` (FR-016). Folds into areas
 interval task in `apps/desktop/src-tauri/src/lib.rs::run_app` is exercised
 function-by-function at Layer 1 (T046 calls both directly); the live interval
 loop is validated in the Windows real-app E2E loop.
+
+## Unified-main audit — 2026-07-05 (Layer-2 + manual-Windows + mock-layer reconciliation)
+
+Read-heavy audit against `origin/main` post spec-043-redesign convergence
+(PR #349 merged, plus #430/#435/#436/#439/#442/#443 landed after it). No
+product code changed. Confirms the Layer-2 harness described above survived
+the convergence intact and adds the missing cross-reference to the mock
+(Playwright) layer and to the 10 user journeys, including several
+post-convergence features (040, 043, 044, 046, 047, 048, 049) that predate
+this file's existing rows.
+
+**Three test layers now exist; this file previously tracked only two.**
+Layer-2 (`crates/e2e-tests/`, this file, above) and Layer-1 (`cargo test
+--workspace`, above) are unchanged in shape. A third, **mock-Playwright**
+layer (`apps/desktop/tests/e2e/*.spec.ts`, `VITE_USE_MOCKS=true`, run via
+`pnpm --filter @astro-plan/desktop test:e2e`) exists and is now tracked here
+for the first time — see
+`docs/development/e2e-mock-coverage-audit-2026-07-05.md` (branch
+`research/e2e-mock-coverage-audit`) for the full spec-by-spec breakdown. A
+fourth surface, **manual-Windows** (`docs/development/windows-journeys/`,
+this audit's new artifact, plus the pre-existing
+`docs/development/verify-on-windows-journeys.md`), is the catch-all for
+everything neither automated layer reaches.
+
+### Per-journey coverage (10 user journeys, `docs/product/user-journeys.md`)
+
+| Journey | Layer-1 | Layer-2 | Mock-Playwright | Manual-Windows doc |
+|---|:--:|:--:|:--:|---|
+| 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions only | `windows-journeys/journey-01-first-run-setup.md` |
+| 2 Ingest → reclassify → confirm (move) | ✅ | 🟡 IPC round-trip only (no UI interaction) | ❌ none | `windows-journeys/journey-02-inbox-ingest-move.md` |
+| 3 Ingest → confirm (catalogue-in-place) | ✅ | ❌ (existing journey forces the move branch) | ❌ none | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
+| 4 Sessions review (derived) | ✅ | 🟡 grouping proof only, no UI-invariant checks | 🟡 rows/detail render only | `windows-journeys/journey-04-sessions-review.md` |
+| 5 Project lifecycle | ✅ | 🟡 transition + ledger only, no UI | 🟡 transition button only (pill-refresh `test.skip`) | `windows-journeys/journey-05-project-lifecycle.md` |
+| 6 Cleanup scan→review→apply | ✅ | 🟡 stops at `approved`, **apply step has zero coverage anywhere** | ❌ none | `windows-journeys/journey-06-cleanup-scan-apply.md` |
+| 7 Archive → delete | ✅ (backend only) | ❌ **none at all** | ❌ **none at all** | `windows-journeys/journey-07-archive-delete.md` |
+| 8 Calibration masters → matching | ✅ | 🟡 `calibration.match.suggest` shape only | ❌ none | `windows-journeys/journey-08-calibration-masters-matching.md` |
+| 9 Targets & planning | ✅ (backend only) | ❌ **none at all** | ❌ **none at all** | `windows-journeys/journey-09-targets-planning.md` |
+| 10 Settings/appearance/i18n | ✅ | 🟡 route-load smoke only | ❌ none | `windows-journeys/journey-10-settings-appearance-i18n.md` |
+
+Legend: ✅ solid coverage at that layer · 🟡 partial/IPC-only/smoke-only ·
+❌ none. Layer-1 "✅" means the backend logic is real-tested; it says
+nothing about the UI surface, which is exactly the gap the other columns
+track.
+
+### Post-convergence feature areas not yet in the table above (specs 040/043/044/046/047/048/049)
+
+These shipped after this file's original 22 areas were enumerated and were
+never folded in. Status verified against real code on `main`
+(2026-07-05), not against spec-doc `Status:` headers, which lag behind
+what's actually merged (`specs/SPEC_STATUS.md` itself is stale in places —
+see the finding below).
+
+| Spec | Area | Layer-1 | Layer-2 | Mock | Manual-Windows | Note |
+|---|---|:--:|:--:|:--:|:--:|---|
+| 040 | Calibration master detection | ✅ | 🟡 (suggest only) | ❌ | journey-08 | Shipped without `plan.md`/`tasks.md` (documented deviation); least-scrutinized recent backend feature |
+| 041 | Inbox single-type sub-items / destination model | ✅ | 🟡 (IPC only) | ❌ | journey-02/03 | iteration-2 now on `main` via #349 |
+| 043 | UI redesign (theming, layout convention, `aria-sort`) | n/a | 🟡 (smoke only) | ❌ | journey-10 | Foundation + round-2 shipped; pill-system unification and resizable splitters still pending per SPEC_STATUS |
+| 044 | Targets planner — Track B ephemeris/observer engine | n/a (frontend-only) | ❌ | ❌ | journey-09 | **Compute engine merged (`a395ce93`) but functionally unreachable**: real astronomy is gated behind `useObserverSiteExists()`, and `site-gate.ts::readSiteExists()` is hardcoded `return false` — no site-creation UI/command exists on `main` until PR #440 (spec 044 US3, open) merges. Verify this is still true before reusing this row. |
+| 046 | i18n infrastructure & error-code translation | ✅ | n/a (cross-cutting) | ❌ | journey-10 | `specs/SPEC_STATUS.md`: Implemented, 36/36 |
+| 047 | Targets planner — Track A (Moon/filter/opposition) | ✅ | ❌ | ❌ | journey-09 | Implemented in code but **also gated by the same site-exists check as 044** (spec 047 D7) — see 044 row; spec's own T028 explicitly defers verify-on-windows here |
+| 048 | Per-frame inventory / live session membership | ✅ (partial) | ❌ | ❌ | — (folds into journeys 4/6) | `main` PRs #435/#442 merged; full per-frame-inventory US scope still open |
+| 049 | Source-view generation (symlinks/junctions) | ✅ (partial) | ❌ | ❌ | — (new journey needed, none written this pass) | `main` PR #439 (US1) + #443 (US2 profile layout) merged; junction/symlink behavior is real, OS-specific filesystem behavior a mock layer structurally cannot prove — highest-value Layer-2 candidate of the unlisted specs |
+
+**Finding (verified against code, not spec prose)**: `specs/SPEC_STATUS.md`
+row 77 (044) reads "Track B specced, implementation in progress... T001–T003
+landed" — this is stale; `git log` shows `a395ce93` ("real tonight altitude,
+rise/set, and imaging-time in the Targets planner", #436) already merged to
+`main`, well past T001–T003. Do not use `SPEC_STATUS.md` prose alone to
+judge what's implemented; check the running code (as this audit did for the
+site-gate finding above).
+
+### Layer-2-only flows (cannot be reached by the mock-Playwright layer, ever)
+
+These are backend-driven behaviors the mock layer structurally cannot
+assert, because they require a real Tauri `Channel`, a real filesystem, a
+real async event pipeline, or a real OS integration — mocking them would
+just test the mock, not the product:
+
+- **`plans.apply.status` durable progress polling and the real file-move
+  side effect** (`plan_review_apply_with_audit`) — needs a real filesystem
+  and the real `plan_apply_events` table.
+- **Event-driven session grouping after plan apply**
+  (`ingestion_sessions_search`) — needs the real async `plan_listener` →
+  `ingest_light_frames` pipeline; a mock can fake the end state but not
+  prove the pipeline actually fires.
+- **`lifecycle.transition.apply` + `lifecycle.ledger.list` real DTO
+  round-trip** (`lifecycle_integrity`) — needs the real backend's
+  business-rule engine, not a canned mock response.
+- **`artifact.watcher.attach` real filesystem reconciliation + live watch**
+  (`cleanup_plan_review`) — needs a real directory watcher.
+- **Archive/cleanup plan `apply` with a `tauri::ipc::Channel` progress
+  argument** — structurally cannot be driven by Playwright at all (no
+  Tauri IPC channel in a browser context); this is Layer-2-or-manual-only
+  by construction, not just by current gap.
+- **Symlink/junction creation for source views (spec 049)** and **OS trash
+  semantics (spec 017/025)** — real, OS-specific filesystem behavior; a
+  mock can only assert the UI *called* the right command, never that the
+  junction/trash operation actually succeeded on that OS.
+- **Native OS folder pickers, "Show in File Explorer" reveal, tool-launch
+  process spawn** — real OS integrations outside any webview.
+
+### Batched plan — new Layer-2 (thirtyfour) journeys to author, ordered by risk/value
+
+1. **Archive lifecycle + trash + permanent delete** (Journey 7) — highest
+   product risk (irreversible deletion) with **zero automated coverage at
+   any layer today**. **Blocked** on a channel-free apply command for
+   archive/cleanup plans (shared blocker with #2) — land that first.
+2. **Cleanup plan apply completion** (Journey 6) — extend
+   `cleanup_plan_review` past `plans.approve` once the channel-free apply
+   path (or a real UI Apply button + a thin test hook) exists. Same
+   blocker as #1; land together.
+3. **Calibration masters ingest → Calibration page → matching → assign**
+   (Journey 8, spec 040) — real UI-level masters flow beyond today's
+   `calibration.match.suggest`-only proof; spec 040 has the least automated
+   scrutiny of any recently-shipped backend feature.
+4. **Source-view generation** (spec 049) — generate/regenerate a
+   WBPP-profile source view and assert real symlinks/junctions exist on
+   disk with the correct per-tool layout; real OS-specific filesystem
+   behavior the mock layer can never prove. No journey exists yet.
+5. **Per-frame inventory reconciliation** (spec 048) — raw-frame-vs-disk
+   reconciliation feeding cleanup candidates; extends Journeys 4/6.
+6. **Inbox UI-level gate + reclassify + root-picker** (Journeys 2/3) —
+   mixed-folder splitting, needs-review banner/badges, bulk reclassify,
+   root-picker prompt, stale-plan refusal, and the catalogue-in-place (0
+   moves) variant — all currently proven only at the IPC level, not through
+   real UI interaction. Highest-value UI-interaction gap, but lower risk
+   than #1/#2 since the backend mutation itself is already proven.
+7. **Targets catalog + SIMBAD resolve-on-demand + stub-disclosure guard**
+   (Journey 9) — testable today independent of the site-gate blocker; the
+   stub-disclosure requirement is called out as safety-critical in the
+   product journey doc and has zero coverage at any layer.
+8. **Real planner astronomy end-to-end** (Journey 9, specs 044/047) —
+   **blocked** on PR #440 (site-creation UI) merging; until then any new
+   journey here can only prove the gated-off prompt renders correctly, not
+   real astronomy — name it honestly (e.g.
+   `targets_planner_site_gate_prompt`) rather than implying coverage it
+   can't provide yet.
+9. **Sessions derived-view invariants** (Journey 4) — absence of
+   review-state controls/pills, notes-edit-doesn't-transition, rescan
+   idempotency; low cost, extends the existing
+   `ingestion_sessions_search` fixture.
+10. **Project lifecycle UI surface** (Journey 5) — create-wizard validation,
+    attach/remove-sources UX, manifests/notes autosave, tool-launch spawn +
+    containment, artifact watcher; tool-launch and the watcher specifically
+    need Layer-2 (a real process/filesystem watcher), not the mock layer.
+11. **Settings + layout-convention + i18n regression guard** (Journey 10) —
+    lowest filesystem-mutation risk; the 1100×720 layout convention and
+    no-raw-error-code checks are cheap, cross-cutting regression guards.
+
+See `docs/development/windows-journeys/journey-0{1..9,10}-*.md` for the
+click-by-click manual scripts covering all of the above until each is
+promoted to a real Layer-2 journey, and
+`docs/development/e2e-mock-coverage-audit-2026-07-05.md` for the
+mock-Playwright layer's own parallel batched fix-list (batches 1–7 there
+target the same gaps from the mock-layer side where a mock CAN reach the
+behavior — see the "Layer-2-only flows" section above for which ones a mock
+never will).

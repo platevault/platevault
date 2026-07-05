@@ -13,8 +13,8 @@
 
 use audit::bus::EventBus;
 use audit::event_bus::{
-    FirstRunCompleted, RootRemapped, Source, SourceCountByKind, TOPIC_FIRST_RUN_COMPLETED,
-    TOPIC_ROOT_REMAPPED,
+    FirstRunCompleted, RootActiveChanged, RootDeleted, RootRemapped, Source, SourceCountByKind,
+    TOPIC_FIRST_RUN_COMPLETED, TOPIC_ROOT_ACTIVE_CHANGED, TOPIC_ROOT_DELETED, TOPIC_ROOT_REMAPPED,
 };
 use contracts_core::first_run::{
     FirstRunCompleteResponse, FirstRunRestartResponse, FirstRunStateResponse, OrganizationState,
@@ -493,6 +493,92 @@ pub async fn apply_root_remap(
     Ok(())
 }
 
+// ── Root active toggle (P6b) ─────────────────────────────────────────────────
+
+/// Set a root's active/enabled flag (`sources.set_active`, P6b).
+///
+/// Disabled roots are excluded from scan/ingest surfaces but retain their
+/// full history (sessions, plan items, file records, inbox items) — this is
+/// a visibility flag, not a deletion (constitution §I). Publishes a
+/// best-effort `root.active_changed` audit event.
+///
+/// # Errors
+///
+/// - `source.not_found` — no root with `root_id`.
+/// - `internal.database` — persistence failure.
+pub async fn set_source_active(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    root_id: &str,
+    active: bool,
+) -> Result<(), ContractError> {
+    let (_, path) = get_root_or_not_found(pool, root_id).await?;
+
+    repo::set_source_active(pool, root_id, active).await.map_err(db_to_contract)?;
+
+    let _ = bus
+        .publish(
+            TOPIC_ROOT_ACTIVE_CHANGED,
+            Source::User,
+            RootActiveChanged { root_id: root_id.to_owned(), path, active },
+        )
+        .await;
+
+    Ok(())
+}
+
+// ── Root delete (P6b) ─────────────────────────────────────────────────────────
+
+/// Delete a root's registration (`roots.delete`, P6b, decision D8).
+///
+/// Blocks with `root.has_dependents` when any dependent records reference
+/// this root (inbox items, plan items, file records, acquisition/calibration
+/// sessions) — deliberately NO cascade-nullify (constitution §II: no silent
+/// orphaning). Files on disk are NEVER touched (constitution §I): only the
+/// `registered_sources` row (and any already-orphaned `inbox_items` for it —
+/// none should remain once the dependents check passes) is removed.
+///
+/// Publishes a best-effort `root.deleted` audit event on success.
+///
+/// # Errors
+///
+/// - `source.not_found` — no root with `root_id`.
+/// - `root.has_dependents` — dependent records exist; see `details` for the
+///   per-category breakdown (`RootDependencyCounts`).
+/// - `internal.database` — persistence failure.
+pub async fn delete_source(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    root_id: &str,
+) -> Result<(), ContractError> {
+    let (kind, path) = get_root_or_not_found(pool, root_id).await?;
+
+    let counts = repo::count_root_dependents(pool, root_id).await.map_err(db_to_contract)?;
+    if !counts.is_empty() {
+        let details = serde_json::to_value(counts).unwrap_or_default();
+        return Err(ContractError::new(
+            ErrorCode::RootHasDependents,
+            format!("root {root_id} has dependent records and cannot be deleted"),
+            ErrorSeverity::Blocking,
+            false,
+        )
+        .with_details(details));
+    }
+
+    repo::remove_source(pool, root_id).await.map_err(db_to_contract)?;
+
+    let kind_str: &'static str = kind.into();
+    let _ = bus
+        .publish(
+            TOPIC_ROOT_DELETED,
+            Source::User,
+            RootDeleted { root_id: root_id.to_owned(), path, kind: kind_str.to_owned() },
+        )
+        .await;
+
+    Ok(())
+}
+
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -717,5 +803,141 @@ mod tests {
         assert!(row.0.contains(&resp.source_id));
         assert!(row.0.contains("/tmp"));
         assert!(row.0.contains("/var/tmp"));
+    }
+
+    // ── P6b: root active toggle ────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn set_source_active_missing_root_returns_not_found() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let err = set_source_active(&pool, &bus, "nonexistent-id", false).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::SourceNotFound);
+    }
+
+    #[tokio::test]
+    async fn set_source_active_toggles_and_publishes_audit_event() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::LightFrames,
+            path: "/astro/raw".to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        let resp = repo::register_source(&pool, &req).await.unwrap();
+
+        set_source_active(&pool, &bus, &resp.source_id, false).await.unwrap();
+
+        let flags = repo::list_active_flags(&pool).await.unwrap();
+        assert_eq!(flags.get(&resp.source_id), Some(&false));
+
+        // A durable `root.active_changed` audit event was written (constitution §II).
+        let row: (String,) =
+            sqlx::query_as("SELECT payload FROM events WHERE topic = 'root.active_changed'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(row.0.contains(&resp.source_id));
+        assert!(row.0.contains("false"));
+
+        set_source_active(&pool, &bus, &resp.source_id, true).await.unwrap();
+        let flags = repo::list_active_flags(&pool).await.unwrap();
+        assert_eq!(flags.get(&resp.source_id), Some(&true));
+    }
+
+    // ── P6b: root delete ───────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn delete_source_missing_root_returns_not_found() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let err = delete_source(&pool, &bus, "nonexistent-id").await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::SourceNotFound);
+    }
+
+    #[tokio::test]
+    async fn delete_source_without_dependents_succeeds_and_publishes_audit_event() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::Project,
+            path: "/astro/projects".to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        let resp = repo::register_source(&pool, &req).await.unwrap();
+
+        delete_source(&pool, &bus, &resp.source_id).await.unwrap();
+
+        let remaining = repo::list_sources(&pool).await.unwrap();
+        assert!(remaining.iter().all(|s| s.source_id != resp.source_id));
+
+        // A durable `root.deleted` audit event was written (constitution §II).
+        let row: (String,) =
+            sqlx::query_as("SELECT payload FROM events WHERE topic = 'root.deleted'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(row.0.contains(&resp.source_id));
+        assert!(row.0.contains("/astro/projects"));
+    }
+
+    #[tokio::test]
+    async fn delete_source_blocks_when_dependents_exist() {
+        use persistence_db::repositories::inbox::{insert_inbox_item, InsertInboxItem};
+
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::Inbox,
+            path: "/astro/inbox".to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Unorganized,
+        };
+        let resp = repo::register_source(&pool, &req).await.unwrap();
+
+        insert_inbox_item(
+            &pool,
+            &InsertInboxItem {
+                id: "item-1",
+                root_id: &resp.source_id,
+                relative_path: "2026-01-01/lights",
+                file_count: 3,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        let err = delete_source(&pool, &bus, &resp.source_id).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::RootHasDependents);
+        // The typed counts are surfaced in `details` so the caller can explain
+        // the block reason without a second round trip.
+        assert_eq!(err.details.0["inboxItems"], serde_json::json!(1));
+
+        // The source registration must NOT have been removed (no cascade,
+        // no partial delete — constitution §II).
+        let remaining = repo::list_sources(&pool).await.unwrap();
+        assert!(remaining.iter().any(|s| s.source_id == resp.source_id));
     }
 }

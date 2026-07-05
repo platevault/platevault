@@ -1,23 +1,38 @@
 /**
- * GenerateSourceViewDialog — spec 049 US1 minimal generation dialog.
+ * GenerateSourceViewDialog — spec 049 US1 minimal generation dialog, extended
+ * for US2 T029 (FR-004a/FR-004c).
  *
  * Not a design pass: a minimal functional dialog wired to `sourceview.generate`
- * — a defaulted profile display (WBPP; profile switching is spec 049 US2), a
- * capability/kind hint (the actual per-item kind is resolved server-side and
- * shown on the produced plan, not previewed here), a copy opt-in checkbox
- * (FR-003 — copy is never the silent default), and submit/cancel.
+ * — a defaulted profile display (WBPP; profile switching is spec 049 US2), the
+ * two *configured* Source Views link-kind settings (read-only here — editing
+ * them is the spec 049 T030 Settings pane), a copy opt-in checkbox (FR-003 —
+ * copy is never the silent default), and submit/cancel.
+ *
+ * There is no live per-drive-scope filesystem-capability probe exposed to the
+ * frontend yet (that would require a new contract/command, out of this
+ * dialog's scope) — the actual per-item kind is still resolved server-side and
+ * reported via the `capability_drift` plan warning after generation. This
+ * dialog surfaces the *configured* kinds up front plus a note explaining the
+ * drift-fallback behavior, rather than fabricating a pre-submit
+ * achievability check.
  *
  * On success, routes the caller to plan review via `onPlanCreated`, mirroring
  * `SourceViewsSection`'s remove/regenerate toast convention.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal } from '@/components';
 import { Btn, Banner } from '@/ui';
 import { m } from '@/lib/i18n';
 import { addToast } from '@/shared/toast';
 import { generateSourceView } from './source-views';
+import { getSettings } from '@/features/settings/settingsIpc';
 import { errMessage } from '@/lib/errors';
+
+interface SourceViewLinkKindSettings {
+  sourceViewLinkKindIntraDrive?: string;
+  sourceViewLinkKindCrossDrive?: string;
+}
 
 export interface GenerateSourceViewDialogProps {
   projectId: string;
@@ -36,6 +51,23 @@ export function GenerateSourceViewDialog({
   const [copyOptIn, setCopyOptIn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [linkKinds, setLinkKinds] = useState<SourceViewLinkKindSettings | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void getSettings({ scope: 'sourceViews' })
+      .then((data) => {
+        if (!cancelled) setLinkKinds(data.values ?? {});
+      })
+      .catch(() => {
+        // Best-effort display only — generation still works without it.
+        if (!cancelled) setLinkKinds(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -99,6 +131,31 @@ export function GenerateSourceViewDialog({
       </div>
 
       <p className="text-muted text-sm">{m.projects_source_views_generate_kind_hint()}</p>
+
+      {linkKinds && (linkKinds.sourceViewLinkKindIntraDrive ?? linkKinds.sourceViewLinkKindCrossDrive) && (
+        <div className="text-sm" data-testid="generate-view-link-kinds">
+          <span className="text-muted">
+            {m.projects_source_views_generate_kind_settings_label()}:
+          </span>{' '}
+          {linkKinds.sourceViewLinkKindIntraDrive && (
+            <span>
+              {m.projects_source_views_generate_kind_intra_drive({
+                kind: linkKinds.sourceViewLinkKindIntraDrive,
+              })}
+            </span>
+          )}
+          {linkKinds.sourceViewLinkKindIntraDrive && linkKinds.sourceViewLinkKindCrossDrive && ' · '}
+          {linkKinds.sourceViewLinkKindCrossDrive && (
+            <span>
+              {m.projects_source_views_generate_kind_cross_drive({
+                kind: linkKinds.sourceViewLinkKindCrossDrive,
+              })}
+            </span>
+          )}
+        </div>
+      )}
+
+      <p className="text-muted text-xs">{m.projects_source_views_generate_kind_drift_note()}</p>
 
       <label className="flex items-center gap-2 text-sm">
         <input
