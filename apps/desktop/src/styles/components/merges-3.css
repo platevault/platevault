@@ -400,6 +400,98 @@
   border-color: color-mix(in srgb, var(--alm-text-muted) 30%, transparent);
 }
 
+/* === spec 047 US3 — real per-band viability pills =========================
+ * Overrides the tier tint above: a band that isn't viable tonight recedes to
+ * a muted/ghost treatment regardless of broadband/narrowband tier, so the
+ * strip reads at a glance (bright = shoot tonight, faded = not tonight).
+ * Reuses the SAME semantic tokens as the rest of the app (--alm-ok, chip,
+ * text-muted) — no one-off colors — so a future sparkline strip (spec 044)
+ * can reuse them too. */
+.alm-filter-badge--not-viable {
+  background: transparent;
+  color: var(--alm-text-muted);
+  border-color: var(--alm-rule);
+  opacity: 0.55;
+}
+.alm-filter-badge--viable {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--alm-ok) 25%, transparent);
+}
+/* Unknown coordinates / no observing night: a single muted pill instead of
+ * seven fabricated per-band states (FR-013). */
+.alm-filter-badge--unknown {
+  background: var(--alm-chip);
+  color: var(--alm-text-secondary);
+  border-color: var(--alm-rule);
+  padding: 0 var(--alm-sp-2);
+}
+
+/* Guidance-cell trigger: an unstyled button wrapper around the pill strip so
+ * clicking/hovering it opens the explanation popover without looking like a
+ * separate control. */
+.alm-guidance-cell__trigger {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.alm-guidance-cell__trigger:focus-visible {
+  outline: 2px solid var(--alm-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--alm-radius-sm);
+}
+
+/* Guidance explanation popover — reuses the session-popover surface tokens. */
+.alm-guidance-popup {
+  min-width: 220px;
+  max-width: 320px;
+  padding: var(--alm-sp-3);
+  background: var(--alm-surface-raised);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  box-shadow: var(--alm-shadow-sm);
+  outline: none;
+  z-index: 200;
+  font-size: var(--alm-text-sm);
+}
+.alm-guidance-popup__title {
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text);
+  margin-bottom: var(--alm-sp-2);
+}
+.alm-guidance-popup__line {
+  color: var(--alm-text-secondary);
+  margin-bottom: var(--alm-sp-1);
+}
+.alm-guidance-popup__unknown {
+  color: var(--alm-text-muted);
+}
+.alm-guidance-popup__bands {
+  list-style: none;
+  margin: var(--alm-sp-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.alm-guidance-popup__band-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--alm-sp-2);
+}
+.alm-guidance-popup__band-name {
+  color: var(--alm-text-secondary);
+}
+.alm-guidance-popup__band-state--viable {
+  color: var(--alm-ok);
+}
+.alm-guidance-popup__band-state--not-viable {
+  color: var(--alm-text-muted);
+}
+
 /* Settings pane: narrow number input + unit label. */
 .alm-settings__num-input {
   width: 72px;
@@ -410,6 +502,76 @@
   margin-left: var(--alm-sp-2);
   color: var(--alm-text-muted);
   font-size: var(--alm-text-sm);
+}
+
+/* ── Moon summary (spec 047 US1) ──────────────────────────────────────────── */
+
+/* Nightly Moon summary widget in the planner bar. */
+.alm-moon-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+
+.alm-moon-summary__glyph {
+  flex: none;
+}
+
+/* Dark limb / disk of the phase glyph. */
+.alm-moon-summary__disk {
+  fill: color-mix(in srgb, var(--alm-text-muted) 22%, transparent);
+  stroke: color-mix(in srgb, var(--alm-text-muted) 45%, transparent);
+  stroke-width: 0.75;
+}
+
+/* Illuminated portion of the phase glyph. */
+.alm-moon-summary__lit {
+  fill: var(--alm-accent);
+  stroke: none;
+}
+
+.alm-moon-summary__text {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: var(--alm-leading-tight);
+}
+
+.alm-moon-summary__title {
+  font-size: var(--alm-text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--alm-text-muted);
+}
+
+.alm-moon-summary__phase {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-primary, var(--alm-text));
+}
+
+.alm-moon-summary__meta {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+/* ── Planner site-setup prompt (spec 047 D7 site gate) ────────────────────── */
+
+.alm-planner-site-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  max-width: 28rem;
+}
+
+.alm-planner-site-prompt__title {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-primary, var(--alm-text));
+}
+
+.alm-planner-site-prompt__desc {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
 }
 
 /* === merged from .cssblocks/inbox-detail.css (task D — inbox detail restructure) === */

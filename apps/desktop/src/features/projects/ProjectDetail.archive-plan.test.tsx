@@ -1,0 +1,164 @@
+/// <reference types="@testing-library/jest-dom" />
+/**
+ * ProjectDetail archive-plan wiring tests (spec 017 US2/WP-B UI-gap fix).
+ *
+ * `archive.plan.generate` previously had zero UI callers: the completed →
+ * archived transition dead-ended on a "create or approve a plan first" info
+ * toast with no way to actually create the plan (the flow only worked driven
+ * over the dev bridge). Verifies that a plan.required refusal on the
+ * archived edge now:
+ *
+ * 1. still surfaces the exact info toast (unchanged, still plan-gated —
+ *    no silent lifecycle flip);
+ * 2. calls `archive.plan.generate` for the project (the shared
+ *    `useGenerateArchivePlan` mutation);
+ * 3. opens the shared `PlanReviewOverlay` with the returned plan id;
+ * 4. surfaces an error toast (and no overlay) when generation itself fails.
+ */
+
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
+}));
+
+vi.mock('./store', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./store')>();
+  return {
+    ...original,
+    useProjectDetail: vi.fn(),
+    callTransitionLifecycle: vi.fn(),
+    callReinferChannels: vi.fn(),
+    callDismissChannelDrift: vi.fn(),
+  };
+});
+
+vi.mock('@/shared/toast', () => ({
+  addToast: vi.fn(),
+}));
+
+const { mockGenerateArchivePlan } = vi.hoisted(() => ({
+  mockGenerateArchivePlan: vi.fn(),
+}));
+
+vi.mock('@/features/archive/store', () => ({
+  useGenerateArchivePlan: () => ({ mutateAsync: mockGenerateArchivePlan, isPending: false }),
+}));
+
+vi.mock('@/features/plans/PlanReviewOverlay', () => ({
+  PlanReviewOverlay: ({ planId, open }: { planId: string | null; open: boolean }) =>
+    open ? <div data-testid="archive-plan-review-stub">{planId}</div> : null,
+}));
+
+import { ProjectDetailContent } from './ProjectDetail';
+import * as store from './store';
+import { addToast } from '@/shared/toast';
+import type { ProjectDetailDto } from '@/bindings/index';
+
+const mockProject: ProjectDetailDto = {
+  id: 'proj-001',
+  name: 'NGC 7000',
+  tool: 'PixInsight',
+  lifecycle: 'completed',
+  path: 'projects/NGC7000',
+  notes: null,
+  channelDrift: { hasNewSources: false, suggestedAction: 'dismiss' },
+  sources: [],
+  channels: [],
+  createdAt: '2026-06-01T00:00:00Z',
+  updatedAt: '2026-06-10T00:00:00Z',
+};
+
+function setupStore(project: Partial<ProjectDetailDto> = {}) {
+  vi.mocked(store.useProjectDetail).mockReturnValue({
+    data: { ...mockProject, ...project },
+    loading: false,
+    error: undefined,
+  });
+}
+
+describe('ProjectDetail archive plan generation (spec 017 US2/WP-B)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('generates and opens the review overlay when the Archive transition returns plan.required', async () => {
+    setupStore({ lifecycle: 'completed' });
+    vi.mocked(store.callTransitionLifecycle).mockResolvedValue({
+      status: 'error',
+      contractVersion: '2.0.0',
+      requestId: 'req-1',
+      error: { code: 'plan.required', message: 'Plan required' },
+    });
+    mockGenerateArchivePlan.mockResolvedValue({
+      planId: 'plan-archive-1',
+      itemCount: 3,
+      protectedItemCount: 0,
+    });
+
+    render(<ProjectDetailContent projectId="proj-001" />);
+    fireEvent.click(screen.getByTestId('transition-btn-archived'));
+
+    // Still plan-gated: the exact info toast fires (no silent lifecycle flip).
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'info' }),
+      );
+    });
+
+    // ...and it now actually generates the plan for this project.
+    await waitFor(() => {
+      expect(mockGenerateArchivePlan).toHaveBeenCalledWith('proj-001');
+    });
+
+    // ...and opens the shared review/apply overlay with the returned plan id.
+    await waitFor(() => {
+      expect(screen.getByTestId('archive-plan-review-stub')).toHaveTextContent(
+        'plan-archive-1',
+      );
+    });
+  });
+
+  it('does not generate a plan for a plan-required refusal on a different edge', async () => {
+    setupStore({ lifecycle: 'ready' });
+    vi.mocked(store.callTransitionLifecycle).mockResolvedValue({
+      status: 'error',
+      contractVersion: '2.0.0',
+      requestId: 'req-2',
+      error: { code: 'plan.required', message: 'Plan required' },
+    });
+
+    render(<ProjectDetailContent projectId="proj-001" />);
+    fireEvent.click(screen.getByTestId('transition-btn-prepared'));
+
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'info' }),
+      );
+    });
+    expect(mockGenerateArchivePlan).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('archive-plan-review-stub')).not.toBeInTheDocument();
+  });
+
+  it('surfaces an error toast and keeps the overlay closed when plan generation fails', async () => {
+    setupStore({ lifecycle: 'completed' });
+    vi.mocked(store.callTransitionLifecycle).mockResolvedValue({
+      status: 'error',
+      contractVersion: '2.0.0',
+      requestId: 'req-3',
+      error: { code: 'plan.required', message: 'Plan required' },
+    });
+    mockGenerateArchivePlan.mockRejectedValue(new Error('db failure'));
+
+    render(<ProjectDetailContent projectId="proj-001" />);
+    fireEvent.click(screen.getByTestId('transition-btn-archived'));
+
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'error' }),
+      );
+    });
+    expect(screen.queryByTestId('archive-plan-review-stub')).not.toBeInTheDocument();
+  });
+});

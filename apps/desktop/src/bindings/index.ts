@@ -378,7 +378,8 @@ export const commands = {
 	 * 
 	 *  This stub is retained for UI compatibility until spec 025 folder-plan
 	 *  integration is wired into `project_setup::create`. The real flow will
-	 *  call into `crates/fs/planner/` and return a live `PlanDetail`.
+	 *  build on `domain_core::lifecycle::plan::FilesystemPlan` +
+	 *  `persistence_db::repositories::plans` and return a live `PlanDetail`.
 	 * 
 	 *  # Errors
 	 * 
@@ -674,6 +675,19 @@ export const commands = {
 	 */
 	rootsRemapApply: (rootId: string, newPath: string, verified: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("roots_remap_apply", { rootId, newPath, verified })),
 	/**
+	 *  `roots.delete` — permanently remove a root's registration (P6b, decision D8).
+	 * 
+	 *  Delegates to `app_core::first_run::delete_source`, which blocks with
+	 *  `root.has_dependents` when dependent records (inbox items, plan items,
+	 *  file records, sessions) still reference the root — no cascade-nullify.
+	 *  Files on disk are never touched (constitution §I).
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` (`source.not_found`, `root.has_dependents`, or
+	 *  `internal.database`).
+	 */
+	rootsDelete: (rootId: string) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("roots_delete", { rootId })),
+	/**
 	 *  `scan.start` — start a filesystem scan, optionally for specific roots.
 	 * 
 	 *  # Errors
@@ -697,6 +711,17 @@ export const commands = {
 	 *  `source.not_found`, or DB error.
 	 */
 	sourcesSetOrganizationState: (sourceId: string, organizationState: OrganizationState) => typedError<SetSourceOrganizationStateResponse, string>(__TAURI_INVOKE("sources_set_organization_state", { sourceId, organizationState })),
+	/**
+	 *  `sources.set_active` — enable or disable a registered source (P6b).
+	 * 
+	 *  Delegates to `app_core::first_run::set_source_active`. Disabled roots are
+	 *  excluded from scan/ingest surfaces but retain their full history; this is
+	 *  a visibility flag, not a deletion.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` (`source.not_found` or `internal.database`).
+	 */
+	sourcesSetActive: (rootId: string, active: boolean) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("sources_set_active", { rootId, active })),
 	/**
 	 *  `firstrun.state` — get the current first-run wizard state.
 	 * 
@@ -1329,6 +1354,49 @@ export const commands = {
 	 *  Returns `Err(String)` on database error.
 	 */
 	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_list", { req })),
+	/**
+	 *  `inventory.frame.list` — list per-frame inventory entries for a session
+	 *  or root.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure or an invalid scope.
+	 */
+	inventoryFrameList: (req: InventoryFrameListRequest_Deserialize) => typedError<InventoryFrameListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_frame_list", { req })),
+	/**
+	 *  `inventory.reconcile.run` — run a reconciliation pass over a root.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` (`root.unavailable`) when the root is not
+	 *  registered, or a database error otherwise. Never mutates a file.
+	 */
+	inventoryReconcileRun: (req: InventoryReconcileRunRequest) => typedError<InventoryReconcileRunResponse, ContractError_Serialize>(__TAURI_INVOKE("inventory_reconcile_run", { req })),
+	/**
+	 *  `inventory.frame.relink` — relink a surfaced missing frame to a candidate
+	 *  file under the same root, confirmed by sha256 content hash.
+	 * 
+	 *  Stub (US2 T025 not yet implemented): always returns `internal.error`
+	 *  rather than silently claiming a match. Contract shape only.
+	 * 
+	 *  # Errors
+	 *  Always returns `ContractError` until T025 lands.
+	 */
+	inventoryFrameRelink: (req: InventoryFrameRelinkRequest) => typedError<InventoryFrameRelinkResponse, ContractError_Serialize>(__TAURI_INVOKE("inventory_frame_relink", { req })),
+	/**
+	 *  `inventory.root_config.get` — read a root's reconcile/detection
+	 *  configuration, with documented defaults filled in for unset keys.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure.
+	 */
+	inventoryRootConfigGet: (req: RootConfigGetRequest) => typedError<RootInventoryConfig, ContractError_Serialize>(__TAURI_INVOKE("inventory_root_config_get", { req })),
+	/**
+	 *  `inventory.root_config.set` — write a (possibly partial) update to a
+	 *  root's reconcile/detection configuration.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure.
+	 */
+	inventoryRootConfigSet: (req: RootConfigSetRequest_Deserialize) => typedError<RootInventoryConfig, ContractError_Serialize>(__TAURI_INVOKE("inventory_root_config_set", { req })),
 	/**
 	 *  `ingestion.settings.get` — returns current ingestion/scan settings,
 	 *  merging any persisted overrides with in-code defaults.
@@ -2544,7 +2612,6 @@ export type DataSourceTransitionRequest = DataSourceTransitionRequest_Serialize 
 export type DataSourceTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: DataSourceState,
 	nextState: DataSourceState,
@@ -2555,7 +2622,6 @@ export type DataSourceTransitionRequest_Deserialize = {
 export type DataSourceTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: DataSourceState,
 	nextState: DataSourceState,
@@ -2568,6 +2634,33 @@ export type Density = "compact" | "comfortable" | "spacious";
 
 /**  Per-plan destination for destructive items (R-Trash-1). */
 export type DestructiveDestination = "archive" | "os_trash";
+
+/**  Per-root detection trigger configuration (spec 048 FR-014/FR-015/FR-017). */
+export type DetectionConfig = {
+	live: boolean,
+	scheduled: boolean,
+	onOpen: boolean,
+	followSymlinks: boolean,
+};
+
+/**  Partial detection-trigger update for `inventory.root_config.set`. */
+export type DetectionConfigUpdate = DetectionConfigUpdate_Serialize | DetectionConfigUpdate_Deserialize;
+
+/**  Partial detection-trigger update for `inventory.root_config.set`. */
+export type DetectionConfigUpdate_Deserialize = {
+	live: boolean | null,
+	scheduled: boolean | null,
+	onOpen: boolean | null,
+	followSymlinks: boolean | null,
+};
+
+/**  Partial detection-trigger update for `inventory.root_config.set`. */
+export type DetectionConfigUpdate_Serialize = {
+	live?: boolean | null,
+	scheduled?: boolean | null,
+	onOpen?: boolean | null,
+	followSymlinks?: boolean | null,
+};
 
 /**  Request for `dev.calls.list`. */
 export type DevCallsListRequest = DevCallsListRequest_Serialize | DevCallsListRequest_Deserialize;
@@ -2753,7 +2846,19 @@ export type Equipment = {
  */
 export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
 /**  Plan approval is outstanding (sent as `ContractError`, not `TransitionError`). */
-"plan.approval_required" | "plan.approval.stale" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
+"plan.approval_required" | "plan.approval.stale" | 
+/**
+ *  Concurrent apply rejected: the plan's (source ∪ destination ∪ archive)
+ *  path set overlaps an active apply run's path set (spec 025 FR-017,
+ *  R-Concur-1).
+ */
+"plan.conflict.overlap" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
+/**
+ *  Returned by `roots.delete` (P6b, decision D8) when dependent records
+ *  (inbox items, plan items, file records, sessions) still reference the
+ *  root; deletion is blocked rather than cascade-nullified.
+ */
+"root.has_dependents" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
 /**  Used in `ContractError` tests in lib.rs; also may appear via plan-apply. */
 "filesystem.destination_exists" | 
 /**
@@ -2774,6 +2879,19 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  *  Included per task instruction.
  */
 "launch.failed" | "macos.quarantine.detected" | "filters.invalid" | "os.command_failed" | "picker.unavailable" | "format.unsupported" | "range.invalid" | "path.write.denied" | "path.parent.missing" | "database.error" | "serialise.error" | "io.error" | 
+/**
+ *  A root's storage is unavailable (e.g. a removable drive is
+ *  disconnected). Frames under it are reported unavailable/missing —
+ *  this is a non-destructive terminal state, never an implicit delete.
+ */
+"root.unavailable" | 
+/**
+ *  A user-initiated relink's candidate file did not match the missing
+ *  frame's sha256 content hash; the record is not re-homed.
+ */
+"hash.mismatch" | 
+/**  Referenced `file_record` id does not exist. */
+"frame.not_found" | 
 /**  Used when a legacy `String` error is wrapped into `ContractError`. */
 "internal.error";
 
@@ -2842,7 +2960,6 @@ export type FileRecordTransitionRequest = FileRecordTransitionRequest_Serialize 
 export type FileRecordTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: FileRecordState,
 	nextState: FileRecordState,
@@ -2853,7 +2970,6 @@ export type FileRecordTransitionRequest_Deserialize = {
 export type FileRecordTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: FileRecordState,
 	nextState: FileRecordState,
@@ -2901,6 +3017,12 @@ export type FirstRunStateResponse_Serialize = {
 	completedAt?: string | null,
 	lastStep: string,
 };
+
+/**
+ *  Presence state of a per-frame inventory entry, projected from
+ *  `file_record.state` (spec 048 data-model.md).
+ */
+export type FramePresenceState = "present" | "missing" | "protected";
 
 /**  A group of frames within a session (per-filter breakdown). */
 export type Frameset = {
@@ -4263,6 +4385,80 @@ export type IngestionSettings = {
 	defaultFilter: string | null,
 };
 
+/**  One per-frame inventory entry (a `file_record` projection). */
+export type InventoryFrame = InventoryFrame_Serialize | InventoryFrame_Deserialize;
+
+/**  Request envelope for `inventory.frame.list`. */
+export type InventoryFrameListRequest = InventoryFrameListRequest_Serialize | InventoryFrameListRequest_Deserialize;
+
+/**  Request envelope for `inventory.frame.list`. */
+export type InventoryFrameListRequest_Deserialize = {
+	scope: InventoryFrameListScope_Deserialize,
+	includeMissing?: boolean | null,
+};
+
+/**  Request envelope for `inventory.frame.list`. */
+export type InventoryFrameListRequest_Serialize = {
+	scope: InventoryFrameListScope_Serialize,
+	includeMissing?: boolean | null,
+};
+
+/**  Response payload for `inventory.frame.list`. `present_*` exclude `missing`. */
+export type InventoryFrameListResponse = InventoryFrameListResponse_Serialize | InventoryFrameListResponse_Deserialize;
+
+/**  Response payload for `inventory.frame.list`. `present_*` exclude `missing`. */
+export type InventoryFrameListResponse_Deserialize = {
+	frames: InventoryFrame_Deserialize[],
+	presentCount: number,
+	presentSizeBytes: number,
+};
+
+/**  Response payload for `inventory.frame.list`. `present_*` exclude `missing`. */
+export type InventoryFrameListResponse_Serialize = {
+	frames: InventoryFrame_Serialize[],
+	presentCount: number,
+	presentSizeBytes: number,
+};
+
+/**
+ *  Scope for `inventory.frame.list` — exactly one of `session_id`/`root_id`
+ *  is expected to be set.
+ */
+export type InventoryFrameListScope = InventoryFrameListScope_Serialize | InventoryFrameListScope_Deserialize;
+
+/**
+ *  Scope for `inventory.frame.list` — exactly one of `session_id`/`root_id`
+ *  is expected to be set.
+ */
+export type InventoryFrameListScope_Deserialize = {
+	sessionId: string | null,
+	rootId: string | null,
+};
+
+/**
+ *  Scope for `inventory.frame.list` — exactly one of `session_id`/`root_id`
+ *  is expected to be set.
+ */
+export type InventoryFrameListScope_Serialize = {
+	sessionId?: string | null,
+	rootId?: string | null,
+};
+
+/**  Request envelope for `inventory.frame.relink`. */
+export type InventoryFrameRelinkRequest = {
+	frameId: string,
+	candidateRelativePath: string,
+};
+
+/**
+ *  Response payload for `inventory.frame.relink`. On a hash mismatch, callers
+ *  receive `hash.mismatch` as a `ContractError` instead (no re-home).
+ */
+export type InventoryFrameRelinkResponse = {
+	relinked: boolean,
+	matchedHash: string,
+};
+
 /**
  *  Frame type for an inventory session.
  *  `DarkFlat` is reserved but never returned in v1.
@@ -4270,6 +4466,28 @@ export type IngestionSettings = {
  *  mixed folders into single-type items at ingest, so a session is never mixed.)
  */
 export type InventoryFrameType = "light" | "dark" | "flat" | "bias";
+
+/**  One per-frame inventory entry (a `file_record` projection). */
+export type InventoryFrame_Deserialize = {
+	frameId: string,
+	rootId: string,
+	relativePath: string,
+	frameType: RawFrameType,
+	sizeBytes: number,
+	state: FramePresenceState,
+	sessionId: string | null,
+};
+
+/**  One per-frame inventory entry (a `file_record` projection). */
+export type InventoryFrame_Serialize = {
+	frameId: string,
+	rootId: string,
+	relativePath: string,
+	frameType: RawFrameType,
+	sizeBytes: number,
+	state: FramePresenceState,
+	sessionId?: string | null,
+};
 
 /**  Outbound references shown in the drawer's "Linked" section. */
 export type InventoryLinkedRefs = InventoryLinkedRefs_Serialize | InventoryLinkedRefs_Deserialize;
@@ -4371,6 +4589,26 @@ export type InventoryProvenanceSummary_Serialize = {
 	filter?: string | null,
 	inferred?: string | null,
 	confirmedBy?: string | null,
+};
+
+/**  Request envelope for `inventory.reconcile.run`. */
+export type InventoryReconcileRunRequest = {
+	rootId: string,
+	reason: ReconcileReason,
+};
+
+/**
+ *  Terminal summary for a reconcile pass. A future long-running-operation
+ *  status stream may report `progress_pct` incrementally (SC-005); this
+ *  scaffold reports the terminal values only.
+ */
+export type InventoryReconcileRunResponse = {
+	scanned: number,
+	present: number,
+	newlyMissing: number,
+	recovered: number,
+	sizeBackfilled: number,
+	progressPct: number,
 };
 
 /**
@@ -4515,6 +4753,12 @@ export type LibraryRoot_Deserialize = {
 	online: boolean,
 	fileCount: number,
 	lastScanned: string | null,
+	/**
+	 *  Whether this root is enabled for scan/ingest (P6b — Data Sources
+	 *  Disable/Enable). Disabled roots are excluded from scans/ingest but
+	 *  their history is retained; this is a visibility flag, not a deletion.
+	 */
+	active: boolean,
 };
 
 /**  A registered library root directory. */
@@ -4525,6 +4769,12 @@ export type LibraryRoot_Serialize = {
 	online: boolean,
 	fileCount: number,
 	lastScanned?: string | null,
+	/**
+	 *  Whether this root is enabled for scan/ingest (P6b — Data Sources
+	 *  Disable/Enable). Disabled roots are excluded from scans/ingest but
+	 *  their history is retained; this is a visibility flag, not a deletion.
+	 */
+	active: boolean,
 };
 
 export type LibraryStats = {
@@ -5487,7 +5737,6 @@ export type PlanTransitionRequest = PlanTransitionRequest_Serialize | PlanTransi
 export type PlanTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PlanState,
 	nextState: PlanState,
@@ -5498,7 +5747,6 @@ export type PlanTransitionRequest_Deserialize = {
 export type PlanTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PlanState,
 	nextState: PlanState,
@@ -5524,7 +5772,6 @@ export type PreparedSourceTransitionRequest = PreparedSourceTransitionRequest_Se
 export type PreparedSourceTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PreparedSourceState,
 	nextState: PreparedSourceState,
@@ -5535,7 +5782,6 @@ export type PreparedSourceTransitionRequest_Deserialize = {
 export type PreparedSourceTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: PreparedSourceState,
 	nextState: PreparedSourceState,
@@ -5721,6 +5967,12 @@ export type ProjectCreateRequest_Deserialize = {
 	requestId: string,
 	name: string,
 	tool: ProjectTool,
+	/**
+	 *  Desired project folder. Either an absolute path, or a path relative to
+	 *  the registered project folder (`registered_sources.kind = 'project'`)
+	 *  which the backend anchors at creation — `projects.path` is always
+	 *  stored absolute (Constitution I: no CWD-dependent resolution).
+	 */
 	path: string,
 	initialSources?: string[],
 	notes: string | null,
@@ -5738,6 +5990,12 @@ export type ProjectCreateRequest_Serialize = {
 	requestId: string,
 	name: string,
 	tool: ProjectTool,
+	/**
+	 *  Desired project folder. Either an absolute path, or a path relative to
+	 *  the registered project folder (`registered_sources.kind = 'project'`)
+	 *  which the backend anchors at creation — `projects.path` is always
+	 *  stored absolute (Constitution I: no CWD-dependent resolution).
+	 */
 	path: string,
 	initialSources: string[],
 	notes?: string | null,
@@ -6057,7 +6315,6 @@ export type ProjectTransitionRequest = ProjectTransitionRequest_Serialize | Proj
 export type ProjectTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectState,
 	nextState: ProjectState,
@@ -6068,7 +6325,6 @@ export type ProjectTransitionRequest_Deserialize = {
 export type ProjectTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectState,
 	nextState: ProjectState,
@@ -6112,7 +6368,6 @@ export type ProjectionTransitionRequest = ProjectionTransitionRequest_Serialize 
 export type ProjectionTransitionRequest_Deserialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectionState,
 	nextState: ProjectionState,
@@ -6123,7 +6378,6 @@ export type ProjectionTransitionRequest_Deserialize = {
 export type ProjectionTransitionRequest_Serialize = {
 	contractVersion: string,
 	requestId: string,
-	entityType: string,
 	entityId: string,
 	currentState: ProjectionState,
 	nextState: ProjectionState,
@@ -6421,6 +6675,15 @@ export type ProvenanceReadResponse_Serialize = {
 
 export type ProvenanceResponseStatus = "success" | "error";
 
+/**  Raw frame kind for a per-frame inventory entry. */
+export type RawFrameType = "light" | "dark" | "flat" | "bias";
+
+/**  Per-root reconcile mode (spec 048 FR-013). */
+export type ReconcileMode = "flag_missing" | "auto_reconcile";
+
+/**  What triggered a reconcile pass (spec 048 contracts/operations.md). */
+export type ReconcileReason = "on_demand" | "on_open" | "scheduled" | "live_event";
+
 export type RecoveryAction = RecoveryAction_Serialize | RecoveryAction_Deserialize;
 
 export type RecoveryAction_Deserialize = {
@@ -6709,11 +6972,51 @@ export type ReviewItem_Serialize = {
 /**  Category of a library root directory. */
 export type RootCategory = "raw" | "calibration" | "project" | "inbox";
 
+/**  Request envelope for `inventory.root_config.get`. */
+export type RootConfigGetRequest = {
+	rootId: string,
+};
+
+/**
+ *  Request envelope for `inventory.root_config.set`. Unset fields leave the
+ *  stored value unchanged (partial update).
+ */
+export type RootConfigSetRequest = RootConfigSetRequest_Serialize | RootConfigSetRequest_Deserialize;
+
+/**
+ *  Request envelope for `inventory.root_config.set`. Unset fields leave the
+ *  stored value unchanged (partial update).
+ */
+export type RootConfigSetRequest_Deserialize = {
+	rootId: string,
+	reconcileMode: ReconcileMode | null,
+	detection: DetectionConfigUpdate_Deserialize | null,
+};
+
+/**
+ *  Request envelope for `inventory.root_config.set`. Unset fields leave the
+ *  stored value unchanged (partial update).
+ */
+export type RootConfigSetRequest_Serialize = {
+	rootId: string,
+	reconcileMode?: ReconcileMode | null,
+	detection?: DetectionConfigUpdate_Serialize | null,
+};
+
 export type RootHealth = {
 	id: string,
 	path: string,
 	kind: string,
 	online: boolean,
+};
+
+/**
+ *  A root's full reconcile/detection configuration, with defaults filled in
+ *  for any unset key (spec 048 data-model.md).
+ */
+export type RootInventoryConfig = {
+	reconcileMode: ReconcileMode,
+	detection: DetectionConfig,
 };
 
 /**

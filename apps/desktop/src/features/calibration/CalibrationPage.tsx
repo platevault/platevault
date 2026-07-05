@@ -13,7 +13,7 @@
  * search + group-by. The page title and per-kind counts are intentionally
  * omitted (the left nav names the page; counts move to the bottom status bar).
  * Sorting is via clickable table-column headers, not a toolbar sort control.
- * Per-master actions ("Use in project" / "Reveal in Explorer") live in the
+ * Per-master actions ("Use in project" / Reveal) live in the
  * detail panel header (MasterDetail), since they act on the selected master.
  *
  * URL state: `?selected=<master-id>` (string UUID from the real backend).

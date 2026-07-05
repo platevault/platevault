@@ -61,6 +61,9 @@ pub mod cleanup_generator;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
 pub mod first_run;
+/// Per-frame inventory use cases (spec 048): `inventory.frame.list` and the
+/// on-demand `inventory.reconcile.run` pass.
+pub mod frame_inventory;
 pub mod guided_flow;
 /// Inbox plan use-cases (spec 041). Lives in `app_core` (not `app_core_inbox`)
 /// because it orchestrates `plans` + `plan_apply`, which are `app_core` modules.
@@ -68,6 +71,11 @@ pub mod inbox_plan;
 pub mod inventory;
 pub mod log_stream;
 pub mod native;
+/// Path-set overlap comparison for the cross-plan concurrency guard
+/// (spec 025 FR-017 / R-Concur-1). Pure, camino-only helper consumed by
+/// [`plan_apply`]; relocated here after the vestigial `fs/planner` crate was
+/// removed (task #26 / #402).
+pub mod path_set;
 pub mod patterns;
 pub mod plan_apply;
 pub mod plans;

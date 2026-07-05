@@ -6,7 +6,7 @@
  * from the narrow side panel to the full-width bottom panel):
  * 1. ManifestsAccordion — shows loading, then list, then expand, then reveal.
  * 2. ProjectNotesSection — shows "No notes." when note is empty; loads and saves.
- * 3. Reveal in OS calls revealManifestInOs and shows error toast on failure.
+ * 3. The Reveal button calls revealManifestInOs and shows error toast on failure.
  * 4. ManifestsAccordion empty state when no manifests.
  * 5. ManifestsAccordion error state on fetch failure.
  * 6. Notes section shows readOnly on archived project.
@@ -17,6 +17,8 @@
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
@@ -134,7 +136,13 @@ function setupStore(project: Partial<ProjectDetailDto> = {}) {
  * immediately visible without expanding.
  */
 function renderDetail(projectId = 'proj-m1') {
-  return render(<ProjectBottomDetail projectId={projectId} />);
+  // The bottom panel now hosts the live CleanupSection (spec 017 WP-E), whose
+  // TanStack mutation hooks need a QueryClient in scope.
+  function wrapper({ children }: { children: ReactNode }) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  }
+  return render(<ProjectBottomDetail projectId={projectId} />, { wrapper });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -212,6 +220,11 @@ describe('ProjectDetail — manifests accordion (spec 024)', () => {
     await waitFor(() => {
       expect(screen.getByTestId(`manifest-reveal-${MANIFEST_SUMMARY.id}`)).toBeInTheDocument();
     });
+    // Tooltip carries the shared platform-native revealLabel() (jsdom → Linux-generic).
+    expect(screen.getByTestId(`manifest-reveal-${MANIFEST_SUMMARY.id}`)).toHaveAttribute(
+      'title',
+      'Show in file manager',
+    );
     await act(async () => {
       fireEvent.click(screen.getByTestId(`manifest-reveal-${MANIFEST_SUMMARY.id}`));
     });

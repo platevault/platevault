@@ -107,13 +107,32 @@ Story labels map to spec user stories US1–US5.
 > journeys cannot run in the WSL dev sandbox** — they are first-verified by CI
 > Stage B and on Windows (handover item). Authoring + un-skipping the full journey
 > set against the real backend is the remaining US3 work, to be verified in CI.
+>
+> **STATUS 2026-07-04 (WP-C, D21/D22)**: journey bodies authored against the
+> real backend and un-ignored — `first_run_resolve_create_project`,
+> `plan_review_apply_with_audit`, `ingestion_sessions_search`,
+> `lifecycle_integrity`, `cleanup_plan_review` (NEW, D22 — the WP-A cleanup
+> generator #389 landed, unblocking a real cleanup-plan review journey; its
+> terminal apply step is a documented gap, see the journey's doc comment),
+> plus the `all_top_level_screens_load` smoke. `sessions.transition` is
+> deliberately NOT exercised (deleted by 041 FR-051, D22). `audit.list`/
+> `audit.export` were stubs when the journeys were authored; PR #388 has
+> since wired them to the real `audit_log_entry` table (#401 adds
+> entity-filtered reads) — durable-record proofs stay on
+> `plans.apply.status` (`plan_apply_events`) and `lifecycle.ledger.list`,
+> the read paths closest to the mutations proved. `e2e.yml` gained
+> `ALM_DB_URL` (previously unset, so `reset_database()` silently no-opped).
+> Cannot be exercised in the WSL dev sandbox (no webview) — compiles clean,
+> 0 clippy warnings, `cargo nextest list` shows all 6 un-ignored; CI's 3-OS
+> matrix is the first real run.
 
-- [ ] T024 [P] [US3] Complete the **first-run setup → target resolve → project create** journey (un-ignore + flesh out), asserting a UI→real-backend round-trip value (FR-008), in `crates/e2e-tests/tests/journeys.rs` (thirtyfour `find(By::...)` against real UI + optional `invoke()`)
-- [ ] T025 [P] [US3] Complete the **filesystem plan review → apply** journey asserting the real side effect **and** durable audit record, inside disposable test locations (FR-009, FR-016), in `crates/e2e-tests/tests/journeys.rs`
-- [ ] T026 [P] [US3] Add an **all-top-level-screens-load** smoke spec covering every navigable feature screen without error (FR-007, coverage-matrix #21), in `crates/e2e-tests/tests/smoke.rs` (un-ignore the existing stub)
-- [ ] T027 [P] [US3] Complete remaining journey stubs (subscriber startup, ingestion plumbing, lifecycle integrity) or convert to explicit, documented not-applicable if superseded — in `crates/e2e-tests/tests/journeys.rs`
-- [X] T028 [US3] `e2e.yml` rewritten to uniform 3-OS matrix (ubuntu/windows/macos) via `tauri-plugin-webdriver` (D10). Drops old `tauri-driver`/msedgedriver/WebKitWebDriver steps. Per OS: install `tauri-webdriver` CLI, build frontend with `VITE_E2E=1`, serve dist on :5173, build `desktop_shell --features e2e`, run nextest (`xvfb-run -a` on Linux). `--no-tests=warn` keeps job green while journeys are stubs. Needs gate from `integration` job (ci.yml Stage A).
+- [X] T024 [P] [US3] **First-run setup → target resolve → project create** journey: `target.resolve("M 31")` (offline bundled-seed cache hit — no network dependency), `projects.create` linked to the resolved target, `projects.list` round-trip (FR-008); real-UI proof is the fresh-DB `/setup` redirect. `crates/e2e-tests/tests/journeys.rs::first_run_resolve_create_project`.
+- [X] T025 [P] [US3] **Filesystem plan review → apply** journey: real `roots.register` → `sources.set_organization_state` → `inbox.scan.folder` → `inbox.classify` → `inbox.confirm` → `inbox.plan.apply` (channel-free real apply) → poll `plans.apply.status` for the durable `plan_apply_events` record (FR-016) + assert the source file actually moved on disk (FR-009). `crates/e2e-tests/tests/journeys.rs::plan_review_apply_with_audit`.
+- [X] T026 [P] [US3] **all-top-level-screens-load** smoke: real routes (`/sessions`,`/inbox`,`/calibration`,`/targets`,`/projects`,`/archive`,`/settings`) after completing first-run via real `roots.register`×2 + `firstrun.complete`; asserts the real, shipped `AppErrorBoundary` fallback (`[data-testid="app-error-boundary-fallback"]`) never appears (FR-007, coverage-matrix #21). `crates/e2e-tests/tests/smoke.rs::all_top_level_screens_load`.
+- [X] T027 [P] [US3] Remaining journeys: `ingestion_sessions_search` (inbox confirm → event-driven ingest session grouping+resolution via the bundled M31 seed → `calibration.match.suggest` → `search.global` alias round-trip) and `lifecycle_integrity` (real `TransitionResponse` from `lifecycle.transition.apply` + a real `lifecycle.ledger.list` row — replaces the scaffold's aspirational, non-existent `events.recent` assertion; `audit.list`, stubbed at authoring time, was wired real by #388 and remains a complementary future assertion surface). Both in `crates/e2e-tests/tests/journeys.rs`. `sessions.transition` intentionally NOT exercised (041 FR-051 deleted it, D22).
+- [X] T028 [US3] `e2e.yml` rewritten to uniform 3-OS matrix (ubuntu/windows/macos) via `tauri-plugin-webdriver` (D10). Drops old `tauri-driver`/msedgedriver/WebKitWebDriver steps. Per OS: install `tauri-webdriver` CLI, build frontend with `VITE_E2E=1`, serve dist on :5173, build `desktop_shell --features e2e`, run nextest (`xvfb-run -a` on Linux). Needs gate from `integration` job (ci.yml Stage A). 2026-07-04: added `ALM_DB_URL` (fresh file-backed DB per run) now that journeys are real.
 - [X] T029 [US3] macOS E2E now part of the uniform matrix via `tauri-plugin-webdriver` (D10 supersedes D4 best-effort deferral). Plugin compile-gated behind `e2e` feature; release binaries omit it (Constitution V).
+- [X] T027b [P] [US3] (NEW, D22) **Cleanup plan review** journey: real `artifact.watcher.attach` (spec 012, #400) + attach-time reconciliation observes a real `integration_*.xisf` output file → `cleanup.policy.update` (opt Intermediate into Archive; default policy is all-Keep) → `cleanup.scan` → `cleanup.plan.generate` → `plans.approve`. Terminal apply is a documented, not-yet-closeable gap (no channel-free apply command for archive/cleanup plans, no UI Apply button wired for `cleanup.plan.generate` output). `crates/e2e-tests/tests/journeys.rs::cleanup_plan_review`.
 
 **Checkpoint**: Real UI↔backend wiring proven on Linux+Windows; macOS handled per D4.
 

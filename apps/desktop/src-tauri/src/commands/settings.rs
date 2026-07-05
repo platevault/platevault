@@ -70,6 +70,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
         ],
         "plans" => &["plansListDefaultAgeCutoffDays"],
         "sourceViews" => &["sourceViewLinkKindIntraDrive", "sourceViewLinkKindCrossDrive"],
+        "planner" => &["plannerMoonAvoidance"],
         // Empty scope or "global" returns every stable key.
         _ => &[
             "logLevel",
@@ -97,6 +98,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "currentLibraryId",
             "sourceViewLinkKindIntraDrive",
             "sourceViewLinkKindCrossDrive",
+            "plannerMoonAvoidance",
         ],
     }
 }

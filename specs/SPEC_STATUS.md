@@ -8,6 +8,7 @@ consistency + mock-mode E2E test redo landed (see the 043 row + CI note below).
 remote (041 single-type impl + 046/037/#360 merged); CI re-enabled; verified
 against code — 041 iter-2 is implemented on the branch, 017 has UI. See the
 updated 041 / 017 rows and the CI note.
+**Last reconciled 2026-07-04 (post-convoy: 19 PRs merged).**
 
 > The per-spec `Status:` line in each `spec.md` had drifted badly — most still read
 > "Draft" despite shipping. This document is the reconciled source of truth. Status
@@ -45,8 +46,8 @@ updated 041 / 017 rows and the CI note.
 | 013 target-lookup-from-fits-object | 🔴 Superseded by 035 | Fully subsumed by 035 — every FR/US covered by SIMBAD resolve-on-demand, or its one unique feature (fuzzy variant matching + confidence tiers) deliberately reversed (035 clarification Q4: exact-match only). 3 open tasks are obsolete stubs (spec-014 download pipeline / removed `catalog_equivalences`). Target-identity model retained in `crates/targeting/` |
 | 014 catalog-index-licensing | 🔴 Superseded by 035 | download-catalog mechanism abandoned; attribution model retained |
 | 015 token-pattern-builder | ✅ Implemented | Chip-based naming-pattern builder shipped: `crates/patterns/` (registry/resolver/validator/sanitize, ~64 tests) + contracts + Tauri `pattern_validate`/`resolve`/`preview` + live `PatternChipsEditor` in `NamingStructure.tsx` (validate + preview). Full SpecKit artifact set exists (~30 tasks, not "0/0"). Deferred downstream scope (per-source overrides, session-backed preview) handed to spec 018 |
-| 016 source-protection-defaults | 🟡 Near-complete | 17/20 (underpins 017) |
-| 017 cleanup-archive-review-plans | 🟡 Backend done; Archive UI shipped, cleanup-review UI remainder open | Backend + archive/trash executor done; Archive UI exists (`features/archive/ArchivePage/List/Detail`). Remaining open work is the cleanup-plan *review* UI (contextual per v4), not greenfield — earlier "19 real-open / UI open" overstated it |
+| 016 source-protection-defaults | ✅ Implemented | 20/20 (underpins 017); closed by `cae0acf1` / #405 |
+| 017 cleanup-archive-review-plans | 🟡 Cleanup-plan review UI shipped; archive-plan-generator remainder open | Backend + archive/trash executor done; Archive UI exists (`features/archive/ArchivePage/List/Detail`); cleanup-plan review UI (WP-E: `CleanupSection`, `PlanReviewOverlay`, protection gate, apply progress) shipped via `d758b532` / #413. Remaining open = US2 archive-plan-generator tasks T017–T021 only — the `archive_plan_generate` command has zero UI callers |
 | 018 settings-configuration-model | ✅ Reconciled + implemented (#348) | 42/46; spec reconciled to as-built scope/values architecture; backend + UI shipped & verified (live T034 walkthrough); 4 obsolete (contracts mirror, 014 key); open: FR-006↔043 density tension (cross-spec decision) |
 | 019 bottom-log-viewer | ✅ Implemented (closed 2026-07-03) | Panel + backend + forwarder shipped; closeout added T006/T011 jsdom tests + T029 docs index + fixed dotted `log.recent`→`log_recent` binding bug; 1 open (T028 Playwright quickstart) DEFERRED (needs Tauri runtime host) |
 | 020 router-url-state | ✅ Implemented | 22/23 |
@@ -54,7 +55,7 @@ updated 041 / 017 rows and the CI note.
 | 022 mantine-prototype-design-system | 🔴 Superseded by 027 | |
 | 023 target-identity-history-notes | ✅ **Closed** | US1–US4 shipped on gen-3 (migration 0048 + `target.sessions.list`/`target.projects.list`/`target.note.*`) + caveats (note-edit audit event, UUID project deep-link, 16 KB note cap) + `speckit-verify` passed. `target.primary.rename` dropped; FR-005/FR-007 deferred |
 | 024 project-manifests-and-notes | ✅ Implemented (closed 2026-06-23) | 32/37; 5 open all DEFERRED (FR-006/export/contract-tests); notes display-on-load fixed at close-out |
-| 025 filesystem-plan-application | 🟡 Partial (out-of-spec) | Real apply shipped via 041; rollback + progress UI open |
+| 025 filesystem-plan-application | 🟡 Partial (out-of-spec) | Real apply shipped via 041; overlap guard FR-017 done (`4b693ea7` / #408); progress UI absorbed into 017's `PlanReviewOverlay`; remaining = rollback integration test T025 + 10k-perf T045 |
 | 026 generated-source-view-removal | 🟡 OPEN — core built, POSSIBLY OBSOLETE | 12/23; remove/regenerate feature fully wired but **vestigial** — no live source-view *generation* path after the 041/043 lifecycle-prep drop. Kept **open** (not closed): P3 (T014–T020 stale-detection + audit) deferred; awaiting product decision to restore generation or retire the surface |
 | 027 frontend-implementation | ✅ Implemented | 99/99 |
 | 028 frontend-quality-hardening | 🟡 Placeholder | 9/15 |
@@ -65,17 +66,21 @@ updated 041 / 017 rows and the CI note.
 | 033 validation-bugfix-remediation | 🟡 Partial | 83/92; blocked on 017 cleanup generator |
 | 035 simbad-target-resolution | ✅ Implemented | validated end-to-end 2026-06-23 |
 | 036 retire-legacy-targets | ✅ Implemented | PR #255 |
-| 037 e2e-integration-testing | 🟠 Partial / gated | 24/39; Layer-1 + CI Stage A done. Gate note is now stale — `search.global`/`sessions.list`/`calibration.masters` graduated to real backends; only `sessions.transition` + tauri-driver wiring remain |
+| 037 e2e-integration-testing | 🟠 Partial / housekeeping only | 29/39; Layer-1 + CI Stage A done; Layer-2 tauri-driver journeys merged (`1419b1a0` / #403) — `search.global`/`sessions.list`/`calibration.masters` are real backends. `sessions.transition` was **deleted** by spec 041 FR-051 (not pending); remaining tasks are superseded/housekeeping. The Layer-2 journeys found+fixed a real bug: lifecycle `TransitionRequest` was undeserializable (#423, fixed by #424) — evidence the layer works |
 | 037 ipc-wrapper-removal | ✅ Complete | All caller areas migrated + merged 2026-07-03 (sessions #369, shell #372, settings #373, setup #374, targets #375, inbox #376, projects #377, dev #378, + fix `ad3497e1`); **0 live `@/api/commands` imports**. dev-tools commands generated under `--features dev-tools` (option C). Phase-4 teardown done: `commands.ts` + its guard test deleted, dead mocks removed, SC-001/SC-005 enforced by `api/ipc-boundary.guard.test.ts`; also swept guided + source-views callers |
 | 038 wizard-scan-step | ✅ Implemented | merged (no committed tasks.md) |
 | 039 cross-root-inbox | 🔴 Superseded by 041 | Scope fully implemented via 041 — cross-root `inbox_list`, inbox optional (`REQUIRED_KINDS`), rescan-all, bounded/virtualized. All 3 US + 7 FR + 5 SC verified in code 2026-07-03. No plan/tasks.md authored |
 | 040 calibration-masters-detection | ✅ Implemented | validated end-to-end 2026-06-23 |
 | 041 inbox-plan-surface | ✅ iteration-1 / 🟡 iteration-2 implemented on `redesign-ui-platevault` (pending merge to main) | iter-1 (confirm + plan surface + apply + destination model) shipped 59/59. **iter-2 (single-type sub-items, T061–T081) is now implemented with tests on `redesign-ui-platevault`** — migration `0049_inbox_single_type.sql`, real missing-mandatory gate (`inbox/confirm.rs` sentinel), field-agnostic `reclassify_v2` (`inbox/reclassify.rs`), `build_frame_metadata` grouping (`inbox/classify.rs`), split/mixed confirm action removed from the contract. **Not yet on `main`** — lands with PR #349. Supersedes 005 |
 | 042 stdlib-adoption | ✅ Implemented | 80/97; reconciled #310 |
-| 043 ui-redesign-platevault | 🔵 Active (foundation + round-2 done; PR #349 mergeable) | Ongoing on `redesign-ui-platevault`. Foundation + per-page round-2 verified against code: 4-theme tokens + Appearance picker, shared `<SortHeader>`/`.alm-sorth`, flat-by-default `.alm-listgroup` on all 4 list pages (#360), `InfoTip`/`SettingsKit`, Inbox bottom inspector, `eslint no-restricted-syntax` style-ban wired into lint. PENDING: Archive single-column, full Sessions inbox-parity, pill-system unification, resizable splitters, Settings per-pane polish. STUBs (all `// STUB:`-marked, blocked on backend): offset Settings-toggle **persistence** (the Rust `require_same_offset` field already exists in `calibration/core/ranking.rs`; only the settings-key wiring is stubbed), channel model, `altitudeCurve()`@52.1°N, Targets list enrichment (#54), + Outputs/Cleanup, audit-history endpoint. Known gap: Sessions table sortable but `aria-sort` not emitted (a11y follow-up). PR #349 → main is **mergeable** (3 behind main). |
-| 044 targets-planner-astronomy | ⚪ Placeholder | frontend mocked; needs research-led astronomy engine |
+| 043 ui-redesign-platevault | 🔵 Active (foundation + round-2 done; PR #349 mergeable) | Ongoing on `redesign-ui-platevault`. Foundation + per-page round-2 verified against code: 4-theme tokens + Appearance picker, shared `<SortHeader>`/`.alm-sorth`, flat-by-default `.alm-listgroup` on all 4 list pages (#360), `InfoTip`/`SettingsKit`, Inbox bottom inspector, `eslint no-restricted-syntax` style-ban wired into lint. **Archive single-column, Sessions inbox-parity, and `aria-sort` on all sortable tables shipped (`34e59139` / #415)**, alongside a platform-native reveal-labels sweep in the same PR. PENDING: pill-system unification, resizable splitters, Settings per-pane polish. STUBs (all `// STUB:`-marked, blocked on backend): offset Settings-toggle **persistence** (the Rust `require_same_offset` field already exists in `calibration/core/ranking.rs`; only the settings-key wiring is stubbed), channel model, `altitudeCurve()`@52.1°N, Targets list enrichment — now moved to 047/044 (see below) — + Outputs/Cleanup, audit-history endpoint. PR #349 → main is **mergeable** (3 behind main). |
+| 044 targets-planner-astronomy | 🔵 Track B specced, implementation in progress | Research-led astronomy engine track (astronomy-engine + Lorentzian filter model) specced on `044-targets-planner-track-b`; plan/data-model/contracts/tasks authored; T001–T003 (deps + offline IANA timezone asset) landed (`06df294b`). Not yet on `redesign-ui-platevault` |
 | 045 review-state-real | 🔴 Superseded by 041 | |
-| 046 i18n-error-codes | ✅ Implemented | 36/36 (#311–#314) |
+| 046 i18n-error-codes | ✅ Implemented | 36/36 (#311–#314). #410 fixed an audit-detail i18n regression (raw backend text instead of translated message) inside this "Implemented" window (`5e05b349`) |
+| 047 targets-planner-moon-filters | ✅ Implemented (T001–T027, T029; T028 verify-on-windows pending) | Track A of the planner split, fully implemented on `047-targets-planner-moon-filters`: real Moon summary (US1), real per-target lunar distance + sort (US2), real per-band Moon-avoidance filter guidance pills + explanation popover + Settings → Target Planner per-band table + filter-by-recommendation (US3), real next-opposition date + sort (US4). All former spec 044 §3 mock symbols (`MOCK_MOON_PHASE_FRAC`, `mockLunarDistanceDegFor`, `filtersFor`) deleted; Track B altitude/imaging-time placeholders untouched (FR-015/016). Perf-optimized opposition scan (per-night memoized Sun-RA table) validated at 5,000 rows. T028 (verify-on-windows) intentionally deferred to a separate campaign lane. PR #430 merged into `redesign-ui-platevault` |
+| 048 per-frame-inventory | 🟠 Partial (reconciled from `main`) | `main` PRs #435 (real session frame counts + disk usage) and #442 (reconcile raw frames vs disk + symlink-gated scans) merged into `redesign-ui-platevault` via the #349 reconciliation; remaining per-frame-inventory US scope still open |
+| 049 source-view-generation | 🟠 Partial (reconciled from `main`) | `main` PR #439 (WBPP-ready source views with zero-copy links, US1) merged into `redesign-ui-platevault` via the #349 reconciliation; remaining tasks still open |
+| 050 publishable-crate-extractions | 📄 Plan-of-record | Mini specs for the FITS/XISF publishable-crate extraction program; landed via #429 (docs-only, plan-of-record for a future extraction effort), merged into `redesign-ui-platevault` |
 | tiny/ catalog-entry, settings-key | 📄 Micro-specs | reference notes, not tracked features |
 
 ## Dependency DAG
@@ -87,15 +92,15 @@ FOUNDATION (all ✅ — nothing blocked here)
 
 INBOX CHAIN
   005 mixed-folder 🔴 ─▶ 041 inbox-plan-surface ✅ ─┬─▶ 039 cross-root-inbox ⚪
-  038 wizard-scan ✅                                ├─▶ 025 plan-application 🟡 (rollback+progress UI)
-  016 protection 🟡 ─▶ 017 cleanup/archive 🟡 ──────┼─▶ 033 validation-bugfix 🟡 (needs 017 generator)
+  038 wizard-scan ✅                                ├─▶ 025 plan-application 🟡 (rollback test + 10k-perf remain)
+  016 protection ✅ ─▶ 017 cleanup/archive 🟡 ──────┼─▶ 033 validation-bugfix 🟡 (needs 017 generator)
                                                     └───┘
 
 TARGETS CHAIN
   013 fits-lookup 🟡 ┐
   014 catalog 🔴 ────┴─▶ 035 SIMBAD ✅ ─┬─▶ 036 retire-legacy ✅
                                         ├─▶ 023 target-identity ⚪ (tasks not generated)
-                                        └─▶ 006 sessions ✅ ─▶ 044 planner-astronomy ⚪
+                                        └─▶ 006 sessions ✅ ─▶ 044 planner-astronomy 🔵 (Track B in progress) ─▶ 047 moon-filters 🔵 (PR #430 open)
 
 CALIBRATION CHAIN
   006 inventory/sessions ✅ ─▶ 007 matching-rules ✅ ─▶ 040 masters ✅
@@ -108,16 +113,18 @@ PROJECTS CHAIN
 INFRA / CROSS-CUTTING (mostly independent)
   018 settings ✅   021 dev-diagnostics 🟡   019 log-viewer ✅
   046 i18n ✅   042 stdlib ✅   043 ui-redesign 🔵
-  037 e2e 🟠 ◀── now gated only on sessions.transition + tauri-driver (search/sessions/calibration are real)
+  037 e2e 🟠 ◀── Layer-2 tauri-driver journeys merged (#403); only housekeeping tasks remain (sessions.transition deleted by 041, not pending)
   037 ipc-removal ✅ (all phases done+merged; commands.ts deleted, guards in CI)
+  026 source-view-removal 🟡 (vestigial, product-decision-pending)   049 source-view-generation ⚪ (specced+planned, 45 tasks)
+  050 publishable-crate-extractions 📄 (plan-of-record, PR #429)
 ```
 
 ## Actionable frontier — what can be worked on now (unblocked)
 
 | Priority | Spec | Why ready | Size |
 |---|---|---|---|
-| 1 | **017 cleanup-plan review UI** (remainder) | Backend + plan model (041) done; Archive UI shipped; 016 nearly done | 🟡 Medium (cleanup-review UI remainder) |
-| 2 | **025 plan-application** (rollback + progress UI) | Apply backend already shipped via 041 | 🟡 Medium |
+| 1 | **017 archive-plan-generator** (remainder) | Cleanup-plan review UI shipped (#413); backend + plan model (041) done; 016 closed | 🟡 Small–Medium (US2 T017–T021; `archive_plan_generate` has zero UI callers) |
+| 2 | **025 plan-application** (rollback integration test + 10k-perf) | Apply backend + overlap guard shipped via 041/#408; progress UI absorbed into 017's `PlanReviewOverlay` | 🟢 Small |
 | 2 | **039 cross-root-inbox** | Greenfield; 041 base on main; needs plan/tasks | 🟡 Medium |
 | — | **037 ipc-wrapper-removal** | ✅ Complete — commands.ts deleted, SC-001/SC-005 guards in CI | done |
 | 3 | **012 artifact-observation** | 011 tool-launch now closed; 012's deps (`launch_id`, `completed_at`, accordion) satisfied | 🟡 Medium |
@@ -135,8 +142,25 @@ INFRA / CROSS-CUTTING (mostly independent)
 ## Blocked / not-yet-actionable
 
 - **033 validation-bugfix** — dead cleanup-plan path depends on the **017** generator; do 017 first.
-- **037 e2e** — real-UI suite now gated only on `sessions.transition` becoming real + tauri-driver wiring (`search.global`/`sessions.list`/`calibration.masters` already graduated to real backends).
-- **044 planner-astronomy** — research-gated: needs an astronomy-engine decision (currently mock).
+- **037 e2e** — no longer blocked: Layer-2 tauri-driver journeys merged (#403); `sessions.transition` was deleted by 041 FR-051, not pending. Remaining tasks are housekeeping only.
+- **044 planner-astronomy** — Track B (astronomy-engine) now specced and in progress on `044-targets-planner-track-b`; see the 044 row.
+
+## Deviations of record
+
+- **PR #411 mkdir-only plan auto-apply (constitution II).** Creating a project now
+  auto-applies folder-creation-only plans instead of requiring an explicit review
+  click. This is a user-approved deviation from constitution Principle II
+  ("plan application MUST be explicit"), decided **2026-07-04**, superseding
+  handover decision D16. Reviewability-as-record is preserved: the plan row,
+  a `plan.approved` audit event (actor `auto.mkdir_only`), and per-item apply
+  audit records are still written for every automatic application; only the
+  manual approval click is skipped, and only for plans whose actions are
+  exclusively `mkdir` (+ the app-owned `write_manifest` marker). Any plan
+  containing a user-file action (move, copy, link, delete, archive, trash,
+  catalogue, or unknown) keeps the explicit review flow unchanged. See the
+  commit's own DEVIATION NOTE (`4162435d`, #411): "'plan application MUST be
+  explicit' is relaxed for mkdir-only plans by explicit user decision of
+  2026-07-04; the fuller spec amendment rides the campaign amendment set."
 
 ## Known repo-health issues (2026-06-23)
 

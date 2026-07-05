@@ -38,6 +38,9 @@ import type {
   OperationEvent,
   PlanApplyResponse,
   AuditListResponse_Serialize,
+  ArchiveListResponse,
+  ArchiveSendToTrashResponse,
+  ArchivePermanentlyDeleteResponse,
   Camera,
   CreateCamera,
   UpdateCamera,
@@ -188,10 +191,10 @@ const mockCalibrationTolerances: CalibrationTolerances = {
   requireSameOffset: true,
 };
 
-const mockRoots: LibraryRoot[] = [
-  { id: 'root-001', path: '/astro/raw', category: 'raw', online: true, fileCount: 1247, lastScanned: '2026-05-19T23:30:00Z' },
-  { id: 'root-002', path: '/astro/calibration', category: 'calibration', online: true, fileCount: 342, lastScanned: '2026-05-19T23:30:00Z' },
-  { id: 'root-003', path: '/astro/projects', category: 'project', online: true, fileCount: 856, lastScanned: '2026-05-18T20:00:00Z' },
+let mockRoots: LibraryRoot[] = [
+  { id: 'root-001', path: '/astro/raw', category: 'raw', online: true, fileCount: 1247, lastScanned: '2026-05-19T23:30:00Z', active: true },
+  { id: 'root-002', path: '/astro/calibration', category: 'calibration', online: true, fileCount: 342, lastScanned: '2026-05-19T23:30:00Z', active: true },
+  { id: 'root-003', path: '/astro/projects', category: 'project', online: true, fileCount: 856, lastScanned: '2026-05-18T20:00:00Z', active: true },
 ];
 
 const mockEquipment: Equipment[] = [
@@ -566,6 +569,50 @@ export async function mockInvoke(
       const filtered = filterMockAuditEntries(args?.filters);
       return filtered.map((e) => JSON.stringify(e)).join('\n');
     }
+
+    // ── Archive commands (spec 017 WP-B) ──────────────────────────────────────
+    case 'archive_list': {
+      return {
+        entries: [
+          {
+            id: 'arch-proj-001',
+            name: 'NGC 7000 · HOO (v1)',
+            entityType: 'project',
+            archivedAt: '2026-05-12T21:40:00Z',
+            reason: 'Superseded by reprocess',
+            originalPath: 'Projects/NGC7000_HOO_v1',
+            sizeBytes: 12_400_000_000,
+            archivedViaPlanId: 'plan-archive-001',
+          },
+          {
+            id: 'arch-proj-002',
+            name: 'M31 · LRGB (2025)',
+            entityType: 'project',
+            archivedAt: '2026-03-02T19:05:00Z',
+            reason: 'Completed and delivered',
+            originalPath: 'Projects/M31_LRGB_2025',
+            sizeBytes: 8_100_000_000,
+            archivedViaPlanId: 'plan-archive-002',
+          },
+        ],
+      } satisfies ArchiveListResponse;
+    }
+    case 'archive_send_to_trash': {
+      const args = _args as { planId?: string } | undefined;
+      return {
+        planId: args?.planId ?? 'plan-archive-001',
+        itemsMoved: 3,
+        auditId: 'audit-archive-trash-001',
+      } satisfies ArchiveSendToTrashResponse;
+    }
+    case 'archive_permanently_delete': {
+      const args = _args as { planId?: string } | undefined;
+      return {
+        planId: args?.planId ?? 'plan-archive-001',
+        itemsDeleted: 3,
+        auditId: 'audit-archive-delete-001',
+      } satisfies ArchivePermanentlyDeleteResponse;
+    }
     case 'log_recent': {
       const { MOCK_LOG_ENTRIES } = await import('@/data/mockLogEntries');
       return {
@@ -623,10 +670,11 @@ export async function mockInvoke(
     // ---------- Mutation Commands ----------
 
     case 'lifecycle_transition_apply': {
-      // Mock: always succeeds. The request carries the desired nextState inside
-      // `args.request.project.nextState` — echo it back so the UI can update.
-      const req = (_args as { request?: { project?: { nextState?: string; currentState?: string; entityId?: string } } } | undefined)
-        ?.request?.project;
+      // Mock: always succeeds. The request is the canonical FLAT discriminated
+      // envelope (issue #423): `nextState` sits beside the `entityType` tag —
+      // there is no `{ project: {...} }` wrapper. Echo it back for the UI.
+      const req = (_args as { request?: { nextState?: string; currentState?: string; entityId?: string } } | undefined)
+        ?.request;
       return {
         status: 'success',
         contractVersion: '2.0.0',
@@ -651,8 +699,77 @@ export async function mockInvoke(
       return plans[0];
     }
     case 'plans_approve': {
-      const { plans } = await import('@/data/fixtures/plans');
-      return plans[0];
+      // Real contract shape (PlanApproveResponse): the overlay consumes
+      // `approvalToken` and hands it to `plans_apply_real`.
+      const planId = (_args as { id?: string } | undefined)?.id ?? 'mock-plan';
+      return {
+        planId,
+        newState: 'approved',
+        approvalToken: `tok-${planId}-mock`,
+        approvedAt: new Date().toISOString(),
+      };
+    }
+    case 'plan_protection_check_cmd': {
+      // One protected item so the spec-016 gate is exercised in mock mode.
+      const planId = (_args as { planId?: string } | undefined)?.planId ?? 'mock-plan';
+      return {
+        planId,
+        hasProtectedItems: true,
+        protectedItems: [
+          {
+            itemId: `${planId}-item-0`,
+            sourceId: 'mock-project-1',
+            level: 'protected',
+            reason: 'Default protection level is protected; no per-source override.',
+            matchedCategories: ['masters'],
+            originalAction: 'archive',
+            rewrittenAction: null,
+          },
+        ],
+        nonBlockingSummary: { normalCount: 2, unprotectedCount: 0 },
+      };
+    }
+    case 'protection_plan_acknowledged': {
+      return 'mock-audit-ack';
+    }
+    case 'cleanup_scan': {
+      // D11 step 1: pure read-only preview. Reason strings follow the backend
+      // generator format (see cleanup_generator.rs::scan_with_policy).
+      const projectId = (_args as { projectId?: string } | undefined)?.projectId ?? 'mock-project-1';
+      return {
+        projectId,
+        candidates: [
+          {
+            filePath: 'processing/calibrated/Ha_300s_c_0001.xisf',
+            dataType: 'intermediate',
+            sizeBytes: 268_435_456,
+            reason:
+              'intermediate artifact (classified by rule, 90% confidence); protection: normal; policy: archive',
+          },
+          {
+            filePath: 'processing/calibrated/Ha_300s_c_0002.xisf',
+            dataType: 'intermediate',
+            sizeBytes: 268_435_456,
+            reason:
+              'intermediate artifact (classified by rule, 90% confidence); protection: normal; policy: archive',
+          },
+          {
+            filePath: 'masters/master_dark_300s.xisf',
+            dataType: 'master',
+            sizeBytes: 536_870_912,
+            reason:
+              'master artifact (classified by rule, 95% confidence); protection: protected; policy: archive',
+          },
+        ],
+        totalReclaimableBytes: 1_073_741_824,
+      };
+    }
+    case 'cleanup_plan_generate': {
+      return {
+        planId: 'plan-cleanup-mock',
+        itemCount: 3,
+        protectedItemCount: 1,
+      };
     }
     case 'plans_apply_real': {
       // Spec 042 US16 (T240): drive the live long-op channel if a subscriber
@@ -739,6 +856,30 @@ export async function mockInvoke(
       } satisfies RemapVerification;
     }
     case 'roots_remap_apply': {
+      return null;
+    }
+    case 'sources_set_active': {
+      // Generated `sourcesSetActive` binding invokes with `{ rootId, active }`
+      // (camelCase) — mirror the real backend's `registered_sources.active`
+      // toggle so mock mode's Disable/Enable buttons behave persistently.
+      const rootId = (_args?.rootId as string) ?? '';
+      const active = (_args?.active as boolean) ?? true;
+      mockRoots = mockRoots.map((r) => (r.id === rootId ? { ...r, active } : r));
+      return null;
+    }
+    case 'roots_delete': {
+      // Mirrors the real backend's decision D8 block: `root-001` carries mock
+      // "dependents" (it has file_count/lastScanned in the demo fixture) so
+      // mock mode can also exercise the has_dependents error path — every
+      // other seed root deletes cleanly.
+      const rootId = (_args?.rootId as string) ?? '';
+      if (rootId === 'root-001') {
+        return mockContractError(
+          'root.has_dependents',
+          `root ${rootId} has dependent records and cannot be deleted`,
+        );
+      }
+      mockRoots = mockRoots.filter((r) => r.id !== rootId);
       return null;
     }
     case 'scan_start': {

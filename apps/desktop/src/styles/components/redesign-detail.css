@@ -204,6 +204,91 @@
   margin-top: var(--alm-sp-1);
 }
 
+/* ── Cleanup scan results + generate controls (spec 017 WP-E) ─────────────── */
+.alm-cleanup-scan__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-2) 0;
+}
+
+.alm-cleanup-scan__reclaimable {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-medium);
+  color: var(--alm-text-secondary);
+}
+
+.alm-cleanup-scan__group {
+  margin-top: var(--alm-sp-2);
+}
+
+.alm-cleanup-scan__group-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--alm-sp-2);
+  padding: var(--alm-sp-1) 0;
+}
+
+.alm-cleanup-scan__group-title {
+  font-size: var(--alm-text-sm);
+  font-weight: var(--alm-weight-medium);
+}
+
+.alm-cleanup-scan__group-meta {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+}
+
+.alm-cleanup-scan__protected-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+}
+
+.alm-cleanup-scan__generate {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--alm-sp-3);
+  padding: var(--alm-sp-2) 0;
+}
+
+/* .alm-cleanup-scan__dest intentionally has no rule — the JSX uses the shared
+   .alm-stack-1 utility (css-dup-sniff: flex-column/gap-1 family). */
+
+.alm-cleanup-scan__dest-label {
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  font-weight: var(--alm-weight-medium);
+}
+
+/* ── Shared plan review overlay (spec 017 WP-E) ───────────────────────────── */
+.alm-plan-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+}
+
+.alm-plan-review__status {
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-muted);
+  padding: var(--alm-sp-3) 0;
+}
+
+/* Protected rows in the cleanup candidate table and the plan review table
+   share one rule (one parameterised pattern, no per-feature clones). */
+.alm-cleanup-scan__row--protected,
+.alm-plan-review__row--protected {
+  background: var(--alm-warn-bg);
+}
+
+.alm-plan-review__progress {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
+}
+
 /* ── Right rail: Next + History cards ─────────────────────────────────────── */
 .alm-project-detail__next-note {
   font-size: var(--alm-text-sm);

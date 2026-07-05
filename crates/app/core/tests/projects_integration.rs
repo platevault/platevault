@@ -30,6 +30,19 @@ fn unique_name(prefix: &str) -> String {
     format!("{prefix}-{}", &Uuid::new_v4().to_string()[..8])
 }
 
+/// `support::setup` plus a registered project folder, so the relative request
+/// paths used below anchor portably on every platform (see
+/// [`support::TEST_PROJECT_ROOT`] for why leading-slash paths are not used).
+async fn setup() -> (
+    persistence_db::Database,
+    persistence_db::repositories::lifecycle::SqliteLifecycleRepository,
+    audit::bus::EventBus,
+) {
+    let (db, repo, bus) = support::setup().await;
+    support::register_project_root(db.pool(), support::TEST_PROJECT_ROOT).await;
+    (db, repo, bus)
+}
+
 fn make_create_req(name: &str, tool: ProjectTool) -> ProjectCreateRequest {
     ProjectCreateRequest {
         request_id: Uuid::new_v4().to_string(),
@@ -49,7 +62,7 @@ fn make_create_req(name: &str, tool: ProjectTool) -> ProjectCreateRequest {
 /// `setup_incomplete` (no sources were linked).
 #[tokio::test]
 async fn create_then_get_returns_persisted_fields() {
-    let (db, _repo, bus) = support::setup().await;
+    let (db, _repo, bus) = setup().await;
 
     let name = unique_name("M42");
     let req = ProjectCreateRequest {
@@ -81,7 +94,11 @@ async fn create_then_get_returns_persisted_fields() {
     assert_eq!(detail.name, name, "persisted name must match request");
     assert_eq!(detail.tool, ProjectTool::PixInsight, "persisted tool must match request");
     assert_eq!(detail.lifecycle, "setup_incomplete");
-    assert_eq!(detail.path, format!("projects/{name}"), "persisted path must match request");
+    assert_eq!(
+        detail.path,
+        format!("{}/projects/{name}", support::TEST_PROJECT_ROOT),
+        "persisted path must be the request path anchored to the project root"
+    );
     assert!(detail.sources.is_empty(), "no sources should be linked on create");
     assert!(detail.channels.is_empty(), "no channels inferred without sources");
     // notes field lives on the projects row; we pass it through the `notes` column.
@@ -93,7 +110,7 @@ async fn create_then_get_returns_persisted_fields() {
 /// `name.duplicate`. This verifies the uniqueness constraint reaches the DB.
 #[tokio::test]
 async fn create_duplicate_name_is_rejected_at_db_layer() {
-    let (db, _repo, bus) = support::setup().await;
+    let (db, _repo, bus) = setup().await;
 
     let name = unique_name("Orion");
     let req1 = make_create_req(&name, ProjectTool::PixInsight);
@@ -111,7 +128,7 @@ async fn create_duplicate_name_is_rejected_at_db_layer() {
 /// `get` on a non-existent id returns an error (not a panic or empty result).
 #[tokio::test]
 async fn get_nonexistent_project_returns_error() {
-    let (db, _repo, _bus) = support::setup().await;
+    let (db, _repo, _bus) = setup().await;
     let bogus_id = Uuid::new_v4().to_string();
     let err =
         project_setup::get(db.pool(), &bogus_id).await.expect_err("get on missing id must fail");
@@ -124,7 +141,7 @@ async fn get_nonexistent_project_returns_error() {
 /// Asserts the DB row is durably updated (not duplicated) on each upsert.
 #[tokio::test]
 async fn note_add_update_read_round_trip() {
-    let (db, _repo, bus) = support::setup().await;
+    let (db, _repo, bus) = setup().await;
 
     // Create the project first (notes are associated by project_id).
     let name = unique_name("Crab");
@@ -183,7 +200,7 @@ async fn note_add_update_read_round_trip() {
 /// Attempt to update notes on a non-existent project; expect `project.not_found`.
 #[tokio::test]
 async fn note_update_missing_project_returns_error() {
-    let (db, _repo, bus) = support::setup().await;
+    let (db, _repo, bus) = setup().await;
 
     let req = ProjectNoteUpdateRequest {
         project_id: Uuid::new_v4().to_string(),
@@ -203,7 +220,7 @@ async fn note_update_missing_project_returns_error() {
 /// which mirrors how `project_manifests::write` works in production.
 #[tokio::test]
 async fn manifest_write_list_get_round_trip() {
-    let (db, _repo, bus) = support::setup().await;
+    let (db, _repo, bus) = setup().await;
 
     // Create a project to own the manifest.
     let name = unique_name("Andromeda");
@@ -265,7 +282,7 @@ async fn manifest_write_list_get_round_trip() {
 /// embedded in the manifest body (A8 requirement from spec 024).
 #[tokio::test]
 async fn manifest_embeds_notes_snapshot_from_db() {
-    let (db, _repo, bus) = support::setup().await;
+    let (db, _repo, bus) = setup().await;
 
     let name = unique_name("Horsehead");
     let req = make_create_req(&name, ProjectTool::Siril);

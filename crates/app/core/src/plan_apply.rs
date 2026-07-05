@@ -31,7 +31,7 @@ use audit::event_bus::{
     PlanItemProgress, Source, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_APPLYING_PAUSED,
     TOPIC_PLAN_APPLYING_RESUMED, TOPIC_PLAN_APPLYING_STARTED, TOPIC_PLAN_ITEM_PROGRESS,
 };
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use contracts_core::plan_apply::{
     PlanApplyResponse, PlanApplyStatus, PlanCancelResponse, PlanItemRetryResponse,
     PlanItemSkipResponse, PlanResumeResponse,
@@ -58,6 +58,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use crate::errors::bus_err;
+use crate::path_set::PlanPathSet;
 use dashmap::DashMap;
 
 // ── Long-operation event sink (spec 042 US16, T240) ───────────────────────────
@@ -131,8 +132,12 @@ struct ActiveRun {
     cancel_token: CancellationToken,
     skip_set: SkipSet,
     retry_queue: RetryQueue,
-    #[allow(dead_code)] // retained for future cross-plan overlap checks (R-Concur-1)
+    #[allow(dead_code)] // retained for run introspection / diagnostics
     run_id: String,
+    /// The (source ∪ destination ∪ archive) path prefixes this run claims,
+    /// compared against pending applies by the FR-017 overlap check
+    /// (R-Concur-1).
+    path_set: PlanPathSet,
 }
 
 /// RAII guard that removes a plan's [`ActiveRun`] entry from the registry on
@@ -142,7 +147,7 @@ struct ActiveRun {
 /// A plain sequential `registry.remove(&plan_id)` after `execute_plan(...)`
 /// returns is skipped if `execute_plan` panics, because the unwind jumps past
 /// it. The leaked entry then defeats the no-double-apply guard
-/// (`check_no_overlap`) for that plan id forever. Holding this guard for the
+/// (`check_overlap_and_register`) for that plan id forever. Holding this guard for the
 /// duration of `execute_plan` makes removal run during the unwind instead.
 ///
 /// The guard is constructed at the same point the entry is inserted and owned
@@ -335,13 +340,80 @@ async fn finalize_archive_lifecycle(
     }
 }
 
-// ── Overlap check (R-Concur-1) ────────────────────────────────────────────────
+// ── Overlap check (FR-017, R-Concur-1) ────────────────────────────────────────
 
-/// Reject if any active run's path set overlaps with the new plan's paths.
-/// v1: simple per-plan mutex (one plan at a time); cross-plan check is a
-/// best-effort check at apply-start time using the active runs registry.
-fn check_no_overlap(plan_id: &str) -> Result<(), ContractError> {
+/// Serializes the FR-017 overlap check with the registry insert so two
+/// concurrent `apply_plan` calls cannot both pass the check and then both
+/// register overlapping runs. Sync-only critical section: the lock is never
+/// held across an `.await`.
+static OVERLAP_GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Resolve one claimed relative path the same way the executor resolves item
+/// paths (`resolve_item_path`): join against the root when known, then
+/// lexically normalize. Unrooted paths normalize as-is — they never falsely
+/// prefix-match rooted absolute paths.
+fn resolve_claimed_path(relative: &str, root: Option<&Utf8PathBuf>) -> Utf8PathBuf {
+    use fs_executor::ops::path_gate::lexical_normalize;
+    match root {
+        Some(r) => lexical_normalize(&r.join(relative)),
+        None => lexical_normalize(Utf8Path::new(relative)),
+    }
+}
+
+/// Compute the plan's claimed (source ∪ destination ∪ archive) path set for
+/// the FR-017 overlap check (research R7).
+///
+/// The destination prefers the destination root when it resolves and falls
+/// back to the source root — over-claiming rather than under-claiming, which
+/// is the safe direction for a concurrency guard. Absolute archive paths
+/// (pre-computed at plan generation) are claimed verbatim.
+fn compute_plan_path_set(
+    item_rows: &[plans_repo::PlanItemRow],
+    root_map: &HashMap<String, Utf8PathBuf>,
+) -> PlanPathSet {
+    use fs_executor::ops::path_gate::lexical_normalize;
+
+    let mut set = PlanPathSet::new();
+    for row in item_rows {
+        let from_root = row.from_root_id.as_deref().and_then(|rid| root_map.get(rid));
+        let to_root = row.to_root_id.as_deref().and_then(|rid| root_map.get(rid)).or(from_root);
+
+        if !row.from_relative_path.is_empty() {
+            set.insert(resolve_claimed_path(&row.from_relative_path, from_root));
+        }
+        if !row.to_relative_path.is_empty() {
+            set.insert(resolve_claimed_path(&row.to_relative_path, to_root));
+        }
+        if let Some(archive) = row.archive_path.as_deref().filter(|a| !a.is_empty()) {
+            let p = Utf8Path::new(archive);
+            if p.is_absolute() {
+                set.insert(lexical_normalize(p));
+            } else {
+                set.insert(resolve_claimed_path(archive, to_root));
+            }
+        }
+    }
+    set
+}
+
+/// Check the FR-017 concurrency invariants and, when they hold, register the
+/// run in [`ACTIVE_RUNS`] — atomically with respect to other apply calls
+/// (guarded by [`OVERLAP_GATE`]).
+///
+/// Returns the RAII removal guard on success. On failure nothing is
+/// registered:
+/// - `plan.invalid_state` — this plan already has an active run (same-plan
+///   double-apply backstop, T021; the state CAS blocks the common path).
+/// - `plan.conflict.overlap` — the plan's path set overlaps an active run's
+///   path set at subtree-prefix granularity (FR-017, R-Concur-1).
+#[allow(clippy::result_large_err)]
+fn check_overlap_and_register(
+    plan_id: &str,
+    run: ActiveRun,
+) -> Result<ActiveRunGuard, ContractError> {
     let registry = active_runs();
+    let _gate = OVERLAP_GATE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+
     if registry.contains_key(plan_id) {
         return Err(ContractError::new(
             ErrorCode::PlanInvalidState,
@@ -350,11 +422,24 @@ fn check_no_overlap(plan_id: &str) -> Result<(), ContractError> {
             false,
         ));
     }
-    // Full path-set overlap check (R-Concur-1) requires resolving absolute
-    // paths for all active plans — deferred to a future iteration when
-    // multiple concurrent plans are common. For v1, the in-memory registry
-    // prevents the same plan from running twice.
-    Ok(())
+
+    for entry in registry.iter() {
+        if let Some((mine, theirs)) = run.path_set.first_overlap(&entry.value().path_set) {
+            return Err(ContractError::new(
+                ErrorCode::PlanConflictOverlap,
+                format!(
+                    "plan {plan_id} path '{mine}' overlaps path '{theirs}' claimed by \
+                     active plan {}; wait for that apply to finish",
+                    entry.key()
+                ),
+                ErrorSeverity::Blocking,
+                false,
+            ));
+        }
+    }
+
+    registry.insert(plan_id.to_owned(), run);
+    Ok(ActiveRunGuard { registry: registry.clone(), plan_id: plan_id.to_owned() })
 }
 
 // ── Approval token verification (A1) ─────────────────────────────────────────
@@ -703,9 +788,6 @@ pub async fn apply_plan(
     let plan_origin = plan_row.origin.clone();
     let plan_project_id = plan_row.origin_path.clone();
 
-    // Overlap check (R-Concur-1).
-    check_no_overlap(plan_id)?;
-
     let run_id = new_id();
     let items_total = plan_row.items_total;
     let items_pending = plan_row.items_pending;
@@ -715,19 +797,10 @@ pub async fn apply_plan(
     // one correlation key. `None` when the caller does not subscribe.
     let op_emitter = event_sink.map(|sink| OpEventEmitter::new(OperationId(run_id.clone()), sink));
 
-    // Atomic CAS: approved → applying (R-CAS-1).
-    apply_repo::cas_approved_to_applying(
-        pool,
-        plan_id,
-        &run_id,
-        approval_token,
-        items_total,
-        items_pending,
-    )
-    .await
-    .map_err(db_err)?;
-
-    // Load items for the executor.
+    // Load items for the executor. Loaded before the state CAS so the FR-017
+    // overlap check below can compute this plan's claimed path set; an
+    // approved plan's items are immutable, so the read stays valid across
+    // the CAS.
     let item_rows = plans_repo::list_plan_items(pool, plan_id).await.map_err(db_err)?;
 
     // T023a: Build a root_id → absolute_path map so the path-gate fires on
@@ -761,27 +834,43 @@ pub async fn apply_plan(
     let executor_items: Vec<ExecutorItem> =
         item_rows.iter().map(|r| item_row_to_executor_item(r, &root_map)).collect();
 
-    // Register active run.
+    // Overlap check + active-run registration (FR-017, R-Concur-1): the
+    // plan's claimed (source ∪ destination ∪ archive) path set must be
+    // disjoint from every active run's at subtree-prefix granularity.
+    // Check and insert happen atomically (OVERLAP_GATE) BEFORE the state
+    // CAS, so a rejected plan is left untouched in `approved`.
+    //
+    // RAII removal guard (FR-017): the returned guard is *moved into the
+    // spawned task* below so its `Drop` fires on the task's scope exit —
+    // including an unwind if `execute_plan` panics. If the CAS below fails,
+    // the guard drops on the early return and removes the just-registered
+    // entry. This replaces the old explicit `registry.remove`.
+    let path_set = compute_plan_path_set(&item_rows, &root_map);
     let cancel_token = CancellationToken::new();
     let skip_set = SkipSet::new();
     let retry_queue = RetryQueue::new();
-    // RAII removal guard (FR-017): inserting the entry and building the guard
-    // are paired here, but the guard is *moved into the spawned task* below so
-    // its `Drop` fires on the task's scope exit — including an unwind if
-    // `execute_plan` panics. This replaces the old explicit `registry.remove`.
-    let run_guard = {
-        let registry = active_runs();
-        registry.insert(
-            plan_id.to_owned(),
-            ActiveRun {
-                cancel_token: cancel_token.clone(),
-                skip_set: skip_set.clone(),
-                retry_queue: retry_queue.clone(),
-                run_id: run_id.clone(),
-            },
-        );
-        ActiveRunGuard { registry: registry.clone(), plan_id: plan_id.to_owned() }
-    };
+    let run_guard = check_overlap_and_register(
+        plan_id,
+        ActiveRun {
+            cancel_token: cancel_token.clone(),
+            skip_set: skip_set.clone(),
+            retry_queue: retry_queue.clone(),
+            run_id: run_id.clone(),
+            path_set,
+        },
+    )?;
+
+    // Atomic CAS: approved → applying (R-CAS-1).
+    apply_repo::cas_approved_to_applying(
+        pool,
+        plan_id,
+        &run_id,
+        approval_token,
+        items_total,
+        items_pending,
+    )
+    .await
+    .map_err(db_err)?;
 
     // Emit started event (A7).
     let started_at = Timestamp::now_iso();
@@ -1466,9 +1555,13 @@ mod tests {
                     name: "file.fits",
                     action: "move",
                     from_root_id: None,
-                    from_relative_path: "raw/file.fits",
+                    // Plan-scoped paths: tests share the process-global
+                    // ACTIVE_RUNS registry and run in parallel, so identical
+                    // relative paths across tests would trip the FR-017
+                    // overlap guard non-deterministically.
+                    from_relative_path: &format!("{plan_id}/raw/file-{i}.fits"),
                     to_root_id: None,
-                    to_relative_path: "archive/file.fits",
+                    to_relative_path: &format!("{plan_id}/archive/file-{i}.fits"),
                     reason: "test",
                     protection: "normal",
                     linked_entity: None,
@@ -1875,6 +1968,7 @@ mod tests {
             skip_set: SkipSet::new(),
             retry_queue: RetryQueue::new(),
             run_id: "run-guard-test".to_owned(),
+            path_set: PlanPathSet::new(),
         }
     }
 
@@ -1927,5 +2021,121 @@ mod tests {
             !registry.contains_key(plan_id),
             "FR-017: guard Drop must remove the registry entry even when the scope unwinds from a panic"
         );
+    }
+
+    // ── FR-017: cross-plan path-set overlap guard (R-Concur-1) ──────────────────
+
+    /// Build a fake active run claiming the given path prefixes.
+    fn fake_active_run(run_id: &str, prefixes: &[&str]) -> ActiveRun {
+        ActiveRun {
+            cancel_token: CancellationToken::new(),
+            skip_set: SkipSet::new(),
+            retry_queue: RetryQueue::new(),
+            run_id: run_id.to_owned(),
+            path_set: prefixes.iter().map(Utf8PathBuf::from).collect(),
+        }
+    }
+
+    /// FR-017: a pending apply whose (source ∪ destination) path set overlaps
+    /// an active run's path set is rejected with `plan.conflict.overlap`,
+    /// the state CAS never runs (plan stays `approved`), and no registry
+    /// entry is leaked for the rejected plan.
+    #[tokio::test]
+    async fn apply_plan_rejects_overlapping_active_plan() {
+        let (db, bus) = setup().await;
+        // Items claim "p-ovl-b/raw/file-0.fits" + "p-ovl-b/archive/file-0.fits"
+        // (unrooted).
+        insert_approved_plan_with_items(&db, "p-ovl-b", 1).await;
+
+        // Another plan's active run claims the "p-ovl-b/raw" subtree — an
+        // ancestor of this plan's source path at subtree-prefix granularity.
+        let registry = active_runs();
+        registry.insert("p-ovl-a".to_owned(), fake_active_run("run-ovl-a", &["p-ovl-b/raw"]));
+
+        let result = apply_plan(db.pool(), &bus, "p-ovl-b", "test-token", None).await;
+        registry.remove("p-ovl-a");
+
+        let err = result.unwrap_err();
+        assert_eq!(err.code, ErrorCode::PlanConflictOverlap);
+        assert!(!registry.contains_key("p-ovl-b"), "rejected plan must not leak a registry entry");
+
+        // The CAS never ran: the plan is untouched and can be applied later.
+        let plan = repo::get_plan(db.pool(), "p-ovl-b", false).await.unwrap();
+        assert_eq!(plan.state, "approved");
+    }
+
+    /// FR-017: disjoint path sets may apply concurrently — the guard only
+    /// rejects overlap, not concurrency itself.
+    #[tokio::test]
+    async fn apply_plan_allows_disjoint_active_plan() {
+        let (db, bus) = setup().await;
+        insert_approved_plan_with_items(&db, "p-dis-b", 1).await;
+
+        let registry = active_runs();
+        registry.insert("p-dis-a".to_owned(), fake_active_run("run-dis-a", &["/somewhere/else"]));
+
+        let result = apply_plan(db.pool(), &bus, "p-dis-b", "test-token", None).await;
+        registry.remove("p-dis-a");
+
+        let resp = result.unwrap();
+        assert_eq!(resp.new_state, "applying");
+
+        // Let the background executor finish so the run's own registry entry
+        // is dropped before other tests run.
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    }
+
+    /// FR-017: the claimed path set resolves item paths against the root map
+    /// the same way the executor does, and claims absolute archive paths
+    /// verbatim.
+    #[test]
+    fn compute_plan_path_set_resolves_roots_and_archive() {
+        let row = plans_repo::PlanItemRow {
+            id: "item-ps".to_owned(),
+            plan_id: "plan-ps".to_owned(),
+            item_index: 1,
+            name: "file.fits".to_owned(),
+            action: "archive".to_owned(),
+            from_root_id: Some("root-001".to_owned()),
+            from_relative_path: "raw/./file.fits".to_owned(),
+            to_root_id: None,
+            to_relative_path: "sorted/file.fits".to_owned(),
+            reason: "test".to_owned(),
+            protection: "normal".to_owned(),
+            linked_entity: None,
+            item_state: "pending".to_owned(),
+            failure_reason: None,
+            provenance: None,
+            approved_mtime: None,
+            approved_size_bytes: None,
+            archive_path: Some("/vault/archive/file.fits".to_owned()),
+            created_at: "2026-06-17T00:00:00Z".to_owned(),
+            source_id: None,
+            category: None,
+            requires_destructive_confirm: Some(0),
+            resolved_pattern: None,
+            destructive_confirmed: 0,
+        };
+
+        let mut root_map = HashMap::new();
+        root_map.insert("root-001".to_owned(), Utf8PathBuf::from("/mnt/library"));
+
+        let set = compute_plan_path_set(std::slice::from_ref(&row), &root_map);
+        assert_eq!(set.len(), 3);
+
+        // Source: rooted + lexically normalized. Destination: falls back to
+        // the source root (over-claiming, the safe direction). Archive:
+        // absolute, claimed verbatim.
+        let source: PlanPathSet =
+            [Utf8PathBuf::from("/mnt/library/raw/file.fits")].into_iter().collect();
+        let dest: PlanPathSet =
+            [Utf8PathBuf::from("/mnt/library/sorted/file.fits")].into_iter().collect();
+        let archive: PlanPathSet = [Utf8PathBuf::from("/vault/archive")].into_iter().collect();
+        assert!(set.overlaps(&source), "source path must be claimed under its root");
+        assert!(set.overlaps(&dest), "destination must fall back to the source root");
+        assert!(set.overlaps(&archive), "absolute archive path must be claimed verbatim");
+
+        let disjoint: PlanPathSet = [Utf8PathBuf::from("/elsewhere")].into_iter().collect();
+        assert!(!set.overlaps(&disjoint));
     }
 }

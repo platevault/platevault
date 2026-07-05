@@ -55,6 +55,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   "operation.not_found": m.err_operation_not_found,
   "plan.approval_required": m.err_plan_approval_required,
   "plan.approval.stale": m.err_plan_approval_stale,
+  "plan.conflict.overlap": m.err_plan_conflict_overlap,
   "plan.invalid_state": m.err_plan_invalid_state,
   "plan.not_found": m.err_plan_not_found,
   "plan.not_in_apply": m.err_plan_not_in_apply,
@@ -94,6 +95,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   "source.already.linked": m.err_source_already_linked,
   "source.not_found": m.err_source_not_found,
   "source.invalid_organization_state": m.err_source_invalid_organization_state,
+  "root.has_dependents": m.err_root_has_dependents,
   "tool.locked": m.err_tool_locked,
   "tool.unknown": m.err_tool_unknown,
   "resolver.endpoint_invalid": m.err_resolver_endpoint_invalid,
@@ -121,6 +123,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   "database.error": m.err_database_error,
   "serialise.error": m.err_serialise_error,
   "io.error": m.err_io_error,
+  // Per-frame inventory (spec 048).
+  "root.unavailable": m.err_root_unavailable,
+  "hash.mismatch": m.err_hash_mismatch,
+  "frame.not_found": m.err_frame_not_found,
   // The generic wrap code maps to the shared generic fallback message (no
   // duplicated catalog values; spec 046 FR-013).
   "internal.error": m.err_generic_fallback,

@@ -56,6 +56,10 @@ use crate::commands::inbox::{
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
 use crate::commands::inventory::inventory_list;
+use crate::commands::inventory_frame::{
+    inventory_frame_list, inventory_frame_relink, inventory_reconcile_run,
+    inventory_root_config_get, inventory_root_config_set,
+};
 use crate::commands::lifecycle::{
     lifecycle_ledger_list, lifecycle_transition_apply, lifecycle_transition_preview,
     provenance_read, AppState,
@@ -91,8 +95,8 @@ use crate::commands::protection::{
 };
 use crate::commands::review::review_queue;
 use crate::commands::roots::{
-    equipment_list, roots_list, roots_register, roots_remap, roots_remap_apply, scan_start,
-    sources_set_organization_state,
+    equipment_list, roots_delete, roots_list, roots_register, roots_remap, roots_remap_apply,
+    scan_start, sources_set_active, sources_set_organization_state,
 };
 use crate::commands::search::search_global;
 use crate::commands::sessions::{
@@ -248,9 +252,11 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         roots_register_batch,
         roots_remap,
         roots_remap_apply,
+        roots_delete,
         scan_start,
         equipment_list,
         sources_set_organization_state,
+        sources_set_active,
         // first-run wizard (spec 003)
         firstrun_state,
         firstrun_complete,
@@ -335,6 +341,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_target_recommendations,
         // inventory (spec 006)
         inventory_list,
+        // per-frame inventory (spec 048)
+        inventory_frame_list,
+        inventory_reconcile_run,
+        inventory_frame_relink,
+        inventory_root_config_get,
+        inventory_root_config_set,
         // ingestion settings (spec 030)
         ingestion_settings_get,
         ingestion_settings_update,
@@ -456,9 +468,11 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         roots_register_batch,
         roots_remap,
         roots_remap_apply,
+        roots_delete,
         scan_start,
         equipment_list,
         sources_set_organization_state,
+        sources_set_active,
         // first-run wizard (spec 003)
         firstrun_state,
         firstrun_complete,
@@ -543,6 +557,12 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_target_recommendations,
         // inventory (spec 006)
         inventory_list,
+        // per-frame inventory (spec 048)
+        inventory_frame_list,
+        inventory_reconcile_run,
+        inventory_frame_relink,
+        inventory_root_config_get,
+        inventory_root_config_set,
         // ingestion settings (spec 030)
         ingestion_settings_get,
         ingestion_settings_update,

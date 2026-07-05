@@ -156,6 +156,11 @@ pub enum ErrorCode {
     PlanApprovalRequired,
     #[serde(rename = "plan.approval.stale")]
     PlanApprovalStale,
+    /// Concurrent apply rejected: the plan's (source ∪ destination ∪ archive)
+    /// path set overlaps an active apply run's path set (spec 025 FR-017,
+    /// R-Concur-1).
+    #[serde(rename = "plan.conflict.overlap")]
+    PlanConflictOverlap,
     #[serde(rename = "plan.invalid_state")]
     PlanInvalidState,
     #[serde(rename = "plan.not_found")]
@@ -253,6 +258,13 @@ pub enum ErrorCode {
     #[serde(rename = "source.invalid_organization_state")]
     SourceInvalidOrganizationState,
 
+    // ── Root ─────────────────────────────────────────────────────────────────
+    /// Returned by `roots.delete` (P6b, decision D8) when dependent records
+    /// (inbox items, plan items, file records, sessions) still reference the
+    /// root; deletion is blocked rather than cascade-nullified.
+    #[serde(rename = "root.has_dependents")]
+    RootHasDependents,
+
     // ── Tool ────────────────────────────────────────────────────────────────
     #[serde(rename = "tool.locked")]
     ToolLocked,
@@ -331,6 +343,20 @@ pub enum ErrorCode {
     SerialiseError,
     #[serde(rename = "io.error")]
     IoError,
+
+    // ── Per-frame inventory (spec 048) ───────────────────────────────────────
+    /// A root's storage is unavailable (e.g. a removable drive is
+    /// disconnected). Frames under it are reported unavailable/missing —
+    /// this is a non-destructive terminal state, never an implicit delete.
+    #[serde(rename = "root.unavailable")]
+    RootUnavailable,
+    /// A user-initiated relink's candidate file did not match the missing
+    /// frame's sha256 content hash; the record is not re-homed.
+    #[serde(rename = "hash.mismatch")]
+    HashMismatch,
+    /// Referenced `file_record` id does not exist.
+    #[serde(rename = "frame.not_found")]
+    FrameNotFound,
 
     // ── Generic fallback ─────────────────────────────────────────────────────
     /// Used when a legacy `String` error is wrapped into `ContractError`.

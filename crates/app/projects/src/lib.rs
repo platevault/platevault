@@ -17,3 +17,5 @@ pub mod project_manifests;
 pub mod project_notes;
 pub mod project_setup;
 pub mod source_view_generate;
+#[cfg(test)]
+pub(crate) mod test_support;

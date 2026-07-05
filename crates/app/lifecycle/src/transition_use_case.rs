@@ -605,9 +605,10 @@ fn parse_request(request: TransitionRequest) -> Result<ParsedRequest, String> {
                 TransitionActor::User => "user".to_owned(),
                 TransitionActor::System => "system".to_owned(),
             };
-            let trigger = req.action_label.clone().unwrap_or_else(|| {
-                format!("{}: {} -> {}", req.entity_type, prior_state, next_state)
-            });
+            let trigger = req
+                .action_label
+                .clone()
+                .unwrap_or_else(|| format!("{}: {} -> {}", entity_type, prior_state, next_state));
             Ok(ParsedRequest {
                 request_id: req.request_id,
                 prior_state: prior_state.clone(),
@@ -665,7 +666,6 @@ mod tests {
         TransitionRequest::Project(ProjectTransitionRequest {
             contract_version: "2.0.0".to_owned(),
             request_id: Uuid::new_v4(),
-            entity_type: "project".to_owned(),
             entity_id: Uuid::new_v4(),
             current_state: current,
             next_state: next,
