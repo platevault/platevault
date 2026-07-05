@@ -225,7 +225,7 @@ everything neither automated layer reaches.
 | 2 Ingest → reclassify → confirm (move) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs`): mixed-folder split, unclassified-frame-type gate + bulk reclassify, missing-path-attribute gate, Confirm-doesn't-move + Apply-moves-to-shown-path. Root-picker prompt (2+ roots) and stale-plan refusal remain unautomated (follow-up) | ❌ none | `windows-journeys/journey-02-inbox-ingest-move.md` |
 | 3 Ingest → confirm (catalogue-in-place) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs::inbox_ui_catalogue_in_place_zero_moves_byte_identical`): organized root → 0-move catalogue plan, no root picker, no destination-absolute cell, byte-identical apply | ❌ none | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
 | 4 Sessions review (derived) | ✅ | 🟡 grouping proof only, no UI-invariant checks | 🟡 rows/detail render only | `windows-journeys/journey-04-sessions-review.md` |
-| 5 Project lifecycle | ✅ | 🟡 transition + ledger only, no UI | 🟡 transition button only (pill-refresh `test.skip`) | `windows-journeys/journey-05-project-lifecycle.md` |
+| 5 Project lifecycle | ✅ | 🟡 real-UI (`lifecycle_ui_journeys.rs`): create-wizard makes real `lights/`/`darks/` folders under the registered project library root (PR #414 regression guard) + blocks a duplicate name with a real inline field error. Attach/remove-source UX, manifests/notes, tool launch, artifact watcher still IPC-only | 🟡 transition button only (pill-refresh `test.skip`) | `windows-journeys/journey-05-project-lifecycle.md` |
 | 6 Cleanup scan→review→apply | ✅ | ✅ `cleanup_plan_review` now applies past `approved` via `plans.apply.direct` + asserts the real FS move + audit (2026-07-05) | ❌ none | `windows-journeys/journey-06-cleanup-scan-apply.md` |
 | 7 Archive → delete | ✅ (backend only) | ✅ `archive_lifecycle_apply_trash_permanent_delete` (`archive_journeys.rs`, NEW 2026-07-05): real apply + `archive.list` + `archive.send_to_trash`/`archive.permanently_delete` metadata + `blockPermanentDelete` gate | ❌ none | `windows-journeys/journey-07-archive-delete.md` |
 | 8 Calibration masters → matching | ✅ | 🟡 `calibration.match.suggest` shape only | ❌ none | `windows-journeys/journey-08-calibration-masters-matching.md` |
@@ -348,8 +348,13 @@ just test the mock, not the product:
    review-state controls/pills, notes-edit-doesn't-transition, rescan
    idempotency; low cost, extends the existing
    `ingestion_sessions_search` fixture.
-10. **Project lifecycle UI surface** (Journey 5) — create-wizard validation,
-    attach/remove-sources UX, manifests/notes autosave, tool-launch spawn +
+10. **Project lifecycle UI surface** (Journey 5) — PARTIALLY DONE
+    (2026-07-05, `crates/e2e-tests/tests/lifecycle_ui_journeys.rs`): the
+    create-wizard's Tests 1/2 (duplicate-name blocks with a real inline
+    field error; a unique name creates real `lights/`/`darks/` folders under
+    the registered project library root — the exact PR #414 regression).
+    Still open as follow-up: attach/remove-sources UX, per-channel
+    integration time, manifests/notes autosave, tool-launch spawn +
     containment, artifact watcher; tool-launch and the watcher specifically
     need Layer-2 (a real process/filesystem watcher), not the mock layer.
 11. **Settings + layout-convention + i18n regression guard** (Journey 10) —
