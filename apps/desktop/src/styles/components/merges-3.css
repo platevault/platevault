@@ -879,6 +879,12 @@
   flex-direction: column;
   gap: var(--alm-sp-4);
 }
+/* Matching hero (spec 043 §4): ranked candidate-masters table, below the
+   fingerprint/linked-sessions row. Shares the row's horizontal padding, no
+   duplicate top padding since it sits directly under it. */
+.alm-session-detail2__match {
+  padding: 0 var(--alm-sp-4) var(--alm-sp-4);
+}
 
 /* === Session list popover — anchored, portaled, searchable ===
    Reuses menu tokens (surface-raised, shadow-sm, border, radius-md).
