@@ -24,7 +24,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { X } from 'lucide-react';
-import { useNavigate } from '@tanstack/react-router';
+import { useNavigate, Link } from '@tanstack/react-router';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type { TargetDetailV3, TargetOpError } from '@/bindings/aliases';
@@ -629,7 +629,12 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               : m.targets_detail_tonight_title_no_site()}
           </div>
           {rowAlt.needsSite ? (
-            <Banner variant="info">{m.targets_planner_no_site_banner()}</Banner>
+            <Banner variant="info">
+              {m.targets_planner_no_site_banner()}{' '}
+              <Link to="/settings/$pane" params={{ pane: 'planner' }} className="alm-banner__action-link">
+                {m.targets_planner_no_site_banner_action()}
+              </Link>
+            </Banner>
           ) : (
             <>
               <AltitudeGraph points={tonightPoints} />

@@ -166,23 +166,36 @@ instant threshold updates. **Independent test**: spec.md US1 Independent Test.
       `TargetsTable.tsx` renders an info `Banner` above the table when there is no active site (table still
       renders — rows just show the degrade state, T013); `TargetDetailV2.tsx` replaces the Tonight
       graph/stats with the same banner. New message key `targets_planner_no_site_banner`.
-- [ ] T016 [US6] First-run wizard step in `apps/desktop/src/app/first-run.ts` (+ wizard step component) that
+- [X] T016 [US6] First-run wizard step in `apps/desktop/src/app/first-run.ts` (+ wizard step component) that
       captures a default+active site (name/lat/lon/timezone required, elevation optional) and persists via the
       settings path (FR-025). **Coordinate the wizard edit with spec 048** so the two don't conflict.
-      DEFERRED (not attempted): `apps/desktop/src/app/first-run.ts` is only the first-run *completion gate*
-      (`checkFirstRunComplete`) — the actual step UI lives in `apps/desktop/src/features/setup/SetupWizard.tsx`,
-      a 462-line component with a 5-step flow hardcoded by numeric step index (`step === 0`, `SCAN_STEP - 1`,
-      etc. threaded through `canProceed`/footer-button branching) and a 533-line `SetupWizard.test.tsx`.
-      Inserting a 6th step safely requires renumbering every index-keyed branch plus updating that test suite,
-      and tasks.md itself flags real coordination risk with spec 048's own wizard changes. Given this task's
-      time/risk budget, changing that flow was judged too likely to destabilize an already-tested onboarding
-      path for a one-pass fix — left for a dedicated follow-up lane (ideally done together with/after spec 048
-      lands, per the task's own coordination note).
+      DONE (follow-up lane, after the T016 deferral above): `apps/desktop/src/app/first-run.ts` remains only the
+      completion gate; the new step lives in `apps/desktop/src/features/setup/steps/StepSite.tsx` (controlled,
+      same field set as the Settings editor) and is wired into `SetupWizard.tsx` as step 4 of 6 (between
+      Configuration and Confirm; Scan is now step 6). Renumbering was surgical: `canProceed`/footer button logic
+      is already index-generic via `SCAN_STEP = STEPS.length - 1`, so only the render-body `step === N` branches
+      needed shifting (Confirm 3→4) plus a new `step === 3` gate (blocks Continue only on an out-of-range
+      lat/lon; the step is otherwise optional — FR-025 never blocks Finish). On Finish, a filled-in site
+      persists through the same `site-store.ts` used by the US3 Settings pane, becoming both default AND
+      active. Also fixed a latent stale-closure bug surfaced while wiring this: `handleFinish`'s `useCallback`
+      deps omitted `state.tools`/`state.site`. `SetupWizard.test.tsx` renumbered (Confirm seeds 3→4, "step N of
+      5"→"of 6") plus 4 new tests (empty-skip, validation gating, persistence, empty-skip-no-persist) — 18/18
+      pass. Not coordinated with spec 048 (not yet merged into this branch's base at implementation time); the
+      diff is index-additive and should rebase cleanly, but a real conflict check needs a fresh look once 048
+      lands.
 - [ ] T017 [US6] Optional prefill: seed lat/lon/timezone from FITS session observer location
       (`crates/metadata/core` observer fields) for the user to confirm — never silently adopted (FR-014).
-      DEFERRED (not attempted, as pre-authorized): depends on T016 existing first; also would need a lookup
-      into whether `crates/metadata/core` currently carries observer lat/lon/timezone fields on session
-      metadata (not verified in this pass).
+      DEFERRED (checked, not cheap): `crates/metadata/core::lib.rs` DOES carry `observer_lat`/`observer_long`/
+      `observer_elev` (`Option<f64>`, from `SITELAT`/`SITELONG`/`SITEELEV` → `OBSGEO-*` → `LAT-OBS`/`LONG-OBS`/
+      `ALT-OBS` FITS keywords) — no `timezone` field, so that part would need a geo→IANA-timezone lookup
+      (not available offline without a bundled tz-boundary dataset — out of scope for a "cheap" add). More
+      fundamentally, this is prefill FROM a scan, but the wizard's new Site step (T016) runs at step 4, BEFORE
+      the Scan step (step 6) that actually reads FITS headers — there is no ingested metadata yet for the
+      wizard to read at the point the Site step renders. Doing this properly requires either moving the Site
+      step after Scan (reordering risk this lane was told to avoid) or a live scan-time hook feeding back into
+      an earlier step, neither of which is cheap. Left for a dedicated follow-up once the step ordering
+      question is deliberately revisited (or handled entirely in Settings -> Target Planner instead of the
+      wizard).
 - [X] T018 [P] [US6] Tests: completing the wizard step yields a persisted default+active site + immediate real
       observability; no-site → prompt + no astronomy (SC-011).
       DONE (partial — no-site/real-astronomy half only; wizard half N/A per T016 deferral): added to
@@ -191,8 +204,10 @@ instant threshold updates. **Independent test**: spec.md US1 Independent Test.
       at the test site's latitude has no astronomical dark window, FR-017) and `TargetDetailV2.test.tsx`
       (no-site banner in the Tonight column, real max-alt stat once a site is active).
 
-**Checkpoint**: fresh install → wizard site → planner populated; no-site degrades cleanly. — PARTIALLY MET:
-no-site degrade is solid and tested; the wizard-driven "fresh install" path is NOT wired (T016/T017 deferred).
+**Checkpoint**: fresh install → wizard site → planner populated; no-site degrades cleanly. — MET (T016 follow-up
+lane): the wizard now writes a real default+active site on Finish, so a fresh install with a filled-in Site
+step gets real planner numbers immediately; skipping the step still degrades cleanly via T015. T017 (FITS
+prefill) remains deferred — see its note above (not cheap, and blocked on step ordering).
 
 ---
 
@@ -200,20 +215,42 @@ no-site degrade is solid and tested; the wizard-driven "fresh install" path is N
 
 **Goal**: site CRUD + default/active + threshold from settings. **Depends on**: Phase 2.
 
-- [ ] T019 [US3] `observing-sites/` UI: list, add/edit/delete named sites (name, lat, lon, elevation, IANA-tz
+- [X] T019 [US3] `observing-sites/` UI: list, add/edit/delete named sites (name, lat, lon, elevation, IANA-tz
       picker from the bundled list, twilight, min-horizon), mark default, choose active — fully offline
       (FR-011/FR-012). Keep `.alm-*` markup.
-- [ ] T020 [US3] Enforce default/active validity across edits/deletes (delete active → reselect default/none;
+      DONE: `apps/desktop/src/features/targets/observing-sites/ObservingSites.tsx` — full CRUD list against the
+      existing settings-backed `site-store.ts`/`observer-site.ts` (T004-T008), mounted in Settings → Target
+      Planner (`PlannerSettings.tsx`, alongside the T012b threshold control). Reuses the promoted
+      `SettingsFormShell` (moved out of `Equipment.tsx` into `SettingsKit.tsx` so the add/edit frame isn't
+      cloned per pane). Also fixed a real gap found while wiring this: nothing in the app ever called
+      `loadObservingState()`, so the live site cache was always empty at runtime; `Shell.tsx` now hydrates it
+      once per session after setup completes.
+- [X] T020 [US3] Enforce default/active validity across edits/deletes (delete active → reselect default/none;
       delete default → valid/empty) — FR-013; wire into the settings write path.
-- [ ] T021 [US3] Expose the usable-altitude threshold (settings-backed, wired in US1 T012b) on the
+      DONE: `ObservingSites.tsx`'s delete handler reassigns `defaultSiteId`/`activeSiteId` to a remaining site
+      (falling back to `null`, the no-site state) whenever the deleted site held either pointer, before calling
+      `saveSites`; edits never touch the pointers. Covered by `ObservingSites.test.tsx`.
+- [X] T021 [US3] Expose the usable-altitude threshold (settings-backed, wired in US1 T012b) on the
       settings/observing surface and verify it **persists across relaunch** (durability aspect of FR-004,
       SC-006), alongside per-site twilight/min-horizon persistence.
-- [ ] T022 [US3] Switching active site recomputes all observability for the new coordinates; active site
+      DONE: the T012b threshold control already lived in `PlannerSettings.tsx`; `ObservingSites` now renders in
+      the same pane above it, so site + threshold are one settings surface. Both go through
+      `commands.settingsUpdate('observing', ...)`, the same durable KV path validated by T008's backend tests.
+- [X] T022 [US3] Switching active site recomputes all observability for the new coordinates; active site
       persists across relaunch (SC-005).
-- [ ] T023 [P] [US3] Tests: two sites give different numbers; switch/relaunch persistence; delete keeps
+      DONE: `TargetsTable.tsx`/`TargetDetailV2.tsx` already subscribed to `useActiveSite()` (T015); `saveSites`
+      updates the live cache synchronously so every subscriber recomputes immediately on "Set active", and the
+      backend write (durable KV row) makes the choice survive relaunch once `Shell.tsx` hydrates the cache on
+      the next launch (the T019 fix that made hydration happen at all).
+- [X] T023 [P] [US3] Tests: two sites give different numbers; switch/relaunch persistence; delete keeps
       selection valid; threshold now survives relaunch (SC-005/SC-006).
+      DONE: `ObservingSites.test.tsx` (8 tests) — empty state, first-site-becomes-default+active, validation
+      rejection, edit-in-place, switch-active-without-touching-default, delete-active-reselects-default (T020),
+      delete-last-site-clears-to-no-site, save-error surfacing. Persistence-across-relaunch is exercised at the
+      `saveSites`/`settingsUpdate` boundary (mocked) rather than a real app-restart, consistent with T008's
+      backend-level relaunch coverage (real DB round-trip) and T012b's existing frontend pattern.
 
-**Checkpoint**: full multi-site management; threshold is durable, not device-local.
+**Checkpoint**: full multi-site management; threshold is durable, not device-local. — MET.
 
 ---
 

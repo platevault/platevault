@@ -18,6 +18,7 @@ import { ToastContainer } from '@/ui/ToastContainer';
 import { GuidedOverlay } from '@/features/guided/GuidedOverlay';
 import { useGuidedFlow } from '@/features/guided/useGuidedFlow';
 import { startGuidedEventBridge, stopGuidedEventBridge } from '@/features/guided/eventBridge';
+import { loadObservingState } from '@/features/targets/observing-sites/site-store';
 
 function ShellInner() {
   const prefs = usePreferences();
@@ -30,6 +31,16 @@ function ShellInner() {
       void navigate({ to: '/setup' });
     }
   }, [prefs.setupCompleted, navigate]);
+
+  // Spec 044 Track B: hydrate the observing-site live cache once per app
+  // session so `useActiveSite()`/`useObservingState()` reflect the persisted
+  // sites/threshold immediately (without this, every planner consumer would
+  // be stuck on the no-site EMPTY_STATE forever, since nothing else in the
+  // app currently calls `loadObservingState()`).
+  useEffect(() => {
+    if (!prefs.setupCompleted) return;
+    void loadObservingState();
+  }, [prefs.setupCompleted]);
 
   // Guided first-project-flow coach (spec 010).
   const guided = useGuidedFlow(prefs.setupCompleted);

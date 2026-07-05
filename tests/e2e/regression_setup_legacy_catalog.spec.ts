@@ -24,7 +24,9 @@ function seedLegacyWizardState(page: import("@playwright/test").Page): void {
     window.localStorage.setItem(
       "alm-setup-wizard-state",
       JSON.stringify({
-        currentStep: 3, // Confirm step — reads catalogSettings.selectedCatalogIds.length
+        // Confirm step — reads catalogSettings.selectedCatalogIds.length.
+        // (spec 044 US3 inserted a first-run Site step at index 3, shifting Confirm 3→4.)
+        currentStep: 4,
         sources: [
           { kind: "light_frames", path: "/astro/lights", scanDepth: "recursive" },
           { kind: "project", path: "/astro/projects", scanDepth: "recursive" },

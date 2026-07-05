@@ -94,6 +94,14 @@ const mockSelectedId = { current: undefined as string | undefined };
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
   useSearch: () => ({ selected: mockSelectedId.current }),
+  // The no-site banner (spec 044 US3) links to Settings via `Link`, which
+  // needs a router context this test doesn't provide. Stub it as a plain
+  // anchor, consistent with TargetsTable.test.tsx/TargetDetailV2.test.tsx.
+  Link: ({ children, to, ...rest }: { children?: import('react').ReactNode; to: string }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({

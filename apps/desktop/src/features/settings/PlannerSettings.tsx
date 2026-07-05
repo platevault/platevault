@@ -1,19 +1,24 @@
 /**
  * PlannerSettings — Settings → Target Planner pane (spec 044 + spec 047 T015).
  *
- * Two sections:
- *   1. Altitude threshold — the usable-altitude threshold that drives
- *      imaging-time and visible-tonight in the Planner table (Track B
- *      placeholder columns, FR-016). Persisted in localStorage via
- *      `altitude-settings.ts`; changes take effect immediately without a
- *      backend round-trip.
- *   2. Moon avoidance (per band) — the seven-band Lorentzian parameters
+ * Three sections:
+ *   1. Observing-site management (spec 044 US3) — add/edit/delete named sites
+ *      and pick the default/active site. Persisted through the settings-backed
+ *      `observing.*` store (`site-store.ts`), durable across relaunch
+ *      (SC-005/SC-006) while applying instantly in the live UI (SC-003).
+ *   2. Altitude threshold — the usable-altitude threshold that drives
+ *      imaging-time and visible-tonight in the Planner table. Persisted via
+ *      `altitude-settings.ts`; changes take effect immediately.
+ *   3. Moon avoidance (per band) — the seven-band Lorentzian parameters
  *      (`plannerMoonAvoidance`, spec 047 FR-010) that drive the REAL filter
  *      guidance pills. Persisted via the spec-018 settings store
  *      (`guidance-settings.ts`); edits recompute the Planner table live
  *      (SC-008) with no Save button, matching every other settings pane's
  *      auto-persist convention. A reset-to-defaults action restores the
  *      shipped table.
+ *
+ * Every value the Planner table/detail pane computes from these settings is
+ * real astronomy-engine output (spec 044 US1), not mock data.
  */
 
 import { useState } from 'react';
@@ -26,6 +31,7 @@ import {
   ALTITUDE_THRESHOLD_MAX,
 } from '@/features/targets/altitude-settings';
 import { USABLE_ALT_DEG } from '@/features/targets/planner-altitude';
+import { ObservingSites } from '@/features/targets/observing-sites/ObservingSites';
 import {
   useGuidanceParams,
   saveGuidanceParams,
@@ -57,6 +63,7 @@ export function PlannerSettings() {
 
   return (
     <>
+      <ObservingSites />
       <SettingsSection title={m.settings_planner_altitude_title()}>
         <SettingsRow
           label={m.settings_planner_altitude_label()}

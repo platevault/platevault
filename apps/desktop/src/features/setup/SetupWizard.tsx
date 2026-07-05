@@ -10,12 +10,18 @@ import {
   StepSourceFolders,
   StepTools,
   StepCatalogs,
+  StepSite,
   StepConfirm,
   StepScan,
   DEFAULT_CATALOG_SETTINGS,
   DEFAULT_TOOLS_STATE,
+  DEFAULT_SITE_STEP_STATE,
+  SITE_STEP_DEFAULT_TWILIGHT,
+  SITE_STEP_DEFAULT_MIN_HORIZON_ALT_DEG,
+  siteStepHasSite,
+  siteStepError,
 } from './steps';
-import type { CatalogSettings, ToolsState } from './steps';
+import type { CatalogSettings, ToolsState, SiteStepState } from './steps';
 import type { SourcesState, SourceKind, ScanDepth, OrganizationState } from './sources-store';
 import type { FlushResult } from './sources-store';
 import {
@@ -28,6 +34,15 @@ import {
   flushToDB,
   getMissingRequiredKinds,
 } from './sources-store';
+import { saveSites } from '@/features/targets/observing-sites/site-store';
+import type { ObserverSite } from '@/features/targets/observing-sites/observer-site';
+
+function newSiteId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `site-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 const STORAGE_KEY = 'alm-setup-wizard-state';
 
@@ -36,6 +51,7 @@ interface WizardState {
   sources: SourcesState;
   catalogSettings: CatalogSettings;
   tools: ToolsState;
+  site: SiteStepState;
 }
 
 const STEPS = [
@@ -54,6 +70,11 @@ const STEPS = [
     label: () => m.setup_step_config_label_heading(),
     heading: () => m.setup_step_config_label_heading(),
     description: () => m.setup_step_config_desc(),
+  },
+  {
+    label: () => m.setup_step_site_label(),
+    heading: () => m.setup_step_site_heading(),
+    description: () => m.setup_step_site_desc(),
   },
   {
     label: () => m.setup_step_confirm_label(),
@@ -90,6 +111,9 @@ function loadWizardState(): WizardState {
           ? parsed.catalogSettings
           : DEFAULT_CATALOG_SETTINGS,
         tools: parsed.tools ?? DEFAULT_TOOLS_STATE,
+        // spec 044 T016: older persisted state (pre-Site step) has no `site`
+        // key — default to the empty (skippable) step state.
+        site: parsed.site ?? DEFAULT_SITE_STEP_STATE,
       };
     }
   } catch {
@@ -100,6 +124,7 @@ function loadWizardState(): WizardState {
     sources: loadSources(),
     catalogSettings: DEFAULT_CATALOG_SETTINGS,
     tools: DEFAULT_TOOLS_STATE,
+    site: DEFAULT_SITE_STEP_STATE,
   };
 }
 
@@ -151,6 +176,10 @@ export function SetupWizard() {
 
   const handleToolsChange = useCallback((tools: ToolsState) => {
     setState((prev) => ({ ...prev, tools }));
+  }, []);
+
+  const handleSiteChange = useCallback((site: SiteStepState) => {
+    setState((prev) => ({ ...prev, site }));
   }, []);
 
   const isMockMode = import.meta.env.VITE_USE_MOCKS === 'true';
@@ -306,6 +335,27 @@ export function SetupWizard() {
           ),
         );
 
+        // spec 044 T016: the Observing Site step is optional (FR-025 never
+        // blocks Finish); only persist a site when the user actually filled
+        // one in and it validates. Becomes both the default AND the active
+        // site (US6 continuity — no-site state is skipped entirely rather
+        // than requiring a separate "make active" step post-setup).
+        if (siteStepHasSite(state.site)) {
+          const site: ObserverSite = {
+            id: newSiteId(),
+            name: state.site.name.trim(),
+            latitudeDeg: Number(state.site.latitudeDegText.trim()),
+            longitudeDeg: Number(state.site.longitudeDegText.trim()),
+            elevationM: state.site.elevationMText.trim() === ''
+              ? null
+              : Number(state.site.elevationMText.trim()),
+            timezone: state.site.timezone,
+            twilight: SITE_STEP_DEFAULT_TWILIGHT,
+            minHorizonAltDeg: SITE_STEP_DEFAULT_MIN_HORIZON_ALT_DEG,
+          };
+          await saveSites([site], site.id, site.id);
+        }
+
         unwrap(await commands.firstrunComplete());
       }
 
@@ -315,7 +365,10 @@ export function SetupWizard() {
     } catch {
       setIsFinishing(false);
     }
-  }, [isMockMode, navigate]);
+    // `state.tools` was already read here without being a dependency (stale
+    // closure risk pre-dating this change); adding `state.site` for the new
+    // T016 persistence surfaced it, so both are listed now for correctness.
+  }, [isMockMode, navigate, state.tools, state.site]);
 
   // Determine whether "Continue" should be enabled.
   // Step 0 (Source Folders) and step 3 (Confirm) require all required folder kinds.
@@ -328,8 +381,14 @@ export function SetupWizard() {
     if (step === 0 || step === SCAN_STEP - 1) {
       return getMissingRequiredKinds(state.sources).length === 0;
     }
+    // Observing Site step (T016): never required (FR-025), but a partially
+    // filled-in site must be internally consistent before Continue — an
+    // out-of-range lat/lon shouldn't silently get dropped at Finish.
+    if (step === 3) {
+      return siteStepError(state.site) === null;
+    }
     return true;
-  }, [state.currentStep, state.sources, isMockMode]);
+  }, [state.currentStep, state.sources, state.site, isMockMode]);
 
   const step = state.currentStep;
   const stepMeta = STEPS[step];
@@ -442,6 +501,12 @@ export function SetupWizard() {
             />
           )}
           {step === 3 && (
+            <StepSite
+              state={state.site}
+              onChange={handleSiteChange}
+            />
+          )}
+          {step === 4 && (
             <StepConfirm
               sources={state.sources}
               catalogSettings={state.catalogSettings}

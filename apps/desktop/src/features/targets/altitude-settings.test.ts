@@ -10,7 +10,21 @@
  * real (optimistic, then backend-persisted) `saveUsableAltitude` path.
  */
 
-import { beforeEach, describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+
+// `setAltitudeThreshold` persists through `site-store.ts`'s `saveUsableAltitude`,
+// which fires `commands.settingsUpdate` (a real tauri IPC). Under jsdom that
+// invoke has no `__TAURI_INTERNALS__` and rejects AFTER the test completes,
+// producing an unhandled rejection that intermittently reds CI. Mock the binding
+// so the backend write resolves cleanly here — belt-and-suspenders with the
+// `.catch()` guard now at the fire-and-forget call site in `altitude-settings.ts`.
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    settingsUpdate: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
+    settingsGet: vi.fn().mockResolvedValue({ status: 'ok', data: {} }),
+  },
+}));
+
 import {
   getAltitudeThreshold,
   setAltitudeThreshold,
