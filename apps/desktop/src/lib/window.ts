@@ -4,11 +4,14 @@
 // URL-described ledger view (spec 020) makes this trivial: spawn a second Tauri
 // webview pointed at the same hash route. Outside Tauri (browser/dev) it
 // degrades to `window.open` so it never crashes.
+//
+// Spec 051 (Tauri Shell Integration), T008: the runtime Tauri check used to be
+// a hand-rolled `'__TAURI_INTERNALS__' in window` sniff. `@tauri-apps/api/core`
+// ships an official `isTauri()` for exactly this; use it instead so this file
+// (and any future call site) doesn't depend on an internal, undocumented
+// global. No behavior change — same true/false outcome in and out of Tauri.
 
-/** Runtime Tauri check — safe to call in a plain browser (no import side effects). */
-function inTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
+import { isTauri } from '@tauri-apps/api/core';
 
 let windowSeq = 0;
 
@@ -21,7 +24,7 @@ export async function openInNewWindow(path: string): Promise<void> {
   const base = window.location.href.split('#')[0];
   const fullUrl = `${base}#${hashPath}`;
 
-  if (!inTauri()) {
+  if (!isTauri()) {
     window.open(fullUrl, '_blank', 'noopener');
     return;
   }
