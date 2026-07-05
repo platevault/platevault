@@ -113,12 +113,29 @@ export function WizardPage() {
     saveDraft(wizardData);
   }, [currentStep, wizardData]);
 
-  // Clear a stale name/tool create-error once the user edits the field it was
-  // attached to (the corresponding backend rule may no longer apply). Done
-  // inline in the StepName onChange handler below rather than via an effect
-  // watching wizardData.name, so this stays a direct response to the edit.
-  function clearNameToolCreateError(): void {
-    setCreateError((prev) => (prev && (prev.field === 'name' || prev.field === 'tool') ? null : prev));
+  // Clear a stale name/tool create-error once the user actually edits the
+  // field it is attached to (the corresponding backend rule may no longer
+  // apply). `next` is compared against the wizardData snapshot captured when
+  // this error was raised — NOT just "onChange fired" — because StepName is
+  // only mounted while on step 0: routing back here after a duplicate-name
+  // rejection remounts it fresh, and its resync effect calls react-hook-form's
+  // `reset(data)` to restore the draft. That `reset()` itself notifies the
+  // same `watch()` subscription that drives this onChange, with values
+  // IDENTICAL to what's already in `wizardData` — no user action involved. An
+  // unconditional clear here nulled the just-set banner before the user ever
+  // saw it (the reported "flashes and clears" bug). Only a genuine change to
+  // the field the error is attached to should dismiss it.
+  function clearNameToolCreateError(next: StepNameData): void {
+    setCreateError((prev) => {
+      if (!prev) return prev;
+      if (prev.field === 'name') {
+        return next.name.trim() !== wizardData.name.name.trim() ? null : prev;
+      }
+      if (prev.field === 'tool') {
+        return next.workflowProfile !== wizardData.name.workflowProfile ? null : prev;
+      }
+      return prev;
+    });
   }
 
   // Step validation — devSkip bypasses all gates so you can walk through without data
@@ -411,8 +428,8 @@ export function WizardPage() {
           <StepName
             data={wizardData.name}
             onChange={(name) => {
+              clearNameToolCreateError(name);
               setWizardData({ ...wizardData, name });
-              clearNameToolCreateError();
             }}
             serverError={
               createError && (createError.field === 'name' || createError.field === 'tool')

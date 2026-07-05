@@ -65,7 +65,11 @@ export function SessionSourcePicker({
 
   const filtered = useMemo(() => {
     return sessions.filter((s) => {
-      if (filterTarget && !s.sessionKey.target.toLowerCase().includes(filterTarget.toLowerCase())) return false;
+      // sessionKey.target can be undefined for a session whose target never
+      // resolved (contract says `string`, but that's a best-effort backend
+      // guarantee — defend the UI so an unresolved session doesn't crash the
+      // whole picker, it just never matches a target filter).
+      if (filterTarget && !(s.sessionKey.target ?? '').toLowerCase().includes(filterTarget.toLowerCase())) return false;
       if (filterFilter && !s.sessionKey.filter.toLowerCase().includes(filterFilter.toLowerCase())) return false;
       return true;
     });
@@ -153,32 +157,39 @@ export function SessionSourcePicker({
         </div>
 
         {/* Rows */}
-        {filtered.map((session) => (
-
-          <label
-            key={session.id}
-            className={'alm-source-picker__row' + (selectedSessionIds.includes(session.id) ? ' alm-source-picker__row--selected' : '')}
-          >
-            <Checkbox.Root
-              className="alm-checkbox"
-              checked={selectedSessionIds.includes(session.id)}
-              onCheckedChange={() => toggleSession(session.id)}
-              aria-label={m.projects_wizard_select_session_aria({ target: session.sessionKey.target })}
+        {filtered.map((session) => {
+          // Defensive fallback: a session whose target never resolved can
+          // reach the UI with `sessionKey.target` undefined even though the
+          // contract types it as `string` — render a disclosed placeholder
+          // instead of crashing (`undefined.toLowerCase()` et al) or silently
+          // showing a blank cell.
+          const targetLabel = session.sessionKey.target || m.projects_wizard_target_unresolved();
+          return (
+            <label
+              key={session.id}
+              className={'alm-source-picker__row' + (selectedSessionIds.includes(session.id) ? ' alm-source-picker__row--selected' : '')}
             >
-              <Checkbox.Indicator className="alm-checkbox__indicator">
-                &#x2713;
-              </Checkbox.Indicator>
-            </Checkbox.Root>
-            <span>
-              {session.sessionKey.target} / {session.sessionKey.filter} / {session.sessionKey.night}
-            </span>
-            <span>{session.frameCount}</span>
-            <span>{formatIntegration(session.totalIntegrationSeconds ?? 0)}</span>
-            <span className="alm-source-picker__train-id">
-              {session.opticalTrainId.slice(0, 8)}
-            </span>
-          </label>
-        ))}
+              <Checkbox.Root
+                className="alm-checkbox"
+                checked={selectedSessionIds.includes(session.id)}
+                onCheckedChange={() => toggleSession(session.id)}
+                aria-label={m.projects_wizard_select_session_aria({ target: targetLabel })}
+              >
+                <Checkbox.Indicator className="alm-checkbox__indicator">
+                  &#x2713;
+                </Checkbox.Indicator>
+              </Checkbox.Root>
+              <span>
+                {targetLabel} / {session.sessionKey.filter} / {session.sessionKey.night}
+              </span>
+              <span>{session.frameCount}</span>
+              <span>{formatIntegration(session.totalIntegrationSeconds ?? 0)}</span>
+              <span className="alm-source-picker__train-id">
+                {session.opticalTrainId.slice(0, 8)}
+              </span>
+            </label>
+          );
+        })}
 
         {filtered.length === 0 && (
           <div className="alm-source-picker__empty">

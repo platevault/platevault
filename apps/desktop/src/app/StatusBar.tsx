@@ -24,8 +24,9 @@ function formatCount(n: number): string {
  * The global totals come from `useStatusSummary()` → `commands.statusSummary()`
  * (the real `LibraryStats` DTO: sessions / projects / calibration sets /
  * targets). There is no library-wide image/file count in the contract yet (the
- * Advanced settings "Records" line is hardcoded), so the image total is a STUB
- * placeholder until the metadata-ingest pipeline exposes one.
+ * Advanced settings "Records" line is hardcoded); rather than show a fabricated
+ * or dev-status-leaking placeholder (fix ef364dfc), the image total is simply
+ * omitted from this bar until the metadata-ingest pipeline exposes a real count.
  */
 export function StatusBar() {
   const { toggle } = useLogPanel();
@@ -61,8 +62,9 @@ export function StatusBar() {
 
       {/* CENTER — GLOBAL library inventory (stable across routes, task #87).
           Sessions / projects / calibration masters / targets are real totals
-          from the status_summary contract. Images is a STUB until a library-wide
-          file count lands in the metadata pipeline. */}
+          from the status_summary contract. No images/file total is shown here —
+          there is no library-wide count in the contract yet, and a fabricated
+          or dev-status placeholder was deliberately removed (fix ef364dfc). */}
       <div className="alm-statusbar__lib" data-testid="statusbar-library-stats">
         <span title={m.status_sessions_title()}>
           {formatCount(status.sessionCount)} {m.status_sessions_label()}

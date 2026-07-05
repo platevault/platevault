@@ -134,4 +134,43 @@ describe('SessionSourcePicker', () => {
       expect(screen.getByText('All sessions are already linked to this project.')).toBeInTheDocument();
     });
   });
+
+  it('renders a fallback instead of crashing when sessionKey.target is undefined', async () => {
+    mockSessionsList.mockResolvedValue({
+      status: 'ok',
+      data: [
+        session({
+          id: 'sess-unresolved',
+          // The contract types `target` as `string`, but a session whose
+          // target never resolved can still reach the UI with it missing —
+          // exercise that runtime shape directly, not just the type.
+          sessionKey: {
+            target: undefined as unknown as string,
+            filter: 'Ha',
+            binning: '1',
+            gain: '100',
+            night: '2026-06-01',
+          },
+        }),
+      ],
+    });
+
+    expect(() => renderPicker()).not.toThrow();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Unresolved target \/ Ha \/ 2026-06-01/)).toBeInTheDocument();
+    });
+
+    // Selecting the row and typing into the target filter must not throw
+    // either (the original crash was `undefined.toLowerCase()` in the filter
+    // predicate).
+    expect(() => {
+      fireEvent.change(screen.getByPlaceholderText(/Filter by target/i), { target: { value: 'anything' } });
+    }).not.toThrow();
+    expect(screen.queryByText(/Unresolved target \/ Ha/)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/Filter by target/i), { target: { value: '' } });
+    const checkbox = screen.getByRole('checkbox', { name: /Unresolved target session/i });
+    expect(() => fireEvent.click(checkbox)).not.toThrow();
+  });
 });
