@@ -127,6 +127,28 @@ fn parse_frame_ids(json: &str) -> Vec<String> {
     serde_json::from_str(json).unwrap_or_default()
 }
 
+/// Append `segment` to `base` with a `/` separator, regardless of platform
+/// path-separator conventions.
+///
+/// `Utf8PathBuf::join` inserts the platform-native separator (`\` on
+/// Windows), which mixes with the forward-slash convention documented and
+/// used by `resolve_pattern_str` (`crates/patterns`). Building destinations by
+/// chaining `.join()` calls on Windows therefore produces paths with both
+/// `\` and `/` in them (e.g. `foo\bar/baz\qux.fits`) — cosmetically ugly, but
+/// also non-deterministic for anything that persists or compares
+/// `to_relative_path`/`name` (spec 049's plan items). Windows path APIs
+/// accept `/` as a separator natively, so joining with `/` unconditionally is
+/// safe on every supported platform and keeps generated destinations
+/// portable, matching the "Portable Contracts and Durable Records"
+/// constitution principle.
+fn join_portable(base: &Utf8Path, segment: &str) -> Utf8PathBuf {
+    if base.as_str().is_empty() {
+        Utf8PathBuf::from(segment)
+    } else {
+        Utf8PathBuf::from(format!("{base}/{segment}"))
+    }
+}
+
 /// A single planned link: canonical source (root + relative path) → the
 /// view-relative destination path, plus the inventory reference to carry
 /// into `PreparedSourceViewItem.inventory_item_id` on successful apply.
@@ -193,7 +215,10 @@ pub async fn generate_source_view(
     // slug does not need to equal it, only to be stable and collision-free.
     let plan_id = new_id();
     let destination_root: Utf8PathBuf = req.destination_override.as_deref().map_or_else(
-        || Utf8PathBuf::from(&project.path).join("source-views").join(&plan_id),
+        || {
+            let root = Utf8PathBuf::from(&project.path);
+            join_portable(&join_portable(&root, "source-views"), &plan_id)
+        },
         Utf8PathBuf::from,
     );
 
@@ -242,7 +267,7 @@ pub async fn generate_source_view(
                 inventory_item_id: frame.id.clone(),
                 source_root_id: root_id.clone(),
                 source_relative_path: frame.relative_path.clone(),
-                dest_relative: light_dir.join(basename),
+                dest_relative: join_portable(&light_dir, basename.as_str()),
             });
         }
         if !any_light_present {
@@ -286,12 +311,14 @@ pub async fn generate_source_view(
             // (FR-009a/CL-5) without needing a `master_id` metadata token.
             let mut cal_bundle: MetadataBundle = HashMap::new();
             cal_bundle.insert("frame_type".to_owned(), cal_type.clone());
-            let cal_dir = Utf8PathBuf::from(
-                resolve_pattern_str(layout.calibration_pattern, &cal_bundle)
-                    .map_err(|e| layout_resolve_err(&e, &master_id))?
-                    .relative_path,
-            )
-            .join(&master_id);
+            let cal_dir = join_portable(
+                &Utf8PathBuf::from(
+                    resolve_pattern_str(layout.calibration_pattern, &cal_bundle)
+                        .map_err(|e| layout_resolve_err(&e, &master_id))?
+                        .relative_path,
+                ),
+                &master_id,
+            );
 
             let cal_frame_ids = parse_frame_ids(&cal_frame_ids_json);
             let cal_frames = frames_for_ids(pool, &cal_frame_ids).await;
@@ -308,7 +335,7 @@ pub async fn generate_source_view(
                     inventory_item_id: frame.id.clone(),
                     source_root_id: cal_root_id.clone(),
                     source_relative_path: frame.relative_path.clone(),
-                    dest_relative: cal_dir.join(basename),
+                    dest_relative: join_portable(&cal_dir, basename.as_str()),
                 });
             }
         }
@@ -394,7 +421,7 @@ pub async fn generate_source_view(
     // 6. Destination-exists guard (FR-016): never silently overwrite a path
     // that already exists as a user file/folder.
     for item in &planned {
-        let abs = destination_root.join(&item.dest_relative);
+        let abs = join_portable(&destination_root, item.dest_relative.as_str());
         if abs.exists() {
             return Err(ContractError::new(
                 ErrorCode::DestinationExists,
@@ -509,7 +536,8 @@ pub async fn generate_source_view(
     let mut mkdir_dirs: BTreeSet<Utf8PathBuf> = BTreeSet::new();
     mkdir_dirs.insert(destination_root.clone());
     for item in &planned {
-        if let Some(parent) = destination_root.join(&item.dest_relative).parent() {
+        if let Some(parent) = join_portable(&destination_root, item.dest_relative.as_str()).parent()
+        {
             mkdir_dirs.insert(parent.to_path_buf());
         }
     }
@@ -545,7 +573,7 @@ pub async fn generate_source_view(
         item_index += 1;
         let item_id = new_id();
         let kind = resolved_kinds.get(&idx).copied().unwrap_or(Materialization::Symlink);
-        let dest_abs = destination_root.join(&item.dest_relative);
+        let dest_abs = join_portable(&destination_root, item.dest_relative.as_str());
         let provenance = serde_json::to_string(&serde_json::json!([
             {"label": "materialization", "value": kind.as_str()}
         ]))
