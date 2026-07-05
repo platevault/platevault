@@ -179,6 +179,88 @@ fn db_err(e: DbError) -> ContractError {
     }
 }
 
+// ── Source view generation finalization (spec 049) ───────────────────────────
+
+/// Terminal step of a `prepared_view_generation` plan apply: write the
+/// first-materialization `PreparedSourceView` (state `current`) plus one
+/// `PreparedSourceViewItem` per successfully-applied `link` item.
+///
+/// Best-effort: the links are already on disk, so a failure here must NOT
+/// fail the apply. Every failure is logged for an external watchdog (§II).
+/// Idempotent: a re-entrant call (e.g. a retried terminal transition) skips
+/// item rows that already exist for this view id.
+async fn finalize_view_generation(pool: &SqlitePool, plan_id: &str, project_id: &str) {
+    use domain_core::source_view::Materialization;
+    use persistence_db::repositories::prepared_source_views as views_repo;
+
+    let items = match plans_repo::list_plan_items(pool, plan_id).await {
+        Ok(items) => items,
+        Err(e) => {
+            tracing::error!(%plan_id, error=%e, "generation finalize: failed to load plan items");
+            return;
+        }
+    };
+
+    let succeeded: Vec<_> =
+        items.iter().filter(|i| i.action == "link" && i.item_state == "succeeded").collect();
+
+    if succeeded.is_empty() {
+        tracing::warn!(%plan_id, "generation finalize: no succeeded link items; no view recorded");
+        return;
+    }
+
+    // The view's display `kind` is the dominant per-item materialization
+    // (spec 026 FR-008 amended, CL-2) — the first succeeded item's kind is a
+    // reasonable representative; per-item kind remains authoritative.
+    let dominant_kind = succeeded
+        .first()
+        .map_or(Materialization::Symlink, |row| materialization_from_provenance(row));
+
+    let view_id = new_id();
+    if let Err(e) = views_repo::insert_view(
+        pool,
+        &views_repo::InsertPreparedSourceView {
+            id: &view_id,
+            project_id,
+            kind: dominant_kind.as_str(),
+        },
+    )
+    .await
+    {
+        tracing::error!(%plan_id, %view_id, error=%e, "generation finalize: failed to insert view");
+        return;
+    }
+
+    for item in succeeded {
+        let Some(inventory_item_id) = item.linked_entity.as_deref() else {
+            tracing::warn!(
+                %plan_id, item_id = %item.id,
+                "generation finalize: link item missing linked_entity (inventory reference); skipped"
+            );
+            continue;
+        };
+        let materialization = materialization_from_provenance(item);
+        let view_item_id = new_id();
+        if let Err(e) = views_repo::insert_view_item(
+            pool,
+            &views_repo::InsertPreparedSourceViewItem {
+                id: &view_item_id,
+                view_id: &view_id,
+                inventory_item_id,
+                view_relative_path: &item.to_relative_path,
+                materialization: materialization.as_str(),
+            },
+        )
+        .await
+        {
+            tracing::error!(
+                %plan_id, %view_id, item_id = %item.id, error=%e,
+                "generation finalize: failed to insert view item"
+            );
+        }
+    }
+}
+
 // ── Archive lifecycle closure (spec 017 C5) ──────────────────────────────────
 
 /// Terminal step of a successful `origin = archive` plan apply: drive the owning
@@ -392,6 +474,33 @@ fn verify_approval_token(
 
 // ── Item → ExecutorItem mapping ───────────────────────────────────────────────
 
+/// Parse the recorded link-materialization kind out of a plan item's
+/// free-form `provenance` JSON (`[{"label":"materialization","value":"..."}]`,
+/// spec 049 generation/regeneration plan builders). Falls back to `Symlink`
+/// (the constitution-preferred default) when absent or unparseable, rather
+/// than guessing a destructive kind.
+fn materialization_from_provenance(
+    row: &plans_repo::PlanItemRow,
+) -> domain_core::source_view::Materialization {
+    row.provenance
+        .as_deref()
+        .and_then(|raw| serde_json::from_str::<Vec<serde_json::Value>>(raw).ok())
+        .and_then(|entries| {
+            entries.into_iter().find_map(|entry| {
+                if entry.get("label").and_then(serde_json::Value::as_str) == Some("materialization")
+                {
+                    entry
+                        .get("value")
+                        .and_then(serde_json::Value::as_str)
+                        .and_then(domain_core::source_view::Materialization::from_str_opt)
+                } else {
+                    None
+                }
+            })
+        })
+        .unwrap_or(domain_core::source_view::Materialization::Symlink)
+}
+
 /// Convert a `PlanItemRow` into an `ExecutorItem`, resolving the library root
 /// from the provided root-id → absolute-path map (T023a).
 ///
@@ -426,6 +535,15 @@ fn item_row_to_executor_item(
         // (previously fell through to NoOp, so applied mkdir plans never
         // created anything on disk).
         "mkdir" => ExecutorItemAction::Mkdir,
+        // spec 049: create a real link (or, with explicit copy opt-in, a real
+        // copy). Previously fell through to NoOp, so applied source-view
+        // generation/regeneration plans never created anything on disk. The
+        // recorded materialization kind rides the free-form `provenance` JSON
+        // array (`[{"label":"materialization","value":"symlink"}]`, spec 014
+        // convention); an unparseable/missing value conservatively falls back
+        // to `symlink` (the constitution-preferred default) rather than
+        // guessing a destructive kind.
+        "link" => ExecutorItemAction::Link { kind: materialization_from_provenance(row) },
         _ => ExecutorItemAction::NoOp,
     };
 
@@ -846,6 +964,20 @@ pub async fn apply_plan(
                             project_id,
                         )
                         .await;
+                    }
+                }
+
+                // Spec 049: on a successful (or partially-applied) generation
+                // plan apply, write the first-materialization
+                // `PreparedSourceView` (state `current`) from the succeeded
+                // link items. Failed/skipped items are simply omitted — a
+                // single missing source never blocks recording the rest of
+                // the view (FR-019).
+                if (terminal == "applied" || terminal == "partially_applied")
+                    && plan_origin_owned == "prepared_view_generation"
+                {
+                    if let Some(project_id) = plan_project_id_owned.as_deref() {
+                        finalize_view_generation(&pool_clone, &plan_id_owned, project_id).await;
                     }
                 }
 

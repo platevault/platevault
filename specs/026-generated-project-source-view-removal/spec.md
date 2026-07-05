@@ -21,6 +21,24 @@
 > **open** with its P3 work deferred until a product decision: either (a) restore
 > a generation path and finish P3, or (b) formally retire the source-view feature
 > and mark this spec Superseded. Do not close as Implemented until that decision.
+>
+> **UPDATE (2026-07-04): generation path RESTORED — option (a) chosen.** The user
+> confirmed source-view generation is in scope, reversing the retire lean. The
+> **generation** (first-materialization) counterpart is specified by
+> [Spec 049 — Source View Generation](../049-source-view-generation/spec.md),
+> which reuses (does not duplicate) this spec's `PreparedSourceView` /
+> `PreparedSourceViewItem` entities and remove/regenerate/stale machinery. Once
+> 049 lands a live generation path, this surface is no longer vestigial and P3
+> stale-detection/audit work here should be finished. **Cross-spec conflict
+> RESOLVED (2026-07-04):** spec 049 CL-2 (user decision) relaxes **FR-008 / the
+> single-kind invariant** (below) to *deterministic kind per drive-scope, recorded
+> per item*. A generation's link kind is resolved from a settings pair (intra-drive
+> default vs cross-drive default), chosen per item by rule, and recorded; a view
+> may carry more than one recorded kind. FR-008 and the data-model invariant are
+> amended accordingly. **Revert note:** if the product decision is reversed and
+> generation is retired again, delete spec 049, re-tighten FR-008 to the strict
+> single-kind invariant, and restore this banner's original "possibly obsolete"
+> framing.
 
 ## Implementation Status: core built (P1/P2); vestigial pending decision
 
@@ -152,10 +170,21 @@ As a user, I want the UI to clearly distinguish generated project views from ori
 - **FR-007** *(R-026-Strategies, GRILL 2026-05-22)*: v1 view strategies
   are `symlink`, `junction`, and `copy` only. `hardlink` is reserved
   and deferred to v1.x.
-- **FR-008** *(A2, GRILL 2026-05-22)*: A `PreparedSourceView.kind` MUST
-  equal every item's `PreparedSourceViewItem.materialization` at create
-  time. Requests that would produce a mixed-kind view MUST be refused
-  with `view.mixed_kind`.
+- **FR-008** *(A2, GRILL 2026-05-22; AMENDED 2026-07-04 by spec 049 CL-2)*:
+  A generated view's materialization kind is resolved **deterministically per
+  drive-scope** (intra-drive vs cross-drive) from the spec 049 link-kind settings
+  pair and **recorded per item** (`PreparedSourceViewItem.materialization`). The
+  original strict invariant — `PreparedSourceView.kind` equals every item's
+  `materialization` — is **relaxed** to: every item's kind MUST be chosen by a
+  deterministic rule and recorded, and the view MUST NOT contain any **unrecorded
+  or non-deterministic** kind. `PreparedSourceView.kind` records the **dominant**
+  kind for display; per-item `materialization` is authoritative. A view whose items
+  carry more than one recorded kind (e.g., hardlink intra-drive + symlink
+  cross-drive) is **valid**. Only a request that would produce an unrecorded/
+  non-deterministic kind is refused (`view.mixed_kind`). **Revert note:** to restore
+  the strict single-kind invariant, re-require `kind` == every item's
+  `materialization` here and change spec 049 FR-004/FR-022 to refuse
+  cross-drive-forced mixed views.
 - **FR-009** *(A3, GRILL 2026-05-22)*: Copy-kind stale detection
   includes content hash mismatch. Link-kind (symlink/junction) views
   skip content hash on stale detection.

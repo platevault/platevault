@@ -10,8 +10,10 @@ path = "src/lib.rs"
 [dependencies]
 app_core_errors = { path = "../errors" }
 audit = { path = "../../audit" }
+camino = { workspace = true }
 contracts_core = { path = "../../contracts/core" }
 domain_core = { path = "../../domain/core" }
+fs_inventory = { path = "../../fs/inventory" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 moka = { workspace = true }

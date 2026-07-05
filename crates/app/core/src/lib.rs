@@ -46,6 +46,7 @@ pub use lifecycle::{
 };
 pub use projects::{
     prepared_views, project_health, project_manifests, project_notes, project_setup,
+    source_view_generate,
 };
 pub use targets::{
     ingest_resolution, ingest_sessions, resolver_settings, target_dto, target_management,
@@ -60,6 +61,9 @@ pub mod cleanup_generator;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;
 pub mod first_run;
+/// Per-frame inventory use cases (spec 048): `inventory.frame.list` and the
+/// on-demand `inventory.reconcile.run` pass.
+pub mod frame_inventory;
 pub mod guided_flow;
 /// Inbox plan use-cases (spec 041). Lives in `app_core` (not `app_core_inbox`)
 /// because it orchestrates `plans` + `plan_apply`, which are `app_core` modules.

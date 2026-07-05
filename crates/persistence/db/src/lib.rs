@@ -83,6 +83,8 @@ impl Database {
     /// # Errors
     ///
     /// Returns [`DbError::Migration`] if any migration script fails.
+    // Touched for spec 049 (migration 0054) to force `sqlx::migrate!`
+    // re-embed (project memory: stale-embed guard).
     pub async fn migrate(&self) -> DbResult<()> {
         sqlx::migrate!("./migrations").run(&self.pool).await?;
         Ok(())

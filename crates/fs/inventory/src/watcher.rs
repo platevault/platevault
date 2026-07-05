@@ -87,14 +87,23 @@ impl WatcherService {
 
     /// Start watching the given inbox directory paths.
     ///
-    /// Replaces any previously active watcher. Each path is watched
-    /// recursively so that nested inbox structures are captured.
+    /// Replaces any previously active watcher.
+    ///
+    /// `follow_symlinks` gates traversal (spec 048 T004, constitution "MUST
+    /// NOT follow symlinks or junctions unless explicitly enabled per
+    /// root"): when `false` (the default for inbox folders), each path is
+    /// walked ourselves via [`crate::symlink_gate::real_dirs_under`] and every
+    /// real (non-link) subdirectory is watched individually with
+    /// `RecursiveMode::NonRecursive`, so a linked subtree is never traversed
+    /// at the OS level. When `true`, the previous behaviour is preserved: a
+    /// single `RecursiveMode::Recursive` watch per path (the OS watcher may
+    /// then follow links under it).
     ///
     /// # Errors
     ///
     /// Returns an error string if the platform watcher cannot be created or a
     /// path cannot be watched.
-    pub fn start(&mut self, paths: &[Utf8PathBuf]) -> Result<(), String> {
+    pub fn start(&mut self, paths: &[Utf8PathBuf], follow_symlinks: bool) -> Result<(), String> {
         // Stop existing watcher if running.
         self.watcher = None;
 
@@ -140,9 +149,18 @@ impl WatcherService {
         .map_err(|e| format!("failed to create filesystem watcher: {e}"))?;
 
         for path in paths {
-            watcher
-                .watch(path.as_std_path(), RecursiveMode::Recursive)
-                .map_err(|e| format!("failed to watch {path}: {e}"))?;
+            if follow_symlinks {
+                watcher
+                    .watch(path.as_std_path(), RecursiveMode::Recursive)
+                    .map_err(|e| format!("failed to watch {path}: {e}"))?;
+                continue;
+            }
+
+            for dir in crate::symlink_gate::real_dirs_under(path.as_std_path(), false) {
+                watcher
+                    .watch(&dir, RecursiveMode::NonRecursive)
+                    .map_err(|e| format!("failed to watch {}: {e}", dir.display()))?;
+            }
         }
 
         self.watcher = Some(watcher);
@@ -195,8 +213,28 @@ mod tests {
     #[test]
     fn start_nonexistent_path_returns_error() {
         let mut svc = WatcherService::new();
-        let result = svc.start(&[Utf8PathBuf::from("/nonexistent/path/that/should/not/exist")]);
+        let result =
+            svc.start(&[Utf8PathBuf::from("/nonexistent/path/that/should/not/exist")], false);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn start_with_follow_symlinks_true_watches_recursively() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let mut svc = WatcherService::new();
+        assert!(svc.start(&[path], true).is_ok());
+        assert!(svc.is_running());
+    }
+
+    #[test]
+    fn start_with_follow_symlinks_false_watches_real_subdirs_only() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("nested")).unwrap();
+        let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let mut svc = WatcherService::new();
+        assert!(svc.start(&[path], false).is_ok());
+        assert!(svc.is_running());
     }
 
     #[test]

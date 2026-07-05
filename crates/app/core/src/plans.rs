@@ -100,6 +100,7 @@ fn parse_plan_origin(s: &str) -> PlanOrigin {
         "project" => PlanOrigin::Project,
         "prepared_view_removal" => PlanOrigin::PreparedViewRemoval,
         "prepared_view_regeneration" => PlanOrigin::PreparedViewRegeneration,
+        "prepared_view_generation" => PlanOrigin::PreparedViewGeneration,
         _ => PlanOrigin::Cleanup,
     }
 }
@@ -113,6 +114,7 @@ fn parse_plan_type(s: &str) -> PlanType {
         "project_create" => PlanType::ProjectCreate,
         "source_view_removal" => PlanType::SourceViewRemoval,
         "source_view_regeneration" => PlanType::SourceViewRegeneration,
+        "source_view_generation" => PlanType::SourceViewGeneration,
         _ => PlanType::Cleanup,
     }
 }

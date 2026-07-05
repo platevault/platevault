@@ -9,6 +9,7 @@
 2	apps/desktop/src-tauri/src/lib.rs
 6	crates/app/calibration/src/equipment.rs
 16	crates/app/calibration/src/matching.rs
+13	crates/app/core/src/frame_inventory.rs
 11	crates/app/core/src/log_stream.rs
 12	crates/app/core/src/search.rs
 13	crates/app/core/src/sessions.rs
@@ -17,6 +18,7 @@
 6	crates/app/inbox/src/reclassify.rs
 2	crates/app/projects/src/prepared_views.rs
 2	crates/app/projects/src/project_setup.rs
+8	crates/app/projects/src/source_view_generate.rs
 6	crates/app/targets/src/frame_writer.rs
 16	crates/app/targets/src/ingest_resolution.rs
 22	crates/app/targets/src/ingest_sessions.rs

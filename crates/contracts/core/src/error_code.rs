@@ -226,6 +226,18 @@ pub enum ErrorCode {
     #[serde(rename = "view.unsupported_kind")]
     ViewUnsupportedKind,
 
+    // ── Source view generation (spec 049) ───────────────────────────────────
+    #[serde(rename = "no_selection")]
+    NoSelection,
+    #[serde(rename = "no_link_kind")]
+    NoLinkKind,
+    #[serde(rename = "destination.collision")]
+    DestinationCollision,
+    #[serde(rename = "destination.exists")]
+    DestinationExists,
+    #[serde(rename = "profile.not_found")]
+    ProfileNotFound,
+
     // ── Canonical target ─────────────────────────────────────────────────────
     #[serde(rename = "canonical_target.not_found")]
     CanonicalTargetNotFound,
@@ -331,6 +343,20 @@ pub enum ErrorCode {
     SerialiseError,
     #[serde(rename = "io.error")]
     IoError,
+
+    // ── Per-frame inventory (spec 048) ───────────────────────────────────────
+    /// A root's storage is unavailable (e.g. a removable drive is
+    /// disconnected). Frames under it are reported unavailable/missing —
+    /// this is a non-destructive terminal state, never an implicit delete.
+    #[serde(rename = "root.unavailable")]
+    RootUnavailable,
+    /// A user-initiated relink's candidate file did not match the missing
+    /// frame's sha256 content hash; the record is not re-homed.
+    #[serde(rename = "hash.mismatch")]
+    HashMismatch,
+    /// Referenced `file_record` id does not exist.
+    #[serde(rename = "frame.not_found")]
+    FrameNotFound,
 
     // ── Generic fallback ─────────────────────────────────────────────────────
     /// Used when a legacy `String` error is wrapped into `ContractError`.

@@ -44,6 +44,8 @@ pub enum PlanOrigin {
     PreparedViewRemoval,
     /// Spec 026 — generated source view regeneration plan.
     PreparedViewRegeneration,
+    /// Spec 049 — generated source view first-materialization (generation) plan.
+    PreparedViewGeneration,
 }
 
 /// Execution shape of a plan.
@@ -74,6 +76,8 @@ pub enum PlanType {
     SourceViewRemoval,
     /// Spec 026 — re-creates previously removed source view.
     SourceViewRegeneration,
+    /// Spec 049 — first-materializes a project source view.
+    SourceViewGeneration,
 }
 
 /// Per-plan destination for destructive items (R-Trash-1).
@@ -361,4 +365,28 @@ pub struct ArchivePermanentlyDeleteResponse {
     pub plan_id: String,
     pub items_deleted: i64,
     pub audit_id: String,
+}
+
+#[cfg(test)]
+mod spec_049_tests {
+    use super::{PlanOrigin, PlanType};
+
+    /// Spec 049 T005: the new generation origin/type round-trip through the
+    /// exact `snake_case` wire strings the DB layer parses/writes
+    /// (`app_core::plans::parse_plan_origin` / `parse_plan_type`).
+    #[test]
+    fn prepared_view_generation_origin_round_trips() {
+        let json = serde_json::to_string(&PlanOrigin::PreparedViewGeneration).unwrap();
+        assert_eq!(json, "\"prepared_view_generation\"");
+        let back: PlanOrigin = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, PlanOrigin::PreparedViewGeneration);
+    }
+
+    #[test]
+    fn source_view_generation_plan_type_round_trips() {
+        let json = serde_json::to_string(&PlanType::SourceViewGeneration).unwrap();
+        assert_eq!(json, "\"source_view_generation\"");
+        let back: PlanType = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, PlanType::SourceViewGeneration);
+    }
 }
