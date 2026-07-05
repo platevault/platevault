@@ -232,6 +232,14 @@ pub struct SettingsState {
     /// FR-004a — `"hardlink"` is never a valid cross-drive value because
     /// hardlinks cannot cross volumes).
     pub source_view_link_kind_cross_drive: String,
+
+    // ── Cleanup per-type overrides (spec 051 US3) ────────────────────────
+    /// Per-cleanup-data-type action overrides, keyed by the type's stable
+    /// numeric id (as a string) and mapping to `"Keep"` | `"Archive"` |
+    /// `"Delete"` (data-model.md §E2). Absent id ⇒ that type's built-in
+    /// default action (from the frontend `CLEANUP_TYPES` fixture) applies.
+    /// Empty by default (no overrides).
+    pub cleanup_type_overrides: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for SettingsState {
@@ -284,6 +292,7 @@ impl Default for SettingsState {
             planner_moon_avoidance: default_planner_moon_avoidance(),
             source_view_link_kind_intra_drive: "hardlink".to_owned(),
             source_view_link_kind_cross_drive: "symlink".to_owned(),
+            cleanup_type_overrides: std::collections::BTreeMap::new(),
         }
     }
 }

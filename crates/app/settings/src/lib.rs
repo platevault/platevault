@@ -491,6 +491,11 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.source_view_link_kind_cross_drive = v.to_owned();
             }
         }
+        "cleanupTypeOverrides" => {
+            if let Ok(v) = serde_json::from_value(value) {
+                state.cleanup_type_overrides = v;
+            }
+        }
         _ => {
             // Structured-path keys are not mapped to static SettingsState fields.
             // Use resolve_setting(key, source_id) to read them individually.
@@ -542,8 +547,10 @@ fn default_value_for_key(key: &str) -> Value {
                 .unwrap_or(Value::Null)
         }
         // Read-side falls back to per-type defaults, so the stored default is an
-        // empty object (no explicit overrides).
-        "patternsByType" => Value::Object(serde_json::Map::new()),
+        // empty object (no explicit overrides). Same shape for
+        // "cleanupTypeOverrides" (spec 051 US3): falls back to each type's
+        // built-in default action.
+        "patternsByType" | "cleanupTypeOverrides" => Value::Object(serde_json::Map::new()),
         "toolWatchExtensions" => {
             serde_json::to_value(&defaults.tool_watch_extensions).unwrap_or(Value::Null)
         }
@@ -1653,6 +1660,114 @@ mod tests {
         };
         let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::ValueInvalid);
+    }
+
+    // ── Spec 051 US3: cleanupTypeOverrides round-trip + validation ─────
+
+    #[tokio::test]
+    async fn update_cleanup_type_overrides_round_trips_via_get() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "cleanupTypeOverrides".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!({"2": "Delete"})),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Success);
+
+        let get_resp = get_settings(db.pool(), &bus).await.unwrap();
+        assert_eq!(
+            get_resp.settings.cleanup_type_overrides.get("2").map(String::as_str),
+            Some("Delete")
+        );
+    }
+
+    #[tokio::test]
+    async fn update_cleanup_type_overrides_accepts_empty_map() {
+        let (db, bus) = setup().await;
+        // {} is the default; sending it back is a no-op, but it must validate.
+        let req = SettingsUpdateRequest {
+            key: "cleanupTypeOverrides".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!({})),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Noop);
+    }
+
+    #[tokio::test]
+    async fn update_cleanup_type_overrides_rejects_unknown_id() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "cleanupTypeOverrides".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!({"999": "Delete"})),
+        };
+        let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
+    }
+
+    #[tokio::test]
+    async fn update_cleanup_type_overrides_rejects_non_numeric_id() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "cleanupTypeOverrides".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!({"lights": "Delete"})),
+        };
+        let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
+    }
+
+    #[tokio::test]
+    async fn update_cleanup_type_overrides_rejects_invalid_action() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "cleanupTypeOverrides".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!({"1": "Nuke"})),
+        };
+        let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
+    }
+
+    #[tokio::test]
+    async fn update_cleanup_type_overrides_rejects_non_object() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "cleanupTypeOverrides".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!(["1"])),
+        };
+        let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
+    }
+
+    #[tokio::test]
+    async fn update_cleanup_type_overrides_emits_exactly_one_change_event() {
+        let (db, bus) = setup().await;
+        let mut rx = bus.subscribe();
+
+        let req = SettingsUpdateRequest {
+            key: "cleanupTypeOverrides".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!({"3": "Keep"})),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Success);
+
+        // Exactly one SettingsChanged event on the real change.
+        let mut changed_count = 0;
+        while let Ok(evt) = rx.try_recv() {
+            if evt.topic == TOPIC_SETTINGS_CHANGED {
+                changed_count += 1;
+            }
+        }
+        assert_eq!(changed_count, 1, "expected exactly one settings.changed event");
+
+        // Re-saving the identical value is a no-op: zero further events.
+        let noop_resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(noop_resp.status, SettingsUpdateStatus::Noop);
+        let mut noop_changed_count = 0;
+        while let Ok(evt) = rx.try_recv() {
+            if evt.topic == TOPIC_SETTINGS_CHANGED {
+                noop_changed_count += 1;
+            }
+        }
+        assert_eq!(noop_changed_count, 0, "no-op re-save must emit zero settings.changed events");
     }
 
     // ── T057: emit_snapshot fires (FR-024) ────────────────────────────

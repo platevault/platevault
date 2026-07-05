@@ -60,6 +60,15 @@ pub(crate) enum ValidationRule {
     MoonAvoidanceBands,
     /// `devMode`: rejected entirely unless the `dev-tools` feature is enabled.
     DevMode,
+    /// Cleanup per-type action overrides (spec 051 US3, `cleanupTypeOverrides`):
+    /// JSON object mapping a cleanup data-type's stable numeric id (as a
+    /// string) to an overridden action. The known id range mirrors
+    /// `CLEANUP_TYPES` in `apps/desktop/src/data/fixtures/settings.ts`
+    /// (currently ids `1`-`20`); that taxonomy is frontend-owned (FR-009), so
+    /// this Rust-side range must be kept in sync by hand if the fixture ever
+    /// grows — the same kind of coupling `PatternsByType` has with the
+    /// Rust-side `FrameTypeClass` enum, just in the opposite direction.
+    CleanupTypeOverrides,
 }
 
 /// A stable settings key plus its audit/override flags and validation rule.
@@ -323,6 +332,13 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
             expected_msg: "must be \"symlink\" or \"junction\"",
         },
     },
+    // ── Cleanup per-type overrides (spec 051 US3) ────────────────────────
+    Descriptor {
+        key: "cleanupTypeOverrides",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::CleanupTypeOverrides,
+    },
 ];
 
 /// Look up the descriptor for a stable key, if any.
@@ -361,6 +377,7 @@ pub(crate) fn is_overridable(key: &str) -> bool {
 ///
 /// Returns `Ok(())` if the rule passes. The devMode `dev-tools` cfg gate
 /// reproduces the original `validate_value` arm byte-for-byte.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn check_rule(
     rule: ValidationRule,
     value: &Value,
@@ -466,6 +483,38 @@ pub(crate) fn check_rule(
                 contracts_core::ErrorSeverity::Warning,
                 false,
             ));
+        }
+        ValidationRule::CleanupTypeOverrides => check_cleanup_type_overrides(value, invalid)?,
+    }
+    Ok(())
+}
+
+/// Validate the `cleanupTypeOverrides` object (spec 051 US3): every key must
+/// parse as one of the known cleanup data-type ids (`1`-`20`, mirroring the
+/// frontend `CLEANUP_TYPES` fixture), and every value must be exactly
+/// `"Keep"`, `"Archive"`, or `"Delete"`. An empty map is valid (no overrides).
+fn check_cleanup_type_overrides(
+    value: &Value,
+    invalid: &impl Fn(&str) -> ContractError,
+) -> Result<(), ContractError> {
+    const MIN_ID: u32 = 1;
+    const MAX_ID: u32 = 20;
+    const ALLOWED_ACTIONS: &[&str] = &["Keep", "Archive", "Delete"];
+
+    let obj = value.as_object().ok_or_else(|| invalid("must be an object"))?;
+    for (id_str, action_value) in obj {
+        let parsed_id: Option<u32> = id_str.parse().ok();
+        let in_range = parsed_id.is_some_and(|id| (MIN_ID..=MAX_ID).contains(&id));
+        if !in_range {
+            return Err(invalid(&format!("unknown data type id: {id_str}")));
+        }
+        let action = action_value
+            .as_str()
+            .ok_or_else(|| invalid(&format!("action for {id_str} must be a string")))?;
+        if !ALLOWED_ACTIONS.contains(&action) {
+            return Err(invalid(&format!(
+                "action for {id_str} must be \"Keep\", \"Archive\", or \"Delete\""
+            )));
         }
     }
     Ok(())
