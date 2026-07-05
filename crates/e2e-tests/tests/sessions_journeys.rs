@@ -1,0 +1,178 @@
+//! Spec 037 Layer-2 real-UI journey — Sessions derived-view invariants
+//! (batch #9 of the coverage-matrix "Batched plan", Journey 4). Promotes
+//! `docs/development/windows-journeys/journey-04-sessions-review.md`'s
+//! UI-level Tests (1/2/3/5) — the existing `ingestion_sessions_search`
+//! journey (`journeys.rs`) already proves the real event-driven grouping
+//! pipeline via `sessions.list`; this file adds the real Sessions PAGE
+//! assertions that journey doesn't touch (nothing before apply, no
+//! review-state controls, rescan doesn't duplicate).
+//!
+//! ## Finding while authoring this file: journey-04 Test 4 is untestable as
+//! written
+//!
+//! Test 4 ("edit a session's Notes field, let it auto-save") describes a
+//! Notes field on the session detail. `SessionDetail.tsx`
+//! (read in full while authoring this) has NO notes field at all — its own
+//! doc comment says "Session metadata remains editable post-hoc via the
+//! inbox per-file metadata/override tables", and a repo-wide search for a
+//! session notes field/command found none. Spec 041 FR-051 (T076) removed
+//! the review-lifecycle actions (Confirm/Re-open/Reject/Ignore) — this
+//! journey's own module doc suggests the notes-editing claim in journey-04
+//! may be a stale holdover from before that removal, not a real, currently
+//! reachable feature. Test 4 is therefore skipped here rather than faked;
+//! flagged in the coverage matrix as a documentation-accuracy follow-up
+//! (either the feature needs to ship, or journey-04 needs correcting).
+
+mod common;
+
+use std::time::Duration;
+
+use common::{write_minimal_fits, E2eApp};
+use serde_json::json;
+
+const UI_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Tests 1/2/3/5 (journey-04) in one journey: nothing appears before a plan
+/// applies, a real session appears automatically (event-driven grouping)
+/// after apply with no separate review step, no review-state controls exist
+/// anywhere on the page, and a no-op Inbox rescan never duplicates the
+/// session.
+#[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
+async fn sessions_ui_derived_view_invariants() -> anyhow::Result<()> {
+    let app = E2eApp::launch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+
+    // Test 1: nothing appears before any inbox item is confirmed + applied.
+    app.goto_route("/sessions").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    anyhow::ensure!(
+        app.find_all_testid_prefix("sessions-row-").await?.is_empty(),
+        "expected Sessions to show nothing before any plan has applied"
+    );
+
+    // Real ingest pipeline (mirrors `ingestion_sessions_search` in
+    // `journeys.rs`) — this journey's new value is the Sessions PAGE
+    // assertions below, not re-proving the ingest pipeline itself.
+    let root_dir = tempfile::tempdir()?;
+    write_minimal_fits(
+        root_dir.path(),
+        "light_m31_sessions_001.fits",
+        "Light Frame",
+        Some("M 31"),
+        Some("Ha"),
+        Some("2026-01-12T21:30:00"),
+    )?;
+    let register: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({ "path": root_dir.path().to_string_lossy(), "category": "light_frames", "scanSettings": null }),
+        )
+        .await?;
+    let root_id = register["sourceId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("roots.register returned no sourceId: {register}"))?
+        .to_owned();
+    let _: serde_json::Value = app
+        .invoke(
+            "sources_set_organization_state",
+            json!({ "sourceId": root_id, "organizationState": "unorganized" }),
+        )
+        .await?;
+    let scan: serde_json::Value = app
+        .invoke(
+            "inbox_scan_folder",
+            json!({
+                "req": {
+                    "rootId": root_id,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                    "followSymlinks": false,
+                }
+            }),
+        )
+        .await?;
+    let inbox_item_id = scan["items"][0]["inboxItemId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
+        .to_owned();
+    let classify: serde_json::Value = app
+        .invoke(
+            "inbox_classify",
+            json!({
+                "req": {
+                    "inboxItemId": inbox_item_id,
+                    "forceRescan": false,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                }
+            }),
+        )
+        .await?;
+    let content_signature = classify["contentSignature"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("inbox.classify returned no contentSignature: {classify}"))?
+        .to_owned();
+    let _: serde_json::Value = app
+        .invoke(
+            "inbox_confirm",
+            json!({
+                "req": {
+                    "inboxItemId": inbox_item_id,
+                    "contentSignature": content_signature,
+                    "destructiveDestination": null,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                    "rootId": null,
+                }
+            }),
+        )
+        .await?;
+    let _: serde_json::Value =
+        app.invoke("inbox_plan_apply", json!({ "inboxItemId": inbox_item_id })).await?;
+
+    // Test 2: the real session appears automatically on the real Sessions
+    // page (no separate review/approve step) — session grouping is
+    // event-driven, so poll the real UI for it.
+    app.goto_route("/sessions").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    app.wait_testid_prefix_present("sessions-row-", UI_TIMEOUT).await.map_err(|e| {
+        anyhow::anyhow!("expected a real session row to appear automatically after apply: {e}")
+    })?;
+    let rows_after_apply = app.find_all_testid_prefix("sessions-row-").await?;
+    anyhow::ensure!(
+        rows_after_apply.len() == 1,
+        "expected exactly 1 real session after applying 1 light frame, found {}",
+        rows_after_apply.len()
+    );
+
+    // Test 3: select it and confirm NO review-state controls exist anywhere
+    // on the page (list + detail) — the intentionally-removed
+    // Confirm/Re-open/Reject/Ignore review lifecycle (spec 041 FR-051/T076).
+    let session_id = app.testid_suffix("sessions-row-").await?;
+    app.click_testid(&format!("sessions-row-{session_id}")).await?;
+    for label in ["Confirm", "Re-open", "Reopen", "Reject", "Ignore"] {
+        anyhow::ensure!(
+            app.count_buttons_with_text(label).await? == 0,
+            "expected NO '{label}' review-lifecycle control anywhere on the Sessions page \
+             (spec 041 FR-051 removed this state machine)"
+        );
+    }
+
+    // Test 5: a no-op Inbox rescan (no new files) must never duplicate the
+    // session or resurrect a review state.
+    app.goto_route("/inbox").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    app.click_by_aria_label("Rescan all roots").await?;
+    // Give the (no-op) rescan a moment to settle, then re-check Sessions.
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+
+    app.goto_route("/sessions").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    app.wait_testid_prefix_present("sessions-row-", UI_TIMEOUT).await?;
+    let rows_after_rescan = app.find_all_testid_prefix("sessions-row-").await?;
+    anyhow::ensure!(
+        rows_after_rescan.len() == 1,
+        "expected a no-op rescan to never duplicate the session, found {} rows",
+        rows_after_rescan.len()
+    );
+
+    app.shutdown().await
+}
