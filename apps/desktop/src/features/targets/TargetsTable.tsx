@@ -68,6 +68,7 @@
 
 import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { Link } from '@tanstack/react-router';
 import type { TargetListItem, TargetObjectType } from '@/bindings/index';
 import { Pill, Banner } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
@@ -595,7 +596,10 @@ export function TargetsTable({
     <div className="alm-targets-table__wrap">
       {!site && (
         <Banner variant="info" className="alm-targets-table__no-site-banner">
-          {m.targets_planner_no_site_banner()}
+          {m.targets_planner_no_site_banner()}{' '}
+          <Link to="/settings/$pane" params={{ pane: 'planner' }} className="alm-banner__action-link">
+            {m.targets_planner_no_site_banner_action()}
+          </Link>
         </Banner>
       )}
       <div ref={scrollRef} className="alm-targets-table__scroll">

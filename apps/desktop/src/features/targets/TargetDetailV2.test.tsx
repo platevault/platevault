@@ -92,6 +92,13 @@ vi.mock('@/bindings/index', () => ({
 const mockNavigate = vi.fn();
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
+  // Minimal stub: the no-site banner's "Add a site" link (spec 044 US3) just
+  // needs to render as a link, not exercise real routing under test.
+  Link: ({ children, to, ...rest }: { children?: import('react').ReactNode; to: string }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
