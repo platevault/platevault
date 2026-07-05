@@ -10,6 +10,17 @@ name: Release Please
 #
 # The release PR is verified by release-gate.yml, which posts the single
 # "Release Gate / verdict" check the shepherd reads before merging.
+#
+# Once release-please tags+publishes a release (release_created == 'true'),
+# the `build` job (spec 051 US10 / T060) builds the Tauri desktop app on the
+# Windows/macOS/Linux matrix, signs the bundles + updater artifact with
+# tauri-apps/tauri-action (minisign, via the TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]
+# repo secrets), and uploads them — plus the generated `latest.json` updater
+# manifest — to the release that release-please just created. This is what
+# makes https://github.com/nightwatch-astro/alm/releases/latest/download/latest.json
+# resolve for `tauri-plugin-updater`. The embedded public key that verifies
+# these signatures lives in apps/desktop/src-tauri/tauri.conf.json and is
+# owned by a separate US10 lane, not this workflow.
 
 on:
   push:
@@ -31,6 +42,7 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      release_body: ${{ steps.release.outputs.body }}
     steps:
       - name: Run release-please
         id: release
@@ -38,3 +50,81 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  build:
+    name: Build & sign (${{ matrix.os }})
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    strategy:
+      fail-fast: false # report each platform distinctly, same as CI's integration matrix
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri's desktop_shell crate needs system webview libs to build AND
+      # bundle (deb/rpm/AppImage) on Linux. patchelf is additionally required
+      # for AppImage bundling, which ci.yml's plain `cargo build` never
+      # exercises.
+      - name: Install Tauri Linux system deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "release-${{ matrix.os }}"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # tauri-action auto-detects the package manager by checking for a
+      # lockfile inside `projectPath` — apps/desktop has no pnpm-lock.yaml of
+      # its own (it lives at the workspace root), so auto-detection would fall
+      # through to `npm run tauri`. `tauriScript: pnpm tauri` pins it to the
+      # same invocation the justfile already uses for `tauri dev`.
+      #
+      # includeUpdaterJson + updaterJsonPreferNsis mirror astro-up's proven
+      # release.yml (~/dev/astro-up/.github/workflows/release.yml): the
+      # Windows updater artifact is the NSIS bundle, and a signed `latest.json`
+      # is generated and uploaded alongside the platform bundles.
+      #
+      # releaseDraft: false — release-please (the `release-please` job above)
+      # already published a real (non-draft) GitHub Release for this tag, so
+      # this step finds that release by tag and uploads bundles/signatures to
+      # it directly, rather than astro-up's separate draft-then-publish dance
+      # (that dance exists there because its release-please step creates the
+      # release explicitly as part of the same job; here it's already public
+      # by the time this job runs, and release-gate.yml already hard-gates the
+      # release PR pre-merge).
+      - name: Build, sign, and upload Tauri bundles
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          tagName: ${{ needs.release-please.outputs.tag_name }}
+          releaseName: ${{ needs.release-please.outputs.tag_name }}
+          releaseBody: ${{ needs.release-please.outputs.release_body }}
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
