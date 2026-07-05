@@ -548,6 +548,7 @@
   "projects_wizard_summary_lights_label": "Lights",
   "projects_wizard_summary_selected": "Selected",
   "projects_wizard_summary_title": "Project summary",
+  "projects_wizard_target_unresolved": "Unresolved target",
   "projects_wizard_token_example_title": "Example: {example}",
   "projects_wizard_toolbar_title": "New project —",
   "projects_wizard_total_integration": "Total integration:",
