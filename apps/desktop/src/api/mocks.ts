@@ -178,6 +178,46 @@ const mockSettingsData: SettingsData = {
   },
 };
 
+// ── `observing`-scope settings (spec 044 Track B + spec 047) — scope-aware ─────
+//
+// The planner's observing-site gate (`features/targets/site-gate.ts` →
+// `activeSite() !== null`) hydrates the site store from
+// `settings_get('observing')` (`observing-sites/site-store.ts`), and the usable
+// altitude threshold (`altitude-settings.ts`) reads the same scope. To let
+// mock-mode exercise BOTH planner states — the no-site "set up your observing
+// site" prompt (spec 047 D7 / edge case) AND the with-site astronomy render —
+// this scope reflects a per-session values bag seeded from the
+// `alm-e2e-observing` localStorage key (set by a test before navigation):
+//
+//   - key ABSENT  → empty observing values → no active site → planner GATED.
+//   - key PRESENT → seeded sites + active pointer → `activeSite() !== null` →
+//                   planner renders real 044 (altitude/imaging-time) + 047
+//                   (moon phase / lunar separation / filter guidance /
+//                   opposition) values against that site.
+//
+// `settings_update('observing', …)` merges into the same bag so a UI-driven
+// site creation (Settings → Observing Sites) round-trips like the real backend.
+// Non-observing scopes are untouched and still resolve to `mockSettingsData`.
+const E2E_OBSERVING_SEED_STORE_ID = 'alm-e2e-observing';
+let mockObservingValues: Record<string, unknown> | null = null;
+
+function observingValues(): Record<string, unknown> {
+  if (mockObservingValues === null) {
+    let seeded: Record<string, unknown> = {};
+    try {
+      const raw =
+        typeof localStorage !== 'undefined'
+          ? localStorage.getItem(E2E_OBSERVING_SEED_STORE_ID)
+          : null;
+      if (raw) seeded = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      seeded = {};
+    }
+    mockObservingValues = seeded;
+  }
+  return mockObservingValues;
+}
+
 // Mutable so `ingestion_settings_update` round-trips through `_get` in mock
 // mode (spec 030, package P12) — mirrors real persistence closely enough for
 // the Ingestion settings pane's load/save flow to be exercised without a
@@ -811,6 +851,13 @@ export async function mockInvoke(
       } satisfies LogExportResponse_Serialize;
     }
     case 'settings_get': {
+      // Scope-aware: the `observing` scope reflects the seedable per-session
+      // values bag (planner site gate + usable-altitude threshold). Every other
+      // scope keeps the legacy general fixture (unchanged behaviour).
+      const scope = (_args as { scope?: string } | undefined)?.scope;
+      if (scope === 'observing') {
+        return { scope: 'observing', values: observingValues() } satisfies SettingsData;
+      }
       return mockSettingsData;
     }
     case 'ingestion_settings_get': {
@@ -1025,6 +1072,14 @@ export async function mockInvoke(
       return null;
     }
     case 'settings_update': {
+      // The `observing` scope round-trips into the seedable values bag so a
+      // UI-driven site creation / active-site switch persists across the
+      // session (site store + altitude threshold both read this scope back).
+      const scope = (_args as { scope?: string } | undefined)?.scope;
+      if (scope === 'observing') {
+        const values = (_args as { values?: Record<string, unknown> } | undefined)?.values;
+        if (values) mockObservingValues = { ...observingValues(), ...values };
+      }
       return null;
     }
     case 'ingestion_settings_update': {
