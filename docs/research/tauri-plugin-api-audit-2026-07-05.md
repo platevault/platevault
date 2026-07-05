@@ -74,6 +74,38 @@ Therefore:
    persisted-scope is only relevant if we granted the webview an fs scope (we do
    not, and should not).
 
+### Where a thin Rust crate beats the plugin (third axis)
+
+For any capability that is **core/business/domain logic or crosses the contract
+boundary**, a thin Rust crate in a narrow shared crate (per CLAUDE.md's "small
+Rust crates with narrow responsibility") is the better, more portable choice than
+a frontend plugin. Full per-capability 3-way verdicts are in **§2d**. The clear
+"Rust crate wins" calls:
+
+- **Caching → `moka` (already `0.12.15` in our workspace), NOT tauri-plugin-cache.**
+  We already cache with moka in `crates/app/projects/src/project_health.rs`. A
+  ~10-50-line shared wrapper (or reuse moka directly) keeps cache state canonical
+  in Rust; a frontend cache plugin would fork state away from the DB/core.
+- **FS watching → `notify` (already `7.0.0`), NOT any plugin.** Already used in
+  `crates/fs/inventory/src/watcher.rs` + `artifact_watcher.rs`. Correct as-is.
+- **Path handling → `camino` `Utf8Path` (already `1.2.2`), NOT `@tauri-apps/api/path`.**
+  Already the core's path type across `crates/fs/*`. Frontend keeps `pathe` for
+  display-only splitting.
+- **SQL → `sqlx` (already `0.9.0`), NOT tauri-plugin-sql.** Canonical store; the
+  plugin would breach the boundary.
+- **HTTP → `reqwest` (already `0.13.3`), NOT tauri-plugin-http.** External calls
+  (SIMBAD) belong in the core resolver, where they already are.
+- **External process launch → `std::process::Command`, NOT tauri-plugin-shell.**
+  Tool launch already uses std::process in `crates/workflow/profiles/src/launch.rs:143`;
+  exposing a shell to the webview is a security/boundary risk.
+- **Directory walking → `walkdir`/`ignore` in the core** if/when scan traversal is
+  formalized (not currently a dependency) — a core concern, never a plugin.
+
+Version note: the `mcp-package-version` MCP server has **no crates.io checker**
+(npm/PyPI/Maven/Go/Gradle/Swift/Docker/GH-Actions only), so in-tree crate
+versions are exact from `Cargo.lock`; out-of-tree candidate crates are cited at
+last-known-stable and marked **"verify on crates.io before adding."**
+
 ### Already correctly adopted (no action)
 
 - **plugin-dialog** — registered `lib.rs:595`; used by Rust pick commands
@@ -159,6 +191,36 @@ Note on sourcing: the official plugin set and JS namespaces were confirmed
 against `https://v2.tauri.app/plugin/`. Community-plugin details are from
 recollection of `awesome-tauri`; treat the community rows as leads to confirm
 against each plugin's current repo before adoption (versions/maintenance vary).
+
+### 2d. Third axis — Tauri plugin vs thin Rust crate vs hand-rolled
+
+For every capability, a 3-way verdict. **Rule applied:** core/business/domain
+logic or anything crossing the contract boundary → prefer a thin Rust crate in a
+narrow shared crate; genuine desktop-shell / OS-UI edge concern → Tauri plugin.
+
+Versions: `[in-tree]` = exact from our `Cargo.lock`; all other crate versions are
+last-known-stable and must be **verified on crates.io before adding** (no
+crates.io version-checker was available in this environment).
+
+| Capability | Tauri plugin option | Rust-crate alternative (crate + one-line why) | Keep hand-rolled? | RECOMMENDED (3-way) | Rationale (architecture rule) |
+|------------|--------------------|-----------------------------------------------|-------------------|---------------------|-------------------------------|
+| **Caching** | tauri-plugin-cache | **`moka` 0.12.15 [in-tree]** — async/sync high-perf cache; already used in `crates/app/projects/src/project_health.rs`. (alts: `cached`, `quick_cache`) | n/a | **Rust crate (moka)** | Cache is core state; a ~10-50-line shared wrapper over moka keeps it canonical. Plugin would fork cache into the webview = boundary drift |
+| **Reveal / open in file manager** | **tauri-plugin-opener** (in use) | `open` ~5.x or `opener` ~0.7.x — open a path in default app; but neither reliably *selects/highlights* the item like `opener().reveal_item_in_dir` | current: core cmd via plugin | **Tauri plugin (opener), already in use** | Genuine OS-UI edge; the plugin's per-OS "reveal + select" beats the bare crates. We already call it from a Rust command (`native.rs:118`) for audit — correct |
+| **Open external URL / file** | tauri-plugin-opener/shell | `open` ~5.x from Rust core | current: `window.open` fallback + plugin | **Tauri plugin (opener)** | Edge concern; already integrated |
+| **Desktop notifications** | tauri-plugin-notification | `notify-rust` ~4.x — native notifications from Rust; fires straight from core background tasks, no JS round-trip (macOS needs a bundled app id) | none today | **Tauri plugin (lean), notify-rust viable** | Toss-up: OS *permission model* favors the plugin, but our triggers are backend (drain/plan-apply) so `notify-rust` in the core is legit. Pick plugin for the permission UX; revisit if we want purely-backend notifications |
+| **Single instance** | tauri-plugin-single-instance | `single-instance` ~0.13.x or `fslock` ~0.2.x — process lock only (no window-focus) | none today | **Tauri plugin** | Edge concern: the plugin *focuses the existing window* on 2nd launch via the Tauri event loop; a raw lock only blocks. Both protect the canonical SQLite store |
+| **FS watching** | (none official) | **`notify` 7.0.0 [in-tree]** — already used in `crates/fs/inventory/src/watcher.rs` | n/a | **Rust crate (notify), already in use** | Core domain; no plugin exists or is wanted |
+| **Directory walking / scan traversal** | (none) | `walkdir` ~2.5.x or `ignore` ~0.4.x — fast recursive walk with symlink control (constitution: don't follow symlinks by default) | possibly hand-rolled in `crates/fs/inventory` | **Rust crate (walkdir/ignore)** if traversal is formalized | Pure core concern; `ignore` gives gitignore-style excludes + symlink guards matching our scan rules |
+| **Path handling** | (`@tauri-apps/api/path`, async) | **`camino` `Utf8Path` 1.2.2 [in-tree]** — already the core path type across `crates/fs/*`; std::path underneath | frontend `pathe` (display only) | **Rust crate (camino) for core; `pathe` for UI** | Path *resolution* is core; the async JS path API is worse DX and would pull logic across the boundary |
+| **Self-update** | tauri-plugin-updater | `self_update` ~0.42.x — replaces the binary from GH releases, but no Tauri window relaunch / signing integration | none (manual CI only) | **Tauri plugin (updater)** | Update *UI + signed artifact + relaunch* is a shell concern the plugin integrates; `self_update` is CLI-shaped and misses the GUI relaunch story |
+| **Global shortcut** | tauri-plugin-global-shortcut | `global-hotkey` ~0.6.x — the exact crate the plugin wraps | none today | **Tauri plugin** | Edge concern; the plugin adds capability-gated registration over the same crate |
+| **Clipboard** | tauri-plugin-clipboard-manager | `arboard` ~3.x — full clipboard incl. images, from a Rust command | current: `navigator.clipboard.writeText` (`reveal.ts:115`, `SchemaViewer.tsx:62`) | **Keep hand-rolled (text)**; `arboard` if rich/image or non-secure-context needed | For copy-*text* the browser API is zero-dep and works in the webview; escalate to `arboard` (Rust) over the plugin only if we need image/rich clipboard |
+| **Config / KV prefs** | tauri-plugin-store | `config`/`figment` ~0.10.x/`confy` ~0.6.x + serde — for app *config files* | current: `localStorage` (UI) + SQLite (canonical) | **Keep current split** | Ephemeral UI prefs stay in `localStorage`; canonical prefs stay in SQLite/contracts. `confy`/`figment` and plugin-store both add a redundant third store |
+| **SQL** | tauri-plugin-sql | **`sqlx` 0.9.0 [in-tree]** — canonical store, already owns SQLite (`lib.rs:647`) | n/a | **Rust crate (sqlx), already in use** | Plugin lets the webview run SQL = direct constitution violation |
+| **HTTP** | tauri-plugin-http | **`reqwest` 0.13.3 [in-tree]** — already the SIMBAD resolver client | n/a | **Rust crate (reqwest), already in use** | Network belongs in the core, not the webview |
+| **Process / shell exec** | tauri-plugin-shell | **`std::process::Command`** (already used, `workflow/profiles/src/launch.rs:143`); `duct` ~0.13.x for pipelines | current: std::process in core | **std / Rust crate, already in use** | Tool launch is core; exposing a shell to the webview is a security + boundary risk. Keep std::process; add `duct` only if we need piped multi-process flows |
+| **Image handling** | (`image` JS namespace = icon plumbing only) | `image` ~0.25.x — decode/thumbnail in Rust | none | **Neither now** (weigh PixInsight boundary) | We don't process images. If display *thumbnails* are ever wanted, `image` in the core (display-only, not processing) — never a frontend plugin |
+| **Fuzzy / global search ranking** | (none) | `nucleo` ~0.5.x (fast, maintained) or `fuzzy-matcher` ~0.3.x (less active) | domain ranking already in core (`inbox/target_recommendations.rs`, coords/angular-separation; calibration ranking); palette fuzzy via `cmdk` (JS) | **cmdk (JS) for the palette; `nucleo` (Rust) only if we add server-side text search** | Current ranking is coordinate/domain math in the core (correct there). Fuzzy *text* search isn't hand-rolled today; if added, put `nucleo` in the core, not the frontend |
 
 ---
 
