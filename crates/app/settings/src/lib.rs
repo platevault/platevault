@@ -491,6 +491,11 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.source_view_link_kind_cross_drive = v.to_owned();
             }
         }
+        "cleanupTypeOverrides" => {
+            if let Ok(v) = serde_json::from_value(value) {
+                state.cleanup_type_overrides = v;
+            }
+        }
         _ => {
             // Structured-path keys are not mapped to static SettingsState fields.
             // Use resolve_setting(key, source_id) to read them individually.
@@ -541,9 +546,9 @@ fn default_value_for_key(key: &str) -> Value {
             serde_json::to_value(&defaults.imagetyp_normalization_user_mappings)
                 .unwrap_or(Value::Null)
         }
-        // Read-side falls back to per-type defaults, so the stored default is an
-        // empty object (no explicit overrides).
-        "patternsByType" => Value::Object(serde_json::Map::new()),
+        // Read-side falls back to per-type/per-frame-type built-in defaults, so
+        // the stored default for both is an empty object (no explicit overrides).
+        "patternsByType" | "cleanupTypeOverrides" => Value::Object(serde_json::Map::new()),
         "toolWatchExtensions" => {
             serde_json::to_value(&defaults.tool_watch_extensions).unwrap_or(Value::Null)
         }
@@ -1364,6 +1369,8 @@ mod tests {
     #[case("usableAltitudeDeg", serde_json::json!(30))]
     #[case("usableAltitudeDeg", serde_json::json!(0))]
     #[case("usableAltitudeDeg", serde_json::json!(90))]
+    #[case("cleanupTypeOverrides", serde_json::json!({}))] // empty map: all defaults apply
+    #[case("cleanupTypeOverrides", serde_json::json!({"1": "Keep", "20": "Delete"}))]
     fn validate_value_accepts(#[case] key: &str, #[case] value: Value) {
         assert!(validate_value(key, &value).is_ok(), "expected {key}={value} to be accepted");
     }
@@ -1408,6 +1415,12 @@ mod tests {
     #[case("usableAltitudeDeg", serde_json::json!(-1))] // below [0,90]
     #[case("usableAltitudeDeg", serde_json::json!(91))] // above [0,90]
     #[case("usableAltitudeDeg", serde_json::json!("x"))] // not a number
+    #[case("cleanupTypeOverrides", serde_json::json!("nope"))] // not an object
+    #[case("cleanupTypeOverrides", serde_json::json!({"0": "Keep"}))] // unknown id (below range)
+    #[case("cleanupTypeOverrides", serde_json::json!({"21": "Keep"}))] // unknown id (above range)
+    #[case("cleanupTypeOverrides", serde_json::json!({"abc": "Keep"}))] // non-numeric id
+    #[case("cleanupTypeOverrides", serde_json::json!({"1": "Trash"}))] // not an allowed action
+    #[case("cleanupTypeOverrides", serde_json::json!({"1": 5}))] // action not a string
     fn validate_value_rejects(#[case] key: &str, #[case] value: Value) {
         let err = validate_value(key, &value).expect_err("expected rejection");
         assert_eq!(err.code, ErrorCode::ValueInvalid, "key {key} value {value}");

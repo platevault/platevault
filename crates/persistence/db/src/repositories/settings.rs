@@ -638,6 +638,14 @@ mod tests {
 // real values through the actual `settings` / `source_overrides` SQL tables.
 // If any serde `rename_all`, field order, `skip_serializing_if`, or numeric
 // formatting changes, the frozen-snapshot assertions fail loudly.
+//
+// Deliberately NOT derived from `SettingsState::default()` at test time: doing
+// so would make `settings_state_default_bytes_unchanged` compare the live type
+// to itself (`to_string(&default) == to_string(&default)`), which always
+// passes and would silently stop catching accidental field reordering/
+// renaming. Adding a new settings field is expected to require a conscious,
+// reviewable edit to this literal (spec 051 T007 added `cleanupTypeOverrides`
+// as the new trailing field) — that's the guard doing its job, not drift.
 #[cfg(test)]
 mod byte_identity_guard {
     use domain_core::settings::{SettingsState, SourceOverride};
@@ -649,7 +657,10 @@ mod byte_identity_guard {
     /// Frozen snapshot of `SettingsState::default()` exactly as persisted /
     /// emitted on the wire prior to the T254 move. Captured from the
     /// pre-move `contracts_core::settings::SettingsState` serialization.
-    const SETTINGS_STATE_DEFAULT_JSON: &str = r#"{"pattern":[{"id":"p0","kind":"token","value":"target"},{"id":"p1","kind":"separator","value":"/"},{"id":"p2","kind":"token","value":"filter"},{"id":"p3","kind":"separator","value":"/"},{"id":"p4","kind":"token","value":"date"},{"id":"p5","kind":"separator","value":"/"},{"id":"p6","kind":"token","value":"frame_type"},{"id":"p7","kind":"separator","value":"/"}],"autoApplyPattern":true,"alwaysPreviewBeforePlan":false,"followSymlinks":false,"hashOnScan":"lazy","darkMatchTolerance":"strict","flatMatching":"filter-rot","suggestCalibration":true,"logLevel":"info","rememberFollowLogs":false,"defaultProtection":"protected","blockPermanentDelete":true,"protectedCategories":["lights","masters","finals"],"devMode":false,"plansListDefaultAgeCutoffDays":90.0,"calibrationDarkTempTolerance":2.0,"calibrationPrefillSuggestion":true,"calibrationDarkOverridePenalty":0.3,"calibrationFlatOverridePenalty":0.3,"calibrationBiasOverridePenalty":0.3,"calibrationAgingThresholdDays":90.0,"imagetypNormalizationUserMappings":[],"patternsByType":{},"toolWatchExtensions":[".xisf",".fits",".fit",".tif",".tiff",".png",".jpg",".ser",".avi"],"toolAttributionWindowHours":6.0,"observingSites":[],"observingDefaultSiteId":null,"observingActiveSiteId":null,"usableAltitudeDeg":30.0,"plannerMoonAvoidance":{"B":{"distanceDeg":120.0,"widthDays":14.0},"G":{"distanceDeg":120.0,"widthDays":14.0},"Ha":{"distanceDeg":60.0,"widthDays":7.0},"L":{"distanceDeg":120.0,"widthDays":14.0},"OIII":{"distanceDeg":110.0,"widthDays":10.0},"R":{"distanceDeg":120.0,"widthDays":14.0},"SII":{"distanceDeg":60.0,"widthDays":7.0}},"sourceViewLinkKindIntraDrive":"hardlink","sourceViewLinkKindCrossDrive":"symlink"}"#;
+    ///
+    /// Updated for spec 051 (T007): added `cleanupTypeOverrides` (default
+    /// empty object) as the new trailing field.
+    const SETTINGS_STATE_DEFAULT_JSON: &str = r#"{"pattern":[{"id":"p0","kind":"token","value":"target"},{"id":"p1","kind":"separator","value":"/"},{"id":"p2","kind":"token","value":"filter"},{"id":"p3","kind":"separator","value":"/"},{"id":"p4","kind":"token","value":"date"},{"id":"p5","kind":"separator","value":"/"},{"id":"p6","kind":"token","value":"frame_type"},{"id":"p7","kind":"separator","value":"/"}],"autoApplyPattern":true,"alwaysPreviewBeforePlan":false,"followSymlinks":false,"hashOnScan":"lazy","darkMatchTolerance":"strict","flatMatching":"filter-rot","suggestCalibration":true,"logLevel":"info","rememberFollowLogs":false,"defaultProtection":"protected","blockPermanentDelete":true,"protectedCategories":["lights","masters","finals"],"devMode":false,"plansListDefaultAgeCutoffDays":90.0,"calibrationDarkTempTolerance":2.0,"calibrationPrefillSuggestion":true,"calibrationDarkOverridePenalty":0.3,"calibrationFlatOverridePenalty":0.3,"calibrationBiasOverridePenalty":0.3,"calibrationAgingThresholdDays":90.0,"imagetypNormalizationUserMappings":[],"patternsByType":{},"toolWatchExtensions":[".xisf",".fits",".fit",".tif",".tiff",".png",".jpg",".ser",".avi"],"toolAttributionWindowHours":6.0,"observingSites":[],"observingDefaultSiteId":null,"observingActiveSiteId":null,"usableAltitudeDeg":30.0,"plannerMoonAvoidance":{"B":{"distanceDeg":120.0,"widthDays":14.0},"G":{"distanceDeg":120.0,"widthDays":14.0},"Ha":{"distanceDeg":60.0,"widthDays":7.0},"L":{"distanceDeg":120.0,"widthDays":14.0},"OIII":{"distanceDeg":110.0,"widthDays":10.0},"R":{"distanceDeg":120.0,"widthDays":14.0},"SII":{"distanceDeg":60.0,"widthDays":7.0}},"sourceViewLinkKindIntraDrive":"hardlink","sourceViewLinkKindCrossDrive":"symlink","cleanupTypeOverrides":{}}"#;
 
     /// Frozen snapshot of a `SourceOverride` as persisted prior to the move.
     const SOURCE_OVERRIDE_JSON: &str = r#"{"sourceId":"src-1","key":"hashOnScan","value":"eager","updatedAt":"2026-01-01T00:00:00Z"}"#;
