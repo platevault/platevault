@@ -75,6 +75,9 @@ import type {
   AuditFilterDto,
   AuditPaginationDto,
   PathPatternPreviewResponse,
+  ProjectNoteGetResult,
+  ProjectNoteUpdateResult,
+  ManifestListResponse_Serialize,
 } from '@/bindings/index';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -471,7 +474,22 @@ export async function mockInvoke(
 
     case 'sessions_list': {
       const { sessions } = await import('@/data/fixtures/sessions');
-      return sessions;
+      // The real `sessions.list` returns the camelCase SessionSummaryDto shape.
+      // The legacy fixture is snake_case (read by SessionsTable); the shared
+      // SessionSourcePicker reads the camelCase fields. Carry BOTH so either
+      // consumer renders in mock mode (previously the picker crashed on
+      // `session.sessionKey.target` when the Edit/wizard source step rendered).
+      return sessions.map((s) => ({
+        ...s,
+        sessionKey: {
+          target: s.session_key.target,
+          filter: s.session_key.filter,
+          night: s.session_key.night,
+        },
+        frameCount: s.frame_count,
+        totalIntegrationSeconds: s.total_integration_seconds,
+        opticalTrainId: s.optical_train_id,
+      }));
     }
     case 'sessions_get': {
       const { sessionDetail } = await import('@/data/fixtures/sessions');
@@ -596,9 +614,14 @@ export async function mockInvoke(
       return mockProjectSummaries;
     }
     case 'projects_get': {
-      // spec 008 real shape: ProjectDetailDto
-      const { mockProjectDetail008 } = await import('@/data/fixtures/projects');
-      return mockProjectDetail008;
+      // spec 008 real shape: ProjectDetailDto. Arg-sensitive so the detail's
+      // lifecycle matches the requested project (mirrors the real backend,
+      // which returns each project's actual lifecycle) — this is what lets the
+      // full lifecycle state machine (ready/prepared/completed/archived/blocked)
+      // be exercised through the UI, not just proj-001's `processing`.
+      const { mockProjectDetailFor } = await import('@/data/fixtures/projects');
+      const id = (_args as { id?: string } | undefined)?.id ?? 'proj-001';
+      return mockProjectDetailFor(id);
     }
     case 'projects_create': {
       // Return a minimal success result; tests override this via vi.mock.
@@ -633,12 +656,56 @@ export async function mockInvoke(
       } satisfies ProjectSourceAddResult_Serialize;
     }
     case 'projects_source_remove': {
-      const req = (_args as { req?: { projectId?: string; projectSourceId?: string } } | undefined)?.req;
+      const req = (_args as { req?: { projectId?: string; projectSourceId?: string; confirmLastSource?: boolean } } | undefined)?.req;
+      // FR-011 last-confirmed-source guard: the backend refuses removing the
+      // final confirmed source unless the caller re-confirms
+      // (`confirm_last_source`). The mock surfaces the exact error contract by
+      // requiring the flag on every removal, so the inline confirm guard flow
+      // in EditProjectPane is exercisable in mock mode. Real per-source-count
+      // discrimination is a Layer-2 concern (needs stateful backend fixtures).
+      if (!req?.confirmLastSource) {
+        return mockContractError(
+          'lifecycle.last_confirmed_source',
+          'Cannot remove the last confirmed source without confirmation.',
+        );
+      }
       return {
         projectId: req?.projectId ?? 'mock-id',
         removedSourceId: req?.projectSourceId ?? 'mock-src',
         auditId: 'mock-audit-id',
       } satisfies ProjectSourceRemoveResult_Serialize;
+    }
+    case 'note_get': {
+      // spec 024 `project.note.get` — persisted free-text notes body.
+      const projectId =
+        (_args as { req?: { projectId?: string } } | undefined)?.req?.projectId ?? 'proj-001';
+      return {
+        projectId,
+        content: 'SHO palette — Ha dominant. Review OIII stretch before integration.',
+      } satisfies ProjectNoteGetResult;
+    }
+    case 'note_update': {
+      // spec 024 `project.note.update` — echoes an updated timestamp on success.
+      const projectId =
+        (_args as { req?: { projectId?: string } } | undefined)?.req?.projectId ?? 'proj-001';
+      return {
+        projectId,
+        updatedAt: new Date().toISOString(),
+      } satisfies ProjectNoteUpdateResult;
+    }
+    case 'manifest_list': {
+      // spec 024 `project.manifest.list` — snapshot history. hasBody:false so
+      // the accordion renders rows without an expandable body fetch.
+      return {
+        manifests: [
+          { id: 'man-001', reason: 'created', timestamp: '2026-05-01T10:00:00Z', path: 'notes/manifest-2026-05-01.md', hasBody: false },
+          { id: 'man-002', reason: 'lifecycle_transition', timestamp: '2026-05-20T22:15:00Z', path: 'notes/manifest-2026-05-20.md', hasBody: false },
+        ],
+        nextCursor: null,
+      } satisfies ManifestListResponse_Serialize;
+    }
+    case 'manifest_reveal_in_os': {
+      return null;
     }
     case 'projects_channels_reinfer': {
       const req = (_args as { req?: { projectId?: string } } | undefined)?.req;
