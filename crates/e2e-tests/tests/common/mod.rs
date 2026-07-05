@@ -62,6 +62,14 @@ pub const APP_URL: &str = "http://127.0.0.1:5173";
 /// 28694907445), and the plugin's own per-attempt window-wait is only 10 s.
 pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// Default deadline for the convenience "find an element by aria-label /
+/// button text, then act on it" helpers ([`E2eApp::click_by_aria_label`] and
+/// friends). These poll for their target rather than doing a single
+/// immediate `find` — see [`E2eApp::find_waiting`] for the CI race this
+/// guards against. 20 s comfortably covers a debug-build route render on a
+/// cold CI runner without masking a genuinely-absent element for long.
+pub const DEFAULT_FIND_TIMEOUT: Duration = Duration::from_secs(20);
+
 // ---------------------------------------------------------------------------
 // Private deserialization target for invoke() responses
 // ---------------------------------------------------------------------------
@@ -421,8 +429,28 @@ impl E2eApp {
     /// (e.g. `prefix = "inbox-item-"` on `data-testid="inbox-item-abc123"`
     /// returns `"abc123"`) — lets a journey discover a real backend id from
     /// the rendered DOM instead of a second invoke round-trip.
+    ///
+    /// POLLS for the element (up to [`DEFAULT_FIND_TIMEOUT`]) rather than
+    /// doing a single immediate lookup: this is frequently called straight
+    /// after an action that triggers an async refetch + re-render (e.g. an
+    /// Inbox rescan, which re-runs `inbox.scan` then re-fetches the list), so
+    /// the row may not exist the instant this is called. Same
+    /// route/refetch-render race [`Self::find_waiting`] documents — waiting
+    /// here means callers don't each have to remember a preceding
+    /// `wait_testid_prefix_present`.
     pub async fn testid_suffix(&self, prefix: &str) -> Result<String> {
-        let el = self.find_testid_prefix(prefix).await?;
+        let deadline = Instant::now() + DEFAULT_FIND_TIMEOUT;
+        let el = loop {
+            if let Ok(el) = self.find_testid_prefix(prefix).await {
+                break el;
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "no data-testid starting with {prefix:?} appeared within {DEFAULT_FIND_TIMEOUT:?}"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        };
         let full = el
             .attr("data-testid")
             .await
@@ -550,16 +578,51 @@ impl E2eApp {
         el.send_keys(value).await.with_context(|| format!("send_keys {testid} failed"))
     }
 
-    /// Click a `<button>` located by its exact visible text — for the few
-    /// real top-bar controls that carry no `data-testid` (e.g. Inbox's
-    /// "Rescan"), matched by `aria-label` first (more stable across i18n
-    /// pluralisation than text nodes) then falling back to text content.
+    /// Poll `driver.find(by)` until it resolves an element or
+    /// [`DEFAULT_FIND_TIMEOUT`] elapses.
+    ///
+    /// WHY this exists (CI-only bug, reproducible on ubuntu + windows,
+    /// #457/#458): after `goto_route(..)` + `wait_bridge_ready(..)`, the
+    /// target route's React component subtree has NOT necessarily finished
+    /// mounting and painting its controls. `wait_bridge_ready` only proves
+    /// `main.tsx` finished top-level module evaluation (the
+    /// `window.__ALM_E2E__` bridge exists) — it says nothing about whether
+    /// the current route's page component has rendered yet. A single
+    /// immediate `driver.find(..)` for a page control (e.g. Inbox's "Rescan
+    /// all roots" button) therefore RACES that render and intermittently
+    /// fails with `no element with aria-label=..` on a slow CI runner, even
+    /// though the string is correct and the control does render a beat later.
+    /// Polling is the fix — the same wait primitive the `data-testid`
+    /// helpers above already use, applied to the aria-label / button-text
+    /// locators too.
+    async fn find_waiting(&self, by: By, what: &str) -> Result<WebElement> {
+        let deadline = Instant::now() + DEFAULT_FIND_TIMEOUT;
+        loop {
+            match self.driver.find(by.clone()).await {
+                Ok(el) => return Ok(el),
+                Err(e) => {
+                    if Instant::now() >= deadline {
+                        return Err(e).with_context(|| {
+                            format!("{what} never appeared within {DEFAULT_FIND_TIMEOUT:?}")
+                        });
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Click an element located by its exact `aria-label` — for the few real
+    /// controls that carry no `data-testid` (e.g. Inbox's "Rescan all roots",
+    /// whose label is more stable across i18n pluralisation than its text
+    /// node). Polls for the element (via [`Self::find_waiting`]) rather than
+    /// doing a single immediate lookup, so it survives the route-render race
+    /// described on `find_waiting` (the CI `no element with aria-label=..`
+    /// failure this fix addresses).
     pub async fn click_by_aria_label(&self, label: &str) -> Result<()> {
         let xpath = format!("//*[@aria-label={}]", escape_string(label));
-        self.driver
-            .find(By::XPath(&xpath))
-            .await
-            .with_context(|| format!("no element with aria-label={label:?}"))?
+        self.find_waiting(By::XPath(&xpath), &format!("element with aria-label={label:?}"))
+            .await?
             .click()
             .await
             .with_context(|| format!("click aria-label={label:?} failed"))
