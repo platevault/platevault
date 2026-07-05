@@ -6,32 +6,27 @@
  * site first, with no location-independent fallback rendering.
  *
  * Spec 047 only *consumes* a site-existence signal; the ObserverSite model,
- * wizard step, and site CRUD are Track B (spec 044 / 048) scope. Until Track
- * B lands its ObserverSite settings key there is nothing to read, so the
- * binding returns `false` and the planner shows the "set up your observing
- * site" prompt.
- *
- * ┌─────────────────────────────────────────────────────────────────────────┐
- * │ FLIP POINT (single swap) — TODO(spec-044 / Track B ObserverSite):        │
- * │ when the ObserverSite settings key lands, replace the body of            │
- * │ `readSiteExists()` to read it (e.g. via `settings.get('site')`) and,     │
- * │ if the value should react at runtime, back `useObserverSiteExists` with  │
- * │ a real subscription. Nothing else in spec 047 needs to change.           │
- * └─────────────────────────────────────────────────────────────────────────┘
+ * wizard step, and site CRUD are Track B (spec 044 / 048) scope. Track B has
+ * now landed the `observing`-scope settings store
+ * (`observing-sites/site-store`), so the gate reads the real active site: it
+ * opens exactly when an observing site exists (persisted by the first-run Site
+ * step or Settings → Observing Sites, both of which set the first site active),
+ * and the planner then computes altitude/rise-set/imaging-time (044) and Moon
+ * phase/lunar separation/filter guidance/opposition (047) against it.
  */
+
+import { activeSite, useActiveSite } from './observing-sites/site-store';
 
 /** Test-only override; `null` = use the real binding. */
 let testOverride: boolean | null = null;
 
 /**
- * Whether a default observing site exists.
- *
- * FLIP POINT: Track B's ObserverSite settings key does not exist yet, so a
- * default site can never be present — always `false` for now.
+ * Whether a default observing site exists — true when the observing-site store
+ * has an active site. Non-reactive read for comparators; the hook below
+ * subscribes for live updates.
  */
 export function readSiteExists(): boolean {
-  // TODO(spec-044): read the real ObserverSite settings key here.
-  return false;
+  return activeSite() !== null;
 }
 
 /** Non-hook read (comparators, tests). Honours the test override. */
@@ -49,9 +44,12 @@ export function __setSiteExistsForTest(value: boolean | null): void {
 }
 
 /**
- * React hook: whether a default observing site exists. Currently static within
- * a session; becomes reactive at the flip point above when Track B's key lands.
+ * React hook: whether a default observing site exists. Subscribes to the
+ * observing-site store so the planner opens the moment a site is created
+ * (first-run Finish or Settings → Observing Sites) without a reload. The test
+ * override still wins when set.
  */
 export function useObserverSiteExists(): boolean {
-  return siteExists();
+  const site = useActiveSite();
+  return testOverride ?? site !== null;
 }
