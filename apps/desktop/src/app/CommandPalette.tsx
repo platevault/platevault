@@ -10,7 +10,9 @@ import { useHotkeys } from '@/lib/useHotkeys';
 import type { SearchResult } from '@/bindings/types';
 
 // `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
-const PAGES: Array<{ label: () => string; route: string }> = [
+// Exported so tests can assert against the real source of truth (T007 guard)
+// instead of a hand-copied array that could silently drift from production.
+export const PAGES: Array<{ label: () => string; route: string }> = [
   { label: () => m.common_sessions(), route: '/sessions' },
   { label: () => m.cmdk_page_review_queue(), route: '/review' },
   { label: () => m.settings_datasources_category_calibration(), route: '/calibration' },
