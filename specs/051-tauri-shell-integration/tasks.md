@@ -39,7 +39,7 @@ can assume the crates/packages already exist in the lockfiles.
       `@tauri-apps/plugin-process` (no JS package exists for
       single-instance or prevent-default — Rust-only). Run install; record
       resolved versions.
-- [ ] T003 [P] Create the new `app_core_cache` crate at `crates/app/cache/`
+- [x] T003 [P] Create the new `app_core_cache` crate at `crates/app/cache/`
       (`Cargo.toml` + `src/lib.rs`) per plan.md's Project Structure: a thin
       wrapper around the existing workspace `moka = "0.12"` dependency (a
       generic `TtlCache<K, V>` and/or `DebounceCache<K>` type, mirroring the
