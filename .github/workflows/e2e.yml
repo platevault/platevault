@@ -28,6 +28,21 @@
 # - This workflow runs independently of ci.yml (Layer-1 integration). Ordering /
 #   merge-gating is enforced by branch-protection required checks, not a
 #   cross-workflow `needs` (which GitHub only supports for reusable workflows).
+#
+# macOS is best-effort, not required (see `docs/development/testing.md`'s
+# Layer-2 note: "Required on Windows + Linux; best-effort on macOS (no
+# official WKWebView WebDriver)"). In practice the embedded
+# `tauri-plugin-webdriver` server on `desktop_shell` never becomes reachable
+# on `macos-latest` GitHub runners: the app boots (build succeeds), but the
+# `tauri-webdriver` CLI proxy gets `Connection refused (os error 61)` against
+# the plugin's native port on every attempt until the 120s launch deadline —
+# reproduced identically on every open PR (e.g. CI runs 28712192291 and
+# 28712185403), never a per-PR regression. The plugin's own upstream E2E
+# workflow (Choochmeque/tauri-plugin-webdriver) fails its macos-latest leg on
+# essentially every recent run too, so this is an upstream/runner-side
+# limitation, not something fixable in this repo. `continue-on-error` keeps
+# the leg running — so coverage isn't silently dropped and a future upstream
+# fix is visible — without blocking every PR on it.
 
 name: Real-UI E2E (thirtyfour + nextest + tauri-plugin-webdriver)
 
@@ -51,13 +66,68 @@ env:
   ALM_DB_URL: "sqlite://./e2e-test.db?mode=rwc"
 
 jobs:
+  # Cheap change-detection gate — mirrors ci.yml's `changes` job. Cross-workflow
+  # `needs` is not supported, so each workflow detects changes itself. The E2E
+  # build (frontend + Rust app) is skipped when the change cannot affect either;
+  # the job still runs and reports success so its status check stays green.
+  # `run` is true when a frontend OR Rust change is present, or any full-suite
+  # trigger fires (workflows, Cargo/lockfiles, package manifests, justfile,
+  # scripts).
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            force_full:
+              - '.github/workflows/**'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - '**/package.json'
+              - 'pnpm-lock.yaml'
+              - 'justfile'
+              - 'scripts/**'
+            rust:
+              - 'crates/**'
+              - 'apps/desktop/src-tauri/**'
+              - 'tests/**'
+              - '**/*.rs'
+            frontend:
+              - 'apps/desktop/src/**'
+              - 'apps/desktop/public/**'
+              - 'apps/desktop/index.html'
+              - 'packages/**'
+              - '**/*.ts'
+              - '**/*.tsx'
+              - '**/*.css'
+      - id: decide
+        shell: bash
+        run: |
+          run=false
+          if [ "${{ steps.filter.outputs.force_full }}" = "true" ] \
+            || [ "${{ steps.filter.outputs.rust }}" = "true" ] \
+            || [ "${{ steps.filter.outputs.frontend }}" = "true" ]; then
+            run=true
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "e2e changes: run=$run"
+
   real-ui-e2e:
     name: Real-UI E2E — ${{ matrix.os }}
+    needs: changes
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # macOS is best-effort (see header comment): a runner-side
+    # tauri-plugin-webdriver connectivity issue, not a per-PR regression.
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -65,7 +135,7 @@ jobs:
       # Tauri needs system webview/GTK libs to build on Linux.
       # No webkit2gtk-driver — the plugin replaces the external driver.
       - name: Install Tauri Linux system deps
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && needs.changes.outputs.run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -74,34 +144,42 @@ jobs:
             xvfb
 
       - uses: dtolnay/rust-toolchain@stable
+        if: needs.changes.outputs.run == 'true'
 
       - uses: Swatinem/rust-cache@v2
+        if: needs.changes.outputs.run == 'true'
         with:
           shared-key: "rust-e2e-${{ matrix.os }}"
           cache-on-failure: true
 
       - uses: taiki-e/install-action@nextest
+        if: needs.changes.outputs.run == 'true'
 
       # Install the tauri-webdriver CLI proxy.
       # It bridges W3C client (:4444) → plugin embedded server (:4445).
       - name: Install tauri-webdriver CLI
+        if: needs.changes.outputs.run == 'true'
         run: cargo install tauri-webdriver --locked
 
       - uses: pnpm/action-setup@v4
+        if: needs.changes.outputs.run == 'true'
         with:
           version: 10.33.0
 
       - uses: actions/setup-node@v4
+        if: needs.changes.outputs.run == 'true'
         with:
           node-version: 20
           cache: pnpm
 
       - name: Install JS deps
+        if: needs.changes.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
       # Build the frontend with VITE_E2E=1 so CI-only typeable path inputs are
       # enabled (the native folder picker cannot be driven by WebDriver).
       - name: Build frontend (VITE_E2E)
+        if: needs.changes.outputs.run == 'true'
         env:
           VITE_E2E: "1"
         run: pnpm --filter @astro-plan/desktop build
@@ -109,20 +187,22 @@ jobs:
       # Serve built dist on :5173 in the background. The app binary reads the
       # Tauri devUrl (:5173) and loads its frontend from there — real IPC.
       - name: Serve frontend dist on :5173
+        if: needs.changes.outputs.run == 'true'
         shell: bash
         run: pnpm --filter @astro-plan/desktop preview --port 5173 &
 
       # Build the app binary WITH the embedded plugin so tauri-webdriver can
       # connect. The `e2e` feature MUST be absent from release builds.
       - name: Build desktop_shell with e2e feature
+        if: needs.changes.outputs.run == 'true'
         run: cargo build -p desktop_shell --features e2e
 
       # Run the Layer-2 harness (real journeys, serial per .config/nextest.toml).
       # Linux wraps in xvfb-run for a headless display; Windows/macOS run natively.
       - name: Run E2E (Linux — xvfb)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && needs.changes.outputs.run == 'true'
         run: xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
 
       - name: Run E2E (Windows / macOS)
-        if: runner.os != 'Linux'
+        if: runner.os != 'Linux' && needs.changes.outputs.run == 'true'
         run: cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn

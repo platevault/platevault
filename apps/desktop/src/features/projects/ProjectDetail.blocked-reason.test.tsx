@@ -38,6 +38,16 @@ vi.mock('@/shared/toast', () => ({
   addToast: vi.fn(),
 }));
 
+// Archive plan generation + review overlay have dedicated coverage in
+// ProjectDetail.archive-plan.test.tsx; stub them here so this file's
+// unrelated assertions don't need a QueryClientProvider.
+vi.mock('@/features/archive/store', () => ({
+  useGenerateArchivePlan: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+vi.mock('@/features/plans/PlanReviewOverlay', () => ({
+  PlanReviewOverlay: () => null,
+}));
+
 import { ProjectDetailContent } from './ProjectDetail';
 import * as store from './store';
 import type { ProjectDetailDto } from '@/bindings/index';

@@ -54,6 +54,10 @@ pub(crate) enum ValidationRule {
     /// `twilight`/`minHorizonAltDeg` in range, plus optional `elevationM`; site
     /// ids must be unique.
     ObserverSites,
+    /// Per-band Moon-avoidance parameters (spec 047 `plannerMoonAvoidance`):
+    /// JSON object with exactly the seven fixed band keys, each
+    /// `{ distanceDeg ∈ [0,180], widthDays ∈ [0.5,30] }`.
+    MoonAvoidanceBands,
     /// `devMode`: rejected entirely unless the `dev-tools` feature is enabled.
     DevMode,
 }
@@ -293,6 +297,13 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
             want_msg: "must be in [0, 90]",
         },
     },
+    // ── Target planner (spec 047 FR-010) ─────────────────────────────────
+    Descriptor {
+        key: "plannerMoonAvoidance",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::MoonAvoidanceBands,
+    },
 ];
 
 /// Look up the descriptor for a stable key, if any.
@@ -390,6 +401,43 @@ pub(crate) fn check_rule(
             }
         }
         ValidationRule::ObserverSites => check_observer_sites(value, invalid)?,
+        ValidationRule::MoonAvoidanceBands => {
+            const BANDS: [&str; 7] = ["L", "R", "G", "B", "Ha", "SII", "OIII"];
+            let obj = value.as_object().ok_or_else(|| invalid("must be an object"))?;
+            // Reject unknown/extra keys.
+            for key in obj.keys() {
+                if !BANDS.contains(&key.as_str()) {
+                    return Err(invalid(&format!("unknown band key: {key}")));
+                }
+            }
+            // Require exactly the seven bands, each with valid ranges.
+            for band in BANDS {
+                let entry =
+                    obj.get(band).ok_or_else(|| invalid(&format!("missing band: {band}")))?;
+                let band_obj = entry
+                    .as_object()
+                    .ok_or_else(|| invalid(&format!("{band} must be an object")))?;
+                for extra in band_obj.keys() {
+                    if extra != "distanceDeg" && extra != "widthDays" {
+                        return Err(invalid(&format!("{band}.{extra} is not allowed")));
+                    }
+                }
+                let distance = band_obj
+                    .get("distanceDeg")
+                    .and_then(serde_json::Value::as_f64)
+                    .ok_or_else(|| invalid(&format!("{band}.distanceDeg must be a number")))?;
+                if !(0.0..=180.0).contains(&distance) {
+                    return Err(invalid(&format!("{band}.distanceDeg must be in [0, 180]")));
+                }
+                let width = band_obj
+                    .get("widthDays")
+                    .and_then(serde_json::Value::as_f64)
+                    .ok_or_else(|| invalid(&format!("{band}.widthDays must be a number")))?;
+                if !(0.5..=30.0).contains(&width) {
+                    return Err(invalid(&format!("{band}.widthDays must be in [0.5, 30]")));
+                }
+            }
+        }
         ValidationRule::DevMode => {
             // In release builds (without dev-tools feature), devMode is always false.
             #[cfg(not(feature = "dev-tools"))]

@@ -16,6 +16,7 @@ import type {
   AuditEntry,
   ArchiveSendToTrashResponse,
   ArchivePermanentlyDeleteResponse,
+  GenerateArchivePlanResult,
 } from '@/bindings/index';
 
 // Local IPC helpers — mirror the `unwrap()` pattern used by projects/store.ts.
@@ -38,6 +39,10 @@ async function sendToTrash(planId: string): Promise<ArchiveSendToTrashResponse> 
 
 async function permanentlyDelete(planId: string): Promise<ArchivePermanentlyDeleteResponse> {
   return unwrap(await commands.archivePermanentlyDelete(planId, 'DELETE'));
+}
+
+async function generateArchivePlan(projectId: string): Promise<GenerateArchivePlanResult> {
+  return unwrap(await commands.archivePlanGenerate(projectId, null));
 }
 
 // Query state shape (matches the projects/store.ts QueryState<T> surface).
@@ -94,5 +99,17 @@ export function usePermanentlyDelete() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.archive.list() });
     },
+  });
+}
+
+/**
+ * Materialise a reviewable whole-project archive plan (spec 017 US2/WP-B).
+ * The ONLY UI entry point that calls `archive.plan.generate` — previously
+ * the completed→archived lifecycle transition dead-ended on a "create or
+ * approve a plan first" toast with no route to actually create one.
+ */
+export function useGenerateArchivePlan() {
+  return useMutation<GenerateArchivePlanResult, Error, string>({
+    mutationFn: generateArchivePlan,
   });
 }

@@ -2,8 +2,11 @@ default:
     @just --list
 
 # Run Rust workspace tests and package tests when present.
+# cargo-nextest runs the unit/integration suite (faster, per-test output);
+# `cargo test --doc` runs doctests, which nextest does not execute.
 test:
-    cargo test --workspace
+    cargo nextest run --workspace
+    cargo test --workspace --doc
     pnpm -r --if-present test
 
 # Lint and format
@@ -93,7 +96,8 @@ speckit-status:
 
 # Run all Rust workspace tests (integration layer).
 test-integration:
-    cargo test --workspace
+    cargo nextest run --workspace
+    cargo test --workspace --doc
 
 # Run end-to-end tests against the real Tauri backend.
 test-e2e:
