@@ -1,106 +1,141 @@
 /**
- * planner-altitude.test.ts — per-row tonight-altitude PLACEHOLDER (tasks
- * #84/#85, spec 044; Track B boundary per spec 047).
+ * planner-altitude.test.ts — real per-row tonight altitude (spec 044 Track B, T011).
  *
- * The model is a deterministic placeholder (no real ephemeris; Track B/spec
- * 044 owns the real observer-location computation); these tests pin the
- * contract the Planner table relies on: stable per-designation output, a
- * sampled curve, a max altitude, and a usable-visibility flag consistent with
- * the threshold.
+ * Replaces the prior hash-based mock tests (tasks #84/#85) now that
+ * `rowAltitudeFor`/`altitudeFor` compute against the real engine
+ * (`planner-astronomy.ts` + `planner-derive.ts`) for a given site/date.
  *
- * Spec 047 mock retirement (FR-017, SC-004): the former spec 044 §3 mock
- * `mockLunarDistanceDegFor`/`filtersFor`/`MOCK_MOON_PHASE_FRAC` tests have been
- * REMOVED along with the mocks themselves — real lunar distance and filter
- * guidance are now tested in `astro/row-planning.test.ts` and
- * `astro/moon-avoidance.test.ts`.
+ * Moon geometry (real lunar distance + filter guidance) is spec 047 Track A and
+ * is tested in `astro/row-planning.test.ts` and `astro/moon-avoidance.test.ts`,
+ * NOT here — this module owns tonight altitude / imaging time only.
+ *
+ * T013 edge cases: a target with no RA/Dec, and no active site, each degrade
+ * to zero/not-visible with no thrown error.
  */
 
 import { describe, it, expect } from 'vitest';
 import type { TargetListItem } from '@/bindings/index';
-import { rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
+import { rowAltitudeFor, altitudeFor, USABLE_ALT_DEG } from './planner-altitude';
+import type { ObserverSite } from './observing-sites/observer-site';
 
-function item(primaryDesignation: string, overrides: Partial<TargetListItem> = {}): TargetListItem {
+const AMSTERDAM: ObserverSite = {
+  id: 'site-ams',
+  name: 'Amsterdam',
+  latitudeDeg: 52.37,
+  longitudeDeg: 4.9,
+  elevationM: 0,
+  timezone: 'Europe/Amsterdam',
+  twilight: 'astronomical',
+  minHorizonAltDeg: 0,
+};
+
+const WINTER_NIGHT_MS = Date.UTC(2026, 0, 15, 12, 0, 0);
+
+function item(
+  id: string,
+  raDeg: number | null,
+  decDeg: number | null,
+  overrides: Partial<TargetListItem> = {},
+): TargetListItem {
   return {
-    id: primaryDesignation,
-    effectiveLabel: primaryDesignation,
-    primaryDesignation,
+    id,
+    effectiveLabel: id,
+    primaryDesignation: id,
     objectType: 'other',
-    raDeg: 0,
-    decDeg: 0,
+    raDeg,
+    decDeg,
     aliases: [],
     ...overrides,
   };
 }
 
-describe('planner-altitude (MOCK)', () => {
-  it('is deterministic for the same designation', () => {
-    const a = rowAltitudeFor(item('NGC 7000'));
-    const b = rowAltitudeFor(item('NGC 7000'));
+describe('rowAltitudeFor (real engine)', () => {
+  it('is deterministic for the same target/site/date', () => {
+    const t = item('NGC 7000', 313, 44);
+    const a = rowAltitudeFor(t, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
+    const b = rowAltitudeFor(t, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
     expect(a.maxAltDeg).toBe(b.maxAltDeg);
     expect(a.visibleTonight).toBe(b.visibleTonight);
     expect(a.points.map((p) => p.altDeg)).toEqual(b.points.map((p) => p.altDeg));
   });
 
-  it('produces different curves for different designations', () => {
-    const a = rowAltitudeFor(item('M 31'));
-    const b = rowAltitudeFor(item('IC 1396'));
-    // Hash-derived pseudo-dec should differ → different peak altitudes.
+  it('produces different peak altitudes for targets in different parts of the sky', () => {
+    const a = rowAltitudeFor(item('a', 0, 60), USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
+    const b = rowAltitudeFor(item('b', 0, -80), USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
     expect(a.maxAltDeg).not.toBe(b.maxAltDeg);
   });
 
   it('samples a non-empty curve and a max altitude that matches the samples', () => {
-    const r = rowAltitudeFor(item('M 42'));
+    const r = rowAltitudeFor(item('M 42', 83.8, -5.4), USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
     expect(r.points.length).toBeGreaterThan(0);
     const sampledMax = Math.max(...r.points.map((p) => p.altDeg));
     expect(r.maxAltDeg).toBeCloseTo(sampledMax, 6);
   });
 
   it('visibleTonight agrees with the usable-altitude threshold', () => {
-    const r = rowAltitudeFor(item('NGC 891'));
+    const r = rowAltitudeFor(item('NGC 891', 35.6, 42.3), USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
     expect(r.visibleTonight).toBe(r.maxAltDeg >= USABLE_ALT_DEG);
   });
 
-  it('reports hours-above-usable as non-negative and bounded by the night', () => {
-    const r = rowAltitudeFor(item('Sh2-155'));
+  it('reports hours-above-usable as non-negative and bounded by a night', () => {
+    const r = rowAltitudeFor(item('Sh2-155', 337.2, 62.6), USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
     expect(r.hoursAboveUsable).toBeGreaterThanOrEqual(0);
-    expect(r.hoursAboveUsable).toBeLessThanOrEqual(12);
-  });
-
-  it('falls back to effectiveLabel/id when primaryDesignation is empty', () => {
-    const r = rowAltitudeFor(item('', { id: 'x', effectiveLabel: 'M 13' }));
-    expect(Number.isFinite(r.maxAltDeg)).toBe(true);
-  });
-});
-
-// ── rowAltitudeFor — usableAltDeg param ────────────────────────────────────────
-
-describe('rowAltitudeFor — usableAltDeg threshold', () => {
-  it('default threshold equals explicit USABLE_ALT_DEG', () => {
-    const t = item('M 42');
-    const dflt = rowAltitudeFor(t);
-    const expl = rowAltitudeFor(t, USABLE_ALT_DEG);
-    expect(dflt.hoursAboveUsable).toBe(expl.hoursAboveUsable);
-    expect(dflt.visibleTonight).toBe(expl.visibleTonight);
+    expect(r.hoursAboveUsable).toBeLessThanOrEqual(16);
   });
 
   it('lower threshold yields same or more imaging time', () => {
-    const t = item('NGC 1234');
-    const high = rowAltitudeFor(t, 30);
-    const low = rowAltitudeFor(t, 5);
+    const t = item('NGC 1234', 47.5, 25.9);
+    const high = rowAltitudeFor(t, 30, AMSTERDAM, WINTER_NIGHT_MS);
+    const low = rowAltitudeFor(t, 5, AMSTERDAM, WINTER_NIGHT_MS);
     expect(low.hoursAboveUsable).toBeGreaterThanOrEqual(high.hoursAboveUsable);
   });
 
-  it('threshold 0° makes every target visible', () => {
-    for (const desig of ['M 31', 'NGC 7000', 'IC 342']) {
-      expect(rowAltitudeFor(item(desig), 0).visibleTonight).toBe(true);
-    }
+  it('threshold 0° makes a circumpolar target visible', () => {
+    const r = rowAltitudeFor(item('circumpolar', 0, 85), 0, AMSTERDAM, WINTER_NIGHT_MS);
+    expect(r.visibleTonight).toBe(true);
   });
 
   it('threshold 89° makes most targets invisible', () => {
     let hiddenCount = 0;
-    for (const desig of ['M 31', 'NGC 7000', 'IC 342', 'Sh2-155', 'M 42']) {
-      if (!rowAltitudeFor(item(desig), 89).visibleTonight) hiddenCount++;
+    const decs = [60, 44, -5.4, 42.3, 62.6];
+    for (const dec of decs) {
+      if (!rowAltitudeFor(item('x', 0, dec), 89, AMSTERDAM, WINTER_NIGHT_MS).visibleTonight) {
+        hiddenCount++;
+      }
     }
     expect(hiddenCount).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ── T013: degrade states (no throw) ──────────────────────────────────────────
+
+describe('altitudeFor / rowAltitudeFor — T013 degrade states', () => {
+  it('a target with no RA/Dec reports needsCoordinates, zero/not-visible, no throw', () => {
+    expect(() =>
+      altitudeFor({ id: 'no-coords', raDeg: null, decDeg: null }, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS),
+    ).not.toThrow();
+    const r = altitudeFor({ id: 'no-coords', raDeg: null, decDeg: null }, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
+    expect(r.needsCoordinates).toBe(true);
+    expect(r.needsSite).toBe(false);
+    expect(r.visibleTonight).toBe(false);
+    expect(r.hoursAboveUsable).toBe(0);
+    expect(r.points).toEqual([]);
+  });
+
+  it('a target with only RA missing still degrades cleanly', () => {
+    const r = altitudeFor({ id: 'x', raDeg: null, decDeg: 40 }, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
+    expect(r.needsCoordinates).toBe(true);
+    expect(r.visibleTonight).toBe(false);
+  });
+
+  it('no active site reports needsSite, zero/not-visible, no throw', () => {
+    expect(() =>
+      altitudeFor({ id: 'x', raDeg: 100, decDeg: 30 }, USABLE_ALT_DEG, null, WINTER_NIGHT_MS),
+    ).not.toThrow();
+    const r = altitudeFor({ id: 'x', raDeg: 100, decDeg: 30 }, USABLE_ALT_DEG, null, WINTER_NIGHT_MS);
+    expect(r.needsSite).toBe(true);
+    expect(r.needsCoordinates).toBe(false);
+    expect(r.visibleTonight).toBe(false);
+    expect(r.hoursAboveUsable).toBe(0);
   });
 });

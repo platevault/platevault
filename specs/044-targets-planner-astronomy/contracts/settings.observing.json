@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astro-plan/contracts/settings.observing.json",
+  "title": "settings.observing keys (spec 044 Track B)",
+  "description": "Value sub-schemas for the observing-site settings keys this feature adds to the spec-018 settings store. These keys extend the `settings.get` / `settings.update` key set (see specs/018-settings-configuration-model/contracts/); NO new Tauri command is introduced. Astronomy computation runs in the frontend and is non-persisted, so it has no contract surface (ADR-0001).",
+  "type": "object",
+  "$comment": "Register these keys in the settings key enum (dotted-key convention, cf. target_lookup.active_catalogs) and add each value sub-schema to settings.state.v1.json.",
+  "properties": {
+    "keys": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "New settings keys and the value each carries.",
+      "properties": {
+        "observing.sites": { "$ref": "#/$defs/ObserverSiteArray" },
+        "observing.default_site_id": { "$ref": "#/$defs/SiteIdOrNull" },
+        "observing.active_site_id": { "$ref": "#/$defs/SiteIdOrNull" },
+        "observing.usable_altitude_deg": { "$ref": "#/$defs/UsableAltitudeDeg" }
+      }
+    }
+  },
+  "$defs": {
+    "ObserverSite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "latitudeDeg", "longitudeDeg", "timezone", "twilight", "minHorizonAltDeg"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Stable, immutable site identity." },
+        "name": { "type": "string", "minLength": 1 },
+        "latitudeDeg": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitudeDeg": { "type": "number", "minimum": -180, "maximum": 180, "description": "East-positive." },
+        "elevationM": { "type": ["number", "null"], "description": "Metres; optional." },
+        "timezone": { "type": "string", "minLength": 1, "description": "IANA timezone id (e.g. Europe/Amsterdam), chosen from a bundled list; no online lookup." },
+        "twilight": { "type": "string", "enum": ["astronomical", "nautical"], "description": "Per-site night definition. astronomical = Sun -18, nautical = Sun -12." },
+        "minHorizonAltDeg": { "type": "number", "minimum": 0, "maximum": 90, "description": "Local-obstruction floor; standard refraction still applied at the true horizon." }
+      }
+    },
+    "ObserverSiteArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ObserverSite" },
+      "default": [],
+      "description": "Named observing-site collection. Empty = no-site state (US6). Site ids MUST be unique."
+    },
+    "SiteIdOrNull": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Must reference an existing ObserverSite.id or be null. At most one default, at most one active; both must stay valid across edits/deletes."
+    },
+    "UsableAltitudeDeg": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 90,
+      "default": 30,
+      "description": "Global lowest-worthwhile altitude. Replaces the localStorage ALTITUDE_THRESHOLD_KEY and the USABLE_ALT_DEG constant."
+    }
+  }
+}

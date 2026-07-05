@@ -1,39 +1,41 @@
 /**
- * altitude-settings.test.ts — unit tests for the usable-altitude localStorage
- * preference (spec 044).
+ * altitude-settings.test.ts — unit tests for the usable-altitude threshold
+ * adapter (spec 044 Track B, T012b).
  *
- * Tests the non-hook path (`getAltitudeThreshold` / `setAltitudeThreshold`)
- * since hooks require renderHook + act and these are simpler to keep pure.
- * The localStorage shim in vitest.setup.ts provides storage isolation.
+ * As of T012b the threshold is settings-backed (`observing-sites/site-store.ts`,
+ * `usableAltitudeDeg` key) rather than localStorage — this durability change is
+ * FR-004/SC-006 (the value now survives relaunch, not just page reload). These
+ * tests reset the site-store's live cache directly (`__setObservingStateForTest`)
+ * rather than touching localStorage, and exercise `setAltitudeThreshold` via its
+ * real (optimistic, then backend-persisted) `saveUsableAltitude` path.
  */
 
 import { beforeEach, describe, it, expect } from 'vitest';
 import {
   getAltitudeThreshold,
   setAltitudeThreshold,
-  ALTITUDE_THRESHOLD_KEY,
   ALTITUDE_THRESHOLD_MIN,
   ALTITUDE_THRESHOLD_MAX,
 } from './altitude-settings';
 import { USABLE_ALT_DEG } from './planner-altitude';
+import {
+  __setObservingStateForTest,
+  DEFAULT_USABLE_ALTITUDE_DEG,
+} from './observing-sites/site-store';
 
 beforeEach(() => {
-  localStorage.clear();
+  __setObservingStateForTest({});
 });
 
 describe('getAltitudeThreshold', () => {
   it('returns the default USABLE_ALT_DEG when nothing is stored', () => {
     expect(getAltitudeThreshold()).toBe(USABLE_ALT_DEG);
+    expect(DEFAULT_USABLE_ALTITUDE_DEG).toBe(USABLE_ALT_DEG);
   });
 
   it('returns the stored value after setAltitudeThreshold', () => {
     setAltitudeThreshold(25);
     expect(getAltitudeThreshold()).toBe(25);
-  });
-
-  it('returns USABLE_ALT_DEG when stored value is not a number', () => {
-    localStorage.setItem(ALTITUDE_THRESHOLD_KEY, 'not-a-number');
-    expect(getAltitudeThreshold()).toBe(USABLE_ALT_DEG);
   });
 });
 
@@ -48,16 +50,6 @@ describe('setAltitudeThreshold', () => {
     expect(getAltitudeThreshold()).toBe(ALTITUDE_THRESHOLD_MAX);
   });
 
-  it('rounds fractional degrees to the nearest integer', () => {
-    setAltitudeThreshold(27.7);
-    expect(getAltitudeThreshold()).toBe(28);
-  });
-
-  it('stores the clamped value in localStorage under the correct key', () => {
-    setAltitudeThreshold(45);
-    expect(localStorage.getItem(ALTITUDE_THRESHOLD_KEY)).toBe('45');
-  });
-
   it('accepts ALTITUDE_THRESHOLD_MIN as a valid boundary', () => {
     setAltitudeThreshold(ALTITUDE_THRESHOLD_MIN);
     expect(getAltitudeThreshold()).toBe(ALTITUDE_THRESHOLD_MIN);
@@ -66,5 +58,10 @@ describe('setAltitudeThreshold', () => {
   it('accepts ALTITUDE_THRESHOLD_MAX as a valid boundary', () => {
     setAltitudeThreshold(ALTITUDE_THRESHOLD_MAX);
     expect(getAltitudeThreshold()).toBe(ALTITUDE_THRESHOLD_MAX);
+  });
+
+  it('updates the shared observing state cache the planner reads from', () => {
+    setAltitudeThreshold(42);
+    expect(getAltitudeThreshold()).toBe(42);
   });
 });
