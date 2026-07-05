@@ -34,8 +34,11 @@ import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { altitudeFor, rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
-import { FilterBadges } from './FilterBadges';
 import { useActiveSite } from './observing-sites/site-store';
+import { GuidanceCell } from './GuidanceCell';
+import { deriveRowMoonPlanning } from './astro/row-planning';
+import type { ObservingNight } from './astro/moon-state';
+import { useGuidanceParams } from './guidance-settings';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,6 +48,12 @@ interface Props {
   item?: TargetListItem | null;
   /** Usable-altitude threshold (from Settings) for img-time / visible-tonight. */
   usableAltDeg?: number;
+  /**
+   * The shared observing night (spec 047), or `null` when no observing site
+   * exists (site gate). Drives the real lunar distance + filter guidance
+   * shown alongside the (still-placeholder) tonight altitude graph.
+   */
+  night?: ObservingNight | null;
 }
 
 type LoadState =
@@ -307,7 +316,8 @@ function AltitudeGraph({ points }: AltitudeGraphProps) {
 
 // ── TargetDetailV2 ────────────────────────────────────────────────────────────
 
-export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_ALT_DEG }: Props) {
+export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_ALT_DEG, night = null }: Props) {
+  const guidanceParams = useGuidanceParams();
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const [aliasInput, setAliasInput] = useState('');
   const [aliasError, setAliasError] = useState<string | null>(null);
@@ -508,11 +518,18 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   // Tonight planner data — shared with the list row (same rowAltitudeFor source
   // so the graph peak and the "Max alt" stat agree). Falls back to a direct
   // real computation from the detail's own RA/Dec when the list item isn't
-  // available (e.g. direct navigation to a target's detail page).
+  // available (e.g. direct navigation to a target's detail page). The altitude/
+  // imaging-time model is real (spec 044 Track B); lunar distance + filter
+  // guidance below are the real spec 047 Track A values from `moon`.
   const rowAlt = item
     ? rowAltitudeFor(item, usableAltDeg, site)
     : altitudeFor({ id: detail.id, raDeg: detail.raDeg, decDeg: detail.decDeg }, usableAltDeg, site);
   const tonightPoints: AltPoint[] = rowAlt.points;
+  const moon = deriveRowMoonPlanning(
+    { raDeg: detail.raDeg, decDeg: detail.decDeg },
+    night,
+    guidanceParams,
+  );
 
   const raDecStr =
     detail.raDeg != null && detail.decDeg != null
@@ -537,14 +554,18 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   // Tonight stats (numeric) — Filters render separately (a component, not a value).
   // No astronomy is possible in the degrade states (T013): no coordinates, or
   // no active observing site (US6/T015) — show nothing rather than 0°/NaN°.
+  // Max alt / imaging time are real (spec 044 Track B); lunar distance is the
+  // real spec 047 value (unknown → "—"), never a fabricated number.
   const tonightAvailable = !rowAlt.needsCoordinates && !rowAlt.needsSite;
   const tonightStats: PropertyDef[] = tonightAvailable
     ? [
         { key: 'maxalt', label: m.targets_col_max_alt(), value: `${Math.round(rowAlt.maxAltDeg)}°` },
         { key: 'imgtime', label: m.targets_col_img_time(), value: `${rowAlt.hoursAboveUsable.toFixed(1)} h` },
-        ...(rowAlt.lunarDistanceDeg != null
-          ? [{ key: 'lunar', label: m.targets_col_lunar(), value: `${Math.round(rowAlt.lunarDistanceDeg)}°` } as PropertyDef]
-          : []),
+        {
+          key: 'lunar',
+          label: m.targets_col_lunar(),
+          value: moon.lunarSeparationDeg != null ? `${Math.round(moon.lunarSeparationDeg)}°` : null,
+        },
       ]
     : [];
 
@@ -622,7 +643,12 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
                   <PropertyTable mode="view" properties={tonightStats} />
                   <div className="alm-planner__tonight-filters">
                     <span className="alm-planner__tonight-filters-label">{m.common_filters()}</span>
-                    <FilterBadges recommendation={rowAlt.filters} />
+                    <GuidanceCell
+                      night={night}
+                      moon={moon}
+                      params={guidanceParams}
+                      targetLabel={detail.effectiveLabel}
+                    />
                   </div>
                 </>
               )}

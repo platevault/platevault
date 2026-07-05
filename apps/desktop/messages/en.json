@@ -213,7 +213,9 @@
   "err_filters_invalid": "Those file filters aren't valid.",
   "err_firstrun_incomplete": "Finish the initial setup before using this feature.",
   "err_format_unsupported": "That export format isn't supported.",
+  "err_frame_not_found": "That frame could not be found.",
   "err_generic_fallback": "Something went wrong. Please try again.",
+  "err_hash_mismatch": "That file doesn't match the missing frame, so it wasn't relinked.",
   "err_inbox_destination_root_required": "A destination library is required for this move.",
   "err_inbox_has_open_plan": "This item already has an open plan. Review or cancel it first.",
   "err_inbox_invalid_destination_root": "That destination library isn't valid.",
@@ -277,6 +279,7 @@
   "err_range_invalid": "That date range isn't valid.",
   "err_resolver_endpoint_invalid": "That resolver address isn't valid.",
   "err_root_has_dependents": "This source still has related records (sessions, plan items, or inbox items) and can't be deleted.",
+  "err_root_unavailable": "That library root isn't available right now. Check that its drive is connected.",
   "err_run_not_found": "That run could not be found.",
   "err_run_not_paused": "This run isn't paused.",
   "err_serialise_error": "Couldn't prepare the data for export. Please try again.",
@@ -296,6 +299,11 @@
   "err_view_mixed_kind": "This selection mixes different kinds of items.",
   "err_view_not_found": "That view could not be found.",
   "err_view_unsupported_kind": "This kind of item isn't supported here.",
+  "err_no_selection": "This project has no selected light frames to generate a source view from.",
+  "err_no_link_kind": "No usable link method is available on this filesystem. Allow copying to proceed instead.",
+  "err_destination_collision": "Two sources would end up at the same destination path. Review the layout before retrying.",
+  "err_destination_exists": "A file or folder already exists at the destination — nothing was overwritten.",
+  "err_profile_not_found": "That processing profile could not be found.",
   "inbox_apply_all": "Apply all",
   "inbox_apply_all_plans_aria": "Apply all plans",
   "inbox_apply_manual_overrides_aria": "Apply manual overrides",
@@ -815,6 +823,13 @@
   "settings_planner_altitude_label": "Usable altitude threshold (°)",
   "settings_planner_altitude_title": "ALTITUDE THRESHOLD",
   "settings_planner_altitude_unit": "degrees above horizon",
+  "settings_planner_moon_avoidance_title": "MOON AVOIDANCE (PER BAND)",
+  "settings_planner_moon_avoidance_info": "Per-band Moon-avoidance thresholds that drive the Planner's filter guidance pills tonight. A band is viable when the target's lunar distance is at least Distance ÷ (1 + (Moon age from full ÷ Width)²). Higher distance/width = more Moon-sensitive.",
+  "settings_planner_moon_avoidance_band_col": "Band",
+  "settings_planner_moon_avoidance_distance_col": "Distance at full (°)",
+  "settings_planner_moon_avoidance_width_col": "Half-width (days)",
+  "settings_planner_moon_avoidance_distance_aria": "{band} required separation at full Moon, in degrees",
+  "settings_planner_moon_avoidance_width_aria": "{band} half-width, in days",
   "settings_resolver_catalogues_title": "DEFAULT CATALOGUES",
   "settings_resolver_debounce_label": "Typeahead debounce (ms)",
   "settings_resolver_endpoint_label": "SIMBAD endpoint",
@@ -1064,6 +1079,37 @@
   "targets_page_search_placeholder": "Search targets...",
   "targets_table_approx_max_alt": "Approximate max altitude tonight",
   "targets_table_next_opposition": "Next opposition date",
+  "targets_opposition_unknown_title": "Opposition date unknown — this target has no coordinates.",
+  "targets_opposition_in_days": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "in {count} day",
+        "countPlural=other": "in {count} days"
+      }
+    }
+  ],
+  "targets_opposition_in_months": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "in {count} month",
+        "countPlural=other": "in {count} months"
+      }
+    }
+  ],
   "targets_table_no_match": "No targets match the current filters.",
   "targets_table_target_count": "{count} targets",
   "targets_table_visible_low": "low",
@@ -1118,6 +1164,8 @@
   "projects_toast_reinfer_failed": "Re-infer failed.",
   "projects_toast_dismiss_failed": "Dismiss failed.",
   "projects_toast_plan_required": "A filesystem plan is required before this transition. Create or approve a plan first.",
+  "projects_archive_generate_failed": "Could not generate the archive plan.",
+  "projects_archive_review_title": "Review archive plan",
   "projects_toast_transition_failed": "Transition failed.",
   "projects_toast_transitioned": "Project {state}.",
   "projects_toast_archived_readonly": "This project is archived. Notes cannot be edited.",
@@ -1131,6 +1179,16 @@
   "projects_source_views_regen_unresolved": " ({count} unresolved references — review plan before applying)",
   "projects_source_views_regen_toast": "Regeneration plan created{warning}. Review and apply to rebuild the view.",
   "projects_source_views_regen_failed": "Could not create regeneration plan: {code}",
+  "projects_source_views_generate_btn": "Generate",
+  "projects_source_views_generate_title": "Generate Source View",
+  "projects_source_views_generate_profile_label": "Profile",
+  "projects_source_views_generate_profile_default": "WBPP (default)",
+  "projects_source_views_generate_kind_hint": "Link kind (symlink/hardlink/junction) is resolved automatically from your Source Views settings and this filesystem's capability. Nothing is copied by default.",
+  "projects_source_views_generate_copy_opt_in_label": "Allow copying files if no link is possible on this filesystem",
+  "projects_source_views_generate_submit_btn": "Generate",
+  "projects_source_views_generate_toast": "Generation plan created{warning}. Review and apply to create the view.",
+  "projects_source_views_generate_warning_count": " ({count} warning(s) — review plan before applying)",
+  "projects_source_views_generate_failed": "Could not create generation plan: {code}",
   "projects_source_views_view_plan_btn": "View Plan",
   "projects_manifests_load_body_failed": "Failed to load manifest: {error}",
   "projects_tool_launched": "Launched {tool}",
@@ -1411,9 +1469,37 @@
   "targets_detail_alias_kind_title": "kind: {kind}",
   "targets_detail_alias_remove_aria": "Remove alias {alias}",
   "targets_filters_narrowband_only": "Narrowband only",
-  "targets_filters_broadband_nb": "Broadband + NB",
+  "targets_filters_broadband_nb": "Broadband OK",
   "targets_planner_no_site_banner": "Add an observing site in Settings to see tonight's real altitude, visibility, and imaging time for your targets.",
   "targets_planner_no_site_banner_action": "Add a site",
+  "targets_filters_avoid_tonight": "Avoid tonight",
+  "targets_recommendation_unknown": "Unknown",
+  "targets_filter_badge_viable_aria": "{band}: viable tonight",
+  "targets_filter_badge_not_viable_aria": "{band}: not viable tonight",
+  "targets_guidance_unknown_title": "Filter guidance unavailable — this target has no catalogued coordinates.",
+  "targets_guidance_explain_title": "Why this guidance",
+  "targets_guidance_explain_moon": "Moon tonight: {phase}, {pct}% illuminated, {age} days from full",
+  "targets_guidance_explain_separation": "This target: {deg}° from the Moon tonight",
+  "targets_guidance_explain_band_row": "{band}: needs ≥ {deg}°",
+  "targets_guidance_state_viable": "viable",
+  "targets_guidance_state_not_viable": "not viable",
+  "targets_guidance_explain_unknown": "No catalogued coordinates for this target — filter guidance cannot be computed.",
+  "targets_planner_site_prompt_title": "Set up your observing site",
+  "targets_planner_site_prompt_desc": "Add a default observing location so the planner can compute the Moon, lunar distances, and the best imaging season for tonight.",
+  "targets_moon_phase_new": "New Moon",
+  "targets_moon_phase_waxing_crescent": "Waxing crescent",
+  "targets_moon_phase_first_quarter": "First quarter",
+  "targets_moon_phase_waxing_gibbous": "Waxing gibbous",
+  "targets_moon_phase_full": "Full Moon",
+  "targets_moon_phase_waning_gibbous": "Waning gibbous",
+  "targets_moon_phase_last_quarter": "Last quarter",
+  "targets_moon_phase_waning_crescent": "Waning crescent",
+  "targets_moon_waxing": "waxing",
+  "targets_moon_waning": "waning",
+  "targets_moon_summary_title": "Moon tonight",
+  "targets_moon_illumination": "{pct}% illuminated",
+  "targets_moon_summary_aria": "Moon tonight: {phase}, {pct} percent illuminated, {direction}.",
+  "targets_lunar_unknown_title": "Lunar distance unknown — this target has no coordinates.",
   "targets_catalog_ngc": "NGC",
   "targets_catalog_sharpless": "Sharpless",
   "targets_catalog_lbn": "LBN",
@@ -2094,6 +2180,21 @@
       "match": {
         "pp=one": "{count} file · {size}",
         "pp=other": "{count} files · {size}"
+      }
+    }
+  ],
+  "projects_archive_plan_created_toast": [
+    {
+      "declarations": [
+        "input count",
+        "local pp = count: plural"
+      ],
+      "selectors": [
+        "pp"
+      ],
+      "match": {
+        "pp=one": "Archive plan created with {count} item — review before anything is moved.",
+        "pp=other": "Archive plan created with {count} items — review before anything is moved."
       }
     }
   ],

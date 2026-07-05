@@ -34,7 +34,10 @@ pub async fn start_watcher(
     let mut rx = {
         let mut svc = watcher_service.lock().await;
         let rx = svc.subscribe();
-        svc.start(paths)?;
+        // Constitution: never follow symlinks/junctions unless explicitly
+        // enabled per root (spec 048 T004). Inbox folders are not (yet) a
+        // per-root-configurable surface, so they default to the safe gate.
+        svc.start(paths, false)?;
         rx
     };
 

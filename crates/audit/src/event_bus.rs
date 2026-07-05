@@ -793,3 +793,104 @@ pub struct SettingsMigration {
 }
 
 pub const TOPIC_SETTINGS_MIGRATION: &str = "settings.migration";
+
+// ── Per-frame inventory audit events (spec 048 T007) ─────────────────────────
+//
+// Reconciliation only ever updates records/UI, never files (FR-008/INV-2);
+// these events are records-only and never imply a filesystem mutation.
+// Payload shapes mirror the `Artifact{Missing,Recovered}` precedent above.
+
+/// Payload for the `frame.missing` topic (spec 048 FR-007/FR-009).
+///
+/// Emitted when a reconciliation pass finds that a previously present
+/// `file_record` is no longer at its recorded path.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameMissing {
+    pub frame_id: String,
+    pub root_id: String,
+    pub relative_path: String,
+    /// What triggered the reconcile pass: `on_demand` | `on_open` | `scheduled` | `live_event`.
+    pub reason: String,
+    pub at: String,
+}
+
+pub const TOPIC_FRAME_MISSING: &str = "frame.missing";
+
+/// Payload for the `frame.recovered` topic (spec 048 FR-011).
+///
+/// Emitted when a `missing` frame is found present again at its recorded path.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameRecovered {
+    pub frame_id: String,
+    pub root_id: String,
+    pub relative_path: String,
+    pub at: String,
+}
+
+pub const TOPIC_FRAME_RECOVERED: &str = "frame.recovered";
+
+/// Payload for the `frame.size_backfilled` topic (spec 048 FR-006, T015).
+///
+/// Emitted when a present `file_record` whose `size_bytes` was `0`/unknown is
+/// corrected to the real on-disk size during a reconcile pass.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameSizeBackfilled {
+    pub frame_id: String,
+    pub root_id: String,
+    pub relative_path: String,
+    pub prior_size_bytes: i64,
+    pub size_bytes: i64,
+    pub at: String,
+}
+
+pub const TOPIC_FRAME_SIZE_BACKFILLED: &str = "frame.size_backfilled";
+
+/// Payload for the `frame.relinked` topic (spec 048 FR-012a).
+///
+/// Emitted after a user-initiated relink succeeds (sha256 content hash
+/// confirmed identity, computed on demand for exactly the two files
+/// involved — never eager, never size/mtime).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameRelinked {
+    pub frame_id: String,
+    pub root_id: String,
+    pub from_path: String,
+    pub to_path: String,
+    pub sha256: String,
+    pub at: String,
+}
+
+pub const TOPIC_FRAME_RELINKED: &str = "frame.relinked";
+
+/// Payload for the `calibration_match.source_missing` topic (spec 048 FR-024).
+///
+/// Emitted when a calibration frame referenced by a calibration match is
+/// marked missing. The match is flagged "source missing / unverifiable" —
+/// it is NEVER automatically invalidated or removed.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationMatchSourceMissing {
+    pub match_id: String,
+    pub frame_id: String,
+    pub at: String,
+}
+
+pub const TOPIC_CALIBRATION_MATCH_SOURCE_MISSING: &str = "calibration_match.source_missing";
+
+/// Payload for the `calibration_match.source_recovered` topic (spec 048 FR-025).
+///
+/// Emitted when a previously missing referenced frame returns to present,
+/// clearing the match's "source missing" flag.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationMatchSourceRecovered {
+    pub match_id: String,
+    pub frame_id: String,
+    pub at: String,
+}
+
+pub const TOPIC_CALIBRATION_MATCH_SOURCE_RECOVERED: &str = "calibration_match.source_recovered";

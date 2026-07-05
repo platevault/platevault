@@ -199,8 +199,22 @@ async fn ingest_light_frame(
         return Ok(FrameOutcome::NotLight);
     }
 
-    // Upsert the file record (UNIQUE root_id+relative_path → reuse id).
-    let image_id = upsert_file_record(pool, &item.root_id, &item.relative_path).await?;
+    // Upsert the file record (UNIQUE root_id+relative_path → reuse id) with the
+    // REAL on-disk size (spec 048 FR-001; was `size_bytes = 0`). A stat failure
+    // (file vanished between apply and this read) falls back to 0/now rather
+    // than blocking ingest — reconciliation (spec 048 US2) corrects it later.
+    let (size_bytes, mtime) = crate::frame_writer::stat_frame(&abs_path).unwrap_or_else(|| {
+        (0, OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default())
+    });
+    let image_id = crate::frame_writer::upsert_frame_record(
+        pool,
+        &item.root_id,
+        &item.relative_path,
+        size_bytes,
+        &mtime,
+        "classified",
+    )
+    .await?;
 
     // Associate the FITS OBJECT → canonical target (inline cache hit or pending).
     let object_raw = meta.object.as_deref().unwrap_or("").trim().to_owned();
@@ -242,7 +256,15 @@ async fn ingest_light_frame(
 ///    `library_root` row (same id, `current_path = registered_sources.path`),
 ///    and return that path.
 /// 3. Neither → `None` (caller skips the frame).
-async fn ensure_library_root(
+///
+/// `pub` (spec 048 T012) so calibration-frame apply
+/// (`app_core_inbox::plan_listener`) can resolve the same root path before
+/// writing a `file_record` via `crate::frame_writer`.
+///
+/// # Errors
+///
+/// Returns [`ContractError`] (`internal.database`) on a query/insert failure.
+pub async fn ensure_library_root(
     pool: &SqlitePool,
     root_id: &str,
 ) -> Result<Option<String>, ContractError> {
@@ -282,51 +304,7 @@ async fn ensure_library_root(
     Ok(Some(path))
 }
 
-// ── file_record upsert ──────────────────────────────────────────────────────────
-
-/// Upsert a `file_record` by its UNIQUE `(root_id, relative_path)`, returning
-/// its id. An existing row's id is reused (state bumped to `classified`).
-async fn upsert_file_record(
-    pool: &SqlitePool,
-    root_id: &str,
-    relative_path: &str,
-) -> Result<String, ContractError> {
-    if let Some((id,)) = sqlx::query_as::<_, (String,)>(
-        "SELECT id FROM file_record WHERE root_id = ? AND relative_path = ?",
-    )
-    .bind(root_id)
-    .bind(relative_path)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?
-    {
-        sqlx::query("UPDATE file_record SET state = 'classified', last_seen_at = ? WHERE id = ?")
-            .bind(OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default())
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(db_err)?;
-        return Ok(id);
-    }
-
-    let id = Uuid::new_v4().to_string();
-    let now = OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default();
-    sqlx::query(
-        "INSERT INTO file_record
-            (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at)
-         VALUES (?, ?, ?, 0, ?, 'classified', ?, ?)",
-    )
-    .bind(&id)
-    .bind(root_id)
-    .bind(relative_path)
-    .bind(&now)
-    .bind(&now)
-    .bind(&now)
-    .execute(pool)
-    .await
-    .map_err(db_err)?;
-    Ok(id)
-}
+// ── file_record upsert: see `crate::frame_writer::upsert_frame_record` (spec 048 T002) ──
 
 // ── session_key derivation ────────────────────────────────────────────────────
 

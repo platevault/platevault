@@ -78,6 +78,9 @@ pub mod ingestion;
 // ── Settings schema migration harness (spec 018 US5, T030 / T031) ────────────
 pub mod migrate;
 
+// ── Per-root reconcile/detection configuration (spec 048 T005) ──────────────
+pub mod root_config;
+
 // ── Error mapping ──────────────────────────────────────────────────────────
 //
 // Canonical mappers live in `app_core_errors` (US11 T142). `db_err` now routes
@@ -473,6 +476,21 @@ fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
                 state.usable_altitude_deg = v;
             }
         }
+        "plannerMoonAvoidance" => {
+            if let Ok(v) = serde_json::from_value(value) {
+                state.planner_moon_avoidance = v;
+            }
+        }
+        "sourceViewLinkKindIntraDrive" => {
+            if let Some(v) = value.as_str() {
+                state.source_view_link_kind_intra_drive = v.to_owned();
+            }
+        }
+        "sourceViewLinkKindCrossDrive" => {
+            if let Some(v) = value.as_str() {
+                state.source_view_link_kind_cross_drive = v.to_owned();
+            }
+        }
         _ => {
             // Structured-path keys are not mapped to static SettingsState fields.
             // Use resolve_setting(key, source_id) to read them individually.
@@ -536,6 +554,11 @@ fn default_value_for_key(key: &str) -> Value {
         // Nullable-by-design (no default site until the user/wizard creates one).
         "observingDefaultSiteId" | "observingActiveSiteId" => Value::Null,
         "usableAltitudeDeg" => serde_json::json!(defaults.usable_altitude_deg),
+        "plannerMoonAvoidance" => {
+            serde_json::to_value(&defaults.planner_moon_avoidance).unwrap_or(Value::Null)
+        }
+        "sourceViewLinkKindIntraDrive" => Value::String(defaults.source_view_link_kind_intra_drive),
+        "sourceViewLinkKindCrossDrive" => Value::String(defaults.source_view_link_kind_cross_drive),
         // Structured-path: tools.<id>.bundle_id resolves the seed default
         // when no user override is stored (spec 018 T042).
         _ if is_tools_bundle_id_key(key) => {
@@ -1388,6 +1411,54 @@ mod tests {
     fn validate_value_rejects(#[case] key: &str, #[case] value: Value) {
         let err = validate_value(key, &value).expect_err("expected rejection");
         assert_eq!(err.code, ErrorCode::ValueInvalid, "key {key} value {value}");
+    }
+
+    /// A fully-populated valid `plannerMoonAvoidance` value (all seven bands).
+    fn valid_planner_moon_avoidance() -> Value {
+        default_value_for_key("plannerMoonAvoidance")
+    }
+
+    /// spec 047 T005: `plannerMoonAvoidance` structured-object validation.
+    #[test]
+    fn planner_moon_avoidance_accepts_full_valid_bands() {
+        assert!(validate_value("plannerMoonAvoidance", &valid_planner_moon_avoidance()).is_ok());
+    }
+
+    #[test]
+    fn planner_moon_avoidance_default_is_the_shipped_table() {
+        let v = valid_planner_moon_avoidance();
+        let obj = v.as_object().expect("object");
+        assert_eq!(obj.len(), 7);
+        assert_eq!(obj["L"]["distanceDeg"], serde_json::json!(120.0));
+        assert_eq!(obj["Ha"]["widthDays"], serde_json::json!(7.0));
+        assert_eq!(obj["OIII"]["distanceDeg"], serde_json::json!(110.0));
+    }
+
+    #[rstest]
+    #[case(serde_json::json!("nope"))] // not an object
+    #[case(serde_json::json!({"L": {"distanceDeg": 120.0, "widthDays": 14.0}}))] // missing bands
+    #[case(serde_json::json!({"X": {"distanceDeg": 1.0, "widthDays": 1.0}}))] // unknown band
+    fn planner_moon_avoidance_rejects_shape(#[case] value: Value) {
+        let err = validate_value("plannerMoonAvoidance", &value).expect_err("expected rejection");
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
+    }
+
+    #[test]
+    fn planner_moon_avoidance_rejects_out_of_range() {
+        let mut v = valid_planner_moon_avoidance();
+        v["L"]["distanceDeg"] = serde_json::json!(181.0); // > 180
+        assert!(validate_value("plannerMoonAvoidance", &v).is_err());
+
+        let mut v2 = valid_planner_moon_avoidance();
+        v2["Ha"]["widthDays"] = serde_json::json!(0.1); // < 0.5
+        assert!(validate_value("plannerMoonAvoidance", &v2).is_err());
+    }
+
+    #[test]
+    fn planner_moon_avoidance_rejects_extra_property() {
+        let mut v = valid_planner_moon_avoidance();
+        v["L"]["bogus"] = serde_json::json!(1);
+        assert!(validate_value("plannerMoonAvoidance", &v).is_err());
     }
 
     /// Unknown / unconstrained keys impose no additional value validation.

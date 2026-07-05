@@ -72,6 +72,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "observingActiveSiteId",
             "usableAltitudeDeg",
         ],
+        "planner" => &["plannerMoonAvoidance"],
         // Empty scope or "global" returns every stable key.
         _ => &[
             "logLevel",
@@ -101,6 +102,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "observingDefaultSiteId",
             "observingActiveSiteId",
             "usableAltitudeDeg",
+            "plannerMoonAvoidance",
         ],
     }
 }

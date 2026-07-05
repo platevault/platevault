@@ -5,9 +5,9 @@
  * `rowAltitudeFor`/`altitudeFor` compute against the real engine
  * (`planner-astronomy.ts` + `planner-derive.ts`) for a given site/date.
  *
- * `filtersFor` remains a documented MOCK (US5 scope) and is tested as such.
- * `lunarDistanceDeg` is now REAL (single-instant `AngleBetween`), tested for
- * range/determinism rather than hash-stability.
+ * Moon geometry (real lunar distance + filter guidance) is spec 047 Track A and
+ * is tested in `astro/row-planning.test.ts` and `astro/moon-avoidance.test.ts`,
+ * NOT here — this module owns tonight altitude / imaging time only.
  *
  * T013 edge cases: a target with no RA/Dec, and no active site, each degrade
  * to zero/not-visible with no thrown error.
@@ -15,13 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { TargetListItem } from '@/bindings/index';
-import {
-  rowAltitudeFor,
-  altitudeFor,
-  USABLE_ALT_DEG,
-  MOCK_MOON_PHASE_FRAC,
-  filtersFor,
-} from './planner-altitude';
+import { rowAltitudeFor, altitudeFor, USABLE_ALT_DEG } from './planner-altitude';
 import type { ObserverSite } from './observing-sites/observer-site';
 
 const AMSTERDAM: ObserverSite = {
@@ -113,57 +107,6 @@ describe('rowAltitudeFor (real engine)', () => {
   });
 });
 
-// ── real lunar distance ─────────────────────────────────────────────────────
-
-describe('rowAltitudeFor — real lunar distance', () => {
-  it('attaches lunarDistanceDeg in [0, 180]', () => {
-    const r = rowAltitudeFor(item('M 31', 10.7, 41.3), USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
-    expect(r.lunarDistanceDeg).not.toBeNull();
-    expect(r.lunarDistanceDeg as number).toBeGreaterThanOrEqual(0);
-    expect(r.lunarDistanceDeg as number).toBeLessThanOrEqual(180);
-  });
-
-  it('is deterministic for the same target/site/date', () => {
-    const t = item('IC 342', 56.7, 68.1);
-    expect(rowAltitudeFor(t, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS).lunarDistanceDeg).toBe(
-      rowAltitudeFor(t, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS).lunarDistanceDeg,
-    );
-  });
-});
-
-// ── spec 044: filtersFor (still MOCK — US5 scope) ────────────────────────────
-
-describe('filtersFor (spec 044, NOT astronomy — US5 scope)', () => {
-  it('MOCK_MOON_PHASE_FRAC is documented as bright moon (≥ 0.4)', () => {
-    expect(MOCK_MOON_PHASE_FRAC).toBeGreaterThanOrEqual(0.4);
-  });
-
-  it('recommends narrowband only when target is close (<60°)', () => {
-    const result = filtersFor(30);
-    expect(result.bands).toEqual(['Ha', 'OIII', 'SII']);
-    expect(result.label).toBe('Narrowband only');
-  });
-
-  it('recommends broadband+NB when target is far (≥60°)', () => {
-    const result = filtersFor(90);
-    expect(result.bands).toContain('L');
-    expect(result.bands).toContain('Ha');
-    expect(result.label).toBe('Broadband + NB');
-  });
-
-  it('boundary: distance exactly 60 is not close → broadband+NB', () => {
-    expect(filtersFor(60).label).toBe('Broadband + NB');
-  });
-
-  it('broadband+NB includes exactly L R G B Ha OIII SII', () => {
-    const result = filtersFor(180);
-    expect(result.bands).toHaveLength(7);
-    for (const b of ['L', 'R', 'G', 'B', 'Ha', 'OIII', 'SII']) {
-      expect(result.bands).toContain(b);
-    }
-  });
-});
-
 // ── T013: degrade states (no throw) ──────────────────────────────────────────
 
 describe('altitudeFor / rowAltitudeFor — T013 degrade states', () => {
@@ -194,10 +137,5 @@ describe('altitudeFor / rowAltitudeFor — T013 degrade states', () => {
     expect(r.needsCoordinates).toBe(false);
     expect(r.visibleTonight).toBe(false);
     expect(r.hoursAboveUsable).toBe(0);
-  });
-
-  it('degrade states still return a usable filters recommendation object', () => {
-    const r = altitudeFor({ id: 'x', raDeg: null, decDeg: null }, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
-    expect(r.filters.bands.length).toBeGreaterThan(0);
   });
 });

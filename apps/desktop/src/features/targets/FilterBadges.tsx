@@ -1,55 +1,75 @@
 /**
- * FilterBadges — compact filter-band tag display for the Planner table
- * (spec 044, task "Filters possible" column).
+ * FilterBadges — parameterised per-band Moon-avoidance viability pills for the
+ * Planner table and detail pane (spec 047, plan D4/T016, FR-009a).
  *
- * Renders a `FiltersRecommendation` as a row of small pill-shaped badges.
- * The bands are grouped into broadband (L/R/G/B) and narrowband (Ha/OIII/SII)
- * tiers; each tier renders with a distinct CSS class for colour coding.
- *
- * NOT astronomy — the recommendation is a mock placeholder per spec 044 §3.
- * Replace with real Telescopius-based model when research §5 lands.
+ * ONE shared component (no per-feature clones): renders all seven fixed bands
+ * (L, R, G, B, Ha, SII, OIII) as compact pills, each showing whether that band
+ * is viable tonight given the real Moon-avoidance Lorentzian rule
+ * (`astro/moon-avoidance.ts`), plus the derived summary recommendation label.
+ * `viability === null` (unknown coordinates / no observing night) renders a
+ * single explicit "unknown" state — never a fabricated recommendation.
  */
 
-import type { FilterBand, FiltersRecommendation } from './planner-altitude';
+import { BANDS, bandTier, type Band, type Recommendation } from './astro/moon-avoidance';
+import { m } from '@/lib/i18n';
 
-// ── Band metadata ──────────────────────────────────────────────────────────────
+/** i18n label for each derived recommendation category (render-time thunks). */
+const RECOMMENDATION_LABEL: Record<Recommendation, () => string> = {
+  'broadband-ok': () => m.targets_filters_broadband_nb(),
+  'narrowband-only': () => m.targets_filters_narrowband_only(),
+  'avoid-tonight': () => m.targets_filters_avoid_tonight(),
+  unknown: () => m.targets_recommendation_unknown(),
+};
 
-/** Broadband bands (LRGB). */
-const BROADBAND_BANDS: FilterBand[] = ['L', 'R', 'G', 'B'];
-/** Narrowband bands (Ha/OIII/SII). */
-const NARROWBAND_BANDS: FilterBand[] = ['Ha', 'OIII', 'SII'];
-
-function bandTier(band: FilterBand): 'broadband' | 'narrowband' {
-  return BROADBAND_BANDS.includes(band) ? 'broadband' : 'narrowband';
+/** Human label for a recommendation category. */
+export function recommendationLabel(recommendation: Recommendation): string {
+  return RECOMMENDATION_LABEL[recommendation]();
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
-
 interface Props {
-  recommendation: FiltersRecommendation;
+  /** Per-band viability tonight, or `null` when coordinates/night are unknown. */
+  viability: Record<Band, boolean> | null;
+  /** Derived summary recommendation ('unknown' whenever `viability` is null). */
+  recommendation: Recommendation;
 }
 
 /**
- * Render a compact set of filter-band badges for a Planner table row.
- * Broadband badges use the `--bb` modifier; narrowband use `--nb`.
+ * Render the seven-band viability pill strip + the derived recommendation
+ * label. Unknown state renders a single muted pill instead of fabricating
+ * per-band viability.
  */
-export function FilterBadges({ recommendation }: Props) {
-  const { bands, label } = recommendation;
+export function FilterBadges({ viability, recommendation }: Props) {
+  const label = recommendationLabel(recommendation);
 
-  // Preserve canonical display order (LRGB first, then Ha/OIII/SII).
-  const ordered = [...BROADBAND_BANDS, ...NARROWBAND_BANDS].filter((b) => bands.includes(b));
+  if (viability === null) {
+    return (
+      <span className="alm-filter-badges" title={label}>
+        <span className="alm-filter-badge alm-filter-badge--unknown">{label}</span>
+      </span>
+    );
+  }
 
   return (
     <span className="alm-filter-badges" title={label}>
-      {ordered.map((band) => (
-        <span
-          key={band}
-          className={`alm-filter-badge alm-filter-badge--${bandTier(band)}`}
-          aria-label={band}
-        >
-          {band}
-        </span>
-      ))}
+      {BANDS.map((band) => {
+        const viable = viability[band];
+        return (
+          <span
+            key={band}
+            className={
+              `alm-filter-badge alm-filter-badge--${bandTier(band)}` +
+              (viable ? ' alm-filter-badge--viable' : ' alm-filter-badge--not-viable')
+            }
+            aria-label={
+              viable
+                ? m.targets_filter_badge_viable_aria({ band })
+                : m.targets_filter_badge_not_viable_aria({ band })
+            }
+          >
+            {band}
+          </span>
+        );
+      })}
     </span>
   );
 }

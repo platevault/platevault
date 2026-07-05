@@ -80,6 +80,12 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   "view.mixed_kind": m.err_view_mixed_kind,
   "view.not_found": m.err_view_not_found,
   "view.unsupported_kind": m.err_view_unsupported_kind,
+  // spec 049 — source view generation.
+  "no_selection": m.err_no_selection,
+  "no_link_kind": m.err_no_link_kind,
+  "destination.collision": m.err_destination_collision,
+  "destination.exists": m.err_destination_exists,
+  "profile.not_found": m.err_profile_not_found,
   // Same user-facing meaning as target.not_found — share one catalog key (no
   // duplicated catalog values; spec 046 FR-013).
   "canonical_target.not_found": m.err_target_not_found,
@@ -117,6 +123,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   "database.error": m.err_database_error,
   "serialise.error": m.err_serialise_error,
   "io.error": m.err_io_error,
+  // Per-frame inventory (spec 048).
+  "root.unavailable": m.err_root_unavailable,
+  "hash.mismatch": m.err_hash_mismatch,
+  "frame.not_found": m.err_frame_not_found,
   // The generic wrap code maps to the shared generic fallback message (no
   // duplicated catalog values; spec 046 FR-013).
   "internal.error": m.err_generic_fallback,

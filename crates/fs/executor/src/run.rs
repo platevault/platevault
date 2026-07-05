@@ -32,6 +32,7 @@ use crate::ops::archive_op;
 use crate::ops::cas_check::{check_cas, CasSnapshot};
 use crate::ops::catalogue_op;
 use crate::ops::delete_op;
+use crate::ops::link_op;
 use crate::ops::mkdir_op;
 use crate::ops::move_op;
 use crate::ops::path_gate;
@@ -167,7 +168,12 @@ pub enum ExecutorItemAction {
     /// exists; a non-directory entry at the destination fails with
     /// `conflict.destination_exists` (constitution §II: never overwrite).
     Mkdir,
-    /// RecordOnly / WriteManifest / Link / Junction — no FS mutation; mark succeeded.
+    /// Create a real link (or, with `Materialization::Copy`, a real copy) from
+    /// source to destination (spec 049 — source view generation).
+    Link {
+        kind: domain_core::source_view::Materialization,
+    },
+    /// RecordOnly / WriteManifest — no FS mutation; mark succeeded.
     NoOp,
 }
 
@@ -610,6 +616,13 @@ fn execute_item(item: &ExecutorItem) -> Result<(), OpError> {
         ExecutorItemAction::Mkdir => {
             let dst = require_resolved_path(resolved_dst.as_deref(), "destination")?;
             mkdir_op::make_dir(dst).map_err(|f| (f, false, RollbackOutcome::NotApplicable, None))
+        }
+
+        ExecutorItemAction::Link { kind } => {
+            let src = require_resolved_path(resolved_src.as_deref(), "source")?;
+            let dst = require_resolved_path(resolved_dst.as_deref(), "destination")?;
+            link_op::create_link(src, dst, *kind)
+                .map_err(|f| (f, false, RollbackOutcome::NotApplicable, None))
         }
     }
 }

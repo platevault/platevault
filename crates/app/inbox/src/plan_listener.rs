@@ -208,13 +208,50 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
     let session_key =
         format!("{}-{}", cal_kind, item.master_frame_type.as_deref().unwrap_or("unknown"));
 
+    // spec 048 US1/T012: write a `file_record` for the applied master frame
+    // (real on-disk size, via the shared writer) and reference it in
+    // `frame_ids` instead of the historical `'[]'` placeholder. A resolution
+    // failure (destination path not found / stat failure) is logged and
+    // leaves `frame_ids` empty — never blocks master registration.
+    let frame_id = match resolve_applied_frame_path(pool, plan_id).await {
+        Ok(Some((root_id, relative_path))) => {
+            match write_calibration_frame_record(pool, &root_id, &relative_path).await {
+                Ok(id) => Some(id),
+                Err(e) => {
+                    tracing::warn!(
+                        plan_id,
+                        "inbox plan_listener: failed to write calibration file_record: {e}"
+                    );
+                    None
+                }
+            }
+        }
+        Ok(None) => {
+            tracing::warn!(
+                plan_id,
+                "inbox plan_listener: no applied path found for master item; frame_ids empty"
+            );
+            None
+        }
+        Err(e) => {
+            tracing::warn!(plan_id, "inbox plan_listener: resolve applied frame path failed: {e}");
+            None
+        }
+    };
+    let frame_ids_json = match &frame_id {
+        Some(id) => serde_json::to_string(std::slice::from_ref(id))
+            .map_err(|e| format!("serialize frame_ids: {e}"))?,
+        None => "[]".to_owned(),
+    };
+
     sqlx::query(
         "INSERT INTO calibration_session
             (id, session_key, frame_ids, kind, created_at, source_inbox_item_id)
-         VALUES (?, ?, '[]', ?, datetime('now'), ?)",
+         VALUES (?, ?, ?, ?, datetime('now'), ?)",
     )
     .bind(&session_id)
     .bind(&session_key)
+    .bind(&frame_ids_json)
     .bind(cal_kind)
     .bind(&item.id)
     .execute(pool)
@@ -242,6 +279,72 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
     );
 
     Ok(())
+}
+
+/// Resolve the applied destination `(root_id, relative_path)` for a plan's
+/// first successful move/catalogue item (spec 048 T012). Master items are a
+/// single stacked file, so a plan applying one has exactly one such item;
+/// catalogue-in-place items carry no `to_root_id`, so the source
+/// (`from_root_id`/`from_relative_path`) is used, matching
+/// `app_core_targets::ingest_sessions`' resolution order (T013: moved and
+/// catalogued frames are recorded identically).
+async fn resolve_applied_frame_path(
+    pool: &SqlitePool,
+    plan_id: &str,
+) -> Result<Option<(String, String)>, String> {
+    let row: Option<(Option<String>, String, Option<String>, String)> = sqlx::query_as(
+        "SELECT to_root_id, to_relative_path, from_root_id, from_relative_path
+         FROM plan_items
+         WHERE plan_id = ?
+           AND action IN ('move', 'catalogue')
+           AND item_state = 'succeeded'
+         ORDER BY item_index ASC
+         LIMIT 1",
+    )
+    .bind(plan_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("query plan_items: {e}"))?;
+
+    let Some((to_root_id, to_rel, from_root_id, from_rel)) = row else {
+        return Ok(None);
+    };
+    Ok(match (to_root_id, from_root_id) {
+        (Some(r), _) if !to_rel.is_empty() => Some((r, to_rel)),
+        (_, Some(r)) => Some((r, from_rel)),
+        _ => None,
+    })
+}
+
+/// Write the calibration master's `file_record` with its real on-disk size
+/// (spec 048 T012), reusing the shared writer (`crate::frame_writer` via
+/// `app_core_targets`, T002). Resolves `root_id` the same way light-frame
+/// ingest does (`registered_sources` mirrored into `library_root`) so the
+/// `file_record.root_id` FK holds.
+async fn write_calibration_frame_record(
+    pool: &SqlitePool,
+    root_id: &str,
+    relative_path: &str,
+) -> Result<String, String> {
+    let root_path = app_core_targets::ingest_sessions::ensure_library_root(pool, root_id)
+        .await
+        .map_err(|e| format!("ensure_library_root: {e:?}"))?
+        .ok_or_else(|| format!("root {root_id} not resolvable to a library_root"))?;
+
+    let abs_path = std::path::Path::new(&root_path).join(relative_path);
+    let (size_bytes, mtime) = app_core_targets::frame_writer::stat_frame(&abs_path)
+        .ok_or_else(|| format!("stat failed for {}", abs_path.display()))?;
+
+    app_core_targets::frame_writer::upsert_frame_record(
+        pool,
+        root_id,
+        relative_path,
+        size_bytes,
+        &mtime,
+        "classified",
+    )
+    .await
+    .map_err(|e| format!("upsert_frame_record: {e:?}"))
 }
 
 /// Called when a plan is discarded (any state → discarded).
@@ -430,5 +533,152 @@ mod tests {
 
         let item = inbox_repo::get_inbox_item(db.pool(), "item-t3").await.unwrap();
         assert_eq!(item.state, "classified");
+    }
+
+    // ── spec 048 US1/T012: calibration master frame_ids population ─────────────
+
+    /// Set up a real-file, applied (`item_state='succeeded'`) master-item plan
+    /// linked to `item_id`/`plan_id`, with the master file written under
+    /// `tmp`/`rel` at `size` bytes. Returns `(root_id, rel)`.
+    async fn setup_master_item_plan(
+        db: &Database,
+        tmp: &std::path::Path,
+        item_id: &str,
+        plan_id: &str,
+        size: usize,
+    ) -> (&'static str, &'static str) {
+        let root_id = "cal-root";
+        let rel = "master_dark.fits";
+        std::fs::write(tmp.join(rel), vec![0u8; size]).unwrap();
+
+        sqlx::query(
+            "INSERT INTO registered_sources (id, kind, path, scan_depth, created_at, created_via)
+             VALUES (?, 'calibration', ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run')",
+        )
+        .bind(root_id)
+        .bind(tmp.to_str().unwrap())
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        inbox_repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id,
+                relative_path: rel,
+                file_count: 1,
+                content_signature: Some("sig"),
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE inbox_items SET is_master_item = 1, master_frame_type = 'dark' WHERE id = ?",
+        )
+        .bind(item_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+        inbox_repo::update_inbox_item_state(db.pool(), item_id, "plan_open").await.unwrap();
+
+        plans::insert_plan(
+            db.pool(),
+            &plans::InsertPlan {
+                id: plan_id,
+                title: "Master apply",
+                origin: "inbox",
+                origin_path: None,
+                plan_type: "split",
+                destructive_destination: "archive",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+        )
+        .await
+        .unwrap();
+        plans::insert_plan_item(
+            db.pool(),
+            &plans::InsertPlanItem {
+                id: "master-plan-1-item-0",
+                plan_id,
+                item_index: 0,
+                name: "[DARK MASTER] master_dark.fits",
+                action: "catalogue",
+                from_root_id: Some(root_id),
+                from_relative_path: rel,
+                to_root_id: Some(root_id),
+                to_relative_path: rel,
+                reason: "inbox_master",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: None,
+                source_id: None,
+                category: None,
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE plan_items SET item_state = 'succeeded' WHERE plan_id = ?")
+            .bind(plan_id)
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        inbox_repo::insert_plan_link(db.pool(), item_id, plan_id).await.unwrap();
+        (root_id, rel)
+    }
+
+    /// A completed master-item plan must write a real-sized `file_record` for
+    /// the applied master file and reference it in `calibration_session.
+    /// frame_ids`, replacing the historical `'[]'` placeholder.
+    #[tokio::test]
+    async fn master_item_apply_writes_frame_record_and_frame_ids() {
+        let db = test_db().await;
+        let bus = make_bus(&db);
+        let tmp = tempfile::tempdir().unwrap();
+        let item_id = "master-item-1";
+        let plan_id = "master-plan-1";
+        let size: usize = 4096;
+        let (root_id, rel) = setup_master_item_plan(&db, tmp.path(), item_id, plan_id, size).await;
+
+        start_inbox_plan_listener(db.pool().clone(), &bus);
+
+        let payload = PlanApplyingCompleted {
+            plan_id: plan_id.to_owned(),
+            run_id: "run-master-1".to_owned(),
+            terminal_state: "applied".to_owned(),
+            items_applied: 1,
+            items_failed: 0,
+            items_skipped: 0,
+            items_cancelled: 0,
+            at: "2026-07-04T00:00:00Z".to_owned(),
+        };
+        bus.publish(TOPIC_PLAN_APPLYING_COMPLETED, Source::System, payload).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let (frame_ids_json,): (String,) = sqlx::query_as(
+            "SELECT frame_ids FROM calibration_session WHERE source_inbox_item_id = ?",
+        )
+        .bind(item_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        let frame_ids: Vec<String> = serde_json::from_str(&frame_ids_json).unwrap();
+        assert_eq!(frame_ids.len(), 1, "frame_ids must reference the applied master file_record");
+
+        let (size_bytes, stored_root, stored_rel): (i64, String, String) = sqlx::query_as(
+            "SELECT size_bytes, root_id, relative_path FROM file_record WHERE id = ?",
+        )
+        .bind(&frame_ids[0])
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        let expected_size = i64::try_from(size).unwrap();
+        assert_eq!(size_bytes, expected_size, "real on-disk size, never 0");
+        assert_eq!(stored_root, root_id);
+        assert_eq!(stored_rel, rel);
     }
 }

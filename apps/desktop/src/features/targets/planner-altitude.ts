@@ -4,10 +4,9 @@
  *
  * Prior versions of this module (tasks #84/#85, mock spec 044 §3) derived a
  * deterministic pseudo-curve from a hash of the target's designation at a
- * fixed placeholder latitude (STUB_OBSERVER_LAT_DEG=52.1). That mock is now
- * replaced with real per-site, per-date computation via `planner-astronomy.ts`
- * (astronomy-engine, offline) + `planner-derive.ts` (cached positions, pure
- * threshold derivation — SC-003).
+ * fixed placeholder latitude. That mock is now replaced with real per-site,
+ * per-date computation via `planner-astronomy.ts` (astronomy-engine, offline) +
+ * `planner-derive.ts` (cached positions, pure threshold derivation — SC-003).
  *
  * `RowAltitude` gains two degrade flags for the edge cases in T013:
  *   - `needsCoordinates`: the target has no RA/Dec (never resolved / manual
@@ -17,21 +16,16 @@
  * In either degrade state the row reports zero imaging time / not visible,
  * with NO thrown error (FR-024/SC-011, T013).
  *
- * STILL MOCK (spec 044 §3, out of Track B/US1 scope — real Moon geometry +
- * per-filter moon-free time are US5, Phase 7, T027/T028):
- *   - `MOCK_MOON_PHASE_FRAC` — fake Moon brightness fraction.
- *   - `filtersFor` — simple brightness/distance bracketing rule for filter
- *     recommendation.
- * `lunarDistanceDeg` IS now real (a single-instant `AngleBetween` at transit
- * via `angularSeparationFromMoonDeg`) — only the phase/filter-rule layer on
- * top of it remains mocked.
+ * Moon geometry — real lunar distance, per-band filter guidance, and next
+ * opposition — is spec 047 Track A and lives in `astro/row-planning.ts`
+ * (`RowMoonPlanning`, computed from the shared `ObservingNight` + catalogued
+ * RA/Dec), NOT in this module. This module owns tonight altitude / imaging time
+ * only.
  */
 
 import type { TargetListItem } from '@/bindings/index';
-import { m } from '@/lib/i18n';
 import type { ObserverSite } from './observing-sites/observer-site';
 import { activeSite } from './observing-sites/site-store';
-import { angularSeparationFromMoonDeg } from './planner-astronomy';
 import { deriveObservability, getNightObservability } from './planner-derive';
 
 /**
@@ -41,32 +35,6 @@ import { deriveObservability, getNightObservability } from './planner-derive';
  * T012b) over this constant.
  */
 export const USABLE_ALT_DEG = 30;
-
-// ── Mock filter types (spec 044, NOT astronomy — US5 scope) ────────────────────
-
-/** Compact filter-band identifier. Broadband: L/R/G/B. Narrowband: Ha/OIII/SII. */
-export type FilterBand = 'L' | 'R' | 'G' | 'B' | 'Ha' | 'OIII' | 'SII';
-
-/** A mock filter-recommendation result. */
-export interface FiltersRecommendation {
-  /** Which filter bands are recommended given the mock moon/separation. */
-  bands: FilterBand[];
-  /**
-   * Short label for display (e.g. "Broadband + NB" or "Narrowband only").
-   * NOT derived from real astronomy — see spec 044 §5 / US5.
-   */
-  label: string;
-}
-
-/**
- * MOCK module-level Moon phase fraction (0 = new moon, 1 = full moon).
- *
- * Real Moon-phase/illumination is US5 (T027). Fixed deterministic value so
- * every test/render is stable until then.
- *
- * NOT astronomy — mock per spec 044 §3.
- */
-export const MOCK_MOON_PHASE_FRAC = 0.55; // ~gibbous — a realistic mid-range value
 
 /** One sampled point of the night's altitude curve. */
 export interface AltPoint {
@@ -89,41 +57,10 @@ export interface RowAltitude {
   hoursAboveUsable: number;
   /** True when the target reaches usable altitude at any dark-window sample. */
   visibleTonight: boolean;
-  /** Real angular separation from the Moon (0–180°) at transit; null in degrade states. */
-  lunarDistanceDeg: number | null;
-  /** Mock filter recommendation given mock Moon phase + (now real) lunar distance. */
-  filters: FiltersRecommendation;
   /** T013: true when the target has no RA/Dec — no astronomy is possible. */
   needsCoordinates: boolean;
   /** T013/US6: true when there is no active observing site. */
   needsSite: boolean;
-}
-
-/**
- * MOCK: derive a recommended filter set from the mock Moon phase and the
- * (real) lunar distance.
- *
- * Rule (placeholder — real model is research §5 of spec 044 / US5):
- *   - Moon is "bright" when MOCK_MOON_PHASE_FRAC ≥ 0.4
- *   - Target is "close" when lunarDistanceDeg < 60
- *   - Bright moon AND close target → narrowband only (Ha/OIII/SII)
- *   - Otherwise → broadband OK (L/R/G/B + narrowband)
- *
- * NOT astronomy.
- */
-export function filtersFor(lunarDistanceDeg: number): FiltersRecommendation {
-  const brightMoon = MOCK_MOON_PHASE_FRAC >= 0.4;
-  const close = lunarDistanceDeg < 60;
-  if (brightMoon && close) {
-    return {
-      bands: ['Ha', 'OIII', 'SII'],
-      label: m.targets_filters_narrowband_only(),
-    };
-  }
-  return {
-    bands: ['L', 'R', 'G', 'B', 'Ha', 'OIII', 'SII'],
-    label: m.targets_filters_broadband_nb(),
-  };
 }
 
 const DEGRADE_ROW: Omit<RowAltitude, 'needsCoordinates' | 'needsSite'> = {
@@ -131,10 +68,6 @@ const DEGRADE_ROW: Omit<RowAltitude, 'needsCoordinates' | 'needsSite'> = {
   maxAltDeg: 0,
   hoursAboveUsable: 0,
   visibleTonight: false,
-  lunarDistanceDeg: null,
-  // Fall back to the permissive (broadband-ok) recommendation when there is no
-  // real lunar distance to reason about yet.
-  filters: filtersFor(180),
 };
 
 /** A minimal shape sufficient to compute tonight observability (T012 fallback reuse). */
@@ -180,21 +113,11 @@ export function altitudeFor(
     tHour: (s.tMs - night.nightStartMs) / 3_600_000,
     altDeg: s.altDeg,
   }));
-  const instantMs = night.transit?.tMs ?? dateMs;
-  const lunarDistanceDeg = angularSeparationFromMoonDeg(
-    subject.raDeg,
-    subject.decDeg,
-    site,
-    instantMs,
-  );
-
   return {
     points,
     maxAltDeg: derived.maxAltDeg,
     hoursAboveUsable: derived.totalImagingMinutes / 60,
     visibleTonight: derived.visibleTonight,
-    lunarDistanceDeg,
-    filters: filtersFor(lunarDistanceDeg),
     needsCoordinates: false,
     needsSite: false,
   };

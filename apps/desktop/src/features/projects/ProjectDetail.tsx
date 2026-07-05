@@ -30,6 +30,8 @@
 import { useState } from 'react';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
+import { queryKeys } from '@/data/queryKeys';
+import { queryClient as sharedQueryClient } from '@/data/queryClient';
 import {
   DetailHeader,
   DetailPane,
@@ -53,6 +55,8 @@ import { addToast } from '@/shared/toast';
 import { BlockedBanner } from './BlockedBanner';
 import type { BlockedReason, RecoveryEdge } from './BlockedBanner';
 import { lifecycleFooterActions, isPlanRequiredError } from './lifecycle-actions';
+import { useGenerateArchivePlan } from '@/features/archive/store';
+import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
 // spec 011: tool launch CTA
 import {
   toolIdFromProjectTool,
@@ -149,6 +153,15 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [channelWorking, setChannelWorking] = useState(false);
   const [transitionWorking, setTransitionWorking] = useState(false);
+  // Archive plan generation (spec 017 US2/WP-B) — the completed→archived
+  // transition is plan-gated; this is the UI entry point that actually
+  // creates the reviewable plan the toast below points the user to.
+  const generateArchivePlan = useGenerateArchivePlan();
+  const [archiveReviewPlanId, setArchiveReviewPlanId] = useState<string | null>(null);
+
+  // spec 012 T008: attach the project's filesystem artifact watcher for as
+  // long as this drawer is open; detaches on close/project switch.
+  useProjectArtifactWatcher(projectId);
 
   // spec 012 T008: attach the project's filesystem artifact watcher for as
   // long as this drawer is open; detaches on close/project switch.
@@ -216,7 +229,11 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
 
   /**
    * Handle a lifecycle transition. Surfaces plan.required as an info toast
-   * directing the user to the plan flow (US3-4 / US3-5).
+   * directing the user to the plan flow (US3-4 / US3-5). For the
+   * completed/blocked → archived edge specifically, a generator command
+   * (`archive.plan.generate`) exists, so a refusal here also generates the
+   * plan and opens the shared review/apply overlay — previously this edge
+   * dead-ended on the toast with no way to actually create the plan.
    */
   const handleTransition = async (
     nextState: ProjectLifecycleState,
@@ -238,6 +255,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           message: m.projects_toast_plan_required(),
           variant: 'info',
         });
+        if (nextState === 'archived') {
+          void handleGenerateArchivePlan();
+        }
       } else if (resp.status === 'error') {
         addToast({
           message: resp.error?.message ?? m.projects_toast_transition_refused(),
@@ -249,6 +269,32 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     } finally {
       setTransitionWorking(false);
     }
+  };
+
+  /**
+   * Generate a reviewable whole-project archive plan (`archive.plan.generate`)
+   * and open the shared {@link PlanReviewOverlay} for review + apply. This is
+   * the ONLY UI entry point for the command — previously it had zero callers
+   * and the flow only worked driven over the dev bridge.
+   */
+  const handleGenerateArchivePlan = async () => {
+    try {
+      const res = await generateArchivePlan.mutateAsync(projectId);
+      addToast({
+        message: m.projects_archive_plan_created_toast({ count: res.itemCount }),
+        variant: 'info',
+      });
+      setArchiveReviewPlanId(res.planId);
+    } catch {
+      addToast({ message: m.projects_archive_generate_failed(), variant: 'error' });
+    }
+  };
+
+  /** After the archive plan applies, the project's lifecycle flips server-side
+   * (C5 — applying an origin=archive plan is the one legitimate path to
+   * `archived`); refresh the detail query so the UI reflects it. */
+  const handleArchivePlanApplied = () => {
+    void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
   };
 
   /** Handle blocked resolve — dispatches the recovery edge from BlockedBanner. */
@@ -584,6 +630,18 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           <EditProjectPane project={project} onClose={() => setEditOpen(false)} />
         </div>
       )}
+
+      {/* ── Archive plan review overlay (spec 017 US2/WP-B) ──────────────────
+          Opens automatically when the plan-gated Archive transition refuses
+          with plan.required; shares the same review → approve → apply kit as
+          the cleanup flow. */}
+      <PlanReviewOverlay
+        planId={archiveReviewPlanId}
+        open={archiveReviewPlanId !== null}
+        onClose={() => setArchiveReviewPlanId(null)}
+        title={m.projects_archive_review_title()}
+        onApplied={handleArchivePlanApplied}
+      />
     </DetailPane>
   );
 }
