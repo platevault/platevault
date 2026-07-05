@@ -38,6 +38,7 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Context, Result};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
+use thirtyfour::components::{escape_string, SelectElement};
 use thirtyfour::prelude::*;
 
 /// URL where the `tauri-webdriver` CLI proxy listens for W3C WebDriver
@@ -379,6 +380,189 @@ impl E2eApp {
             Err(e) if matches!(e.as_inner(), WebDriverErrorInner::NoSuchElement(_)) => Ok(false),
             Err(e) => Err(e).context("failed to query for the error boundary fallback"),
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Real-DOM interaction helpers (additive, shared across per-area UI
+    // journeys — inbox/calibration/targets/sessions/lifecycle/settings).
+    // These drive the ACTUAL rendered `data-testid` elements (click/type/
+    // read), never the invoke bridge, so journeys built on them are proving
+    // real UI interaction rather than a second copy of the IPC-level tests.
+    // ---------------------------------------------------------------------
+
+    /// Locate a single element by its exact `data-testid` attribute.
+    pub async fn find_testid(&self, testid: &str) -> Result<WebElement> {
+        self.driver
+            .find(By::Css(format!("[data-testid='{testid}']")))
+            .await
+            .with_context(|| format!("no element with data-testid={testid:?}"))
+    }
+
+    /// Locate the first element whose `data-testid` STARTS WITH `prefix` —
+    /// for dynamic testids keyed by a real backend id (e.g.
+    /// `plan-group-<planId>`, `inbox-item-<inboxItemId>`) that the journey
+    /// doesn't know in advance.
+    pub async fn find_testid_prefix(&self, prefix: &str) -> Result<WebElement> {
+        self.driver
+            .find(By::Css(format!("[data-testid^='{prefix}']")))
+            .await
+            .with_context(|| format!("no element with data-testid starting with {prefix:?}"))
+    }
+
+    /// All elements whose `data-testid` starts with `prefix`.
+    pub async fn find_all_testid_prefix(&self, prefix: &str) -> Result<Vec<WebElement>> {
+        self.driver
+            .find_all(By::Css(format!("[data-testid^='{prefix}']")))
+            .await
+            .with_context(|| format!("query for data-testid prefix {prefix:?} failed"))
+    }
+
+    /// The dynamic suffix of the first `data-testid` starting with `prefix`
+    /// (e.g. `prefix = "inbox-item-"` on `data-testid="inbox-item-abc123"`
+    /// returns `"abc123"`) — lets a journey discover a real backend id from
+    /// the rendered DOM instead of a second invoke round-trip.
+    pub async fn testid_suffix(&self, prefix: &str) -> Result<String> {
+        let el = self.find_testid_prefix(prefix).await?;
+        let full = el
+            .attr("data-testid")
+            .await
+            .context("failed to read data-testid attribute")?
+            .ok_or_else(|| anyhow!("element matched by prefix {prefix:?} has no data-testid"))?;
+        full.strip_prefix(prefix)
+            .map(str::to_owned)
+            .ok_or_else(|| anyhow!("data-testid {full:?} did not start with {prefix:?}"))
+    }
+
+    /// `true` if an element with the exact `data-testid` is currently in the DOM.
+    pub async fn testid_exists(&self, testid: &str) -> Result<bool> {
+        use thirtyfour::error::WebDriverErrorInner;
+        match self.driver.find(By::Css(format!("[data-testid='{testid}']"))).await {
+            Ok(_) => Ok(true),
+            Err(e) if matches!(e.as_inner(), WebDriverErrorInner::NoSuchElement(_)) => Ok(false),
+            Err(e) => Err(e).context("testid_exists query failed"),
+        }
+    }
+
+    /// Click the element with the given `data-testid`.
+    pub async fn click_testid(&self, testid: &str) -> Result<()> {
+        self.find_testid(testid)
+            .await?
+            .click()
+            .await
+            .with_context(|| format!("click {testid} failed"))
+    }
+
+    /// Rendered text content of the element with the given `data-testid`.
+    pub async fn text_testid(&self, testid: &str) -> Result<String> {
+        self.find_testid(testid)
+            .await?
+            .text()
+            .await
+            .with_context(|| format!("read text of {testid} failed"))
+    }
+
+    /// `true` when the element with the given `data-testid` is enabled — the
+    /// real DOM `disabled` state, not an assumption from response shape.
+    pub async fn is_enabled_testid(&self, testid: &str) -> Result<bool> {
+        self.find_testid(testid).await?.is_enabled().await.context("is_enabled query failed")
+    }
+
+    /// Poll for an element with the given `data-testid` to appear, returning it.
+    pub async fn wait_testid(&self, testid: &str, timeout: Duration) -> Result<WebElement> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Ok(el) = self.find_testid(testid).await {
+                return Ok(el);
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!("data-testid={testid:?} never appeared within {timeout:?}"));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Poll until the element with the given `data-testid` becomes enabled.
+    pub async fn wait_testid_enabled(&self, testid: &str, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if self.is_enabled_testid(testid).await.unwrap_or(false) {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "data-testid={testid:?} never became enabled within {timeout:?}"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Poll until at least one element whose `data-testid` starts with
+    /// `prefix` appears in the DOM.
+    pub async fn wait_testid_prefix_present(&self, prefix: &str, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if self.find_testid_prefix(prefix).await.is_ok() {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "no data-testid starting with {prefix:?} appeared within {timeout:?}"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Poll until no element with the given `data-testid` remains in the DOM.
+    pub async fn wait_testid_gone(&self, testid: &str, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if !self.testid_exists(testid).await.unwrap_or(true) {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!("data-testid={testid:?} never disappeared within {timeout:?}"));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Select an `<option>` by its `value` attribute on the
+    /// `<select data-testid=..>` — a real click on the option element (fires
+    /// the browser's native `change` event, which is what React's controlled
+    /// `<select onChange>` listens for).
+    pub async fn select_testid(&self, testid: &str, value: &str) -> Result<()> {
+        let el = self.find_testid(testid).await?;
+        let select = SelectElement::new(&el)
+            .await
+            .with_context(|| format!("{testid} is not a <select> element"))?;
+        select
+            .select_by_value(value)
+            .await
+            .with_context(|| format!("select value {value:?} on {testid} failed"))
+    }
+
+    /// Clear then type into the `<input data-testid=..>`.
+    pub async fn fill_testid(&self, testid: &str, value: &str) -> Result<()> {
+        let el = self.find_testid(testid).await?;
+        el.clear().await.with_context(|| format!("clear {testid} failed"))?;
+        el.send_keys(value).await.with_context(|| format!("send_keys {testid} failed"))
+    }
+
+    /// Click a `<button>` located by its exact visible text — for the few
+    /// real top-bar controls that carry no `data-testid` (e.g. Inbox's
+    /// "Rescan"), matched by `aria-label` first (more stable across i18n
+    /// pluralisation than text nodes) then falling back to text content.
+    pub async fn click_by_aria_label(&self, label: &str) -> Result<()> {
+        let xpath = format!("//*[@aria-label={}]", escape_string(label));
+        self.driver
+            .find(By::XPath(&xpath))
+            .await
+            .with_context(|| format!("no element with aria-label={label:?}"))?
+            .click()
+            .await
+            .with_context(|| format!("click aria-label={label:?} failed"))
     }
 
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
