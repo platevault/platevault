@@ -316,6 +316,56 @@ export const mockProjectSummaries: ProjectSummaryDto[] = [
     createdAt: '2026-05-15T12:00:00Z',
     updatedAt: '2026-05-18T18:00:00Z',
   },
+  // Lifecycle-diverse fixtures (Journey 5 full state machine): one project per
+  // remaining lifecycle state so each state's footer transitions — including
+  // the plan-gated edges (completed → archived, ready → prepared, etc.) — can
+  // be exercised through the real UI. `projects.get` (mocks.ts →
+  // mockProjectDetailFor) resolves each to a detail carrying its lifecycle.
+  {
+    id: 'proj-004',
+    name: 'Rosette Nebula HOO',
+    tool: 'PixInsight',
+    lifecycle: 'completed',
+    path: 'projects/Rosette_HOO',
+    notes: 'Final accepted; delivered.',
+    channelDrift: false,
+    sourceCount: 3,
+    createdAt: '2026-04-01T10:00:00Z',
+    updatedAt: '2026-05-01T10:00:00Z',
+  },
+  {
+    id: 'proj-005',
+    name: 'Heart Nebula SHO',
+    tool: 'PixInsight',
+    lifecycle: 'prepared',
+    path: 'projects/Heart_SHO',
+    channelDrift: false,
+    sourceCount: 2,
+    createdAt: '2026-04-05T10:00:00Z',
+    updatedAt: '2026-05-02T10:00:00Z',
+  },
+  {
+    id: 'proj-006',
+    name: 'Veil Nebula (legacy)',
+    tool: 'PixInsight',
+    lifecycle: 'archived',
+    path: 'projects/Veil_2023',
+    channelDrift: false,
+    sourceCount: 2,
+    createdAt: '2023-04-05T10:00:00Z',
+    updatedAt: '2023-06-02T10:00:00Z',
+  },
+  {
+    id: 'proj-007',
+    name: 'Cave Nebula attempt',
+    tool: 'Siril',
+    lifecycle: 'blocked',
+    path: 'projects/Cave_attempt',
+    channelDrift: false,
+    sourceCount: 1,
+    createdAt: '2026-05-05T10:00:00Z',
+    updatedAt: '2026-05-06T10:00:00Z',
+  },
 ];
 
 export const mockProjectDetail008: ProjectDetailDto = {
@@ -358,3 +408,34 @@ export const mockProjectDetail008WithDrift: ProjectDetailDto = {
   ...mockProjectDetail008,
   channelDrift: { hasNewSources: true, suggestedAction: 're_infer' },
 };
+
+/**
+ * Resolve the `projects.get` detail for a given project id (mock mode).
+ *
+ * proj-001 keeps the canonical {@link mockProjectDetail008} body (existing
+ * specs depend on its sources/channels/cleanup wiring). Every other summary
+ * gets a detail with the SAME operational body but its own identity +
+ * lifecycle, so the UI reflects the requested project's real state. Blocked
+ * projects additionally carry a typed blocked reason (FR-020).
+ */
+export function mockProjectDetailFor(id: string): ProjectDetailDto {
+  const summary = mockProjectSummaries.find((p) => p.id === id);
+  if (!summary || id === 'proj-001') return mockProjectDetail008;
+  const base: ProjectDetailDto = {
+    ...mockProjectDetail008,
+    id: summary.id,
+    name: summary.name,
+    tool: summary.tool,
+    lifecycle: summary.lifecycle,
+    path: summary.path,
+    notes: summary.notes ?? null,
+  };
+  if (summary.lifecycle === 'blocked') {
+    return {
+      ...base,
+      blockedReasonKind: 'calibration_unmatched',
+      blockedReasonNote: 'Missing calibration masters for SII filter',
+    };
+  }
+  return base;
+}
