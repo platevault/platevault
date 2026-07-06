@@ -90,7 +90,13 @@ async fn settings_ui_ingestion_toggle_autosaves_no_global_save_button() -> anyho
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
     complete_first_run(&app).await?;
 
-    app.goto_route("/settings?pane=ingestion").await?;
+    // The active pane is a real PATH param (`settingsPaneRoute`, path
+    // `/settings/$pane` — `apps/desktop/src/app/router.tsx`), read via
+    // `useParams` in `SettingsPage.tsx`, NOT a `?pane=` query string; the
+    // query-string form silently falls back to the default 'sources' pane
+    // (CI: "Follow symbolic links" never appeared — the Ingestion pane
+    // never actually mounted).
+    app.goto_route("/settings/ingestion").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
 
     anyhow::ensure!(
@@ -146,7 +152,7 @@ async fn settings_ui_theme_applies_live_and_persists_across_relaunch() -> anyhow
         app.wait_bridge_ready(Duration::from_secs(30)).await?;
         complete_first_run(&app).await?;
 
-        app.goto_route("/settings?pane=general").await?;
+        app.goto_route("/settings/general").await?;
         app.wait_bridge_ready(Duration::from_secs(15)).await?;
 
         // "Espresso" (`THEMES` id `espresso-dark`) — a real, non-default theme
@@ -204,7 +210,7 @@ async fn settings_ui_theme_applies_live_and_persists_across_relaunch() -> anyhow
     // Confirm the Settings UI itself reflects the persisted choice too (not
     // just the raw DOM attribute).
     complete_first_run(&app2).await?;
-    app2.goto_route("/settings?pane=general").await?;
+    app2.goto_route("/settings/general").await?;
     app2.wait_bridge_ready(Duration::from_secs(15)).await?;
     let espresso_swatch = app2
         .find_waiting(
