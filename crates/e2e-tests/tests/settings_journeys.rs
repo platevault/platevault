@@ -202,18 +202,18 @@ async fn settings_ui_theme_applies_live_and_persists_across_relaunch() -> anyhow
 
         // `E2eApp::shutdown()` force-kills the app process (the CLI's only
         // handle on the app's lifetime — see `blocking_session_delete`'s
-        // doc), rather than closing the window gracefully. Chromium/WebView2
-        // commits `localStorage` writes to its on-disk store asynchronously
-        // (a background-sequence flush, not synchronous-per-write), so an
-        // abrupt process kill immediately after a write can lose it before
-        // it reaches disk — a documented WebView2/Chromium characteristic,
-        // and a plausible reason this journey is Windows-only-flaky even
-        // with a real, unwiped webview profile (WebKitGTK's flush timing
-        // differs). Give the background flush a moment to complete before
-        // killing the process.
-        tokio::time::sleep(Duration::from_millis(1000)).await;
-
-        app.shutdown().await?;
+        // doc). CI evidence (round 2, fix-464-theme: CI run 28810006837) is
+        // that this reliably LOSES a `localStorage` write on Windows — the
+        // raw value read back after a relaunch was `null`, not merely stale
+        // — and a delay before the kill (tried in that round) does not save
+        // it: WebView2 commits `localStorage` to its on-disk LevelDB-backed
+        // store on a graceful shutdown, not on a timer, so nothing short of
+        // an actual graceful close preserves it. Use
+        // `E2eApp::graceful_shutdown()` instead, which closes the window for
+        // real (`getCurrentWindow().close()`) before tearing the session
+        // down — real-user fidelity, and the only path that gives WebView2 a
+        // normal teardown to flush during.
+        app.graceful_shutdown().await?;
     }
 
     // Relaunch: a fresh WebDriver session + a fresh `desktop_shell` process,

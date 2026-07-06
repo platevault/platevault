@@ -1028,6 +1028,78 @@ impl E2eApp {
             .with_context(|| format!("is_selected() on aria-label={label:?} failed"))
     }
 
+    /// Close the app's window gracefully (round 3, fix-464-theme) before
+    /// falling through to the ordinary [`Self::shutdown`] teardown, so a
+    /// value written to `localStorage` right before this call actually
+    /// survives a following [`Self::relaunch`].
+    ///
+    /// [`Self::shutdown`]'s `driver.quit()` makes the `tauri-webdriver` CLI
+    /// force-kill the app process — the CLI's only handle on the app's
+    /// lifetime (see `blocking_session_delete`'s doc). CI evidence (run
+    /// 28808552431, then run 28810006837 even with a 1s pre-kill flush
+    /// delay) shows this reliably loses a `localStorage` write on Windows:
+    /// the raw value read back after a relaunch was `null`, not merely
+    /// stale — WebView2 commits `localStorage` to its on-disk LevelDB-backed
+    /// store on a graceful shutdown, not on a timer, so a delay before an
+    /// abrupt kill cannot save it.
+    ///
+    /// Triggers a REAL native window close — `@tauri-apps/api/window`'s
+    /// `getCurrentWindow().close()` (dynamically imported the same way
+    /// `apps/desktop/src/data/theme.ts`'s `syncNativeWindowTheme` already
+    /// does), not DOM's bare `window.close()` (a no-op for a top-level
+    /// window in most engines). This app has no `on_window_event`/
+    /// `CloseRequested` handler (`apps/desktop/src-tauri/src/lib.rs`), so
+    /// closing the only window exits the process the same way the native
+    /// Quit menu item's `app.exit(0)` does (`lib.rs`'s `on_menu_event`) —
+    /// real-user fidelity, not a synthetic teardown path.
+    ///
+    /// Polls for the `__ALM_E2E__` bridge to actually disappear (proof the
+    /// window/process tore down) rather than trusting the `close()` promise
+    /// resolved before the OS finished reaping the process, then hands off
+    /// to [`Self::shutdown`] — by then the app is normally already gone, so
+    /// that call is just cleaning up the (already-dead) CLI session and
+    /// freeing port 4444, not the thing that kills the app.
+    ///
+    /// Falls back to [`Self::shutdown`]'s abrupt kill if the graceful close
+    /// doesn't complete within the deadline (e.g. the dynamic import fails
+    /// outside a real Tauri runtime) — best-effort, never hangs a journey.
+    pub async fn graceful_shutdown(self) -> Result<()> {
+        let script = r#"
+            var callback = arguments[arguments.length - 1];
+            import('@tauri-apps/api/window').then(function (mod) {
+                return mod.getCurrentWindow().close();
+            }).then(function () {
+                callback(true);
+            }).catch(function () {
+                callback(false);
+            });
+        "#;
+        let _: bool = self
+            .driver
+            .execute_async(script, vec![])
+            .await
+            .ok()
+            .and_then(|ret| ret.convert::<bool>().ok())
+            .unwrap_or(false);
+
+        // Proof the window/process actually tore down: once it has, WebDriver
+        // commands against the now-gone window/session fail — treat any
+        // error the same as an explicit "bridge gone" (`Ok(false)`).
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            match self.bridge_ready().await {
+                Ok(false) | Err(_) => break,
+                Ok(true) if Instant::now() >= deadline => break,
+                Ok(true) => tokio::time::sleep(Duration::from_millis(100)).await,
+            }
+        }
+        // Small extra margin for the OS to finish reaping the process right
+        // after the window/webview teardown completes.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        self.shutdown().await
+    }
+
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
     /// if present. Quitting the session (a `DELETE /session/{id}` through the
     /// CLI) makes the CLI terminate the app process it launched on our
