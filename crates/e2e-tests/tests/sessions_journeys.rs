@@ -27,6 +27,7 @@ mod common;
 
 use std::time::Duration;
 
+use anyhow::Context;
 use common::{write_minimal_fits, E2eApp};
 use serde_json::json;
 
@@ -69,6 +70,26 @@ async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
         )
         .await?;
     app.complete_first_run_gate().await
+}
+
+/// Force a real reload of the CURRENTLY-loaded route rather than calling
+/// `E2eApp::goto_route` again with the identical URL.
+///
+/// `goto_route` builds `{APP_URL}/#{path}` and calls `driver.goto(url)`; when
+/// the app is already sitting on that exact URL (no intervening navigation
+/// away from it), asking the browser to "navigate to" a byte-identical URL
+/// is a well-known no-op in several engines (no reload, no route remount, no
+/// TanStack Query refetch) — this bit Test 2 below, which re-visits
+/// `/sessions` immediately after the real ingest pipeline runs entirely over
+/// the invoke bridge (no navigation happens in between), so the page never
+/// re-fetches and the newly-applied session's row never appears within the
+/// polling deadline (CI: both ubuntu and windows hung on
+/// `wait_testid_prefix_present("sessions-row-", ..)`, ruling out a timing
+/// flake). An explicit `driver.refresh()` is unambiguous.
+async fn reload_current_route(app: &E2eApp) -> anyhow::Result<()> {
+    app.driver.refresh().await.context("page refresh failed")?;
+    app.wait_document_ready(Duration::from_secs(10)).await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await
 }
 
 /// Tests 1/2/3/5 (journey-04) in one journey: nothing appears before a plan
@@ -171,9 +192,11 @@ async fn sessions_ui_derived_view_invariants() -> anyhow::Result<()> {
 
     // Test 2: the real session appears automatically on the real Sessions
     // page (no separate review/approve step) — session grouping is
-    // event-driven, so poll the real UI for it.
-    app.goto_route("/sessions").await?;
-    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    // event-driven, so poll the real UI for it. The app is ALREADY sitting
+    // on `/sessions` from Test 1 (no navigation happened during the ingest
+    // pipeline above, which is invoke-only) — reload rather than
+    // `goto_route` to the identical URL, see `reload_current_route`.
+    reload_current_route(&app).await?;
     app.wait_testid_prefix_present("sessions-row-", UI_TIMEOUT).await.map_err(|e| {
         anyhow::anyhow!("expected a real session row to appear automatically after apply: {e}")
     })?;
