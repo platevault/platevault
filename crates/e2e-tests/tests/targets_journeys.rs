@@ -229,7 +229,12 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
     })?;
 
     // Real UI: Settings -> Target Planner -> Observing Sites -> Add site.
-    app.goto_route("/settings?pane=planner").await?;
+    // The active pane is a real PATH param (`settingsPaneRoute`, path
+    // `/settings/$pane` — `apps/desktop/src/app/router.tsx`), read via
+    // `useParams` in `SettingsPage.tsx`, NOT a `?pane=` query string; the
+    // query-string form silently falls back to the default 'sources' pane
+    // (CI: "+ Add site" never appeared — the Planner pane never mounted).
+    app.goto_route("/settings/planner").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
     app.click_button_text("+ Add site").await?;
 
