@@ -191,11 +191,54 @@ async fn sessions_ui_derived_view_invariants() -> anyhow::Result<()> {
         app.invoke("inbox_plan_apply", json!({ "inboxItemId": inbox_item_id })).await?;
 
     // Test 2: the real session appears automatically on the real Sessions
-    // page (no separate review/approve step) — session grouping is
-    // event-driven, so poll the real UI for it. The app is ALREADY sitting
-    // on `/sessions` from Test 1 (no navigation happened during the ingest
-    // pipeline above, which is invoke-only) — reload rather than
-    // `goto_route` to the identical URL, see `reload_current_route`.
+    // page (no separate review/approve step). Session grouping is
+    // event-driven — `inbox.plan_apply` returns as soon as the plan's
+    // executor finishes; the plan-listener that folds the applied light
+    // frame into an `acquisition_session` row (spec 035 US4/T042,
+    // `ingest_light_frames_if_applicable` in
+    // `crates/app/inbox/src/plan_listener.rs`) reacts to the
+    // `plan.applying.completed` event on its OWN background task afterwards.
+    // A single reload raced that background task (CI: both ubuntu and
+    // windows hung on `wait_testid_prefix_present`, ruling out a timing
+    // flake — the backend simply hadn't grouped the frame into a session
+    // yet by the time the one-shot TanStack Query fetch ran, and nothing
+    // thereafter re-triggers a refetch for `wait_testid_prefix_present` to
+    // observe). Poll the real backend command the page itself queries
+    // (`inventory.list` via `useInventorySources`, NOT `sessions.list` —
+    // that's a different, session-review-era projection) until the grouped
+    // session exists, mirroring `invoke_until`'s documented wait primitive
+    // for this exact class of event-driven backend effect
+    // (`journeys.rs`'s `ingestion_sessions_search`). Only once the backend
+    // is ready does reloading the UI mean anything.
+    app.invoke_until(
+        "inventory_list",
+        json!({
+            "req": {
+                "contractVersion": "2.0.0",
+                "requestId": "e2e-sessions-derived-view-poll",
+                "filters": null,
+            }
+        }),
+        UI_TIMEOUT,
+        |v: &serde_json::Value| {
+            v["sources"].as_array().is_some_and(|sources| {
+                sources.iter().any(|s| s["sessions"].as_array().is_some_and(|ss| !ss.is_empty()))
+            })
+        },
+    )
+    .await
+    .map_err(|e| {
+        anyhow::anyhow!(
+            "expected the backend to group the applied light frame into a real \
+             acquisition session: {e}"
+        )
+    })?;
+
+    // The app is ALREADY sitting on `/sessions` from Test 1 (no navigation
+    // happened during the ingest pipeline above, which is invoke-only) —
+    // reload rather than `goto_route` to the identical URL, see
+    // `reload_current_route`. The backend is now known-ready, so the page's
+    // one-shot fetch on remount will find the session immediately.
     reload_current_route(&app).await?;
     app.wait_testid_prefix_present("sessions-row-", UI_TIMEOUT).await.map_err(|e| {
         anyhow::anyhow!("expected a real session row to appear automatically after apply: {e}")
