@@ -1834,6 +1834,52 @@ mod tests {
         assert!(resp2.audit_id.is_none(), "noop must not emit audit event");
     }
 
+    /// (spec 051 US3, T022) `cleanupTypeOverrides`: a real change publishes
+    /// exactly one `SettingsChanged` bus event and produces an audit record;
+    /// re-saving the identical map afterwards is a noop that publishes zero
+    /// further events and no additional audit record (SC-003).
+    #[tokio::test]
+    async fn cleanup_type_overrides_emits_one_event_then_noop() {
+        let (db, bus) = setup().await;
+        let mut rx = bus.subscribe();
+
+        let overrides = serde_json::json!({"1": "Archive", "20": "Delete"});
+
+        // First write: a real change from the empty-map default — must emit
+        // exactly one event and produce an audit record.
+        let req = SettingsUpdateRequest {
+            key: "cleanupTypeOverrides".to_owned(),
+            value: contracts_core::JsonAny::from(overrides.clone()),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Success, "initial write must succeed");
+        assert!(resp.audit_id.is_some(), "real change must emit an audit event");
+
+        assert!(
+            rx.try_recv().is_ok(),
+            "real change must publish exactly one SettingsChanged event"
+        );
+        assert!(
+            rx.try_recv().is_err(),
+            "real change must publish exactly one SettingsChanged event, not more"
+        );
+
+        // Second write: structurally identical map — must be a noop, with no
+        // further audit record and no further bus event.
+        let req2 = SettingsUpdateRequest {
+            key: "cleanupTypeOverrides".to_owned(),
+            value: contracts_core::JsonAny::from(overrides),
+        };
+        let resp2 = update_setting(db.pool(), &bus, &req2).await.unwrap();
+        assert_eq!(
+            resp2.status,
+            SettingsUpdateStatus::Noop,
+            "structurally-identical cleanupTypeOverrides must be noop"
+        );
+        assert!(resp2.audit_id.is_none(), "noop must not emit audit event");
+        assert!(rx.try_recv().is_err(), "noop re-save must publish zero events");
+    }
+
     // ── Property tests ─────────────────────────────────────────────────────
     //
     // Invariants over arbitrary input. Proptest uses a deterministic default
