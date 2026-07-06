@@ -75,6 +75,50 @@ async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
     app.complete_first_run_gate().await
 }
 
+/// Seed the FIRST scan of `root_id` through the invoke bridge — mirrors
+/// `inbox_ui_journeys.rs`'s `seed_initial_scan` (same root cause it
+/// documents, CI run 28766017315): the Inbox page's "Rescan all roots"
+/// button derives the set of roots it scans from the CURRENT item list
+/// (`InboxPage.tsx`'s `roots` `useMemo`, deduped by `item.rootId`), and
+/// `useInboxRescan` (`store.ts`) is a real no-op — it never calls
+/// `inbox.scan.folder` — whenever that derived list is empty:
+/// `if (roots.length === 0) { onComplete(); return; }`. A calibration root
+/// registered via `roots_register` has never been scanned, so the item list
+/// is empty on first mount, "Rescan all roots" derives zero roots to ping,
+/// and no `inbox-item-*` row can EVER appear no matter how long a journey
+/// waits — this is what made both journeys below rely on a real button click
+/// that could never do the one thing the assertion needs. One bridge-side
+/// `inbox.scan.folder` (mirroring the first-run wizard's own scan step, which
+/// WebDriver can't drive because it needs the native folder picker) seeds the
+/// list so the real Rescan click that follows exercises a root the page
+/// actually knows about, exactly like `inbox_ui_journeys.rs` already does.
+async fn seed_initial_scan(
+    app: &E2eApp,
+    root_id: &str,
+    root_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    let scan: serde_json::Value = app
+        .invoke(
+            "inbox_scan_folder",
+            json!({
+                "req": {
+                    "rootId": root_id,
+                    "rootAbsolutePath": root_dir.to_string_lossy(),
+                    "followSymlinks": false,
+                }
+            }),
+        )
+        .await?;
+    let items = scan["items"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder returned no items array: {scan}"))?;
+    anyhow::ensure!(
+        !items.is_empty(),
+        "expected the seed inbox.scan.folder to discover the fixture master file(s): {scan}"
+    );
+    Ok(())
+}
+
 async fn register_calibration_root(app: &E2eApp) -> anyhow::Result<(tempfile::TempDir, String)> {
     let root_dir = tempfile::tempdir()?;
     let register: serde_json::Value = app
@@ -112,7 +156,7 @@ async fn calibration_ui_masters_ingest_as_individual_items() -> anyhow::Result<(
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
     settle_first_run_redirect(&app).await?;
 
-    let (root_dir, _root_id) = register_calibration_root(&app).await?;
+    let (root_dir, root_id) = register_calibration_root(&app).await?;
     complete_first_run(&app).await?;
     write_minimal_fits(
         root_dir.path(),
@@ -130,11 +174,23 @@ async fn calibration_ui_masters_ingest_as_individual_items() -> anyhow::Result<(
         None,
         Some("2026-01-05T12:00:00"),
     )?;
+    seed_initial_scan(&app, &root_id, root_dir.path()).await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
     app.click_by_aria_label("Rescan all roots").await?;
-    app.wait_testid_prefix_present("inbox-item-", UI_TIMEOUT).await?;
+    if let Err(e) = app.wait_testid_prefix_present("inbox-item-", UI_TIMEOUT).await {
+        let backend_items: serde_json::Value = app
+            .invoke("inbox_list", json!({}))
+            .await
+            .unwrap_or_else(|err| json!({ "invoke_error": err.to_string() }));
+        let ui_diagnostics = app.dump_ui_diagnostics().await;
+        let console_log = app.dump_console_log().await;
+        anyhow::bail!(
+            "{e} (backend inbox.list={backend_items}, ui_diagnostics={ui_diagnostics}, \
+             console_log={console_log})"
+        );
+    }
 
     let rows = app.find_all_testid_prefix("inbox-item-").await?;
     anyhow::ensure!(
@@ -175,7 +231,7 @@ async fn calibration_ui_confirmed_master_shows_kind_conditional_detail() -> anyh
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
     settle_first_run_redirect(&app).await?;
 
-    let (root_dir, _root_id) = register_calibration_root(&app).await?;
+    let (root_dir, root_id) = register_calibration_root(&app).await?;
     complete_first_run(&app).await?;
     write_minimal_fits(
         root_dir.path(),
@@ -185,10 +241,23 @@ async fn calibration_ui_confirmed_master_shows_kind_conditional_detail() -> anyh
         None,
         Some("2026-01-06T12:00:00"),
     )?;
+    seed_initial_scan(&app, &root_id, root_dir.path()).await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
     app.click_by_aria_label("Rescan all roots").await?;
+    if let Err(e) = app.wait_testid_prefix_present("inbox-item-", UI_TIMEOUT).await {
+        let backend_items: serde_json::Value = app
+            .invoke("inbox_list", json!({}))
+            .await
+            .unwrap_or_else(|err| json!({ "invoke_error": err.to_string() }));
+        let ui_diagnostics = app.dump_ui_diagnostics().await;
+        let console_log = app.dump_console_log().await;
+        anyhow::bail!(
+            "{e} (backend inbox.list={backend_items}, ui_diagnostics={ui_diagnostics}, \
+             console_log={console_log})"
+        );
+    }
     let item_id = app.testid_suffix("inbox-item-").await?;
     app.click_testid(&format!("inbox-item-{item_id}")).await?;
     app.wait_testid_enabled("inbox-confirm-btn", UI_TIMEOUT).await.map_err(|e| {
