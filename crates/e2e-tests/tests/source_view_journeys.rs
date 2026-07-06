@@ -271,7 +271,22 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
 
     app.wait_testid("generate-source-view-btn", Duration::from_secs(15)).await?.click().await?;
     app.wait_testid("generate-source-view-dialog", Duration::from_secs(10)).await?;
+    app.wait_testid_enabled("generate-source-view-submit", Duration::from_secs(10)).await?;
     app.find_testid("generate-source-view-submit").await?.click().await?;
+
+    // `GenerateSourceViewDialog.handleSubmit` only calls `onClose()` after
+    // `sourceview.generate` resolves successfully, so the dialog closing is
+    // real, DOM-visible proof the submit actually reached and completed the
+    // backend call — a much sharper failure signal than the `plans_list`
+    // poll below if the click never registered or the call errored.
+    app.wait_testid_gone("generate-source-view-dialog", Duration::from_secs(15)).await.map_err(
+        |e| {
+            anyhow::anyhow!(
+                "the dialog never closed after submit — sourceview.generate likely errored \
+                 or the submit click never registered: {e}"
+            )
+        },
+    )?;
 
     // ── 4. Real backend proof: a real, reviewable plan was created ──
     //

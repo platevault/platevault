@@ -293,8 +293,22 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
     );
 
     // ── 6. Real UI (AFTER): a fresh page load re-fetches sessions.list ──
-    // (no stale TanStack Query cache to fight) — the SAME real DOM surface
-    // now reflects the real reconciliation result.
+    //
+    // `goto_route` only changes the URL fragment on the SAME document — per
+    // the HTML fragment-navigation algorithm this never creates a new
+    // Document, so the shared `QueryClient` (30s `staleTime`,
+    // `apps/desktop/src/data/queryClient.ts`) survives across it and the
+    // `sessions.list` query stays cached from the BEFORE read above. A real
+    // `driver.refresh()` (used for the same reason by
+    // `complete_first_run_gate`) forces an actual reload, discarding the
+    // in-memory QueryClient so the SAME real DOM surface is guaranteed to
+    // re-fetch and reflect the real reconciliation result rather than
+    // serving stale cached data.
+    app.driver
+        .refresh()
+        .await
+        .map_err(|e| anyhow::anyhow!("page refresh before the AFTER read failed: {e}"))?;
+    app.wait_document_ready(Duration::from_secs(10)).await?;
     app.goto_route("/projects").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
     app.wait_testid(&format!("project-row-{project_id}"), Duration::from_secs(15))
