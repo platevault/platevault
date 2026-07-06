@@ -14,6 +14,7 @@
 use audit::bus::EventBus;
 use audit::event_bus::{ProtectionPlanAcknowledged, ProtectionSourceSet, Source};
 use audit::{TOPIC_PROTECTION_PLAN_ACKNOWLEDGED, TOPIC_PROTECTION_SOURCE_SET};
+use camino::Utf8Path;
 use contracts_core::protection::{
     NonBlockingSummary, PlanProtectionCheckRequest, PlanProtectionCheckResponse, ProtectedPlanItem,
     ProtectionLevel, SourceProtectionGetRequest, SourceProtectionGetResponse,
@@ -543,6 +544,35 @@ pub async fn generate_cleanup_plan(
     .await
 }
 
+/// Compute an absolute, collision-free archive destination for an
+/// `action = "archive"` plan item (spec 037 Journey 6/7 bugfix).
+///
+/// **Prior bug (found while adding Layer-2 archive/cleanup apply coverage,
+/// spec 037):** `archive_path` was hardcoded to `None` for every plan item
+/// regardless of action, so the spec-025 executor's fallback used
+/// `to_relative_path` verbatim. Both generators leave that fallback
+/// unusable: `archive_generator` sets it equal to the source path (apply then
+/// fails every item with `conflict.destination_exists`, since source ==
+/// destination), and `cleanup_generator` leaves it an empty string. Neither
+/// path had ever been exercised by a real filesystem apply before this spec —
+/// see the coverage-matrix "Archive/cleanup plan apply" gap.
+///
+/// Destination convention: `<parent-dir-of-source>/.astro-plan-archive/
+/// <planId>/<itemId>-<fileName>`. Anchoring on the source file's own parent
+/// directory (rather than a resolved library root) keeps this fix local to
+/// the shared generator tail — no root/project-path lookup required — and
+/// `item_id` (already globally unique per plan) guarantees no collision
+/// between same-named files. A single unified per-plan archive root (one
+/// folder regardless of how many source directories a project's artifacts
+/// span) is a reasonable follow-up but not required for a correct, safe,
+/// never-overwriting apply.
+fn compute_archive_destination(plan_id: &str, item_id: &str, from_relative_path: &str) -> String {
+    let src = Utf8Path::new(from_relative_path);
+    let file_name = src.file_name().unwrap_or(from_relative_path);
+    let parent = src.parent().map_or(".", Utf8Path::as_str);
+    format!("{parent}/.astro-plan-archive/{plan_id}/{item_id}-{file_name}")
+}
+
 /// Generalised protection-resolved plan generator (D12 shared tail).
 ///
 /// Creates the plan row (in `draft`), inserts each item with its real
@@ -602,6 +632,17 @@ pub async fn generate_plan(
             protected_item_count += 1;
         }
 
+        // Bugfix (spec 037 Journey 6/7): compute a real, distinct archive
+        // destination for `archive`-action items instead of always storing
+        // `None` (see `compute_archive_destination` doc for why the old
+        // fallback made every real archive apply fail). `to_relative_path`
+        // is also set to the same value so the plan-review UI's destination
+        // preview shows where the file will actually land, rather than
+        // repeating the source path or showing nothing.
+        let archive_dest = (item.action == "archive")
+            .then(|| compute_archive_destination(&req.plan_id, &item.id, &item.from_relative_path));
+        let to_relative_path: &str = archive_dest.as_deref().unwrap_or(&item.to_relative_path);
+
         plans_repo::insert_plan_item(
             pool,
             &plans_repo::InsertPlanItem {
@@ -613,12 +654,12 @@ pub async fn generate_plan(
                 from_root_id: item.from_root_id.as_deref(),
                 from_relative_path: &item.from_relative_path,
                 to_root_id: None,
-                to_relative_path: &item.to_relative_path,
+                to_relative_path,
                 reason: &req.reason,
                 protection,
                 linked_entity: None,
                 provenance_json: None,
-                archive_path: None,
+                archive_path: archive_dest.as_deref(),
                 source_id: Some(&item.source_id),
                 category: Some(&item.category),
             },

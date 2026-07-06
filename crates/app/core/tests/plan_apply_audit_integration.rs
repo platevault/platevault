@@ -632,3 +632,161 @@ async fn full_review_to_apply_audit_round_trip() {
     assert_eq!(status.items_applied, 1);
     assert_eq!(status.items_failed, 0);
 }
+
+// ── Test: apply_plan_channel_free (spec 037 channel-free archive apply) ─────
+
+/// `apply_plan_channel_free` auto-approves a still-`ready_for_review` archive
+/// plan, then applies it exactly like `apply_plan` — same FS move, same
+/// durable audit trail, same terminal counts via `get_apply_status`, and the
+/// same spec 017 C5 archive lifecycle closure. This is the E2E-harness- and
+/// UI-callable variant (spec 037 Journeys 6/7): no `tauri::ipc::Channel` and
+/// no pre-supplied approval token required.
+#[tokio::test]
+async fn apply_plan_channel_free_auto_approves_and_moves_file() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let project_id = Uuid::new_v4().to_string();
+    support::insert_project(db.pool(), &project_id, "t", "completed").await;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("capture.fits");
+    let dst = dir.path().join("archive/capture.fits");
+    std::fs::write(&src, b"raw-light-frame").expect("write src");
+
+    // Seed a `ready_for_review` archive plan — deliberately NOT pre-approved;
+    // the channel-free path must perform the approve step itself.
+    plans_repo::insert_plan(
+        db.pool(),
+        &plans_repo::InsertPlan {
+            id: &plan_id,
+            title: "Channel-Free Archive Test Plan",
+            origin: "archive",
+            origin_path: Some(&project_id),
+            plan_type: "archive",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        },
+    )
+    .await
+    .expect("insert archive plan");
+
+    plans_repo::insert_plan_item(
+        db.pool(),
+        &plans_repo::InsertPlanItem {
+            id: &format!("{plan_id}-item-0"),
+            plan_id: &plan_id,
+            item_index: 1,
+            name: "capture.fits",
+            action: "move",
+            from_root_id: None,
+            from_relative_path: src.to_str().expect("utf-8 src"),
+            to_root_id: None,
+            to_relative_path: dst.to_str().expect("utf-8 dst"),
+            reason: "archive",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: Some(&project_id),
+            category: Some("intermediate"),
+        },
+    )
+    .await
+    .expect("insert archive item");
+
+    plans_repo::update_plan_state(db.pool(), &plan_id, "ready_for_review")
+        .await
+        .expect("ready_for_review");
+
+    // Channel-free apply: no approval_token, no Channel.
+    let resp = app_core::plan_apply::apply_plan_channel_free(db.pool(), &bus, &plan_id)
+        .await
+        .expect("apply_plan_channel_free should auto-approve then apply");
+    assert_eq!(resp.plan_id, plan_id);
+    assert_eq!(resp.new_state, "applying");
+    assert!(!resp.run_id.is_empty(), "run_id should be non-empty");
+
+    // Wait for the background executor task to complete.
+    tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
+
+    // FS side effect: real move to the archive destination (never a silent
+    // overwrite — constitution §II).
+    assert!(!src.exists(), "source should have been moved");
+    assert!(dst.exists(), "destination should exist in the archive subtree");
+    assert_eq!(std::fs::read(&dst).expect("read dst"), b"raw-light-frame");
+
+    // Audit: plan-level start + terminal events recorded per attempted action.
+    let (start_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM plan_apply_events \
+         WHERE plan_id = ? AND item_id IS NULL AND prior_state = 'approved' AND new_state = 'applying'",
+    )
+    .bind(&plan_id)
+    .fetch_one(db.pool())
+    .await
+    .expect("query start event");
+    assert_eq!(start_count, 1, "expected 1 plan-level start event");
+
+    let (terminal_count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM plan_apply_events \
+         WHERE plan_id = ? AND item_id IS NULL AND new_state = 'applied'",
+    )
+    .bind(&plan_id)
+    .fetch_one(db.pool())
+    .await
+    .expect("query terminal event");
+    assert_eq!(terminal_count, 1, "expected 1 plan-level terminal event");
+
+    // Terminal summary via the same poll path the E2E journeys use.
+    let status = app_core::plan_apply::get_apply_status(db.pool(), &plan_id)
+        .await
+        .expect("get_apply_status");
+    assert_eq!(status.plan_state, "applied");
+    assert_eq!(status.items_applied, 1);
+    assert_eq!(status.items_failed, 0);
+    assert_eq!(status.items_skipped, 0);
+    assert_eq!(status.items_cancelled, 0);
+
+    // C5 lifecycle closure still fires through the channel-free path: an
+    // `origin = archive` plan reaching `applied` drives the project to
+    // `archived`.
+    let archived = persistence_db::repositories::projects::list_archived_projects(db.pool())
+        .await
+        .expect("list_archived_projects");
+    assert_eq!(archived.len(), 1, "the completed project must now be archived");
+    assert_eq!(archived[0].id, project_id);
+    assert_eq!(archived[0].archived_via_plan_id.as_deref(), Some(plan_id.as_str()));
+}
+
+/// `apply_plan_channel_free` also handles a plan that is already `approved`
+/// (idempotent-ish reuse of the stored token) rather than only
+/// `ready_for_review` — mirrors `inbox_plan::apply_inbox_plan`'s tolerance of
+/// a caller that approved out-of-band.
+#[tokio::test]
+async fn apply_plan_channel_free_reuses_existing_approval() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let src = dir.path().join("source.fits");
+    let dst = dir.path().join("processed/source.fits");
+    std::fs::write(&src, b"fits-content").expect("write src");
+
+    seed_approved_plan_with_real_files(db.pool(), &plan_id, &src, &dst).await;
+
+    let resp = app_core::plan_apply::apply_plan_channel_free(db.pool(), &bus, &plan_id)
+        .await
+        .expect("apply_plan_channel_free should reuse the existing approval");
+    assert_eq!(resp.new_state, "applying");
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    assert!(!src.exists(), "source should have been moved");
+    assert!(dst.exists(), "destination should exist");
+
+    let status = app_core::plan_apply::get_apply_status(db.pool(), &plan_id)
+        .await
+        .expect("get_apply_status");
+    assert_eq!(status.plan_state, "applied");
+    assert_eq!(status.items_applied, 1);
+}

@@ -264,6 +264,43 @@ mod tests {
         assert!(items.iter().all(|i| i.action == "archive"));
     }
 
+    /// Regression test (spec 037 Journey 6/7 bugfix): before
+    /// `protection::generate_plan` computed a real `archive_path`, every
+    /// `archive`-action item generated here had `to_relative_path` set equal
+    /// to its own `from_relative_path` (see `generate`'s item-mapping
+    /// closure), so applying the plan always failed every item with
+    /// `conflict.destination_exists` (source == destination) — a bug with
+    /// zero prior test coverage until this spec added real apply-path
+    /// journeys. Assert the destination is now a distinct, non-empty path
+    /// under the app-managed `.astro-plan-archive/<planId>/` convention.
+    #[tokio::test]
+    async fn generate_computes_distinct_archive_destination_per_item() {
+        let db = setup().await;
+        seed_project(&db, "p1", "completed").await;
+        seed_artifact(&db, "a1", "p1", "/data/p1/calibrated/light_001.xisf", "intermediate", 1000)
+            .await;
+
+        let resp = generate(db.pool(), "p1", None).await.unwrap();
+        let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+        assert_eq!(items.len(), 1);
+        let item = &items[0];
+
+        assert_eq!(item.from_relative_path, "/data/p1/calibrated/light_001.xisf");
+        assert_ne!(
+            item.to_relative_path, item.from_relative_path,
+            "archive destination must differ from the source path, or every real apply \
+             fails with conflict.destination_exists"
+        );
+        assert!(
+            item.to_relative_path.contains(".astro-plan-archive/"),
+            "expected the app-managed archive folder convention in: {}",
+            item.to_relative_path
+        );
+        assert!(item.to_relative_path.contains(&resp.plan_id));
+        assert!(item.to_relative_path.ends_with("light_001.xisf"));
+        assert_eq!(item.archive_path.as_deref(), Some(item.to_relative_path.as_str()));
+    }
+
     #[tokio::test]
     async fn generate_masters_and_finals_gate_approval() {
         // Default global protection is "protected", and master/final map to the

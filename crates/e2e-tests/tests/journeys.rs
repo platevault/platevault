@@ -8,7 +8,10 @@
 //! commands); mutating steps that require a `tauri::ipc::Channel` argument
 //! (`plans.apply` a.k.a. `plans_apply_real`) are deliberately routed through
 //! the channel-free command variants that exist for exactly this purpose
-//! (`inbox.plan.apply`, `plans.approve`) rather than reaching into product
+//! (`inbox.plan.apply` for inbox plans; `plans.apply.direct` a.k.a.
+//! `plans_apply_direct`, spec 037, for archive/cleanup plans — `plans.approve`
+//! remains available separately for journeys that only need the reviewable
+//! `ready_for_review` -> `approved` step) rather than reaching into product
 //! frontend code to fabricate a Channel from a WebDriver script — see each
 //! journey's doc comment for the specific reasoning.
 //!
@@ -567,25 +570,27 @@ async fn lifecycle_integrity() -> anyhow::Result<()> {
 }
 
 /// Cleanup plan review: real artifact observation -> scan -> generate ->
-/// approve (spec 017/037 D22 — newly in scope now that the WP-A generator
-/// (#389) is merged).
+/// approve -> apply (spec 017/037 D22/Journey 6 — newly in scope now that the
+/// WP-A generator (#389) and the channel-free `plans.apply.direct` command
+/// exist).
 ///
-/// Backend REAL: `projects.create`, `artifact.watcher.attach` (spec 012,
-/// #400), `artifact.list`, `cleanup.policy.update`, `cleanup.scan`,
-/// `cleanup.plan.generate`, `plans.approve`.
+/// Backend REAL: `projects.create`, `source.protection.set`,
+/// `artifact.watcher.attach` (spec 012, #400), `artifact.list`,
+/// `cleanup.policy.update`, `cleanup.scan`, `cleanup.plan.generate`,
+/// `plans.approve`, `plans.apply.direct`, `plans.apply.status`.
 ///
-/// KNOWN GAP (documented, not faked): applying the generated plan requires
-/// `plans.apply_real`, which takes a `tauri::ipc::Channel` progress argument.
-/// There is no channel-free apply command for archive/cleanup plans (unlike
-/// `inbox.plan.apply` for inbox plans), and the Cleanup/Archive UI does not
-/// yet wire an "Apply" affordance for generator-produced plans (`git grep
-/// cleanupPlanGenerate apps/desktop/src/features/projects
-/// apps/desktop/src/features/archive` finds no caller). Fabricating a
-/// `Channel` from a WebDriver script would mean reaching into product
-/// frontend code beyond a thin test hook (FR-018), so this journey stops at
-/// the reviewable, `ready_for_review` -> `approved` plan and documents the
-/// apply step as a follow-up once a channel-free apply path or a real UI
-/// Apply button exists.
+/// FORMERLY a documented gap: applying the generated plan needed
+/// `plans.apply_real`, which takes a `tauri::ipc::Channel` progress
+/// argument this WebDriver harness cannot construct. `plans.apply.direct`
+/// (spec 037) is the channel-free equivalent — same executor, same durable
+/// audit trail, no `Channel` required — so this journey now drives the real
+/// filesystem mutation instead of stopping at `approved`.
+///
+/// `source.protection.set` marks this project `normal` before generating the
+/// plan: the app's safe-by-default protection level is `"protected"`
+/// (constitution II), and a project id has no protection override until a
+/// caller sets one — a real user would do the same via Settings before a
+/// first cleanup, exactly like this call.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn cleanup_plan_review() -> anyhow::Result<()> {
@@ -622,7 +627,27 @@ async fn cleanup_plan_review() -> anyhow::Result<()> {
     // convention (`crates/workflow/artifacts/src/default_rules.rs`), which
     // classifies as `ArtifactKind::Intermediate` — eligible for cleanup once
     // the policy allows it (below).
-    std::fs::write(project_dir.path().join("integration_M31_Ha.xisf"), b"not-a-real-xisf-file")?;
+    let original_path = project_dir.path().join("integration_M31_Ha.xisf");
+    std::fs::write(&original_path, b"not-a-real-xisf-file")?;
+
+    // Real per-project protection override (US2): without it, the item
+    // resolves to the app's safe-by-default "protected" level and the apply
+    // step below refuses every item with `protected.source` — not a bug,
+    // the documented constitution-II gate — so a real cleanup flow always
+    // sets this (or the global default) before a first-time cleanup.
+    let _: serde_json::Value = app
+        .invoke(
+            "source_protection_set",
+            json!({
+                "request": {
+                    "sourceId": project_id,
+                    "level": "normal",
+                    "blockPermanentDelete": null,
+                    "categories": null,
+                }
+            }),
+        )
+        .await?;
 
     // Attaching the watcher runs a real, synchronous-enough reconciliation
     // pass over existing files (spec 012 T005) — poll `artifact.list` for it
@@ -684,6 +709,57 @@ async fn cleanup_plan_review() -> anyhow::Result<()> {
     anyhow::ensure!(
         approve["planId"] == json!(plan_id) && approve["newState"] == "approved",
         "expected plans.approve to move the generated plan to approved: {approve}"
+    );
+
+    // Apply — the real filesystem mutation (channel-free, spec 037). Tolerates
+    // the plan already being `approved` (reuses the stored token).
+    let apply: serde_json::Value =
+        app.invoke("plans_apply_direct", json!({ "planId": plan_id })).await?;
+    anyhow::ensure!(
+        apply["planId"] == json!(plan_id) && apply["newState"] == "applying",
+        "expected plans.apply.direct to start applying the approved plan: {apply}"
+    );
+
+    // Poll the real, durable apply status until the executor finishes —
+    // `plans.apply.status` reads `plan_apply_events` (the same durable proof
+    // `plan_review_apply_with_audit` uses for the inbox path).
+    let status: serde_json::Value = app
+        .invoke_until(
+            "plans_apply_status",
+            json!({ "planId": plan_id }),
+            INVOKE_TIMEOUT,
+            |v: &serde_json::Value| {
+                matches!(
+                    v["planState"].as_str(),
+                    Some("applied" | "partially_applied" | "failed" | "cancelled")
+                )
+            },
+        )
+        .await?;
+    anyhow::ensure!(
+        status["planState"] == "applied",
+        "expected the cleanup plan to apply cleanly, got: {status}"
+    );
+    anyhow::ensure!(
+        status["itemsApplied"].as_i64().unwrap_or(0) >= 1,
+        "expected at least 1 durably-recorded applied item: {status}"
+    );
+
+    // Real filesystem side effect: the original output file moved out of the
+    // project folder into the app-managed archive subtree.
+    anyhow::ensure!(
+        !original_path.exists(),
+        "expected the cleanup candidate to have moved away from {original_path:?}"
+    );
+    let archived_somewhere = std::fs::read_dir(project_dir.path())
+        .ok()
+        .and_then(|mut entries| {
+            entries.find(|e| e.as_ref().is_ok_and(|e| e.file_name() == ".astro-plan-archive"))
+        })
+        .is_some();
+    anyhow::ensure!(
+        archived_somewhere,
+        "expected a `.astro-plan-archive` subtree under the project folder after apply"
     );
 
     app.shutdown().await

@@ -1214,6 +1214,63 @@ pub async fn apply_plan(
     Ok(PlanApplyResponse { plan_id: plan_id.to_owned(), run_id, new_state: "applying".to_owned() })
 }
 
+// ── apply_plan_channel_free ───────────────────────────────────────────────────
+
+/// Channel-free variant of [`apply_plan`] (spec 037 archive/cleanup apply).
+///
+/// `apply_plan` requires a caller-supplied `approval_token` (spec 025 A1) and
+/// is normally reached through the webview's `tauri::ipc::Channel`-carrying
+/// `plans.apply` command so live per-item progress can stream back. Two kinds
+/// of caller have neither a token in hand nor a `Channel` to construct:
+///
+/// - The spec 037 Layer-2 WebDriver test harness, which drives the real
+///   backend via `window.__ALM_E2E__.invoke(...)` and structurally cannot
+///   create a `tauri::ipc::Channel` from a test script.
+/// - Any archive/cleanup UI surface that only needs a fire-and-poll apply
+///   (poll [`get_apply_status`] for the durable terminal counts) rather than
+///   a live progress stream.
+///
+/// This mirrors the auto-approve-then-apply pattern `inbox_plan::
+/// apply_inbox_plan` already established for inbox plans, generalised to any
+/// plan id (no inbox-item link required): approve the plan if it is still
+/// `ready_for_review`, tolerate an already-`approved` plan by reusing its
+/// stored token, then start the same background executor as `apply_plan`
+/// with no progress sink. Constitution §II (reviewable filesystem mutation +
+/// audit) is preserved unchanged — this only removes the live-progress
+/// transport, not any approval, CAS, or audit step.
+///
+/// # Errors
+///
+/// - `plan.not_found` — plan not found.
+/// - `plan.invalid_state` — plan is not `ready_for_review`/`approved` (e.g.
+///   already applied/discarded/applying), or the approve step's non-empty
+///   items invariant failed.
+/// - `plan.conflict.overlap` — concurrent apply already running.
+pub async fn apply_plan_channel_free(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    plan_id: &str,
+) -> Result<PlanApplyResponse, ContractError> {
+    let approve_resp = crate::plans::approve_plan(pool, bus, plan_id, "user").await;
+
+    let approval_token = match approve_resp {
+        Ok(resp) => resp.approval_token,
+        // Already approved (idempotent-ish) — fetch the stored token and carry
+        // through to apply_plan. Any other state (applying/applied/discarded/
+        // stale) surfaces the original error unchanged.
+        Err(e) if e.code == ErrorCode::PlanInvalidState => {
+            let plan_row = plans_repo::get_plan(pool, plan_id, false).await.map_err(db_err)?;
+            if plan_row.state != "approved" {
+                return Err(e);
+            }
+            plan_row.approval_token.unwrap_or_default()
+        }
+        Err(e) => return Err(e),
+    };
+
+    apply_plan(pool, bus, plan_id, &approval_token, None).await
+}
+
 // ── cancel_plan ───────────────────────────────────────────────────────────────
 
 /// Cancel an in-flight plan apply (US3, T032).
