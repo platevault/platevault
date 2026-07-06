@@ -14,6 +14,18 @@
  *   - We fetch getCalibrationMaster(master.id) → MasterDetail_Serialize whose
  *     usedBySessionIds and compatibleSessions are populated, then cross-reference
  *     listSessions() to build "{target} · {filter} · {night}" labels for both.
+ *
+ * Matching hero (spec 043 §4 "Detail hero = compatible-sessions match table"):
+ *   `MatchCandidatesPanel` is mounted below the fingerprint/linked-sessions row
+ *   using the master's first `usedBySessionIds` entry as the matching context
+ *   — `calibration.match.suggest` is anchored on a light SESSION (it returns
+ *   ranked candidate masters for that one session), so a session id is
+ *   required to drive it. `compatibleSessions` cannot supply that id: the
+ *   backend leaves it an empty stub today (`masters_get` in
+ *   crates/app/calibration/src/matching.rs hardcodes `compatible_sessions:
+ *   vec![]`), so it is not used here. When the master has no used session yet
+ *   the panel shows its existing "no selection" empty state — real once the
+ *   master gets its first assignment instead of faked from stub data.
  */
 
 import { useEffect, useState } from "react";
@@ -30,6 +42,8 @@ import { Btn, EmptyState } from "@/ui";
 import { m } from "@/lib/i18n";
 import { revealLabel } from "@/lib/reveal-label";
 import { SessionListPopover } from "./SessionListPopover";
+import { MatchCandidatesPanel } from "./MatchCandidatesPanel";
+import { useCalibrationAssign, useCalibrationSuggest } from "./useCalibration";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -58,12 +72,47 @@ interface DetailState {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function MasterDetail({ master, agingThresholdDays }: Props) {
+export function MasterDetail({ master, prefillSuggestion, agingThresholdDays }: Props) {
 	const [detail, setDetail] = useState<DetailState>({
 		confirmedNames: [],
 		compatibleNames: [],
 		loading: false,
 	});
+
+	// Matching context: the session `calibration.match.suggest` is anchored on.
+	// See the file-header note — real `usedBySessionIds`, not the stub
+	// `compatibleSessions` field.
+	const matchSessionId = master?.usedBySessionIds[0];
+	const {
+		response: suggestResponse,
+		loading: suggestLoading,
+		error: suggestError,
+		refresh: refreshSuggest,
+	} = useCalibrationSuggest(matchSessionId);
+	const { assigning, assign } = useCalibrationAssign();
+
+	const handleAssign = async (masterId: string, override: boolean) => {
+		if (!matchSessionId) {
+			return {
+				status: "error",
+				error: { code: "no_session", message: m.calibration_compatible_sessions_no_anchor_desc() },
+			};
+		}
+		const res = await assign(matchSessionId, masterId, override);
+		if (res.status === "success") refreshSuggest();
+		// Normalize: the real response types `error`/`details` as `| null`, while
+		// the panel's prop type only allows the object or `undefined`.
+		return {
+			status: res.status,
+			error: res.error
+				? {
+						code: res.error.code,
+						message: res.error.message,
+						details: res.error.details ?? undefined,
+					}
+				: undefined,
+		};
+	};
 
 	useEffect(() => {
 		if (!master) {
@@ -214,6 +263,20 @@ export function MasterDetail({ master, agingThresholdDays }: Props) {
 						names={detail.loading ? [] : detail.compatibleNames}
 					/>
 				</div>
+			</div>
+
+			{/* Detail hero (spec 043 §4): ranked candidate-masters match table for
+			    the master's matching-context session, with assign/cancel. */}
+			<div className="alm-session-detail2__match">
+				<MatchCandidatesPanel
+					sessionId={matchSessionId ?? ""}
+					response={suggestResponse}
+					loading={suggestLoading}
+					error={suggestError}
+					onAssign={handleAssign}
+					assigning={assigning}
+					prefillSuggestion={prefillSuggestion}
+				/>
 			</div>
 		</DetailPanel>
 	);
