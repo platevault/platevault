@@ -7,6 +7,7 @@
 //!
 //! Spec 013/023 gen-2 target repository (`targets`) removed by spec 036.
 //! Spec 023 US2/US3/US4 target history + notes queries live in `targets`.
+//! Spec 051 US2 target favourites queries live in `target_favourites`.
 
 pub mod artifacts;
 pub mod audit;
@@ -28,5 +29,6 @@ pub mod provenance;
 pub mod session_snapshot;
 pub mod settings;
 pub mod source_protection;
+pub mod target_favourites;
 pub mod targets;
 pub mod tool_launches;

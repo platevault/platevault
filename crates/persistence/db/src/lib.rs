@@ -6,6 +6,7 @@
 //! Migration 0048 added `canonical_target.notes` (spec 023 US4).
 //! Migration 0053 added `projects.archived_via_plan_id` + re-added `'archive'`
 //! to the `plans.origin` CHECK (spec 017 C5).
+//! Migration 0061 added `target_favourite` (spec 051 US2).
 
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 
@@ -83,7 +84,7 @@ impl Database {
     /// # Errors
     ///
     /// Returns [`DbError::Migration`] if any migration script fails.
-    // Touched for spec 049 (migration 0054) to force `sqlx::migrate!`
+    // Touched for spec 051 (migration 0061) to force `sqlx::migrate!`
     // re-embed (project memory: stale-embed guard).
     pub async fn migrate(&self) -> DbResult<()> {
         sqlx::migrate!("./migrations").run(&self.pool).await?;
