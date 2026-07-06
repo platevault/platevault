@@ -68,9 +68,36 @@ export function resolveTheme(choice: ThemeChoice = getThemeChoice()): ThemeId {
   return choice;
 }
 
+/**
+ * Sync the native window chrome's light/dark family to the resolved theme
+ * (spec 051 US6, T037/T038). Gated behind `core.isTauri()` (FR-020: a no-op
+ * outside Tauri, e.g. the browser dev server or vitest). Fire-and-forget: a
+ * platform/webview that throws or rejects (Linux desktop environments per
+ * plan.md's platform-differences table) degrades silently — no error is
+ * ever surfaced to the user for a native chrome affordance this minor.
+ */
+function syncNativeWindowTheme(themeId: ThemeId): void {
+  const mode = THEMES.find((t) => t.id === themeId)?.mode ?? 'light';
+
+  void (async () => {
+    try {
+      const { isTauri } = await import('@tauri-apps/api/core');
+      if (!isTauri()) return;
+
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().setTheme(mode);
+    } catch {
+      // Silently degrade (FR-020, US6 AS2) — native chrome theming is
+      // best-effort and must never surface an error to the user.
+    }
+  })();
+}
+
 export function applyTheme(): void {
   if (typeof document === 'undefined') return;
-  document.documentElement.setAttribute('data-theme', resolveTheme());
+  const resolved = resolveTheme();
+  document.documentElement.setAttribute('data-theme', resolved);
+  syncNativeWindowTheme(resolved);
 }
 
 export function applyDensity(density?: string): void {
