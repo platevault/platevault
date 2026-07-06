@@ -158,6 +158,7 @@ impl E2eApp {
         preflight()?;
         reset_database()?;
         reset_webview_storage();
+        reset_window_state();
 
         let mut driver_proc = spawn_tauri_webdriver()
             .context("failed to spawn the tauri-webdriver CLI on port 4444")?;
@@ -1020,6 +1021,53 @@ fn reset_webview_storage() {
     for path in candidates {
         let _ = std::fs::remove_dir_all(path);
     }
+}
+
+/// Reset `tauri-plugin-window-state`'s persisted geometry (spec 051 US4)
+/// before each journey launch, for the same reason `reset_database()` and
+/// `reset_webview_storage()` exist: sequential journeys in the same CI job
+/// share one real OS user profile, so without this a later journey's app
+/// process restores whatever size/position/maximized state an EARLIER
+/// journey's process happened to exit in. On a CI runner (headless/virtual
+/// display, or a shared display with unusual bounds), a restored geometry
+/// can end up minimized or positioned somewhere WebDriver's element queries
+/// can't interact with, hanging the next journey instead of failing fast
+/// (observed as `inbox_ui_mixed_folder_splits_into_single_type_items` timing
+/// out at >150s on Windows/macOS real-UI CI once the shell-polish window
+/// state plugin started actually persisting geometry across launches).
+///
+/// The plugin's default store is `.window-state.json` under
+/// `app.path().app_config_dir()` (`tauri-plugin-window-state` source) —
+/// which is a DIFFERENT directory than `app_data_dir()` on Linux
+/// (`$XDG_CONFIG_HOME`/`~/.config` vs `$XDG_DATA_HOME`/`~/.local/share`) but
+/// the SAME directory on Windows (`%APPDATA%`) and macOS
+/// (`~/Library/Application Support`), where the CI failures were observed.
+/// Failures are ignored (first run has no window-state file yet).
+fn reset_window_state() {
+    if let Some(dir) = app_config_dir() {
+        let _ = std::fs::remove_file(dir.join(".window-state.json"));
+    }
+}
+
+/// Resolve the per-OS Tauri `app_config_dir` for the app identifier
+/// `dev.astro-plan.astro-library-manager` (`tauri.conf.json`). Mirrors
+/// `tauri::path::PathResolver::app_config_dir` (`dirs::config_dir()/<identifier>`)
+/// without needing a Tauri runtime in the test harness:
+/// - Linux:   `$XDG_CONFIG_HOME` or `~/.config`
+/// - macOS:   `~/Library/Application Support` (same as `app_data_dir`)
+/// - Windows: `%APPDATA%` (roaming, same as `app_data_dir`)
+fn app_config_dir() -> Option<PathBuf> {
+    const APP_IDENTIFIER: &str = "dev.astro-plan.astro-library-manager";
+    let base = if cfg!(target_os = "windows") {
+        std::env::var_os("APPDATA").map(PathBuf::from)
+    } else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+    };
+    base.map(|b| b.join(APP_IDENTIFIER))
 }
 
 /// Resolve the per-OS Tauri `app_data_dir` for the app identifier
