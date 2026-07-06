@@ -35,6 +35,46 @@ use serde_json::json;
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Wait for the index route's async first-run redirect to land on `/setup`
+/// BEFORE navigating anywhere (mirrors `inbox_ui_journeys.rs`'s
+/// `settle_first_run_redirect`). A fresh DB (the harness resets it every
+/// launch) makes `checkFirstRunComplete` redirect `/` → `/setup` from an
+/// async `beforeLoad`; if a journey `goto_route`s while that redirect is
+/// still pending, the late-resolving redirect can yank the app off the
+/// target route.
+async fn settle_first_run_redirect(app: &E2eApp) -> anyhow::Result<()> {
+    app.wait_url_contains("/setup", Duration::from_secs(15))
+        .await
+        .map(drop)
+        .map_err(|e| anyhow::anyhow!("expected a fresh DB to redirect to /setup: {e}"))
+}
+
+/// Registers a disposable `light_frames` root and a disposable `project`
+/// root: `firstrun.complete` (which [`E2eApp::complete_first_run_gate`]
+/// issues) specifically requires one of EACH of those two categories — a
+/// `calibration` root (this file's actual test subject) does not satisfy
+/// either precondition (`crates/persistence/db/src/repositories/first_run.rs`).
+/// Every journey below registers this pair alongside its calibration root so
+/// `goto_route` to a Shell-wrapped page (`/inbox`, `/calibration`) doesn't get
+/// bounced back to `/setup` by `Shell.tsx`'s client-side `setupCompleted` gate.
+async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
+    let raw_dir = tempfile::tempdir()?;
+    let _: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({ "path": raw_dir.path().to_string_lossy(), "category": "light_frames", "scanSettings": null }),
+        )
+        .await?;
+    let project_dir = tempfile::tempdir()?;
+    let _: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({ "path": project_dir.path().to_string_lossy(), "category": "project", "scanSettings": null }),
+        )
+        .await?;
+    app.complete_first_run_gate().await
+}
+
 async fn register_calibration_root(app: &E2eApp) -> anyhow::Result<(tempfile::TempDir, String)> {
     let root_dir = tempfile::tempdir()?;
     let register: serde_json::Value = app
@@ -70,8 +110,10 @@ async fn register_calibration_root(app: &E2eApp) -> anyhow::Result<(tempfile::Te
 async fn calibration_ui_masters_ingest_as_individual_items() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
 
     let (root_dir, _root_id) = register_calibration_root(&app).await?;
+    complete_first_run(&app).await?;
     write_minimal_fits(
         root_dir.path(),
         "master_dark_001.fits",
@@ -131,8 +173,10 @@ async fn calibration_ui_masters_ingest_as_individual_items() -> anyhow::Result<(
 async fn calibration_ui_confirmed_master_shows_kind_conditional_detail() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
 
     let (root_dir, _root_id) = register_calibration_root(&app).await?;
+    complete_first_run(&app).await?;
     write_minimal_fits(
         root_dir.path(),
         "master_bias_002.fits",
