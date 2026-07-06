@@ -121,6 +121,17 @@ pub struct E2eApp {
     driver_proc: Option<Child>,
 }
 
+/// How much persisted state [`E2eApp::launch_with`] wipes before spawning
+/// the app process. See [`E2eApp::launch`] vs [`E2eApp::relaunch`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ResetScope {
+    /// Wipe DB + webview storage + window-state (a fresh journey).
+    Full,
+    /// Wipe DB + window-state, but keep webview storage (localStorage) —
+    /// simulates a real app restart within one journey.
+    PreserveWebviewStorage,
+}
+
 impl E2eApp {
     /// Launch a full E2E session: preflight → reset DB → spawn the
     /// `tauri-webdriver` CLI proxy → create the WebDriver session with a
@@ -155,9 +166,41 @@ impl E2eApp {
     /// The app auto-loads its frontend from the Tauri `devUrl` on launch, so
     /// no `driver.goto(...)` call is needed here (see module docs).
     pub async fn launch() -> Result<Self> {
+        Self::launch_with(ResetScope::Full).await
+    }
+
+    /// Simulate a real app restart WITHIN one journey: a fresh WebDriver
+    /// session + a fresh `desktop_shell` process, but WITHOUT wiping the
+    /// webview's persisted web storage (localStorage & co).
+    ///
+    /// [`Self::launch`] always calls `reset_webview_storage()` so that
+    /// state set by one journey (test function) can't leak into the NEXT
+    /// journey's fresh [`Self::launch`] — those are different real OS user
+    /// profiles' worth of isolation, correctly enforced. But a journey that
+    /// wants to prove something actually SURVIVES a real app relaunch (e.g.
+    /// `settings_journeys.rs`'s theme persistence test) must call this
+    /// instead of `launch()` for its second call: calling `launch()` again
+    /// wipes the very localStorage state the journey is trying to prove
+    /// persisted, which is a harness bug, not a product one (windows-only
+    /// symptom: only WebView2's `EBWebView` wipe path in
+    /// `reset_webview_storage()` actually deletes real localStorage files —
+    /// the Linux `localstorage`/`storage` paths don't match WebKitGTK's real
+    /// storage location, so the same call was already a no-op there).
+    ///
+    /// Still resets the database and window-state store (same as `launch()`)
+    /// — those are unrelated to the webview storage this exists to preserve,
+    /// and journeys that use this (see `settings_journeys.rs`) already expect
+    /// a fresh DB / first-run gate after "relaunching".
+    pub async fn relaunch() -> Result<Self> {
+        Self::launch_with(ResetScope::PreserveWebviewStorage).await
+    }
+
+    async fn launch_with(scope: ResetScope) -> Result<Self> {
         preflight()?;
         reset_database()?;
-        reset_webview_storage();
+        if matches!(scope, ResetScope::Full) {
+            reset_webview_storage();
+        }
         reset_window_state();
 
         let mut driver_proc = spawn_tauri_webdriver()
@@ -983,6 +1026,78 @@ impl E2eApp {
             .is_selected()
             .await
             .with_context(|| format!("is_selected() on aria-label={label:?} failed"))
+    }
+
+    /// Close the app's window gracefully (round 3, fix-464-theme) before
+    /// falling through to the ordinary [`Self::shutdown`] teardown, so a
+    /// value written to `localStorage` right before this call actually
+    /// survives a following [`Self::relaunch`].
+    ///
+    /// [`Self::shutdown`]'s `driver.quit()` makes the `tauri-webdriver` CLI
+    /// force-kill the app process — the CLI's only handle on the app's
+    /// lifetime (see `blocking_session_delete`'s doc). CI evidence (run
+    /// 28808552431, then run 28810006837 even with a 1s pre-kill flush
+    /// delay) shows this reliably loses a `localStorage` write on Windows:
+    /// the raw value read back after a relaunch was `null`, not merely
+    /// stale — WebView2 commits `localStorage` to its on-disk LevelDB-backed
+    /// store on a graceful shutdown, not on a timer, so a delay before an
+    /// abrupt kill cannot save it.
+    ///
+    /// Triggers a REAL native window close — `@tauri-apps/api/window`'s
+    /// `getCurrentWindow().close()` (dynamically imported the same way
+    /// `apps/desktop/src/data/theme.ts`'s `syncNativeWindowTheme` already
+    /// does), not DOM's bare `window.close()` (a no-op for a top-level
+    /// window in most engines). This app has no `on_window_event`/
+    /// `CloseRequested` handler (`apps/desktop/src-tauri/src/lib.rs`), so
+    /// closing the only window exits the process the same way the native
+    /// Quit menu item's `app.exit(0)` does (`lib.rs`'s `on_menu_event`) —
+    /// real-user fidelity, not a synthetic teardown path.
+    ///
+    /// Polls for the `__ALM_E2E__` bridge to actually disappear (proof the
+    /// window/process tore down) rather than trusting the `close()` promise
+    /// resolved before the OS finished reaping the process, then hands off
+    /// to [`Self::shutdown`] — by then the app is normally already gone, so
+    /// that call is just cleaning up the (already-dead) CLI session and
+    /// freeing port 4444, not the thing that kills the app.
+    ///
+    /// Falls back to [`Self::shutdown`]'s abrupt kill if the graceful close
+    /// doesn't complete within the deadline (e.g. the dynamic import fails
+    /// outside a real Tauri runtime) — best-effort, never hangs a journey.
+    pub async fn graceful_shutdown(self) -> Result<()> {
+        let script = r#"
+            var callback = arguments[arguments.length - 1];
+            import('@tauri-apps/api/window').then(function (mod) {
+                return mod.getCurrentWindow().close();
+            }).then(function () {
+                callback(true);
+            }).catch(function () {
+                callback(false);
+            });
+        "#;
+        let _: bool = self
+            .driver
+            .execute_async(script, vec![])
+            .await
+            .ok()
+            .and_then(|ret| ret.convert::<bool>().ok())
+            .unwrap_or(false);
+
+        // Proof the window/process actually tore down: once it has, WebDriver
+        // commands against the now-gone window/session fail — treat any
+        // error the same as an explicit "bridge gone" (`Ok(false)`).
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            match self.bridge_ready().await {
+                Ok(false) | Err(_) => break,
+                Ok(true) if Instant::now() >= deadline => break,
+                Ok(true) => tokio::time::sleep(Duration::from_millis(100)).await,
+            }
+        }
+        // Small extra margin for the OS to finish reaping the process right
+        // after the window/webview teardown completes.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        self.shutdown().await
     }
 
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process

@@ -230,7 +230,7 @@ everything neither automated layer reaches.
 | 7 Archive → delete | ✅ (backend only) | ✅ `archive_lifecycle_apply_trash_permanent_delete` (`archive_journeys.rs`, NEW 2026-07-05): real apply + `archive.list` + `archive.send_to_trash`/`archive.permanently_delete` metadata + `blockPermanentDelete` gate | ❌ none | `windows-journeys/journey-07-archive-delete.md` |
 | 8 Calibration masters → matching | ✅ | 🟡 real-UI (`calibration_ui_journeys.rs`): masters ingest as individual items + kind-conditional detail (Tests 1/2). Matching/assign UI (Tests 3-5) found UNREACHABLE from the real app during this pass — see finding below, not automatable until fixed | ❌ none | `windows-journeys/journey-08-calibration-masters-matching.md` |
 | 9 Targets & planning | ✅ (backend only) | ❌ **none at all** | ❌ **none at all** | `windows-journeys/journey-09-targets-planning.md` |
-| 10 Settings/appearance/i18n | ✅ | 🟡 route-load smoke only | ❌ none | `windows-journeys/journey-10-settings-appearance-i18n.md` |
+| 10 Settings/appearance/i18n | ✅ | 🟡 real-UI (`settings_journeys.rs`): no-global-Save + real auto-save round-trip, theme live-apply + cross-relaunch persistence. Remaining sub-tests (altitude clamp, log-panel layout/export, 1100×720 convention, translated backend errors, command palette, sidebar persistence) still route-load-smoke only | ❌ none | `windows-journeys/journey-10-settings-appearance-i18n.md` |
 
 Legend: ✅ solid coverage at that layer · 🟡 partial/IPC-only/smoke-only ·
 ❌ none. Layer-1 "✅" means the backend logic is real-tested; it says
@@ -373,8 +373,16 @@ just test the mock, not the product:
     containment, artifact watcher; tool-launch and the watcher specifically
     need Layer-2 (a real process/filesystem watcher), not the mock layer.
 11. **Settings + layout-convention + i18n regression guard** (Journey 10) —
-    lowest filesystem-mutation risk; the 1100×720 layout convention and
-    no-raw-error-code checks are cheap, cross-cutting regression guards.
+    PARTIALLY DONE (2026-07-05, `crates/e2e-tests/tests/settings_journeys.rs`):
+    no-global-Save-button + real auto-save round-trip (Test 1), and theme
+    live-apply + real cross-relaunch persistence (Test 2, using the
+    `localStorage`-backed theme choice — the one piece of Settings state this
+    harness's per-launch `reset_database()` doesn't erase, so it's the only
+    honest way to prove relaunch persistence here). Still open as follow-up:
+    the 1100×720 layout convention and no-raw-error-code checks are cheap,
+    cross-cutting regression guards worth adding next; altitude clamp,
+    log-panel layout/export, command palette, and sidebar persistence remain
+    unautomated too.
 
 See `docs/development/windows-journeys/journey-0{1..9,10}-*.md` for the
 click-by-click manual scripts covering all of the above until each is
