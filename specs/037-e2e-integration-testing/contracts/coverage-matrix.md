@@ -253,8 +253,8 @@ see the finding below).
 | 044 | Targets planner — Track B ephemeris/observer engine | n/a (frontend-only) | ❌ | ❌ | journey-09 | **Compute engine merged (`a395ce93`) but functionally unreachable**: real astronomy is gated behind `useObserverSiteExists()`, and `site-gate.ts::readSiteExists()` is hardcoded `return false` — no site-creation UI/command exists on `main` until PR #440 (spec 044 US3, open) merges. Verify this is still true before reusing this row. |
 | 046 | i18n infrastructure & error-code translation | ✅ | n/a (cross-cutting) | ❌ | journey-10 | `specs/SPEC_STATUS.md`: Implemented, 36/36 |
 | 047 | Targets planner — Track A (Moon/filter/opposition) | ✅ | ❌ | ❌ | journey-09 | Implemented in code but **also gated by the same site-exists check as 044** (spec 047 D7) — see 044 row; spec's own T028 explicitly defers verify-on-windows here |
-| 048 | Per-frame inventory / live session membership | ✅ (partial) | ❌ | ❌ | — (folds into journeys 4/6) | `main` PRs #435/#442 merged; full per-frame-inventory US scope still open |
-| 049 | Source-view generation (symlinks/junctions) | ✅ (partial) | ❌ | ❌ | — (new journey needed, none written this pass) | `main` PR #439 (US1) + #443 (US2 profile layout) merged; junction/symlink behavior is real, OS-specific filesystem behavior a mock layer structurally cannot prove — highest-value Layer-2 candidate of the unlisted specs |
+| 048 | Per-frame inventory / live session membership | ✅ (partial) | 🟡 `inventory_journeys.rs::reconcile_drops_externally_deleted_frame_from_real_ui_count` | ❌ | — (folds into journeys 4/6) | `main` PRs #435/#442 merged; full per-frame-inventory US scope still open. New journey proves a real external raw-frame deletion + `inventory.reconcile.run` through the real Add-sources session picker's frame count — **but `inventory.reconcile.run`/`inventory.frame.list`/`inventory.root_config.*` have zero frontend callers** (no UI button/setting triggers a reconcile pass anywhere), so the trigger itself is IPC-only by necessity, not by choice; only the reconciliation *result* is read from real DOM |
+| 049 | Source-view generation (symlinks/junctions) | ✅ (partial) | 🟡 `source_view_journeys.rs::generate_source_view_creates_reviewable_wbpp_plan` | ❌ | — (new journey needed, none written this pass) | `main` PR #439 (US1) + #443 (US2 profile layout) merged; junction/symlink behavior is real, OS-specific filesystem behavior a mock layer structurally cannot prove — highest-value Layer-2 candidate of the unlisted specs. New journey drives the REAL "Generate source view" dialog end-to-end to a reviewable, approved `prepared_view_generation` plan and asserts the real WBPP 3-level destination layout — **but stops at `approved`**: real symlink/junction materialization needs `plans.apply_real`'s `tauri::ipc::Channel`, which no product UI constructs for this plan type (`SourceViewsSection`/`ProjectBottomDetail` drop the generated plan id on the floor — see the journey's module docs), the same channel-free-apply blocker already tracked for cleanup/archive (batch items #1/#2 below). Also surfaced a real, pre-existing data-quality gap: `projects.source.add`/`projects.create` have shipped empty `filter_snapshot`/`exposure_snapshot` since spec 003 and were never wired to the real per-session values available since spec 048, so every real project's generated layout falls back to `nofilter`/`unknown-exposure` folders instead of the frame's real filter |
 
 **Finding (verified against code, not spec prose)**: `specs/SPEC_STATUS.md`
 row 77 (044) reads "Track B specced, implementation in progress... T001–T003
@@ -332,12 +332,30 @@ just test the mock, not the product:
    MasterDetail)", which is not true of the code as of this writing. This
    makes Tests 3-5 unreachable from the real app and therefore
    un-automatable at Layer 2 until product wiring lands.
-4. **Source-view generation** (spec 049) — generate/regenerate a
-   WBPP-profile source view and assert real symlinks/junctions exist on
-   disk with the correct per-tool layout; real OS-specific filesystem
-   behavior the mock layer can never prove. No journey exists yet.
-5. **Per-frame inventory reconciliation** (spec 048) — raw-frame-vs-disk
-   reconciliation feeding cleanup candidates; extends Journeys 4/6.
+4. **Source-view generation** (spec 049) — PARTIALLY DONE (2026-07-05,
+   `crates/e2e-tests/tests/source_view_journeys.rs::generate_source_view_creates_reviewable_wbpp_plan`):
+   drives the REAL "Generate source view" dialog (real project row →
+   `SourceViewsSection` button → dialog submit) to a real, reviewable
+   `prepared_view_generation` plan and asserts the WBPP 3-level
+   `{date}/{filter}/{exposure}` destination layout — then stops at
+   `approved`. The remaining scope (assert real symlinks/junctions exist
+   on disk) is **blocked** on the same channel-free apply command as
+   items #1/#2: `plans.apply_real`'s `tauri::ipc::Channel` is never
+   constructed for this plan type by any product UI
+   (`ProjectBottomDetail` drops the generated plan id — see the
+   journey's module docs). Also surfaced the empty
+   `filter_snapshot`/`exposure_snapshot` data-quality FINDING recorded
+   in the 049 row above.
+5. **Per-frame inventory reconciliation** (spec 048) — DONE for the
+   reconcile→UI read path (2026-07-05,
+   `crates/e2e-tests/tests/inventory_journeys.rs::reconcile_drops_externally_deleted_frame_from_real_ui_count`):
+   real external raw-frame deletion + real `inventory.reconcile.run` →
+   the real Add-sources session picker's frame count drops 2→1 in the
+   product DOM. The reconcile *trigger* stays on the invoke bridge by
+   necessity (zero frontend callers exist for
+   `inventory.reconcile.run`/`inventory.frame.list`/`inventory.root_config.*`
+   — see the 048 row above); the cleanup-candidate feed (Journeys 4/6
+   extension) remains open.
 6. **Inbox UI-level gate + reclassify + root-picker** (Journeys 2/3) — DONE
    (2026-07-05, `crates/e2e-tests/tests/inbox_ui_journeys.rs`): mixed-folder
    splitting, the unclassified-frame-type gate + bulk-reclassify unblock, the

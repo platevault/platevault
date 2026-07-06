@@ -1,0 +1,285 @@
+//! Spec 037 Layer-2 real-UI journey: per-frame inventory reconciliation
+//! (spec 048).
+//!
+//! Real backend REAL: `roots.register`, `inbox.scan.folder`,
+//! `inbox.classify`, `inbox.confirm`, `inbox.plan.apply` (catalogue-in-place),
+//! `projects.create`, `inventory.reconcile.run`
+//! (`apps/desktop/src-tauri/src/commands/inventory_frame.rs`, spec 048 T006).
+//!
+//! Real DOM: the project's "Add sources" session picker
+//! (`SessionSourcePicker`, mounted from `EditProjectPane`) queries
+//! `sessions.list` — the spec-048 T014 active/non-missing `frame_count`
+//! read path (`crates/app/core/src/sessions.rs::active_frame_summary`) — and
+//! renders it per-session. This journey reads that REAL, product-rendered
+//! frame count before and after a real reconcile pass, rather than asserting
+//! only the `inventory.reconcile.run` IPC response.
+//!
+//! Catalogue-in-place: same reasoning as `source_view_journeys.rs` — the
+//! `roots.register` default (`organized`) keeps both fixture files at their
+//! literal on-disk paths, so this journey can delete one of them directly to
+//! simulate a real, external raw-frame loss (the disconnected-drive /
+//! moved-by-another-tool scenario spec 048 exists to detect).
+//!
+//! KNOWN GAP (documented, not faked): `inventory.reconcile.run`,
+//! `inventory.frame.list`, and `inventory.root_config.{get,set}`
+//! have real backend implementations (spec 048 T006) but ZERO frontend
+//! callers today (`git grep -rl inventoryReconcileRun apps/desktop/src`
+//! matches only the generated `bindings/index.ts` file) — there is no
+//! button, setting, or scheduled trigger anywhere in the product UI that
+//! invokes a reconcile pass. This journey therefore triggers the reconcile
+//! pass over the invoke bridge (same convention as `artifact.watcher.attach`
+//! in `journeys.rs::cleanup_plan_review` for a backend surface with no UI
+//! affordance yet) and proves its REAL, UI-visible effect on a genuine
+//! product screen, rather than fabricating a UI trigger that does not exist.
+//!
+//! Run (CI): `cargo nextest run -p e2e_tests --profile e2e --run-ignored all`
+//! (serial, `.config/nextest.toml`). See `crates/e2e-tests/tests/journeys.rs`
+//! module docs and `README.md` for the full local run procedure.
+
+mod common;
+
+use std::time::Duration;
+
+use common::{write_minimal_fits, E2eApp};
+use serde_json::json;
+
+const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// External raw-frame deletion → `inventory.reconcile.run` → the real
+/// Add-sources session picker's frame count drops from 2 to 1.
+#[tokio::test]
+#[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
+async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow::Result<()> {
+    let app = E2eApp::launch().await?;
+    app.wait_bridge_ready(Duration::from_secs(30)).await?;
+
+    // ── 1. Real ingest precondition: two same-identity light frames group ──
+    // into ONE real `acquisition_session` with `frame_count == 2` (same
+    // OBJECT/FILTER/GAIN/BINNING/night, spec 035 US4), catalogued in place so
+    // both files stay at their real, individually-deletable paths.
+    let root_dir = tempfile::tempdir()?;
+    let keep_name = "light_m33_001.fits";
+    let lose_name = "light_m33_002.fits";
+    let keep_path = write_minimal_fits(
+        root_dir.path(),
+        keep_name,
+        "Light Frame",
+        Some("M 33"),
+        Some("Ha"),
+        Some("2026-01-12T22:00:00"),
+    )?;
+    let lose_path = write_minimal_fits(
+        root_dir.path(),
+        lose_name,
+        "Light Frame",
+        Some("M 33"),
+        Some("Ha"),
+        Some("2026-01-12T23:00:00"),
+    )?;
+    anyhow::ensure!(
+        keep_path.exists() && lose_path.exists(),
+        "fixture FITS files were not written"
+    );
+
+    let register: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({
+                "path": root_dir.path().to_string_lossy(),
+                "category": "light_frames",
+                "scanSettings": null,
+            }),
+        )
+        .await?;
+    let root_id = register["sourceId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("roots.register returned no sourceId: {register}"))?
+        .to_owned();
+
+    let scan: serde_json::Value = app
+        .invoke(
+            "inbox_scan_folder",
+            json!({
+                "req": {
+                    "rootId": root_id,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                    "followSymlinks": false,
+                }
+            }),
+        )
+        .await?;
+    let inbox_item_id = scan["items"][0]["inboxItemId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder discovered no item: {scan}"))?
+        .to_owned();
+
+    let classify: serde_json::Value = app
+        .invoke(
+            "inbox_classify",
+            json!({
+                "req": {
+                    "inboxItemId": inbox_item_id,
+                    "forceRescan": false,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                }
+            }),
+        )
+        .await?;
+    let content_signature = classify["contentSignature"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("inbox.classify returned no contentSignature: {classify}"))?
+        .to_owned();
+
+    let _confirm: serde_json::Value = app
+        .invoke(
+            "inbox_confirm",
+            json!({
+                "req": {
+                    "inboxItemId": inbox_item_id,
+                    "contentSignature": content_signature,
+                    "destructiveDestination": null,
+                    "rootAbsolutePath": root_dir.path().to_string_lossy(),
+                    "rootId": null,
+                }
+            }),
+        )
+        .await?;
+
+    let _apply: serde_json::Value =
+        app.invoke("inbox_plan_apply", json!({ "inboxItemId": inbox_item_id })).await?;
+    anyhow::ensure!(
+        keep_path.exists() && lose_path.exists(),
+        "catalogue-in-place (organized default) must never move either file"
+    );
+
+    // Event-driven session grouping (spec 035 US4 plan_listener) — poll until
+    // BOTH frames have joined the same session.
+    let sessions: serde_json::Value = app
+        .invoke_until("sessions_list", json!({}), INVOKE_TIMEOUT, |v: &serde_json::Value| {
+            v.as_array().is_some_and(|arr| {
+                arr.iter().any(|s| {
+                    s["sessionKey"]["target"] == "M 33" && s["frameCount"].as_i64() == Some(2)
+                })
+            })
+        })
+        .await?;
+    let session = sessions
+        .as_array()
+        .and_then(|arr| arr.iter().find(|s| s["sessionKey"]["target"] == "M 33"))
+        .ok_or_else(|| anyhow::anyhow!("no M 33 session found: {sessions}"))?;
+    let session_id = session["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("session has no id: {session}"))?
+        .to_owned();
+    anyhow::ensure!(
+        session["frameCount"].as_i64() == Some(2),
+        "expected the two same-identity frames to group into one 2-frame session: {session}"
+    );
+
+    // ── 2. Real project (setup precondition) ──
+    //
+    // This journey's DOM focus is the Add-sources session picker's real frame
+    // count, not project creation itself — created over the invoke bridge
+    // like every other journey's preconditions.
+    let project_dir = tempfile::tempdir()?;
+    let create: serde_json::Value = app
+        .invoke(
+            "projects_create",
+            json!({
+                "req": {
+                    "requestId": "e2e-inventory-create",
+                    "name": "E2E Per-Frame Inventory Project",
+                    "tool": "PixInsight",
+                    "path": project_dir.path().to_string_lossy(),
+                    "initialSources": [],
+                    "notes": null,
+                    "canonicalTargetId": null,
+                }
+            }),
+        )
+        .await?;
+    let project_id = create["projectId"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("projects.create returned no projectId: {create}"))?
+        .to_owned();
+
+    // ── 3. Real UI (BEFORE): open the project, open Add sources, read the ──
+    // real per-session frame count from the real DOM.
+    app.goto_route("/projects").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    app.wait_testid(&format!("project-row-{project_id}"), Duration::from_secs(15))
+        .await?
+        .click()
+        .await?;
+    app.wait_testid("edit-project-btn", Duration::from_secs(15)).await?.click().await?;
+    app.wait_testid("edit-project-add-sources-toggle", Duration::from_secs(10))
+        .await?
+        .click()
+        .await?;
+    let frames_before = app
+        .wait_testid_text(
+            &format!("session-picker-frames-{session_id}"),
+            Duration::from_secs(10),
+            |text| !text.trim().is_empty(),
+        )
+        .await?;
+    anyhow::ensure!(
+        frames_before.trim() == "2",
+        "expected the real Add-sources picker to show frameCount=2 before reconcile: \
+         {frames_before:?}"
+    );
+
+    // ── 4. Real filesystem mutation: an external tool/user deletes one raw ──
+    // frame from disk — the exact scenario spec 048 exists to detect.
+    std::fs::remove_file(&lose_path)?;
+    anyhow::ensure!(!lose_path.exists(), "fixture file was not actually removed: {lose_path:?}");
+    anyhow::ensure!(keep_path.exists(), "the surviving frame must still be present: {keep_path:?}");
+
+    // ── 5. Real backend mutation: inventory.reconcile.run ──
+    //
+    // No product UI exposes a reconcile trigger today (KNOWN GAP, module
+    // docs), so this is invoked directly over the bridge.
+    let reconcile: serde_json::Value = app
+        .invoke(
+            "inventory_reconcile_run",
+            json!({ "req": { "rootId": root_id, "reason": "on_demand" } }),
+        )
+        .await?;
+    anyhow::ensure!(
+        reconcile["newlyMissing"].as_i64() == Some(1),
+        "expected exactly 1 newly-missing frame: {reconcile}"
+    );
+    anyhow::ensure!(
+        reconcile["present"].as_i64() == Some(1),
+        "expected exactly 1 still-present frame: {reconcile}"
+    );
+
+    // ── 6. Real UI (AFTER): a fresh page load re-fetches sessions.list ──
+    // (no stale TanStack Query cache to fight) — the SAME real DOM surface
+    // now reflects the real reconciliation result.
+    app.goto_route("/projects").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    app.wait_testid(&format!("project-row-{project_id}"), Duration::from_secs(15))
+        .await?
+        .click()
+        .await?;
+    app.wait_testid("edit-project-btn", Duration::from_secs(15)).await?.click().await?;
+    app.wait_testid("edit-project-add-sources-toggle", Duration::from_secs(10))
+        .await?
+        .click()
+        .await?;
+    let frames_after = app
+        .wait_testid_text(
+            &format!("session-picker-frames-{session_id}"),
+            Duration::from_secs(15),
+            |text| text.trim() == "1",
+        )
+        .await?;
+    anyhow::ensure!(
+        frames_after.trim() == "1",
+        "expected the real Add-sources picker to show frameCount=1 after reconcile: \
+         {frames_after:?}"
+    );
+
+    app.shutdown().await
+}

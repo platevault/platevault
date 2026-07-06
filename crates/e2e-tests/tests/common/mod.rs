@@ -553,7 +553,8 @@ impl E2eApp {
 
     // ---------------------------------------------------------------------
     // Real-DOM interaction helpers (additive, shared across per-area UI
-    // journeys — inbox/calibration/targets/sessions/lifecycle/settings).
+    // journeys — inbox/calibration/targets/sessions/lifecycle/settings/
+    // source-view/per-frame-inventory).
     // These drive the ACTUAL rendered `data-testid` elements (click/type/
     // read), never the invoke bridge, so journeys built on them are proving
     // real UI interaction rather than a second copy of the IPC-level tests.
@@ -804,6 +805,41 @@ impl E2eApp {
                         });
                     }
                 }
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Poll the text content of the element at `data-testid` until `predicate`
+    /// accepts it or `timeout` elapses — the DOM-read equivalent of
+    /// [`Self::invoke_until`], for asserting a real backend mutation (e.g. a
+    /// reconcile pass) landed in a re-rendered, product-owned element instead
+    /// of only in the IPC response.
+    pub async fn wait_testid_text<P>(
+        &self,
+        testid: &str,
+        timeout: Duration,
+        mut predicate: P,
+    ) -> Result<String>
+    where
+        P: FnMut(&str) -> bool,
+    {
+        let deadline = Instant::now() + timeout;
+        let mut last_seen: Option<String> = None;
+        loop {
+            if let Ok(el) = self.driver.find(By::Css(format!("[data-testid='{testid}']"))).await {
+                if let Ok(text) = el.text().await {
+                    if predicate(&text) {
+                        return Ok(text);
+                    }
+                    last_seen = Some(text);
+                }
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "text of data-testid={testid:?} never matched within {timeout:?} \
+                     (last seen: {last_seen:?})"
+                ));
             }
             tokio::time::sleep(Duration::from_millis(150)).await;
         }

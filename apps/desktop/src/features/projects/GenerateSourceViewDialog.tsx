@@ -117,7 +117,12 @@ export function GenerateSourceViewDialog({
           <Btn variant="ghost" onClick={onClose} disabled={submitting}>
             {m.common_cancel()}
           </Btn>
-          <Btn variant="primary" onClick={() => void handleSubmit()} disabled={submitting}>
+          <Btn
+            variant="primary"
+            onClick={() => void handleSubmit()}
+            disabled={submitting}
+            data-testid="generate-source-view-submit"
+          >
             {submitting ? m.common_working() : m.projects_source_views_generate_submit_btn()}
           </Btn>
         </>

@@ -379,6 +379,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                 size="sm"
                 variant="ghost"
                 onClick={() => setShowAddSources(true)}
+                data-testid="edit-project-add-sources-toggle"
               >
                 {m.projects_edit_sources_add_btn()}
               </Btn>

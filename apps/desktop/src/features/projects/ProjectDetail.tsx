@@ -386,7 +386,12 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         subtitle={undefined}
         actions={
           lifecycle !== 'archived' && (
-            <Btn size="sm" variant="ghost" onClick={() => setEditOpen(true)}>
+            <Btn
+              size="sm"
+              variant="ghost"
+              onClick={() => setEditOpen(true)}
+              data-testid="edit-project-btn"
+            >
               {m.projects_detail_edit_btn()}
             </Btn>
           )
