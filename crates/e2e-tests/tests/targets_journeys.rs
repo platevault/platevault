@@ -269,6 +269,73 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     report
 }
 
+/// Poll [`E2eApp::count_elements_with_title`] until it reports at least one
+/// match or `UI_TIMEOUT` elapses.
+///
+/// `count_elements_with_title`'s own doc explicitly does NOT poll — a zero
+/// count is frequently the CORRECT, expected result for its other callers
+/// (asserting an absence), so it hands the "wait for a nonzero count"
+/// responsibility to callers that need it. `targets_ui_astronomy_columns_
+/// disclose_placeholder_without_site` was calling it exactly once, right
+/// after `add_target_via_ui` returns — a real IPC round trip (the target
+/// list refetch that must happen before the new row's astronomy cells exist)
+/// racing a single synchronous check, with no retry. This is the fix: poll
+/// like every other "wait for a real UI state" helper in this harness
+/// (`find_waiting`, the suggestion-poll loop in `add_target_via_ui`).
+async fn wait_for_title_count_at_least(
+    app: &E2eApp,
+    title: &str,
+    min_count: usize,
+) -> anyhow::Result<usize> {
+    let deadline = tokio::time::Instant::now() + UI_TIMEOUT;
+    loop {
+        let count = app.count_elements_with_title(title).await?;
+        if count >= min_count {
+            return Ok(count);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Ok(count);
+        }
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+}
+
+/// Diagnostics for a `wait_for_title_count_at_least` timeout: the first real
+/// target row's outerHTML (does the row even exist? does it carry the
+/// expected muted/unknown cells?) plus a page-wide count for both disclosure
+/// titles, so a future red run shows real evidence instead of a bare
+/// "expected >= 1, got N".
+async fn dump_astronomy_diagnostics(app: &E2eApp) -> String {
+    let mut report = String::from("=== astronomy-columns diagnostics ===\n");
+
+    let row_html_script = r"
+        var el = document.querySelector('.alm-targets-table__row');
+        return el ? el.outerHTML : '<.alm-targets-table__row not found in DOM>';
+    ";
+    match app.driver.execute(row_html_script, vec![]).await {
+        Ok(ret) => match ret.convert::<String>() {
+            Ok(html) => report
+                .push_str(&format!("--- first .alm-targets-table__row outerHTML ---\n{html}\n")),
+            Err(e) => report.push_str(&format!("(failed to deserialise row outerHTML: {e})\n")),
+        },
+        Err(e) => report.push_str(&format!("(row outerHTML script execution failed: {e})\n")),
+    }
+
+    match app.count_elements_with_title(OPPOSITION_UNKNOWN_TITLE).await {
+        Ok(n) => report.push_str(&format!("--- OPPOSITION_UNKNOWN_TITLE count: {n} ---\n")),
+        Err(e) => report.push_str(&format!("(OPPOSITION_UNKNOWN_TITLE count query failed: {e})\n")),
+    }
+    match app.count_elements_with_title(LUNAR_UNKNOWN_TITLE).await {
+        Ok(n) => report.push_str(&format!("--- LUNAR_UNKNOWN_TITLE count: {n} ---\n")),
+        Err(e) => report.push_str(&format!("(LUNAR_UNKNOWN_TITLE count query failed: {e})\n")),
+    }
+
+    let ui_diag = app.dump_ui_diagnostics().await;
+    report.push_str(&format!("--- dump_ui_diagnostics ---\n{ui_diag:#}\n"));
+
+    report
+}
+
 /// Add a target via the REAL "Add target" dialog (search -> select suggestion
 /// -> confirm), all real DOM interaction. `query` should match the bundled
 /// offline seed (e.g. a Messier designation) so resolution never needs a live
@@ -400,14 +467,25 @@ async fn targets_ui_astronomy_columns_disclose_placeholder_without_site() -> any
         "no observing site exists — a real MoonSummary must not render"
     );
 
-    anyhow::ensure!(
-        app.count_elements_with_title(OPPOSITION_UNKNOWN_TITLE).await? >= 1,
-        "expected at least one real 'Opposition unknown' disclosure with no observing site"
-    );
-    anyhow::ensure!(
-        app.count_elements_with_title(LUNAR_UNKNOWN_TITLE).await? >= 1,
-        "expected at least one real 'Lunar distance unknown' disclosure with no observing site"
-    );
+    // Poll rather than a single check: the target row `add_target_via_ui` just
+    // added still needs the real list-query refetch to land before its
+    // astronomy cells (and therefore this title) exist in the DOM.
+    let opposition_count = wait_for_title_count_at_least(&app, OPPOSITION_UNKNOWN_TITLE, 1).await?;
+    if opposition_count < 1 {
+        let diagnostics = dump_astronomy_diagnostics(&app).await;
+        anyhow::bail!(
+            "expected at least one real 'Opposition unknown' disclosure with no observing \
+             site within {UI_TIMEOUT:?}, got {opposition_count}\n{diagnostics}"
+        );
+    }
+    let lunar_count = wait_for_title_count_at_least(&app, LUNAR_UNKNOWN_TITLE, 1).await?;
+    if lunar_count < 1 {
+        let diagnostics = dump_astronomy_diagnostics(&app).await;
+        anyhow::bail!(
+            "expected at least one real 'Lunar distance unknown' disclosure with no observing \
+             site within {UI_TIMEOUT:?}, got {lunar_count}\n{diagnostics}"
+        );
+    }
 
     app.shutdown().await
 }
