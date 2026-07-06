@@ -13,7 +13,7 @@
 //     (the dark/bias hard-rule the matching engine already enforces).
 //   - temperatureToleranceC (number | null) — Sensor temp tolerance in °C
 //   - agingLimitDays      (number) — Dark / bias age tolerance in days
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Toggle, Pill } from '@/ui';
 import { m } from '@/lib/i18n';
 import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
@@ -51,10 +51,20 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
   const [tempTolerance, setTempTolerance] = useState<number>(DEFAULTS.temperatureToleranceC);
   const [agingLimit, setAgingLimit] = useState<number>(DEFAULTS.agingLimitDays);
 
+  // Guards against the initial calibrationTolerancesGet() fetch resolving
+  // *after* the user has already edited a control — a real race (not just
+  // CI timing): on a slower/more contended machine the mount fetch can still
+  // be in flight when the user's first click/keystroke fires. Without this,
+  // the late setState calls below stomp the user's optimistic edit back to
+  // the stale fetched value (same class of bug as the Ingestion pane's
+  // startup-fetch race).
+  const editedRef = useRef(false);
+
   // ── Load persisted values from backend on mount ────────────────────────────
   useEffect(() => {
     calibrationTolerancesGet()
       .then((tol) => {
+        if (editedRef.current) return;
         setRequireCamera(tol.requireSameCamera);
         setRequireBinning(tol.requireSameBinning);
         setRequireGain(tol.requireSameGain);
@@ -71,6 +81,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
 
   // ── Persist a partial update; callers pass only the changed field ──────────
   function persist(patch: Partial<UpdateCalibrationTolerances>) {
+    editedRef.current = true;
     const req: UpdateCalibrationTolerances = {
       requireSameCamera: requireCamera,
       requireSameBinning: requireBinning,
@@ -123,6 +134,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
   // visible fields to DEFAULTS and persist via that store — not
   // `settings.restore-defaults`, which would touch unrelated settings keys.
   const handleRestoreCalibration = async () => {
+    editedRef.current = true;
     setRequireCamera(DEFAULTS.requireSameCamera);
     setRequireBinning(DEFAULTS.requireSameBinning);
     setRequireGain(DEFAULTS.requireSameGain);

@@ -147,4 +147,33 @@ describe('CalibrationMatching — offset match-required persistence', () => {
     });
     expect(offsetToggleInput()).toBeChecked();
   });
+
+  it('a slow initial fetch does not clobber an edit made before it resolves', async () => {
+    // Reproduces a real race, not just CI flakiness: the mount-time
+    // calibrationTolerancesGet() fetch can still be in flight when the
+    // user's first toggle fires. If the late resolution unconditionally
+    // overwrites state, the user's edit reverts (same class of bug as the
+    // Ingestion pane's startup-fetch race).
+    let resolveGet!: (value: { status: 'ok'; data: CalibrationTolerances }) => void;
+    mockGet.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveGet = resolve;
+      }),
+    );
+    mockUpdate.mockResolvedValue({ status: 'ok', data: makeTolerances({ requireSameOffset: false }) });
+
+    render(<CalibrationMatching save={vi.fn()} />);
+
+    // Edit fires before the mount fetch has resolved.
+    fireEvent.click(offsetToggleInput());
+    await waitFor(() => expect(offsetToggleInput()).not.toBeChecked());
+
+    // Now let the slow initial fetch resolve with the stale "true" value.
+    resolveGet({ status: 'ok', data: makeTolerances({ requireSameOffset: true }) });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The user's edit must survive — the late fetch must not stomp it.
+    expect(offsetToggleInput()).not.toBeChecked();
+  });
 });
