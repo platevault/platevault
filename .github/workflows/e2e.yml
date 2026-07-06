@@ -64,6 +64,12 @@ env:
   # (`apps/desktop/src-tauri/src/main.rs`); the harness's `reset_database()`
   # deletes it before each journey launches the app.
   ALM_DB_URL: "sqlite://./e2e-test.db?mode=rwc"
+  # DIAGNOSTIC ONLY, branch-local (037-ui-journeys-targets): bumped to debug
+  # for the target-search crates so a CI run tells us whether
+  # `target.search query="M 1"` (crates/app/targets/src/target_search.rs) is
+  # even reached and what it returns, chasing the "no suggestion rendered for
+  # query 'M 1'" failure in targets_journeys.rs. Revert once root-caused.
+  RUST_LOG: "info,app_core_targets=debug,targeting_resolver=debug"
 
 jobs:
   # Cheap change-detection gate — mirrors ci.yml's `changes` job. Cross-workflow
@@ -206,3 +212,18 @@ jobs:
       - name: Run E2E (Windows / macOS)
         if: runner.os != 'Linux' && needs.changes.outputs.run == 'true'
         run: cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
+
+      # DIAGNOSTIC ONLY, branch-local (037-ui-journeys-targets): picks up any
+      # best-effort screenshots `targets_journeys.rs::dump_target_search_diagnostics`
+      # writes to `target/e2e-diagnostics/` when the "no suggestion rendered
+      # for query 'M 1'" timeout fires, so they're inspectable without a local
+      # repro. `if: failure()` — only runs when a prior step in this job
+      # failed; harmless (and skipped) on green runs. Revert once root-caused.
+      - name: Upload E2E diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics-${{ matrix.os }}
+          path: target/e2e-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 7

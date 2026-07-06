@@ -80,6 +80,91 @@ async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
     app.complete_first_run_gate().await
 }
 
+/// DIAGNOSTIC ONLY (not a fix): capture what the `.alm-target-search` widget
+/// actually rendered when the suggestion-poll loop in [`add_target_via_ui`]
+/// times out, so the NEXT CI run tells us whether Phase 1 (`target.search`)
+/// threw, is still "resolving" (stuck on Phase 2 / SIMBAD), or genuinely
+/// rendered zero suggestions.
+///
+/// Two refuted hypotheses already ruled out by code review (see the branch's
+/// PR discussion): (1) the test fills the input via real `send_keys`, not a
+/// JS value-set, so React's change/debounce handlers should fire; (2) Phase 1
+/// (local seed search, `crates/app/targets/src/target_search.rs`, no network)
+/// completes and calls `setSuggestions` BEFORE Phase 2 (SIMBAD `target.resolve`)
+/// even starts, so a stuck/slow Phase 2 should not be able to block Phase 1's
+/// already-rendered result. This capture exists to falsify or confirm both
+/// with real evidence instead of guessing further.
+///
+/// Everything is printed via `anyhow::Error`'s `Display`/`Debug` chain so it
+/// shows up directly in the nextest failure's stdout/stderr — no artifact
+/// upload plumbing required. A best-effort screenshot is ALSO written to
+/// `target/e2e-diagnostics/` (uploaded by the workflow's
+/// `upload-artifact` step on failure) in case the DOM text alone doesn't
+/// explain it.
+async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
+    let mut report = format!("=== target-search diagnostics for query {query:?} ===\n");
+
+    // (a) DOM dump: outerHTML of the whole `.alm-target-search` root (input +
+    // filters + status + any rendered options), not the full page — small and
+    // directly relevant.
+    let outer_html_script = r"
+        var el = document.querySelector('.alm-target-search');
+        return el ? el.outerHTML : '<.alm-target-search not found in DOM>';
+    ";
+    match app.driver.execute(outer_html_script, vec![]).await {
+        Ok(ret) => match ret.convert::<String>() {
+            Ok(html) => report.push_str(&format!("--- .alm-target-search outerHTML ---\n{html}\n")),
+            Err(e) => report.push_str(&format!("(failed to deserialise outerHTML: {e})\n")),
+        },
+        Err(e) => report.push_str(&format!("(outerHTML script execution failed: {e})\n")),
+    }
+
+    // (b) Explicit state check: is a real `role="alert"` field error visible
+    // (Phase 1 threw, `TargetSearch.tsx`'s catch branch), or is the
+    // `--resolving` status still showing (stuck on Phase 2 / SIMBAD)?
+    match app.driver.find(By::Css(".alm-field-error")).await {
+        Ok(el) => {
+            let text = el.text().await.unwrap_or_default();
+            report.push_str(&format!("--- error state: PRESENT, text={text:?} ---\n"));
+        }
+        Err(_) => report.push_str("--- error state: absent ---\n"),
+    }
+    match app.driver.find(By::Css(".alm-target-search__status--resolving")).await {
+        Ok(el) => {
+            let text = el.text().await.unwrap_or_default();
+            report.push_str(&format!(
+                "--- resolving (SIMBAD phase-2) state: PRESENT, text={text:?} ---\n"
+            ));
+        }
+        Err(_) => report.push_str("--- resolving (SIMBAD phase-2) state: absent ---\n"),
+    }
+    match app.driver.find(By::Css(".alm-target-search__status")).await {
+        Ok(el) => {
+            let text = el.text().await.unwrap_or_default();
+            report.push_str(&format!("--- generic status line: PRESENT, text={text:?} ---\n"));
+        }
+        Err(_) => report.push_str("--- generic status line: absent ---\n"),
+    }
+
+    // (c) Best-effort screenshot — written to a fixed, predictable path per
+    // query so the workflow's failure-only `upload-artifact` step can pick up
+    // `target/e2e-diagnostics/*.png` regardless of which test/OS failed.
+    let dir = std::path::Path::new("target/e2e-diagnostics");
+    if std::fs::create_dir_all(dir).is_ok() {
+        let safe_query: String =
+            query.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+        let path = dir.join(format!("target-search-timeout-{safe_query}.png"));
+        match app.driver.screenshot(&path).await {
+            Ok(()) => report.push_str(&format!("--- screenshot written to {path:?} ---\n")),
+            Err(e) => report.push_str(&format!("(screenshot capture failed: {e})\n")),
+        }
+    } else {
+        report.push_str("(failed to create target/e2e-diagnostics/ directory)\n");
+    }
+
+    report
+}
+
 /// Add a target via the REAL "Add target" dialog (search -> select suggestion
 /// -> confirm), all real DOM interaction. `query` should match the bundled
 /// offline seed (e.g. a Messier designation) so resolution never needs a live
@@ -104,11 +189,13 @@ async fn add_target_via_ui(app: &E2eApp, query: &str) -> anyhow::Result<String> 
         if let Ok(opt) = popup.find(By::Css(".alm-target-search__option")).await {
             break opt;
         }
-        anyhow::ensure!(
-            tokio::time::Instant::now() < deadline,
-            "no suggestion rendered for query {query:?} within {UI_TIMEOUT:?} \
-             (offline seed search should be instant for a bundled designation)"
-        );
+        if tokio::time::Instant::now() >= deadline {
+            let diagnostics = dump_target_search_diagnostics(app, query).await;
+            anyhow::bail!(
+                "no suggestion rendered for query {query:?} within {UI_TIMEOUT:?} \
+                 (offline seed search should be instant for a bundled designation)\n{diagnostics}"
+            );
+        }
         tokio::time::sleep(Duration::from_millis(150)).await;
     };
     option.click().await?;
