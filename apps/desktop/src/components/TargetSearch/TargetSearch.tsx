@@ -463,7 +463,31 @@ export function TargetSearch({
           </span>
         )}
 
-        <Combobox.Portal>
+        {/*
+         * `keepMounted`: without it, `Combobox.Portal` only renders its
+         * subtree (status/option elements) once Base UI's internal
+         * store-derived `mounted` flips true — which, per
+         * `useTransitionStatus`, happens synchronously the instant `open`
+         * becomes true, EXCEPT this combobox's `open` is re-derived on every
+         * keystroke (`onInputValueChange` -> `setOpen(true)`), unlike a
+         * click-triggered Dialog/Popover whose `open` only flips once per
+         * interaction. That gives a real-typing-driven open/close cycle far
+         * more chances to race Base UI's own internal open bookkeeping than
+         * a single click does. Windows real-UI E2E (`targets_journeys.rs`,
+         * "M 1" suggestion never rendering within 20s even though
+         * `target.search` is a local, network-free, sub-millisecond seed
+         * lookup) hit exactly that: `aria-expanded`/`data-popup-open` on the
+         * input reported "open", but NO popup content — not even the
+         * always-present idle/no-results/searching `Combobox.Status` line —
+         * ever appeared anywhere in the document, meaning the portal itself
+         * never rendered. `keepMounted` decouples rendering the subtree from
+         * that race: the popup DOM is always present (hidden via the
+         * `hidden` attribute — invisible and inert, so real users never see
+         * anything different) as soon as our OWN `suggestions`/`loading`/
+         * `error` state has something to show, regardless of Base UI's
+         * internal open/mounted timing.
+         */}
+        <Combobox.Portal keepMounted>
           <Combobox.Positioner
             className="alm-target-search__positioner"
             sideOffset={4}
