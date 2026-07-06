@@ -293,13 +293,17 @@ impl E2eApp {
 
     /// Navigate to a top-level SPA route and wait for the shell to settle.
     ///
-    /// The app does not perform a full page navigation for in-app routes (it's
-    /// a client-side router), but a fresh `driver.goto` to `APP_URL + path` is
-    /// still the simplest deterministic way to land on a known route in a
-    /// thirtyfour session. Waits for `document.readyState == "complete"`
+    /// The router uses HASH history (`createHashHistory()`,
+    /// `apps/desktop/src/app/router.tsx`): routes live in the URL fragment
+    /// (`/#/inbox`) and the pathname is ignored entirely. Navigating to
+    /// `{APP_URL}{path}` therefore always lands on the index route `/`,
+    /// whose first-run gate redirects a fresh DB to `/setup` — the target
+    /// page never mounts (CI run 28751553798: Inbox's "Rescan all roots"
+    /// deterministically never appeared on all three OSes). Navigate to the
+    /// hash form instead. Waits for `document.readyState == "complete"`
     /// instead of a fixed sleep.
     pub async fn goto_route(&self, path: &str) -> Result<()> {
-        let url = format!("{APP_URL}{path}");
+        let url = format!("{APP_URL}/#{path}");
         self.driver.goto(&url).await.with_context(|| format!("goto {url} failed"))?;
         self.wait_document_ready(Duration::from_secs(10)).await
     }
