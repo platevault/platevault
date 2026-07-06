@@ -324,7 +324,7 @@ each theme's `mode`.
 **Depends on**: T008 (Foundational `isTauri()` cleanup) so this uses the same
 runtime check.
 
-- [ ] T037 [US6] In `apps/desktop/src/data/theme.ts`, extend `applyTheme()`
+- [x] T037 [US6] In `apps/desktop/src/data/theme.ts`, extend `applyTheme()`
       (or add a sibling called from the same call sites: `initAppearance()`,
       `setThemeChoice()`, and the `prefers-color-scheme` change listener) to
       call `getCurrentWindow().setTheme(mode === 'dark' ? 'dark' : 'light')`
@@ -334,15 +334,15 @@ runtime check.
       ambiguity; the existing `ThemeMeta.mode` field already resolves it
       exactly). Gate the call behind `core.isTauri()` (FR-020 — no-op outside
       Tauri / where unsupported).
-- [ ] T038 [US6] Wrap the `setTheme` call so a platform/webview that throws or
+- [x] T038 [US6] Wrap the `setTheme` call so a platform/webview that throws or
       no-ops (Linux desktop environments per plan.md's platform-differences
       table) degrades silently — no error surfaced to the user (FR-020, US6
       AS2).
-- [ ] T039 [P] [US6] Add/update a vitest confirming `applyTheme()`/theme-switch
+- [x] T039 [P] [US6] Add/update a vitest confirming `applyTheme()`/theme-switch
       calls the native `setTheme` with the correct mode for each of the four
       themes when running under a mocked Tauri environment, and does not call
       it (or calls it as a no-op) outside Tauri.
-- [ ] T040 [US6] Manual verification on Windows, macOS, and at least one
+- [ ] T040 [US6] **Deferred to manual verification.** Manual verification on Windows, macOS, and at least one
       Linux desktop environment: switch each of the four themes, confirm
       native chrome (where rendered) matches light/dark family (SC-005); on
       Linux, confirm the documented no-op is what actually happens (not a
