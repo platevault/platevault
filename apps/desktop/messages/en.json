@@ -1412,6 +1412,7 @@
   "inbox_master_row_label": "{type} master",
   "inbox_state_classified": "classified",
   "inbox_state_master_fallback": "master",
+  "inbox_state_needs_review": "needs review",
   "inbox_state_pending": "pending",
   "inbox_state_plan_open": "plan open",
   "inbox_state_resolved": "resolved",

@@ -41,13 +41,31 @@ export const DEFAULT_INBOX_SORT: InboxSort = { col: 'detection', dir: 'asc' };
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
+ * `true` for a materialized single-type sub-item that landed in the T070/
+ * FR-047 needs-review sentinel bucket (spec 041 "single-type sub-items"):
+ * one or more files are missing a mandatory attribute (or have no frame
+ * type at all), so the group has no single dominant frame type — the
+ * backend marks this with `groupKey === "__needs_review__"` and a non-empty
+ * `missingMandatory` list (see `crates/app/inbox/src/classify.rs`'s
+ * `SENTINEL_NEEDS_REVIEW`). Both signals are checked because legacy
+ * pre-materialization rows may carry neither.
+ */
+function isNeedsReview(item: InboxListItem): boolean {
+  return item.groupKey === '__needs_review__' || (item.missingMandatory?.length ?? 0) > 0;
+}
+
+/**
  * Classification label shown in the Type column. For classified / plan-open
  * items we show the dominant frame type when available so the column is
- * frame-type-forward rather than state-forward.
+ * frame-type-forward rather than state-forward. A needs-review sub-item has
+ * no dominant frame type by definition — it must show a distinct
+ * "needs review" label, never the raw item `state` (which is otherwise
+ * `classified` at this point and would misleadingly read as fully resolved).
  */
 function classificationLabel(item: InboxListItem): string {
   if (item.isMaster) return item.masterFrameType ?? m.inbox_state_master_fallback();
   if (item.groupFrameType) return item.groupFrameType;
+  if (isNeedsReview(item)) return m.inbox_state_needs_review();
   switch (item.state) {
     case 'pending_classification': return m.inbox_state_pending();
     case 'classified':             return m.inbox_state_classified();
@@ -58,8 +76,9 @@ function classificationLabel(item: InboxListItem): string {
 }
 
 /** CSS colour modifier for the Type cell. */
-function classificationMod(state: string): string {
-  switch (state) {
+function classificationMod(item: InboxListItem): string {
+  if (isNeedsReview(item)) return 'needs_review';
+  switch (item.state) {
     case 'pending_classification': return 'pending';
     case 'classified':             return 'classified';
     case 'plan_open':              return 'plan_open';
@@ -326,7 +345,7 @@ export function InboxList({
         }
         const { item, originalIdx, indent } = row;
         const selected = selectedIdx === originalIdx;
-        const mod = classificationMod(item.state);
+        const mod = classificationMod(item);
         return {
           _testid: `inbox-item-${item.inboxItemId}`,
           _rowClassName: [
