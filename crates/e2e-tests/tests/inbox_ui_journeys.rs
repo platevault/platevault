@@ -252,9 +252,23 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
                 .await
                 .unwrap_or_else(|e| serde_json::json!({ "invoke_error": e.to_string() }));
             let url = app.driver.current_url().await.map(|u| u.to_string()).unwrap_or_default();
+            // Round 5: the backend-vs-UI split above already proved the
+            // backend returns the right rows, and the entire frontend
+            // transform pipeline renders that exact payload correctly in
+            // unit scope (InboxList.windowsSplitPayload.test.tsx) — so this
+            // failure lives only in the real Windows WebView2 runtime. Fold
+            // in DOM/virtualizer, TanStack Query, buffered-error, build-time,
+            // and console-log evidence so THIS failure message alone can
+            // decide between the three live hypotheses (see
+            // `E2eApp::dump_ui_diagnostics`'s doc comment for how each field
+            // maps to a hypothesis: UI IPC race, virtualizer/layout race, or
+            // stale build artifact).
+            let ui_diagnostics = app.dump_ui_diagnostics().await;
+            let console_log = app.dump_console_log().await;
             anyhow::bail!(
                 "expected the mixed folder to split into >=2 single-type rows in the \
-                 real Inbox list, found {} (current_url={url:?}, backend inbox.list={backend_items})",
+                 real Inbox list, found {} (current_url={url:?}, backend inbox.list={backend_items}, \
+                 ui_diagnostics={ui_diagnostics}, console_log={console_log})",
                 rows.len()
             );
         }
