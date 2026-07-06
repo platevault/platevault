@@ -121,6 +121,17 @@ pub struct E2eApp {
     driver_proc: Option<Child>,
 }
 
+/// How much persisted state [`E2eApp::launch_with`] wipes before spawning
+/// the app process. See [`E2eApp::launch`] vs [`E2eApp::relaunch`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ResetScope {
+    /// Wipe DB + webview storage + window-state (a fresh journey).
+    Full,
+    /// Wipe DB + window-state, but keep webview storage (localStorage) —
+    /// simulates a real app restart within one journey.
+    PreserveWebviewStorage,
+}
+
 impl E2eApp {
     /// Launch a full E2E session: preflight → reset DB → spawn the
     /// `tauri-webdriver` CLI proxy → create the WebDriver session with a
@@ -155,9 +166,41 @@ impl E2eApp {
     /// The app auto-loads its frontend from the Tauri `devUrl` on launch, so
     /// no `driver.goto(...)` call is needed here (see module docs).
     pub async fn launch() -> Result<Self> {
+        Self::launch_with(ResetScope::Full).await
+    }
+
+    /// Simulate a real app restart WITHIN one journey: a fresh WebDriver
+    /// session + a fresh `desktop_shell` process, but WITHOUT wiping the
+    /// webview's persisted web storage (localStorage & co).
+    ///
+    /// [`Self::launch`] always calls `reset_webview_storage()` so that
+    /// state set by one journey (test function) can't leak into the NEXT
+    /// journey's fresh [`Self::launch`] — those are different real OS user
+    /// profiles' worth of isolation, correctly enforced. But a journey that
+    /// wants to prove something actually SURVIVES a real app relaunch (e.g.
+    /// `settings_journeys.rs`'s theme persistence test) must call this
+    /// instead of `launch()` for its second call: calling `launch()` again
+    /// wipes the very localStorage state the journey is trying to prove
+    /// persisted, which is a harness bug, not a product one (windows-only
+    /// symptom: only WebView2's `EBWebView` wipe path in
+    /// `reset_webview_storage()` actually deletes real localStorage files —
+    /// the Linux `localstorage`/`storage` paths don't match WebKitGTK's real
+    /// storage location, so the same call was already a no-op there).
+    ///
+    /// Still resets the database and window-state store (same as `launch()`)
+    /// — those are unrelated to the webview storage this exists to preserve,
+    /// and journeys that use this (see `settings_journeys.rs`) already expect
+    /// a fresh DB / first-run gate after "relaunching".
+    pub async fn relaunch() -> Result<Self> {
+        Self::launch_with(ResetScope::PreserveWebviewStorage).await
+    }
+
+    async fn launch_with(scope: ResetScope) -> Result<Self> {
         preflight()?;
         reset_database()?;
-        reset_webview_storage();
+        if matches!(scope, ResetScope::Full) {
+            reset_webview_storage();
+        }
         reset_window_state();
 
         let mut driver_proc = spawn_tauri_webdriver()

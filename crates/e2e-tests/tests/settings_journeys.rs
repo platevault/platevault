@@ -15,17 +15,18 @@
 //! fixture or a real backend-rejected action reachable without a native
 //! dialog, which would meaningfully grow this file's scope.
 //!
-//! Note on `E2eApp::launch()` and cross-session persistence: `launch()`
-//! calls `reset_database()` (wipes the SQLite DB) on every call, so a
+//! Note on cross-session persistence and `E2eApp::launch()`/`relaunch()`:
+//! both reset the SQLite DB on every call (`reset_database()`), so a
 //! backend-persisted setting (e.g. Ingestion's toggles, which round-trip
 //! through `ingestion.settings.get`/`update` into the same DB) CANNOT be
-//! proven to survive a relaunch across two `E2eApp::launch()` calls in this
-//! harness — the DB reset would erase it regardless of whether the real app
-//! would have kept it. Only `localStorage`-backed state (e.g. the theme
-//! choice, `apps/desktop/src/data/theme.ts`) is unaffected by
-//! `reset_database()` and can honestly prove cross-relaunch persistence
-//! here; the ingestion-settings-persist-across-restart scenario (journey-10
-//! Test 4) is left as a follow-up for that reason, not an oversight.
+//! proven to survive a relaunch in this harness — the DB reset would erase
+//! it regardless of whether the real app would have kept it. Only
+//! `localStorage`-backed state (e.g. the theme choice,
+//! `apps/desktop/src/data/theme.ts`) survives a `relaunch()` (unlike a
+//! second `launch()`, which also wipes webview storage) and can honestly
+//! prove cross-relaunch persistence here; the
+//! ingestion-settings-persist-across-restart scenario (journey-10 Test 4) is
+//! left as a follow-up for that reason, not an oversight.
 
 mod common;
 
@@ -185,13 +186,16 @@ async fn settings_ui_theme_applies_live_and_persists_across_relaunch() -> anyhow
         app.shutdown().await?;
     }
 
-    // Relaunch: a fresh WebDriver session + a fresh `desktop_shell` process.
-    // `reset_database()` wipes the SQLite DB (first-run state), but the
-    // theme choice lives in the SAME OS webview profile's localStorage and
-    // is applied by `initAppearance()` at boot, before routing/first-run
-    // even resolves — so it should already be set the instant the bridge is
-    // ready, with no navigation needed.
-    let app2 = E2eApp::launch().await?;
+    // Relaunch: a fresh WebDriver session + a fresh `desktop_shell` process,
+    // via `E2eApp::relaunch()` (NOT `launch()` — `launch()` wipes the
+    // webview's persisted storage on every call, which would erase the very
+    // localStorage state this journey is trying to prove survives a real
+    // app restart). `reset_database()` still wipes the SQLite DB (first-run
+    // state), but the theme choice lives in the SAME OS webview profile's
+    // localStorage and is applied by `initAppearance()` at boot, before
+    // routing/first-run even resolves — so it should already be set the
+    // instant the bridge is ready, with no navigation needed.
+    let app2 = E2eApp::relaunch().await?;
     app2.wait_bridge_ready(Duration::from_secs(30)).await?;
 
     let theme_after_relaunch: String = app2
