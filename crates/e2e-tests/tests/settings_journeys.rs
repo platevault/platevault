@@ -183,6 +183,36 @@ async fn settings_ui_theme_applies_live_and_persists_across_relaunch() -> anyhow
             "expected the theme to apply live with no reload, got data-theme={theme:?}"
         );
 
+        // Diagnostic (round 2, fix-464-theme): confirm the write actually
+        // landed in `localStorage` itself, not just the derived `data-theme`
+        // attribute — rules out "never written" as a cause of a later
+        // relaunch failure.
+        let stored: serde_json::Value = app
+            .driver
+            .execute("return window.localStorage.getItem('alm.theme')", vec![])
+            .await
+            .context("failed to read localStorage['alm.theme'] before shutdown")?
+            .convert()
+            .context("failed to deserialise localStorage['alm.theme'] before shutdown")?;
+        anyhow::ensure!(
+            stored == serde_json::json!("espresso-dark"),
+            "expected localStorage['alm.theme']=\"espresso-dark\" to be written before \
+             shutdown, got {stored:?}"
+        );
+
+        // `E2eApp::shutdown()` force-kills the app process (the CLI's only
+        // handle on the app's lifetime — see `blocking_session_delete`'s
+        // doc), rather than closing the window gracefully. Chromium/WebView2
+        // commits `localStorage` writes to its on-disk store asynchronously
+        // (a background-sequence flush, not synchronous-per-write), so an
+        // abrupt process kill immediately after a write can lose it before
+        // it reaches disk — a documented WebView2/Chromium characteristic,
+        // and a plausible reason this journey is Windows-only-flaky even
+        // with a real, unwiped webview profile (WebKitGTK's flush timing
+        // differs). Give the background flush a moment to complete before
+        // killing the process.
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+
         app.shutdown().await?;
     }
 
@@ -198,6 +228,21 @@ async fn settings_ui_theme_applies_live_and_persists_across_relaunch() -> anyhow
     let app2 = E2eApp::relaunch().await?;
     app2.wait_bridge_ready(Duration::from_secs(30)).await?;
 
+    // Diagnostic (round 2, fix-464-theme): read the RAW localStorage value
+    // directly, in addition to the derived `data-theme` attribute. If this
+    // is `null`, the write was lost between processes (harness/OS-level
+    // storage loss). If it's still `"espresso-dark"` but `data-theme` below
+    // reverted to the default, the value survived fine and the bug is a
+    // product-code race in `initAppearance()`/`applyTheme()` reading
+    // localStorage before hydration completes — a very different fix.
+    let stored_after_relaunch: serde_json::Value = app2
+        .driver
+        .execute("return window.localStorage.getItem('alm.theme')", vec![])
+        .await
+        .context("failed to read localStorage['alm.theme'] after relaunch")?
+        .convert()
+        .context("failed to deserialise localStorage['alm.theme'] after relaunch")?;
+
     let theme_after_relaunch: String = app2
         .driver
         .execute("return document.documentElement.getAttribute('data-theme')", vec![])
@@ -208,7 +253,9 @@ async fn settings_ui_theme_applies_live_and_persists_across_relaunch() -> anyhow
     anyhow::ensure!(
         theme_after_relaunch == "espresso-dark",
         "expected the theme choice to survive a full app relaunch (localStorage), \
-         got data-theme={theme_after_relaunch:?}"
+         got data-theme={theme_after_relaunch:?} (raw localStorage['alm.theme']={stored_after_relaunch:?} \
+         — null means the value never made it to disk/the new process; \
+         \"espresso-dark\" means it survived but something ignored it at boot)"
     );
 
     // Confirm the Settings UI itself reflects the persisted choice too (not
