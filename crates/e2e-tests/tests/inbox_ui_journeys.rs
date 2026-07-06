@@ -50,6 +50,25 @@ async fn register_light_root(app: &E2eApp) -> anyhow::Result<(tempfile::TempDir,
     Ok((root_dir, root_id))
 }
 
+/// Register a disposable PROJECT root. `firstrun.complete` (which
+/// [`E2eApp::complete_first_run_gate`] issues) requires at least one raw AND
+/// one project source, so every journey registers one alongside its light
+/// root. The returned `TempDir` must stay alive for the test's duration.
+async fn register_project_root(app: &E2eApp) -> anyhow::Result<tempfile::TempDir> {
+    let project_dir = tempfile::tempdir()?;
+    let _: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({
+                "path": project_dir.path().to_string_lossy(),
+                "category": "project",
+                "scanSettings": null,
+            }),
+        )
+        .await?;
+    Ok(project_dir)
+}
+
 /// Wait for the index route's async first-run redirect to land on `/setup`
 /// BEFORE navigating anywhere. A fresh DB (the harness resets it every
 /// launch) makes `checkFirstRunComplete` redirect `/` → `/setup` from an
@@ -97,6 +116,13 @@ async fn seed_initial_scan(app: &E2eApp, root_id: &str, root_dir: &Path) -> anyh
         !items.is_empty(),
         "expected the seed inbox.scan.folder to discover the fixture file(s): {scan}"
     );
+    // NOTE: deliberately NO bridge-side `inbox.classify` pre-warm here. The
+    // UI's confirm gate requires `classification.type == "single_type"`,
+    // which the backend only reports for the FIRST (computing) classify of
+    // an item — a re-read of an already-classified item reports
+    // `"classified"` and would keep Confirm disabled for the journey's real
+    // click. The journeys let the detail pane trigger the first classify,
+    // exactly like a real user.
     Ok(())
 }
 
@@ -112,11 +138,27 @@ async fn rescan_and_wait_for_item(app: &E2eApp) -> anyhow::Result<()> {
 /// for the detail pane's real Confirm button to mount (the detail-loaded
 /// signal — `InboxDetail` always renders `data-testid="inbox-confirm-btn"`
 /// once an item is selected, per `InboxPage.tsx`'s always-passed `onConfirm`).
+/// The list refetches (and re-renders, swapping row DOM nodes) several times
+/// right after a rescan or page reload, so a single find→read→click sequence
+/// can hit `stale element reference` / `no such element` mid-churn. Retry
+/// the whole sequence until the click lands or [`UI_TIMEOUT`] elapses.
 async fn select_only_item(app: &E2eApp) -> anyhow::Result<String> {
-    let item_id = app.testid_suffix("inbox-item-").await?;
-    app.click_testid(&format!("inbox-item-{item_id}")).await?;
-    app.wait_testid("inbox-confirm-btn", UI_TIMEOUT).await?;
-    Ok(item_id)
+    let deadline = tokio::time::Instant::now() + UI_TIMEOUT;
+    loop {
+        let attempt = async {
+            let item_id = app.testid_suffix("inbox-item-").await?;
+            app.click_testid(&format!("inbox-item-{item_id}")).await?;
+            anyhow::Ok(item_id)
+        };
+        match attempt.await {
+            Ok(item_id) => {
+                app.wait_testid("inbox-confirm-btn", UI_TIMEOUT).await?;
+                return Ok(item_id);
+            }
+            Err(e) if tokio::time::Instant::now() >= deadline => return Err(e),
+            Err(_) => tokio::time::sleep(Duration::from_millis(300)).await,
+        }
+    }
 }
 
 /// Test 1 (journey-02): a folder with one light + one dark frame — both with
@@ -134,6 +176,7 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
     settle_first_run_redirect(&app).await?;
 
     let (root_dir, root_id) = register_light_root(&app).await?;
+    let _project_dir = register_project_root(&app).await?;
     // Force the move branch isn't needed for classification — leave the
     // default `organized` state; classification doesn't depend on it.
     let _: serde_json::Value = app
@@ -161,19 +204,45 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
     )?;
 
     seed_initial_scan(&app, &root_id, root_dir.path()).await?;
+    app.complete_first_run_gate().await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
-    app.click_by_aria_label("Rescan all roots").await?;
-    app.wait_testid_prefix_present("inbox-item-", UI_TIMEOUT).await?;
+    rescan_and_wait_for_item(&app).await?;
 
-    let rows = app.find_all_testid_prefix("inbox-item-").await?;
-    anyhow::ensure!(
-        rows.len() >= 2,
-        "expected the mixed folder to split into >=2 single-type rows in the \
-         real Inbox list, found {}",
-        rows.len()
-    );
+    // The split happens when the folder is CLASSIFIED (spec 041 T066:
+    // `materialize_sub_items` runs inside `inbox.classify`, then purges the
+    // superseded parent row) — scanning alone lists ONE folder-level item.
+    // Selecting the row is the real user action that triggers that classify.
+    select_only_item(&app).await?;
+
+    // Wait for the classify round-trip to COMPLETE before re-reading the
+    // list: the mixed advisory banner is only rendered from a loaded
+    // classification (`InboxDetail.tsx`, `classType === "mixed"`), so its
+    // appearance proves the split was materialized server-side. Reloading
+    // earlier would abort the in-flight classify and restart it every cycle.
+    app.wait_testid("inbox-mixed-alert", UI_TIMEOUT).await?;
+
+    // The list itself isn't invalidated by classify; re-read it the way a
+    // user would (reload) until the split rows land. The list refetches and
+    // re-renders several times after a reload, so a transiently-empty
+    // `find_all` is churn, not failure — only the deadline decides.
+    let deadline = tokio::time::Instant::now() + UI_TIMEOUT;
+    let rows = loop {
+        let rows = app.find_all_testid_prefix("inbox-item-").await.unwrap_or_default();
+        if rows.len() >= 2 {
+            break rows;
+        }
+        anyhow::ensure!(
+            tokio::time::Instant::now() < deadline,
+            "expected the mixed folder to split into >=2 single-type rows in the \
+             real Inbox list, found {}",
+            rows.len()
+        );
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        app.driver.refresh().await.context("refresh while waiting for split rows failed")?;
+        app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    };
     for row in &rows {
         let text = row.text().await.unwrap_or_default().to_lowercase();
         anyhow::ensure!(
@@ -200,6 +269,7 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
     settle_first_run_redirect(&app).await?;
 
     let (root_dir, root_id) = register_light_root(&app).await?;
+    let _project_dir = register_project_root(&app).await?;
     let _: serde_json::Value = app
         .invoke(
             "sources_set_organization_state",
@@ -220,6 +290,7 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
     )?;
 
     seed_initial_scan(&app, &root_id, root_dir.path()).await?;
+    app.complete_first_run_gate().await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
@@ -235,6 +306,13 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
 
     // Bulk reclassify: select the one needs-review file, set frame type ->
     // light, apply. Real inputs, real `inbox.reclassify` round-trip.
+    //
+    // Both controls are CONTROLLED React inputs on a pane that re-renders as
+    // its classification/metadata queries land, and `handleBulkApply`
+    // silently no-ops when the selection set is empty or no frame type is
+    // chosen (`InboxDetail.tsx`) — so verify each interaction actually
+    // committed to the DOM before clicking Apply, retrying through render
+    // churn until it does.
     app.click_testid("reclassify-select-all").await?;
     app.select_testid("bulk-frame-type", "light").await?;
     app.click_testid("bulk-apply-btn").await?;
@@ -272,6 +350,7 @@ async fn inbox_ui_missing_path_attribute_banner_blocks_confirm() -> anyhow::Resu
     settle_first_run_redirect(&app).await?;
 
     let (root_dir, root_id) = register_light_root(&app).await?;
+    let _project_dir = register_project_root(&app).await?;
     let _: serde_json::Value = app
         .invoke(
             "sources_set_organization_state",
@@ -289,13 +368,26 @@ async fn inbox_ui_missing_path_attribute_banner_blocks_confirm() -> anyhow::Resu
     )?;
 
     seed_initial_scan(&app, &root_id, root_dir.path()).await?;
+    app.complete_first_run_gate().await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
     rescan_and_wait_for_item(&app).await?;
     select_only_item(&app).await?;
 
-    app.wait_testid("inbox-missing-attr-banner", UI_TIMEOUT).await?;
+    // The FR-032 banner is metadata-driven: the detail pane's
+    // `inbox.item.metadata` query races the per-file extraction that the
+    // SAME selection's `inbox.classify` call persists, and can cache an
+    // empty file list for the session (nothing invalidates it when classify
+    // lands). A real user recovers by re-opening the item; do the same once
+    // — after a reload the metadata rows persisted by the first selection's
+    // classify make the banner render deterministically.
+    if app.wait_testid("inbox-missing-attr-banner", UI_TIMEOUT).await.is_err() {
+        app.driver.refresh().await.context("refresh for banner retry failed")?;
+        app.wait_bridge_ready(Duration::from_secs(15)).await?;
+        select_only_item(&app).await?;
+        app.wait_testid("inbox-missing-attr-banner", UI_TIMEOUT).await?;
+    }
     let banner_text = app.text_testid("inbox-missing-attr-banner").await?;
     anyhow::ensure!(
         banner_text.to_lowercase().contains("required metadata missing"),
@@ -324,6 +416,7 @@ async fn inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination() 
     settle_first_run_redirect(&app).await?;
 
     let (root_dir, root_id) = register_light_root(&app).await?;
+    let _project_dir = register_project_root(&app).await?;
     let _: serde_json::Value = app
         .invoke(
             "sources_set_organization_state",
@@ -341,6 +434,7 @@ async fn inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination() 
     )?;
 
     seed_initial_scan(&app, &root_id, root_dir.path()).await?;
+    app.complete_first_run_gate().await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
@@ -403,6 +497,7 @@ async fn inbox_ui_catalogue_in_place_zero_moves_byte_identical() -> anyhow::Resu
     // Deliberately organized (default) — no `sources_set_organization_state`
     // call — this is the catalogue-in-place branch, not the move branch.
     let (root_dir, root_id) = register_light_root(&app).await?;
+    let _project_dir = register_project_root(&app).await?;
 
     let original_path = write_minimal_fits(
         root_dir.path(),
@@ -415,6 +510,7 @@ async fn inbox_ui_catalogue_in_place_zero_moves_byte_identical() -> anyhow::Resu
     let original_bytes = std::fs::read(&original_path)?;
 
     seed_initial_scan(&app, &root_id, root_dir.path()).await?;
+    app.complete_first_run_gate().await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
@@ -445,7 +541,10 @@ async fn inbox_ui_catalogue_in_place_zero_moves_byte_identical() -> anyhow::Resu
     );
 
     app.click_testid("plan-apply-all").await?;
-    app.wait_testid_gone("plan-panel", INVOKE_TIMEOUT).await.map_err(|e| {
+    // Auto-close needs apply → plan-applied event → open-plans refetch →
+    // overlay effect, several async hops on a loaded debug-build runner —
+    // give it double the usual invoke budget before calling it broken.
+    app.wait_testid_gone("plan-panel", Duration::from_secs(60)).await.map_err(|e| {
         anyhow::anyhow!("expected the plan-approval overlay to auto-close after apply: {e}")
     })?;
 

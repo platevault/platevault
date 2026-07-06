@@ -37,10 +37,14 @@ const TOP_LEVEL_ROUTES: &[(&str, &str)] = &[
 async fn all_top_level_screens_load() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
 
-    // First-run gate: a fresh DB redirects every route to /setup. Register
-    // one raw + one project source (real `roots.register` calls) and mark
-    // first-run complete (real `firstrun.complete`) so the real app screens
-    // are what gets exercised below, not the wizard.
+    // First-run gate: a fresh DB redirects every route to /setup — both via
+    // the index route's beforeLoad AND the Shell's own `setupCompleted`
+    // localStorage gate (`apps/desktop/src/app/Shell.tsx`). Register one raw
+    // + one project source (real `roots.register` calls), then complete the
+    // WHOLE gate (backend `firstrun.complete` + the localStorage preference +
+    // reload) so the real app screens are what gets exercised below, not the
+    // wizard. Without the localStorage half, every `goto_route` below lands
+    // back on /setup and the sweep silently re-tests the wizard seven times.
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
     let raw_dir = tempfile::tempdir()?;
     let project_dir = tempfile::tempdir()?;
@@ -56,7 +60,7 @@ async fn all_top_level_screens_load() -> anyhow::Result<()> {
             json!({ "path": project_dir.path().to_string_lossy(), "category": "project", "scanSettings": null }),
         )
         .await?;
-    let _: serde_json::Value = app.invoke("firstrun_complete", json!({})).await?;
+    app.complete_first_run_gate().await?;
 
     for (name, path) in TOP_LEVEL_ROUTES {
         app.goto_route(path).await?;

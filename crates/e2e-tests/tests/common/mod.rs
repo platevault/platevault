@@ -38,7 +38,7 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Context, Result};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
-use thirtyfour::components::{escape_string, SelectElement};
+use thirtyfour::components::escape_string;
 use thirtyfour::prelude::*;
 
 /// URL where the `tauri-webdriver` CLI proxy listens for W3C WebDriver
@@ -48,11 +48,20 @@ use thirtyfour::prelude::*;
 /// default in `apps/desktop/src-tauri/src/lib.rs`).
 pub const TAURI_WEBDRIVER_URL: &str = "http://127.0.0.1:4444";
 
-/// Vite dev-server / `vite preview` port the app's Tauri `devUrl` points at
+/// Vite dev-server / `vite preview` URL the app's Tauri `devUrl` points at
 /// (`apps/desktop/src-tauri/tauri.conf.json`). The app loads this URL on its
 /// own at launch — do NOT `driver.goto(APP_URL)` after connecting. Kept for
 /// journeys that need to assert the current URL or navigate within the SPA.
-pub const APP_URL: &str = "http://127.0.0.1:5173";
+///
+/// MUST be the `localhost` host form, byte-identical to `devUrl`: the app
+/// boots on `http://localhost:5173`, and `localhost` vs `127.0.0.1` are
+/// DIFFERENT web origins with separate localStorage. Navigating journeys to
+/// a `127.0.0.1` URL splits app state across two origins — preferences
+/// written on one (e.g. `setupCompleted`, `complete_first_run_gate`) are
+/// invisible on the other, which made `Shell`'s localStorage-based setup
+/// gate and `SetupPage`'s backend-based check ping-pong `/setup` ↔ `/inbox`
+/// indefinitely.
+pub const APP_URL: &str = "http://localhost:5173";
 
 /// Overall deadline for WebDriver session creation in [`E2eApp::launch`].
 ///
@@ -148,6 +157,7 @@ impl E2eApp {
     pub async fn launch() -> Result<Self> {
         preflight()?;
         reset_database()?;
+        reset_webview_storage();
 
         let mut driver_proc = spawn_tauri_webdriver()
             .context("failed to spawn the tauri-webdriver CLI on port 4444")?;
@@ -302,10 +312,44 @@ impl E2eApp {
     /// deterministically never appeared on all three OSes). Navigate to the
     /// hash form instead. Waits for `document.readyState == "complete"`
     /// instead of a fixed sleep.
+    /// The navigation is VERIFIED: several app-level redirects can move the
+    /// page away from the requested route right after landing (the Shell
+    /// redirects everything to `/setup` while the `setupCompleted` preference
+    /// is false, `SetupPage` bounces to `/inbox` once setup completes, the
+    /// index gate redirects asynchronously). Retry until the URL actually
+    /// stays on the target route, and fail with the URL it kept landing on —
+    /// far more diagnosable in CI than a downstream "element never appeared".
     pub async fn goto_route(&self, path: &str) -> Result<()> {
         let url = format!("{APP_URL}/#{path}");
-        self.driver.goto(&url).await.with_context(|| format!("goto {url} failed"))?;
-        self.wait_document_ready(Duration::from_secs(10)).await
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut last = String::new();
+        loop {
+            self.driver.goto(&url).await.with_context(|| format!("goto {url} failed"))?;
+            self.wait_document_ready(Duration::from_secs(10)).await?;
+
+            // Wait for the URL to land on the target, then confirm it STAYS
+            // there (a late-resolving redirect can still yank it away).
+            if self.wait_url_contains(path, Duration::from_secs(3)).await.is_ok() {
+                tokio::time::sleep(Duration::from_millis(700)).await;
+                let current =
+                    self.driver.current_url().await.context("failed to read current_url")?;
+                last = current.to_string();
+                if last.contains(path) {
+                    return Ok(());
+                }
+            } else if let Ok(current) = self.driver.current_url().await {
+                last = current.to_string();
+            }
+
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "route {path} did not stick within 20s — the app kept redirecting \
+                     away (last URL: {last}); is the first-run gate complete \
+                     (E2eApp::complete_first_run_gate)?"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(300)).await;
+        }
     }
 
     /// Poll `document.readyState` until `"complete"` or `timeout` elapses.
@@ -561,18 +605,42 @@ impl E2eApp {
     }
 
     /// Select an `<option>` by its `value` attribute on the
-    /// `<select data-testid=..>` — a real click on the option element (fires
-    /// the browser's native `change` event, which is what React's controlled
-    /// `<select onChange>` listens for).
+    /// `<select data-testid=..>`.
+    ///
+    /// NOT implemented via WebDriver's option-click
+    /// (`SelectElement::select_by_value`): on WebKitGTK that click does not
+    /// reliably fire the `change` event a React-CONTROLLED `<select
+    /// onChange>` needs, so React never updates its state and re-renders the
+    /// select straight back to its previous value (observed on the Inbox
+    /// bulk-reclassify frame-type select, PR #457 — the checkbox on the same
+    /// pane committed fine while every option-click silently reverted).
+    /// Instead set the value and dispatch bubbling `input` + `change` events
+    /// — exactly what Playwright's `selectOption` does — then VERIFY the
+    /// value stuck.
     pub async fn select_testid(&self, testid: &str, value: &str) -> Result<()> {
         let el = self.find_testid(testid).await?;
-        let select = SelectElement::new(&el)
+        let script = r#"
+            var el = arguments[0];
+            var value = arguments[1];
+            el.value = value;
+            el.dispatchEvent(new Event('input',  { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return el.value;
+        "#;
+        let out: String = self
+            .driver
+            .execute(script, vec![el.to_json()?, json!(value)])
             .await
-            .with_context(|| format!("{testid} is not a <select> element"))?;
-        select
-            .select_by_value(value)
-            .await
-            .with_context(|| format!("select value {value:?} on {testid} failed"))
+            .with_context(|| format!("select value {value:?} on {testid} failed"))?
+            .convert()
+            .context("failed to deserialise the select result")?;
+        if out != value {
+            return Err(anyhow!(
+                "select {testid}: value {value:?} did not stick (got {out:?}) — \
+                 is there an <option value={value:?}>?"
+            ));
+        }
+        Ok(())
     }
 
     /// Clear then type into the `<input data-testid=..>`.
@@ -606,8 +674,20 @@ impl E2eApp {
                 Ok(el) => return Ok(el),
                 Err(e) => {
                     if Instant::now() >= deadline {
+                        // Include the URL the page actually sits on — a
+                        // missing element is very often "the app is on a
+                        // different route", which this makes diagnosable
+                        // straight from a CI log.
+                        let url = self
+                            .driver
+                            .current_url()
+                            .await
+                            .map_or_else(|_| "<unknown>".to_owned(), |u| u.to_string());
                         return Err(e).with_context(|| {
-                            format!("{what} never appeared within {DEFAULT_FIND_TIMEOUT:?}")
+                            format!(
+                                "{what} never appeared within {DEFAULT_FIND_TIMEOUT:?} \
+                                 (current URL: {url})"
+                            )
                         });
                     }
                 }
@@ -630,6 +710,80 @@ impl E2eApp {
             .click()
             .await
             .with_context(|| format!("click aria-label={label:?} failed"))
+    }
+
+    /// Complete the app's first-run gate the way the wizard's Finish step
+    /// does (`SetupWizard.tsx`), without driving the wizard UI.
+    ///
+    /// Journeys that visit ANY shell page need this: the Shell component
+    /// itself redirects every route to `/setup` while the `setupCompleted`
+    /// localStorage preference is false (`apps/desktop/src/app/Shell.tsx` —
+    /// a second gate besides the index route's `beforeLoad`, and the reason
+    /// `/#/inbox` bounced back to `/#/setup` on CI run 28767450494 even
+    /// after the hash-history fix).
+    ///
+    /// Mirrors the wizard's completion sequence:
+    /// 1. `firstrun.complete` (backend gate — the CALLER must already have
+    ///    registered at least one raw and one project source, its real
+    ///    preconditions);
+    /// 2. `guided.dismiss` — the guided coach auto-activates on the first
+    ///    Shell mount after setup and its react-joyride overlay would sit
+    ///    over the page; activation is a no-op on a dismissed flow
+    ///    (`crates/app/core/src/guided_flow.rs::activate_after_setup`);
+    /// 3. set `setupCompleted: true` in the `alm-preferences` localStorage
+    ///    blob (what `SetupWizard` does via `setPreference`);
+    /// 4. reload the page — the preferences module caches its localStorage
+    ///    read in module state (`apps/desktop/src/data/preferences.ts`), so
+    ///    a direct localStorage write is invisible until a fresh page load.
+    pub async fn complete_first_run_gate(&self) -> Result<()> {
+        let _: Value = self
+            .invoke("firstrun_complete", json!({}))
+            .await
+            .context("firstrun.complete failed — were a raw AND a project source registered?")?;
+        let _: Value = self.invoke("guided_dismiss", json!({})).await?;
+
+        let script = r#"
+            var raw = localStorage.getItem('alm-preferences');
+            var prefs = {};
+            try { prefs = raw ? JSON.parse(raw) : {}; } catch (e) { prefs = {}; }
+            prefs.setupCompleted = true;
+            localStorage.setItem('alm-preferences', JSON.stringify(prefs));
+        "#;
+        self.driver
+            .execute(script, vec![])
+            .await
+            .context("failed to persist setupCompleted preference")?;
+
+        self.driver.refresh().await.context("page refresh after first-run completion failed")?;
+        self.wait_document_ready(Duration::from_secs(10)).await?;
+        self.wait_bridge_ready(Duration::from_secs(15)).await?;
+
+        // Verify the preference actually survived the reload: if the
+        // webview's storage backend dropped it, every shell route would
+        // silently bounce back to /setup — fail HERE with a named cause
+        // instead of a downstream "element never appeared".
+        let persisted: bool = self
+            .driver
+            .execute(
+                r#"
+                try {
+                    var raw = localStorage.getItem('alm-preferences');
+                    return raw ? JSON.parse(raw).setupCompleted === true : false;
+                } catch (e) { return false; }
+                "#,
+                vec![],
+            )
+            .await
+            .context("failed to read back the setupCompleted preference")?
+            .convert()
+            .context("failed to deserialise the setupCompleted read-back")?;
+        if !persisted {
+            return Err(anyhow!(
+                "setupCompleted=true did not persist in localStorage across the reload — \
+                 the webview storage backend dropped the preference"
+            ));
+        }
+        Ok(())
     }
 
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
@@ -803,22 +957,90 @@ fn spawn_tauri_webdriver() -> Result<Child> {
 /// Reset the application database so each test starts from a clean state.
 ///
 /// FR-006: if `ALM_DB_URL` is set and looks like `sqlite://PATH?...`, strip
-/// the `sqlite://` prefix and everything from `?` onward, then
-/// `std::fs::remove_file` that path (errors are ignored so a missing file
-/// doesn't fail startup).
+/// the `sqlite://` prefix and everything from `?` onward, then remove that
+/// file (errors are ignored so a missing file doesn't fail startup).
 ///
-/// TODO(spec-037 wiring): when `ALM_DB_URL` is unset, resolve the OS
-/// app-data path (`dev.astro-plan.astro-library-manager/alm.db`) and remove
-/// it there instead.
+/// When `ALM_DB_URL` is unset (the e2e.yml CI configuration), the app stores
+/// its DB at `<app_data_dir>/alm.db` (`apps/desktop/src-tauri/src/main.rs`,
+/// identifier `dev.astro-plan.astro-library-manager`). Without removing it
+/// there, state accumulates ACROSS the serial journeys — a journey that
+/// completes first-run leaves `firstrun.complete` + its registered roots +
+/// unacknowledged inbox items behind for every later journey, breaking both
+/// the fresh-DB startup-redirect expectation and every "only item in the
+/// list" selection. The `-wal`/`-shm` sidecars are removed too so SQLite
+/// can't replay a stale WAL into the fresh DB.
 fn reset_database() -> Result<()> {
-    if let Ok(url) = std::env::var("ALM_DB_URL") {
-        if let Some(path_and_query) = url.strip_prefix("sqlite://") {
-            let path = path_and_query.split('?').next().unwrap_or(path_and_query);
-            let _ = std::fs::remove_file(path);
+    let db_path: Option<PathBuf> = if let Ok(url) = std::env::var("ALM_DB_URL") {
+        url.strip_prefix("sqlite://").map(|p| PathBuf::from(p.split('?').next().unwrap_or(p)))
+    } else {
+        app_data_dir().map(|dir| dir.join("alm.db"))
+    };
+    if let Some(path) = db_path {
+        let _ = std::fs::remove_file(&path);
+        for sidecar in ["-wal", "-shm"] {
+            let mut os = path.clone().into_os_string();
+            os.push(sidecar);
+            let _ = std::fs::remove_file(PathBuf::from(os));
         }
     }
-    // TODO(spec-037 wiring): resolve OS app-data path when ALM_DB_URL is unset.
     Ok(())
+}
+
+/// Best-effort wipe of the webview's persisted web storage (localStorage &
+/// co.) so preferences set by one journey (`alm-preferences.setupCompleted`,
+/// grouping dims, theme) can't leak into the next. Without this, a journey
+/// that completes first-run leaves `setupCompleted: true` behind, and the
+/// next launch's `SetupPage` immediately bounces `/setup` → `/inbox`
+/// (`SetupPage.tsx`), breaking the fresh-DB startup-redirect expectation the
+/// journeys share. Called before the app process is spawned, so nothing
+/// holds these files open. Failures are ignored (first run has no storage).
+fn reset_webview_storage() {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if cfg!(target_os = "windows") {
+        // WebView2 keeps ALL web storage under the user-data folder tauri
+        // points at `<app_local_data_dir>/EBWebView`.
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            candidates
+                .push(PathBuf::from(local).join("dev.astro-plan.astro-library-manager/EBWebView"));
+        }
+    } else if cfg!(target_os = "macos") {
+        // WKWebView website data (incl. localStorage) lives under
+        // ~/Library/WebKit/<identifier>/WebsiteData.
+        if let Some(home) = std::env::var_os("HOME") {
+            candidates.push(
+                PathBuf::from(home)
+                    .join("Library/WebKit/dev.astro-plan.astro-library-manager/WebsiteData"),
+            );
+        }
+    } else if let Some(dir) = app_data_dir() {
+        // WebKitGTK stores localStorage / IndexedDB inside the app data dir.
+        candidates.push(dir.join("localstorage"));
+        candidates.push(dir.join("storage"));
+    }
+    for path in candidates {
+        let _ = std::fs::remove_dir_all(path);
+    }
+}
+
+/// Resolve the per-OS Tauri `app_data_dir` for the app identifier
+/// `dev.astro-plan.astro-library-manager` (`tauri.conf.json`). Mirrors
+/// `tauri::path::PathResolver::app_data_dir` (`dirs::data_dir()/<identifier>`)
+/// without needing a Tauri runtime in the test harness:
+/// - Linux:   `$XDG_DATA_HOME` or `~/.local/share`
+/// - macOS:   `~/Library/Application Support`
+/// - Windows: `%APPDATA%` (roaming)
+fn app_data_dir() -> Option<PathBuf> {
+    const APP_IDENTIFIER: &str = "dev.astro-plan.astro-library-manager";
+    let base = if cfg!(target_os = "windows") {
+        std::env::var_os("APPDATA").map(PathBuf::from)
+    } else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+    };
+    base.map(|b| b.join(APP_IDENTIFIER))
 }
 
 // ---------------------------------------------------------------------------
