@@ -19,6 +19,7 @@ import { GuidedOverlay } from '@/features/guided/GuidedOverlay';
 import { useGuidedFlow } from '@/features/guided/useGuidedFlow';
 import { startGuidedEventBridge, stopGuidedEventBridge } from '@/features/guided/eventBridge';
 import { loadObservingState } from '@/features/targets/observing-sites/site-store';
+import { startUpdateSubscription, stopUpdateSubscription } from '@/data/updateSubscription';
 
 function ShellInner() {
   const prefs = usePreferences();
@@ -51,6 +52,14 @@ function ShellInner() {
     void startGuidedEventBridge();
     return () => stopGuidedEventBridge();
   }, [prefs.setupCompleted]);
+
+  // Spec 051 US10 (T058): listen for the backend's startup `update-available`
+  // event for the whole app session, so it's captured even if the user
+  // hasn't opened Settings > Advanced yet.
+  useEffect(() => {
+    void startUpdateSubscription();
+    return () => stopUpdateSubscription();
+  }, []);
 
   return (
     <div className={`alm-frame density-${prefs.density}`}>
