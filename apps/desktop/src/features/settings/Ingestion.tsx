@@ -20,7 +20,7 @@
 // — this pane makes them durable, not yet enforced. Toggling e.g. "Follow NTFS
 // junctions" does not change scan behaviour until a scan-pipeline consumer is
 // wired to read it.
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Toggle } from '@/ui';
 import { m } from '@/lib/i18n';
 import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
@@ -59,11 +59,19 @@ export function Ingestion(_props: IngestionProps) {
   // clobbering them.
   const [settings, setSettings] = useState<UpdateIngestionSettings>(DEFAULTS);
 
+  // Guards against the initial `ingestionSettingsGet()` fetch resolving
+  // *after* the user has already edited a control (a real race, not just a
+  // CI timing artifact: on a slower/more contended machine the mount fetch
+  // can still be in flight when the user's first click fires). Without this,
+  // the late `setSettings(loaded)` below stomps the user's optimistic edit
+  // back to the stale fetched value.
+  const editedRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     ingestionSettingsGet()
       .then((loaded: IngestionSettings) => {
-        if (cancelled) return;
+        if (cancelled || editedRef.current) return;
         setSettings(loaded);
       })
       .catch(() => {
@@ -75,6 +83,7 @@ export function Ingestion(_props: IngestionProps) {
   }, []);
 
   function persist(patch: Partial<UpdateIngestionSettings>) {
+    editedRef.current = true;
     const next: UpdateIngestionSettings = { ...settings, ...patch };
     setSettings(next);
     ingestionSettingsUpdate(next).catch(() => {
@@ -83,6 +92,7 @@ export function Ingestion(_props: IngestionProps) {
   }
 
   const handleRestoreDefaults = async () => {
+    editedRef.current = true;
     const persisted = await ingestionSettingsUpdate(DEFAULTS);
     setSettings(persisted);
   };
