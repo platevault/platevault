@@ -76,7 +76,7 @@ respective foundational pieces below land.
       `crates/persistence/db/repositories/` (new `target_favourites.rs` or an
       addition to the existing targets repository file — match current file
       layout), per data-model.md §E1's repository shape.
-- [ ] T007 [Foundational] Add the `cleanupTypeOverrides` descriptor entry to
+- [x] T007 [Foundational] Add the `cleanupTypeOverrides` descriptor entry to
       `crates/app/settings/src/descriptors.rs`: a new `ValidationRule` variant
       (object map of known data-type id → `Keep|Archive|Delete`, mirroring the
       existing `PatternsByType` rule's validation style), registered as
@@ -208,31 +208,31 @@ and produced exactly one audit event.
 
 ### Tests for User Story 3
 
-- [ ] T021 [P] [US3] `cargo test` for the new `ValidationRule` variant: valid
+- [x] T021 [P] [US3] `cargo test` for the new `ValidationRule` variant: valid
       map accepted; unknown data-type id rejected (`value.invalid`); invalid
       action string rejected; empty map accepted (all defaults apply).
-- [ ] T022 [P] [US3] `cargo test` confirming `update_setting` for
+- [x] T022 [P] [US3] `cargo test` confirming `update_setting` for
       `cleanupTypeOverrides` emits exactly one `SettingsChanged`
       (`TOPIC_SETTINGS_CHANGED`) event on a real change and zero events on a
       no-op re-save of the identical map (SC-003).
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Wire `apps/desktop/src/features/settings/Cleanup.tsx`'s
+- [x] T023 [US3] Wire `apps/desktop/src/features/settings/Cleanup.tsx`'s
       `handleTableChange` to call `save('cleanup', { cleanupTypeOverrides: next })`
       (the same `save` prop already used for `blockPermanentDelete`/
       `defaultProtection`) instead of `saveActionsToStorage`; load initial
       state from the existing `getSettings({ scope: 'cleanup' })` call
       already present in the component (extend `applyValues` to read
       `cleanupTypeOverrides`) instead of `loadActionsFromStorage`.
-- [ ] T024 [US3] Remove `ACTIONS_STORAGE_KEY`, `loadActionsFromStorage`,
+- [x] T024 [US3] Remove `ACTIONS_STORAGE_KEY`, `loadActionsFromStorage`,
       `saveActionsToStorage` from `Cleanup.tsx` once the backend path is
       wired and verified (FR-007).
-- [ ] T025 [P] [US3] Update/add a vitest for `Cleanup.tsx` confirming an
+- [x] T025 [P] [US3] Update/add a vitest for `Cleanup.tsx` confirming an
       override change calls `save('cleanup', ...)` with the expected shape
       and that a reload (re-mount with `getSettings` returning the saved map)
       shows the override, not the fixture default.
-- [ ] T026 [US3] Confirm the existing `warnedTypes` impact-warning banner
+- [x] T026 [US3] Confirm the existing `warnedTypes` impact-warning banner
       logic (protected type set destructive) still functions unchanged
       against the backend-sourced `actions` state (US3 AS3) — no logic change
       expected, verification only.
