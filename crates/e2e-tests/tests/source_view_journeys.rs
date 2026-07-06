@@ -304,7 +304,7 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
     // No product UI routes this plan id back for review (KNOWN GAP, module
     // docs), so find it via the real `plans.list` read path instead of a
     // fabricated return value.
-    let plans: serde_json::Value = app
+    let plans_poll = app
         .invoke_until(
             "plans_list",
             json!({
@@ -320,11 +320,69 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
                     .is_some_and(|arr| arr.iter().any(|p| p["originPath"] == json!(project_id)))
             },
         )
-        .await
-        .map_err(|e| match &dialog_close_diagnostics {
-            Some(d) => anyhow::anyhow!("{e}\n\nadditional evidence from the submit step: {d}"),
-            None => e,
-        })?;
+        .await;
+    let plans: serde_json::Value = match plans_poll {
+        Ok(v) => v,
+        Err(e) => {
+            // Round 4 (#470): the previous round's raw-payload dump showed
+            // `{"plans": []}` — no `prepared_view_generation` plan exists AT
+            // ALL, even though the dialog closed (a real success response).
+            // `generate_source_view` (`crates/app/projects/src/
+            // source_view_generate.rs`) has no early-return success path
+            // that skips `insert_plan` — every branch either errors before
+            // persisting anything or persists the plan and advances it to
+            // `ready_for_review` before returning `Ok`. So a genuine silent
+            // "success with nothing persisted" would itself be a real
+            // product bug worth proving directly rather than guessing.
+            // Gather three more pieces of ground truth, all best-effort
+            // (never masking the real error below):
+            // (a) plans.list with NO origin filter — sanity-checks the read
+            //     path itself still works and shows whatever plans DO exist
+            //     (e.g. the earlier inbox-confirm plan).
+            // (b) sessions.list — the project's linked session/frame state
+            //     at THIS moment, to rule out something unlinking it
+            //     between setup and submit.
+            // (c) a second, direct bridge invoke of the SAME
+            //     `sourceview.generate` call with the same project id: if
+            //     it also resolves, the exact response (including any
+            //     warnings) proves what the real call returns; if it now
+            //     errors, that error is the real root cause the UI's first
+            //     call hit too (masked from the test only by the dialog's
+            //     resolved-promise-closes-unconditionally-on-success logic).
+            let all_plans: serde_json::Value = app
+                .invoke(
+                    "plans_list",
+                    json!({
+                        "stateFilter": null,
+                        "originFilter": null,
+                        "createdAfter": null,
+                        "limit": null,
+                    }),
+                )
+                .await
+                .unwrap_or_else(|e2| json!({ "plans_list_no_filter_error": e2.to_string() }));
+            let sessions_now: serde_json::Value = app
+                .invoke("sessions_list", json!({}))
+                .await
+                .unwrap_or_else(|e2| json!({ "sessions_list_error": e2.to_string() }));
+            let regenerate: serde_json::Value = app
+                .invoke(
+                    "sourceview_generate",
+                    json!({ "req": { "projectId": project_id, "copyOptIn": false, "strict": false, "profileId": null, "destinationOverride": null } }),
+                )
+                .await
+                .unwrap_or_else(|e2| json!({ "sourceview_generate_retry_error": e2.to_string() }));
+            let dialog_evidence = dialog_close_diagnostics
+                .as_deref()
+                .unwrap_or("(dialog closed — submit's promise resolved)");
+            return Err(anyhow::anyhow!(
+                "{e}\n\nsubmit-step evidence: {dialog_evidence}\n\ndiagnostic plans.list (no \
+                 origin filter): {all_plans}\n\ndiagnostic sessions.list at failure time: \
+                 {sessions_now}\n\ndiagnostic direct retry of sourceview.generate for the same \
+                 project: {regenerate}"
+            ));
+        }
+    };
     let plan = plans["plans"]
         .as_array()
         .and_then(|arr| arr.iter().find(|p| p["originPath"] == json!(project_id)))
