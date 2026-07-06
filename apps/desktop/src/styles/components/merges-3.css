@@ -681,6 +681,10 @@
 .alm-inbox-row__classification--classified { color: var(--alm-info); }
 .alm-inbox-row__classification--plan_open { color: var(--alm-ok); }
 .alm-inbox-row__classification--resolved  { color: var(--alm-ink4); }
+/* T070/FR-047: a materialized sub-item with a missing mandatory attribute
+   (spec 041 needs-review sentinel bucket) — distinct from `classified` so it
+   never reads as fully resolved. */
+.alm-inbox-row__classification--needs_review { color: var(--alm-warn); }
 
 /* ── task 35: bulk-confirm button ───────────────────────────────────────────────
  *
