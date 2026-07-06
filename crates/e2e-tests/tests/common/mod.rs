@@ -780,7 +780,7 @@ impl E2eApp {
     /// Polling is the fix — the same wait primitive the `data-testid`
     /// helpers above already use, applied to the aria-label / button-text
     /// locators too.
-    async fn find_waiting(&self, by: By, what: &str) -> Result<WebElement> {
+    pub async fn find_waiting(&self, by: By, what: &str) -> Result<WebElement> {
         let deadline = Instant::now() + DEFAULT_FIND_TIMEOUT;
         loop {
             match self.driver.find(by.clone()).await {
@@ -897,6 +897,92 @@ impl E2eApp {
             ));
         }
         Ok(())
+    }
+
+    /// Fill an `<input>`/`<select>`-less text field located by its exact
+    /// `aria-label` (clear then type) — for real form fields that carry no
+    /// `data-testid` (e.g. `TargetSearch`'s combobox input). Polls for the
+    /// element (via [`Self::find_waiting`]) rather than doing a single
+    /// immediate lookup, so it survives the same route-render race
+    /// `find_waiting` documents.
+    pub async fn fill_by_aria_label(&self, label: &str, value: &str) -> Result<()> {
+        let xpath = format!("//*[@aria-label={}]", escape_string(label));
+        let el = self
+            .find_waiting(By::XPath(&xpath), &format!("element with aria-label={label:?}"))
+            .await?;
+        el.clear().await.with_context(|| format!("clear aria-label={label:?} failed"))?;
+        el.send_keys(value).await.with_context(|| format!("send_keys aria-label={label:?} failed"))
+    }
+
+    /// Click the first `<button>` whose full trimmed text content equals
+    /// `text` exactly — for real controls with no `data-testid` and no
+    /// stable `aria-label` (e.g. Settings' "+ Add site" / "Save" buttons).
+    /// Only safe to use when `text` is unambiguous in the current DOM (no
+    /// two same-labelled buttons visible at once) — callers with an
+    /// ambiguity risk (e.g. a dialog whose confirm button repeats a trigger
+    /// button's label) should scope the search to a container element
+    /// instead via `app.driver.find(...)` + `WebElement::find(...)`. Polls
+    /// for the element (via [`Self::find_waiting`]) rather than doing a
+    /// single immediate lookup, so it survives the same route-render race
+    /// `find_waiting` documents.
+    pub async fn click_button_text(&self, text: &str) -> Result<()> {
+        let xpath = format!("//button[normalize-space(.)={}]", escape_string(text));
+        self.find_waiting(By::XPath(&xpath), &format!("<button> with text {text:?}"))
+            .await?
+            .click()
+            .await
+            .with_context(|| format!("click button text={text:?} failed"))
+    }
+
+    /// Count of elements anywhere on the page whose `title` attribute equals
+    /// `title` exactly — a real, coarse but honest way to assert a specific
+    /// disclosure/placeholder tooltip is (or is not) present, when the
+    /// underlying element carries no `data-testid` (e.g. the Targets table's
+    /// per-row "Opposition date unknown" / "Lunar distance unknown"
+    /// disclosures, spec 047). NOT routed through [`Self::find_waiting`]:
+    /// callers use this to assert an ABSENCE (a zero count is frequently the
+    /// expected, correct result), so polling for presence here would be
+    /// wrong — callers that need to wait for a nonzero count should poll
+    /// this fn themselves.
+    pub async fn count_elements_with_title(&self, title: &str) -> Result<usize> {
+        let xpath = format!("//*[@title={}]", escape_string(title));
+        Ok(self
+            .driver
+            .find_all(By::XPath(&xpath))
+            .await
+            .with_context(|| format!("query for title={title:?} failed"))?
+            .len())
+    }
+
+    /// Count of `<button>`s anywhere on the page whose full trimmed text
+    /// content equals `text` exactly — used as a real, honest "no such
+    /// control exists" check (e.g. proving no global "Save" button exists on
+    /// a settings pane, spec 018's auto-save-only convention). NOT routed
+    /// through [`Self::find_waiting`] for the same reason as
+    /// [`Self::count_elements_with_title`]: a zero count is frequently the
+    /// expected, correct result.
+    pub async fn count_buttons_with_text(&self, text: &str) -> Result<usize> {
+        let xpath = format!("//button[normalize-space(.)={}]", escape_string(text));
+        Ok(self
+            .driver
+            .find_all(By::XPath(&xpath))
+            .await
+            .with_context(|| format!("query for button text={text:?} failed"))?
+            .len())
+    }
+
+    /// Read an `aria-label`ed checkbox's checked state (e.g. a `Toggle`
+    /// component) — real DOM state, not an assumption from response shape.
+    /// Polls for the element (via [`Self::find_waiting`]) rather than doing a
+    /// single immediate lookup, so it survives the same route-render race
+    /// `find_waiting` documents.
+    pub async fn checkbox_checked_by_aria_label(&self, label: &str) -> Result<bool> {
+        let xpath = format!("//*[@aria-label={}]", escape_string(label));
+        self.find_waiting(By::XPath(&xpath), &format!("element with aria-label={label:?}"))
+            .await?
+            .is_selected()
+            .await
+            .with_context(|| format!("is_selected() on aria-label={label:?} failed"))
     }
 
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
