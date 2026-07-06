@@ -53,6 +53,8 @@ thiserror = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+# Rotating diagnostics log file (spec 051 US7, T041/T042) — alongside stderr.
+tracing-appender = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }
 

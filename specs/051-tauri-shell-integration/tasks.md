@@ -247,28 +247,28 @@ and produced exactly one audit event.
 
 **Independent Test**: Resize/move, quit, relaunch, confirm restoration.
 
-- [ ] T027 [US4] Register `tauri_plugin_window_state::Builder::default().build()`
+- [x] T027 [US4] Register `tauri_plugin_window_state::Builder::default().build()`
       in `build_app()`, after single-instance (US1) so a redirected second
       launch never touches window-state's own store file for a window it
       isn't actually creating.
-- [ ] T028 [US4] Add the plugin's required capability grant(s) (e.g.
+- [x] T028 [US4] Add the plugin's required capability grant(s) (e.g.
       `window-state:default`, if the plugin exposes any webview-invokable
       surface — verify at implementation time) to
       `apps/desktop/src-tauri/capabilities/default.json`.
-- [ ] T029 [US4] Confirm/enforce the minimum-size floor
+- [x] T029 [US4] Confirm/enforce the minimum-size floor
       (`minWidth`/`minHeight` = 1100x720, already in `tauri.conf.json`) is
       still respected after the plugin restores a persisted size — add an
       explicit clamp in `build_app()`/`setup()` if the plugin does not already
       guarantee this (mirrors the `astro-up` reference's own explicit
       min-size enforcement after window-state restore — see research.md's
       cited `lib.rs` excerpt).
-- [ ] T030 [US4] Add the off-screen-position fallback (US4 AS3, FR-013): on
+- [x] T030 [US4] Add the off-screen-position fallback (US4 AS3, FR-013): on
       restore, if the persisted position is fully outside all current
       display bounds, reset to a centered/default position rather than
       accepting the plugin's raw restore (verify whether the plugin already
       handles this natively before adding app-level logic — avoid duplicating
       built-in behavior).
-- [ ] T031 [US4] Manual verification across at least two of the three
+- [ ] T031 [US4] **Deferred to manual verification.** Manual verification across at least two of the three
       platforms: resize/move/maximize, restart, confirm restoration (SC-004);
       disconnect a second monitor the window was on, restart, confirm
       on-screen fallback.
@@ -285,14 +285,14 @@ menu.
 **Independent Test**: Open the native menu on each platform; confirm entries
 and Edit-menu copy/paste/select-all work.
 
-- [ ] T032 [US5] Build a `tauri::menu::Menu` in `build_app()`/`setup()` using
+- [x] T032 [US5] Build a `tauri::menu::Menu` in `build_app()`/`setup()` using
       `tauri::menu::{Menu, Submenu, PredefinedMenuItem, MenuItem}`: an
       App/PlateVault submenu (About, Settings, separator, Quit), a Window
       submenu (`PredefinedMenuItem::minimize`, `close_window`, etc., following
       the platform default set), and an Edit submenu
       (`PredefinedMenuItem::copy`, `paste`, `select_all`, `undo`/`redo` if
       appropriate for platform convention).
-- [ ] T033 [US5] Wire the About and Settings menu items to whatever
+- [x] T033 [US5] Wire the About and Settings menu items to whatever
       in-app navigation/dialog already exists for those surfaces (emit a
       frontend event the app shell already listens for, or open the existing
       Settings route) — reuse existing UI, do not build a new About dialog if
@@ -300,13 +300,16 @@ and Edit-menu copy/paste/select-all work.
       native `about` `PredefinedMenuItem` (OS-provided About panel) as the
       placeholder rather than inventing new in-app UI (out of this spec's
       scope to design an About screen).
-- [ ] T034 [US5] Wire Quit to the same shutdown path as the existing
+- [x] T034 [US5] Wire Quit to the same shutdown path as the existing
       window-close control (FR-016) — verify no bypass of any existing
       close-confirmation logic (check for one before assuming none exists).
-- [ ] T035 [US5] Explicitly verify (no code expected) that this task group
+      Verified: this crate has no `on_window_event`/`CloseRequested` handler
+      anywhere, so `PredefinedMenuItem::quit`'s default `app.exit(0)` has
+      nothing to bypass.
+- [x] T035 [US5] Explicitly verify (no code expected) that this task group
       does **not** touch any existing native/React context-menu code path
-      (FR-017, US5 AS4).
-- [ ] T036 [US5] Manual verification on macOS (global menu bar, Cmd+Q/Cmd+,
+      (FR-017, US5 AS4). Verified: no context-menu code exists in this crate.
+- [ ] T036 [US5] **Deferred to manual verification.** Manual verification on macOS (global menu bar, Cmd+Q/Cmd+,
       conventions), Windows, and Linux: menu presence, Edit-menu
       copy/paste/select-all in a focused text field, Quit behavior.
 
@@ -359,7 +362,7 @@ runtime check.
 **Independent Test**: Run the app, locate the log file, confirm rotation and
 readability.
 
-- [ ] T041 [US7] Register `tauri_plugin_log::Builder::new()` in `build_app()`
+- [x] T041 [US7] Register `tauri_plugin_log::Builder::new()` in `build_app()`
       configured with **both** a stdout target and a rotating file target
       (`tauri_plugin_log::Target::new(TargetKind::LogDir { file_name: None })`
       or equivalent, with a size/age-based `RotationStrategy`), so existing
@@ -370,15 +373,32 @@ readability.
       messages are not duplicated or dropped — research the plugin's
       `tracing`-bridge feature flag at implementation time (research.md §c
       notes `2.8.0` "includes... tracing support").
-- [ ] T042 [US7] Confirm the rotation policy is enforced (max file size and/or
+      **Implementation deviation, documented**: the vendored `tauri-plugin-log
+      2.8.0` declares a `tracing` Cargo feature but does not actually wire it
+      into any code path (verified by reading the vendored crate source) —
+      enabling it would still install fern's own global `log::logger()`,
+      which directly conflicts with `tracing-subscriber`'s own `tracing-log`
+      bridge (both want the single process-wide `log` logger slot). Resolved
+      by registering `tauri_plugin_log::Builder::new().skip_logger().build()`
+      (so the plugin still exists as a registered plugin, and its `log` Tauri
+      command / `@tauri-apps/plugin-log` JS API still work against the
+      ambient logger) while the actual rotating file target is a
+      `tracing_appender::rolling::daily` layer composed directly into
+      `main.rs`'s `tracing_subscriber::registry()`, alongside the unchanged
+      stderr `fmt` layer — avoiding the dual-global-logger conflict entirely
+      while still satisfying the goal (stdout preserved, rotating file
+      exists, single source of truth for every `tracing::`/`log::` call).
+- [x] T042 [US7] Confirm the rotation policy is enforced (max file size and/or
       max file count) so the log directory never grows unbounded (FR-022,
-      SC-006).
-- [ ] T043 [P] [US7] Document the per-platform log location (already recorded
+      SC-006). Implemented as: `tracing_appender::rolling::daily` (one file
+      per day) plus an explicit age-based prune (`prune_old_logs`, 14-day
+      retention) run on every startup before the day's writer is created.
+- [ ] T043 [P] [US7] **Skipped (optional, not required by any FR)**. Document the per-platform log location (already recorded
       in plan.md's platform-differences table) in whatever in-app "About" or
       "Diagnostics" surface exists (or the native About panel from T033, if a
       "reveal log folder" affordance is added — optional nice-to-have, not
       required by any FR).
-- [ ] T044 [US7] Manual verification on all three platforms: run the app,
+- [ ] T044 [US7] **Deferred to manual verification.** Manual verification on all three platforms: run the app,
       locate the log file at the documented location, confirm readable
       recent entries and confirm the SQLite audit trail is unaffected/unchanged
       (FR-023).

@@ -61,6 +61,37 @@ function ShellInner() {
     return () => stopUpdateSubscription();
   }, []);
 
+  // Spec 051 US5 (T033): native "Settings…" application-menu item — no
+  // native dialog of its own, so the backend emits an event and this
+  // listener navigates to the existing Settings route. In mock/test mode
+  // (VITE_USE_MOCKS=true) there's no native menu to listen for, matching the
+  // convention already used by logSubscription.ts/updateSubscription.ts.
+  useEffect(() => {
+    if (import.meta.env.VITE_USE_MOCKS === 'true') return undefined;
+
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        const fn = await listen('menu:open-settings', () => {
+          void navigate({ to: '/settings' });
+        });
+        if (cancelled) {
+          fn();
+        } else {
+          unlisten = fn;
+        }
+      } catch (err) {
+        console.warn('[Shell] menu:open-settings listen failed:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [navigate]);
+
   return (
     <div className={`alm-frame density-${prefs.density}`}>
       <div className="alm-frame__body">
