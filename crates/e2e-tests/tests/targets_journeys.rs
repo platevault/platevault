@@ -35,10 +35,34 @@ const UI_TIMEOUT: Duration = Duration::from_secs(20);
 const OPPOSITION_UNKNOWN_TITLE: &str = "Opposition date unknown — this target has no coordinates.";
 const LUNAR_UNKNOWN_TITLE: &str = "Lunar distance unknown — this target has no coordinates.";
 
+/// Wait for the index route's async first-run redirect to land on `/setup`
+/// BEFORE navigating anywhere (mirrors `inbox_ui_journeys.rs`'s
+/// `settle_first_run_redirect`). A fresh DB (the harness resets it every
+/// launch) makes `checkFirstRunComplete` redirect `/` → `/setup` from an
+/// async `beforeLoad`; if a journey `goto_route`s while that redirect is
+/// still pending, the late-resolving redirect can yank the app off the
+/// target route.
+async fn settle_first_run_redirect(app: &E2eApp) -> anyhow::Result<()> {
+    app.wait_url_contains("/setup", Duration::from_secs(15))
+        .await
+        .map(drop)
+        .map_err(|e| anyhow::anyhow!("expected a fresh DB to redirect to /setup: {e}"))
+}
+
 /// Complete first-run via the invoke bridge (native folder pickers can't be
 /// driven by WebDriver — same documented constraint as `journeys.rs`/
 /// `smoke.rs`) so `/targets` is directly reachable.
+///
+/// Registers BOTH a raw (`light_frames`) and a `project` root:
+/// [`E2eApp::complete_first_run_gate`] requires at least one of each, and
+/// routing through the real gate (not a bare `firstrun_complete` invoke)
+/// also clears the Shell's separate `setupCompleted` localStorage flag — a
+/// journey that only calls the backend command still gets bounced to
+/// `/setup` on every subsequent `goto_route` (`inbox_ui_journeys.rs`'s
+/// `register_project_root`/`complete_first_run_gate` pairing is the proven
+/// pattern this mirrors).
 async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
+    settle_first_run_redirect(app).await?;
     let raw_dir = tempfile::tempdir()?;
     let _: serde_json::Value = app
         .invoke(
@@ -46,8 +70,14 @@ async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
             json!({ "path": raw_dir.path().to_string_lossy(), "category": "light_frames", "scanSettings": null }),
         )
         .await?;
-    let _: serde_json::Value = app.invoke("firstrun_complete", json!({})).await?;
-    Ok(())
+    let project_dir = tempfile::tempdir()?;
+    let _: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({ "path": project_dir.path().to_string_lossy(), "category": "project", "scanSettings": null }),
+        )
+        .await?;
+    app.complete_first_run_gate().await
 }
 
 /// Add a target via the REAL "Add target" dialog (search -> select suggestion
