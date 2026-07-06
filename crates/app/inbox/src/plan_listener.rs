@@ -213,9 +213,21 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
     // `frame_ids` instead of the historical `'[]'` placeholder. A resolution
     // failure (destination path not found / stat failure) is logged and
     // leaves `frame_ids` empty — never blocks master registration.
+    //
+    // `resolved_root_id` (spec 006's `calibration_session.root_id`, migration
+    // 0021) is captured from the same lookup and written below — this table
+    // had the identical gap as `acquisition_session` (#470 round 6): the
+    // column existed, `persistence_db::repositories::inventory::
+    // update_calibration_session_root_id` existed to set it, but nothing
+    // ever called the setter or wrote the column at insert time, so every
+    // real calibration master's `root_id` stayed `NULL` (silently decoded as
+    // `""` by sqlx-sqlite, masking the gap from a plain string comparison).
+    let mut resolved_root_id: Option<String> = None;
     let frame_id = match resolve_applied_frame_path(pool, plan_id).await {
         Ok(Some((root_id, relative_path))) => {
-            match write_calibration_frame_record(pool, &root_id, &relative_path).await {
+            let outcome = write_calibration_frame_record(pool, &root_id, &relative_path).await;
+            resolved_root_id = Some(root_id);
+            match outcome {
                 Ok(id) => Some(id),
                 Err(e) => {
                     tracing::warn!(
@@ -246,13 +258,14 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
 
     sqlx::query(
         "INSERT INTO calibration_session
-            (id, session_key, frame_ids, kind, created_at, source_inbox_item_id)
-         VALUES (?, ?, ?, ?, datetime('now'), ?)",
+            (id, session_key, frame_ids, kind, root_id, created_at, source_inbox_item_id)
+         VALUES (?, ?, ?, ?, ?, datetime('now'), ?)",
     )
     .bind(&session_id)
     .bind(&session_key)
     .bind(&frame_ids_json)
     .bind(cal_kind)
+    .bind(&resolved_root_id)
     .bind(&item.id)
     .execute(pool)
     .await
@@ -680,5 +693,23 @@ mod tests {
         assert_eq!(size_bytes, expected_size, "real on-disk size, never 0");
         assert_eq!(stored_root, root_id);
         assert_eq!(stored_rel, rel);
+
+        // Regression for #470 round 6's twin bug: `calibration_session.root_id`
+        // (migration 0021) had the identical never-written gap as
+        // `acquisition_session.root_id` — this test already drives the real
+        // registered_sources → plan-apply → plan_listener path, so it is the
+        // right place to lock the fix in rather than adding a parallel test.
+        let (session_root_id,): (String,) = sqlx::query_as(
+            "SELECT root_id FROM calibration_session WHERE source_inbox_item_id = ?",
+        )
+        .bind(item_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            session_root_id, root_id,
+            "calibration_session.root_id must be set to the real registered source id, not left \
+             empty/unset"
+        );
     }
 }
