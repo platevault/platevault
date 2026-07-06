@@ -32,6 +32,45 @@ use serde_json::json;
 
 const UI_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Wait for the index route's async first-run redirect to land on `/setup`
+/// BEFORE navigating anywhere (mirrors `inbox_ui_journeys.rs`'s
+/// `settle_first_run_redirect`). A fresh DB (the harness resets it every
+/// launch) makes `checkFirstRunComplete` redirect `/` → `/setup` from an
+/// async `beforeLoad`; if a journey `goto_route`s while that redirect is
+/// still pending, the late-resolving redirect can yank the app off the
+/// target route.
+async fn settle_first_run_redirect(app: &E2eApp) -> anyhow::Result<()> {
+    app.wait_url_contains("/setup", Duration::from_secs(15))
+        .await
+        .map(drop)
+        .map_err(|e| anyhow::anyhow!("expected a fresh DB to redirect to /setup: {e}"))
+}
+
+/// Registers a disposable `light_frames` root and a disposable `project`
+/// root purely to satisfy `firstrun.complete`'s precondition (one of EACH,
+/// `crates/persistence/db/src/repositories/first_run.rs`), then routes
+/// through the real gate. Without this, `Shell.tsx`'s client-side
+/// `setupCompleted` gate bounces every `goto_route` to a Shell-wrapped page
+/// (`/sessions`, `/inbox`) back to `/setup` indefinitely (mirrors the proven
+/// `inbox_ui_journeys.rs` pattern).
+async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
+    let raw_dir = tempfile::tempdir()?;
+    let _: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({ "path": raw_dir.path().to_string_lossy(), "category": "light_frames", "scanSettings": null }),
+        )
+        .await?;
+    let project_dir = tempfile::tempdir()?;
+    let _: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({ "path": project_dir.path().to_string_lossy(), "category": "project", "scanSettings": null }),
+        )
+        .await?;
+    app.complete_first_run_gate().await
+}
+
 /// Tests 1/2/3/5 (journey-04) in one journey: nothing appears before a plan
 /// applies, a real session appears automatically (event-driven grouping)
 /// after apply with no separate review step, no review-state controls exist
@@ -42,6 +81,8 @@ const UI_TIMEOUT: Duration = Duration::from_secs(30);
 async fn sessions_ui_derived_view_invariants() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
+    complete_first_run(&app).await?;
 
     // Test 1: nothing appears before any inbox item is confirmed + applied.
     app.goto_route("/sessions").await?;
