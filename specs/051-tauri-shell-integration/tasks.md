@@ -473,22 +473,22 @@ tracked separately (research.md §a).
 **Independent Test**: Against a locally-published signed test artifact,
 confirm detect → verify → install; against a tampered one, confirm rejection.
 
-- [ ] T055 [US10] Add the `plugins.updater` block to
+- [x] T055 [US10] Add the `plugins.updater` block to
       `apps/desktop/src-tauri/tauri.conf.json` with a clearly-documented
       **placeholder** `pubkey` and the GitHub-Releases `latest.json` endpoint
       shape (research.md §a) — comment it as non-functional until the real
       keypair/pipeline exist.
-- [ ] T056 [US10] Register `tauri_plugin_updater::Builder::new().build()` in
+- [x] T056 [US10] Register `tauri_plugin_updater::Builder::new().build()` in
       `build_app()`; add `updater:default` and `process:default` (for the
       relaunch-to-apply step) to
       `apps/desktop/src-tauri/capabilities/default.json`.
-- [ ] T057 [US10] Add a `check_for_app_update` helper (mirroring the cited
+- [x] T057 [US10] Add a `check_for_app_update` helper (mirroring the cited
       `astro-up` `lib.rs` pattern in research.md §a): call
       `app.updater()?.check().await`, treat `Err` as "updater unavailable"
       (log at `debug`, non-fatal, FR-031), and on `Ok(Some(update))` emit a
       frontend-visible "update available" signal (event, matching the
       reference implementation's `update-available` event).
-- [ ] T058 [US10] Add a minimal frontend affordance (e.g. a Settings-page or
+- [x] T058 [US10] Add a minimal frontend affordance (e.g. a Settings-page or
       toast surface) that listens for the update-available signal and offers
       the user an explicit "install" action calling
       `update.downloadAndInstall()` from `@tauri-apps/plugin-updater` — no
@@ -500,6 +500,8 @@ confirm detect → verify → install; against a tampered one, confirm rejection
       rejection end-to-end once a real keypair exists (blocked on the
       follow-up infra — record as a deferred verification if the keypair is
       not yet available at implementation time).
+      **Deferred**: no real minisign keypair exists yet (T060 not built); this
+      cannot be exercised until that follow-up lands.
 - [ ] T060 [US10] **Follow-up, not implemented in this feature's commits**:
       generate a new PlateVault-specific minisign keypair; add
       `.github/workflows/release.yml` modeled on

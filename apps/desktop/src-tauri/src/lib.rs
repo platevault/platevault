@@ -12,7 +12,7 @@ use std::sync::Arc;
 use audit::bus::EventBus;
 use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
 use sqlx::SqlitePool;
-use tauri::Manager;
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_specta::{collect_commands, Builder};
 
 use crate::commands::artifacts::{
@@ -652,7 +652,16 @@ pub fn build_app() -> tauri::App {
             }
         }))
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init());
+        .plugin(tauri_plugin_opener::init())
+        // Spec 051 US10 (T056): signed auto-update plugin. `updater:default` +
+        // `process:default` (for the relaunch-to-apply step) are granted in
+        // `capabilities/default.json`. The `plugins.updater.pubkey` in
+        // `tauri.conf.json` is a documented placeholder until the real
+        // minisign keypair/release pipeline land (T060 follow-up) — until
+        // then `check_for_app_update` will only ever see "updater
+        // unavailable" or a verification failure, never a real update.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
 
     // Tauri MCP bridge plugin (@hypothesi tauri-plugin-mcp-bridge) — dev/debug
     // builds only. Runs a WebSocket server on 0.0.0.0:9223 that the
@@ -684,6 +693,46 @@ pub fn build_app() -> tauri::App {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
+}
+
+/// Check for a signed app update and, if one is available, emit an
+/// `update-available` event the frontend can surface (spec 051 US10, T057).
+///
+/// Mirrors the reference `astro-up` `check_for_app_update` pattern: an
+/// `Err` from `app.updater()` (plugin unavailable, e.g. non-bundled dev
+/// builds) or from `.check()` (network/verification failure, or — until the
+/// T060 follow-up replaces the placeholder `pubkey` — every real call) is
+/// logged at `debug`/`warn` and treated as non-fatal (FR-031); it never
+/// blocks or interrupts app startup.
+pub(crate) async fn check_for_app_update(app: &AppHandle) {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let updater = match app.updater() {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::debug!("Updater not available: {e}");
+            return;
+        }
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            tracing::info!(version = update.version.as_str(), "App update available");
+            let _ = app.emit(
+                "update-available",
+                serde_json::json!({
+                    "version": update.version,
+                    "body": update.body,
+                }),
+            );
+        }
+        Ok(None) => {
+            tracing::debug!("App is up to date");
+        }
+        Err(e) => {
+            tracing::warn!("Update check failed: {e}");
+        }
+    }
 }
 
 /// Spawn the spec-035 US4/T043 background ingest-resolution drain.
@@ -847,6 +896,15 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
     // back-fill on an interval. Non-blocking; transient/offline outcomes leave
     // rows pending for the next pass.
     spawn_ingest_resolution_drain(pool.clone(), bus.clone());
+
+    // spec 051 US10 (T057): startup self-update check. Non-blocking, non-fatal
+    // (FR-031) — failures/unavailability are logged and otherwise ignored.
+    {
+        let handle = app.handle().clone();
+        tokio::spawn(async move {
+            check_for_app_update(&handle).await;
+        });
+    }
 
     // Inbox + inventory commands take `State<'_, SqlitePool>` directly (rather
     // than via AppState), so the raw pool must be managed too. Without this they

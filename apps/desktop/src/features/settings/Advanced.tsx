@@ -4,7 +4,7 @@
 // spec 010 — Guided flow restart control added (T042).
 // spec 003 US3 — first-run setup wizard restart control added (regression fix:
 // firstrun.restart was fully wired on the backend but had no UI caller).
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Btn } from '@/ui';
 import { getSettings, restartFirstRun } from './settingsIpc';
@@ -15,6 +15,11 @@ import { errMessage } from '@/lib/errors';
 import { setPreference } from '@/data/preferences';
 import { resetWizardStateWithSources, type SourceEntry } from '@/features/setup/sources-store';
 import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
+import {
+  getUpdateSnapshot,
+  subscribeUpdate,
+  installPendingUpdate,
+} from '@/data/updateSubscription';
 
 const ADVANCED_KEYS = ['logLevel', 'rememberFollowLogs', 'devMode'];
 
@@ -32,6 +37,9 @@ export function Advanced({ save }: AdvancedProps) {
   const [firstRunConfirming, setFirstRunConfirming] = useState(false);
   const [firstRunRestarting, setFirstRunRestarting] = useState(false);
   const [firstRunError, setFirstRunError] = useState<string | null>(null);
+  const pendingUpdate = useSyncExternalStore(subscribeUpdate, getUpdateSnapshot);
+  const [installing, setInstalling] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const applyValues = (vals: Record<string, unknown>) => {
     if (vals?.logLevel && typeof vals.logLevel === 'string') {
@@ -114,6 +122,20 @@ export function Advanced({ save }: AdvancedProps) {
 
   const handleExport = () => console.log('Export DB triggered');
   const handleReset = () => console.log('Reset preferences triggered');
+
+  // Signed auto-update install (spec 051 US10, T058). Explicit user action
+  // only — never silent/automatic (US10 AS1, FR-030).
+  const handleInstallUpdate = async () => {
+    setInstalling(true);
+    setUpdateError(null);
+    try {
+      await installPendingUpdate();
+    } catch (err) {
+      setUpdateError(errMessage(err));
+    } finally {
+      setInstalling(false);
+    }
+  };
 
   return (
     <>
@@ -241,6 +263,36 @@ export function Advanced({ save }: AdvancedProps) {
             {firstRunError && (
               <div className="alm-settings__error" role="alert">
                 {m.settings_advanced_firstrun_restart_error({ message: firstRunError })}
+              </div>
+            )}
+          </div>
+        </SettingsRow>
+      </SettingsSection>
+
+      {/* Signed auto-update (spec 051 US10, T058) */}
+      <SettingsSection title={m.settings_advanced_updates_title()}>
+        <SettingsRow label={m.settings_advanced_updates_title()}>
+          <div className="alm-adv-settings__control-col">
+            <p className="alm-adv-settings__control-desc">
+              {pendingUpdate
+                ? m.settings_advanced_updates_available({ version: pendingUpdate.version })
+                : m.settings_advanced_updates_uptodate()}
+            </p>
+            {pendingUpdate && (
+              <Btn
+                size="sm"
+                onClick={() => void handleInstallUpdate()}
+                disabled={installing}
+                data-testid="update-install-btn"
+              >
+                {installing
+                  ? m.settings_advanced_updates_installing()
+                  : m.settings_advanced_updates_install()}
+              </Btn>
+            )}
+            {updateError && (
+              <div className="alm-settings__error" role="alert">
+                {m.settings_advanced_updates_error({ message: updateError })}
               </div>
             )}
           </div>
