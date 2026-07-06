@@ -153,27 +153,27 @@ star persists and is visible in the database, not `localStorage`.
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] `cargo test` for the new repository functions
+- [x] T014 [P] [US2] `cargo test` for the new repository functions
       (`list_favourites`/`add_favourite`/`remove_favourite`): add → present in
       list; add twice → single row, idempotent; remove → absent; remove of a
       never-favourited id → no-op, no error.
-- [ ] T015 [P] [US2] `cargo test` (or an integration test in
+- [x] T015 [P] [US2] `cargo test` (or an integration test in
       `tests/contract`) exercising cascade delete: delete/retire a
       `canonical_target` row that has a favourite → `target_favourite` row is
       gone (FK `ON DELETE CASCADE`).
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Add `targets.favourites.list` / `targets.favourites.add` /
+- [x] T016 [US2] Add `targets.favourites.list` / `targets.favourites.add` /
       `targets.favourites.remove` use-cases in
       `crates/app/targets/src/target_favourites.rs` (new file), calling the
       T006 repository functions; wire `target.not_found` for `add` against an
       unknown id (contracts/operations.md).
-- [ ] T017 [US2] Register the three commands with `tauri-specta` in
+- [x] T017 [US2] Register the three commands with `tauri-specta` in
       `apps/desktop/src-tauri/src/lib.rs`'s command list; regenerate
       `apps/desktop/src/bindings/index.ts` (`cargo test -p desktop_shell`)
       and commit the regenerated bindings.
-- [ ] T018 [US2] Rewrite `apps/desktop/src/features/targets/useFavourites.ts`
+- [x] T018 [US2] Rewrite `apps/desktop/src/features/targets/useFavourites.ts`
       to call the new bindings instead of `localStorage`, **preserving the
       existing public hook shape** (`{ favouriteIds, toggle, isFavourite }`
       plus the non-hook `getFavouriteIds` export) so
@@ -181,7 +181,7 @@ star persists and is visible in the database, not `localStorage`.
       beyond removing the STUB comment. Handle the optimistic-update /
       re-fetch pattern consistent with other backend-backed hooks in this
       codebase.
-- [ ] T019 [P] [US2] Update `apps/desktop/src/features/targets/useFavourites.test.ts`
+- [x] T019 [P] [US2] Update `apps/desktop/src/features/targets/useFavourites.test.ts`
       for the new backend-backed behavior (mock the IPC bindings instead of
       `localStorage`/`StorageEvent`).
 - [ ] T020 [US2] Remove the module-header STUB note in `useFavourites.ts` and

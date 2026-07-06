@@ -49,8 +49,8 @@ pub use projects::{
     source_view_generate,
 };
 pub use targets::{
-    ingest_resolution, ingest_sessions, resolver_settings, target_dto, target_management,
-    target_resolve, target_search,
+    ingest_resolution, ingest_sessions, resolver_settings, target_dto, target_favourites,
+    target_management, target_resolve, target_search,
 };
 
 // In-crate modules (file layout under `src/`). These live in `app_core` itself

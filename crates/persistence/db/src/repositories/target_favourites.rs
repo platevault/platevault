@@ -12,6 +12,36 @@ use sqlx::SqlitePool;
 
 use crate::DbResult;
 
+/// Returns `true` when `target_id` references an existing `canonical_target`
+/// row. Used by the `targets.favourites.add` use case to distinguish
+/// `target.not_found` from a genuine database error before inserting.
+///
+/// # Errors
+///
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn target_exists(pool: &SqlitePool, target_id: &str) -> DbResult<bool> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
+        .bind(target_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.is_some())
+}
+
+/// Read back the stored `favourited_at` for `target_id`, or `None` if the
+/// target is not currently favourited.
+///
+/// # Errors
+///
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn get_favourited_at(pool: &SqlitePool, target_id: &str) -> DbResult<Option<String>> {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT favourited_at FROM target_favourite WHERE target_id = ?")
+            .bind(target_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map(|(at,)| at))
+}
+
 /// List the ids of every currently-favourited canonical target, ordered by
 /// `favourited_at DESC` (most recently favourited first).
 ///
@@ -152,6 +182,37 @@ mod tests {
         let db = setup().await;
         let ids = list_favourites(db.pool()).await.unwrap();
         assert!(ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn target_exists_true_for_known_target() {
+        let db = setup().await;
+        insert_target(db.pool(), "t-006").await;
+        assert!(target_exists(db.pool(), "t-006").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn target_exists_false_for_unknown_target() {
+        let db = setup().await;
+        assert!(!target_exists(db.pool(), "missing").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn get_favourited_at_returns_none_when_not_favourited() {
+        let db = setup().await;
+        insert_target(db.pool(), "t-007").await;
+        assert!(get_favourited_at(db.pool(), "t-007").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn get_favourited_at_returns_stored_timestamp() {
+        let db = setup().await;
+        insert_target(db.pool(), "t-008").await;
+        add_favourite(db.pool(), "t-008", "2026-07-05T00:00:00Z").await.unwrap();
+        assert_eq!(
+            get_favourited_at(db.pool(), "t-008").await.unwrap().as_deref(),
+            Some("2026-07-05T00:00:00Z")
+        );
     }
 
     #[tokio::test]

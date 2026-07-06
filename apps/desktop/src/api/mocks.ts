@@ -278,6 +278,10 @@ let mockCameras: Camera[] = [
   { id: 'cam-002', name: 'ASI533MC Pro', aliases: ['ZWO ASI533MC'], autoDetected: false },
 ];
 
+// Target favourites (spec 051 US2): id → favourited-at timestamp, mirroring
+// the real `target_favourite` table's shape (row presence = favourited).
+const mockFavourites = new Map<string, string>();
+
 let mockTelescopes: Telescope[] = [
   { id: 'tel-001', name: 'Takahashi FSQ-106EDX4', aliases: [], focalLengthMm: 530, autoDetected: false },
   { id: 'tel-002', name: 'William Optics GT81', aliases: [], focalLengthMm: 478, autoDetected: false },
@@ -607,6 +611,22 @@ export async function mockInvoke(
         source: 'resolved',
         aliases: [],
       } satisfies TargetDetailV3_Serialize;
+    }
+    case 'target_favourites_list': {
+      return { targetIds: [...mockFavourites.keys()] };
+    }
+    case 'target_favourites_add': {
+      const req = (_args as { req?: { targetId?: string } } | undefined)?.req;
+      const targetId = req?.targetId ?? '';
+      const favouritedAt = mockFavourites.get(targetId) ?? new Date().toISOString();
+      mockFavourites.set(targetId, favouritedAt);
+      return { targetId, favouritedAt };
+    }
+    case 'target_favourites_remove': {
+      const req = (_args as { req?: { targetId?: string } } | undefined)?.req;
+      const targetId = req?.targetId ?? '';
+      mockFavourites.delete(targetId);
+      return { targetId };
     }
     case 'target_search': {
       const req = (_args as { req?: { query?: string } } | undefined)?.req;

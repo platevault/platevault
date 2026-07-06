@@ -1,100 +1,83 @@
 /**
- * useFavourites — client-side favourite/starred targets (task #18, spec 043).
+ * useFavourites — database-backed favourite/starred targets (spec 051 US2).
  *
- * STUB: favourites are stored in localStorage only.  Real persistence requires
- * the FITS OBJECT → target_id linkage (task #54) so the backend knows which
- * canonical targets have linked sessions/projects.  When #54 lands, replace
- * this module with a backend-backed hook that reads the real "My Targets" set.
+ * Favourites are canonical, database-backed state (`target_favourite` table,
+ * migration `0061`) — see `targets.favourites.list` / `.add` / `.remove` in
+ * `apps/desktop/src-tauri/src/commands/target_favourites.rs`. This replaces
+ * the previous `localStorage`-only stub (task #18, spec 043).
  *
- * localStorage key: 'alm:targets:favourites'
- * Format:           JSON array of canonical target id strings.
+ * The old stub cited task #54 (FITS OBJECT → target_id linkage) as its own
+ * blocker — that citation was specific to *storage location*, which this
+ * feature resolves (favourites are keyed directly off canonical target ids,
+ * independent of any FITS ingest linkage). Task #54 itself is broader than
+ * favourites storage: it also covers the FITS-derived target list backing
+ * `TargetsPage.tsx`'s stub filters and `ProjectsTable.tsx`'s target column
+ * (both still marked STUB pending #54), which this feature does not close.
  *
- * API:
+
+ * API (unchanged shape from the stub):
  *   useFavourites() → { favouriteIds: Set<string>, toggle, isFavourite }
- *   getFavouriteIds()         — non-hook read (for tests / outside React)
- *   FAVOURITES_STORAGE_KEY    — exported for tests
+ *   getFavouriteIds()         — non-hook read (for tests / outside React;
+ *                               returns the current in-memory cache, which is
+ *                               empty until the first backend fetch resolves)
  */
 
-import { useSyncExternalStore, useCallback } from 'react';
+import { useSyncExternalStore, useCallback, useEffect } from 'react';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 
-/** localStorage key under which favourited target ids are stored. */
-export const FAVOURITES_STORAGE_KEY = 'alm:targets:favourites';
+// ── Module-level cache + subscriber wiring ──────────────────────────────────
+//
+// A single shared cache backs every `useFavourites()` mount so all
+// subscribers (e.g. TargetsTable + a detail pane) stay in sync without each
+// mount re-fetching independently.
 
-// ── Storage helpers ────────────────────────────────────────────────────────────
-
-/** Read the raw stored set (empty set on any parse/storage error). */
-function readFromStorage(): ReadonlySet<string> {
-  try {
-    const raw = localStorage.getItem(FAVOURITES_STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed: unknown = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((v): v is string => typeof v === 'string'));
-  } catch {
-    return new Set();
-  }
-}
-
-/** Persist a new id set and notify all subscribers. */
-function writeToStorage(ids: ReadonlySet<string>): void {
-  try {
-    localStorage.setItem(FAVOURITES_STORAGE_KEY, JSON.stringify([...ids]));
-  } catch {
-    // localStorage unavailable (e.g. tests without shim) — skip persist.
-  }
-  // Notify useSyncExternalStore subscribers across all mounts.
-  try {
-    window.dispatchEvent(
-      new StorageEvent('storage', {
-        key: FAVOURITES_STORAGE_KEY,
-        newValue: JSON.stringify([...ids]),
-      }),
-    );
-  } catch {
-    // Non-browser env; subscribers won't get the push notification but will
-    // re-read on the next render via useSyncExternalStore.
-  }
-  // Also call module-local listeners directly (same-tab updates).
-  for (const fn of listeners) fn();
-}
-
-// ── useSyncExternalStore wiring ────────────────────────────────────────────────
+let cachedIds: ReadonlySet<string> = new Set();
+let hasLoaded = false;
+let inFlightLoad: Promise<void> | null = null;
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
 
+function notify(): void {
+  for (const fn of listeners) fn();
+}
+
 function subscribe(fn: Listener): () => void {
   listeners.add(fn);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === FAVOURITES_STORAGE_KEY || e.key === null) fn();
-  };
-  window.addEventListener('storage', onStorage);
   return () => {
     listeners.delete(fn);
-    window.removeEventListener('storage', onStorage);
   };
 }
 
-// Stable snapshot reference: useSyncExternalStore requires referential equality
-// between renders when the data hasn't changed.  We keep a module-level cache
-// so the same Set object is returned until a write actually occurs.
-let cachedSnapshot: ReadonlySet<string> = new Set();
-let cachedRaw: string | null = null;
-
 function getSnapshot(): ReadonlySet<string> {
-  try {
-    const raw = localStorage.getItem(FAVOURITES_STORAGE_KEY);
-    if (raw === cachedRaw) return cachedSnapshot;
-    cachedRaw = raw;
-    cachedSnapshot = readFromStorage();
-    return cachedSnapshot;
-  } catch {
-    return cachedSnapshot;
-  }
+  return cachedIds;
 }
 
 function getServerSnapshot(): ReadonlySet<string> {
   return new Set();
+}
+
+/** Fetch the current favourite set from the backend (de-duplicates concurrent calls). */
+function ensureLoaded(): Promise<void> {
+  if (hasLoaded) return Promise.resolve();
+  if (inFlightLoad) return inFlightLoad;
+  inFlightLoad = Promise.resolve()
+    .then(() => commands.targetFavouritesList())
+    .then(unwrap)
+    .then(({ targetIds }) => {
+      cachedIds = new Set(targetIds);
+      hasLoaded = true;
+      notify();
+    })
+    .catch(() => {
+      // Leave the cache empty on failure; a future call may retry via a
+      // fresh mount (hasLoaded stays false).
+    })
+    .finally(() => {
+      inFlightLoad = null;
+    });
+  return inFlightLoad;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -109,26 +92,50 @@ export interface UseFavouritesResult {
 }
 
 /**
- * React hook: subscribe to the client-side favourite set.
+ * React hook: subscribe to the database-backed favourite set.
  *
  * Provides `toggle` (stable across renders) to star/unstar a target, and
- * `isFavourite` for conditional rendering.
- *
- * STUB — see module header.  Replace with a backend-backed hook when #54 lands.
+ * `isFavourite` for conditional rendering. Applies an optimistic update on
+ * `toggle`, then reconciles with the backend call; a failed call reverts the
+ * optimistic change.
  */
 export function useFavourites(): UseFavouritesResult {
   const favouriteIds = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
+  useEffect(() => {
+    void ensureLoaded();
+  }, []);
+
   const toggle = useCallback((targetId: string) => {
-    // Re-read from storage immediately (not from the React snapshot) so rapid
-    // successive clicks on different rows don't race.
-    const current = new Set(readFromStorage());
-    if (current.has(targetId)) {
-      current.delete(targetId);
+    const wasFavourited = cachedIds.has(targetId);
+
+    // Optimistic update.
+    const next = new Set(cachedIds);
+    if (wasFavourited) {
+      next.delete(targetId);
     } else {
-      current.add(targetId);
+      next.add(targetId);
     }
-    writeToStorage(current);
+    cachedIds = next;
+    notify();
+
+    const call = Promise.resolve().then(() =>
+      wasFavourited
+        ? commands.targetFavouritesRemove({ targetId })
+        : commands.targetFavouritesAdd({ targetId }),
+    );
+
+    call.then(unwrap).catch(() => {
+      // Revert the optimistic change on failure.
+      const reverted = new Set(cachedIds);
+      if (wasFavourited) {
+        reverted.add(targetId);
+      } else {
+        reverted.delete(targetId);
+      }
+      cachedIds = reverted;
+      notify();
+    });
   }, []);
 
   const isFavourite = useCallback(
@@ -142,6 +149,20 @@ export function useFavourites(): UseFavouritesResult {
 /**
  * Non-hook read for use outside React (tests, initial render).
  *
- * STUB — see module header.
+ * Returns the current in-memory cache — empty until the first backend fetch
+ * (triggered by a `useFavourites()` mount) resolves.
  */
-export { readFromStorage as getFavouriteIds };
+export function getFavouriteIds(): ReadonlySet<string> {
+  return cachedIds;
+}
+
+/**
+ * Test-only reset of the module-level cache. Not part of the public hook
+ * surface; exported so `useFavourites.test.ts` can isolate cases without
+ * process-per-test isolation.
+ */
+export function __resetFavouritesCacheForTests(): void {
+  cachedIds = new Set();
+  hasLoaded = false;
+  inFlightLoad = null;
+}
