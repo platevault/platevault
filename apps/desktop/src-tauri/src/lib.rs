@@ -612,6 +612,34 @@ pub fn build_app() -> tauri::App {
 
     #[allow(unused_mut)]
     let mut tb = tauri::Builder::default()
+        // Spec 051 US1: single-instance guard MUST be the first plugin
+        // registered so a redirected second launch is intercepted during
+        // `.build()` below — before any other plugin/state/window setup, and
+        // therefore before `main()` ever reaches `Database::connect`/
+        // `db.migrate()` (FR-003: the second launch performs no database
+        // migration, seed, or write of its own).
+        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
+            tracing::info!(
+                ?argv,
+                %cwd,
+                "second launch attempt redirected to existing instance"
+            );
+            // FR-002: focus/foreground the existing main window, restoring it
+            // if minimized, instead of opening a new window or connection.
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(e) = window.unminimize() {
+                    tracing::warn!("failed to unminimize main window: {e:?}");
+                }
+                if let Err(e) = window.show() {
+                    tracing::warn!("failed to show main window: {e:?}");
+                }
+                if let Err(e) = window.set_focus() {
+                    tracing::warn!("failed to focus main window: {e:?}");
+                }
+            } else {
+                tracing::warn!("single-instance redirect: no `main` window found to focus");
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init());
 

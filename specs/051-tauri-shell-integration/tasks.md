@@ -111,23 +111,29 @@ duplicate process against the same database.
 **Independent Test**: Launch the app twice in a row; confirm one window, one
 process, no database contention.
 
-- [ ] T010 [US1] Register `tauri_plugin_single_instance::init(...)` as the
+- [x] T010 [US1] Register `tauri_plugin_single_instance::init(...)` as the
       **first** plugin in `build_app()` (`apps/desktop/src-tauri/src/lib.rs`)
       — single-instance must attach before other plugins/state so a
       redirected second launch never reaches database/migration code. The
       callback focuses/unminimizes the existing main window and logs the
       received argv/cwd (FR-002, FR-003).
-- [ ] T011 [US1] Confirm (add if missing) that the single-instance callback
+- [x] T011 [US1] Confirm (add if missing) that the single-instance callback
       runs before `Database::connect`/`db.migrate()` in `main.rs` on the
       redirected path — i.e. the second process's `main()` never reaches
       those calls at all once the plugin redirects it (FR-003 — "exit without
-      performing any database migration, seed, or write").
-- [ ] T012 [P] [US1] Add a capability entry if `tauri-plugin-single-instance`
+      performing any database migration, seed, or write"). Confirmed:
+      `main.rs` already calls `build_app()` (which registers and builds the
+      single-instance plugin first) before `Database::connect`/`db.migrate()`;
+      no reordering needed.
+- [x] T012 [P] [US1] Add a capability entry if `tauri-plugin-single-instance`
       requires one (most single-instance plugins need no webview-side
       permission since it is a setup-time-only Rust API — verify against the
       plugin's docs at implementation time and add to
       `apps/desktop/src-tauri/capabilities/default.json` only if actually
-      required).
+      required). Verified against the vendored `tauri-plugin-single-instance
+      2.4.2` crate: no `permissions/` schema directory and its README confirms
+      it is a Rust-only, setup-time API with no frontend/webview surface — no
+      capability entry added.
 - [ ] T013 [US1] Manual verification: launch the built app, launch it again
       from a shortcut/CLI while running, confirm single window + focus
       (SC-001); repeat with the window minimized (US1 AS2).
