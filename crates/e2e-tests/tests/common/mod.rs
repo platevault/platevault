@@ -1028,20 +1028,23 @@ fn reset_webview_storage() {
 /// `reset_webview_storage()` exist: sequential journeys in the same CI job
 /// share one real OS user profile, so without this a later journey's app
 /// process restores whatever size/position/maximized state an EARLIER
-/// journey's process happened to exit in. On a CI runner (headless/virtual
-/// display, or a shared display with unusual bounds), a restored geometry
-/// can end up minimized or positioned somewhere WebDriver's element queries
-/// can't interact with, hanging the next journey instead of failing fast
-/// (observed as `inbox_ui_mixed_folder_splits_into_single_type_items` timing
-/// out at >150s on Windows/macOS real-UI CI once the shell-polish window
-/// state plugin started actually persisting geometry across launches).
+/// journey's process happened to exit in. Kept as a defensive hygiene reset
+/// (a restored off-screen/minimized geometry is a real way to hang WebDriver
+/// element queries), but it is NOT a fix for the Windows real-UI E2E failure
+/// on `inbox_ui_mixed_folder_splits_into_single_type_items`: CI run
+/// 28782673323 (main@9ee504d1, BEFORE this function existed) and run
+/// 28786351305 (this branch, AFTER it landed) fail identically — same
+/// "found 0" assertion, same ~152s duration, on both TRY 1 and TRY 2. The
+/// real root cause of that failure is still open; see the diagnostic dump
+/// added at the failure site in `inbox_ui_journeys.rs` (round 3,
+/// fix-main-e2e-interplay) for the next data point.
 ///
 /// The plugin's default store is `.window-state.json` under
 /// `app.path().app_config_dir()` (`tauri-plugin-window-state` source) —
 /// which is a DIFFERENT directory than `app_data_dir()` on Linux
 /// (`$XDG_CONFIG_HOME`/`~/.config` vs `$XDG_DATA_HOME`/`~/.local/share`) but
 /// the SAME directory on Windows (`%APPDATA%`) and macOS
-/// (`~/Library/Application Support`), where the CI failures were observed.
+/// (`~/Library/Application Support`).
 /// Failures are ignored (first run has no window-state file yet).
 fn reset_window_state() {
     if let Some(dir) = app_config_dir() {

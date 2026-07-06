@@ -233,12 +233,31 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
         if rows.len() >= 2 {
             break rows;
         }
-        anyhow::ensure!(
-            tokio::time::Instant::now() < deadline,
-            "expected the mixed folder to split into >=2 single-type rows in the \
-             real Inbox list, found {}",
-            rows.len()
-        );
+        if tokio::time::Instant::now() >= deadline {
+            // CI run 28782673323 (pre round-1 window-state fix, main@9ee504d1)
+            // and run 28786351305 (post-fix, this branch) both fail HERE on
+            // Windows with the identical "found 0" message and near-identical
+            // ~152s duration — the window-state reset changed nothing about
+            // this failure, so its root cause is NOT window geometry. Before
+            // erroring, call `inbox.list` directly through the invoke bridge
+            // (bypassing the UI entirely) so the failure message tells us
+            // whether the backend ever materialized split rows at all (a real
+            // classify/materialize_sub_items regression) or whether they
+            // exist server-side but the UI/list query never surfaced them
+            // after reload (a frontend refetch/race bug) — the two
+            // possibilities need different fixes and neither can be
+            // distinguished from the UI-only signal alone.
+            let backend_items: serde_json::Value = app
+                .invoke("inbox_list", serde_json::json!({}))
+                .await
+                .unwrap_or_else(|e| serde_json::json!({ "invoke_error": e.to_string() }));
+            let url = app.driver.current_url().await.map(|u| u.to_string()).unwrap_or_default();
+            anyhow::bail!(
+                "expected the mixed folder to split into >=2 single-type rows in the \
+                 real Inbox list, found {} (current_url={url:?}, backend inbox.list={backend_items})",
+                rows.len()
+            );
+        }
         tokio::time::sleep(Duration::from_secs(2)).await;
         app.driver.refresh().await.context("refresh while waiting for split rows failed")?;
         app.wait_bridge_ready(Duration::from_secs(15)).await?;
