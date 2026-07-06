@@ -162,6 +162,57 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
         report.push_str("(failed to create target/e2e-diagnostics/ directory)\n");
     }
 
+    // (d) Round 2 (keepMounted alone did NOT fix this — still fails
+    // identically cross-platform, deterministically): bypass the UI and
+    // invoke the REAL backend `target_search` command directly through the
+    // `window.__ALM_E2E__.invoke` bridge, mirroring `inbox_ui_journeys.rs`'s
+    // direct-invoke diagnostic. This tells us whether the backend genuinely
+    // returns hits for this exact query independent of the frontend
+    // combobox/portal — local Chromium+mocks repro (both dev and prod
+    // builds) proves the combobox mounts and renders options correctly for
+    // typed queries, so if THIS call also returns real hits, the bug is
+    // somewhere between the UI's `runSearch` and the DOM (state never
+    // reaching `open`/`suggestions`); if it errors or never returns, the bug
+    // is in the real IPC round-trip or the backend itself.
+    let direct_invoke: serde_json::Value = match app
+        .invoke(
+            "target_search",
+            json!({
+                "req": {
+                    "contractVersion": "1.0",
+                    "requestId": "diag-direct-search",
+                    "query": query,
+                    "catalogFilter": [],
+                    "typeFilter": [],
+                    "limit": 20
+                }
+            }),
+        )
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => json!({ "direct_invoke_error": e.to_string() }),
+    };
+    report.push_str(&format!(
+        "--- direct backend invoke of target_search({query:?}) ---\n{direct_invoke:#}\n"
+    ));
+
+    // (e) General UI-state diagnostics (bridge exposed?, build time, buffered
+    // window errors/rejections) — the #477-era instrumentation
+    // (`E2eApp::dump_ui_diagnostics`) shared with `inbox_ui_journeys.rs`.
+    // `queryState` will be null here (TargetSearch doesn't use react-query),
+    // but `bridgeExposed`/`buildTime`/`e2eErrors` are exactly what
+    // distinguishes "stale/mismatched frontend build" from "a real uncaught
+    // exception the UI swallowed silently" from "genuinely nothing went
+    // wrong at the JS level".
+    let ui_diag = app.dump_ui_diagnostics().await;
+    report.push_str(&format!("--- dump_ui_diagnostics ---\n{ui_diag:#}\n"));
+
+    // (f) Real browser console log tail (best-effort; some WebDriver stacks
+    // reject the log endpoint entirely, per `dump_console_log`'s doc).
+    let console_log = app.dump_console_log().await;
+    report.push_str(&format!("--- dump_console_log ---\n{console_log:#}\n"));
+
     report
 }
 
