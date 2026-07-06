@@ -499,7 +499,7 @@ export const commands = {
 	 *  Auto-approves the plan if it is still `ready_for_review`, then runs the
 	 *  same background executor and writes the same durable audit trail as
 	 *  `plans_apply_real` — it just takes no `tauri::ipc::Channel`, so it can be
-	 *  invoked directly by the Layer-2 WebDriver E2E bridge (which cannot
+	 *  invoked directly by the Layer-2 `WebDriver` E2E bridge (which cannot
 	 *  construct a `Channel` from a test script) or by any UI surface that only
 	 *  needs a fire-and-poll apply (poll `plans.apply.status` for the durable
 	 *  terminal counts) rather than a live progress stream.
