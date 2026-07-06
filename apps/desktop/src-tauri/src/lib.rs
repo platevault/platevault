@@ -613,6 +613,114 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
     ])
 }
 
+/// Menu id for the native "Settings…" application-menu item (spec 051 US5).
+const MENU_ID_SETTINGS: &str = "menu-settings";
+
+/// Enforce the min-size floor (spec 051 US4, T029) after
+/// `tauri-plugin-window-state` restores a persisted size, in case a prior
+/// app version persisted a smaller size than the current `tauri.conf.json`
+/// `minWidth`/`minHeight` (1100x720) — mirrors the `astro-up` reference's own
+/// explicit post-restore clamp (research.md's cited `lib.rs` excerpt).
+fn enforce_min_window_size(window: &tauri::WebviewWindow) {
+    const MIN_WIDTH: u32 = 1100;
+    const MIN_HEIGHT: u32 = 720;
+
+    if let Ok(size) = window.inner_size() {
+        let w = size.width.max(MIN_WIDTH);
+        let h = size.height.max(MIN_HEIGHT);
+        if w != size.width || h != size.height {
+            if let Err(e) = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(w, h))) {
+                tracing::warn!("failed to enforce minimum window size: {e:?}");
+            } else {
+                tracing::info!(width = w, height = h, "enforced minimum window size");
+            }
+        }
+    }
+}
+
+/// Off-screen-position fallback (spec 051 US4, T030/FR-013): if the restored
+/// position has no overlap with any currently-connected display (e.g. a
+/// second monitor the window was on has since been disconnected), recenter
+/// the window instead of leaving it stranded off-screen.
+fn recenter_if_offscreen(window: &tauri::WebviewWindow) {
+    let (Ok(pos), Ok(size), Ok(monitors)) =
+        (window.outer_position(), window.outer_size(), window.available_monitors())
+    else {
+        return;
+    };
+
+    let win_right = pos.x + i32::try_from(size.width).unwrap_or(i32::MAX);
+    let win_bottom = pos.y + i32::try_from(size.height).unwrap_or(i32::MAX);
+
+    let on_screen = monitors.iter().any(|m| {
+        let mp = m.position();
+        let ms = m.size();
+        let mon_right = mp.x + i32::try_from(ms.width).unwrap_or(i32::MAX);
+        let mon_bottom = mp.y + i32::try_from(ms.height).unwrap_or(i32::MAX);
+        // Any overlap between the window rect and this monitor's rect.
+        pos.x < mon_right && win_right > mp.x && pos.y < mon_bottom && win_bottom > mp.y
+    });
+
+    if !on_screen {
+        if let Err(e) = window.center() {
+            tracing::warn!("failed to recenter off-screen window: {e:?}");
+        } else {
+            tracing::info!("restored window position was off-screen; recentered");
+        }
+    }
+}
+
+/// Build the native application menu (spec 051 US5, T032): an App submenu
+/// (About, Settings, Quit), a Window submenu, and a standard Edit submenu
+/// (copy/cut/paste/select-all/undo/redo). The "Settings…" item has no native
+/// dialog of its own — its click is handled by `on_menu_event` in
+/// `build_app()`, which emits a frontend event for the existing Settings
+/// route to handle (T033: reuse existing UI, no new native dialog).
+fn build_native_menu(app: &tauri::App<tauri::Wry>) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+
+    let about = PredefinedMenuItem::about(app, Some("About PlateVault"), None)?;
+    let settings =
+        MenuItem::with_id(app, MENU_ID_SETTINGS, "Settings…", true, Some("CmdOrCtrl+,"))?;
+    let quit = PredefinedMenuItem::quit(app, None)?;
+    let app_menu = Submenu::with_items(
+        app,
+        "PlateVault",
+        true,
+        &[
+            &about,
+            &PredefinedMenuItem::separator(app)?,
+            &settings,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
+    )?;
+
+    let edit_menu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )?;
+
+    let window_menu = Submenu::with_items(
+        app,
+        "Window",
+        true,
+        &[&PredefinedMenuItem::minimize(app, None)?, &PredefinedMenuItem::close_window(app, None)?],
+    )?;
+
+    Menu::with_items(app, &[&app_menu, &edit_menu, &window_menu])
+}
+
 /// Build the Tauri [`App`] **without** starting the event loop.
 ///
 /// The returned handle exposes the platform path resolver (needed to locate
@@ -655,6 +763,12 @@ pub fn build_app() -> tauri::App {
                 tracing::warn!("single-instance redirect: no `main` window found to focus");
             }
         }))
+        // Spec 051 US4 (T027): window-state persistence. Registered right
+        // after single-instance so a redirected second launch (which never
+        // creates a window of its own) never touches this plugin's store
+        // file. `window-state:default` is granted in
+        // `capabilities/default.json` (T028).
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // Spec 051 US10 (T056): signed auto-update plugin. `updater:default` +
@@ -665,7 +779,21 @@ pub fn build_app() -> tauri::App {
         // then `check_for_app_update` will only ever see "updater
         // unavailable" or a verification failure, never a real update.
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init());
+        .plugin(tauri_plugin_process::init())
+        // Spec 051 US7 (T041): diagnostics log file. `skip_logger()` is
+        // required here — this app already installs a global `tracing`
+        // subscriber (in `main.rs`, right after `build_app()` returns, once
+        // the platform log directory is resolvable) that owns the single
+        // process-wide `log`-facade logger slot via `tracing-subscriber`'s
+        // default `tracing-log` bridge feature. Without `skip_logger()`, this
+        // plugin would try to install a SECOND global logger and panic/lose
+        // the race (FR-021's "not duplicated or dropped" requirement). With
+        // it, the plugin still registers its `log` Tauri command (so
+        // `@tauri-apps/plugin-log` calls from the frontend reach the ambient
+        // logger), it just never owns that logger itself — the rotating file
+        // target itself is `main.rs`'s `tracing_appender` layer, not this
+        // plugin's own (skipped) fern dispatch.
+        .plugin(tauri_plugin_log::Builder::new().skip_logger().build());
 
     // Tauri MCP bridge plugin (@hypothesi tauri-plugin-mcp-bridge) — dev/debug
     // builds only. Runs a WebSocket server on 0.0.0.0:9223 that the
@@ -690,9 +818,52 @@ pub fn build_app() -> tauri::App {
         tb = tb.plugin(tauri_plugin_webdriver::init());
     }
 
-    tb.invoke_handler(builder.invoke_handler())
+    tb
+        // Spec 051 US5 (T033): the native "Settings" menu item has no native
+        // dialog of its own — emit a frontend event and let the existing
+        // Settings route handle navigation, matching the reference pattern
+        // of reusing existing UI rather than inventing new native dialogs.
+        .on_menu_event(|app, event| {
+            if event.id() == MENU_ID_SETTINGS {
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Err(e) = window.emit("menu:open-settings", ()) {
+                        tracing::warn!("failed to emit menu:open-settings: {e:?}");
+                    }
+                }
+            }
+            // Quit (T034): `PredefinedMenuItem::quit` already calls
+            // `app.exit(0)` internally — no separate handling needed here.
+            // This app has no existing close-confirmation logic to bypass
+            // (verified: no `on_window_event`/`CloseRequested` handler exists
+            // anywhere in this crate), so Quit is a plain, un-gated exit.
+        })
+        .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
+
+            // Spec 051 US4 (T029/T030): enforce the min-size floor and
+            // off-screen fallback after tauri-plugin-window-state restores a
+            // persisted size/position — it may restore geometry from a prior
+            // app version or a since-disconnected monitor.
+            if let Some(window) = app.get_webview_window("main") {
+                enforce_min_window_size(&window);
+                recenter_if_offscreen(&window);
+            }
+
+            // Spec 051 US5 (T032): native application menu — App submenu
+            // (About/Settings/Quit), Window submenu, and a standard Edit
+            // submenu (copy/cut/paste/select-all/undo/redo). Does not touch
+            // any existing native/React context-menu code path (T035 — none
+            // exists in this crate to touch).
+            match build_native_menu(app) {
+                Ok(menu) => {
+                    if let Err(e) = app.set_menu(menu) {
+                        tracing::warn!("failed to set native application menu: {e:?}");
+                    }
+                }
+                Err(e) => tracing::warn!("failed to build native application menu: {e:?}"),
+            }
+
             Ok(())
         })
         .build(tauri::generate_context!())
