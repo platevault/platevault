@@ -38,7 +38,30 @@ use thirtyfour::By;
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// Wait for the index route's async first-run redirect to land on `/setup`
+/// BEFORE navigating anywhere (mirrors `inbox_ui_journeys.rs`'s
+/// `settle_first_run_redirect`). A fresh DB (the harness resets it every
+/// launch) makes `checkFirstRunComplete` redirect `/` → `/setup` from an
+/// async `beforeLoad`; if a journey `goto_route`s while that redirect is
+/// still pending, the late-resolving redirect can yank the app off the
+/// target route.
+async fn settle_first_run_redirect(app: &E2eApp) -> anyhow::Result<()> {
+    app.wait_url_contains("/setup", Duration::from_secs(15))
+        .await
+        .map(drop)
+        .map_err(|e| anyhow::anyhow!("expected a fresh DB to redirect to /setup: {e}"))
+}
+
+/// Registers BOTH a raw (`light_frames`) and a `project` root:
+/// [`E2eApp::complete_first_run_gate`] requires at least one of each, and
+/// routing through the real gate (not a bare `firstrun_complete` invoke)
+/// also clears the Shell's separate `setupCompleted` localStorage flag — a
+/// journey that only calls the backend command still gets bounced to
+/// `/setup` on every subsequent `goto_route` (`inbox_ui_journeys.rs`'s
+/// `register_project_root`/`complete_first_run_gate` pairing is the proven
+/// pattern this mirrors).
 async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
+    settle_first_run_redirect(app).await?;
     let raw_dir = tempfile::tempdir()?;
     let _: serde_json::Value = app
         .invoke(
@@ -46,8 +69,14 @@ async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
             json!({ "path": raw_dir.path().to_string_lossy(), "category": "light_frames", "scanSettings": null }),
         )
         .await?;
-    let _: serde_json::Value = app.invoke("firstrun_complete", json!({})).await?;
-    Ok(())
+    let project_dir = tempfile::tempdir()?;
+    let _: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({ "path": project_dir.path().to_string_lossy(), "category": "project", "scanSettings": null }),
+        )
+        .await?;
+    app.complete_first_run_gate().await
 }
 
 /// Test 1 (journey-10): the Ingestion pane has NO global "Save" button
@@ -124,11 +153,12 @@ async fn settings_ui_theme_applies_live_and_persists_across_relaunch() -> anyhow
         // swatch, matched by its visible name (the swatch button's full text
         // also includes its light/dark mode label, so an exact-match helper
         // would be wrong here — use `contains`).
+        // Poll for the swatch to actually mount: it opens asynchronously
+        // after the navigation, same route/render race `E2eApp::find_waiting`
+        // documents.
         let xpath = "//button[contains(., 'Espresso')]";
-        app.driver
-            .find(By::XPath(xpath))
-            .await
-            .context("no 'Espresso' theme swatch button found")?
+        app.find_waiting(By::XPath(xpath), "the 'Espresso' theme swatch button")
+            .await?
             .click()
             .await
             .context("click the Espresso theme swatch failed")?;
@@ -177,10 +207,11 @@ async fn settings_ui_theme_applies_live_and_persists_across_relaunch() -> anyhow
     app2.goto_route("/settings?pane=general").await?;
     app2.wait_bridge_ready(Duration::from_secs(15)).await?;
     let espresso_swatch = app2
-        .driver
-        .find(By::XPath("//button[contains(., 'Espresso')]"))
-        .await
-        .context("no 'Espresso' theme swatch button found after relaunch")?;
+        .find_waiting(
+            By::XPath("//button[contains(., 'Espresso')]"),
+            "the 'Espresso' theme swatch button after relaunch",
+        )
+        .await?;
     let pressed = espresso_swatch
         .attr("aria-pressed")
         .await
