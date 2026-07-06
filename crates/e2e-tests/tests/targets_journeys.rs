@@ -213,6 +213,59 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     let console_log = app.dump_console_log().await;
     report.push_str(&format!("--- dump_console_log ---\n{console_log:#}\n"));
 
+    // (g) Round 3 correction: (a) above only dumps `.alm-target-search`'s
+    // OWN outerHTML, and `Combobox.Portal` renders the suggestion listbox at
+    // `document.body` — a SIBLING of that subtree, never a descendant — so
+    // "absent from (a)'s dump" was never real evidence the listbox didn't
+    // render, only that it isn't nested under the search root (which it
+    // never was, portal or no portal). Look for it where it ACTUALLY lives:
+    // (i) the real listbox via the input's `aria-controls` id (works
+    // wherever it was portaled to), (ii) a page-wide count + first-match
+    // outerHTML for the exact selector `add_target_via_ui`'s suggestion-poll
+    // loop waits on, and (iii) a page-wide count of `[role="listbox"]` /
+    // `[role="option"]` in case the class name itself has drifted (e.g. a
+    // CSS consolidation rename) independent of Base UI's own ARIA roles.
+    let listbox_script = r#"
+        var callback = arguments[arguments.length - 1];
+        function truncate(s, n) {
+            if (typeof s !== 'string') return s;
+            return s.length > n ? s.slice(0, n) + '...[truncated]' : s;
+        }
+        try {
+            var input = document.querySelector('.alm-target-search__input');
+            var controlsId = input ? input.getAttribute('aria-controls') : null;
+            var listboxEl = controlsId ? document.getElementById(controlsId) : null;
+            var optionEls = document.querySelectorAll('.alm-target-search__option');
+            var roleListboxEls = document.querySelectorAll('[role="listbox"]');
+            var roleOptionEls = document.querySelectorAll('[role="option"]');
+            callback({
+                ok: true,
+                value: {
+                    ariaControlsId: controlsId,
+                    listboxFoundById: !!listboxEl,
+                    listboxOuterHtml: truncate(listboxEl ? listboxEl.outerHTML : null, 4096),
+                    optionSelectorCount: optionEls.length,
+                    optionSelectorFirstOuterHtml: truncate(optionEls[0] ? optionEls[0].outerHTML : null, 2048),
+                    roleListboxCount: roleListboxEls.length,
+                    roleOptionCount: roleOptionEls.length
+                }
+            });
+        } catch (err) {
+            callback({ ok: false, error: String(err) });
+        }
+    "#;
+    match app.driver.execute_async(listbox_script, vec![]).await {
+        Ok(ret) => match ret.convert::<serde_json::Value>() {
+            Ok(v) => {
+                report.push_str(&format!("--- real-listbox / role-based diagnostics ---\n{v:#}\n"))
+            }
+            Err(e) => {
+                report.push_str(&format!("(failed to deserialise listbox diagnostics: {e})\n"))
+            }
+        },
+        Err(e) => report.push_str(&format!("(listbox diagnostics script execution failed: {e})\n")),
+    }
+
     report
 }
 
@@ -235,9 +288,23 @@ async fn add_target_via_ui(app: &E2eApp, query: &str) -> anyhow::Result<String> 
     input.send_keys(query).await?;
 
     // Poll for a real suggestion option to render (offline seed search).
+    //
+    // Round 3 root cause (#463): this MUST be `app.driver.find` (page-scoped),
+    // NOT `popup.find` (scoped to `.alm-add-target__popup`'s subtree).
+    // `TargetSearch.tsx`'s `Combobox.Portal` renders the suggestion listbox at
+    // `document.body` — a SIBLING of the dialog popup, never a descendant of
+    // it — so `popup.find(By::Css(".alm-target-search__option"))` was
+    // structurally unable to ever match, regardless of whether the backend
+    // responded or the popup actually rendered. This explained every prior
+    // round's "no suggestion rendered" symptom even though round-3
+    // diagnostics proved the backend answers instantly/correctly and the UI
+    // buffers no errors: the assertion itself was searching the wrong DOM
+    // subtree, cross-platform and deterministically. The mock-Playwright spec
+    // (`targets_planner.spec.ts` 9.2b) never hit this because Playwright's
+    // `page.locator(...)` is page-scoped by default.
     let deadline = tokio::time::Instant::now() + UI_TIMEOUT;
     let option = loop {
-        if let Ok(opt) = popup.find(By::Css(".alm-target-search__option")).await {
+        if let Ok(opt) = app.driver.find(By::Css(".alm-target-search__option")).await {
             break opt;
         }
         if tokio::time::Instant::now() >= deadline {
