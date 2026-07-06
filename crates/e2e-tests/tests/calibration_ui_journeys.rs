@@ -157,7 +157,6 @@ async fn calibration_ui_masters_ingest_as_individual_items() -> anyhow::Result<(
     settle_first_run_redirect(&app).await?;
 
     let (root_dir, root_id) = register_calibration_root(&app).await?;
-    complete_first_run(&app).await?;
     write_minimal_fits(
         root_dir.path(),
         "master_dark_001.fits",
@@ -174,7 +173,20 @@ async fn calibration_ui_masters_ingest_as_individual_items() -> anyhow::Result<(
         None,
         Some("2026-01-05T12:00:00"),
     )?;
+    // Seed BEFORE `complete_first_run` — mirrors `inbox_ui_journeys.rs`'s
+    // ordering exactly. `complete_first_run` -> `complete_first_run_gate`
+    // does a real `driver.refresh()` (full page reload) to make the
+    // `setupCompleted` localStorage write visible to the cached preferences
+    // module. Calling the bridge-side seed invoke AFTER that refresh (as an
+    // earlier revision of this file did) races the reload: CI run
+    // 28808954263 (ubuntu-latest) hit `__ALM_E2E__ bridge missing` on the
+    // seed invoke, then a JS execution error on retry — a classic
+    // WebDriver-vs-navigation race, not a build flake (12/14 other bridge-
+    // using tests in the same job/build passed). Seeding first keeps the
+    // invoke on the ORIGINAL page load, well after the initial
+    // `wait_bridge_ready`, with no refresh in between.
     seed_initial_scan(&app, &root_id, root_dir.path()).await?;
+    complete_first_run(&app).await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
@@ -232,7 +244,6 @@ async fn calibration_ui_confirmed_master_shows_kind_conditional_detail() -> anyh
     settle_first_run_redirect(&app).await?;
 
     let (root_dir, root_id) = register_calibration_root(&app).await?;
-    complete_first_run(&app).await?;
     write_minimal_fits(
         root_dir.path(),
         "master_bias_002.fits",
@@ -241,7 +252,12 @@ async fn calibration_ui_confirmed_master_shows_kind_conditional_detail() -> anyh
         None,
         Some("2026-01-06T12:00:00"),
     )?;
+    // Seed BEFORE `complete_first_run` — see the matching comment in
+    // `calibration_ui_masters_ingest_as_individual_items` for why: the
+    // gate's internal `driver.refresh()` must not land between the initial
+    // `wait_bridge_ready` and this invoke.
     seed_initial_scan(&app, &root_id, root_dir.path()).await?;
+    complete_first_run(&app).await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
