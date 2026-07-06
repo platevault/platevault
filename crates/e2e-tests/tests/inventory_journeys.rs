@@ -292,6 +292,26 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
         "expected exactly 1 still-present frame: {reconcile}"
     );
 
+    // ── 5b. Poll the SAME backend read the picker uses until it reflects ──
+    // the drop, BEFORE reloading (mirrors the fix for
+    // sessions_ui_derived_view_invariants, `git log 5c4ab4c5`: `inbox.plan
+    // .apply`/`inventory.reconcile.run` returning does not guarantee every
+    // downstream read is immediately consistent — a single page load only
+    // fetches once, and if that one fetch lands before the backend state is
+    // fully settled, nothing thereafter retriggers a refetch for
+    // `wait_testid_text` to catch. `reconcile["present"]/["newlyMissing"]`
+    // above already assert the response shape; this additionally proves
+    // `sessions.list` itself — the exact command the picker queries — has
+    // caught up before the reload below, so the reload's one-shot fetch
+    // cannot race it.
+    app.invoke_until("sessions_list", json!({}), INVOKE_TIMEOUT, |v: &serde_json::Value| {
+        v.as_array().is_some_and(|arr| {
+            arr.iter().any(|s| s["id"] == json!(session_id) && s["frameCount"].as_i64() == Some(1))
+        })
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("sessions.list never settled to frameCount=1 for the reconciled session before the UI reload: {e}"))?;
+
     // ── 6. Real UI (AFTER): a fresh page load re-fetches sessions.list ──
     //
     // `goto_route` only changes the URL fragment on the SAME document — per

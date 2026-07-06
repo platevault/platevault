@@ -270,7 +270,12 @@ impl E2eApp {
     ///
     /// # Errors
     /// Returns the last error (invoke failure, or a "predicate never matched"
-    /// message once `timeout` elapses) if the predicate never accepts a value.
+    /// message once `timeout` elapses) if the predicate never accepts a
+    /// value. The timeout variant includes the last successfully-decoded
+    /// (but non-matching) response, truncated, so a caller can see whether
+    /// the backend returned an empty/unrelated result or the expected data
+    /// present-but-unmatched by the predicate (a predicate bug) without a
+    /// second CI round just to add that dump.
     pub async fn invoke_until<T, P>(
         &self,
         command: &str,
@@ -279,23 +284,37 @@ impl E2eApp {
         mut predicate: P,
     ) -> Result<T>
     where
-        T: DeserializeOwned,
+        T: DeserializeOwned + std::fmt::Debug,
         P: FnMut(&T) -> bool,
     {
         let deadline = Instant::now() + timeout;
         let mut last_err: Option<anyhow::Error> = None;
+        let mut last_value: Option<String> = None;
         loop {
             match self.invoke::<T>(command, args.clone()).await {
                 Ok(value) if predicate(&value) => return Ok(value),
-                Ok(_) => {}
+                Ok(value) => {
+                    let dump = format!("{value:?}");
+                    last_value = Some(if dump.len() > 4096 {
+                        format!("{}...[truncated]", &dump[..4096])
+                    } else {
+                        dump
+                    });
+                }
                 Err(e) => last_err = Some(e),
             }
             if Instant::now() >= deadline {
-                return Err(last_err.unwrap_or_else(|| {
-                    anyhow!(
-                        "invoke_until({command}) timed out after {:?} without a matching value",
+                return Err(last_err.unwrap_or_else(|| match &last_value {
+                    Some(v) => anyhow!(
+                        "invoke_until({command}) timed out after {:?} without a matching \
+                         value; last response: {v}",
                         timeout
-                    )
+                    ),
+                    None => anyhow!(
+                        "invoke_until({command}) timed out after {:?} without a matching value \
+                         (never returned successfully)",
+                        timeout
+                    ),
                 }));
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
