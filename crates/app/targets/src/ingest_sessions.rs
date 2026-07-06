@@ -240,8 +240,15 @@ async fn ingest_light_frame(
 
     let (key, has_observer_location) = derive_session_key(&key_target, &meta);
 
-    upsert_session(pool, &key, has_observer_location, canonical_target_id.as_deref(), &image_id)
-        .await?;
+    upsert_session(
+        pool,
+        &key,
+        has_observer_location,
+        canonical_target_id.as_deref(),
+        &image_id,
+        &item.root_id,
+    )
+    .await?;
 
     Ok(FrameOutcome::Ingested)
 }
@@ -364,12 +371,30 @@ fn parse_date_obs(raw: Option<&str>) -> OffsetDateTime {
 ///
 /// Idempotent (R12): the SELECT-by-`session_key` lookup keeps grouping
 /// single-row, and a repeat append of the same frame id is dropped (set-dedup).
+///
+/// `root_id` (R9/T036/FR-012 — spec 006's `acquisition_session.root_id`,
+/// migration 0021) is set on every insert and back-filled with
+/// `COALESCE(root_id, ?)` on every append so a session's first-known root
+/// sticks even across repeat ingests. This closed a real gap (found via
+/// #470's Layer-2 journeys, round 6): `root_id` was never written by this
+/// function at all — the column existed and `persistence_db::repositories::
+/// inventory::update_acquisition_session_root_id` existed to set it (its own
+/// doc comment: "Called when the inbox confirm pipeline resolves the root
+/// for a session"), but nothing ever called it, so every real ingested
+/// session's `root_id` stayed `NULL`. Sqlx-sqlite (this project's version)
+/// silently decodes a `NULL` `TEXT` column into a plain (non-`Option`)
+/// `String` as `""` rather than erroring, so downstream readers that assume
+/// `root_id` is always populated (`app_core_projects::source_view_generate`)
+/// got a real-looking-but-empty id and failed with a confusing
+/// `no_link_kind`/"source root  could not be resolved" (note the double
+/// space) instead of a clear "root never set" error.
 async fn upsert_session(
     pool: &SqlitePool,
     key: &str,
     has_observer_location: bool,
     canonical_target_id: Option<&str>,
     image_id: &str,
+    root_id: &str,
 ) -> Result<(), ContractError> {
     if let Some((id, frame_ids_json, existing_target)) = sqlx::query_as::<
         _,
@@ -391,10 +416,13 @@ async fn upsert_session(
         // Back-fill the link if it resolved this pass and the row had none.
         if existing_target.is_none() && canonical_target_id.is_some() {
             sqlx::query(
-                "UPDATE acquisition_session SET frame_ids = ?, canonical_target_id = ? WHERE id = ?",
+                "UPDATE acquisition_session \
+                 SET frame_ids = ?, canonical_target_id = ?, root_id = COALESCE(root_id, ?) \
+                 WHERE id = ?",
             )
             .bind(&frames_json)
             .bind(canonical_target_id)
+            .bind(root_id)
             .bind(&id)
             .execute(pool)
             .await
@@ -405,12 +433,16 @@ async fn upsert_session(
                 propagate_target_to_projects(pool, &id, target_id).await?;
             }
         } else {
-            sqlx::query("UPDATE acquisition_session SET frame_ids = ? WHERE id = ?")
-                .bind(&frames_json)
-                .bind(&id)
-                .execute(pool)
-                .await
-                .map_err(db_err)?;
+            sqlx::query(
+                "UPDATE acquisition_session \
+                 SET frame_ids = ?, root_id = COALESCE(root_id, ?) WHERE id = ?",
+            )
+            .bind(&frames_json)
+            .bind(root_id)
+            .bind(&id)
+            .execute(pool)
+            .await
+            .map_err(db_err)?;
         }
         return Ok(());
     }
@@ -420,14 +452,15 @@ async fn upsert_session(
     sqlx::query(
         "INSERT INTO acquisition_session
             (id, session_key, target_id, canonical_target_id, has_observer_location,
-             frame_ids, observer_location, created_at)
-         VALUES (?, ?, NULL, ?, ?, ?, NULL, ?)",
+             frame_ids, observer_location, root_id, created_at)
+         VALUES (?, ?, NULL, ?, ?, ?, NULL, ?, ?)",
     )
     .bind(&id)
     .bind(key)
     .bind(canonical_target_id)
     .bind(i64::from(has_observer_location))
     .bind(&frames_json)
+    .bind(root_id)
     .bind(OffsetDateTime::now_utc().format(&Iso8601::DEFAULT).unwrap_or_default())
     .execute(pool)
     .await
@@ -646,6 +679,22 @@ mod tests {
         .unwrap();
     }
 
+    /// Insert a minimal `library_root` row so `acquisition_session.root_id`'s
+    /// FK (migration 0021) is satisfiable in tests that pass a `root_id` to
+    /// `upsert_session`.
+    async fn seed_library_root(pool: &SqlitePool, id: &str) {
+        sqlx::query(
+            "INSERT INTO library_root (id, label, current_path, kind, state, created_at)
+             VALUES (?, ?, ?, 'local', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .bind(id)
+        .bind(id)
+        .bind(format!("/tmp/{id}"))
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
     async fn seed_project(pool: &SqlitePool, id: &str) {
         repo_projects::insert_project(
             pool,
@@ -729,13 +778,16 @@ mod tests {
     async fn upsert_session_insert_branch_with_no_linked_project_does_not_error() {
         let db = test_db().await;
         seed_canonical_target(db.pool(), "target-1", "M 31").await;
+        seed_library_root(db.pool(), "root-1").await;
 
         // A brand-new session (INSERT branch of upsert_session) resolves a
         // target immediately; `project_sources` cannot yet reference this
         // session's id (a project can only link an *existing* session in the
         // real UI flow), so there is no linked project. The INSERT-branch
         // propagation call must be a safe no-op, not a panic/error.
-        upsert_session(db.pool(), "sk-1", false, Some("target-1"), "image-1").await.unwrap();
+        upsert_session(db.pool(), "sk-1", false, Some("target-1"), "image-1", "root-1")
+            .await
+            .unwrap();
 
         let (canonical_target_id,): (Option<String>,) = sqlx::query_as(
             "SELECT canonical_target_id FROM acquisition_session WHERE session_key = 'sk-1'",
@@ -746,14 +798,73 @@ mod tests {
         assert_eq!(canonical_target_id.as_deref(), Some("target-1"));
     }
 
+    /// Regression test for #470 round 6: `acquisition_session.root_id`
+    /// (migration 0021) was never written by real ingest — `upsert_session`'s
+    /// INSERT/UPDATE statements simply omitted the column, and the
+    /// `update_acquisition_session_root_id` repo fn that existed specifically
+    /// to set it (T036/FR-012) was never called from anywhere. Every
+    /// downstream reader that assumes `root_id` is populated
+    /// (`app_core_projects::source_view_generate`) got sqlx's silent
+    /// NULL-into-`String` coercion to `""` instead, and failed with a
+    /// confusing `no_link_kind`/"source root  could not be resolved" (double
+    /// space) rather than a clear error.
+    ///
+    /// Registers the root through the REAL `roots.register` repo path
+    /// (`persistence_db::repositories::first_run::register_source`) — a
+    /// `registered_sources` row, NOT a hand-seeded `library_root` row — and
+    /// mirrors it via the same `ensure_library_root` (R9) call the real
+    /// `ingest_light_frame` pipeline makes, so this test exercises the actual
+    /// production root-resolution path rather than a `library_root`-only
+    /// fixture shortcut that would mask the same gap the backend unit test
+    /// for `source_view_generate` originally did.
+    #[tokio::test]
+    async fn upsert_session_persists_root_id_from_a_really_registered_source() {
+        let db = test_db().await;
+
+        let register_req = domain_core::first_run::RegisterSourceRequest {
+            kind: domain_core::first_run::SourceKind::LightFrames,
+            path: "/tmp/e2e-lights".to_owned(),
+            kind_subtype: None,
+            scan_depth: domain_core::first_run::ScanDepth::Recursive,
+            organization_state: domain_core::first_run::OrganizationState::Organized,
+        };
+        let registered =
+            persistence_db::repositories::first_run::register_source(db.pool(), &register_req)
+                .await
+                .unwrap();
+
+        // R9: the same mirroring `ingest_light_frame` performs before ever
+        // calling `upsert_session` — real users hit this via the applied
+        // plan's `to_root_id`, which is a `registered_sources` id.
+        let mirrored_path = ensure_library_root(db.pool(), &registered.source_id).await.unwrap();
+        assert_eq!(mirrored_path.as_deref(), Some("/tmp/e2e-lights"));
+
+        upsert_session(db.pool(), "sk-root-real", false, None, "image-1", &registered.source_id)
+            .await
+            .unwrap();
+
+        let (root_id,): (String,) =
+            sqlx::query_as("SELECT root_id FROM acquisition_session WHERE session_key = ?")
+                .bind("sk-root-real")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            root_id, registered.source_id,
+            "acquisition_session.root_id must be set to the real registered source id, not left \
+             empty/unset"
+        );
+    }
+
     #[tokio::test]
     async fn upsert_session_backfill_branch_propagates_when_project_prelinked() {
         let db = test_db().await;
         seed_canonical_target(db.pool(), "target-1", "M 31").await;
         seed_project(db.pool(), "proj-1").await;
+        seed_library_root(db.pool(), "root-1").await;
 
         // First frame arrives with no resolvable target — session created NULL.
-        upsert_session(db.pool(), "sk-2", false, None, "image-1").await.unwrap();
+        upsert_session(db.pool(), "sk-2", false, None, "image-1", "root-1").await.unwrap();
         let (session_id,): (String,) =
             sqlx::query_as("SELECT id FROM acquisition_session WHERE session_key = 'sk-2'")
                 .fetch_one(db.pool())
@@ -763,7 +874,9 @@ mod tests {
 
         // Second frame in the same session resolves — back-fill branch runs and
         // must propagate to the now-linked project.
-        upsert_session(db.pool(), "sk-2", false, Some("target-1"), "image-2").await.unwrap();
+        upsert_session(db.pool(), "sk-2", false, Some("target-1"), "image-2", "root-1")
+            .await
+            .unwrap();
 
         let got =
             repo_projects::get_project_canonical_target_id(db.pool(), "proj-1").await.unwrap();
@@ -797,7 +910,7 @@ mod tests {
         .unwrap();
 
         // A session with an unresolved (NULL) target, one frame.
-        upsert_session(db.pool(), "sk-3", false, None, "image-1").await.unwrap();
+        upsert_session(db.pool(), "sk-3", false, None, "image-1", "root-1").await.unwrap();
         let (session_id,): (String,) =
             sqlx::query_as("SELECT id FROM acquisition_session WHERE session_key = 'sk-3'")
                 .fetch_one(db.pool())
