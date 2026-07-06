@@ -34,5 +34,13 @@
       "icons/icon.ico",
       "icons/icon.png"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "PLACEHOLDER-NOT-A-REAL-KEY-see-specs-051-tauri-shell-integration-tasks-md-T060",
+      "endpoints": [
+        "https://github.com/nightwatch-astro/alm/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

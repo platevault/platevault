@@ -82,6 +82,10 @@ tauri-plugin-window-state = "2.4.1"
 tauri-plugin-log = "2.8.0"
 tauri-plugin-notification = "2.3.3"
 tauri-plugin-updater = "2.10.1"
+# Needed by the updater's relaunch-to-apply step (`process:default`
+# capability); matches the `@tauri-apps/plugin-process` npm version already
+# pinned in `apps/desktop/package.json`.
+tauri-plugin-process = "2.3.1"
 tauri-plugin-prevent-default = "5.0.2"
 tauri-specta = { version = "2.0.0-rc.25", features = ["typescript"] }
 schemars = { version = "1", features = ["uuid1"] }

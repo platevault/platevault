@@ -41,6 +41,8 @@ tauri-plugin-window-state = { workspace = true }
 tauri-plugin-log = { workspace = true }
 tauri-plugin-notification = { workspace = true }
 tauri-plugin-updater = { workspace = true }
+# Relaunch-to-apply step for the updater plugin (spec 051 US10, T056).
+tauri-plugin-process = { workspace = true }
 tauri-plugin-prevent-default = { workspace = true }
 tauri-specta = { workspace = true }
 # E2E automation surface — ONLY compiled when the `e2e` feature is enabled.
