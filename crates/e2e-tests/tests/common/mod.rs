@@ -535,6 +535,48 @@ impl E2eApp {
         }
     }
 
+    /// Generic evidence dump for a failing journey centred on ONE
+    /// `data-testid` element (unlike `dump_ui_diagnostics`, which is
+    /// hardcoded to the Inbox virtualizer/query-key investigation) — e.g. a
+    /// dialog/modal that should have closed after a submit action but is
+    /// still present. Captures whether the element is still in the DOM, its
+    /// (truncated) `outerHTML` — including any inline error banner it may be
+    /// showing — and the buffered `window.__e2eErrors` (uncaught
+    /// `error`/`unhandledrejection` events, `VITE_E2E` listener installed in
+    /// `apps/desktop/src/main.tsx`). Never used for assertions; a failure at
+    /// any step degrades to an inline error string rather than propagating.
+    pub async fn dump_testid_diagnostics(&self, testid: &str) -> Value {
+        let script = format!(
+            r#"
+            var callback = arguments[arguments.length - 1];
+            function truncate(s, n) {{
+                if (typeof s !== 'string') return s;
+                return s.length > n ? s.slice(0, n) + '...[truncated]' : s;
+            }}
+            try {{
+                var el = document.querySelector('[data-testid="{testid}"]');
+                callback({{
+                    ok: true,
+                    value: {{
+                        found: !!el,
+                        outerHtml: truncate(el ? el.outerHTML : null, 8192),
+                        e2eErrors: (window.__e2eErrors || []).slice(-30)
+                    }}
+                }});
+            }} catch (err) {{
+                callback({{ ok: false, error: String(err) }});
+            }}
+        "#
+        );
+
+        match self.driver.execute_async(&script, vec![]).await {
+            Ok(ret) => ret.convert::<Value>().unwrap_or_else(
+                |e| json!({ "dump_testid_diagnostics_decode_error": e.to_string() }),
+            ),
+            Err(e) => json!({ "dump_testid_diagnostics_execute_error": e.to_string() }),
+        }
+    }
+
     /// Drain the last ~30 real browser console entries (chromedriver/
     /// WebView2 `"browser"` log type, W3C `GET /session/{id}/log`) — best
     /// effort. Some WebDriver stacks (notably older Edge/WebView2 driver

@@ -277,16 +277,27 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
     // `GenerateSourceViewDialog.handleSubmit` only calls `onClose()` after
     // `sourceview.generate` resolves successfully, so the dialog closing is
     // real, DOM-visible proof the submit actually reached and completed the
-    // backend call — a much sharper failure signal than the `plans_list`
-    // poll below if the click never registered or the call errored.
-    app.wait_testid_gone("generate-source-view-dialog", Duration::from_secs(15)).await.map_err(
-        |e| {
-            anyhow::anyhow!(
-                "the dialog never closed after submit — sourceview.generate likely errored \
-                 or the submit click never registered: {e}"
-            )
-        },
-    )?;
+    // backend call — a much sharper signal than the `plans_list` poll below
+    // if the click never registered or the call errored. This is
+    // diagnostic-only (never gates the journey): a slow/absent close
+    // animation without a genuine submit failure would otherwise produce a
+    // false negative here even though the plan really was created, and the
+    // real assertion is the `plans_list` read below regardless. On failure,
+    // dump the dialog's own DOM (it renders the submit error inline via a
+    // `Banner`, `GenerateSourceViewDialog.tsx`) plus any buffered uncaught
+    // errors, and fold that evidence into the `plans_list` timeout message
+    // if the plan never shows up either.
+    let dialog_close_diagnostics =
+        match app.wait_testid_gone("generate-source-view-dialog", Duration::from_secs(15)).await {
+            Ok(()) => None,
+            Err(e) => {
+                let diagnostics = app.dump_testid_diagnostics("generate-source-view-dialog").await;
+                Some(format!(
+                    "the dialog never closed after submit — sourceview.generate likely errored or \
+                 the submit click never registered: {e}\ndiagnostics: {diagnostics}"
+                ))
+            }
+        };
 
     // ── 4. Real backend proof: a real, reviewable plan was created ──
     //
@@ -309,7 +320,11 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
                     .is_some_and(|arr| arr.iter().any(|p| p["originPath"] == json!(project_id)))
             },
         )
-        .await?;
+        .await
+        .map_err(|e| match &dialog_close_diagnostics {
+            Some(d) => anyhow::anyhow!("{e}\n\nadditional evidence from the submit step: {d}"),
+            None => e,
+        })?;
     let plan = plans["plans"]
         .as_array()
         .and_then(|arr| arr.iter().find(|p| p["originPath"] == json!(project_id)))
