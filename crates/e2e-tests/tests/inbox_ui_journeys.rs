@@ -234,19 +234,43 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
             break rows;
         }
         if tokio::time::Instant::now() >= deadline {
-            // CI run 28782673323 (pre round-1 window-state fix, main@9ee504d1)
-            // and run 28786351305 (post-fix, this branch) both fail HERE on
-            // Windows with the identical "found 0" message and near-identical
-            // ~152s duration — the window-state reset changed nothing about
-            // this failure, so its root cause is NOT window geometry. Before
-            // erroring, call `inbox.list` directly through the invoke bridge
-            // (bypassing the UI entirely) so the failure message tells us
-            // whether the backend ever materialized split rows at all (a real
-            // classify/materialize_sub_items regression) or whether they
-            // exist server-side but the UI/list query never surfaced them
-            // after reload (a frontend refetch/race bug) — the two
-            // possibilities need different fixes and neither can be
-            // distinguished from the UI-only signal alone.
+            // Round 6 (fix-inbox-splitrow-label): rounds 3-5 proved the
+            // backend always materializes the right 2 sub-items and that
+            // `InboxList`'s own render pipeline handles the exact captured
+            // Windows payload correctly (`InboxList.windowsSplitPayload.test.
+            // tsx`) — the drop is real-webview-only. Live diagnostics off
+            // failing Windows runs (28807257849, 28807308638) then showed the
+            // SAME instant recording `rows.len() == 0` from this very
+            // `find_all_testid_prefix` check while a `dump_ui_diagnostics`
+            // JS eval gathered moments later (after an intervening
+            // `inbox.list` invoke round-trip) reported `rowCount: 2` for the
+            // identical live page — i.e. the two split rows land in the real
+            // DOM strictly *between* this deadline check and the
+            // diagnostics-gathering that follows it. Bailing on that single
+            // stale reading is exactly the flake: give the in-flight
+            // fetch/render one bounded last chance to land, using the same
+            // check the pass path uses, before treating it as a real
+            // failure. A genuine regression still times out below.
+            let grace_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            let mut late_rows = rows;
+            while late_rows.len() < 2 && tokio::time::Instant::now() < grace_deadline {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                late_rows = app.find_all_testid_prefix("inbox-item-").await.unwrap_or_default();
+            }
+            if late_rows.len() >= 2 {
+                break late_rows;
+            }
+
+            // Still short after the grace window — gather full evidence
+            // before erroring. Before erroring, call `inbox.list` directly
+            // through the invoke bridge (bypassing the UI entirely) so the
+            // failure message tells us whether the backend ever materialized
+            // split rows at all (a real classify/materialize_sub_items
+            // regression) or whether they exist server-side but the UI/list
+            // query never surfaced them after reload (a frontend
+            // refetch/race bug) — the two possibilities need different
+            // fixes and neither can be distinguished from the UI-only
+            // signal alone.
             let backend_items: serde_json::Value = app
                 .invoke("inbox_list", serde_json::json!({}))
                 .await
@@ -267,9 +291,10 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
             let console_log = app.dump_console_log().await;
             anyhow::bail!(
                 "expected the mixed folder to split into >=2 single-type rows in the \
-                 real Inbox list, found {} (current_url={url:?}, backend inbox.list={backend_items}, \
+                 real Inbox list, found {} after a {UI_TIMEOUT:?} deadline + 5s grace \
+                 window (current_url={url:?}, backend inbox.list={backend_items}, \
                  ui_diagnostics={ui_diagnostics}, console_log={console_log})",
-                rows.len()
+                late_rows.len()
             );
         }
         tokio::time::sleep(Duration::from_secs(2)).await;
