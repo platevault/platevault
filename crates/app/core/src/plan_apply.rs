@@ -1678,9 +1678,23 @@ mod tests {
         assert_eq!(resp.new_state, "applying");
         assert!(!resp.run_id.is_empty());
 
-        // Plan state should be applying.
+        // The background executor is spawned via `tokio::spawn`, and the
+        // `#[tokio::test]` current-thread runtime only gives it a chance to
+        // run at the next `.await` yield point — which is the `get_plan`
+        // call right below. On a fast/loaded runner the executor can win that
+        // race and finish (this test's item has no real file on disk, so it
+        // resolves to a terminal `failed` state) before this read, which is
+        // not a bug in `apply_plan` (the CAS to "applying" already succeeded,
+        // per `resp.new_state` above) — it's a timing artifact of reading
+        // back a state the caller does not otherwise synchronize on. Accept
+        // either the transient "applying" state or a terminal state the
+        // now-raced-ahead executor already reached.
         let plan = repo::get_plan(db.pool(), "p1", false).await.unwrap();
-        assert_eq!(plan.state, "applying");
+        assert!(
+            matches!(plan.state.as_str(), "applying" | "completed" | "failed"),
+            "unexpected plan state after apply_plan: {}",
+            plan.state
+        );
 
         // Wait briefly for the background task to complete.
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
