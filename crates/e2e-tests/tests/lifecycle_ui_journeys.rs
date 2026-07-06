@@ -27,6 +27,20 @@ use thirtyfour::By;
 
 const UI_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Wait for the index route's async first-run redirect to land on `/setup`
+/// BEFORE navigating anywhere (mirrors `inbox_ui_journeys.rs`'s
+/// `settle_first_run_redirect`). A fresh DB (the harness resets it every
+/// launch) makes `checkFirstRunComplete` redirect `/` → `/setup` from an
+/// async `beforeLoad`; if a journey `goto_route`s while that redirect is
+/// still pending, the late-resolving redirect can yank the app off the
+/// target route.
+async fn settle_first_run_redirect(app: &E2eApp) -> anyhow::Result<()> {
+    app.wait_url_contains("/setup", Duration::from_secs(15))
+        .await
+        .map(drop)
+        .map_err(|e| anyhow::anyhow!("expected a fresh DB to redirect to /setup: {e}"))
+}
+
 /// Registers a disposable "project" category root (the registered project
 /// LIBRARY the wizard's derived project path is anchored under, per PR
 /// #414), plus one real confirmed session (M 31) so the wizard's Sources
@@ -173,8 +187,14 @@ async fn run_wizard_to_create(app: &E2eApp, name: &str) -> anyhow::Result<()> {
 async fn projects_ui_wizard_creates_real_folders_and_blocks_duplicate_name() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
     let project_root = setup_project_library_and_one_session(&app).await?;
-    let _: serde_json::Value = app.invoke("firstrun_complete", json!({})).await?;
+    // Route through the real gate (not a bare `firstrun_complete` invoke):
+    // it also clears the Shell's separate `setupCompleted` localStorage
+    // flag, without which every subsequent `goto_route` below would still
+    // get bounced to `/setup` by `Shell.tsx`'s client-side gate (mirrors the
+    // proven `inbox_ui_journeys.rs` pattern).
+    app.complete_first_run_gate().await?;
 
     let project_name = "E2E Wizard Project";
 
