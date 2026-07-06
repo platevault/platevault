@@ -13,7 +13,7 @@ use app_core::inbox::property_registry::property_registry as get_property_regist
 use app_core::inbox::reclassify::{
     reclassify, reclassify_v2, ReclassifyOverride, ReclassifyRequest,
 };
-use app_core::inbox::scan::{scan_root, ScanOptions, ScannedMasterFile};
+use app_core::inbox::scan::{scan_root, ScanOptions, ScannedInboxItem, ScannedMasterFile};
 use app_core::inbox::stats::inbox_stats as inbox_stats_uc;
 use app_core::inbox::target_recommendations::{
     target_recommendations as target_recommendations_uc, RecommendationTarget,
@@ -38,8 +38,8 @@ use contracts_core::ContractError;
 use domain_core::first_run::OrganizationState;
 use persistence_db::repositories::first_run::get_source_organization_state;
 use persistence_db::repositories::inbox::{
-    grouping_keys_for_items, list_unacknowledged_across_roots, upsert_inbox_source_group,
-    UpsertSourceGroup,
+    get_inbox_source_group_by_path, grouping_keys_for_items, link_placeholder_to_source_group,
+    list_unacknowledged_across_roots, upsert_inbox_source_group, UpsertSourceGroup,
 };
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -347,9 +347,6 @@ pub async fn inbox_scan_folder(
             continue;
         }
 
-        let item_id = Uuid::new_v4().to_string();
-        let folder_format_str = scanned_item.format.as_str();
-
         // For sub-count: use total minus masters for FITS-lane items.
         let persist_file_count = if scanned_item.masters.is_empty() {
             total_image_count + scanned_item.video_files.len()
@@ -357,53 +354,104 @@ pub async fn inbox_scan_folder(
             sub_count
         };
 
-        sqlx::query(
-            "INSERT OR IGNORE INTO inbox_items
-                (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
-                 content_signature, state, lane, format, is_master_item)
-             VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?, 'pending_classification', ?, ?, 0)",
-        )
-        .bind(&item_id)
-        .bind(&req.root_id)
-        .bind(&scanned_item.relative_path)
-        .bind(i64::try_from(persist_file_count).unwrap_or(i64::MAX))
-        .bind(&scanned_item.content_signature)
-        .bind(scanned_item.lane.as_str())
-        .bind(folder_format_str)
-        .execute(&*pool)
-        .await
-        .map_err(|e| ContractError::internal(e.to_string()))?;
-
-        // Fetch the authoritative row (may have existed before).
-        let row: Option<(String, String, i64, String, Option<String>, Option<String>)> =
-            sqlx::query_as(
-                "SELECT id, state, file_count, lane, content_signature, format
-                 FROM inbox_items WHERE root_id = ? AND relative_path = ?",
-            )
-            .bind(&req.root_id)
-            .bind(&scanned_item.relative_path)
-            .fetch_optional(&*pool)
-            .await
-            .map_err(|e| ContractError::internal(e.to_string()))?;
-
-        if let Some((id, state, fc, lane, sig, fmt)) = row {
-            items.push(InboxItemSummary {
-                inbox_item_id: id,
-                relative_path: scanned_item.relative_path.clone(),
-                file_count: u32::try_from(fc).unwrap_or(u32::MAX),
-                lane,
-                format: fmt.unwrap_or_else(|| folder_format_str.to_owned()),
-                state,
-                content_signature: sig.unwrap_or_default(),
-                is_master: false,
-                master_frame_type: None,
-                master_filter: None,
-                master_exposure_s: None,
-            });
+        if let Some(summary) =
+            persist_folder_placeholder(&pool, &req.root_id, scanned_item, sg_id, persist_file_count)
+                .await?
+        {
+            items.push(summary);
         }
     }
 
     Ok(InboxScanFolderResponse { root_id: req.root_id, items })
+}
+
+/// Insert (or reuse) the folder-level PLACEHOLDER `inbox_items` row
+/// (`group_key = ''`) for a scanned folder, linked to its source group, and
+/// return its summary.
+///
+/// The placeholder MUST be linked to its source group: `classify`'s
+/// single-type sub-item materialization (spec 041 T066,
+/// `materialize_sub_items`) is gated on `inbox_items.source_group_id` and
+/// silently never runs for unlinked items, which left mixed folders
+/// permanently un-split for every newly scanned root (caught by the spec 037
+/// Layer-2 Inbox journeys, PR #457). On a rescan the source-group upsert
+/// keeps the ORIGINAL row (conflict target `root_id`+`relative_path`), so the
+/// caller's freshly generated `fallback_sg_id` may not be the persisted one —
+/// resolve the authoritative id first.
+async fn persist_folder_placeholder(
+    pool: &SqlitePool,
+    root_id: &str,
+    scanned_item: &ScannedInboxItem,
+    fallback_sg_id: String,
+    persist_file_count: usize,
+) -> Result<Option<InboxItemSummary>, ContractError> {
+    let item_id = Uuid::new_v4().to_string();
+    let folder_format_str = scanned_item.format.as_str();
+
+    let authoritative_sg_id =
+        get_inbox_source_group_by_path(pool, root_id, &scanned_item.relative_path)
+            .await
+            .map_err(|e| ContractError::internal(e.to_string()))?
+            .map_or(fallback_sg_id, |row| row.id);
+
+    sqlx::query(
+        "INSERT OR IGNORE INTO inbox_items
+            (id, root_id, relative_path, source_group_id, file_count, discovered_at,
+             last_scanned_at, content_signature, state, lane, format, is_master_item)
+         VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, 'pending_classification', ?, ?, 0)",
+    )
+    .bind(&item_id)
+    .bind(root_id)
+    .bind(&scanned_item.relative_path)
+    .bind(&authoritative_sg_id)
+    .bind(i64::try_from(persist_file_count).unwrap_or(i64::MAX))
+    .bind(&scanned_item.content_signature)
+    .bind(scanned_item.lane.as_str())
+    .bind(folder_format_str)
+    .execute(pool)
+    .await
+    .map_err(|e| ContractError::internal(e.to_string()))?;
+
+    // Backfill the link for placeholder rows that predate it (the INSERT
+    // above is OR IGNORE, so an existing row keeps its columns).
+    link_placeholder_to_source_group(
+        pool,
+        root_id,
+        &scanned_item.relative_path,
+        &authoritative_sg_id,
+    )
+    .await
+    .map_err(|e| ContractError::internal(e.to_string()))?;
+
+    // Fetch the authoritative row (may have existed before). Scoped to
+    // the placeholder (`group_key = ''`): once classify has materialized
+    // single-type sub-items they share this (root_id, relative_path) and
+    // an unscoped lookup would return an arbitrary one of them.
+    let row: Option<(String, String, i64, String, Option<String>, Option<String>)> =
+        sqlx::query_as(
+            "SELECT id, state, file_count, lane, content_signature, format
+             FROM inbox_items
+             WHERE root_id = ? AND relative_path = ? AND group_key = ''",
+        )
+        .bind(root_id)
+        .bind(&scanned_item.relative_path)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+
+    Ok(row.map(|(id, state, fc, lane, sig, fmt)| InboxItemSummary {
+        inbox_item_id: id,
+        relative_path: scanned_item.relative_path.clone(),
+        file_count: u32::try_from(fc).unwrap_or(u32::MAX),
+        lane,
+        format: fmt.unwrap_or_else(|| folder_format_str.to_owned()),
+        state,
+        content_signature: sig.unwrap_or_default(),
+        is_master: false,
+        master_frame_type: None,
+        master_filter: None,
+        master_exposure_s: None,
+    }))
 }
 
 /// Row shape for an individual master `inbox_items` lookup: `(id, state,

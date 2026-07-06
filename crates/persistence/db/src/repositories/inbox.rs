@@ -290,6 +290,32 @@ pub async fn upsert_inbox_source_group(
     Ok(())
 }
 
+/// Backfill the folder PLACEHOLDER item's (`group_key = ''`) link to its
+/// source group when the link is still NULL (rows inserted before scan wrote
+/// the link, or by older builds). Materialized single-type sub-items carry
+/// their own linkage and are deliberately not touched.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn link_placeholder_to_source_group(
+    pool: &SqlitePool,
+    root_id: &str,
+    relative_path: &str,
+    source_group_id: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE inbox_items SET source_group_id = ?
+         WHERE root_id = ? AND relative_path = ? AND group_key = ''
+           AND source_group_id IS NULL",
+    )
+    .bind(source_group_id)
+    .bind(root_id)
+    .bind(relative_path)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Fetch one `inbox_source_groups` row by `(root_id, relative_path)`.
 ///
 /// Returns `None` when no matching row exists.

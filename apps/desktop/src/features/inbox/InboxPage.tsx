@@ -610,6 +610,20 @@ export function InboxPage() {
 		}
 	}, [planOverlayOpen, openPlans.length, pendingRootPick]);
 
+	// While the overlay is open, poll the open-plan surface: the backend's
+	// plan-applied LISTENER transitions items to resolved asynchronously
+	// AFTER `inbox.plan.apply*` returns (`plan_listener.rs`), so the single
+	// post-apply `refreshAll()` can race it and read the plan as still open —
+	// after which nothing would ever refresh again and the overlay could
+	// never auto-close (deterministic on CI runners, spec 037 Layer-2
+	// catalogue journey, PR #457). Polling only while open keeps the page
+	// quiescent otherwise.
+	useEffect(() => {
+		if (!planOverlayOpen) return undefined;
+		const timer = setInterval(() => refreshOpenPlans(), 1000);
+		return () => clearInterval(timer);
+	}, [planOverlayOpen, refreshOpenPlans]);
+
 	// spec 041 T072: "Generate split plan" is retired along with the backend
 	// "split" action (FR-050) — a mixed row is disabled via `canConfirm`
 	// above, so the label is always the plain confirm label now.

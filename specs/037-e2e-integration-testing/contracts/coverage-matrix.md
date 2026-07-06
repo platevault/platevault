@@ -222,8 +222,8 @@ everything neither automated layer reaches.
 | Journey | Layer-1 | Layer-2 | Mock-Playwright | Manual-Windows doc |
 |---|:--:|:--:|:--:|---|
 | 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions only | `windows-journeys/journey-01-first-run-setup.md` |
-| 2 Ingest → reclassify → confirm (move) | ✅ | 🟡 IPC round-trip only (no UI interaction) | ❌ none | `windows-journeys/journey-02-inbox-ingest-move.md` |
-| 3 Ingest → confirm (catalogue-in-place) | ✅ | ❌ (existing journey forces the move branch) | ❌ none | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
+| 2 Ingest → reclassify → confirm (move) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs`): mixed-folder split, unclassified-frame-type gate + bulk reclassify, missing-path-attribute gate, Confirm-doesn't-move + Apply-moves-to-shown-path. Root-picker prompt (2+ roots) and stale-plan refusal remain unautomated (follow-up) | ❌ none | `windows-journeys/journey-02-inbox-ingest-move.md` |
+| 3 Ingest → confirm (catalogue-in-place) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs::inbox_ui_catalogue_in_place_zero_moves_byte_identical`): organized root → 0-move catalogue plan, no root picker, no destination-absolute cell, byte-identical apply | ❌ none | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
 | 4 Sessions review (derived) | ✅ | 🟡 grouping proof only, no UI-invariant checks | 🟡 rows/detail render only | `windows-journeys/journey-04-sessions-review.md` |
 | 5 Project lifecycle | ✅ | 🟡 transition + ledger only, no UI | 🟡 transition button only (pill-refresh `test.skip`) | `windows-journeys/journey-05-project-lifecycle.md` |
 | 6 Cleanup scan→review→apply | ✅ | ✅ `cleanup_plan_review` now applies past `approved` via `plans.apply.direct` + asserts the real FS move + audit (2026-07-05) | ❌ none | `windows-journeys/journey-06-cleanup-scan-apply.md` |
@@ -323,12 +323,17 @@ just test the mock, not the product:
    behavior the mock layer can never prove. No journey exists yet.
 5. **Per-frame inventory reconciliation** (spec 048) — raw-frame-vs-disk
    reconciliation feeding cleanup candidates; extends Journeys 4/6.
-6. **Inbox UI-level gate + reclassify + root-picker** (Journeys 2/3) —
-   mixed-folder splitting, needs-review banner/badges, bulk reclassify,
-   root-picker prompt, stale-plan refusal, and the catalogue-in-place (0
-   moves) variant — all currently proven only at the IPC level, not through
-   real UI interaction. Highest-value UI-interaction gap, but lower risk
-   than #1/#2 since the backend mutation itself is already proven.
+6. **Inbox UI-level gate + reclassify + root-picker** (Journeys 2/3) — DONE
+   (2026-07-05, `crates/e2e-tests/tests/inbox_ui_journeys.rs`): mixed-folder
+   splitting, the unclassified-frame-type gate + bulk-reclassify unblock, the
+   missing-path-attribute (FR-032) gate as a distinct real mechanism, Confirm
+   never moving a file before Apply, Apply moving to exactly the
+   overlay-displayed destination path, and the catalogue-in-place (0-move,
+   byte-identical) variant. Remaining gap (follow-up, not done): the
+   multi-root destination picker prompt (`inbox-root-picker`, needs 2+
+   registered light-frame roots) and the stale-plan-refusal UI (external
+   file mutation between confirm and apply) are still unautomated at this
+   layer.
 7. **Targets catalog + SIMBAD resolve-on-demand + stub-disclosure guard**
    (Journey 9) — testable today independent of the site-gate blocker; the
    stub-disclosure requirement is called out as safety-critical in the

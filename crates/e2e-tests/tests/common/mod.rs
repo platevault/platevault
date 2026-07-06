@@ -38,6 +38,7 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Context, Result};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
+use thirtyfour::components::escape_string;
 use thirtyfour::prelude::*;
 
 /// URL where the `tauri-webdriver` CLI proxy listens for W3C WebDriver
@@ -47,11 +48,20 @@ use thirtyfour::prelude::*;
 /// default in `apps/desktop/src-tauri/src/lib.rs`).
 pub const TAURI_WEBDRIVER_URL: &str = "http://127.0.0.1:4444";
 
-/// Vite dev-server / `vite preview` port the app's Tauri `devUrl` points at
+/// Vite dev-server / `vite preview` URL the app's Tauri `devUrl` points at
 /// (`apps/desktop/src-tauri/tauri.conf.json`). The app loads this URL on its
 /// own at launch — do NOT `driver.goto(APP_URL)` after connecting. Kept for
 /// journeys that need to assert the current URL or navigate within the SPA.
-pub const APP_URL: &str = "http://127.0.0.1:5173";
+///
+/// MUST be the `localhost` host form, byte-identical to `devUrl`: the app
+/// boots on `http://localhost:5173`, and `localhost` vs `127.0.0.1` are
+/// DIFFERENT web origins with separate localStorage. Navigating journeys to
+/// a `127.0.0.1` URL splits app state across two origins — preferences
+/// written on one (e.g. `setupCompleted`, `complete_first_run_gate`) are
+/// invisible on the other, which made `Shell`'s localStorage-based setup
+/// gate and `SetupPage`'s backend-based check ping-pong `/setup` ↔ `/inbox`
+/// indefinitely.
+pub const APP_URL: &str = "http://localhost:5173";
 
 /// Overall deadline for WebDriver session creation in [`E2eApp::launch`].
 ///
@@ -60,6 +70,14 @@ pub const APP_URL: &str = "http://127.0.0.1:5173";
 /// BEFORE the window exists (observed ~30 s on ubuntu-latest, CI run
 /// 28694907445), and the plugin's own per-attempt window-wait is only 10 s.
 pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Default deadline for the convenience "find an element by aria-label /
+/// button text, then act on it" helpers ([`E2eApp::click_by_aria_label`] and
+/// friends). These poll for their target rather than doing a single
+/// immediate `find` — see [`E2eApp::find_waiting`] for the CI race this
+/// guards against. 20 s comfortably covers a debug-build route render on a
+/// cold CI runner without masking a genuinely-absent element for long.
+pub const DEFAULT_FIND_TIMEOUT: Duration = Duration::from_secs(20);
 
 // ---------------------------------------------------------------------------
 // Private deserialization target for invoke() responses
@@ -139,6 +157,7 @@ impl E2eApp {
     pub async fn launch() -> Result<Self> {
         preflight()?;
         reset_database()?;
+        reset_webview_storage();
 
         let mut driver_proc = spawn_tauri_webdriver()
             .context("failed to spawn the tauri-webdriver CLI on port 4444")?;
@@ -284,15 +303,53 @@ impl E2eApp {
 
     /// Navigate to a top-level SPA route and wait for the shell to settle.
     ///
-    /// The app does not perform a full page navigation for in-app routes (it's
-    /// a client-side router), but a fresh `driver.goto` to `APP_URL + path` is
-    /// still the simplest deterministic way to land on a known route in a
-    /// thirtyfour session. Waits for `document.readyState == "complete"`
+    /// The router uses HASH history (`createHashHistory()`,
+    /// `apps/desktop/src/app/router.tsx`): routes live in the URL fragment
+    /// (`/#/inbox`) and the pathname is ignored entirely. Navigating to
+    /// `{APP_URL}{path}` therefore always lands on the index route `/`,
+    /// whose first-run gate redirects a fresh DB to `/setup` — the target
+    /// page never mounts (CI run 28751553798: Inbox's "Rescan all roots"
+    /// deterministically never appeared on all three OSes). Navigate to the
+    /// hash form instead. Waits for `document.readyState == "complete"`
     /// instead of a fixed sleep.
+    /// The navigation is VERIFIED: several app-level redirects can move the
+    /// page away from the requested route right after landing (the Shell
+    /// redirects everything to `/setup` while the `setupCompleted` preference
+    /// is false, `SetupPage` bounces to `/inbox` once setup completes, the
+    /// index gate redirects asynchronously). Retry until the URL actually
+    /// stays on the target route, and fail with the URL it kept landing on —
+    /// far more diagnosable in CI than a downstream "element never appeared".
     pub async fn goto_route(&self, path: &str) -> Result<()> {
-        let url = format!("{APP_URL}{path}");
-        self.driver.goto(&url).await.with_context(|| format!("goto {url} failed"))?;
-        self.wait_document_ready(Duration::from_secs(10)).await
+        let url = format!("{APP_URL}/#{path}");
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut last = String::new();
+        loop {
+            self.driver.goto(&url).await.with_context(|| format!("goto {url} failed"))?;
+            self.wait_document_ready(Duration::from_secs(10)).await?;
+
+            // Wait for the URL to land on the target, then confirm it STAYS
+            // there (a late-resolving redirect can still yank it away).
+            if self.wait_url_contains(path, Duration::from_secs(3)).await.is_ok() {
+                tokio::time::sleep(Duration::from_millis(700)).await;
+                let current =
+                    self.driver.current_url().await.context("failed to read current_url")?;
+                last = current.to_string();
+                if last.contains(path) {
+                    return Ok(());
+                }
+            } else if let Ok(current) = self.driver.current_url().await {
+                last = current.to_string();
+            }
+
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "route {path} did not stick within 20s — the app kept redirecting \
+                     away (last URL: {last}); is the first-run gate complete \
+                     (E2eApp::complete_first_run_gate)?"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(300)).await;
+        }
     }
 
     /// Poll `document.readyState` until `"complete"` or `timeout` elapses.
@@ -379,6 +436,354 @@ impl E2eApp {
             Err(e) if matches!(e.as_inner(), WebDriverErrorInner::NoSuchElement(_)) => Ok(false),
             Err(e) => Err(e).context("failed to query for the error boundary fallback"),
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Real-DOM interaction helpers (additive, shared across per-area UI
+    // journeys — inbox/calibration/targets/sessions/lifecycle/settings).
+    // These drive the ACTUAL rendered `data-testid` elements (click/type/
+    // read), never the invoke bridge, so journeys built on them are proving
+    // real UI interaction rather than a second copy of the IPC-level tests.
+    // ---------------------------------------------------------------------
+
+    /// Locate a single element by its exact `data-testid` attribute.
+    pub async fn find_testid(&self, testid: &str) -> Result<WebElement> {
+        self.driver
+            .find(By::Css(format!("[data-testid='{testid}']")))
+            .await
+            .with_context(|| format!("no element with data-testid={testid:?}"))
+    }
+
+    /// Locate the first element whose `data-testid` STARTS WITH `prefix` —
+    /// for dynamic testids keyed by a real backend id (e.g.
+    /// `plan-group-<planId>`, `inbox-item-<inboxItemId>`) that the journey
+    /// doesn't know in advance.
+    pub async fn find_testid_prefix(&self, prefix: &str) -> Result<WebElement> {
+        self.driver
+            .find(By::Css(format!("[data-testid^='{prefix}']")))
+            .await
+            .with_context(|| format!("no element with data-testid starting with {prefix:?}"))
+    }
+
+    /// All elements whose `data-testid` starts with `prefix`.
+    pub async fn find_all_testid_prefix(&self, prefix: &str) -> Result<Vec<WebElement>> {
+        self.driver
+            .find_all(By::Css(format!("[data-testid^='{prefix}']")))
+            .await
+            .with_context(|| format!("query for data-testid prefix {prefix:?} failed"))
+    }
+
+    /// The dynamic suffix of the first `data-testid` starting with `prefix`
+    /// (e.g. `prefix = "inbox-item-"` on `data-testid="inbox-item-abc123"`
+    /// returns `"abc123"`) — lets a journey discover a real backend id from
+    /// the rendered DOM instead of a second invoke round-trip.
+    ///
+    /// POLLS for the element (up to [`DEFAULT_FIND_TIMEOUT`]) rather than
+    /// doing a single immediate lookup: this is frequently called straight
+    /// after an action that triggers an async refetch + re-render (e.g. an
+    /// Inbox rescan, which re-runs `inbox.scan` then re-fetches the list), so
+    /// the row may not exist the instant this is called. Same
+    /// route/refetch-render race [`Self::find_waiting`] documents — waiting
+    /// here means callers don't each have to remember a preceding
+    /// `wait_testid_prefix_present`.
+    pub async fn testid_suffix(&self, prefix: &str) -> Result<String> {
+        let deadline = Instant::now() + DEFAULT_FIND_TIMEOUT;
+        let el = loop {
+            if let Ok(el) = self.find_testid_prefix(prefix).await {
+                break el;
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "no data-testid starting with {prefix:?} appeared within {DEFAULT_FIND_TIMEOUT:?}"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        };
+        let full = el
+            .attr("data-testid")
+            .await
+            .context("failed to read data-testid attribute")?
+            .ok_or_else(|| anyhow!("element matched by prefix {prefix:?} has no data-testid"))?;
+        full.strip_prefix(prefix)
+            .map(str::to_owned)
+            .ok_or_else(|| anyhow!("data-testid {full:?} did not start with {prefix:?}"))
+    }
+
+    /// `true` if an element with the exact `data-testid` is currently in the DOM.
+    pub async fn testid_exists(&self, testid: &str) -> Result<bool> {
+        use thirtyfour::error::WebDriverErrorInner;
+        match self.driver.find(By::Css(format!("[data-testid='{testid}']"))).await {
+            Ok(_) => Ok(true),
+            Err(e) if matches!(e.as_inner(), WebDriverErrorInner::NoSuchElement(_)) => Ok(false),
+            Err(e) => Err(e).context("testid_exists query failed"),
+        }
+    }
+
+    /// Click the element with the given `data-testid`.
+    pub async fn click_testid(&self, testid: &str) -> Result<()> {
+        self.find_testid(testid)
+            .await?
+            .click()
+            .await
+            .with_context(|| format!("click {testid} failed"))
+    }
+
+    /// Rendered text content of the element with the given `data-testid`.
+    pub async fn text_testid(&self, testid: &str) -> Result<String> {
+        self.find_testid(testid)
+            .await?
+            .text()
+            .await
+            .with_context(|| format!("read text of {testid} failed"))
+    }
+
+    /// `true` when the element with the given `data-testid` is enabled — the
+    /// real DOM `disabled` state, not an assumption from response shape.
+    pub async fn is_enabled_testid(&self, testid: &str) -> Result<bool> {
+        self.find_testid(testid).await?.is_enabled().await.context("is_enabled query failed")
+    }
+
+    /// Poll for an element with the given `data-testid` to appear, returning it.
+    pub async fn wait_testid(&self, testid: &str, timeout: Duration) -> Result<WebElement> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Ok(el) = self.find_testid(testid).await {
+                return Ok(el);
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!("data-testid={testid:?} never appeared within {timeout:?}"));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Poll until the element with the given `data-testid` becomes enabled.
+    pub async fn wait_testid_enabled(&self, testid: &str, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if self.is_enabled_testid(testid).await.unwrap_or(false) {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "data-testid={testid:?} never became enabled within {timeout:?}"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Poll until at least one element whose `data-testid` starts with
+    /// `prefix` appears in the DOM.
+    pub async fn wait_testid_prefix_present(&self, prefix: &str, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if self.find_testid_prefix(prefix).await.is_ok() {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "no data-testid starting with {prefix:?} appeared within {timeout:?}"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Poll until no element with the given `data-testid` remains in the DOM.
+    pub async fn wait_testid_gone(&self, testid: &str, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if !self.testid_exists(testid).await.unwrap_or(true) {
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!("data-testid={testid:?} never disappeared within {timeout:?}"));
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Select an `<option>` by its `value` attribute on the
+    /// `<select data-testid=..>`.
+    ///
+    /// NOT implemented via WebDriver's option-click
+    /// (`SelectElement::select_by_value`): on WebKitGTK that click does not
+    /// reliably fire the `change` event a React-CONTROLLED `<select
+    /// onChange>` needs, so React never updates its state and re-renders the
+    /// select straight back to its previous value (observed on the Inbox
+    /// bulk-reclassify frame-type select, PR #457 — the checkbox on the same
+    /// pane committed fine while every option-click silently reverted).
+    /// Instead set the value and dispatch bubbling `input` + `change` events
+    /// — exactly what Playwright's `selectOption` does — then VERIFY the
+    /// value stuck.
+    pub async fn select_testid(&self, testid: &str, value: &str) -> Result<()> {
+        let el = self.find_testid(testid).await?;
+        let script = r#"
+            var el = arguments[0];
+            var value = arguments[1];
+            el.value = value;
+            el.dispatchEvent(new Event('input',  { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return el.value;
+        "#;
+        let out: String = self
+            .driver
+            .execute(script, vec![el.to_json()?, json!(value)])
+            .await
+            .with_context(|| format!("select value {value:?} on {testid} failed"))?
+            .convert()
+            .context("failed to deserialise the select result")?;
+        if out != value {
+            return Err(anyhow!(
+                "select {testid}: value {value:?} did not stick (got {out:?}) — \
+                 is there an <option value={value:?}>?"
+            ));
+        }
+        Ok(())
+    }
+
+    /// Clear then type into the `<input data-testid=..>`.
+    pub async fn fill_testid(&self, testid: &str, value: &str) -> Result<()> {
+        let el = self.find_testid(testid).await?;
+        el.clear().await.with_context(|| format!("clear {testid} failed"))?;
+        el.send_keys(value).await.with_context(|| format!("send_keys {testid} failed"))
+    }
+
+    /// Poll `driver.find(by)` until it resolves an element or
+    /// [`DEFAULT_FIND_TIMEOUT`] elapses.
+    ///
+    /// WHY this exists (CI-only bug, reproducible on ubuntu + windows,
+    /// #457/#458): after `goto_route(..)` + `wait_bridge_ready(..)`, the
+    /// target route's React component subtree has NOT necessarily finished
+    /// mounting and painting its controls. `wait_bridge_ready` only proves
+    /// `main.tsx` finished top-level module evaluation (the
+    /// `window.__ALM_E2E__` bridge exists) — it says nothing about whether
+    /// the current route's page component has rendered yet. A single
+    /// immediate `driver.find(..)` for a page control (e.g. Inbox's "Rescan
+    /// all roots" button) therefore RACES that render and intermittently
+    /// fails with `no element with aria-label=..` on a slow CI runner, even
+    /// though the string is correct and the control does render a beat later.
+    /// Polling is the fix — the same wait primitive the `data-testid`
+    /// helpers above already use, applied to the aria-label / button-text
+    /// locators too.
+    async fn find_waiting(&self, by: By, what: &str) -> Result<WebElement> {
+        let deadline = Instant::now() + DEFAULT_FIND_TIMEOUT;
+        loop {
+            match self.driver.find(by.clone()).await {
+                Ok(el) => return Ok(el),
+                Err(e) => {
+                    if Instant::now() >= deadline {
+                        // Include the URL the page actually sits on — a
+                        // missing element is very often "the app is on a
+                        // different route", which this makes diagnosable
+                        // straight from a CI log.
+                        let url = self
+                            .driver
+                            .current_url()
+                            .await
+                            .map_or_else(|_| "<unknown>".to_owned(), |u| u.to_string());
+                        return Err(e).with_context(|| {
+                            format!(
+                                "{what} never appeared within {DEFAULT_FIND_TIMEOUT:?} \
+                                 (current URL: {url})"
+                            )
+                        });
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Click an element located by its exact `aria-label` — for the few real
+    /// controls that carry no `data-testid` (e.g. Inbox's "Rescan all roots",
+    /// whose label is more stable across i18n pluralisation than its text
+    /// node). Polls for the element (via [`Self::find_waiting`]) rather than
+    /// doing a single immediate lookup, so it survives the route-render race
+    /// described on `find_waiting` (the CI `no element with aria-label=..`
+    /// failure this fix addresses).
+    pub async fn click_by_aria_label(&self, label: &str) -> Result<()> {
+        let xpath = format!("//*[@aria-label={}]", escape_string(label));
+        self.find_waiting(By::XPath(&xpath), &format!("element with aria-label={label:?}"))
+            .await?
+            .click()
+            .await
+            .with_context(|| format!("click aria-label={label:?} failed"))
+    }
+
+    /// Complete the app's first-run gate the way the wizard's Finish step
+    /// does (`SetupWizard.tsx`), without driving the wizard UI.
+    ///
+    /// Journeys that visit ANY shell page need this: the Shell component
+    /// itself redirects every route to `/setup` while the `setupCompleted`
+    /// localStorage preference is false (`apps/desktop/src/app/Shell.tsx` —
+    /// a second gate besides the index route's `beforeLoad`, and the reason
+    /// `/#/inbox` bounced back to `/#/setup` on CI run 28767450494 even
+    /// after the hash-history fix).
+    ///
+    /// Mirrors the wizard's completion sequence:
+    /// 1. `firstrun.complete` (backend gate — the CALLER must already have
+    ///    registered at least one raw and one project source, its real
+    ///    preconditions);
+    /// 2. `guided.dismiss` — the guided coach auto-activates on the first
+    ///    Shell mount after setup and its react-joyride overlay would sit
+    ///    over the page; activation is a no-op on a dismissed flow
+    ///    (`crates/app/core/src/guided_flow.rs::activate_after_setup`);
+    /// 3. set `setupCompleted: true` in the `alm-preferences` localStorage
+    ///    blob (what `SetupWizard` does via `setPreference`);
+    /// 4. reload the page — the preferences module caches its localStorage
+    ///    read in module state (`apps/desktop/src/data/preferences.ts`), so
+    ///    a direct localStorage write is invisible until a fresh page load.
+    pub async fn complete_first_run_gate(&self) -> Result<()> {
+        let _: Value = self
+            .invoke("firstrun_complete", json!({}))
+            .await
+            .context("firstrun.complete failed — were a raw AND a project source registered?")?;
+        let _: Value = self.invoke("guided_dismiss", json!({})).await?;
+
+        let script = r#"
+            var raw = localStorage.getItem('alm-preferences');
+            var prefs = {};
+            try { prefs = raw ? JSON.parse(raw) : {}; } catch (e) { prefs = {}; }
+            prefs.setupCompleted = true;
+            localStorage.setItem('alm-preferences', JSON.stringify(prefs));
+        "#;
+        self.driver
+            .execute(script, vec![])
+            .await
+            .context("failed to persist setupCompleted preference")?;
+
+        self.driver.refresh().await.context("page refresh after first-run completion failed")?;
+        self.wait_document_ready(Duration::from_secs(10)).await?;
+        self.wait_bridge_ready(Duration::from_secs(15)).await?;
+
+        // Verify the preference actually survived the reload: if the
+        // webview's storage backend dropped it, every shell route would
+        // silently bounce back to /setup — fail HERE with a named cause
+        // instead of a downstream "element never appeared".
+        let persisted: bool = self
+            .driver
+            .execute(
+                r#"
+                try {
+                    var raw = localStorage.getItem('alm-preferences');
+                    return raw ? JSON.parse(raw).setupCompleted === true : false;
+                } catch (e) { return false; }
+                "#,
+                vec![],
+            )
+            .await
+            .context("failed to read back the setupCompleted preference")?
+            .convert()
+            .context("failed to deserialise the setupCompleted read-back")?;
+        if !persisted {
+            return Err(anyhow!(
+                "setupCompleted=true did not persist in localStorage across the reload — \
+                 the webview storage backend dropped the preference"
+            ));
+        }
+        Ok(())
     }
 
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
@@ -552,22 +957,90 @@ fn spawn_tauri_webdriver() -> Result<Child> {
 /// Reset the application database so each test starts from a clean state.
 ///
 /// FR-006: if `ALM_DB_URL` is set and looks like `sqlite://PATH?...`, strip
-/// the `sqlite://` prefix and everything from `?` onward, then
-/// `std::fs::remove_file` that path (errors are ignored so a missing file
-/// doesn't fail startup).
+/// the `sqlite://` prefix and everything from `?` onward, then remove that
+/// file (errors are ignored so a missing file doesn't fail startup).
 ///
-/// TODO(spec-037 wiring): when `ALM_DB_URL` is unset, resolve the OS
-/// app-data path (`dev.astro-plan.astro-library-manager/alm.db`) and remove
-/// it there instead.
+/// When `ALM_DB_URL` is unset (the e2e.yml CI configuration), the app stores
+/// its DB at `<app_data_dir>/alm.db` (`apps/desktop/src-tauri/src/main.rs`,
+/// identifier `dev.astro-plan.astro-library-manager`). Without removing it
+/// there, state accumulates ACROSS the serial journeys — a journey that
+/// completes first-run leaves `firstrun.complete` + its registered roots +
+/// unacknowledged inbox items behind for every later journey, breaking both
+/// the fresh-DB startup-redirect expectation and every "only item in the
+/// list" selection. The `-wal`/`-shm` sidecars are removed too so SQLite
+/// can't replay a stale WAL into the fresh DB.
 fn reset_database() -> Result<()> {
-    if let Ok(url) = std::env::var("ALM_DB_URL") {
-        if let Some(path_and_query) = url.strip_prefix("sqlite://") {
-            let path = path_and_query.split('?').next().unwrap_or(path_and_query);
-            let _ = std::fs::remove_file(path);
+    let db_path: Option<PathBuf> = if let Ok(url) = std::env::var("ALM_DB_URL") {
+        url.strip_prefix("sqlite://").map(|p| PathBuf::from(p.split('?').next().unwrap_or(p)))
+    } else {
+        app_data_dir().map(|dir| dir.join("alm.db"))
+    };
+    if let Some(path) = db_path {
+        let _ = std::fs::remove_file(&path);
+        for sidecar in ["-wal", "-shm"] {
+            let mut os = path.clone().into_os_string();
+            os.push(sidecar);
+            let _ = std::fs::remove_file(PathBuf::from(os));
         }
     }
-    // TODO(spec-037 wiring): resolve OS app-data path when ALM_DB_URL is unset.
     Ok(())
+}
+
+/// Best-effort wipe of the webview's persisted web storage (localStorage &
+/// co.) so preferences set by one journey (`alm-preferences.setupCompleted`,
+/// grouping dims, theme) can't leak into the next. Without this, a journey
+/// that completes first-run leaves `setupCompleted: true` behind, and the
+/// next launch's `SetupPage` immediately bounces `/setup` → `/inbox`
+/// (`SetupPage.tsx`), breaking the fresh-DB startup-redirect expectation the
+/// journeys share. Called before the app process is spawned, so nothing
+/// holds these files open. Failures are ignored (first run has no storage).
+fn reset_webview_storage() {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if cfg!(target_os = "windows") {
+        // WebView2 keeps ALL web storage under the user-data folder tauri
+        // points at `<app_local_data_dir>/EBWebView`.
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            candidates
+                .push(PathBuf::from(local).join("dev.astro-plan.astro-library-manager/EBWebView"));
+        }
+    } else if cfg!(target_os = "macos") {
+        // WKWebView website data (incl. localStorage) lives under
+        // ~/Library/WebKit/<identifier>/WebsiteData.
+        if let Some(home) = std::env::var_os("HOME") {
+            candidates.push(
+                PathBuf::from(home)
+                    .join("Library/WebKit/dev.astro-plan.astro-library-manager/WebsiteData"),
+            );
+        }
+    } else if let Some(dir) = app_data_dir() {
+        // WebKitGTK stores localStorage / IndexedDB inside the app data dir.
+        candidates.push(dir.join("localstorage"));
+        candidates.push(dir.join("storage"));
+    }
+    for path in candidates {
+        let _ = std::fs::remove_dir_all(path);
+    }
+}
+
+/// Resolve the per-OS Tauri `app_data_dir` for the app identifier
+/// `dev.astro-plan.astro-library-manager` (`tauri.conf.json`). Mirrors
+/// `tauri::path::PathResolver::app_data_dir` (`dirs::data_dir()/<identifier>`)
+/// without needing a Tauri runtime in the test harness:
+/// - Linux:   `$XDG_DATA_HOME` or `~/.local/share`
+/// - macOS:   `~/Library/Application Support`
+/// - Windows: `%APPDATA%` (roaming)
+fn app_data_dir() -> Option<PathBuf> {
+    const APP_IDENTIFIER: &str = "dev.astro-plan.astro-library-manager";
+    let base = if cfg!(target_os = "windows") {
+        std::env::var_os("APPDATA").map(PathBuf::from)
+    } else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
+    } else {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+    };
+    base.map(|b| b.join(APP_IDENTIFIER))
 }
 
 // ---------------------------------------------------------------------------
