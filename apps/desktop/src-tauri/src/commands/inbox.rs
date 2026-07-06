@@ -38,8 +38,8 @@ use contracts_core::ContractError;
 use domain_core::first_run::OrganizationState;
 use persistence_db::repositories::first_run::get_source_organization_state;
 use persistence_db::repositories::inbox::{
-    grouping_keys_for_items, list_unacknowledged_across_roots, upsert_inbox_source_group,
-    UpsertSourceGroup,
+    get_inbox_source_group_by_path, grouping_keys_for_items, list_unacknowledged_across_roots,
+    upsert_inbox_source_group, UpsertSourceGroup,
 };
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -357,15 +357,32 @@ pub async fn inbox_scan_folder(
             sub_count
         };
 
+        // Resolve the AUTHORITATIVE source-group id for this folder: on a
+        // rescan the upsert above keeps the ORIGINAL row (conflict target
+        // root_id+relative_path), so the freshly generated `sg_id` may not be
+        // the persisted one. The placeholder item MUST be linked to its
+        // source group — `classify`'s single-type sub-item materialization
+        // (spec 041 T066, `materialize_sub_items`) is gated on
+        // `inbox_items.source_group_id` and silently never runs for
+        // unlinked items, which left mixed folders permanently un-split for
+        // every newly scanned root (caught by the spec 037 Layer-2 Inbox
+        // journeys, PR #457).
+        let authoritative_sg_id =
+            get_inbox_source_group_by_path(&pool, &req.root_id, &scanned_item.relative_path)
+                .await
+                .map_err(|e| ContractError::internal(e.to_string()))?
+                .map_or(sg_id, |row| row.id);
+
         sqlx::query(
             "INSERT OR IGNORE INTO inbox_items
-                (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
-                 content_signature, state, lane, format, is_master_item)
-             VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), ?, 'pending_classification', ?, ?, 0)",
+                (id, root_id, relative_path, source_group_id, file_count, discovered_at,
+                 last_scanned_at, content_signature, state, lane, format, is_master_item)
+             VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, 'pending_classification', ?, ?, 0)",
         )
         .bind(&item_id)
         .bind(&req.root_id)
         .bind(&scanned_item.relative_path)
+        .bind(&authoritative_sg_id)
         .bind(i64::try_from(persist_file_count).unwrap_or(i64::MAX))
         .bind(&scanned_item.content_signature)
         .bind(scanned_item.lane.as_str())
@@ -374,11 +391,31 @@ pub async fn inbox_scan_folder(
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
-        // Fetch the authoritative row (may have existed before).
+        // Backfill the link for placeholder rows that predate it (the INSERT
+        // above is OR IGNORE, so an existing row keeps its columns). Scoped
+        // to the placeholder (`group_key = ''`): materialized sub-items keep
+        // their own linkage.
+        sqlx::query(
+            "UPDATE inbox_items SET source_group_id = ?
+             WHERE root_id = ? AND relative_path = ? AND group_key = ''
+               AND source_group_id IS NULL",
+        )
+        .bind(&authoritative_sg_id)
+        .bind(&req.root_id)
+        .bind(&scanned_item.relative_path)
+        .execute(&*pool)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
+
+        // Fetch the authoritative row (may have existed before). Scoped to
+        // the placeholder (`group_key = ''`): once classify has materialized
+        // single-type sub-items they share this (root_id, relative_path) and
+        // an unscoped lookup would return an arbitrary one of them.
         let row: Option<(String, String, i64, String, Option<String>, Option<String>)> =
             sqlx::query_as(
                 "SELECT id, state, file_count, lane, content_signature, format
-                 FROM inbox_items WHERE root_id = ? AND relative_path = ?",
+                 FROM inbox_items
+                 WHERE root_id = ? AND relative_path = ? AND group_key = ''",
             )
             .bind(&req.root_id)
             .bind(&scanned_item.relative_path)

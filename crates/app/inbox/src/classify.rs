@@ -988,9 +988,38 @@ async fn build_response_from_cache(
 
     let computed_at = cached.computed_at.clone();
 
+    // `inbox_classifications.result` stores the DB vocabulary introduced by
+    // migration 0048 ('classified' / 'unclassified'), but
+    // `ClassifyResponse.classification_type` is contractually the stable API
+    // vocabulary ('single_type' / 'mixed' / 'unclassified') — see step 7 of
+    // `classify`. Returning `cached.result` verbatim leaked 'classified' to
+    // the frontend on every cache hit (re-selecting an item, or the classify
+    // refetch after `inbox.reclassify`), where `canConfirm` requires exactly
+    // 'single_type' — permanently disabling Confirm for already-classified
+    // items (caught by the spec 037 Layer-2 Inbox journeys, PR #457). Map DB
+    // → API here, mirroring `reclassify`'s aggregation: 'classified' is
+    // single-type by the 0048 CHECK's definition; a DB 'unclassified' with
+    // two or more distinct effective frame types is the mixed case.
+    let classification_type = match cached.result.as_str() {
+        "classified" => "single_type".to_owned(),
+        "unclassified" => {
+            let distinct: std::collections::HashSet<&str> = evidence_rows
+                .iter()
+                .filter_map(|ev| ev.manual_override.as_deref().or(ev.frame_type.as_deref()))
+                .collect();
+            if distinct.len() >= 2 {
+                "mixed".to_owned()
+            } else {
+                "unclassified".to_owned()
+            }
+        }
+        // Pre-0048 rows can still carry the API vocabulary — pass through.
+        other => other.to_owned(),
+    };
+
     Ok(ClassifyResponse {
         inbox_item_id: item.id.clone(),
-        classification_type: cached.result.clone(),
+        classification_type,
         frame_type: cached.frame_type.clone(),
         content_signature: cached.content_signature.clone(),
         breakdown,
@@ -1065,6 +1094,52 @@ mod tests {
         assert_eq!(resp.classification_type, "single_type");
         assert_eq!(resp.frame_type, Some("light".to_owned()));
         assert!(!resp.content_signature.is_empty());
+    }
+
+    /// Regression (PR #457 Layer-2 Inbox journeys): a SECOND classify of an
+    /// unchanged item hits `build_response_from_cache`, which must translate
+    /// the persisted DB vocabulary ('classified', migration 0048) back to the
+    /// API vocabulary ('single_type'). Leaking 'classified' permanently
+    /// disabled the frontend's Confirm gate (`canConfirm` requires exactly
+    /// 'single_type') for any already-classified item.
+    #[tokio::test]
+    async fn classify_cache_hit_keeps_api_vocabulary() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
+
+        let db = test_db().await;
+        let item_id = "item-classify-cache-vocab";
+        repo::insert_inbox_item(
+            db.pool(),
+            &InsertInboxItem {
+                id: item_id,
+                root_id: "root-1",
+                relative_path: "",
+                file_count: 0,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        let req = || ClassifyRequest {
+            inbox_item_id: item_id.to_owned(),
+            root_absolute_path: tmp.path().to_owned(),
+            force_rescan: false,
+        };
+
+        let first = classify(db.pool(), req()).await.unwrap();
+        assert_eq!(first.classification_type, "single_type");
+
+        // Unchanged content → this is the cache path.
+        let second = classify(db.pool(), req()).await.unwrap();
+        assert_eq!(
+            second.classification_type, "single_type",
+            "cache-hit classify must return the API vocabulary, not the DB 'classified' value"
+        );
+        assert_eq!(second.frame_type, Some("light".to_owned()));
+        assert_eq!(second.content_signature, first.content_signature);
     }
 
     #[tokio::test]
