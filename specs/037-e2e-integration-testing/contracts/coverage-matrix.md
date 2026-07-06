@@ -228,7 +228,7 @@ everything neither automated layer reaches.
 | 5 Project lifecycle | ✅ | 🟡 transition + ledger only, no UI | 🟡 transition button only (pill-refresh `test.skip`) | `windows-journeys/journey-05-project-lifecycle.md` |
 | 6 Cleanup scan→review→apply | ✅ | ✅ `cleanup_plan_review` now applies past `approved` via `plans.apply.direct` + asserts the real FS move + audit (2026-07-05) | ❌ none | `windows-journeys/journey-06-cleanup-scan-apply.md` |
 | 7 Archive → delete | ✅ (backend only) | ✅ `archive_lifecycle_apply_trash_permanent_delete` (`archive_journeys.rs`, NEW 2026-07-05): real apply + `archive.list` + `archive.send_to_trash`/`archive.permanently_delete` metadata + `blockPermanentDelete` gate | ❌ none | `windows-journeys/journey-07-archive-delete.md` |
-| 8 Calibration masters → matching | ✅ | 🟡 `calibration.match.suggest` shape only | ❌ none | `windows-journeys/journey-08-calibration-masters-matching.md` |
+| 8 Calibration masters → matching | ✅ | 🟡 real-UI (`calibration_ui_journeys.rs`): masters ingest as individual items + kind-conditional detail (Tests 1/2). Matching/assign UI (Tests 3-5) found UNREACHABLE from the real app during this pass — see finding below, not automatable until fixed | ❌ none | `windows-journeys/journey-08-calibration-masters-matching.md` |
 | 9 Targets & planning | ✅ (backend only) | ❌ **none at all** | ❌ **none at all** | `windows-journeys/journey-09-targets-planning.md` |
 | 10 Settings/appearance/i18n | ✅ | 🟡 route-load smoke only | ❌ none | `windows-journeys/journey-10-settings-appearance-i18n.md` |
 
@@ -314,9 +314,24 @@ just test the mock, not the product:
    `plans.apply.direct` and asserts the real filesystem mutation + audit
    record.
 3. **Calibration masters ingest → Calibration page → matching → assign**
-   (Journey 8, spec 040) — real UI-level masters flow beyond today's
-   `calibration.match.suggest`-only proof; spec 040 has the least automated
-   scrutiny of any recently-shipped backend feature.
+   (Journey 8, spec 040) — DONE for the reachable half (2026-07-05,
+   `crates/e2e-tests/tests/calibration_ui_journeys.rs`): masters ingest as
+   individual real Inbox items (not a folder aggregate) and confirmed
+   masters appear as their own real Calibration-page row with genuinely
+   kind-conditional detail (a property is OMITTED, not dash-faked, when its
+   fingerprint field is null). Added a thin, additive `master-row-<id>`
+   test-hook to `MastersTable.tsx` (mirrors `InboxList`'s existing
+   `inbox-item-<id>` convention) since no per-row testid existed.
+   **FINDING (real product gap, not fixed here)**: the matching/assign UI
+   (Tests 3-5 — ranked candidates, assign/cancel, offset-tolerance) is
+   `MatchCandidatesPanel.tsx`, fully implemented and unit-tested, but **no
+   page mounts it** — `CalibrationPage.tsx` renders only `MastersTable` +
+   `MasterDetail`. `CalibrationMatchPanel.tsx` (a different, read-only
+   component on the project detail page) says in its own doc comment
+   "assignment is done from the Calibration page (CalibrationPage +
+   MasterDetail)", which is not true of the code as of this writing. This
+   makes Tests 3-5 unreachable from the real app and therefore
+   un-automatable at Layer 2 until product wiring lands.
 4. **Source-view generation** (spec 049) — generate/regenerate a
    WBPP-profile source view and assert real symlinks/junctions exist on
    disk with the correct per-tool layout; real OS-specific filesystem
