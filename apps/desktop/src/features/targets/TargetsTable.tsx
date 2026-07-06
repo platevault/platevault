@@ -413,14 +413,12 @@ interface Props {
    */
   guidanceParams?: MoonAvoidanceParams;
   /**
-   * Set of currently-favourited target ids (task #18).
+   * Set of currently-favourited target ids (task #18, spec 051 US2).
    * When provided the star column renders filled for matched ids.
-   * STUB: sourced from localStorage via useFavourites until task #54 lands.
    */
   favouriteIds?: ReadonlySet<string>;
   /**
    * Called when the user clicks the star button in a row (task #18).
-   * STUB: see useFavourites.ts.
    */
   onToggleFavourite?: (targetId: string) => void;
 }
