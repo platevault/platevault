@@ -271,6 +271,28 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
 
     app.wait_testid("generate-source-view-btn", Duration::from_secs(15)).await?.click().await?;
     app.wait_testid("generate-source-view-dialog", Duration::from_secs(10)).await?;
+
+    // Round 4/5 (#470) root cause: the dialog's own diagnostics dump showed
+    // a real `alm-banner--danger` reading "No usable link method is
+    // available on this filesystem. Allow copying to proceed instead." —
+    // the CI runner's tempdir filesystem cannot symlink OR hardlink at all,
+    // `sourceview.generate` correctly refuses with `no_link_kind`
+    // (`domain_core::source_view::resolve_link_kind`), and the dialog's
+    // error Banner rendered exactly as designed. The product was behaving
+    // correctly; this journey just never opted in to the documented copy
+    // fallback. Always check the copy opt-in checkbox rather than
+    // conditionally reacting to the banner (racier — the banner render lags
+    // the settings/capability fetch) or trying to make the fixture's
+    // tempdirs support real links (CI tmpfs/overlay link support is
+    // runner-/OS-dependent and not something this repo controls, so making
+    // that work would just trade one environment-fragile assumption for
+    // another): `copy_opt_in` is consulted only as a last-resort fallback
+    // (`resolve_link_kind`) after every real link kind has already been
+    // tried, so checking it here never changes behavior on a runner where
+    // linking genuinely works — it only unblocks the runners where it
+    // doesn't.
+    app.wait_testid("generate-view-copy-opt-in", Duration::from_secs(10)).await?.click().await?;
+
     app.wait_testid_enabled("generate-source-view-submit", Duration::from_secs(10)).await?;
     app.find_testid("generate-source-view-submit").await?.click().await?;
 
@@ -368,7 +390,7 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
             let regenerate: serde_json::Value = app
                 .invoke(
                     "sourceview_generate",
-                    json!({ "req": { "projectId": project_id, "copyOptIn": false, "strict": false, "profileId": null, "destinationOverride": null } }),
+                    json!({ "req": { "projectId": project_id, "copyOptIn": true, "strict": false, "profileId": null, "destinationOverride": null } }),
                 )
                 .await
                 .unwrap_or_else(|e2| json!({ "sourceview_generate_retry_error": e2.to_string() }));
@@ -432,6 +454,28 @@ async fn generate_source_view_creates_reviewable_wbpp_plan() -> anyhow::Result<(
         "the filter/exposure fallback bucket names changed (or `projects.source.add` now \
          snapshots real filter/exposure) — re-verify the empty-snapshot FINDING documented in \
          this file's module docs before updating this assertion: {layout_tail}"
+    );
+
+    // Document which materialization path this run actually exercised
+    // (`domain_core::source_view::resolve_link_kind`): a real link kind
+    // (symlink/hardlink/junction) when the runner's filesystem supports one,
+    // or the `copy` fallback this journey's `copyOptIn` check unblocks when
+    // it doesn't (observed on the CI ubuntu runner, round 4/5 — see the
+    // copy-opt-in comment above). Either is a fully reviewable plan; this
+    // only asserts the value is a real, known materialization rather than
+    // requiring one specific kind, since runner filesystem capability is
+    // environment-dependent and not something this journey controls.
+    let materialization = link_item["provenance"]
+        .as_array()
+        .and_then(|entries| entries.iter().find(|e| e["label"] == "materialization"))
+        .and_then(|e| e["value"].as_str())
+        .ok_or_else(|| {
+            anyhow::anyhow!("link item has no materialization provenance: {link_item}")
+        })?;
+    anyhow::ensure!(
+        matches!(materialization, "symlink" | "hardlink" | "junction" | "copy"),
+        "unexpected materialization value on the generated link item: {materialization:?} \
+         ({link_item})"
     );
 
     // ── 5. Real, channel-free step available today: approve ──

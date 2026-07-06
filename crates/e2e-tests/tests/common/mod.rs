@@ -242,7 +242,26 @@ impl E2eApp {
             window.__ALM_E2E__.invoke(cmd, cmdArgs).then(function(value) {
                 callback({ ok: true, value: value });
             }).catch(function(err) {
-                callback({ ok: false, error: String(err) });
+                // `unwrap()` (`apps/desktop/src/api/ipc.ts`) throws the raw
+                // `ContractError` envelope object on a rejected command, not
+                // a JS `Error` instance — `String(err)` on a plain object
+                // stringifies to the useless "[object Object]" (round 4,
+                // #470: masked a real `no_link_kind` backend error behind
+                // that placeholder). Prefer JSON.stringify so `code`/
+                // `message`/`details` are readable; fall back to
+                // `err.message`/`String(err)` only if JSON serialisation
+                // itself fails or yields nothing useful (e.g. a real `Error`
+                // instance, whose own fields aren't enumerable).
+                var serialized;
+                try {
+                    serialized = JSON.stringify(err);
+                } catch (jsonErr) {
+                    serialized = null;
+                }
+                if (!serialized || serialized === '{}') {
+                    serialized = (err && err.message) ? String(err.message) : String(err);
+                }
+                callback({ ok: false, error: serialized });
             });
         "#;
 
