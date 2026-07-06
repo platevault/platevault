@@ -158,6 +158,7 @@ impl E2eApp {
         preflight()?;
         reset_database()?;
         reset_webview_storage();
+        reset_window_state();
 
         let mut driver_proc = spawn_tauri_webdriver()
             .context("failed to spawn the tauri-webdriver CLI on port 4444")?;
@@ -435,6 +436,118 @@ impl E2eApp {
             Ok(_) => Ok(true),
             Err(e) if matches!(e.as_inner(), WebDriverErrorInner::NoSuchElement(_)) => Ok(false),
             Err(e) => Err(e).context("failed to query for the error boundary fallback"),
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Failure-site diagnostics (fix-lane round 5, PR #477): purely
+    // best-effort evidence-gathering for a failing journey's error message —
+    // never used for assertions. Each dump degrades to an inline error string
+    // rather than propagating, so a diagnostic failing never masks the real
+    // assertion failure it was called from.
+    // ---------------------------------------------------------------------
+
+    /// Dump DOM + TanStack Query + buffered-error evidence for a failing
+    /// real-UI journey, deciding between the three live hypotheses for the
+    /// Windows-only `inbox_ui_mixed_folder_splits_into_single_type_items`
+    /// "found 0 rows" failure (round 3/4 narrowed it to: real webview only):
+    ///
+    /// - (a) UI IPC channel error/race: `queryState` (status/fetchStatus/
+    ///   error/dataUpdatedAt/fetchFailureCount) for the `['inbox','all']`
+    ///   query key (`apps/desktop/src/features/inbox/store.ts`), plus
+    ///   `e2eErrors` — uncaught `error`/`unhandledrejection` events buffered by
+    ///   the `VITE_E2E` listener installed in `apps/desktop/src/main.tsx`. If
+    ///   the query never reaches `status: "success"` with `dataUpdatedAt > 0`,
+    ///   or `e2eErrors` is non-empty, the UI's own IPC channel is implicated
+    ///   rather than the backend (which round-3 already proved returns the
+    ///   right rows via the diagnostic-only invoke bridge).
+    /// - (b) layout/virtualizer race: `containerFound` / `containerRectHeight`
+    ///   / `rowCount` / `containerOuterHtml` (truncated) for the
+    ///   `[data-testid="inbox-virtual-sizer"]` scroll viewport
+    ///   (`apps/desktop/src/ui/Table.tsx`'s virtualizer measures this
+    ///   element) — a 0-height container with `rowCount: 0` but a non-empty,
+    ///   well-formed `containerOuterHtml` (e.g. spacer rows present) points at
+    ///   the virtualizer, not the query layer.
+    /// - (c) stale frontend artifact: `buildTime`, baked in at Vite
+    ///   config-eval time via the `VITE_BUILD_TIME` define
+    ///   (`apps/desktop/vite.config.ts`) — compare against the CI job's wall
+    ///   clock in the run this dump came from.
+    ///
+    /// Returns a single JSON object; a field-level failure (bridge not
+    /// exposed, container missing, query client absent) becomes a `null` /
+    /// error-string value in that field rather than an `Err` for the whole
+    /// call, so partial evidence is never lost to an all-or-nothing dump.
+    pub async fn dump_ui_diagnostics(&self) -> Value {
+        let script = r#"
+            var callback = arguments[arguments.length - 1];
+            function truncate(s, n) {
+                if (typeof s !== 'string') return s;
+                return s.length > n ? s.slice(0, n) + '...[truncated]' : s;
+            }
+            try {
+                var container = document.querySelector('[data-testid="inbox-virtual-sizer"]');
+                var rows = document.querySelectorAll('[data-testid^="inbox-item-"]');
+                var rect = container ? container.getBoundingClientRect() : null;
+                var e2e = window.__ALM_E2E__;
+                var queryState = null;
+                if (e2e && e2e.queryClient) {
+                    try {
+                        var s = e2e.queryClient.getQueryState(['inbox', 'all']);
+                        if (s) {
+                            queryState = {
+                                status: s.status,
+                                fetchStatus: s.fetchStatus,
+                                error: s.error ? String(s.error.message || s.error) : null,
+                                dataUpdatedAt: s.dataUpdatedAt,
+                                errorUpdatedAt: s.errorUpdatedAt,
+                                fetchFailureCount: s.fetchFailureCount,
+                                dataLength: Array.isArray(s.data) ? s.data.length : null
+                            };
+                        }
+                    } catch (qerr) {
+                        queryState = { queryStateError: String(qerr) };
+                    }
+                }
+                callback({
+                    ok: true,
+                    value: {
+                        bridgeExposed: !!e2e,
+                        buildTime: e2e ? e2e.buildTime : null,
+                        documentReadyState: document.readyState,
+                        containerFound: !!container,
+                        containerRectHeight: rect ? rect.height : null,
+                        rowCount: rows.length,
+                        containerOuterHtml: truncate(container ? container.outerHTML : null, 4096),
+                        queryState: queryState,
+                        e2eErrors: (window.__e2eErrors || []).slice(-30)
+                    }
+                });
+            } catch (err) {
+                callback({ ok: false, error: String(err) });
+            }
+        "#;
+
+        match self.driver.execute_async(script, vec![]).await {
+            Ok(ret) => ret
+                .convert::<Value>()
+                .unwrap_or_else(|e| json!({ "dump_ui_diagnostics_decode_error": e.to_string() })),
+            Err(e) => json!({ "dump_ui_diagnostics_execute_error": e.to_string() }),
+        }
+    }
+
+    /// Drain the last ~30 real browser console entries (chromedriver/
+    /// WebView2 `"browser"` log type, W3C `GET /session/{id}/log`) — best
+    /// effort. Some WebDriver stacks (notably older Edge/WebView2 driver
+    /// builds) reject the log endpoint entirely; that's captured as an error
+    /// string rather than failing the caller, per this module's diagnostics
+    /// contract.
+    pub async fn dump_console_log(&self) -> Value {
+        match self.driver.get_log("browser").await {
+            Ok(entries) => {
+                let tail: Vec<_> = entries.iter().rev().take(30).rev().collect();
+                json!({ "console_log": tail })
+            }
+            Err(e) => json!({ "console_log_error": e.to_string() }),
         }
     }
 
@@ -1020,6 +1133,56 @@ fn reset_webview_storage() {
     for path in candidates {
         let _ = std::fs::remove_dir_all(path);
     }
+}
+
+/// Reset `tauri-plugin-window-state`'s persisted geometry (spec 051 US4)
+/// before each journey launch, for the same reason `reset_database()` and
+/// `reset_webview_storage()` exist: sequential journeys in the same CI job
+/// share one real OS user profile, so without this a later journey's app
+/// process restores whatever size/position/maximized state an EARLIER
+/// journey's process happened to exit in. Kept as a defensive hygiene reset
+/// (a restored off-screen/minimized geometry is a real way to hang WebDriver
+/// element queries), but it is NOT a fix for the Windows real-UI E2E failure
+/// on `inbox_ui_mixed_folder_splits_into_single_type_items`: CI run
+/// 28782673323 (main@9ee504d1, BEFORE this function existed) and run
+/// 28786351305 (this branch, AFTER it landed) fail identically — same
+/// "found 0" assertion, same ~152s duration, on both TRY 1 and TRY 2. The
+/// real root cause of that failure is still open; see the diagnostic dump
+/// added at the failure site in `inbox_ui_journeys.rs` (round 3,
+/// fix-main-e2e-interplay) for the next data point.
+///
+/// The plugin's default store is `.window-state.json` under
+/// `app.path().app_config_dir()` (`tauri-plugin-window-state` source) —
+/// which is a DIFFERENT directory than `app_data_dir()` on Linux
+/// (`$XDG_CONFIG_HOME`/`~/.config` vs `$XDG_DATA_HOME`/`~/.local/share`) but
+/// the SAME directory on Windows (`%APPDATA%`) and macOS
+/// (`~/Library/Application Support`).
+/// Failures are ignored (first run has no window-state file yet).
+fn reset_window_state() {
+    if let Some(dir) = app_config_dir() {
+        let _ = std::fs::remove_file(dir.join(".window-state.json"));
+    }
+}
+
+/// Resolve the per-OS Tauri `app_config_dir` for the app identifier
+/// `dev.astro-plan.astro-library-manager` (`tauri.conf.json`). Mirrors
+/// `tauri::path::PathResolver::app_config_dir` (`dirs::config_dir()/<identifier>`)
+/// without needing a Tauri runtime in the test harness:
+/// - Linux:   `$XDG_CONFIG_HOME` or `~/.config`
+/// - macOS:   `~/Library/Application Support` (same as `app_data_dir`)
+/// - Windows: `%APPDATA%` (roaming, same as `app_data_dir`)
+fn app_config_dir() -> Option<PathBuf> {
+    const APP_IDENTIFIER: &str = "dev.astro-plan.astro-library-manager";
+    let base = if cfg!(target_os = "windows") {
+        std::env::var_os("APPDATA").map(PathBuf::from)
+    } else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+    };
+    base.map(|b| b.join(APP_IDENTIFIER))
 }
 
 /// Resolve the per-OS Tauri `app_data_dir` for the app identifier

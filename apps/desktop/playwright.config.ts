@@ -21,6 +21,15 @@ export default defineConfig({
   reporter: [["list"]],
   timeout: 30_000,
   expect: { timeout: 5_000 },
+  // The mock-mode suite has grown from a handful of files to 50+ tests across
+  // a dozen spec files as batches merged; on CI's fixed-core runners this
+  // makes the occasional single-worker-starved assertion (a synchronous React
+  // state update that should reflect well under the 5s expect timeout, but
+  // doesn't when every worker's CPU is oversubscribed) miss its deadline.
+  // Locally there is no such contention, so this only retries on CI —
+  // keeping 0 retries locally preserves a hard failure signal for genuine
+  // regressions during development.
+  retries: process.env.CI ? 2 : 0,
   use: {
     baseURL: BASE_URL,
     headless: true,
