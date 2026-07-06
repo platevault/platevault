@@ -18,6 +18,7 @@
 
 mod common;
 
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -47,6 +48,56 @@ async fn register_light_root(app: &E2eApp) -> anyhow::Result<(tempfile::TempDir,
         .ok_or_else(|| anyhow::anyhow!("roots.register returned no sourceId: {register}"))?
         .to_owned();
     Ok((root_dir, root_id))
+}
+
+/// Wait for the index route's async first-run redirect to land on `/setup`
+/// BEFORE navigating anywhere. A fresh DB (the harness resets it every
+/// launch) makes `checkFirstRunComplete` redirect `/` → `/setup` from an
+/// async `beforeLoad` (dynamic import + `firstrun_state` IPC round-trip,
+/// `apps/desktop/src/app/router.tsx`). If a journey `goto_route`s while that
+/// redirect is still pending, the late-resolving redirect yanks the app off
+/// the target route — on CI run 28766017315 that intermittently replaced
+/// `/#/inbox` with `/#/setup` and "Rescan all roots" never appeared. Once the
+/// URL shows `/setup`, no navigation is pending and `goto_route` is safe.
+async fn settle_first_run_redirect(app: &E2eApp) -> anyhow::Result<()> {
+    app.wait_url_contains("/setup", Duration::from_secs(15))
+        .await
+        .map(drop)
+        .map_err(|e| anyhow::anyhow!("expected a fresh DB to redirect to /setup: {e}"))
+}
+
+/// Seed the FIRST scan of `root_id` through the invoke bridge (a setup step,
+/// like root registration itself).
+///
+/// In the real product the initial scan happens in the first-run wizard's
+/// scan step. The Inbox page's "Rescan all roots" derives its root set from
+/// the CURRENT item list (`InboxPage.tsx` dedupes `items[].rootId`), so on a
+/// never-scanned root the button is a real no-op — no `inbox-item-*` row can
+/// ever appear, however long the journey waits (CI run 28766017315). One
+/// bridge-side `inbox.scan.folder` mirrors the wizard step (whose native
+/// folder picker WebDriver can't drive); the journey's Rescan click then
+/// exercises the real UI path against a root the list actually knows.
+async fn seed_initial_scan(app: &E2eApp, root_id: &str, root_dir: &Path) -> anyhow::Result<()> {
+    let scan: serde_json::Value = app
+        .invoke(
+            "inbox_scan_folder",
+            json!({
+                "req": {
+                    "rootId": root_id,
+                    "rootAbsolutePath": root_dir.to_string_lossy(),
+                    "followSymlinks": false,
+                }
+            }),
+        )
+        .await?;
+    let items = scan["items"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("inbox.scan.folder returned no items array: {scan}"))?;
+    anyhow::ensure!(
+        !items.is_empty(),
+        "expected the seed inbox.scan.folder to discover the fixture file(s): {scan}"
+    );
+    Ok(())
 }
 
 /// Click Rescan (aria-label "Rescan all roots" — `m.inbox_rescan_all_roots_aria()`,
@@ -80,6 +131,7 @@ async fn select_only_item(app: &E2eApp) -> anyhow::Result<String> {
 async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
 
     let (root_dir, root_id) = register_light_root(&app).await?;
     // Force the move branch isn't needed for classification — leave the
@@ -107,6 +159,8 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
         None,
         Some("2026-01-10T22:05:00"),
     )?;
+
+    seed_initial_scan(&app, &root_id, root_dir.path()).await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
@@ -143,6 +197,7 @@ async fn inbox_ui_mixed_folder_splits_into_single_type_items() -> anyhow::Result
 async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
 
     let (root_dir, root_id) = register_light_root(&app).await?;
     let _: serde_json::Value = app
@@ -163,6 +218,8 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
         Some("Ha"),
         Some("2026-01-10T22:00:00"),
     )?;
+
+    seed_initial_scan(&app, &root_id, root_dir.path()).await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
@@ -212,6 +269,7 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
 async fn inbox_ui_missing_path_attribute_banner_blocks_confirm() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
 
     let (root_dir, root_id) = register_light_root(&app).await?;
     let _: serde_json::Value = app
@@ -229,6 +287,8 @@ async fn inbox_ui_missing_path_attribute_banner_blocks_confirm() -> anyhow::Resu
         Some("Ha"),
         None, // no DATE-OBS — the real, path-load-bearing gap (FR-032)
     )?;
+
+    seed_initial_scan(&app, &root_id, root_dir.path()).await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
@@ -261,6 +321,7 @@ async fn inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination() 
 {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
 
     let (root_dir, root_id) = register_light_root(&app).await?;
     let _: serde_json::Value = app
@@ -278,6 +339,8 @@ async fn inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination() 
         Some("Ha"),
         Some("2026-01-10T22:00:00"),
     )?;
+
+    seed_initial_scan(&app, &root_id, root_dir.path()).await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
@@ -335,10 +398,11 @@ async fn inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination() 
 async fn inbox_ui_catalogue_in_place_zero_moves_byte_identical() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
 
     // Deliberately organized (default) — no `sources_set_organization_state`
     // call — this is the catalogue-in-place branch, not the move branch.
-    let (root_dir, _root_id) = register_light_root(&app).await?;
+    let (root_dir, root_id) = register_light_root(&app).await?;
 
     let original_path = write_minimal_fits(
         root_dir.path(),
@@ -349,6 +413,8 @@ async fn inbox_ui_catalogue_in_place_zero_moves_byte_identical() -> anyhow::Resu
         Some("2026-01-10T22:00:00"),
     )?;
     let original_bytes = std::fs::read(&original_path)?;
+
+    seed_initial_scan(&app, &root_id, root_dir.path()).await?;
 
     app.goto_route("/inbox").await?;
     app.wait_bridge_ready(Duration::from_secs(15)).await?;
