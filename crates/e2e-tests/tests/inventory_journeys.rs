@@ -45,6 +45,41 @@ use serde_json::json;
 
 const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Wait for the index route's async first-run redirect to land on `/setup`
+/// BEFORE navigating anywhere (mirrors `inbox_ui_journeys.rs`'s
+/// `settle_first_run_redirect`). A fresh DB (the harness resets it every
+/// launch) makes `checkFirstRunComplete` redirect `/` → `/setup` from an
+/// async `beforeLoad`; if a journey `goto_route`s while that redirect is
+/// still pending, the late-resolving redirect can yank the app off the
+/// target route.
+async fn settle_first_run_redirect(app: &E2eApp) -> anyhow::Result<()> {
+    app.wait_url_contains("/setup", Duration::from_secs(15))
+        .await
+        .map(drop)
+        .map_err(|e| anyhow::anyhow!("expected a fresh DB to redirect to /setup: {e}"))
+}
+
+/// Registers a disposable `project`-category root purely to satisfy
+/// `firstrun.complete`'s precondition (one `light_frames` root — this
+/// journey's own ingest root satisfies that half — AND one `project` root,
+/// `crates/persistence/db/src/repositories/first_run.rs`), then routes
+/// through the real gate. A `projects.create` Project entity (this journey
+/// creates one below) is a DIFFERENT concept from a registered `project`
+/// source root and does not satisfy this precondition on its own. Without
+/// this, `Shell.tsx`'s client-side `setupCompleted` gate bounces every
+/// `goto_route` to a Shell-wrapped page (`/projects`) back to `/setup`
+/// indefinitely (mirrors the proven `inbox_ui_journeys.rs` pattern).
+async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
+    let project_dir = tempfile::tempdir()?;
+    let _: serde_json::Value = app
+        .invoke(
+            "roots_register",
+            json!({ "path": project_dir.path().to_string_lossy(), "category": "project", "scanSettings": null }),
+        )
+        .await?;
+    app.complete_first_run_gate().await
+}
+
 /// External raw-frame deletion → `inventory.reconcile.run` → the real
 /// Add-sources session picker's frame count drops from 2 to 1.
 #[tokio::test]
@@ -52,6 +87,7 @@ const INVOKE_TIMEOUT: Duration = Duration::from_secs(30);
 async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
     app.wait_bridge_ready(Duration::from_secs(30)).await?;
+    settle_first_run_redirect(&app).await?;
 
     // ── 1. Real ingest precondition: two same-identity light frames group ──
     // into ONE real `acquisition_session` with `frame_count == 2` (same
@@ -202,6 +238,8 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("projects.create returned no projectId: {create}"))?
         .to_owned();
+
+    complete_first_run(&app).await?;
 
     // ── 3. Real UI (BEFORE): open the project, open Add sources, read the ──
     // real per-session frame count from the real DOM.
