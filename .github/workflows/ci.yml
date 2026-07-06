@@ -239,7 +239,11 @@ jobs:
             cargo nextest run --workspace --profile ci
           else
             echo "Running scoped tests for: $args"
-            cargo nextest run --profile ci $args
+            # --no-tests=pass: a scoped crate set can legitimately contain
+            # zero runnable tests (e.g. an e2e_tests-only change — all its
+            # tests are #[ignore]d for the Layer-2 e2e.yml job), and nextest
+            # otherwise exits 4 ("no tests to run", run 28751553778).
+            cargo nextest run --profile ci --no-tests=pass $args
           fi
 
       # nextest does not run doctests; keep them in a dedicated step.
