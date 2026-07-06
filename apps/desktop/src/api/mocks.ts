@@ -218,6 +218,13 @@ function observingValues(): Record<string, unknown> {
   return mockObservingValues;
 }
 
+// Mutable so `settings_update('cleanup', { cleanupTypeOverrides })` round-trips
+// through `settings_get('cleanup')` in mock mode (spec 051 US3) — the
+// per-type cleanup action table now persists via this database-backed
+// setting instead of `localStorage`, so its mock-mode round-trip must mirror
+// real persistence the same way `mockIngestionSettings` does below.
+let mockCleanupTypeOverrides: Record<string, string> = {};
+
 // Mutable so `ingestion_settings_update` round-trips through `_get` in mock
 // mode (spec 030, package P12) — mirrors real persistence closely enough for
 // the Ingestion settings pane's load/save flow to be exercised without a
@@ -878,6 +885,12 @@ export async function mockInvoke(
       if (scope === 'observing') {
         return { scope: 'observing', values: observingValues() } satisfies SettingsData;
       }
+      if (scope === 'cleanup') {
+        return {
+          scope: 'cleanup',
+          values: { cleanupTypeOverrides: mockCleanupTypeOverrides },
+        } satisfies SettingsData;
+      }
       return mockSettingsData;
     }
     case 'ingestion_settings_get': {
@@ -1099,6 +1112,13 @@ export async function mockInvoke(
       if (scope === 'observing') {
         const values = (_args as { values?: Record<string, unknown> } | undefined)?.values;
         if (values) mockObservingValues = { ...observingValues(), ...values };
+      }
+      if (scope === 'cleanup') {
+        const values = (_args as { values?: Record<string, unknown> } | undefined)?.values;
+        const overrides = values?.cleanupTypeOverrides;
+        if (overrides && typeof overrides === 'object') {
+          mockCleanupTypeOverrides = { ...(overrides as Record<string, string>) };
+        }
       }
       return null;
     }

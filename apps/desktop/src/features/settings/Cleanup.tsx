@@ -2,10 +2,12 @@
 // protectedCategories. Loads from settings.get('cleanup') on mount and
 // auto-saves via the save() prop on change.
 //
-// Per-type cleanup action table: user overrides are stored in localStorage
-// (key: 'alm.cleanup.type_actions') so they persist across reloads without
-// requiring the cleanup-plan backend spec. CLEANUP_TYPES provides the
-// defaults and the locked/unlocked flags. (T061 FR-024)
+// Per-type cleanup action table: user overrides are the `cleanupTypeOverrides`
+// database-backed setting (spec 051 US3) — a JSON object mapping a known
+// stable data-type id (stringified `1`-`20`) to `"Keep"`, `"Archive"`, or
+// `"Delete"`. Loaded via the same `settings.get('cleanup')` call as the rest
+// of this pane and saved via the same `save()` prop, so changes are audited
+// (FR-007).
 import { useState, useEffect, Fragment } from 'react';
 import { Toggle, SegControl, Pill, Banner } from '@/ui';
 import { getSettings } from './settingsIpc';
@@ -18,47 +20,37 @@ const CLEANUP_KEYS = ['blockPermanentDelete', 'defaultProtection', 'protectedCat
 type CleanupAction = CleanupTypeFixture['action'];
 type DefaultProtection = 'protected' | 'normal' | 'unprotected';
 
-// Bumped to v2: row ids and the type set changed (per-type raw calibration
-// frames + per-type masters), so old persisted overrides no longer map.
-const ACTIONS_STORAGE_KEY = 'alm.cleanup.type_actions.v2';
-
-/** Load persisted per-type action overrides from localStorage. */
-function loadActionsFromStorage(): Record<number, CleanupAction> {
+/** Default per-type actions (from the CLEANUP_TYPES fixture). */
+function defaultActions(): Record<number, CleanupAction> {
   const init: Record<number, CleanupAction> = {};
   for (const row of CLEANUP_TYPES) {
     init[row.id] = row.action;
   }
-  try {
-    const raw = typeof localStorage !== 'undefined'
-      ? localStorage.getItem(ACTIONS_STORAGE_KEY)
-      : null;
-    if (raw) {
-      const saved = JSON.parse(raw) as Record<string, string>;
-      for (const row of CLEANUP_TYPES) {
-        if (saved[String(row.id)]) {
-          init[row.id] = saved[String(row.id)] as CleanupAction;
-        }
+  return init;
+}
+
+/** Parse the `cleanupTypeOverrides` backend value into the row-id-keyed shape. */
+function parseCleanupTypeOverrides(value: unknown): Record<number, CleanupAction> {
+  const init = defaultActions();
+  if (value && typeof value === 'object') {
+    const overrides = value as Record<string, string>;
+    for (const row of CLEANUP_TYPES) {
+      const override = overrides[String(row.id)];
+      if (override) {
+        init[row.id] = override as CleanupAction;
       }
     }
-  } catch {
-    // localStorage unavailable or corrupt — use defaults.
   }
   return init;
 }
 
-/** Persist per-type action overrides to localStorage. */
-function saveActionsToStorage(actions: Record<number, CleanupAction>): void {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const serialisable: Record<string, string> = {};
-      for (const [id, action] of Object.entries(actions)) {
-        serialisable[id] = action;
-      }
-      localStorage.setItem(ACTIONS_STORAGE_KEY, JSON.stringify(serialisable));
-    }
-  } catch {
-    // localStorage unavailable — best effort.
+/** Serialize the row-id-keyed actions map into the backend's string-keyed shape. */
+function serializeCleanupTypeOverrides(actions: Record<number, CleanupAction>): Record<string, string> {
+  const serialisable: Record<string, string> = {};
+  for (const [id, action] of Object.entries(actions)) {
+    serialisable[id] = action;
   }
+  return serialisable;
 }
 
 interface CleanupProps {
@@ -69,6 +61,8 @@ export function Cleanup({ save }: CleanupProps) {
   // ── spec 018 owned state ─────────────────────────────────────────────────
   const [blockPermanentDelete, setBlockPermanentDelete] = useState(true);
   const [defaultProtection, setDefaultProtection] = useState<DefaultProtection>('protected');
+  // ── spec 051 US3: per-type action overrides, now database-backed ─────────
+  const [actions, setActions] = useState<Record<number, CleanupAction>>(defaultActions);
 
   const applyValues = (vals: Record<string, unknown>) => {
     if (typeof vals?.blockPermanentDelete === 'boolean') {
@@ -76,6 +70,9 @@ export function Cleanup({ save }: CleanupProps) {
     }
     if (vals?.defaultProtection && typeof vals.defaultProtection === 'string') {
       setDefaultProtection(vals.defaultProtection as DefaultProtection);
+    }
+    if ('cleanupTypeOverrides' in vals) {
+      setActions(parseCleanupTypeOverrides(vals.cleanupTypeOverrides));
     }
   };
 
@@ -96,13 +93,11 @@ export function Cleanup({ save }: CleanupProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Per-type action table — persisted in localStorage (T061) ─────────────
-  const [actions, setActions] = useState<Record<number, CleanupAction>>(loadActionsFromStorage);
-
+  // ── Per-type action table — database-backed (spec 051 US3, T023) ─────────
   const handleTableChange = (id: number, action: string) => {
     setActions((prev) => {
       const next = { ...prev, [id]: action as CleanupAction };
-      saveActionsToStorage(next);
+      save('cleanup', { cleanupTypeOverrides: serializeCleanupTypeOverrides(next) });
       return next;
     });
   };
@@ -159,7 +154,7 @@ export function Cleanup({ save }: CleanupProps) {
         </SettingsRow>
       </SettingsSection>
 
-      {/* Per-type cleanup actions — fixture mockup, not yet wired to backend */}
+      {/* Per-type cleanup actions — persisted via cleanupTypeOverrides (spec 051 US3) */}
       {/* TODO(spec 017 US2): replace CLEANUP_TYPES fixture with the archive plan generator once it lands */}
       <SettingsSection title={m.settings_cleanup_pertype_title()}>
         {warnedTypes.length > 0 && (

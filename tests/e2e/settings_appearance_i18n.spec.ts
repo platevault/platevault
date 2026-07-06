@@ -71,7 +71,7 @@ test.describe("Journey 10 · Settings configuration model (spec 018)", () => {
     await expect(hashingAfter).toHaveValue("eager");
   });
 
-  test("Cleanup pane renders the per-type override table and persists an override across reload", async ({
+  test("Cleanup pane renders the per-type override table and persists an override via the settings mock round-trip", async ({
     page,
   }) => {
     seedSetupComplete(page);
@@ -83,8 +83,9 @@ test.describe("Journey 10 · Settings configuration model (spec 018)", () => {
     ).toBeVisible();
 
     // "Raw dark frames" defaults to "Archive"; flip it to "Keep" (a non-default
-    // choice, so the override is observable) then reload to prove the
-    // localStorage-backed round-trip (alm.cleanup.type_actions.v2).
+    // choice, so the override is observable). This now fires
+    // `settings_update('cleanup', { cleanupTypeOverrides })` (spec 051 US3),
+    // not a localStorage write.
     const row = page.getByRole("row").filter({ hasText: "Raw dark frames" });
     await expect(row).toBeVisible();
     await expect(row.getByRole("button", { name: "Archive" })).toHaveClass(
@@ -95,10 +96,22 @@ test.describe("Journey 10 · Settings configuration model (spec 018)", () => {
       /alm-seg__btn--active/,
     );
 
-    // Full reload — localStorage survives; the mutable settings mock does not,
-    // so this specifically proves the table's own persistence path.
-    await page.reload();
+    // `save()` debounces via useAutoSave (300ms) before it actually calls
+    // `settings_update`; wait it out so the mock has genuinely persisted the
+    // override before we navigate away (otherwise this proves nothing about
+    // backend persistence — just lingering component state).
+    await page.waitForTimeout(400);
+
+    // Round-trip proof: leave the pane (Cleanup unmounts) and return (it
+    // re-mounts and re-fetches via `settings_get('cleanup')`). The value must
+    // survive because the mock persisted it, not because component state
+    // lingered — mirrors the Ingestion pane proof above.
+    await page.getByRole("button", { name: "Appearance", exact: true }).click();
+    await expect(page.getByText("Theme", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Cleanup", exact: true }).click();
+
     const rowAfter = page.getByRole("row").filter({ hasText: "Raw dark frames" });
+    await expect(rowAfter).toBeVisible();
     await expect(rowAfter.getByRole("button", { name: "Keep" })).toHaveClass(
       /alm-seg__btn--active/,
     );
