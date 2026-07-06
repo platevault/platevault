@@ -168,6 +168,7 @@ export function SessionSourcePicker({
             <label
               key={session.id}
               className={'alm-source-picker__row' + (selectedSessionIds.includes(session.id) ? ' alm-source-picker__row--selected' : '')}
+              data-testid={`session-picker-row-${session.id}`}
             >
               <Checkbox.Root
                 className="alm-checkbox"
@@ -182,7 +183,7 @@ export function SessionSourcePicker({
               <span>
                 {targetLabel} / {session.sessionKey.filter} / {session.sessionKey.night}
               </span>
-              <span>{session.frameCount}</span>
+              <span data-testid={`session-picker-frames-${session.id}`}>{session.frameCount}</span>
               <span>{formatIntegration(session.totalIntegrationSeconds ?? 0)}</span>
               <span className="alm-source-picker__train-id">
                 {session.opticalTrainId.slice(0, 8)}

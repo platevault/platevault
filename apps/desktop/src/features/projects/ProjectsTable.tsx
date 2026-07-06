@@ -174,6 +174,7 @@ export function ProjectsTable({
         'alm-projects-table__row' +
         (project.id === selectedId ? ' alm-projects-table__row--selected' : ''),
       _onClick: () => onSelect(project.id),
+      _testid: `project-row-${project.id}`,
       name: (
         <span
           className="alm-projects-table__name"

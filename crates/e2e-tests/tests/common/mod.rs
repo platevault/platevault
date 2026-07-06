@@ -285,7 +285,26 @@ impl E2eApp {
             window.__ALM_E2E__.invoke(cmd, cmdArgs).then(function(value) {
                 callback({ ok: true, value: value });
             }).catch(function(err) {
-                callback({ ok: false, error: String(err) });
+                // `unwrap()` (`apps/desktop/src/api/ipc.ts`) throws the raw
+                // `ContractError` envelope object on a rejected command, not
+                // a JS `Error` instance — `String(err)` on a plain object
+                // stringifies to the useless "[object Object]" (round 4,
+                // #470: masked a real `no_link_kind` backend error behind
+                // that placeholder). Prefer JSON.stringify so `code`/
+                // `message`/`details` are readable; fall back to
+                // `err.message`/`String(err)` only if JSON serialisation
+                // itself fails or yields nothing useful (e.g. a real `Error`
+                // instance, whose own fields aren't enumerable).
+                var serialized;
+                try {
+                    serialized = JSON.stringify(err);
+                } catch (jsonErr) {
+                    serialized = null;
+                }
+                if (!serialized || serialized === '{}') {
+                    serialized = (err && err.message) ? String(err.message) : String(err);
+                }
+                callback({ ok: false, error: serialized });
             });
         "#;
 
@@ -313,7 +332,12 @@ impl E2eApp {
     ///
     /// # Errors
     /// Returns the last error (invoke failure, or a "predicate never matched"
-    /// message once `timeout` elapses) if the predicate never accepts a value.
+    /// message once `timeout` elapses) if the predicate never accepts a
+    /// value. The timeout variant includes the last successfully-decoded
+    /// (but non-matching) response, truncated, so a caller can see whether
+    /// the backend returned an empty/unrelated result or the expected data
+    /// present-but-unmatched by the predicate (a predicate bug) without a
+    /// second CI round just to add that dump.
     pub async fn invoke_until<T, P>(
         &self,
         command: &str,
@@ -322,23 +346,37 @@ impl E2eApp {
         mut predicate: P,
     ) -> Result<T>
     where
-        T: DeserializeOwned,
+        T: DeserializeOwned + std::fmt::Debug,
         P: FnMut(&T) -> bool,
     {
         let deadline = Instant::now() + timeout;
         let mut last_err: Option<anyhow::Error> = None;
+        let mut last_value: Option<String> = None;
         loop {
             match self.invoke::<T>(command, args.clone()).await {
                 Ok(value) if predicate(&value) => return Ok(value),
-                Ok(_) => {}
+                Ok(value) => {
+                    let dump = format!("{value:?}");
+                    last_value = Some(if dump.len() > 4096 {
+                        format!("{}...[truncated]", &dump[..4096])
+                    } else {
+                        dump
+                    });
+                }
                 Err(e) => last_err = Some(e),
             }
             if Instant::now() >= deadline {
-                return Err(last_err.unwrap_or_else(|| {
-                    anyhow!(
-                        "invoke_until({command}) timed out after {:?} without a matching value",
+                return Err(last_err.unwrap_or_else(|| match &last_value {
+                    Some(v) => anyhow!(
+                        "invoke_until({command}) timed out after {:?} without a matching \
+                         value; last response: {v}",
                         timeout
-                    )
+                    ),
+                    None => anyhow!(
+                        "invoke_until({command}) timed out after {:?} without a matching value \
+                         (never returned successfully)",
+                        timeout
+                    ),
                 }));
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
@@ -578,6 +616,48 @@ impl E2eApp {
         }
     }
 
+    /// Generic evidence dump for a failing journey centred on ONE
+    /// `data-testid` element (unlike `dump_ui_diagnostics`, which is
+    /// hardcoded to the Inbox virtualizer/query-key investigation) — e.g. a
+    /// dialog/modal that should have closed after a submit action but is
+    /// still present. Captures whether the element is still in the DOM, its
+    /// (truncated) `outerHTML` — including any inline error banner it may be
+    /// showing — and the buffered `window.__e2eErrors` (uncaught
+    /// `error`/`unhandledrejection` events, `VITE_E2E` listener installed in
+    /// `apps/desktop/src/main.tsx`). Never used for assertions; a failure at
+    /// any step degrades to an inline error string rather than propagating.
+    pub async fn dump_testid_diagnostics(&self, testid: &str) -> Value {
+        let script = format!(
+            r#"
+            var callback = arguments[arguments.length - 1];
+            function truncate(s, n) {{
+                if (typeof s !== 'string') return s;
+                return s.length > n ? s.slice(0, n) + '...[truncated]' : s;
+            }}
+            try {{
+                var el = document.querySelector('[data-testid="{testid}"]');
+                callback({{
+                    ok: true,
+                    value: {{
+                        found: !!el,
+                        outerHtml: truncate(el ? el.outerHTML : null, 8192),
+                        e2eErrors: (window.__e2eErrors || []).slice(-30)
+                    }}
+                }});
+            }} catch (err) {{
+                callback({{ ok: false, error: String(err) }});
+            }}
+        "#
+        );
+
+        match self.driver.execute_async(&script, vec![]).await {
+            Ok(ret) => ret.convert::<Value>().unwrap_or_else(
+                |e| json!({ "dump_testid_diagnostics_decode_error": e.to_string() }),
+            ),
+            Err(e) => json!({ "dump_testid_diagnostics_execute_error": e.to_string() }),
+        }
+    }
+
     /// Drain the last ~30 real browser console entries (chromedriver/
     /// WebView2 `"browser"` log type, W3C `GET /session/{id}/log`) — best
     /// effort. Some WebDriver stacks (notably older Edge/WebView2 driver
@@ -596,7 +676,8 @@ impl E2eApp {
 
     // ---------------------------------------------------------------------
     // Real-DOM interaction helpers (additive, shared across per-area UI
-    // journeys — inbox/calibration/targets/sessions/lifecycle/settings).
+    // journeys — inbox/calibration/targets/sessions/lifecycle/settings/
+    // source-view/per-frame-inventory).
     // These drive the ACTUAL rendered `data-testid` elements (click/type/
     // read), never the invoke bridge, so journeys built on them are proving
     // real UI interaction rather than a second copy of the IPC-level tests.
@@ -847,6 +928,41 @@ impl E2eApp {
                         });
                     }
                 }
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Poll the text content of the element at `data-testid` until `predicate`
+    /// accepts it or `timeout` elapses — the DOM-read equivalent of
+    /// [`Self::invoke_until`], for asserting a real backend mutation (e.g. a
+    /// reconcile pass) landed in a re-rendered, product-owned element instead
+    /// of only in the IPC response.
+    pub async fn wait_testid_text<P>(
+        &self,
+        testid: &str,
+        timeout: Duration,
+        mut predicate: P,
+    ) -> Result<String>
+    where
+        P: FnMut(&str) -> bool,
+    {
+        let deadline = Instant::now() + timeout;
+        let mut last_seen: Option<String> = None;
+        loop {
+            if let Ok(el) = self.driver.find(By::Css(format!("[data-testid='{testid}']"))).await {
+                if let Ok(text) = el.text().await {
+                    if predicate(&text) {
+                        return Ok(text);
+                    }
+                    last_seen = Some(text);
+                }
+            }
+            if Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "text of data-testid={testid:?} never matched within {timeout:?} \
+                     (last seen: {last_seen:?})"
+                ));
             }
             tokio::time::sleep(Duration::from_millis(150)).await;
         }
