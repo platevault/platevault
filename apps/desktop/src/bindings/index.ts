@@ -258,6 +258,32 @@ export const commands = {
 	 */
 	targetNoteUpdate: (req: TargetNoteUpdateRequest) => typedError<TargetNoteUpdateResult_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_note_update", { req })),
 	/**
+	 *  `targets.favourites.list` — list the ids of every currently-favourited
+	 *  canonical target.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with code `internal.database`.
+	 */
+	targetFavouritesList: () => typedError<TargetFavouritesListResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_favourites_list")),
+	/**
+	 *  `targets.favourites.add` — favourite a canonical target. Idempotent.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with code `target.not_found` or
+	 *  `internal.database`.
+	 */
+	targetFavouritesAdd: (req: TargetFavouriteRequest) => typedError<TargetFavouriteAddResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_favourites_add", { req })),
+	/**
+	 *  `targets.favourites.remove` — unfavourite a canonical target. Idempotent.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(TargetOpError)` with code `internal.database`.
+	 */
+	targetFavouritesRemove: (req: TargetFavouriteRequest) => typedError<TargetFavouriteRemoveResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_favourites_remove", { req })),
+	/**
 	 *  `target.resolve` — cache-first resolution of a designation / common name (or
 	 *  FITS OBJECT value) against the local cache + bundled seed, falling back to
 	 *  SIMBAD on a miss when online resolution is enabled (spec 035).
@@ -7509,6 +7535,29 @@ export type TargetDisplayAliasSetRequest = {
 	targetId: string,
 	/**  Presentation label. Empty/blank is treated as a clear (NULL). */
 	displayAlias: string,
+};
+
+/**  Response for `targets.favourites.add` (spec 051 US2). */
+export type TargetFavouriteAddResult = {
+	targetId: string,
+	/**  ISO-8601 UTC timestamp the target was first favourited. */
+	favouritedAt: string,
+};
+
+/**  Response for `targets.favourites.remove` (spec 051 US2). */
+export type TargetFavouriteRemoveResult = {
+	targetId: string,
+};
+
+/**  Request for `targets.favourites.add` / `targets.favourites.remove` (spec 051 US2). */
+export type TargetFavouriteRequest = {
+	targetId: string,
+};
+
+/**  Response for `targets.favourites.list` (spec 051 US2). */
+export type TargetFavouritesListResult = {
+	/**  Ids of every currently-favourited canonical target. */
+	targetIds: string[],
 };
 
 /**  Request for `target.get` (gen-3). */

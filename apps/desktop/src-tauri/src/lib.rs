@@ -107,6 +107,9 @@ use crate::commands::settings::{
     settings_source_override_set, settings_update,
 };
 use crate::commands::status::status_summary;
+use crate::commands::target_favourites::{
+    target_favourites_add, target_favourites_list, target_favourites_remove,
+};
 use crate::commands::target_lookup::{
     target_resolution_settings, target_resolution_settings_update, target_resolve, target_search,
 };
@@ -204,6 +207,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_mgmt_cmds::target_projects_list,
         target_mgmt_cmds::target_note_get,
         target_mgmt_cmds::target_note_update,
+        // target favourites (spec 051 US2)
+        target_favourites_list,
+        target_favourites_add,
+        target_favourites_remove,
         // target resolve (spec 035 — SIMBAD cache-first resolution)
         target_resolve,
         // target search (spec 035, US1)
@@ -420,6 +427,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_mgmt_cmds::target_projects_list,
         target_mgmt_cmds::target_note_get,
         target_mgmt_cmds::target_note_update,
+        // target favourites (spec 051 US2)
+        target_favourites_list,
+        target_favourites_add,
+        target_favourites_remove,
         // target resolve (spec 035 — SIMBAD cache-first resolution)
         target_resolve,
         // target search (spec 035, US1)

@@ -356,6 +356,39 @@ pub struct TargetNoteUpdateResult {
     pub notes: Option<String>,
 }
 
+// ── Spec 051 US2 DTOs — target favourites ────────────────────────────────────
+
+/// Response for `targets.favourites.list` (spec 051 US2).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetFavouritesListResult {
+    /// Ids of every currently-favourited canonical target.
+    pub target_ids: Vec<String>,
+}
+
+/// Request for `targets.favourites.add` / `targets.favourites.remove` (spec 051 US2).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetFavouriteRequest {
+    pub target_id: String,
+}
+
+/// Response for `targets.favourites.add` (spec 051 US2).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetFavouriteAddResult {
+    pub target_id: String,
+    /// ISO-8601 UTC timestamp the target was first favourited.
+    pub favourited_at: String,
+}
+
+/// Response for `targets.favourites.remove` (spec 051 US2).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetFavouriteRemoveResult {
+    pub target_id: String,
+}
+
 // ── Spec 035 DTOs — SIMBAD target resolution ──────────────────────────────────
 //
 // These types implement the three JSON Schema contracts in
