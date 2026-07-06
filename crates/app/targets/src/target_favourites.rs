@@ -54,12 +54,8 @@ pub async fn add(
     pool: &SqlitePool,
     req: &TargetFavouriteRequest,
 ) -> Result<TargetFavouriteAddResult, TargetOpError> {
-    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
-        .bind(&req.target_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(db_err)?;
-    if exists.is_none() {
+    let exists = target_favourites::target_exists(pool, &req.target_id).await.map_err(db_err)?;
+    if !exists {
         return Err(not_found(&req.target_id));
     }
 
@@ -68,14 +64,12 @@ pub async fn add(
 
     // Re-read the stored favourited_at: a repeat add is a no-op and must
     // reflect the *original* timestamp, not the one just computed above.
-    let stored_at: (String,) =
-        sqlx::query_as("SELECT favourited_at FROM target_favourite WHERE target_id = ?")
-            .bind(&req.target_id)
-            .fetch_one(pool)
-            .await
-            .map_err(db_err)?;
+    let stored_at = target_favourites::get_favourited_at(pool, &req.target_id)
+        .await
+        .map_err(db_err)?
+        .unwrap_or(favourited_at);
 
-    Ok(TargetFavouriteAddResult { target_id: req.target_id.clone(), favourited_at: stored_at.0 })
+    Ok(TargetFavouriteAddResult { target_id: req.target_id.clone(), favourited_at: stored_at })
 }
 
 /// `targets.favourites.remove` — unfavourite a canonical target. Idempotent:
