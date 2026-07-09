@@ -112,4 +112,24 @@ Batch path (wizard Confirm) registered all 3 overlapping roots `status: success`
 — **no intra-batch overlap detection** either. All probe roots cleaned up
 (`roots_list` back to 0); wizard buffer reset to empty.
 
-_awaiting human checkpoint._
+**Test 3 (in progress) — full org×depth option matrix across all categories.**
+Per human directive, testing every `(category, organization, scanDepth)` combo
+through the real wizard UI so the settings persist and feed downstream journeys.
+
+Fixture tree built at `D:\astrophotography\ALM test\OptMatrix\` (14 dirs, real
+FITS copies, original filenames preserved for detector tokens; sibling dirs, no
+overlap):
+
+| Category | Combos | Per-dir content (top / recursive count) |
+|----------|--------|------------------------------------------|
+| light_frames | organized×{rec,single}, unorganized×{rec,single} | 1 M51 light / 2 |
+| calibration | organized×{rec,single}, unorganized×{rec,single} | master dark + raw flat = 2 / 4 (both types) |
+| project | organized×{rec,single}, unorganized×{rec,single} | 1 M51 light / 2 |
+| inbox | unorganized×{rec,single} (org forced) | light + master dark + raw flat = 3 / 6 (mixed) |
+
+Wizard buffer verified: all 14 cards' org/depth selects match their combo name
+(allMatch: true). Inbox org correctly forced `unorganized` (no org select
+rendered). Expected scan: `single` depth finds top-level only, `recursive` finds
+all — verifying next.
+
+_awaiting human checkpoint before Confirm→Scan (registers 14 roots)._
