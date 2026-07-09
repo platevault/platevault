@@ -1,9 +1,19 @@
 // Appearance runtime — theme + density (PlateVault redesign).
 //
-// Theme is persisted in localStorage under `alm.theme` and applied as a
-// `data-theme` attribute on <html>; tokens.css defines one scope per theme.
-// `system` follows the OS via prefers-color-scheme. Density mirrors the
-// existing AppPreferences.density and is applied as a class on <html>.
+// Theme is applied as a `data-theme` attribute on <html>; tokens.css defines
+// one scope per theme. `system` follows the OS via prefers-color-scheme.
+// Density mirrors the existing AppPreferences.density and is applied as a
+// class on <html>.
+//
+// Persistence (theme-settings-db): the settings DB (`general` scope, `theme`
+// key — spec 018) is the durable source of truth. localStorage (`alm.theme`)
+// is kept ONLY as a synchronous boot cache so `initAppearance()` can paint the
+// right theme before first render without waiting on an IPC round-trip. On
+// Windows, WebView2 only flushes its localStorage-backing LevelDB store on a
+// graceful shutdown, so a force-killed app can lose the cache entirely — the
+// DB survives that. `hydrateThemeFromSettings()` reconciles the cache from
+// the DB once IPC is available (call after `initAppearance()`); `setThemeChoice`
+// writes both on every change.
 import { useSyncExternalStore } from 'react';
 import { getPreferences } from '@/data/preferences';
 
@@ -53,6 +63,21 @@ const THEME_KEY = 'alm.theme';
 const LIGHT_DEFAULT: ThemeId = 'warm-slate';
 const DARK_DEFAULT: ThemeId = 'observatory-dark';
 
+/** Settings-DB scope/key for the durable theme choice (spec 018 `general` scope). */
+const SETTINGS_SCOPE = 'general';
+const SETTINGS_KEY = 'theme';
+
+const VALID_CHOICES: readonly ThemeChoice[] = [
+  'system',
+  ...THEMES.map((t) => t.id),
+];
+
+function isThemeChoice(v: unknown): v is ThemeChoice {
+  return (
+    typeof v === 'string' && (VALID_CHOICES as readonly string[]).includes(v)
+  );
+}
+
 const listeners = new Set<() => void>();
 function notify(): void {
   for (const l of listeners) l();
@@ -60,11 +85,39 @@ function notify(): void {
 
 export function getThemeChoice(): ThemeChoice {
   try {
-    const v = localStorage.getItem(THEME_KEY) as ThemeChoice | null;
-    return v ?? 'system';
+    const v = localStorage.getItem(THEME_KEY);
+    return isThemeChoice(v) ? v : 'system';
   } catch {
     return 'system';
   }
+}
+
+/**
+ * Best-effort write-through to the settings DB (spec 018) — same
+ * fire-and-forget shape as `syncNativeWindowTheme`: outside Tauri (dev
+ * server, vitest) or on any IPC failure this silently no-ops. localStorage
+ * is written synchronously by the caller regardless, so the UI never waits
+ * on this.
+ */
+function persistThemeToSettings(choice: ThemeChoice): void {
+  void (async () => {
+    try {
+      const { isTauri } = await import('@tauri-apps/api/core');
+      if (!isTauri()) return;
+
+      const [{ commands }, { unwrap }] = await Promise.all([
+        import('@/bindings/index'),
+        import('@/api/ipc'),
+      ]);
+      unwrap(
+        await commands.settingsUpdate(SETTINGS_SCOPE, {
+          [SETTINGS_KEY]: choice,
+        }),
+      );
+    } catch {
+      // Best-effort — a DB write failure never blocks or reverts the UI change.
+    }
+  })();
 }
 
 export function setThemeChoice(choice: ThemeChoice): void {
@@ -73,8 +126,36 @@ export function setThemeChoice(choice: ThemeChoice): void {
   } catch {
     /* localStorage may be unavailable */
   }
+  persistThemeToSettings(choice);
   applyTheme();
   notify();
+}
+
+/**
+ * Reconcile the synchronous localStorage boot cache against the settings DB
+ * (spec 018) — the DB is the durable source of truth; localStorage only
+ * exists to avoid a flash of the wrong theme before this async call
+ * resolves. Call once after `initAppearance()` at boot. No-ops outside
+ * Tauri or on any IPC failure (the localStorage cache stays authoritative
+ * until the next successful reconcile).
+ */
+export async function hydrateThemeFromSettings(): Promise<void> {
+  try {
+    const { isTauri } = await import('@tauri-apps/api/core');
+    if (!isTauri()) return;
+
+    const [{ commands }, { unwrap }] = await Promise.all([
+      import('@/bindings/index'),
+      import('@/api/ipc'),
+    ]);
+    const data = unwrap(await commands.settingsGet(SETTINGS_SCOPE));
+    const stored = (data.values as Record<string, unknown>)[SETTINGS_KEY];
+    if (isThemeChoice(stored) && stored !== getThemeChoice()) {
+      setThemeChoice(stored);
+    }
+  } catch {
+    // Best-effort — keep the current localStorage-cached choice.
+  }
 }
 
 function prefersDark(): boolean {

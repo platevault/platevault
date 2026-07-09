@@ -11,7 +11,10 @@
 //!
 //! The scope groups keys by workflow area:
 //! - `"advanced"` → `logLevel`, `rememberFollowLogs`, `devMode`
-//! - `"general"`  → (empty; rowDensity removed T032)
+//! - `"general"`  → `theme` (theme-settings-db: durable source of truth for
+//!   the UI theme; the frontend still keeps a synchronous localStorage boot
+//!   cache to avoid a flash of the wrong theme, reconciled from this scope
+//!   at startup)
 //! - `"cleanup"`  → `blockPermanentDelete`, `defaultProtection`, `protectedCategories`
 //! - `"naming"`   → `pattern`, `autoApplyPattern`, `patternsByType`
 //! - `"sources"`  → `followSymlinks`, `hashOnScan`
@@ -54,7 +57,7 @@ use contracts_core::ContractError;
 fn scope_keys(scope: &str) -> &'static [&'static str] {
     match scope {
         "advanced" => &["logLevel", "rememberFollowLogs", "devMode"],
-        "general" => &[],
+        "general" => &["theme"],
         "cleanup" => &["blockPermanentDelete", "defaultProtection", "protectedCategories"],
         "naming" => &["pattern", "autoApplyPattern", "patternsByType"],
         "sources" => &["followSymlinks", "hashOnScan", "alwaysPreviewBeforePlan"],
@@ -110,6 +113,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "observingActiveSiteId",
             "usableAltitudeDeg",
             "plannerMoonAvoidance",
+            "theme",
         ],
     }
 }

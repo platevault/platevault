@@ -230,7 +230,7 @@ everything neither automated layer reaches.
 | 7 Archive → delete | ✅ (backend only) | ✅ `archive_lifecycle_apply_trash_permanent_delete` (`archive_journeys.rs`, NEW 2026-07-05): real apply + `archive.list` + `archive.send_to_trash`/`archive.permanently_delete` metadata + `blockPermanentDelete` gate | ✅ `archive_lifecycle.spec.ts` (batch 2, PR #447, 2026-07-05): archive page listing + canonical actions, send-to-trash, typed-`DELETE` permanent-delete gate | `windows-journeys/journey-07-archive-delete.md` |
 | 8 Calibration masters → matching | ✅ | 🟡 real-UI (`calibration_ui_journeys.rs`): masters ingest as individual items + kind-conditional detail (Tests 1/2). Matching/assign UI (Tests 3-5) found UNREACHABLE from the real app during this pass — see finding below, not automatable until fixed | ✅ `calibration_masters_matching.spec.ts` (batch 4, PR #452, 2026-07-05): masters as individual items with kind-conditional Filter/Exposure columns, aging pill + fingerprint detail, per-project match-status confidence, configurable matching tolerances | `windows-journeys/journey-08-calibration-masters-matching.md` |
 | 9 Targets & planning | ✅ (backend only) | 🟡 real-UI (`targets_journeys.rs`): add-target no-dup, stub-disclosure guard (no site), real astronomy after site creation (#440 confirmed landed) | ✅ `targets_planner.spec.ts` (batch 5, PR #454, 2026-07-05 + planner site-gate regression guard): no-site prompt / real-astronomy-after-site-creation / persisted-site-after-reload (9.1a–c), catalog list + typeahead + on-demand SIMBAD resolve (9.2a–c), honest-empty favourites/sessions states (9.3a–b) | `windows-journeys/journey-09-targets-planning.md` |
-| 10 Settings/appearance/i18n | ✅ | 🟡 real-UI (`settings_journeys.rs`): no-global-Save + real auto-save round-trip, theme live-apply + cross-relaunch persistence. Remaining sub-tests (altitude clamp, log-panel layout/export, 1100×720 convention, translated backend errors, command palette, sidebar persistence) still route-load-smoke only | ✅ `settings_appearance_i18n.spec.ts` (batch 6, PR #455, 2026-07-05; stabilized PR #494): Ingestion/Cleanup panes auto-save round-trip, 4-theme switch + persistence, 1100×720 pinned-header layout convention, no-raw-message-key + plural-form (audit event count) i18n assertions, log-panel filter/Escape-close | `windows-journeys/journey-10-settings-appearance-i18n.md` |
+| 10 Settings/appearance/i18n | ✅ | 🟡 real-UI (`settings_journeys.rs`): no-global-Save + real auto-save round-trip, theme live-apply + settings-DB persistence (theme-settings-db, 2026-07-09 — supersedes the old localStorage-only cross-relaunch claim, see note below). Remaining sub-tests (altitude clamp, log-panel layout/export, 1100×720 convention, translated backend errors, command palette, sidebar persistence) still route-load-smoke only | ✅ `settings_appearance_i18n.spec.ts` (batch 6, PR #455, 2026-07-05; stabilized PR #494): Ingestion/Cleanup panes auto-save round-trip, 4-theme switch + persistence, 1100×720 pinned-header layout convention, no-raw-message-key + plural-form (audit event count) i18n assertions, log-panel filter/Escape-close | `windows-journeys/journey-10-settings-appearance-i18n.md` |
 
 Legend: ✅ solid coverage at that layer · 🟡 partial/IPC-only/smoke-only ·
 ❌ none. Layer-1 "✅" means the backend logic is real-tested; it says
@@ -412,14 +412,25 @@ just test the mock, not the product:
 11. **Settings + layout-convention + i18n regression guard** (Journey 10) —
     PARTIALLY DONE (2026-07-05, `crates/e2e-tests/tests/settings_journeys.rs`):
     no-global-Save-button + real auto-save round-trip (Test 1), and theme
-    live-apply + real cross-relaunch persistence (Test 2, using the
-    `localStorage`-backed theme choice — the one piece of Settings state this
-    harness's per-launch `reset_database()` doesn't erase, so it's the only
-    honest way to prove relaunch persistence here). Still open as follow-up:
+    live-apply + settings-DB persistence (Test 2). Still open as follow-up:
     the 1100×720 layout convention and no-raw-error-code checks are cheap,
     cross-cutting regression guards worth adding next; altitude clamp,
     log-panel layout/export, command palette, and sidebar persistence remain
     unautomated too.
+    UPDATE (theme-settings-db, 2026-07-09): theme moved from purely
+    `localStorage`-backed to DB-backed (settings `general` scope, `theme`
+    key), with `localStorage` kept only as a synchronous boot cache
+    (`hydrateThemeFromSettings()` reconciles it from the DB after boot) — a
+    fix for WebView2 only flushing `localStorage`'s LevelDB store on a
+    graceful shutdown, losing the choice on a forced kill (the finding Test 2
+    originally diagnosed via `graceful_shutdown()`/CI run 28810006837). This
+    moves theme into the same "cannot be proven to survive a relaunch in this
+    harness" bucket as Ingestion (both `E2eApp::launch()`/`relaunch()`
+    unconditionally wipe the DB via `reset_database()`), so Test 2's
+    cross-relaunch assertion was trimmed to the live-apply + DB write-through
+    checks only. A true cross-relaunch proof needs a harness `ResetScope`
+    that preserves the DB — left as a follow-up alongside
+    ingestion-settings-persist-across-restart.
 
 See `docs/development/windows-journeys/journey-0{1..9,10}-*.md` for the
 click-by-click manual scripts covering all of the above until each is

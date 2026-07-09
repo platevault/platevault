@@ -8,11 +8,19 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { router } from './app/router';
 import { AppErrorBoundary } from './app/AppErrorBoundary';
 import { queryClient } from './data/queryClient';
-import { initAppearance } from './data/theme';
+import { initAppearance, hydrateThemeFromSettings } from './data/theme';
 
 // Apply the persisted theme + density to <html> before first paint, and wire
-// OS light/dark changes for the `system` choice.
+// OS light/dark changes for the `system` choice. Synchronous and driven off
+// the localStorage boot cache so there is no flash of the wrong theme.
 initAppearance();
+
+// Reconcile that boot cache against the settings DB (spec 018, source of
+// truth — theme-settings-db) once IPC is available. Deliberately NOT awaited
+// before the initial render: the DB is only consulted after the fast,
+// synchronous cache has already painted, and this at most swaps the theme
+// once if the two disagree (e.g. localStorage lost to a WebView2 force-kill).
+void hydrateThemeFromSettings();
 
 // T075 / SC-002: Install the recording proxy at boot in dev-tools builds.
 // VITE_DEV_TOOLS is statically "false" in release builds, so this branch and

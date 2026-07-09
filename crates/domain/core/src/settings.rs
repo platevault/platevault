@@ -240,6 +240,16 @@ pub struct SettingsState {
     /// `"Delete"` (data-model.md §E2). Absent id ⇒ that type's built-in
     /// default action applies. Empty by default (no overrides).
     pub cleanup_type_overrides: std::collections::BTreeMap<String, String>,
+
+    // ── Appearance ─────────────────────────────────────────────────────
+    /// UI theme choice: one of the four fixed theme ids (`warm-clay`,
+    /// `warm-slate`, `observatory-dark`, `espresso-dark`) or `"system"` to
+    /// follow the OS light/dark preference (`apps/desktop/src/data/theme.ts`
+    /// `ThemeChoice`). This is the durable source of truth; the frontend
+    /// mirrors it into a synchronous localStorage boot cache to avoid a
+    /// flash of the wrong theme, since WebView2 only flushes localStorage on
+    /// graceful shutdown and loses it on a forced kill.
+    pub theme: String,
 }
 
 impl Default for SettingsState {
@@ -293,6 +303,7 @@ impl Default for SettingsState {
             source_view_link_kind_intra_drive: "hardlink".to_owned(),
             source_view_link_kind_cross_drive: "symlink".to_owned(),
             cleanup_type_overrides: std::collections::BTreeMap::new(),
+            theme: "system".to_owned(),
         }
     }
 }
