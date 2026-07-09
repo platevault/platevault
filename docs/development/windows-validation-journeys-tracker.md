@@ -3,7 +3,11 @@
 **This is the source of truth for the Windows real-app validation campaign.**
 Any agent continuing this work MUST:
 
-1. **Read this file first** and find the first journey/test not marked ✅/❌.
+0. **New session? Read the handover first:**
+   `docs/development/windows-validation-handover-2026-07-09.md` (current state,
+   resume mechanics, and the prioritised **fixes-to-run** incl. the
+   fixture-library retry).
+1. **Read this file** and find the first journey/test not marked ✅/❌.
 2. **Continue from there** — do not restart completed work.
 3. **Update this file** (status per test) and the matching **GitHub epic** as you go.
 4. Keep the detailed run log + persistent backlog in
