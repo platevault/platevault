@@ -96,7 +96,12 @@ function renderPanel(
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('PlanPanel (aggregate surface)', () => {
+// This suite renders PlanPanel with up to 41 action rows plus per-type
+// aggregation; the default 5s vitest timeout has been observed to be too
+// tight on slower (Windows CI) runners even though every individual test
+// completes in well under 100ms locally — raise it explicitly rather than
+// papering over slow-runner variance test by test.
+describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
   let onApplySelected: ApplySelectedSpy;
   let onApplyAll: ApplyAllSpy;
   let onCancel: CancelSpy;
@@ -434,7 +439,7 @@ describe('PlanPanel (aggregate surface)', () => {
 
 // ── spec 041 US8/FR-029/FR-031: destination-root picker + absolute path ───────
 
-describe('PlanPanel destination-root picker (US8)', () => {
+describe('PlanPanel destination-root picker (US8)', { timeout: 15_000 }, () => {
   const pendingRootPick = {
     category: 'light_frames',
     candidates: [
