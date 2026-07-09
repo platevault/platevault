@@ -1,0 +1,29 @@
+{
+  "pkg": "@astro-plan/desktop",
+  "globalName": "PlateVault",
+  "shape": "package",
+  "projectId": "97fa5c7a-8ff3-4331-8f5c-3d5a89635cf4",
+  "srcDir": "src",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": ".ds-css/flattened.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "componentSrcMap": {
+    "Pill": "src/ui/Pill.tsx",
+    "Btn": "src/ui/Btn.tsx",
+    "Section": "src/ui/Section.tsx",
+    "Box": "src/ui/Box.tsx",
+    "KV": "src/ui/KV.tsx",
+    "EmptyState": "src/ui/EmptyState.tsx",
+    "Table": "src/ui/Table.tsx",
+    "Banner": "src/ui/Banner.tsx",
+    "Toggle": "src/ui/Toggle.tsx",
+    "SegControl": "src/ui/SegControl.tsx",
+    "RadioGroup": "src/ui/RadioGroup.tsx",
+    "CoverageBar": "src/ui/CoverageBar.tsx",
+    "Lock": "src/ui/Lock.tsx",
+    "DirPicker": "src/ui/DirPicker.tsx",
+    "WizardShell": "src/ui/WizardShell.tsx",
+    "ToastContainer": "src/ui/ToastContainer.tsx",
+    "InfoTip": "src/ui/InfoTip.tsx"
+  }
+}
