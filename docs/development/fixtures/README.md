@@ -20,24 +20,31 @@ Generator: `gen_detection_matrix.py` → writes the tree + `manifest.json`
 - **is_master** = `IMAGETYP` contains "master" (PI) OR `STACKCNT`/`NCOMBINE` > 1
   (Siril) OR file name / path contains "master" or "_stacked" (fallback).
 
-## Permutation coverage (19 fixtures)
+## Permutation coverage (~93 fixtures — COMPREHENSIVE)
 
-| Type | raw (header) | master (Siril STACKCNT) | master (PI IMAGETYP) | master (path fallback) |
-|------|:---:|:---:|:---:|:---:|
-| Light | ✓ | ✓ (integration) | — | — |
-| Dark | ✓ | ✓ | ✓ | ✓ |
-| Flat | ✓ | ✓ | ✓ | ✓ (`_stacked`) |
-| Bias | ✓ | ✓ (`OFFSET`→Bias) | ✓ | — |
-| DarkFlat | ✓ | — | ✓ | — |
+Every cell has **multiple files** (real multi-sub sessions) so multi-file
+detection/grouping is exercised, not just single files. Formats
+(`.fits/.fit/.fts/.xisf`) are woven across cells. Per type
+{Light, Dark, Flat, Bias, DarkFlat}:
 
-Plus:
-- **Header-vs-name conflict** (header type MUST win): `IMAGETYP='DARK'` named
-  `masterFlat…` → Dark + master; `IMAGETYP='BIAS'` named `light…` → Bias, not master.
-- **Negative / unclassified**: no `IMAGETYP` + non-master name
-  (`dark_stack_9_noheader.fits`) → unclassified — reproduces the exact fixture
-  shape that hid in #513.
+| Cell | Files/type | What it proves |
+|------|:---:|----------------|
+| **raw · header** | 4 subs + each IMAGETYP synonym + STACKCNT=1 | header classifies raws; synonyms (`Dark Frame`,`Flat Field`,`OFFSET`→Bias,`SCIENCE`); STACKCNT=1 is NOT master |
+| **raw · name-only (NEGATIVE)** | 3 subs | a raw named `dark_sub_…` with **no header stays UNCLASSIFIED** (filenames must not classify raws) |
+| **master · header** | STACKCNT, NCOMBINE, PI `Master X`, case-variant | both Siril + PixInsight master signals + lowercase |
+| **master · path (fallback)** | name×2 (+`masterXs/` dir) + `_stacked` suffix | no-header masters detected by name/path |
+| **master · NEGATIVE** | STACKCNT but no IMAGETYP + no master path | must stay unclassified |
 
-Every file's expected `(frame_type, is_master, evidence)` is in `manifest.json`.
+Global cells:
+- **Header-vs-name CONFLICT** (header type MUST win): `IMAGETYP='DARK'` named
+  `masterFlat…` → Dark+master; `IMAGETYP='BIAS'` named `light…` → Bias, not
+  master; `IMAGETYP='FLAT'`+STACKCNT named `dark…` → Flat+master.
+- **Unknown / unclassified**: unknown `IMAGETYP` value; no-header neutral name;
+  and `dark_exp_120_stack_9_stripped.fits` — reproduces the exact stripped-header
+  "master dark" that hid in **#513**.
+
+Every file's expected `(frame_type, is_master, evidence, group)` is in the
+generated `manifest.json`. Run the generator to see a per-group count summary.
 
 ## How to run
 
