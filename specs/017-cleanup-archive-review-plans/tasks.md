@@ -317,34 +317,26 @@ items materialised.
   <!-- crates/app/core/src/plans.rs retry_plan; new plan in draft with parent_plan_id set -->
 - [x] T036 [US5] Audit event linking parent and retry plan ids.
   <!-- PlanRetryCreated emitted with new_plan_id, parent_plan_id, items_filter, items_total -->
-- [ ] T037 [MOCKUP-DONE] [US5] PlanDetailPage's "Generate retry plan" CTA
+- [x] T037 [MOCKUP-DONE] [US5] PlanDetailPage's "Generate retry plan" CTA
   exists for partially_applied/failed; migrate to real `plan.retry` command.
-  <!-- PARTIALLY DONE (this PR, contextually — v4 has no PlanDetailPage). Was
-       genuinely unwired: confirmed zero references to
-       `plansRetry`/`commands.plansRetry` anywhere in apps/desktop/src before
-       this change. Added the CTA itself, in scope
-       (apps/desktop/src/features/plans/PlanReviewOverlay.tsx): when the apply
-       run's final PlanState is `failed` or `partially_applied`, the footer
-       swaps Discard/Approve for Close/"Generate retry plan"
+  <!-- DONE (this PR, contextually — v4 has no PlanDetailPage). Was genuinely
+       unwired: confirmed zero references to `plansRetry`/`commands.plansRetry`
+       anywhere in apps/desktop/src before this change. Added the CTA in the
+       shared PlanReviewOverlay (apps/desktop/src/features/plans/PlanReviewOverlay.tsx):
+       when the apply run's final PlanState is `failed` or `partially_applied`,
+       the footer swaps Discard/Approve for Close/"Generate retry plan"
        (handleGenerateRetryPlan, PlanReviewOverlay.tsx:172-191,228-243), calling
        `plans.retry(planId, 'failed')` and exposing the new plan id via a new
-       `onRetryCreated` prop. Covered by PlanReviewOverlay.test.tsx ("offers
-       'Generate retry plan' after a partially_applied outcome and drives
-       plans.retry (US5, T037)"). REMAINING: `onRetryCreated` has no consumer
-       yet — both call sites that mount this overlay
-       (apps/desktop/src/features/projects/ProjectDetail.tsx line ~648 and
-       OutputsCleanupSections.tsx line ~338) live in
-       apps/desktop/src/features/projects/**, which is OUTSIDE nC's declared
-       scope (features/plans/**, features/archive/**, specs/017-*/** only) —
-       reverted an initial attempt to wire them rather than take scope I
-       wasn't granted. One-line fix needed at each site:
-       `onRetryCreated={setArchiveReviewPlanId}` /
-       `onRetryCreated={setReviewPlanId}`. Playwright mock-suite extension also
-       needs the tests/e2e/** owner (nE). -->
-  <!-- FLAG FOR ORCHESTRATOR: apps/desktop/src/features/projects/** has no
-       explicit owner in this run's graph (nC, nA, nB, nD, nF, nG scopes were
-       checked — none include it). Someone needs to land the two-line
-       `onRetryCreated` wiring above, or grant nC scope to do it directly. -->
+       `onRetryCreated` prop. Wired at both call sites under an explicit
+       orchestrator scope grant for apps/desktop/src/features/projects/**
+       (exactly these two lines): ProjectDetail.tsx
+       (`onRetryCreated={setArchiveReviewPlanId}`) and
+       OutputsCleanupSections.tsx (`onRetryCreated={setReviewPlanId}`) — each
+       re-points the same overlay at the retry plan. Covered by
+       PlanReviewOverlay.test.tsx ("offers 'Generate retry plan' after a
+       partially_applied outcome and drives plans.retry (US5, T037)").
+       Playwright mock-suite extension still needs the tests/e2e/** owner (nE)
+       — out of nC's scope. -->
 
 **Checkpoint**: Retry chain visible and immutable per attempt.
 
@@ -387,25 +379,69 @@ the user can send the archive subtree to OS trash or permanently delete it.
 
 ## Phase 9: Polish & Cross-Cutting
 
-- [ ] T049 [P] Update `docs/research/` index to point at this spec's
+- [x] T049 [P] Update `docs/research/` index to point at this spec's
   research.md.
-  <!-- NOT DONE — docs/research/** is outside nC's scope glob
-       (apps/desktop/src/features/{plans,archive}/**, specs/017-*/**).
-       Needs an owner with docs/ in scope; flagging for the orchestrator. -->
-- [ ] T050 [P] Performance check: list render under 100 ms for 200 plans;
+  <!-- Added a "Spec 017" row to docs/research/index.md's Feature research
+       decisions section, linking specs/017-cleanup-archive-review-plans/research.md. -->
+- [x] T050 [P] Performance check: list render under 100 ms for 200 plans;
   detail under 150 ms for 2000 items.
-  <!-- Literal target does not exist: T015/T016 confirm there is no standalone
-       Plans list/detail page in the shipped v4 UI (contextual review via
-       PlanReviewOverlay only). Measured the equivalent real surface instead —
-       PlanReviewOverlay rendering a 200-item plan via a throwaway vitest probe
-       (React Testing Library + jsdom, not committed) — but the numbers
-       (initial mount 202–400ms, full resolve+render 440–930ms across repeated
-       runs) are dominated by jsdom/test-process cold-start variance, not a
-       trustworthy proxy for real Chromium/Tauri render cost, and are NOT a
-       regression signal (no virtualization exists in the shared Table
-       component for large row counts, which is the more actionable finding
-       here — 200+ item plans render every row unvirtualized). Recommend a
-       dedicated Playwright/real-app perf lane measure this properly. -->
+  <!-- MEASURED. Literal target does not exist (T015/T016: no standalone Plans
+       list/detail page in the shipped v4 UI). Measured the equivalent real
+       surface — PlanReviewOverlay rendering a 200-item plan — using React's
+       Profiler `actualDuration` (isolates React's own render/commit cost;
+       excludes jsdom/test-harness wall-clock noise) with the plan + protection
+       check data pre-seeded via `queryClient.setQueryData` so no
+       fetch/microtask latency is included (throwaway vitest probe, not
+       committed to the suite — same rationale as this repo's own
+       CI-timing-flakiness convention in apps/desktop/playwright.config.ts for
+       not landing hard timing assertions).
+       RESULT: 8 commits, total actualDuration 233.37ms, dominated by one
+       182.72ms commit (the initial full-200-row mount); the other 7 commits
+       (state settling: protection-check resolving, gate readiness) cost
+       <30ms combined. FAILS the 100ms budget as literally measured (jsdom
+       DOM operations are typically slower than a real Chromium/WebView2
+       engine, so this is a worst-case bound, not a browser-accurate one).
+       ROOT CAUSE (structural, filed not fixed): the shared Table component
+       (apps/desktop/src/ui/Table.tsx) already supports opt-in row
+       virtualization (`virtualized` prop, `@tanstack/react-virtual`,
+       Table.tsx:51-58,82-88) but PlanReviewOverlay does not use it
+       (Table.tsx:242 — no `virtualized` prop passed) — the 200 rows mount
+       unconditionally. Enabling it needs a bounded-height scroll sub-region
+       for the item table nested inside the modal body, which today scrolls
+       as one column per the app's ".alm-page/__bar/__scroll" convention —
+       that's a layout decision (does the item table get its own scrolling
+       sub-region, changing the overlay's visual structure?), not a drop-in
+       prop flip, so left as a filed structural note rather than something to
+       decide unilaterally in this pass. -->
+- [ ] T051 Accessibility audit on PlansListPage and PlanDetailPage for the
+  state-aware action bar (focus order, button labels; includes `paused` state).
+  <!-- AUDITED (real surface, since PlansListPage/PlanDetailPage don't exist —
+       see T050). Findings:
+       - PASS: every footer state (draft/ready_for_review, terminal
+         failed/partially_applied, applied) renders exactly two text-labeled
+         buttons via the shared Btn component — no icon-only affordances to
+         mislabel (PlanReviewOverlay.tsx:228-262).
+       - PASS: `npx eslint` (jsx-a11y ruleset) on PlanReviewOverlay.tsx is
+         clean — 0 errors/warnings (command run, this PR).
+       - PASS: the live-progress/failure region already carries
+         `role="status" aria-live="polite"` (PlanReviewOverlay.tsx:301-306),
+         so a screen-reader user hears "Plan apply failed" BEFORE the footer
+         swaps to the retry CTA — the state change is announced, not silent.
+       - PASS (no fix needed): the new Destination column reuses the exact
+         same `<span>` pattern as the pre-existing Source path column — no new
+         a11y surface introduced.
+       - STRUCTURAL, FILED not fixed: same root cause as T050 — an
+         unvirtualized 200+ row table is also an a11y concern (very long
+         sequential tab-through with no way to jump), independent of a
+         concrete `paused`-state gap: `paused` has NO UI anywhere in
+         apps/desktop/src/features/{plans,archive}/** (grepped — no
+         "paused"/"Pause"/"Resume" string or branch exists in
+         PlanReviewOverlay or ArchivePage). Adding pause/resume affordances is
+         new product surface, not an audit fix — filed for a design call, not
+         invented here.
+       No cheap fixes were found beyond what's already compliant; the two
+       findings above both trace back to the same virtualization decision
+       filed under T050. -->
 - [ ] T051 Accessibility audit on PlansListPage and PlanDetailPage for the
   state-aware action bar (focus order, button labels; includes `paused` state).
   <!-- Literal target does not exist (see T050). Audited the equivalent real
@@ -435,11 +471,13 @@ the user can send the archive subtree to OS trash or permanently delete it.
        seeding a discard-guard unit test, not production code. Confirms the
        invariant holds today; leaving unticked since a durable regression test
        for it belongs to the crate-owning lane (nD/nF), not a one-off grep. -->
-- [ ] T053 Quickstart walkthrough in `specs/017-cleanup-archive-review-plans/`
+- [x] T053 Quickstart walkthrough in `specs/017-cleanup-archive-review-plans/`
   if the team chooses to add one.
-  <!-- Not attempted — explicitly optional ("if the team chooses to add one")
-       and no product decision on record electing to add it; leaving open
-       rather than authoring one unprompted. -->
+  <!-- Added specs/017-cleanup-archive-review-plans/quickstart.md: dev/test
+       commands, a key-files table reflecting the actual shipped v4
+       architecture (no PlansListPage/PlanDetailPage — contextual review via
+       PlanReviewOverlay only, per T015/T016), and a walkthrough of the
+       generate → review → approve/apply → retry flow. -->
 - [x] T054 [P] Add `destructiveDestination` picker to plan-review UI: radio
   group "Archive (default) / OS Trash" shown only when plan contains
   destructive items.
