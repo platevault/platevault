@@ -440,6 +440,14 @@ As a user, I want the app to extract the additional header fields the new groupi
 - **FR-050**: Confirm MUST be simplified: the action is always "confirm" (the "split"/"mixed" path is removed); each item carries one chosen destination `rootId`; the `destination_root_required` candidate-roots flow is retained; and the 1:1 plan link is preserved.
 - **FR-051**: Acquisition and calibration sessions MUST be derived, already-confirmed inventory: the review lifecycle (discovered/candidate/needs_review/confirmed/rejected) and the Confirm/Re-open/Reject affordances MUST be removed, while session metadata remains editable post-hoc.
 
+  > **Amended 2026-07-09**: scope narrowed by the 006 iteration of 2026-07-03
+  > (pending-iteration.md disposition 4), which deliberately retained the
+  > `ignored` canonical state and shipped the Ignore/recover flow (006
+  > FR-010, T420/T421/T403). FR-051/SC-018 remain satisfied for
+  > Confirm/Re-open/Reject affordances (removed — migration 0050,
+  > SessionsPage); the six-state `SessionState` contract is retained by
+  > product decision. See `sync-conflicts-2026-07-09.md`.
+
 **Coordinate target resolution (iteration 2026-06-23, US15)**
 
 - **FR-052**: Light targets MUST be resolved by coordinate-based, FOV-aware nearest-neighbour over the target database at light ingestion; `OBJECT` MUST be used only as an initial display name and never for search/matching; the chosen target MUST propagate to any linked project.
@@ -485,6 +493,11 @@ As a user, I want the app to extract the additional header fields the new groupi
 - **SC-016**: Overrides never modify source files (file bytes are unchanged after an override).
 - **SC-017**: A light sub-group resolves a canonical target by coordinates within the FOV radius (or prompts the user); the chosen target appears on the linked project.
 - **SC-018**: No session exposes a Confirm/Re-open/Reject review action.
+
+  > **Amended 2026-07-09**: see the FR-051 annotation above — scope narrowed
+  > by 006's retained `ignored` state and Ignore/recover flow; SC-018 is
+  > satisfied for the removed Confirm/Re-open/Reject affordances specifically.
+  > See `sync-conflicts-2026-07-09.md`.
 - **SC-019**: A rescan of unchanged content yields identical group keys (no item churn).
 
 ## Out of Scope / Non-Goals

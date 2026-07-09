@@ -9,6 +9,15 @@ remote (041 single-type impl + 046/037/#360 merged); CI re-enabled; verified
 against code — 041 iter-2 is implemented on the branch, 017 has UI. See the
 updated 041 / 017 rows and the CI note.
 **Last reconciled 2026-07-04 (post-convoy: 19 PRs merged).**
+**2026-07-09**: `redesign-ui-platevault` (PR #349) is merged into `main`
+(merge commit `6fcaa766`) — 041 iteration-2, 043 foundation/round-2, and the
+044/047/048/049 work that had landed on the branch are now all on `main`.
+Versioning was reset to 0.x for the first release cut (`cbd91378`); the
+release/tag lane is owned separately from this document — this refresh does
+not touch release-please or workflow files. 041/043/047/051 rows re-verified
+against `origin/main` code; 044/048/049 are marked **in-flight** — active
+lanes (044 Track B, 048 per-frame-inventory, 049 source-view-generation) are
+still landing PRs and these rows will move again once those lanes report.
 
 > The per-spec `Status:` line in each `spec.md` had drifted badly — most still read
 > "Draft" despite shipping. This document is the reconciled source of truth. Status
@@ -71,16 +80,17 @@ updated 041 / 017 rows and the CI note.
 | 038 wizard-scan-step | ✅ Implemented | merged (no committed tasks.md) |
 | 039 cross-root-inbox | 🔴 Superseded by 041 | Scope fully implemented via 041 — cross-root `inbox_list`, inbox optional (`REQUIRED_KINDS`), rescan-all, bounded/virtualized. All 3 US + 7 FR + 5 SC verified in code 2026-07-03. No plan/tasks.md authored |
 | 040 calibration-masters-detection | ✅ Implemented | validated end-to-end 2026-06-23 |
-| 041 inbox-plan-surface | ✅ iteration-1 / 🟡 iteration-2 implemented on `redesign-ui-platevault` (pending merge to main) | iter-1 (confirm + plan surface + apply + destination model) shipped 59/59. **iter-2 (single-type sub-items, T061–T081) is now implemented with tests on `redesign-ui-platevault`** — migration `0049_inbox_single_type.sql`, real missing-mandatory gate (`inbox/confirm.rs` sentinel), field-agnostic `reclassify_v2` (`inbox/reclassify.rs`), `build_frame_metadata` grouping (`inbox/classify.rs`), split/mixed confirm action removed from the contract. **Not yet on `main`** — lands with PR #349. Supersedes 005 |
+| 041 inbox-plan-surface | 🟡 iteration-1 + iteration-2 implemented and merged to `main` (72/80 tasks ticked) | iter-1 (confirm + plan surface + apply + destination model) shipped 59/59. iter-2 (single-type sub-items) merged to `main` via PR #349 (`6fcaa766`): code evidence for T071 (`bfddb736`, confirm split/mixed removed), T072 (`7991ac25`, contracts+bindings), T076 (`009da1b4`, session-review lifecycle dropped), T077 (`807b24bc`, plan_open legacy guard), and T081 (`8b566a62`/`f2de3243` — `crates/app/inbox/src/classify.rs:696,699` wires `raw.offset`/`raw.set_temp_c` into `FrameMetadata`, no longer hardcoded `None`) all exist on `main`, but `tasks.md` checkboxes for T071–T073/T076–T079/T081 are **not yet ticked** — a dedicated independent `speckit-verify` audit lane is reconciling the paper trail; do not tick or close related GH issues until it reports. Supersedes 005 |
 | 042 stdlib-adoption | ✅ Implemented | 80/97; reconciled #310 |
-| 043 ui-redesign-platevault | 🔵 Active (foundation + round-2 done; PR #349 mergeable) | Ongoing on `redesign-ui-platevault`. Foundation + per-page round-2 verified against code: 4-theme tokens + Appearance picker, shared `<SortHeader>`/`.alm-sorth`, flat-by-default `.alm-listgroup` on all 4 list pages (#360), `InfoTip`/`SettingsKit`, Inbox bottom inspector, `eslint no-restricted-syntax` style-ban wired into lint. **Archive single-column, Sessions inbox-parity, and `aria-sort` on all sortable tables shipped (`34e59139` / #415)**, alongside a platform-native reveal-labels sweep in the same PR. PENDING: pill-system unification, resizable splitters, Settings per-pane polish. STUBs (all `// STUB:`-marked, blocked on backend): offset Settings-toggle **persistence** (the Rust `require_same_offset` field already exists in `calibration/core/ranking.rs`; only the settings-key wiring is stubbed), channel model, `altitudeCurve()`@52.1°N, Targets list enrichment — now moved to 047/044 (see below) — + Outputs/Cleanup, audit-history endpoint. PR #349 → main is **mergeable** (3 behind main). |
-| 044 targets-planner-astronomy | 🔵 Track B specced, implementation in progress | Research-led astronomy engine track (astronomy-engine + Lorentzian filter model) specced on `044-targets-planner-track-b`; plan/data-model/contracts/tasks authored; T001–T003 (deps + offline IANA timezone asset) landed (`06df294b`). Not yet on `redesign-ui-platevault` |
+| 043 ui-redesign-platevault | 🟡 Merged to `main` (PR #349, `6fcaa766`); remainder open | Foundation + per-page round-2 verified against code: 4-theme tokens + Appearance picker, shared `<SortHeader>`/`.alm-sorth`, flat-by-default `.alm-listgroup` on all 4 list pages (#360), `InfoTip`/`SettingsKit`, Inbox bottom inspector, `eslint no-restricted-syntax` style-ban wired into lint, Archive single-column + Sessions inbox-parity + `aria-sort` (`34e59139`/#415), platform-native reveal-labels sweep. Since the merge, several former STUBs were closed on `main`: offset Settings-toggle persistence (`9f0dc724`/#395), Targets list RA/Dec/constellation/magnitude enrichment (`50632d99`/#57), real altitude/moon/opposition (moved to and shipped by 044/047). Still `// STUB:`-marked and open: target↔project/session linkage blocked on task **#54** (`ProjectsTable.tsx:82,201`, `TargetDetailV2.tsx:17,20`), Outputs/Cleanup accepted-output backend model (`OutputsCleanupSections.tsx:80`), pill-system unification, resizable splitters, Settings per-pane polish. No committed `tasks.md` (spec.md only) — task-count tracking not applicable. |
+| 044 targets-planner-astronomy | 🔵 Track B in-flight on `main`; lane B (this campaign) actively landing more (23/40 tasks ticked) | Research-led astronomy engine track (astronomy-engine + Lorentzian filter model), merged to `main` via #349 and further PRs: real tonight altitude/rise-set/imaging-time (`a395ce93`/#436), observing-site management + first-run setup (`ceef2e1e`/#440), planner un-gated on the real site store (`4e5c3a4f`/#450), planner mock-E2E coverage (`c42e8404`/#454). **In-flight** — this row will move again when lane B reports; do not treat as final |
 | 045 review-state-real | 🔴 Superseded by 041 | |
 | 046 i18n-error-codes | ✅ Implemented | 36/36 (#311–#314). #410 fixed an audit-detail i18n regression (raw backend text instead of translated message) inside this "Implemented" window (`5e05b349`) |
-| 047 targets-planner-moon-filters | ✅ Implemented (T001–T027, T029; T028 verify-on-windows pending) | Track A of the planner split, fully implemented on `047-targets-planner-moon-filters`: real Moon summary (US1), real per-target lunar distance + sort (US2), real per-band Moon-avoidance filter guidance pills + explanation popover + Settings → Target Planner per-band table + filter-by-recommendation (US3), real next-opposition date + sort (US4). All former spec 044 §3 mock symbols (`MOCK_MOON_PHASE_FRAC`, `mockLunarDistanceDegFor`, `filtersFor`) deleted; Track B altitude/imaging-time placeholders untouched (FR-015/016). Perf-optimized opposition scan (per-night memoized Sun-RA table) validated at 5,000 rows. T028 (verify-on-windows) intentionally deferred to a separate campaign lane. PR #430 merged into `redesign-ui-platevault` |
-| 048 per-frame-inventory | 🟠 Partial (reconciled from `main`) | `main` PRs #435 (real session frame counts + disk usage) and #442 (reconcile raw frames vs disk + symlink-gated scans) merged into `redesign-ui-platevault` via the #349 reconciliation; remaining per-frame-inventory US scope still open |
-| 049 source-view-generation | 🟠 Partial (reconciled from `main`) | `main` PR #439 (WBPP-ready source views with zero-copy links, US1) merged into `redesign-ui-platevault` via the #349 reconciliation; remaining tasks still open |
-| 050 publishable-crate-extractions | 📄 Plan-of-record | Mini specs for the FITS/XISF publishable-crate extraction program; landed via #429 (docs-only, plan-of-record for a future extraction effort), merged into `redesign-ui-platevault` |
+| 047 targets-planner-moon-filters | ✅ Implemented (T001–T027, T029; T028 verify-on-windows pending) | Track A of the planner split, merged to `main` (via #349, `6fcaa766`): real Moon summary (US1), real per-target lunar distance + sort (US2), real per-band Moon-avoidance filter guidance pills + explanation popover + Settings → Target Planner per-band table + filter-by-recommendation (US3), real next-opposition date + sort (US4, `0906728f`/#430). All former spec 044 §3 mock symbols (`MOCK_MOON_PHASE_FRAC`, `mockLunarDistanceDegFor`, `filtersFor`) deleted. Perf-optimized opposition scan validated at 5,000 rows. T028 (verify-on-windows) deferred to the campaign's Windows-validation lane |
+| 048 per-frame-inventory | 🟠 Partial, in-flight — lane D (this campaign) actively working | `tasks.md` still shows 0/44 ticked, but real code has landed on `main`: session frame counts + disk usage (`5dc00c90`/#435), raw-frame-vs-disk reconciliation + symlink-gated scans (`a70db417`/#442), an accurate per-frame-type destination-pattern preview (`58ccfcbd`/#390), and a real-UI journey (`c526dc10`/#470). This row will move again when lane D reports; treat the `0/44` count as stale, not authoritative |
+| 049 source-view-generation | 🟠 Partial, in-flight — lane F (this campaign) actively working | 32/46 tasks ticked. WBPP-ready source views with zero-copy links (US1, `54b56d28`/#439) and profile-driven source-view layout (US2, `51a0a64d`/#443) are merged to `main`; a real-UI journey landed (`c526dc10`/#470) alongside a related sessions `root_id` persistence fix (`1da1e3f2`/#480). Remaining tasks still open; this row will move again when lane F reports |
+| 050 publishable-crate-extractions | 📄 Plan-of-record | Mini specs for the FITS/XISF publishable-crate extraction program; landed via #429 (docs-only, plan-of-record for a future extraction effort), merged into `main` |
+| 051 tauri-shell-integration | 🟡 Partial | 34/64 tasks ticked (undercounts — several merged tasks, e.g. T001–T009, aren't checked off). US1 single-instance guard (`64a94881`/#471), US2 favourites-in-DB (`54378086`/#472), US3 cleanup-overrides-in-DB (`c990f967`/#474), US4 window-state persistence + US5 native menu bar + US7 diagnostics log file (`e9b1622b`/#476), US6 native theme sync (`29617775`/#475), and US10 signed-update groundwork (`c1f3ede9`/#473, updater key fix `a33dc427`, build/sign pipeline `60732f2f`/#469) are all merged to `main`. **Not yet implemented**: US8 OS notifications on long-task completion (no `tauri_plugin_notification` registration found in `apps/desktop/src-tauri/src/lib.rs`) and US9 release-build native behavior / reload-guard (no `prevent_default` plugin registration found) — both real open scope, not just unticked boxes |
 | tiny/ catalog-entry, settings-key | 📄 Micro-specs | reference notes, not tracked features |
 
 ## Dependency DAG
@@ -100,7 +110,7 @@ TARGETS CHAIN
   013 fits-lookup 🟡 ┐
   014 catalog 🔴 ────┴─▶ 035 SIMBAD ✅ ─┬─▶ 036 retire-legacy ✅
                                         ├─▶ 023 target-identity ⚪ (tasks not generated)
-                                        └─▶ 006 sessions ✅ ─▶ 044 planner-astronomy 🔵 (Track B in progress) ─▶ 047 moon-filters 🔵 (PR #430 open)
+                                        └─▶ 006 sessions ✅ ─▶ 044 planner-astronomy 🔵 (Track B in-flight on main, lane B active) ─▶ 047 moon-filters ✅ (merged to main via #349)
 
 CALIBRATION CHAIN
   006 inventory/sessions ✅ ─▶ 007 matching-rules ✅ ─▶ 040 masters ✅
@@ -112,11 +122,13 @@ PROJECTS CHAIN
 
 INFRA / CROSS-CUTTING (mostly independent)
   018 settings ✅   021 dev-diagnostics 🟡   019 log-viewer ✅
-  046 i18n ✅   042 stdlib ✅   043 ui-redesign 🔵
+  046 i18n ✅   042 stdlib ✅   043 ui-redesign 🟡 (merged to main via #349; remainder open)
   037 e2e 🟠 ◀── Layer-2 tauri-driver journeys merged (#403); only housekeeping tasks remain (sessions.transition deleted by 041, not pending)
   037 ipc-removal ✅ (all phases done+merged; commands.ts deleted, guards in CI)
-  026 source-view-removal 🟡 (vestigial, product-decision-pending)   049 source-view-generation ⚪ (specced+planned, 45 tasks)
+  026 source-view-removal 🟡 (vestigial, product-decision-pending; lane G reviewing)
+  048 per-frame-inventory 🟠 (in-flight, lane D active)   049 source-view-generation 🟠 (in-flight, lane F active, 32/46 tasks)
   050 publishable-crate-extractions 📄 (plan-of-record, PR #429)
+  051 tauri-shell-integration 🟡 (US1–US7 + US10-groundwork merged; US8 notifications + US9 release-native-behavior open)
 ```
 
 ## Actionable frontier — what can be worked on now (unblocked)
@@ -131,9 +143,15 @@ INFRA / CROSS-CUTTING (mostly independent)
 | 3 | **008 project-create** | 006 inventory closed | 🟡 Medium |
 | 3 | **021 dev-diagnostics** | Independent, behind `dev-tools` flag | 🟡 Small |
 | 3 | **023 target-identity** | 035 done; needs `/speckit.tasks` to generate tasks | ⚪ Plan exists, 0 tasks |
-| active | **043 ui-redesign** | In progress on current branch | 🔵 Ongoing |
+| active | **043 ui-redesign** | Merged to `main`; remainder (target↔project linkage #54, Outputs/Cleanup backend model, pill-system, splitters) unblocked | 🟡 Small–Medium remainder |
+| active | **051 US8/US9** | Shell-integration foundation (US1–US7, US10-groundwork) merged; notifications + release-native-behavior plugins not yet registered | 🟡 Small–Medium |
 
-**Suggested parallel lanes:** one engineer on the **017 → 025 → 033** plan/cleanup chain; **043** continues on UI. (018 settings shipped via #348.)
+**Suggested parallel lanes:** one engineer on the **017 → 025 → 033** plan/cleanup chain; another on 043's remainder + 051's US8/US9. (018 settings shipped via #348.)
+
+**Versioning note (2026-07-09):** the release baseline was reset to 0.x
+(`cbd91378`) ahead of the first release cut. This document and its frontier
+are unaffected — no spec here tracks or blocks on version numbers, and this
+lane does not touch `.github/workflows/**`, tags, or release PRs.
 
 ## Closeout-ready (verify pass, not new work)
 
