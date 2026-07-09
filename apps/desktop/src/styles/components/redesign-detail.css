@@ -521,6 +521,12 @@
   font-size: 9px;
   fill: var(--alm-text-muted);
 }
+/* spec 044 Track B, T035: evening/morning twilight (not-dark) shading either
+   side of the real dark window. */
+.alm-planner__graph-twilight {
+  fill: var(--alm-text-muted);
+  opacity: 0.12;
+}
 .alm-planner__graph-legend {
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);

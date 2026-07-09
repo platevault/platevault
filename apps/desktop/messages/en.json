@@ -1039,7 +1039,7 @@
   "targets_detail_clear_display_alias_failed": "Failed to clear display alias.",
   "targets_detail_alias_input_aria": "New alias",
   "targets_detail_alias_placeholder": "Add user alias…",
-  "targets_detail_alt_graph_aria": "Tonight altitude graph (approximate)",
+  "targets_detail_alt_graph_aria": "Tonight altitude graph",
   "targets_detail_back": "← All targets",
   "targets_detail_display_label_title": "Display label",
   "targets_detail_display_label_unset": "Not set — showing primary designation",

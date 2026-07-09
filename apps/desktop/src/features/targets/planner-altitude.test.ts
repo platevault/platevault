@@ -107,6 +107,25 @@ describe('rowAltitudeFor (real engine)', () => {
   });
 });
 
+describe('rowAltitudeFor — US4 darkWindowHours (T035)', () => {
+  it('is a startHour < endHour pair inside the points range for a normal night', () => {
+    const r = rowAltitudeFor(item('NGC 7000', 313, 44), USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS);
+    expect(r.darkWindowHours).not.toBeNull();
+    if (r.darkWindowHours) {
+      expect(r.darkWindowHours.startHour).toBeLessThan(r.darkWindowHours.endHour);
+      expect(r.darkWindowHours.startHour).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('is null when there is no dark window (US4/FR-017)', () => {
+    const highLat: ObserverSite = { ...AMSTERDAM, latitudeDeg: 69.6, longitudeDeg: 18.9 };
+    const summerMs = Date.UTC(2026, 5, 21, 12, 0, 0);
+    const r = rowAltitudeFor(item('t', 180, 0), USABLE_ALT_DEG, highLat, summerMs);
+    expect(r.noDarkWindow).toBe(true);
+    expect(r.darkWindowHours).toBeNull();
+  });
+});
+
 // ── T013: degrade states (no throw) ──────────────────────────────────────────
 
 describe('altitudeFor / rowAltitudeFor — T013 degrade states', () => {

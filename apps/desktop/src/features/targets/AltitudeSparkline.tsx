@@ -1,11 +1,12 @@
 /**
- * AltitudeSparkline — tiny inline opposition/altitude sparkline for a Planner
- * row (task #85, spec 043; polished task #19).
+ * AltitudeSparkline — tiny inline altitude sparkline for a Planner row (task
+ * #85, spec 043; polished task #19; real ephemeris since spec 044 Track B).
  *
- * STUB (real values arrive with ephemeris + observer location, #58): plots the
- * approximate per-row altitude curve from planner-altitude.ts across the night.
- * A faint guide line marks the usable-altitude threshold; the stroke turns
- * "usable" colour when the target peaks above it tonight.
+ * Plots the real per-row altitude curve from `planner-altitude.ts` (per-site
+ * ephemeris, astronomy-engine) across the night. A faint guide line marks the
+ * usable-altitude threshold; the stroke turns "usable" colour when the target
+ * peaks above it tonight. Shares its x/y scale with `TargetDetailV2`'s
+ * detail-pane graph via `altitude-scale.ts` (spec 044 Track B, T035).
  *
  * task #19 additions:
  *   - Reduced height (viewBox uses VB_H = 20; CSS sets 22 px via wave2 block).
@@ -23,6 +24,7 @@
  */
 
 import { type RowAltitude, USABLE_ALT_DEG } from './planner-altitude';
+import { altitudeScale, hourScale, HOUR_DOMAIN } from './altitude-scale';
 
 // ── Coordinate space ───────────────────────────────────────────────────────────
 //
@@ -34,20 +36,19 @@ const CURVE_H = 14; // height of the altitude-curve area (px in viewBox units)
 const TICK_H = 6;   // height reserved below curve for time-axis tick + label
 const VB_H = CURVE_H + TICK_H;
 const PAD_Y = 1;
-const ALT_MIN = -10;
-const ALT_MAX = 90;
 
-// Night spans 18:00 → 06:00 (12 h).  The x-axis maps tHour (0..12) → VB_W.
-const NIGHT_HOURS = 12;
+// spec 044 Track B, T035: the SAME altitude/hour scale `TargetDetailV2`'s
+// detail-pane graph uses (altitude-scale.ts), not a second hand-rolled
+// linear interpolation.
+const altScale = altitudeScale(CURVE_H - PAD_Y, PAD_Y);
+const hrScale = hourScale(0, VB_W);
 
 function altToY(alt: number): number {
-  const clamped = Math.max(ALT_MIN, Math.min(ALT_MAX, alt));
-  const frac = (clamped - ALT_MIN) / (ALT_MAX - ALT_MIN);
-  return PAD_Y + (CURVE_H - 2 * PAD_Y) * (1 - frac);
+  return altScale(alt);
 }
 
 function tHourToX(tHour: number): number {
-  return (tHour / NIGHT_HOURS) * VB_W;
+  return hrScale(tHour);
 }
 
 // ── Time-axis tick config ──────────────────────────────────────────────────────
@@ -162,7 +163,7 @@ export function AltitudeSparkline({ alt, label }: Props) {
               x={x}
               y={VB_H}
               textAnchor={
-                tHour === 0 ? 'start' : tHour === NIGHT_HOURS ? 'end' : 'middle'
+                tHour === 0 ? 'start' : tHour === HOUR_DOMAIN[1] ? 'end' : 'middle'
               }
             >
               {tickLabel}

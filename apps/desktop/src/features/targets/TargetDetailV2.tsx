@@ -8,10 +8,10 @@
  *     STUB fields (Constellation, Magnitude, Apparent size, Best season, Transit,
  *     Moon, Altitude now) are marked below — the gen-3 backend does not yet return
  *     these.
- *   - Tonight altitude graph: approximate sinusoidal SVG curve from RA/Dec +
- *     placeholder observer latitude.
- *     // STUB: altitude ephemeris — replace with real astro calc when
- *     // location/ephemeris backend lands.
+ *   - Tonight altitude graph: real per-site ephemeris (spec 044 Track B,
+ *     astronomy-engine, offline), rendered via `@visx/scale`/`shape`/`group`/
+ *     `threshold` (T035) — usable-altitude band shading + twilight-vs-dark
+ *     shading, sharing `altitude-scale.ts` with the list row's sparkline.
  *   - Coverage bars (filter integration hours) — stubbed; gen-3 backend does not
  *     yet expose coverage per filter on the target.get endpoint.
  *     // STUB: target coverage — backend pending.
@@ -41,6 +41,10 @@ import { deriveRowMoonPlanning } from './astro/row-planning';
 import type { ObservingNight } from './astro/moon-state';
 import { useGuidanceParams } from './guidance-settings';
 import { formatOppositionDate, oppositionRelative } from './astro/opposition';
+import { Group } from '@visx/group';
+import { LinePath } from '@visx/shape';
+import { Threshold } from '@visx/threshold';
+import { altitudeScale, hourScale } from './altitude-scale';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,7 +57,7 @@ interface Props {
   /**
    * The shared observing night (spec 047), or `null` when no observing site
    * exists (site gate). Drives the real lunar distance + filter guidance
-   * shown alongside the (still-placeholder) tonight altitude graph.
+   * shown alongside the real (spec 044 Track B) tonight altitude graph.
    */
   night?: ObservingNight | null;
 }
@@ -133,11 +137,23 @@ interface AltPoint {
   altDeg: number;
 }
 
-// ── Tonight Altitude SVG ──────────────────────────────────────────────────────
+// ── Tonight Altitude graph (spec 044 Track B, T035 — @visx) ──────────────────
+//
+// Rebuilt on `@visx/scale`/`shape`/`group`/`threshold` (replacing the prior
+// hand-rolled polyline): the usable-altitude shading now follows the CURVE
+// itself (Threshold clips the shaded area to where the curve is actually
+// above the threshold, not a static full-width band), and twilight-vs-dark
+// shading marks the evening/morning twilight either side of the real dark
+// window. The x/y scales are `altitude-scale.ts`, shared with the per-row
+// `AltitudeSparkline`.
 
 interface AltitudeGraphProps {
   /** Pre-sampled altitude curve (shared with the list's max-alt computation). */
   points: AltPoint[];
+  /** Usable-altitude threshold (Settings → Target Planner); shades the curve above it. */
+  usableAltDeg: number;
+  /** The dark window's `[startHour, endHour]` on the same axis as `points`; `null` = no dark window (US4). */
+  darkWindowHours: { startHour: number; endHour: number } | null;
 }
 
 const SVG_W = 400;
@@ -148,46 +164,25 @@ const PAD_T = 10;
 const PAD_B = 28;
 const PLOT_W = SVG_W - PAD_L - PAD_R;
 const PLOT_H = SVG_H - PAD_T - PAD_B;
-const ALT_MIN = -10;
-const ALT_MAX = 90;
 
-function altToY(alt: number): number {
-  const frac = (alt - ALT_MIN) / (ALT_MAX - ALT_MIN);
-  return PAD_T + PLOT_H - frac * PLOT_H;
-}
+function AltitudeGraph({ points, usableAltDeg, darkWindowHours }: AltitudeGraphProps) {
+  const yScale = altitudeScale(PLOT_H, 0);
+  const xScale = hourScale(0, PLOT_W);
 
-function hourToX(tHour: number): number {
-  return PAD_L + (tHour / 12) * PLOT_W;
-}
+  const usableYPx = yScale(usableAltDeg);
 
-function AltitudeGraph({ points }: AltitudeGraphProps) {
-  // Build SVG polyline points string (dynamic geometry — inline attribute ok)
-  const polylinePoints = points
-    .map((p) => `${hourToX(p.tHour).toFixed(1)},${altToY(p.altDeg).toFixed(1)}`)
-    .join(' ');
+  // Transit marker: find point closest to peak altitude.
+  const peak = points.reduce((best, p) => (p.altDeg > best.altDeg ? p : best), points[0]);
+  const transitXPx = xScale(peak.tHour);
 
-  // Usable-altitude band (≥30°) shading
-  const y30 = altToY(30);
-  const yTop = altToY(ALT_MAX);
-
-  // Transit marker: find point closest to peak altitude
-  const peak = points.reduce(
-    (best, p) => (p.altDeg > best.altDeg ? p : best),
-    points[0],
-  );
-  const transitX = hourToX(peak.tHour);
-  // The curve is an approximate placeholder (see caption), so the marker is
-  // labelled "transit" without a precise time to avoid contradicting the
-  // identity table (which shows transit as "—" pending the ephemeris backend).
-
-  // X-axis tick labels (every 2 h from 18 to 06)
+  // X-axis tick labels (every 2 h from 18 to 06).
   const xTicks: Array<{ tHour: number; label: string }> = [];
   for (let h = 0; h <= 12; h += 2) {
     const clock = (18 + h) % 24;
     xTicks.push({ tHour: h, label: String(clock).padStart(2, '0') });
   }
 
-  // Y-axis tick labels
+  // Y-axis tick labels.
   const yTicks = [0, 30, 60, 90];
 
   return (
@@ -199,118 +194,112 @@ function AltitudeGraph({ points }: AltitudeGraphProps) {
         aria-label={m.targets_detail_alt_graph_aria()}
         role="img"
       >
-        {/* Usable altitude shaded band (≥30°) */}
-        <rect
-          x={PAD_L}
-          y={yTop}
-          width={PLOT_W}
-          height={y30 - yTop}
-          fill="var(--alm-ok-bg)"
-          opacity="0.6"
-        />
-
-        {/* 30° usable-altitude guide line */}
-        <line
-          x1={PAD_L}
-          y1={y30}
-          x2={PAD_L + PLOT_W}
-          y2={y30}
-          stroke="var(--alm-ok-border)"
-          strokeWidth="1"
-          strokeDasharray="3 3"
-        />
-
-        {/* Altitude curve */}
-        <polyline
-          points={polylinePoints}
-          fill="none"
-          stroke="var(--alm-accent)"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-
-        {/* Transit vertical marker */}
-        <line
-          x1={transitX}
-          y1={PAD_T}
-          x2={transitX}
-          y2={PAD_T + PLOT_H}
-          stroke="var(--alm-accent)"
-          strokeWidth="1"
-          strokeDasharray="2 2"
-          opacity="0.6"
-        />
-        <text
-          x={transitX + 3}
-          y={PAD_T + 9}
-          className="alm-planner__graph-label-text"
-        >
-          {m.targets_detail_transit()}
-        </text>
-
-        {/* Y-axis */}
-        <line
-          x1={PAD_L}
-          y1={PAD_T}
-          x2={PAD_L}
-          y2={PAD_T + PLOT_H}
-          stroke="var(--alm-border)"
-          strokeWidth="1"
-        />
-        {/* X-axis */}
-        <line
-          x1={PAD_L}
-          y1={PAD_T + PLOT_H}
-          x2={PAD_L + PLOT_W}
-          y2={PAD_T + PLOT_H}
-          stroke="var(--alm-border)"
-          strokeWidth="1"
-        />
-
-        {/* Y-axis ticks + labels */}
-        {yTicks.map((alt) => (
-          <g key={alt}>
-            <line
-              x1={PAD_L - 3}
-              y1={altToY(alt)}
-              x2={PAD_L}
-              y2={altToY(alt)}
-              stroke="var(--alm-border)"
-              strokeWidth="1"
+        <Group left={PAD_L} top={PAD_T}>
+          {/* US4/T031: twilight (not-dark) shading either side of the real
+              dark window — omitted entirely when there is no dark window
+              tonight (a separate banner discloses that, T033). */}
+          {darkWindowHours && darkWindowHours.startHour > 0 && (
+            <rect
+              x={0}
+              y={0}
+              width={Math.max(0, xScale(darkWindowHours.startHour))}
+              height={PLOT_H}
+              className="alm-planner__graph-twilight"
             />
-            <text
-              x={PAD_L - 5}
-              y={altToY(alt) + 3}
-              textAnchor="end"
-              className="alm-planner__graph-axis-text"
-            >
-              {alt}°
-            </text>
-          </g>
-        ))}
-
-        {/* X-axis ticks + labels */}
-        {xTicks.map(({ tHour, label }) => (
-          <g key={tHour}>
-            <line
-              x1={hourToX(tHour)}
-              y1={PAD_T + PLOT_H}
-              x2={hourToX(tHour)}
-              y2={PAD_T + PLOT_H + 3}
-              stroke="var(--alm-border)"
-              strokeWidth="1"
+          )}
+          {darkWindowHours && darkWindowHours.endHour < 12 && (
+            <rect
+              x={xScale(darkWindowHours.endHour)}
+              y={0}
+              width={Math.max(0, PLOT_W - xScale(darkWindowHours.endHour))}
+              height={PLOT_H}
+              className="alm-planner__graph-twilight"
             />
-            <text
-              x={hourToX(tHour)}
-              y={PAD_T + PLOT_H + 12}
-              textAnchor="middle"
-              className="alm-planner__graph-axis-text"
-            >
-              {label}
-            </text>
-          </g>
-        ))}
+          )}
+
+          {/* Usable-altitude shading — clipped to where the CURVE is actually
+              above the threshold (T035), not a static full-width band. */}
+          <Threshold<AltPoint>
+            id="tonight-usable-threshold"
+            data={points}
+            x={(p) => xScale(p.tHour)}
+            y0={() => usableYPx}
+            y1={(p) => yScale(p.altDeg)}
+            clipAboveTo={0}
+            clipBelowTo={PLOT_H}
+            aboveAreaProps={{ fill: 'var(--alm-ok-bg)', opacity: 0.6 }}
+            belowAreaProps={{ fill: 'none' }}
+          />
+
+          {/* Usable-altitude guide line. */}
+          <line
+            x1={0}
+            y1={usableYPx}
+            x2={PLOT_W}
+            y2={usableYPx}
+            stroke="var(--alm-ok-border)"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+          />
+
+          {/* Altitude curve. */}
+          <LinePath<AltPoint>
+            data={points}
+            x={(p) => xScale(p.tHour)}
+            y={(p) => yScale(p.altDeg)}
+            stroke="var(--alm-accent)"
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+
+          {/* Transit vertical marker. */}
+          <line
+            x1={transitXPx}
+            y1={0}
+            x2={transitXPx}
+            y2={PLOT_H}
+            stroke="var(--alm-accent)"
+            strokeWidth={1}
+            strokeDasharray="2 2"
+            opacity={0.6}
+          />
+          <text x={transitXPx + 3} y={9} className="alm-planner__graph-label-text">
+            {m.targets_detail_transit()}
+          </text>
+
+          {/* Y-axis */}
+          <line x1={0} y1={0} x2={0} y2={PLOT_H} stroke="var(--alm-border)" strokeWidth={1} />
+          {/* X-axis */}
+          <line x1={0} y1={PLOT_H} x2={PLOT_W} y2={PLOT_H} stroke="var(--alm-border)" strokeWidth={1} />
+
+          {/* Y-axis ticks + labels */}
+          {yTicks.map((alt) => (
+            <g key={alt}>
+              <line x1={-3} y1={yScale(alt)} x2={0} y2={yScale(alt)} stroke="var(--alm-border)" strokeWidth={1} />
+              <text x={-5} y={yScale(alt) + 3} textAnchor="end" className="alm-planner__graph-axis-text">
+                {alt}°
+              </text>
+            </g>
+          ))}
+
+          {/* X-axis ticks + labels */}
+          {xTicks.map(({ tHour, label }) => (
+            <g key={tHour}>
+              <line
+                x1={xScale(tHour)}
+                y1={PLOT_H}
+                x2={xScale(tHour)}
+                y2={PLOT_H + 3}
+                stroke="var(--alm-border)"
+                strokeWidth={1}
+              />
+              <text x={xScale(tHour)} y={PLOT_H + 12} textAnchor="middle" className="alm-planner__graph-axis-text">
+                {label}
+              </text>
+            </g>
+          ))}
+        </Group>
       </svg>
     </div>
   );
@@ -569,17 +558,16 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   const tonightAvailable = !rowAlt.needsCoordinates && !rowAlt.needsSite;
   // US2/T025: best-imaging date (FR-009) — same anti-solar-RA computation as
   // the Targets table's "Opposition" column (spec 047), formatted the same way.
-  const bestDateValue =
-    rowAlt.bestDate != null
-      ? (() => {
-          const rel = oppositionRelative(rowAlt.bestDate!.inDays);
-          const relText =
-            rel.unit === 'days'
-              ? m.targets_opposition_in_days({ count: rel.count })
-              : m.targets_opposition_in_months({ count: rel.count });
-          return `${formatOppositionDate(new Date(rowAlt.bestDate!.dateMs))} · ${relText}`;
-        })()
-      : null;
+  const bestDateValue = ((): string | null => {
+    const bestDate = rowAlt.bestDate;
+    if (bestDate === null) return null;
+    const rel = oppositionRelative(bestDate.inDays);
+    const relText =
+      rel.unit === 'days'
+        ? m.targets_opposition_in_days({ count: rel.count })
+        : m.targets_opposition_in_months({ count: rel.count });
+    return `${formatOppositionDate(new Date(bestDate.dateMs))} · ${relText}`;
+  })();
   const tonightStats: PropertyDef[] = tonightAvailable
     ? [
         { key: 'maxalt', label: m.targets_col_max_alt(), value: `${Math.round(rowAlt.maxAltDeg)}°` },
@@ -661,7 +649,11 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
             </Banner>
           ) : (
             <>
-              <AltitudeGraph points={tonightPoints} />
+              <AltitudeGraph
+                points={tonightPoints}
+                usableAltDeg={usableAltDeg}
+                darkWindowHours={rowAlt.darkWindowHours}
+              />
               {/* US4/T033: no qualifying dark window (e.g. high-latitude
                   summer) — disclose it explicitly (FR-017); the altitude
                   graph above is still real, only the imaging-time concept

@@ -86,6 +86,13 @@ export interface RowAltitude {
    * degrade states (no astronomy is attempted there at all).
    */
   noDarkWindow: boolean;
+  /**
+   * The dark window's `[startHour, endHour]` on the SAME `tHour` axis as
+   * `points` (T035: lets the detail-pane graph shade twilight vs dark);
+   * `null` when there is no dark window (`noDarkWindow`) or in the degrade
+   * states.
+   */
+  darkWindowHours: { startHour: number; endHour: number } | null;
 }
 
 const ZERO_BY_BAND: Record<Band, number> = Object.fromEntries(BANDS.map((b) => [b, 0])) as Record<
@@ -102,6 +109,7 @@ const DEGRADE_ROW: Omit<RowAltitude, 'needsCoordinates' | 'needsSite'> = {
   separationScalars: UNKNOWN_SEPARATION_SCALARS,
   moonFreeMinutesByBand: ZERO_BY_BAND,
   noDarkWindow: false,
+  darkWindowHours: null,
 };
 
 /** A minimal shape sufficient to compute tonight observability (T012 fallback reuse). */
@@ -170,6 +178,12 @@ export function altitudeFor(
     separationScalars: derived.separationScalars,
     moonFreeMinutesByBand: derived.moonFreeMinutesByBand,
     noDarkWindow: night.darkWindow === null,
+    darkWindowHours: night.darkWindow
+      ? {
+          startHour: (night.darkWindow.startMs - night.nightStartMs) / 3_600_000,
+          endHour: (night.darkWindow.endMs - night.nightStartMs) / 3_600_000,
+        }
+      : null,
   };
 }
 
