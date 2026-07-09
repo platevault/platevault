@@ -13,10 +13,26 @@
  * `Equator(..., ofdate=true)` before `Horizon()`, so the ~20′ 2000→2026 drift is
  * not dropped the way the old mock did.
  *
- * MVP scope note: Moon geometry (`moonSamples`, `moonUpWindows`, illumination)
- * and the anti-solar best-date belong to US5 / US2 and are added in follow-up
- * lanes; this module intentionally computes only the US1 (altitude/transit/
- * rise-set/dark-window) surface.
+ * US5 (T027): also computes the Moon time-series — altitude(t) + target↔Moon
+ * separation(t) aligned to the same grid, and the Moon-up windows (∩ the dark
+ * window, horizon-aware — T032). Per SC-013 (no duplicate Moon-geometry
+ * computation between the tracks), the per-sample separation reuses Track A's
+ * exact vector math (`astro/lunar-separation.ts`'s `targetUnitVector`/
+ * `angleBetweenDeg` against `GeoVector(Body.Moon, …)`, the same frame
+ * `astro/moon-state.ts` uses) rather than a second implementation, and the
+ * single-instant illumination/Moon-age carried on `NightObservability` is
+ * Track A's own `moonStateAt` evaluated at this night's dark-window midpoint
+ * (Track A only evaluates "tonight"; Track B needs an arbitrary planned date,
+ * so it calls the same function at its own reference instant — still ONE
+ * implementation, not a fork). The per-band Lorentzian rule itself
+ * (`minSeparationDeg`) is consumed, never redefined, in `planner-derive.ts`
+ * (FR-022/FR-023).
+ *
+ * The anti-solar best-imaging date (US2/FR-009) is likewise NOT recomputed
+ * here — it is the exact same anti-solar-RA search Track A already ships as
+ * `astro/opposition.ts`'s `nextOpposition` (a fixed-RA target's "transits at
+ * local midnight" date IS its opposition-style date); `planner-derive.ts`
+ * calls it directly instead of a second search implementation.
  *
  * Pure/offline compute; no React. Memoization is `planner-derive.ts`'s job.
  */
@@ -26,6 +42,7 @@ import {
   Body,
   DefineStar,
   Equator,
+  GeoVector,
   Horizon,
   Observer,
   SearchAltitude,
@@ -33,6 +50,8 @@ import {
   SearchRiseSet,
 } from 'astronomy-engine';
 import type { ObserverSite } from './observing-sites/observer-site';
+import { angleBetweenDeg, targetUnitVector } from './astro/lunar-separation';
+import { moonStateAt } from './astro/moon-state';
 
 /** Fixed grid step across the night (minutes). */
 export const GRID_STEP_MINUTES = 10;
@@ -66,6 +85,15 @@ export interface TimeWindow {
   endMs: number;
 }
 
+/** One sampled point of the Moon's altitude + target↔Moon separation (US5, FR-019). */
+export interface MoonSample {
+  tMs: number;
+  /** Moon's apparent altitude in degrees (refraction applied). */
+  moonAltDeg: number;
+  /** Target↔Moon angular separation in degrees (0…180). */
+  separationDeg: number;
+}
+
 /** Per-target, per-site, per-date observability (US1 surface — data-model.md §2). */
 export interface NightObservability {
   /** The night span the grid covers (sunset→sunrise, or a fallback window). */
@@ -80,6 +108,14 @@ export interface NightObservability {
   set: AltEvent | null;
   /** Dark window from the site twilight depression; null when no dark exists (FR-017). */
   darkWindow: TimeWindow | null;
+  /** Moon altitude + target-Moon separation, aligned 1:1 with `samples` (US5, FR-019). */
+  moonSamples: MoonSample[];
+  /** Contiguous Moon-above-`minHorizonAltDeg` intervals ∩ the dark window (US5, FR-021). */
+  moonUpWindows: TimeWindow[];
+  /** Illuminated Moon fraction [0,1] for the night, from Track A's `moonStateAt` (carried for display). */
+  moonIllumination: number;
+  /** Days from full Moon at the same reference instant as `moonIllumination` — the Lorentzian input (FR-022). */
+  moonAgeFromFullDays: number;
 }
 
 const REFRACTION = 'normal';
@@ -172,15 +208,33 @@ export function computeNightObservability(
   const observer = observerFor(site);
   // Define the fixed target as Star1: RA in sidereal hours, Dec in degrees, J2000.
   DefineStar(Body.Star1, raDegJ2000 / 15, decDegJ2000, STAR_DISTANCE_LY);
+  // The target's J2000 unit vector is fixed for the whole night — computed once
+  // (Track A's `lunar-separation.ts` geocentric-vector approach, ±2° tolerance
+  // per its own doc; no precession needed at this tolerance for a separation
+  // angle, unlike the precessed of-date altitude/azimuth above).
+  const targetVec = targetUnitVector(raDegJ2000, decDegJ2000);
 
   const { startMs, endMs } = nightSpan(observer, dateMs);
 
-  // 10-minute altitude/az grid across the night.
+  // 10-minute altitude/az grid across the night, plus the aligned Moon
+  // altitude + target-Moon separation series (US5, FR-019).
   const samples: AltAzSample[] = [];
+  const moonSamples: MoonSample[] = [];
   const step = GRID_STEP_MINUTES * MS_PER_MIN;
   for (let tMs = startMs; tMs <= endMs; tMs += step) {
-    const { altDeg, azDeg } = starHorizonAt(new Date(tMs), observer);
+    const date = new Date(tMs);
+    const { altDeg, azDeg } = starHorizonAt(date, observer);
     samples.push({ tMs, altDeg, azDeg });
+
+    // Moon apparent topocentric altitude at the site (of-date, aberration-
+    // corrected — matches how a real body, as opposed to the fixed Star1
+    // proxy, is normally evaluated with astronomy-engine).
+    const moonEq = Equator(Body.Moon, date, observer, /*ofdate*/ true, /*aberration*/ true);
+    const moonHor = Horizon(date, observer, moonEq.ra, moonEq.dec, REFRACTION);
+    // Separation reuses Track A's exact geocentric vector math (SC-013).
+    const moonGeoVec = GeoVector(Body.Moon, date, true);
+    const separationDeg = angleBetweenDeg(targetVec, moonGeoVec);
+    moonSamples.push({ tMs, moonAltDeg: moonHor.altitude, separationDeg });
   }
 
   // Exact transit nearest the night (search from 1h before night start).
@@ -206,7 +260,60 @@ export function computeNightObservability(
 
   const darkWindow = darkWindowFor(observer, site, startMs);
 
-  return { nightStartMs: startMs, nightEndMs: endMs, samples, transit, rise, set, darkWindow };
+  // Moon-up windows: Moon above the site's minimum-horizon altitude,
+  // intersected with the dark window (US5/US4, FR-021, T032).
+  const moonUpWindows = moonUpWindowsFor(moonSamples, darkWindow, site.minHorizonAltDeg);
+
+  // Single reference-instant Moon state (illumination + age) for this planned
+  // night, via Track A's own `moonStateAt` (SC-013 — reuse, not a fork).
+  // Track A only ever evaluates "tonight"; here the reference instant is this
+  // NIGHT's own dark-window midpoint (or the night midpoint when there is no
+  // dark window), so an arbitrary planned date (US2) gets a correct age/
+  // illumination instead of today's.
+  const referenceMs = darkWindow
+    ? (darkWindow.startMs + darkWindow.endMs) / 2
+    : (startMs + endMs) / 2;
+  const moonRef = moonStateAt(new Date(referenceMs));
+
+  return {
+    nightStartMs: startMs,
+    nightEndMs: endMs,
+    samples,
+    transit,
+    rise,
+    set,
+    darkWindow,
+    moonSamples,
+    moonUpWindows,
+    moonIllumination: moonRef.illuminationFrac,
+    moonAgeFromFullDays: moonRef.moonAgeFromFullDays,
+  };
+}
+
+/**
+ * Contiguous Moon-above-`minHorizonAltDeg` intervals within the dark window
+ * (US5, FR-021; horizon-aware per T032). `null` dark window (no dark exists,
+ * FR-017) yields no windows — there is no imaging time to protect.
+ */
+function moonUpWindowsFor(
+  moonSamples: MoonSample[],
+  darkWindow: TimeWindow | null,
+  minHorizonAltDeg: number,
+): TimeWindow[] {
+  if (!darkWindow) return [];
+  const windows: TimeWindow[] = [];
+  let openStartMs: number | null = null;
+  for (const s of moonSamples) {
+    if (s.tMs < darkWindow.startMs || s.tMs > darkWindow.endMs) continue;
+    const up = s.moonAltDeg >= minHorizonAltDeg;
+    if (up && openStartMs === null) openStartMs = s.tMs;
+    if (!up && openStartMs !== null) {
+      windows.push({ startMs: openStartMs, endMs: s.tMs });
+      openStartMs = null;
+    }
+  }
+  if (openStartMs !== null) windows.push({ startMs: openStartMs, endMs: darkWindow.endMs });
+  return windows;
 }
 
 /**

@@ -35,10 +35,12 @@ import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { altitudeFor, rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
 import { useActiveSite } from './observing-sites/site-store';
+import { usePlannerDateMs } from './planner-date-store';
 import { GuidanceCell } from './GuidanceCell';
 import { deriveRowMoonPlanning } from './astro/row-planning';
 import type { ObservingNight } from './astro/moon-state';
 import { useGuidanceParams } from './guidance-settings';
+import { formatOppositionDate, oppositionRelative } from './astro/opposition';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -347,6 +349,8 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   // US6/T015: real astronomy needs an active observing site; the graph/stats
   // degrade cleanly (T013) via `altitudeFor`'s needsSite flag when there isn't one.
   const site = useActiveSite();
+  // US2/T024: the Planner's chosen date (defaults to "tonight", FR-008).
+  const dateMs = usePlannerDateMs();
 
   const load = useCallback(() => {
     setLoadState({ status: 'loading' });
@@ -522,8 +526,14 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   // imaging-time model is real (spec 044 Track B); lunar distance + filter
   // guidance below are the real spec 047 Track A values from `moon`.
   const rowAlt = item
-    ? rowAltitudeFor(item, usableAltDeg, site)
-    : altitudeFor({ id: detail.id, raDeg: detail.raDeg, decDeg: detail.decDeg }, usableAltDeg, site);
+    ? rowAltitudeFor(item, usableAltDeg, site, dateMs, guidanceParams)
+    : altitudeFor(
+        { id: detail.id, raDeg: detail.raDeg, decDeg: detail.decDeg },
+        usableAltDeg,
+        site,
+        dateMs,
+        guidanceParams,
+      );
   const tonightPoints: AltPoint[] = rowAlt.points;
   const moon = deriveRowMoonPlanning(
     { raDeg: detail.raDeg, decDeg: detail.decDeg },
@@ -557,6 +567,19 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   // Max alt / imaging time are real (spec 044 Track B); lunar distance is the
   // real spec 047 value (unknown → "—"), never a fabricated number.
   const tonightAvailable = !rowAlt.needsCoordinates && !rowAlt.needsSite;
+  // US2/T025: best-imaging date (FR-009) — same anti-solar-RA computation as
+  // the Targets table's "Opposition" column (spec 047), formatted the same way.
+  const bestDateValue =
+    rowAlt.bestDate != null
+      ? (() => {
+          const rel = oppositionRelative(rowAlt.bestDate!.inDays);
+          const relText =
+            rel.unit === 'days'
+              ? m.targets_opposition_in_days({ count: rel.count })
+              : m.targets_opposition_in_months({ count: rel.count });
+          return `${formatOppositionDate(new Date(rowAlt.bestDate!.dateMs))} · ${relText}`;
+        })()
+      : null;
   const tonightStats: PropertyDef[] = tonightAvailable
     ? [
         { key: 'maxalt', label: m.targets_col_max_alt(), value: `${Math.round(rowAlt.maxAltDeg)}°` },
@@ -566,6 +589,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
           label: m.targets_col_lunar(),
           value: moon.lunarSeparationDeg != null ? `${Math.round(moon.lunarSeparationDeg)}°` : null,
         },
+        { key: 'bestdate', label: m.targets_col_best_date(), value: bestDateValue },
       ]
     : [];
 
@@ -638,6 +662,13 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
           ) : (
             <>
               <AltitudeGraph points={tonightPoints} />
+              {/* US4/T033: no qualifying dark window (e.g. high-latitude
+                  summer) — disclose it explicitly (FR-017); the altitude
+                  graph above is still real, only the imaging-time concept
+                  doesn't apply tonight. */}
+              {tonightAvailable && rowAlt.noDarkWindow && (
+                <Banner variant="info">{m.targets_table_no_dark_window_title()}</Banner>
+              )}
               {tonightAvailable && (
                 <>
                   <PropertyTable mode="view" properties={tonightStats} />
@@ -648,6 +679,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
                       moon={moon}
                       params={guidanceParams}
                       targetLabel={detail.effectiveLabel}
+                      moonFreeMinutesByBand={rowAlt.moonFreeMinutesByBand}
                     />
                   </div>
                 </>

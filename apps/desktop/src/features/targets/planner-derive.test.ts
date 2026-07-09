@@ -13,6 +13,8 @@ import {
   getNightObservability,
 } from './planner-derive';
 import type { ObserverSite } from './observing-sites/observer-site';
+import { BANDS, DEFAULT_MOON_AVOIDANCE } from './astro/moon-avoidance';
+import { __resetOppositionCacheForTest } from './astro/opposition';
 
 const AMSTERDAM: ObserverSite = {
   id: 'site-ams',
@@ -29,6 +31,7 @@ const WINTER_NIGHT_MS = Date.UTC(2026, 0, 15, 12, 0, 0);
 
 beforeEach(() => {
   clearObservabilityCache();
+  __resetOppositionCacheForTest();
 });
 
 describe('getNightObservability — memoization', () => {
@@ -103,5 +106,93 @@ describe('deriveObservability — never-visible edge case (T013)', () => {
     const derived = deriveObservability(night, 10);
     expect(derived.visibleTonight).toBe(true);
     expect(derived.totalImagingMinutes).toBeGreaterThan(0);
+  });
+});
+
+describe('deriveObservability — US5 separation scalars (T028, SC-009)', () => {
+  it('all three scalars are either a finite [0,180] degree figure or "moon-not-up"', () => {
+    const night = getNightObservability('t1', 180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const derived = deriveObservability(night, 30);
+    for (const figure of Object.values(derived.separationScalars)) {
+      if (figure === 'moon-not-up') continue;
+      expect(figure).toBeGreaterThanOrEqual(0);
+      expect(figure).toBeLessThanOrEqual(180);
+    }
+  });
+
+  it('minOverDarkDeg never exceeds atDarkMidpointDeg when both are numeric (min ≤ any point)', () => {
+    const night = getNightObservability('t1', 180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const derived = deriveObservability(night, 30);
+    const { minOverDarkDeg, atDarkMidpointDeg } = derived.separationScalars;
+    if (minOverDarkDeg !== 'moon-not-up' && atDarkMidpointDeg !== 'moon-not-up') {
+      expect(minOverDarkDeg).toBeLessThanOrEqual(atDarkMidpointDeg + 1e-6);
+    }
+  });
+
+  it('raising minHorizonAltDeg can only turn a numeric figure into "moon-not-up", never the reverse', () => {
+    const night = getNightObservability('t1', 180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const low = deriveObservability(night, 30, { minHorizonAltDeg: 0 });
+    const high = deriveObservability(night, 30, { minHorizonAltDeg: 89 });
+    if (low.separationScalars.atDarkMidpointDeg === 'moon-not-up') {
+      expect(high.separationScalars.atDarkMidpointDeg).toBe('moon-not-up');
+    }
+  });
+});
+
+describe('deriveObservability — US5 per-band moon-free minutes (T028, SC-010)', () => {
+  it('every band is within [0, totalImagingMinutes]', () => {
+    const night = getNightObservability('t1', 180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const derived = deriveObservability(night, 30, { moonAvoidanceParams: DEFAULT_MOON_AVOIDANCE });
+    for (const band of BANDS) {
+      expect(derived.moonFreeMinutesByBand[band]).toBeGreaterThanOrEqual(0);
+      expect(derived.moonFreeMinutesByBand[band]).toBeLessThanOrEqual(derived.totalImagingMinutes);
+    }
+  });
+
+  it('a more Moon-tolerant band never reports less moon-free time than a stricter band (SC-010)', () => {
+    const night = getNightObservability('t1', 180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const derived = deriveObservability(night, 30, { moonAvoidanceParams: DEFAULT_MOON_AVOIDANCE });
+    // Ha (60°/7d) is strictly more tolerant than L (120°/14d) at every Moon age
+    // (smaller required distance AND narrower width) — Ha must never trail L.
+    expect(derived.moonFreeMinutesByBand.Ha).toBeGreaterThanOrEqual(derived.moonFreeMinutesByBand.L);
+  });
+
+  it('no dark window => every band is zero (FR-017, no fabrication)', () => {
+    const highLat: ObserverSite = { ...AMSTERDAM, latitudeDeg: 69.6, longitudeDeg: 18.9 };
+    const summerMs = Date.UTC(2026, 5, 21, 12, 0, 0);
+    const night = getNightObservability('t-summer', 180, 0, highLat, summerMs);
+    expect(night.darkWindow).toBeNull();
+    const derived = deriveObservability(night, 30);
+    for (const band of BANDS) {
+      expect(derived.moonFreeMinutesByBand[band]).toBe(0);
+    }
+  });
+});
+
+describe('deriveObservability — US2 bestDate (T025, FR-009)', () => {
+  it('is null for unknown coordinates', () => {
+    const night = getNightObservability('t1', 180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const derived = deriveObservability(night, 30, { raDegJ2000: null });
+    expect(derived.bestDate).toBeNull();
+  });
+
+  it('is a real future-or-present date with a non-negative days-until for known coordinates', () => {
+    const night = getNightObservability('t1', 180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const derived = deriveObservability(night, 30, { raDegJ2000: 180, bestDateFromMs: WINTER_NIGHT_MS });
+    expect(derived.bestDate).not.toBeNull();
+    expect(derived.bestDate?.inDays).toBeGreaterThanOrEqual(0);
+    expect(derived.bestDate?.dateMs).toBeGreaterThanOrEqual(WINTER_NIGHT_MS);
+  });
+
+  it('a later anchor within the same cycle reduces the best-date days-until (US2/SC-004)', () => {
+    const night = getNightObservability('t1', 180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const fromWinter = deriveObservability(night, 30, { raDegJ2000: 180, bestDateFromMs: WINTER_NIGHT_MS });
+    // 10 days later, still well short of the ~60-day-out best date found above —
+    // moving the anchor forward within the same cycle must shrink days-until by
+    // the same 10 days (same absolute best-date calendar day).
+    const laterMs = WINTER_NIGHT_MS + 10 * 86_400_000;
+    const fromLater = deriveObservability(night, 30, { raDegJ2000: 180, bestDateFromMs: laterMs });
+    expect(fromLater.bestDate?.dateMs).toBe(fromWinter.bestDate?.dateMs);
+    expect(fromLater.bestDate?.inDays).toBeLessThan(fromWinter.bestDate?.inDays ?? -Infinity);
   });
 });

@@ -131,6 +131,72 @@ describe('computeNightObservability — dark window + grid shape', () => {
   });
 });
 
+describe('computeNightObservability — US5 Moon time-series (T027/T031/T032)', () => {
+  it('moonSamples is aligned 1:1 with samples (same tMs grid)', () => {
+    const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    expect(night.moonSamples.length).toBe(night.samples.length);
+    for (let i = 0; i < night.samples.length; i++) {
+      expect(night.moonSamples[i].tMs).toBe(night.samples[i].tMs);
+    }
+  });
+
+  it('every moonSamples separation is within [0, 180]', () => {
+    const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    for (const s of night.moonSamples) {
+      expect(s.separationDeg).toBeGreaterThanOrEqual(0);
+      expect(s.separationDeg).toBeLessThanOrEqual(180);
+    }
+  });
+
+  it('moonIllumination is a fraction in [0, 1]', () => {
+    const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    expect(night.moonIllumination).toBeGreaterThanOrEqual(0);
+    expect(night.moonIllumination).toBeLessThanOrEqual(1);
+  });
+
+  it('moonUpWindows only contains intervals inside the dark window', () => {
+    const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const dark = required(night.darkWindow, 'darkWindow');
+    for (const w of night.moonUpWindows) {
+      expect(w.startMs).toBeGreaterThanOrEqual(dark.startMs);
+      expect(w.endMs).toBeLessThanOrEqual(dark.endMs);
+      expect(w.startMs).toBeLessThanOrEqual(w.endMs);
+    }
+  });
+
+  it('raising minHorizonAltDeg never widens the Moon-up windows (horizon-aware, T032)', () => {
+    const low = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const raised: ObserverSite = { ...AMSTERDAM, minHorizonAltDeg: 20 };
+    const high = computeNightObservability(180, 0, raised, WINTER_NIGHT_MS);
+    const sumMs = (windows: typeof low.moonUpWindows) =>
+      windows.reduce((acc, w) => acc + (w.endMs - w.startMs), 0);
+    expect(sumMs(high.moonUpWindows)).toBeLessThanOrEqual(sumMs(low.moonUpWindows));
+  });
+});
+
+describe('computeNightObservability — US4 twilight + horizon (T031/T032/T033)', () => {
+  it('nautical twilight (shallower −12° threshold) gives a window at least as wide as astronomical −18° (SC-007)', () => {
+    // Sun-below−12° is a strictly looser condition than Sun-below−18°, so the
+    // nautical dark window contains the astronomical one (wider, not narrower).
+    const astro = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const nautical: ObserverSite = { ...AMSTERDAM, twilight: 'nautical' };
+    const naut = computeNightObservability(180, 0, nautical, WINTER_NIGHT_MS);
+    const astroDark = required(astro.darkWindow, 'astro darkWindow');
+    const nautDark = required(naut.darkWindow, 'naut darkWindow');
+    const astroLenMs = astroDark.endMs - astroDark.startMs;
+    const nautLenMs = nautDark.endMs - nautDark.startMs;
+    expect(nautLenMs).toBeGreaterThanOrEqual(astroLenMs);
+  });
+
+  it('a high-latitude summer night has no dark window (SC-008, no fabrication)', () => {
+    // Tromsø-like site (69.6N) at midsummer: astronomical twilight never reached.
+    const highLat: ObserverSite = { ...AMSTERDAM, latitudeDeg: 69.6, longitudeDeg: 18.9 };
+    const summer = Date.UTC(2026, 5, 21, 12, 0, 0);
+    const night = computeNightObservability(180, 0, highLat, summer);
+    expect(night.darkWindow).toBeNull();
+  });
+});
+
 describe('angularSeparationFromMoonDeg', () => {
   it('returns a value in [0, 180] degrees', () => {
     const deg = angularSeparationFromMoonDeg(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
