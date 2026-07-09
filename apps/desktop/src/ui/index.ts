@@ -10,7 +10,7 @@ export { KV } from './KV';
 export type { KVProps } from './KV';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
-export { Table } from './Table';
+export { Table, tableIndent } from './Table';
 export type { TableProps, TableColumn, TableRow } from './Table';
 export { Banner } from './Banner';
 export type { BannerProps, BannerVariant } from './Banner';

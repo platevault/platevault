@@ -27,7 +27,7 @@
 
 import { useMemo, type ReactNode } from 'react';
 import type { InventorySource, InventorySession } from '@/bindings/index';
-import { Table, Pill } from '@/ui';
+import { Table, Pill, tableIndent } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { m } from '@/lib/i18n';
 import type { TableColumn, TableRow } from '@/ui';
@@ -172,8 +172,6 @@ const EMPTY_CELLS = {
   projects: '' as string | ReactNode,
 };
 
-const INDENT_PER_DEPTH = 12;
-
 // ── Component ────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -257,6 +255,7 @@ export function SessionsTable({
           const { node, depth, path, collapsed: isCollapsed } = row;
           return {
             _rowClassName: 'alm-listgroup',
+            _indent: tableIndent(depth),
             target: (
               <button
                 type="button"
@@ -264,8 +263,6 @@ export function SessionsTable({
                 data-testid={`sessions-group-${node.dimension}-${node.key}`}
                 aria-expanded={!isCollapsed}
                 onClick={() => toggle(path)}
-                // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
-                style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
               >
                 <span className="alm-listgroup__caret" aria-hidden="true">
                   {isCollapsed ? '▸' : '▾'}
@@ -283,7 +280,7 @@ export function SessionsTable({
         // table is flat (the default) or a grouped leaf (indented under its
         // header). Inbox-parity: rows carry a stable per-row testid.
         const s = row.item;
-        const indentPx = grouped ? 8 + row.depth * INDENT_PER_DEPTH : 0;
+        const indentPx = grouped ? tableIndent(row.depth) : 0;
         const projects = s.linked?.projects ?? [];
         return {
           _testid: `sessions-row-${s.id}`,
@@ -291,14 +288,10 @@ export function SessionsTable({
             'alm-sessions-table__row' +
             (selected === s.id ? ' alm-sessions-table__row--selected' : ''),
           _onClick: () => onSelect(s.id),
+          _selected: selected === s.id,
+          _indent: indentPx || undefined,
           target: (
-            <span
-              className="alm-sessions-cell--target"
-              // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
-              style={indentPx ? { paddingLeft: indentPx } : undefined}
-            >
-              {s.target ?? s.name}
-            </span>
+            <span className="alm-sessions-cell--target">{s.target ?? s.name}</span>
           ),
           filter: s.filter ?? '—',
           frames: s.frames,

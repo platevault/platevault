@@ -71,7 +71,7 @@ import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { TargetListItem, TargetObjectType } from '@/bindings/index';
-import { Pill, Banner } from '@/ui';
+import { Pill, Banner, tableIndent } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
@@ -844,7 +844,6 @@ export function TargetsTable({
               const row = flatRows[index];
 
               if (row.kind === 'group') {
-                const depthIndent = (row.depth ?? 0) * 12;
                 if (row.collapsible && row.path != null) {
                   // Multi-level collapsible group header.
                   return (
@@ -862,7 +861,7 @@ export function TargetsTable({
                           aria-label={row.label}
                           onClick={() => toggleCollapsed(row.path!)}
                           // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
-                          style={{ paddingLeft: 8 + depthIndent }}
+                          style={{ paddingLeft: tableIndent(row.depth ?? 0) }}
                         >
                           <span
                             className="alm-listgroup__caret"
@@ -924,10 +923,19 @@ export function TargetsTable({
                   key={row.key}
                   data-index={index}
                   className={
-                    'alm-targets-table__row' +
+                    'alm-targets-table__row alm-table__row--clickable' +
                     (isSelected ? ' alm-targets-table__row--selected' : '')
                   }
                   onClick={() => onSelect(t.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelect(t.id);
+                    }
+                  }}
+                  // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- selectable row: focusable, activated by Enter/Space
+                  tabIndex={0}
+                  aria-selected={isSelected}
                 >
                   {/* task #18: favourite star toggle.
                       STUB: stored in localStorage only until task #54 (backend linkage) lands.

@@ -20,7 +20,7 @@
 import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { m } from '@/lib/i18n';
-import { Table } from '@/ui';
+import { Table, tableIndent } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import type { TableColumn, TableRow } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
@@ -148,8 +148,6 @@ export interface ProjectsTableProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-const INDENT_PER_DEPTH = 12;
-
 export function ProjectsTable({
   projects,
   selectedId,
@@ -211,13 +209,11 @@ export function ProjectsTable({
         'alm-projects-table__row' +
         (project.id === selectedId ? ' alm-projects-table__row--selected' : ''),
       _onClick: () => onSelect(project.id),
+      _selected: project.id === selectedId,
+      _indent: indentPx || undefined,
       _testid: `project-row-${project.id}`,
       name: (
-        <span
-          className="alm-projects-table__name"
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
-          style={indentPx ? { paddingLeft: indentPx } : undefined}
-        >
+        <span className="alm-projects-table__name">
           {project.lifecycle === 'blocked' && (
             <AlertTriangle
               size={13}
@@ -286,6 +282,7 @@ export function ProjectsTable({
         const { node, depth, path, collapsed: isCollapsed } = vrow;
         rows.push({
           _rowClassName: 'alm-listgroup',
+          _indent: tableIndent(depth),
           name: (
             <button
               type="button"
@@ -293,8 +290,6 @@ export function ProjectsTable({
               data-testid={`projects-group-${node.dimension}-${node.key}`}
               aria-expanded={!isCollapsed}
               onClick={() => toggle(path)}
-              // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
-              style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
             >
               <span className="alm-listgroup__caret" aria-hidden="true">
                 {isCollapsed ? '▸' : '▾'}
@@ -306,8 +301,7 @@ export function ProjectsTable({
           ...EMPTY_PROJECT_CELLS,
         });
       } else {
-        const indentPx = 8 + vrow.depth * INDENT_PER_DEPTH;
-        rows.push(projectItemRow(vrow.item, indentPx));
+        rows.push(projectItemRow(vrow.item, tableIndent(vrow.depth)));
       }
     }
   } else {

@@ -322,7 +322,10 @@ function PatternChipsEditor({
                 aria-label={m.settings_naming_remove_token({ label })}
                 onClick={() => handleRemove(part.id)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleRemove(part.id);
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleRemove(part.id);
+                  }
                 }}
               >
                 &times;
@@ -508,7 +511,10 @@ function PerTypePatternChipsEditor({
                 aria-label={m.settings_naming_remove_token({ label })}
                 onClick={() => handleRemove(chip.id)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleRemove(chip.id);
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleRemove(chip.id);
+                  }
                 }}
               >
                 &times;
