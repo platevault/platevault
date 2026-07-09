@@ -8,9 +8,12 @@
  * 2. Renders without the settings line when the fetch fails (best-effort
  *    display only — generation still works).
  * 3. Submits with the entered copy-opt-in flag and routes to plan review.
+ * 4. Toast wording distinguishes a link-materialization success from a
+ *    copy-fallback success (`resp.usedCopyFallback`), so users can tell
+ *    whether files were linked or copied without opening the plan.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockGenerate, mockGetSettings } = vi.hoisted(() => ({
@@ -26,10 +29,16 @@ vi.mock('@/features/settings/settingsIpc', () => ({
   getSettings: mockGetSettings,
 }));
 
+vi.mock('@/shared/toast', () => ({
+  addToast: vi.fn(),
+}));
+
 import { GenerateSourceViewDialog } from './GenerateSourceViewDialog';
+import { addToast } from '@/shared/toast';
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mockGetSettings.mockResolvedValue({ scope: 'sourceViews', values: {} });
 });
 
 describe('GenerateSourceViewDialog', () => {
@@ -69,5 +78,38 @@ describe('GenerateSourceViewDialog', () => {
       <GenerateSourceViewDialog projectId="p1" open={false} onClose={() => {}} />,
     );
     expect(mockGetSettings).not.toHaveBeenCalled();
+  });
+
+  it('shows a link-materialization toast when generation used no copy fallback', async () => {
+    mockGenerate.mockResolvedValue({ planId: 'plan-1', warnings: [], usedCopyFallback: false });
+
+    render(<GenerateSourceViewDialog projectId="p1" open onClose={() => {}} />);
+    fireEvent.click(screen.getByTestId('generate-source-view-submit'));
+
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringMatching(/linked, not copied/),
+        }),
+      );
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.not.stringMatching(/copy fallback/),
+        }),
+      );
+    });
+  });
+
+  it('shows a copy-fallback toast when generation materialized via copy', async () => {
+    mockGenerate.mockResolvedValue({ planId: 'plan-1', warnings: [], usedCopyFallback: true });
+
+    render(<GenerateSourceViewDialog projectId="p1" open onClose={() => {}} />);
+    fireEvent.click(screen.getByTestId('generate-source-view-submit'));
+
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('copy fallback') }),
+      );
+    });
   });
 });

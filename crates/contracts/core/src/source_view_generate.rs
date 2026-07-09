@@ -86,4 +86,10 @@ pub struct SourceViewGenerateResponse {
     /// Non-blocking review warnings surfaced with the plan.
     #[serde(default)]
     pub warnings: Vec<GenerationWarning>,
+    /// `true` when at least one item resolved to a copy-fallback
+    /// materialization (no link kind was achievable and `copyOptIn` allowed a
+    /// copy — FR-003/FR-004b). Lets callers surface link vs. copy-fallback
+    /// distinctly instead of a generic success message.
+    #[serde(default)]
+    pub used_copy_fallback: bool,
 }

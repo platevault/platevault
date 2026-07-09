@@ -81,9 +81,15 @@ export function GenerateSourceViewDialog({
         warningCount > 0
           ? m.projects_source_views_generate_warning_count({ count: String(warningCount) })
           : '';
+      // Distinguish the materialization path actually taken (FR-003/FR-004b) —
+      // a copy fallback is a meaningfully different outcome from a link, not
+      // just another warning to skim past.
+      const toastMessage = resp.usedCopyFallback
+        ? m.projects_source_views_generate_toast_copy_fallback({ warning })
+        : m.projects_source_views_generate_toast({ warning });
       addToast({
         variant: 'info',
-        message: m.projects_source_views_generate_toast({ warning }),
+        message: toastMessage,
         action: {
           label: m.projects_source_views_view_plan_btn(),
           onClick: () => onPlanCreated?.(resp.planId),

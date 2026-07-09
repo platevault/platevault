@@ -105,6 +105,8 @@ export interface SourceViewGenerateResponse {
   /** Id of the generation plan. Route through spec 017/025 pipeline. */
   planId: string;
   warnings?: GenerationWarning[];
+  /** True when at least one item materialized via copy fallback (FR-003/FR-004b). */
+  usedCopyFallback?: boolean;
 }
 
 // ── Command wrappers ──────────────────────────────────────────────────────────
