@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/nightwatch-astro/alm/compare/v0.1.0...v0.2.0) (2026-07-09)
+
+
+### Features
+
+* **source-views:** show which materialization path a generate took ([#490](https://github.com/nightwatch-astro/alm/issues/490)) ([6f897e2](https://github.com/nightwatch-astro/alm/commit/6f897e238f68c97b08387dece72344f940c5169f))
+
+
+### Bug Fixes
+
+* generate signed updater artifacts so the app can auto-update ([11ce569](https://github.com/nightwatch-astro/alm/commit/11ce569f65ece58ce9393fc1edb2e6f160138a71))
+* **inbox:** rescan registered roots that have no items yet ([#488](https://github.com/nightwatch-astro/alm/issues/488)) ([f3ba8b4](https://github.com/nightwatch-astro/alm/commit/f3ba8b479bcd35ef1067901510d304b3563a3244))
+
 ## 0.1.0 (2026-07-09)
 
 
