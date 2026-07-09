@@ -219,6 +219,15 @@ jobs:
       # No standalone `cargo build --workspace` step: clippy --all-targets
       # (above, Linux) and nextest (below, every OS) each already build every
       # target they need, so a dedicated build step only duplicated work.
+      # Clippy is Linux-only above, so Windows loses its only all-targets
+      # compile check of non-test code ([[bin]]s, examples) — nextest only
+      # builds through the cfg(test) harness. This repo has real history of
+      # Windows-only bin-vs-test-binary divergence (tauri-build manifest
+      # embed regression -> 0xc0000139), so restore cheap bin-target coverage
+      # on Windows specifically. macOS stays descoped (no comparable history).
+      - name: Windows workspace check (all targets)
+        if: runner.os == 'Windows' && needs.changes.outputs.rust == 'true'
+        run: cargo check --workspace --all-targets
 
       # Scope `cargo test` to the changed workspace members plus their
       # reverse-dependency closure (see scripts/ci-affected-crates.sh). Any
