@@ -85,5 +85,15 @@ mechanism itself.
   completions found. Inverse drift instead: 6 tasks (T071/T072/T073/T076/
   T077/T081) were implemented-and-tested on `main` but left unticked in
   `tasks.md`; all 21 open issues in the #320–#340 range were stale-open
-  (code already shipped). T078 (sync-conflicts record) and T079 (Windows
-  E2E) remain genuinely open — left unticked, issues #339/#340 left open.
+  (code already shipped). T079 (Windows E2E) remains genuinely open — left
+  unticked, issue #340 left open.
+- **T078 retroactive sync.conflicts run (2026-07-09).** Found a genuine
+  041↔006 lifecycle contradiction: 041 FR-051/SC-018 mandate removing the
+  session review lifecycle entirely, but a later shipped 006 iteration
+  (2026-07-03, FR-010) deliberately retained the `ignored` canonical state
+  and its Ignore/recover flow. Reconciled toward the later shipped 006
+  decision via a dated amendment annotation on 041's FR-051/SC-018 (see
+  `specs/041-inbox-plan-surface/sync-conflicts-2026-07-09.md` and the
+  spec.md annotations) rather than reverting either side's shipped code.
+  Flagged to the product owner for override if this reconciliation is
+  wrong. T078 ticked; issue #339 closed citing the record.
