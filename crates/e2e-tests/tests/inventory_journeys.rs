@@ -349,6 +349,9 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
     // WebDriver backend; explicitly invalidating the exact query the picker
     // reads removes the dependency on the reload actually having discarded
     // the 30s-`staleTime` cache (`E2eApp::invalidate_query` doc comment).
+    // Removable once lane nD's frontend reconcile-invalidation (PR #517,
+    // `sessions.all` + `inventory` prefix invalidation on reconcile
+    // completion) lands and `driver.refresh()` alone is sufficient again.
     app.invalidate_query(r#"["sessions"]"#).await?;
 
     let frames_after = app

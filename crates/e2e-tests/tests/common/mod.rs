@@ -683,7 +683,10 @@ impl E2eApp {
     /// Query resolves only once every currently-active matching query's
     /// refetch settles, so the caller can assert the freshly-rendered DOM
     /// immediately after this returns. Test-side workaround only — does not
-    /// substitute for the still-open frontend invalidation-wiring follow-up.
+    /// substitute for the still-open frontend invalidation-wiring follow-up
+    /// (lane nD, PR #517, adds `sessions.all` + `inventory` prefix
+    /// invalidation on reconcile completion); remove this call once that
+    /// lands and `driver.refresh()` alone proves sufficient again.
     pub async fn invalidate_query(&self, key_json: &str) -> Result<()> {
         let script = format!(
             r#"
