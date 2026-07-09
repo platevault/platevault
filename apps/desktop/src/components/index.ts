@@ -55,6 +55,10 @@ export type { ModalProps, ModalSize } from './Modal';
 export { ConfirmOverlay } from './ConfirmOverlay';
 export type { ConfirmOverlayProps } from './ConfirmOverlay';
 
+// Shared status indicator (dot + label). ProjectStatusTag is a thin alias.
+export { StatusTag } from './StatusTag';
+export type { StatusTagProps } from './StatusTag';
+
 // spec 035: SIMBAD target resolution — project-creation target typeahead.
 export { TargetSearch } from './TargetSearch';
 export type { TargetSearchProps } from './TargetSearch';
