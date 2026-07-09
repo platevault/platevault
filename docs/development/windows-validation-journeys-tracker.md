@@ -59,14 +59,19 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | #510 | Step 2 tools UI polish (pills/redetect/typography) | J1 | ux |
 | #511 | Tool binary picker accepts any file (.zip) | J1 | **bug** |
 | #512 | Make step-nav tabs clickable + a11y | J1 | enhancement |
-| _(pending)_ | Scan-step preview: count vs types mismatch, empty root row | J1/J8 | **bug** |
-| _(pending)_ | spec-040 comprehensive master-detection test matrix | J8 | test-coverage |
+| #513 | Scan-step preview: count vs types mismatch, empty root row | J1/J8 | **bug** |
+| #514 | spec-040 comprehensive master-detection test matrix | J8 | test-coverage |
+| #515 | Confirm shows depth not org state | J1 | minor |
+| #516 | Observing Site name accepts empty | J1 | minor |
+
+**Journey → Epic map:** J1 #518 · J2 #519 · J3 #520 · J4 #521 · J5 #522 · J6 #523
+· J7 #524 · J8 #525 · J9 #526 · J10 #527.
 
 ---
 
 # Journey 1 — First-run setup → Data Sources
 
-**Epic:** _(pending)_ · Source doc: `windows-journeys/journey-01-first-run-setup.md`
+**Epic:** #518 · Source doc: `windows-journeys/journey-01-first-run-setup.md`
 **Status: in progress** (Tests 1–4 done; 5–9 pending). Wizard steps 2–5 also deep-validated.
 
 | Test | Status | Notes / evidence |
@@ -247,15 +252,18 @@ placeholders, not fabricated values. Also probe observing-site lat/long range va
 
 ## Epics index
 
+Each epic carries labels `epic` + `journey-N`. Attached issues query:
+`label:journey-N`.
+
 | Journey | Epic issue | Status |
 |---------|-----------|--------|
-| J1 First-run setup | _(pending)_ | in progress |
-| J2 Inbox move | _(pending)_ | not started |
-| J3 Catalogue-in-place | _(pending)_ | not started |
-| J4 Sessions | _(pending)_ | not started |
-| J5 Project lifecycle | _(pending)_ | not started |
-| J6 Cleanup | _(pending)_ | not started |
-| J7 Archive/delete | _(pending)_ | not started |
-| J8 Calibration masters | _(pending)_ | not started |
-| J9 Targets/planning | _(pending)_ | not started |
-| J10 Settings/i18n | _(pending)_ | not started |
+| J1 First-run setup | **#518** | in progress |
+| J2 Inbox move | **#519** | not started |
+| J3 Catalogue-in-place | **#520** | not started |
+| J4 Sessions | **#521** | not started |
+| J5 Project lifecycle | **#522** | not started |
+| J6 Cleanup | **#523** | not started |
+| J7 Archive/delete | **#524** | not started |
+| J8 Calibration masters | **#525** | not started |
+| J9 Targets/planning | **#526** | not started |
+| J10 Settings/i18n | **#527** | not started |
