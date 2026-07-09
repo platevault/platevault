@@ -48,6 +48,12 @@ jobs:
         id: release
         uses: googleapis/release-please-action@v5
         with:
+          # A user PAT (not the default GITHUB_TOKEN) so the release PR and the
+          # published tag are created as the token owner: this lets the tagged
+          # release trigger downstream workflows (release-gate on `push: tags`)
+          # and avoids GitHub holding the bot-authored PR's checks as
+          # `action_required`. Secret owned by the repo admin.
+          token: ${{ secrets.RELEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
