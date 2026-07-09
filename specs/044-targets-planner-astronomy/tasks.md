@@ -369,7 +369,13 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
       imaging time (edge case).
       DONE: `planner-astronomy.test.ts` "US5 Moon time-series" block (grid alignment, separation range,
       illumination fraction range, Moon-up windows contained in the dark window, horizon-raising never widens
-      Moon-up — T032). `planner-derive.test.ts` "US5 separation scalars"/"US5 per-band moon-free minutes"
+      Moon-up — T032). REVIEWER FIX (external reference, SC-009): added
+      "target↔Moon separation vs an independent ephemeris" block — a real JPL Horizons (DE441) geocentric
+      astrometric Moon RA/Dec, fetched live via the public API at write-time and hardcoded with the exact
+      `curl` query cited in the test's comment (NOT derived from astronomy-engine), checked against both
+      `angularSeparationFromMoonDeg` (topocentric, 0.5° tolerance for the geocentric-reference gap — measured
+      ≈0.25° at the test's site/instant) and the T027 per-sample formula (`targetUnitVector`×`GeoVector`,
+      geocentric, 0.1° tolerance). `planner-derive.test.ts` "US5 separation scalars"/"US5 per-band moon-free minutes"
       blocks (SC-009: all figures in valid range or explicit "moon-not-up"; min ≤ midpoint; raising the
       horizon can only turn a figure into "moon-not-up", never the reverse. SC-010: every band ≤ total
       imaging minutes; Ha — more Moon-tolerant (60°/7d) — never trails L — stricter (120°/14d) — for the same
