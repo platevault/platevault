@@ -66,6 +66,13 @@ and can be deleted.
   (key ID `C332EF435C16EA58`).
 - CI signs with the repo secrets `TAURI_SIGNING_PRIVATE_KEY` +
   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (must match the 1Password pair).
+- **`bundle.createUpdaterArtifacts: true` is REQUIRED** in `tauri.conf.json`.
+  Tauri v2 only emits the updater bundles + `.sig` signatures (and lets
+  `tauri-action` build `latest.json`) when this is set. Without it a release
+  ships installers but **no `.sig` and no `latest.json`** — a silently broken
+  updater — even with valid signing secrets and a correct pubkey. This (not the
+  empty secrets) is why v1.0.0 and v0.1.0 had no updater; fixed for v0.1.1+.
+  Independent of Tauri version (the repo tracks the latest v2 line, 2.11.x).
 
 ### Set / rotate the signing secrets
 
