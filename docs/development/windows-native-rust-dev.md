@@ -13,11 +13,15 @@ reasons:
    `\\wsl$\…` / `\\wsl.localhost\…` path as a working directory (`cmd.exe`
    refuses UNC CWDs; many tools break). So you cannot drive the build from
    Windows against the WSL filesystem.
-2. **WSL↔Windows networking problem.** A Vite dev server bound inside WSL is
-   often unreachable from a Windows browser under NAT networking (`localhost`
-   forwarding is flaky/absent), so the browser-preview path is unreliable.
+2. **WSL↔Windows networking** — historical: under NAT networking a Vite dev
+   server bound inside WSL was often unreachable from a Windows browser.
+   This host now runs WSL in **mirrored networking mode**
+   (`networkingMode=mirrored` in `.wslconfig`), so `localhost` is shared in
+   both directions and this reason no longer applies — but note the flip
+   side: WSL and Windows now share one port space, so a stray WSL process on
+   `:5173` (or `:9223`) directly conflicts with the Windows app's ports.
 
-The fix that eliminates **both**: keep a **second checkout on a native Windows
+Reason 1 alone still mandates the fix: keep a **second checkout on a native Windows
 NTFS drive** (e.g. `C:\dev\astro-plan`) and build/run there. node, cargo, Vite,
 and the WebView2 window are all Windows-native — nothing crosses the WSL
 boundary. The WSL copy stays as the canonical repo; the Windows copy is the
@@ -186,4 +190,4 @@ Get-Process desktop_shell,cargo,rustc -ErrorAction SilentlyContinue | Stop-Proce
 | `link.exe`/`cl` “not found” at the Rust link step | Install VS Build Tools 2022 “Desktop development with C++”. |
 | WSL-side edits don’t hot-reload | Ensure `CHOKIDAR_USEPOLLING=true` (default in the launch script). |
 | Keeping the two checkouts in sync | Treat WSL as canonical: `git push origin main` from WSL, then on Windows `git fetch origin; git reset --hard origin/main` (the mirror tree is often dirty/divergent so a plain `git pull` won't fast-forward — `git stash` first to keep any local mods). **Do NOT** pull the Windows checkout from the WSL repo over a `\\wsl.localhost\…` UNC path: `node`/`pnpm` fail over UNC and git is flaky there. Keep all git + node + cargo on the native `C:\` filesystem. |
-| `tauri dev` fails with `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL … Exit status 4294967295` | The `beforeDevCommand` (Vite) couldn't bind `:5173`. A Vite dev server left running **inside WSL** on `:5173` is forwarded to Windows `localhost:5173`, and Vite uses `strictPort`. Kill the WSL `:5173` server (`lsof -ti :5173 \| xargs kill`) before launching on Windows, or change the port. |
+| `tauri dev` fails with `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL … Exit status 4294967295` | The `beforeDevCommand` (Vite) couldn't bind `:5173`. Under mirrored networking WSL and Windows share one port space, so a Vite dev server left running **inside WSL** on `:5173` occupies the port outright, and Vite uses `strictPort`. Kill the WSL `:5173` server (`lsof -ti :5173 \| xargs kill`) before launching on Windows, or change the port. |

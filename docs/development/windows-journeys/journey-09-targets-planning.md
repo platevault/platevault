@@ -62,7 +62,7 @@
   with `$env:CI="true"`, relaunch.
 - Tauri MCP bridge (optional): `cargo tauri dev --config
   src-tauri\tauri.dev.conf.json` (bridge WS on `0.0.0.0:9223`), connect with
-  `driver_session host=<gateway> port=9223`, invoke via `webview_execute_js` →
+  `driver_session host=localhost port=9223`, invoke via `webview_execute_js` →
   `window.__TAURI__.core.invoke('<snake_command>', {args})`. There is no
   known backend command to fake an ObserverSite for this pre-#440 test —
   don't try to force Test 6c until #440 actually merges.

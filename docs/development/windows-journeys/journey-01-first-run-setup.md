@@ -56,9 +56,10 @@
 - Launch with the dev overlay so the bridge is live:
   `cargo tauri dev --config src-tauri\tauri.dev.conf.json` (bridge is
   `#[cfg(debug_assertions)]`, WebSocket on `0.0.0.0:9223`).
-- Connect via `driver_session host=<WSL↔Windows gateway IP> port=9223`
-  (`ip route show default` on the WSL side gives the gateway; firewall
-  already allows 9223).
+- Connect via `driver_session host=localhost port=9223` — WSL runs in
+  mirrored networking mode (`networkingMode=mirrored` in `.wslconfig`), so
+  `localhost` reaches Windows services directly; the old NAT gateway-IP
+  lookup (`ip route show default`) is obsolete. Firewall already allows 9223.
 - Prefer `webview_execute_js` → `window.__TAURI__.core.invoke('<snake_command>', {args})`
   to call a backend command directly; `ipc_execute_command` rejects many real
   commands.
