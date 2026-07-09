@@ -1,0 +1,2363 @@
+{
+  "_config": {
+    "feature_root": "specs",
+    "messages": {
+      "no_feature": "No active spec-kit feature resolved. Run /speckit.specify first or switch to the feature branch."
+    },
+    "prefix": "speckit.",
+    "resolve": [
+      "git-branch",
+      "newest-dir"
+    ]
+  },
+  "accessibility-compliance": {
+    "post": {
+      "title": "/speckit.accessibility.compliance -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.accessibility.compliance -- before you run this"
+    }
+  },
+  "agent-assign-assign": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/agent-assignments.md`"
+      ],
+      "title": "/speckit.agent.assign.assign -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.tasks (mandatory)"
+      ],
+      "context": [
+        "Scan available Claude Code agents and assign them to tasks in tasks.md. Must run before validate and execute."
+      ],
+      "hard_exists": [
+        "specs/<feat>/agent-assignments.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/tasks.md"
+      ],
+      "soft": [],
+      "title": "/speckit.agent.assign.assign -- before you run this"
+    }
+  },
+  "agent-assign-execute": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/task-<n>.report.md`"
+      ],
+      "title": "/speckit.agent.assign.execute -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.agent.assign.assign (mandatory)",
+        "/speckit.agent.assign.validate (mandatory)"
+      ],
+      "context": [
+        "Execute tasks by spawning the assigned agent for each task in its own context. Replaces the deprecated /speckit.implement. Requires agent-assignments.md (assign) and a passing validate run."
+      ],
+      "hard_exists": [
+        "specs/<feat>/task-<n>.report.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/agent-assignments.md"
+      ],
+      "soft": [],
+      "title": "/speckit.agent.assign.execute -- before you run this"
+    }
+  },
+  "agent-assign-validate": {
+    "post": {
+      "title": "/speckit.agent.assign.validate -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.agent.assign.assign (mandatory)"
+      ],
+      "context": [
+        "Validate that all agent assignments in agent-assignments.md are correct and that the assigned agents exist. Must run before execute."
+      ],
+      "hard_missing": [
+        "specs/<feat>/agent-assignments.md"
+      ],
+      "soft": [],
+      "title": "/speckit.agent.assign.validate -- before you run this"
+    }
+  },
+  "analyze": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/analysis.md`"
+      ],
+      "title": "/speckit.analyze -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.tasks (mandatory)"
+      ],
+      "context": [
+        "Surfaces risks, missing tasks, and over-broad tasks."
+      ],
+      "hard_exists": [
+        "specs/<feat>/analysis.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/tasks.md"
+      ],
+      "soft": [],
+      "title": "/speckit.analyze -- before you run this"
+    }
+  },
+  "archive": {
+    "post": {
+      "postconditions": [
+        "`specs/archived/<feat>/`"
+      ],
+      "title": "/speckit.archive -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "Terminal step; moves specs/<feat>/ to archived/."
+      ],
+      "hard_missing": [
+        "specs/<feat>/verify-report.md",
+        "specs/<feat>/review-report.md"
+      ],
+      "soft": [],
+      "title": "/speckit.archive -- before you run this"
+    }
+  },
+  "archive-run": {
+    "post": {
+      "title": "/speckit.archive.run -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.archive.run -- before you run this"
+    }
+  },
+  "audit-steering": {
+    "post": {
+      "title": "/speckit.audit.steering -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.audit.steering -- before you run this"
+    }
+  },
+  "bash-defensive-patterns": {
+    "post": {
+      "title": "/speckit.bash.defensive.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.bash.defensive.patterns -- before you run this"
+    }
+  },
+  "bats-testing-patterns": {
+    "post": {
+      "title": "/speckit.bats.testing.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.bats.testing.patterns -- before you run this"
+    }
+  },
+  "brand-landingpage": {
+    "post": {
+      "title": "/speckit.brand.landingpage -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.brand.landingpage -- before you run this"
+    }
+  },
+  "brownfield-bootstrap": {
+    "post": {
+      "title": "/speckit.brownfield.bootstrap -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.brownfield.bootstrap -- before you run this"
+    }
+  },
+  "brownfield-migrate": {
+    "post": {
+      "title": "/speckit.brownfield.migrate -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.brownfield.migrate -- before you run this"
+    }
+  },
+  "brownfield-scan": {
+    "post": {
+      "title": "/speckit.brownfield.scan -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.brownfield.scan -- before you run this"
+    }
+  },
+  "brownfield-validate": {
+    "post": {
+      "title": "/speckit.brownfield.validate -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.brownfield.validate -- before you run this"
+    }
+  },
+  "bugfix": {
+    "post": {
+      "title": "/speckit.bugfix -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.bugfix -- before you run this"
+    }
+  },
+  "bugfix-patch": {
+    "post": {
+      "title": "/speckit.bugfix.patch -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.bugfix.verify (mandatory)"
+      ],
+      "context": [
+        "Applies the fix; reruns the failing test to confirm."
+      ],
+      "soft": [],
+      "title": "/speckit.bugfix.patch -- before you run this"
+    }
+  },
+  "bugfix-report": {
+    "post": {
+      "title": "/speckit.bugfix.report -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.bugfix.report -- before you run this"
+    }
+  },
+  "bugfix-verify": {
+    "post": {
+      "title": "/speckit.bugfix.verify -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.bugfix.report (mandatory)"
+      ],
+      "context": [
+        "Reproduces the bug with a failing test before patching."
+      ],
+      "soft": [],
+      "title": "/speckit.bugfix.verify -- before you run this"
+    }
+  },
+  "catchup": {
+    "post": {
+      "title": "/speckit.catchup -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.catchup -- before you run this"
+    }
+  },
+  "checklist": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/checklist.md`"
+      ],
+      "title": "/speckit.checklist -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.specify (mandatory)",
+        "/speckit.plan (mandatory)",
+        "/speckit.tasks (mandatory)"
+      ],
+      "context": [
+        "Requirements-quality gate before implementation."
+      ],
+      "hard_exists": [
+        "specs/<feat>/checklist.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/spec.md",
+        "specs/<feat>/plan.md",
+        "specs/<feat>/tasks.md"
+      ],
+      "soft": [],
+      "title": "/speckit.checklist -- before you run this"
+    }
+  },
+  "checkpoint-commit": {
+    "post": {
+      "postconditions": [
+        "`git commit`"
+      ],
+      "title": "/speckit.checkpoint.commit -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.specify (mandatory)"
+      ],
+      "context": [
+        "Locks in spec/plan/tasks before or after execution."
+      ],
+      "hard_missing": [
+        "specs/<feat>/spec.md"
+      ],
+      "soft": [],
+      "title": "/speckit.checkpoint.commit -- before you run this"
+    }
+  },
+  "clarify": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/clarifications.md`"
+      ],
+      "title": "/speckit.clarify -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.specify (mandatory)"
+      ],
+      "context": [
+        "Resolves ambiguities left open in spec.md."
+      ],
+      "hard_exists": [
+        "specs/<feat>/clarifications.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/spec.md"
+      ],
+      "soft": [],
+      "title": "/speckit.clarify -- before you run this"
+    }
+  },
+  "cleanup": {
+    "post": {
+      "title": "/speckit.cleanup -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.cleanup -- before you run this"
+    }
+  },
+  "cleanup-run": {
+    "post": {
+      "title": "/speckit.cleanup.run -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.cleanup.run -- before you run this"
+    }
+  },
+  "code-review": {
+    "post": {
+      "title": "/speckit.code.review -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.code.review -- before you run this"
+    }
+  },
+  "codebase-index": {
+    "post": {
+      "title": "/speckit.codebase.index -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.codebase.index -- before you run this"
+    }
+  },
+  "codebase-memory": {
+    "post": {
+      "title": "/speckit.codebase.memory -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.codebase.memory -- before you run this"
+    }
+  },
+  "commit-push-merge": {
+    "post": {
+      "title": "/speckit.commit.push.merge -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.commit.push.merge -- before you run this"
+    }
+  },
+  "commit-push-pr": {
+    "post": {
+      "title": "/speckit.commit.push.pr -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.commit.push.pr -- before you run this"
+    }
+  },
+  "conduct": {
+    "post": {
+      "title": "/speckit.conduct -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.conduct -- before you run this"
+    }
+  },
+  "conduct-run": {
+    "post": {
+      "title": "/speckit.conduct.run -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.conduct.run -- before you run this"
+    }
+  },
+  "constitution": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/constitution.md`"
+      ],
+      "title": "/speckit.constitution -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "Create or update the project constitution."
+      ],
+      "hard_exists": [
+        "specs/<feat>/constitution.md"
+      ],
+      "soft": [],
+      "title": "/speckit.constitution -- before you run this"
+    }
+  },
+  "converge": {
+    "post": {
+      "going_to": [
+        "/speckit.tasks (default)"
+      ],
+      "postconditions": [
+        "`specs/<feat>/tasks.md`"
+      ],
+      "title": "/speckit.converge -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.specify (mandatory)",
+        "/speckit.plan (mandatory)",
+        "/speckit.tasks (mandatory)"
+      ],
+      "context": [
+        "Closes gap between spec intent and actual implementation."
+      ],
+      "hard_exists": [
+        "specs/<feat>/tasks.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/spec.md",
+        "specs/<feat>/plan.md",
+        "specs/<feat>/tasks.md"
+      ],
+      "soft": [],
+      "title": "/speckit.converge -- before you run this"
+    }
+  },
+  "critique-run": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/critique-report.md`"
+      ],
+      "title": "/speckit.critique.run -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.plan (mandatory)",
+        "/speckit.tasks (mandatory)"
+      ],
+      "context": [
+        "Dual-lens review (product strategy + engineering risk)."
+      ],
+      "hard_exists": [
+        "specs/<feat>/critique-report.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/plan.md",
+        "specs/<feat>/tasks.md"
+      ],
+      "soft": [],
+      "title": "/speckit.critique.run -- before you run this"
+    }
+  },
+  "dag": {
+    "post": {
+      "title": "/speckit.dag -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.dag -- before you run this"
+    }
+  },
+  "design-md": {
+    "post": {
+      "title": "/speckit.design.md -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.design.md -- before you run this"
+    }
+  },
+  "design-system-patterns": {
+    "post": {
+      "title": "/speckit.design.system.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.design.system.patterns -- before you run this"
+    }
+  },
+  "diagnose": {
+    "post": {
+      "title": "/speckit.diagnose -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.diagnose -- before you run this"
+    }
+  },
+  "diagram-dependencies": {
+    "post": {
+      "title": "/speckit.diagram.dependencies -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.diagram.dependencies -- before you run this"
+    }
+  },
+  "diagram-status": {
+    "post": {
+      "title": "/speckit.diagram.status -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.diagram.status -- before you run this"
+    }
+  },
+  "diagram-workflow": {
+    "post": {
+      "title": "/speckit.diagram.workflow -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.diagram.workflow -- before you run this"
+    }
+  },
+  "doctor": {
+    "post": {
+      "title": "/speckit.doctor -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.doctor -- before you run this"
+    }
+  },
+  "doctor-check": {
+    "post": {
+      "title": "/speckit.doctor.check -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.doctor.check -- before you run this"
+    }
+  },
+  "enhance-prompt": {
+    "post": {
+      "title": "/speckit.enhance.prompt -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.enhance.prompt -- before you run this"
+    }
+  },
+  "evaluation-methodology": {
+    "post": {
+      "title": "/speckit.evaluation.methodology -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.evaluation.methodology -- before you run this"
+    }
+  },
+  "explore": {
+    "post": {
+      "title": "/speckit.explore -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.explore -- before you run this"
+    }
+  },
+  "fix-findings": {
+    "post": {
+      "title": "/speckit.fix.findings -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.fix.findings -- before you run this"
+    }
+  },
+  "fix-findings-run": {
+    "post": {
+      "title": "/speckit.fix.findings.run -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.fix.findings.run -- before you run this"
+    }
+  },
+  "fleet": {
+    "post": {
+      "title": "/speckit.fleet -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.fleet -- before you run this"
+    }
+  },
+  "fleet-review": {
+    "post": {
+      "title": "/speckit.fleet.review -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "Cross-model evaluation of plan.md and tasks.md."
+      ],
+      "hard_missing": [
+        "specs/<feat>/fleet-state.md"
+      ],
+      "soft": [],
+      "title": "/speckit.fleet.review -- before you run this"
+    }
+  },
+  "fleet-run": {
+    "post": {
+      "title": "/speckit.fleet.run -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.fleet.run -- before you run this"
+    }
+  },
+  "git-commit": {
+    "post": {
+      "title": "/speckit.git.commit -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.git.commit -- before you run this"
+    }
+  },
+  "git-feature": {
+    "post": {
+      "title": "/speckit.git.feature -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.git.feature -- before you run this"
+    }
+  },
+  "git-initialize": {
+    "post": {
+      "title": "/speckit.git.initialize -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.git.initialize -- before you run this"
+    }
+  },
+  "git-remote": {
+    "post": {
+      "title": "/speckit.git.remote -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.git.remote -- before you run this"
+    }
+  },
+  "git-validate": {
+    "post": {
+      "title": "/speckit.git.validate -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.git.validate -- before you run this"
+    }
+  },
+  "github-issues-import": {
+    "post": {
+      "title": "/speckit.github.issues.import -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.github.issues.import -- before you run this"
+    }
+  },
+  "github-issues-link": {
+    "post": {
+      "title": "/speckit.github.issues.link -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.github.issues.link -- before you run this"
+    }
+  },
+  "github-issues-sync": {
+    "post": {
+      "title": "/speckit.github.issues.sync -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.github.issues.sync -- before you run this"
+    }
+  },
+  "go-concurrency-patterns": {
+    "post": {
+      "title": "/speckit.go.concurrency.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.go.concurrency.patterns -- before you run this"
+    }
+  },
+  "go-quality": {
+    "post": {
+      "title": "/speckit.go.quality -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.go.quality -- before you run this"
+    }
+  },
+  "grill-with-docs": {
+    "post": {
+      "title": "/speckit.grill.with.docs -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.grill.with.docs -- before you run this"
+    }
+  },
+  "grilling": {
+    "post": {
+      "title": "/speckit.grilling -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.grilling -- before you run this"
+    }
+  },
+  "hads": {
+    "post": {
+      "title": "/speckit.hads -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.hads -- before you run this"
+    }
+  },
+  "handover": {
+    "post": {
+      "title": "/speckit.handover -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.handover -- before you run this"
+    }
+  },
+  "impeccable": {
+    "post": {
+      "title": "/speckit.impeccable -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.impeccable -- before you run this"
+    }
+  },
+  "implement": {
+    "post": {
+      "title": "/speckit.implement -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.tasks (mandatory)"
+      ],
+      "context": [
+        "Deprecated. Route implementation through /speckit.agent-assign-assign then /speckit.agent-assign-validate then /speckit.agent-assign-execute instead."
+      ],
+      "hard_deprecated": [
+        "/speckit.implement is deprecated in this project. See gates.yaml for the recommended replacement."
+      ],
+      "soft": [],
+      "title": "/speckit.implement -- before you run this"
+    }
+  },
+  "interaction-design": {
+    "post": {
+      "title": "/speckit.interaction.design -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.interaction.design -- before you run this"
+    }
+  },
+  "interface-design": {
+    "post": {
+      "title": "/speckit.interface.design -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.interface.design -- before you run this"
+    }
+  },
+  "iterate-apply": {
+    "post": {
+      "postconditions": [
+        "`spec/plan/tasks updated`"
+      ],
+      "title": "/speckit.iterate.apply -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.iterate.define (mandatory)"
+      ],
+      "context": [
+        "Applies iteration intent to spec + plan + tasks."
+      ],
+      "hard_missing": [
+        "specs/<feat>/pending-iteration.md"
+      ],
+      "soft": [],
+      "title": "/speckit.iterate.apply -- before you run this"
+    }
+  },
+  "iterate-define": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/pending-iteration.md`"
+      ],
+      "title": "/speckit.iterate.define -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.specify (mandatory)"
+      ],
+      "context": [
+        "Scope/intent pivots distinct from incremental refine."
+      ],
+      "hard_exists": [
+        "specs/<feat>/pending-iteration.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/spec.md"
+      ],
+      "soft": [],
+      "title": "/speckit.iterate.define -- before you run this"
+    }
+  },
+  "javascript-testing-patterns": {
+    "post": {
+      "title": "/speckit.javascript.testing.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.javascript.testing.patterns -- before you run this"
+    }
+  },
+  "memory-md-audit": {
+    "post": {
+      "title": "/speckit.memory.md.audit -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.memory.md.audit -- before you run this"
+    }
+  },
+  "memory-md-capture": {
+    "post": {
+      "postconditions": [
+        "`docs/memory/`"
+      ],
+      "title": "/speckit.memory.md.capture -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "Captures durable lessons from completed work."
+      ],
+      "soft": [],
+      "title": "/speckit.memory.md.capture -- before you run this"
+    }
+  },
+  "memory-md-capture-from-diff": {
+    "post": {
+      "title": "/speckit.memory.md.capture.from.diff -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.memory.md.capture.from.diff -- before you run this"
+    }
+  },
+  "memory-md-init": {
+    "post": {
+      "title": "/speckit.memory.md.init -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.memory.md.init -- before you run this"
+    }
+  },
+  "memory-md-log-finding": {
+    "post": {
+      "title": "/speckit.memory.md.log.finding -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.memory.md.log.finding -- before you run this"
+    }
+  },
+  "memory-md-plan-with-memory": {
+    "post": {
+      "title": "/speckit.memory.md.plan.with.memory -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.memory.md.plan.with.memory -- before you run this"
+    }
+  },
+  "memory-md-prepare-context": {
+    "post": {
+      "title": "/speckit.memory.md.prepare.context -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.memory.md.prepare.context -- before you run this"
+    }
+  },
+  "memory-md-token-report": {
+    "post": {
+      "title": "/speckit.memory.md.token.report -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.memory.md.token.report -- before you run this"
+    }
+  },
+  "memory-safety-patterns": {
+    "post": {
+      "title": "/speckit.memory.safety.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.memory.safety.patterns -- before you run this"
+    }
+  },
+  "mobile-android-design": {
+    "post": {
+      "title": "/speckit.mobile.android.design -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.mobile.android.design -- before you run this"
+    }
+  },
+  "mobile-ios-design": {
+    "post": {
+      "title": "/speckit.mobile.ios.design -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.mobile.ios.design -- before you run this"
+    }
+  },
+  "modern-javascript-patterns": {
+    "post": {
+      "title": "/speckit.modern.javascript.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.modern.javascript.patterns -- before you run this"
+    }
+  },
+  "nextjs-app-router-patterns": {
+    "post": {
+      "title": "/speckit.nextjs.app.router.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.nextjs.app.router.patterns -- before you run this"
+    }
+  },
+  "nodejs-backend-patterns": {
+    "post": {
+      "title": "/speckit.nodejs.backend.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.nodejs.backend.patterns -- before you run this"
+    }
+  },
+  "onboard-badge": {
+    "post": {
+      "title": "/speckit.onboard.badge -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.onboard.badge -- before you run this"
+    }
+  },
+  "onboard-explain": {
+    "post": {
+      "title": "/speckit.onboard.explain -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.onboard.explain -- before you run this"
+    }
+  },
+  "onboard-mentor": {
+    "post": {
+      "title": "/speckit.onboard.mentor -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.onboard.mentor -- before you run this"
+    }
+  },
+  "onboard-quiz": {
+    "post": {
+      "title": "/speckit.onboard.quiz -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.onboard.quiz -- before you run this"
+    }
+  },
+  "onboard-start": {
+    "post": {
+      "title": "/speckit.onboard.start -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.onboard.start -- before you run this"
+    }
+  },
+  "onboard-team": {
+    "post": {
+      "title": "/speckit.onboard.team -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.onboard.team -- before you run this"
+    }
+  },
+  "onboard-trail": {
+    "post": {
+      "title": "/speckit.onboard.trail -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.onboard.trail -- before you run this"
+    }
+  },
+  "optimize-learn": {
+    "post": {
+      "title": "/speckit.optimize.learn -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.optimize.learn -- before you run this"
+    }
+  },
+  "optimize-run": {
+    "post": {
+      "title": "/speckit.optimize.run -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.optimize.run -- before you run this"
+    }
+  },
+  "optimize-steering": {
+    "post": {
+      "title": "/speckit.optimize.steering -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.optimize.steering -- before you run this"
+    }
+  },
+  "optimize-tokens": {
+    "post": {
+      "title": "/speckit.optimize.tokens -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.optimize.tokens -- before you run this"
+    }
+  },
+  "orchestrate": {
+    "post": {
+      "title": "/speckit.orchestrate -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.orchestrate -- before you run this"
+    }
+  },
+  "plan": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/plan.md`"
+      ],
+      "title": "/speckit.plan -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.specify (mandatory)"
+      ],
+      "context": [
+        "Decomposes spec into design and implementation plan."
+      ],
+      "hard_exists": [
+        "specs/<feat>/plan.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/spec.md"
+      ],
+      "soft": [],
+      "title": "/speckit.plan -- before you run this"
+    }
+  },
+  "playwright": {
+    "post": {
+      "title": "/speckit.playwright -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.playwright -- before you run this"
+    }
+  },
+  "postgresql-table-design": {
+    "post": {
+      "title": "/speckit.postgresql.table.design -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.postgresql.table.design -- before you run this"
+    }
+  },
+  "python-quality": {
+    "post": {
+      "title": "/speckit.python.quality -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.python.quality -- before you run this"
+    }
+  },
+  "qa-run": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/qa-report.md`"
+      ],
+      "title": "/speckit.qa.run -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.review.run (mandatory)"
+      ],
+      "context": [
+        "Systematic QA: browser-driven or CLI-based acceptance."
+      ],
+      "hard_exists": [
+        "specs/<feat>/qa-report.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/review-report.md"
+      ],
+      "soft": [],
+      "title": "/speckit.qa.run -- before you run this"
+    }
+  },
+  "quick-commit": {
+    "post": {
+      "title": "/speckit.quick.commit -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.quick.commit -- before you run this"
+    }
+  },
+  "react-native-architecture": {
+    "post": {
+      "title": "/speckit.react.native.architecture -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.react.native.architecture -- before you run this"
+    }
+  },
+  "react-native-design": {
+    "post": {
+      "title": "/speckit.react.native.design -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.react.native.design -- before you run this"
+    }
+  },
+  "react-state-management": {
+    "post": {
+      "title": "/speckit.react.state.management -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.react.state.management -- before you run this"
+    }
+  },
+  "reconcile": {
+    "post": {
+      "title": "/speckit.reconcile -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.reconcile -- before you run this"
+    }
+  },
+  "reconcile-run": {
+    "post": {
+      "title": "/speckit.reconcile.run -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.reconcile.run -- before you run this"
+    }
+  },
+  "refine-diff": {
+    "post": {
+      "title": "/speckit.refine.diff -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.refine.diff -- before you run this"
+    }
+  },
+  "refine-propagate": {
+    "post": {
+      "postconditions": [
+        "`downstream artefact updates`"
+      ],
+      "title": "/speckit.refine.propagate -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.refine.diff (mandatory)"
+      ],
+      "context": [
+        "Pushes spec diff into plan, tasks, and issues."
+      ],
+      "soft": [],
+      "title": "/speckit.refine.propagate -- before you run this"
+    }
+  },
+  "refine-status": {
+    "post": {
+      "title": "/speckit.refine.status -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.refine.status -- before you run this"
+    }
+  },
+  "refine-update": {
+    "post": {
+      "postconditions": [
+        "`artefact updates`"
+      ],
+      "title": "/speckit.refine.update -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.specify (mandatory)"
+      ],
+      "context": [
+        "Incremental edits to existing artefacts."
+      ],
+      "hard_missing": [
+        "specs/<feat>/spec.md"
+      ],
+      "soft": [],
+      "title": "/speckit.refine.update -- before you run this"
+    }
+  },
+  "release-please": {
+    "post": {
+      "title": "/speckit.release.please -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.release.please -- before you run this"
+    }
+  },
+  "remotion": {
+    "post": {
+      "title": "/speckit.remotion -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.remotion -- before you run this"
+    }
+  },
+  "research": {
+    "post": {
+      "title": "/speckit.research -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.research -- before you run this"
+    }
+  },
+  "responsive-design": {
+    "post": {
+      "title": "/speckit.responsive.design -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.responsive.design -- before you run this"
+    }
+  },
+  "resume-session": {
+    "post": {
+      "title": "/speckit.resume.session -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.resume.session -- before you run this"
+    }
+  },
+  "retro-run": {
+    "post": {
+      "title": "/speckit.retro.run -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.retro.run -- before you run this"
+    }
+  },
+  "review-code": {
+    "post": {
+      "title": "/speckit.review.code -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.review.code -- before you run this"
+    }
+  },
+  "review-comments": {
+    "post": {
+      "title": "/speckit.review.comments -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.review.comments -- before you run this"
+    }
+  },
+  "review-errors": {
+    "post": {
+      "title": "/speckit.review.errors -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.review.errors -- before you run this"
+    }
+  },
+  "review-run": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/review-report.md`"
+      ],
+      "title": "/speckit.review.run -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.verify (mandatory)"
+      ],
+      "context": [
+        "Orchestrates granular review sub-agents."
+      ],
+      "hard_exists": [
+        "specs/<feat>/review-report.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/verify-report.md"
+      ],
+      "soft": [],
+      "title": "/speckit.review.run -- before you run this"
+    }
+  },
+  "review-simplify": {
+    "post": {
+      "title": "/speckit.review.simplify -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.review.simplify -- before you run this"
+    }
+  },
+  "review-tests": {
+    "post": {
+      "title": "/speckit.review.tests -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.review.tests -- before you run this"
+    }
+  },
+  "review-types": {
+    "post": {
+      "title": "/speckit.review.types -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.review.types -- before you run this"
+    }
+  },
+  "rust-async-patterns": {
+    "post": {
+      "title": "/speckit.rust.async.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.rust.async.patterns -- before you run this"
+    }
+  },
+  "rust-quality": {
+    "post": {
+      "title": "/speckit.rust.quality -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.rust.quality -- before you run this"
+    }
+  },
+  "screen-reader-testing": {
+    "post": {
+      "title": "/speckit.screen.reader.testing -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.screen.reader.testing -- before you run this"
+    }
+  },
+  "security-review-apply": {
+    "post": {
+      "title": "/speckit.security.review.apply -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.security.review.apply -- before you run this"
+    }
+  },
+  "security-review-audit": {
+    "post": {
+      "title": "/speckit.security.review.audit -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.security.review.audit -- before you run this"
+    }
+  },
+  "security-review-branch": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/security-review.md`"
+      ],
+      "title": "/speckit.security.review.branch -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.tasks (mandatory)"
+      ],
+      "context": [
+        "Security risks introduced by the current branch."
+      ],
+      "hard_exists": [
+        "specs/<feat>/security-review.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/tasks.md"
+      ],
+      "soft": [],
+      "title": "/speckit.security.review.branch -- before you run this"
+    }
+  },
+  "security-review-followup": {
+    "post": {
+      "title": "/speckit.security.review.followup -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.security.review.followup -- before you run this"
+    }
+  },
+  "security-review-plan": {
+    "post": {
+      "title": "/speckit.security.review.plan -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.security.review.plan -- before you run this"
+    }
+  },
+  "security-review-staged": {
+    "post": {
+      "title": "/speckit.security.review.staged -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.security.review.staged -- before you run this"
+    }
+  },
+  "security-review-tasks": {
+    "post": {
+      "title": "/speckit.security.review.tasks -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.security.review.tasks -- before you run this"
+    }
+  },
+  "setup": {
+    "post": {
+      "title": "/speckit.setup -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.setup -- before you run this"
+    }
+  },
+  "shadcn-ui": {
+    "post": {
+      "title": "/speckit.shadcn.ui -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.shadcn.ui -- before you run this"
+    }
+  },
+  "shellcheck-configuration": {
+    "post": {
+      "title": "/speckit.shellcheck.configuration -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.shellcheck.configuration -- before you run this"
+    }
+  },
+  "specify": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/spec.md`"
+      ],
+      "title": "/speckit.specify -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "Initial spec authoring; must precede all other phases."
+      ],
+      "hard_exists": [
+        "specs/<feat>/spec.md"
+      ],
+      "soft": [],
+      "title": "/speckit.specify -- before you run this"
+    }
+  },
+  "status": {
+    "post": {
+      "title": "/speckit.status -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.status -- before you run this"
+    }
+  },
+  "status-show": {
+    "post": {
+      "title": "/speckit.status.show -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.status.show -- before you run this"
+    }
+  },
+  "steering-audit": {
+    "post": {
+      "title": "/speckit.steering.audit -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.steering.audit -- before you run this"
+    }
+  },
+  "stitch-design": {
+    "post": {
+      "title": "/speckit.stitch.design -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.stitch.design -- before you run this"
+    }
+  },
+  "stitch-loop": {
+    "post": {
+      "title": "/speckit.stitch.loop -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.stitch.loop -- before you run this"
+    }
+  },
+  "tailwind-design-system": {
+    "post": {
+      "title": "/speckit.tailwind.design.system -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.tailwind.design.system -- before you run this"
+    }
+  },
+  "tasks": {
+    "post": {
+      "going_to": [
+        "/speckit.converge (default)"
+      ],
+      "postconditions": [
+        "`specs/<feat>/tasks.md`"
+      ],
+      "title": "/speckit.tasks -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.plan (mandatory)"
+      ],
+      "context": [
+        "Decomposes plan into discrete, testable tasks."
+      ],
+      "hard_exists": [
+        "specs/<feat>/tasks.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/plan.md"
+      ],
+      "soft": [],
+      "title": "/speckit.tasks -- before you run this"
+    }
+  },
+  "taskstoissues": {
+    "post": {
+      "postconditions": [
+        "`gh issues`",
+        "`specs/<feat>/issue-map.md`"
+      ],
+      "title": "/speckit.taskstoissues -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.tasks (mandatory)"
+      ],
+      "context": [
+        "Turns tasks into trackable GitHub issues."
+      ],
+      "hard_exists": [
+        "specs/<feat>/issue-map.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/tasks.md"
+      ],
+      "soft": [],
+      "title": "/speckit.taskstoissues -- before you run this"
+    }
+  },
+  "taste-design": {
+    "post": {
+      "title": "/speckit.taste.design -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.taste.design -- before you run this"
+    }
+  },
+  "tinyspec-classify": {
+    "post": {
+      "title": "/speckit.tinyspec.classify -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.tinyspec.classify -- before you run this"
+    }
+  },
+  "tinyspec-implement": {
+    "post": {
+      "title": "/speckit.tinyspec.implement -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.tinyspec.tinyspec (mandatory)"
+      ],
+      "context": [
+        "Implements a small change directly from its tinyspec."
+      ],
+      "hard_missing": [
+        "specs/<feat>/tinyspec.md"
+      ],
+      "soft": [],
+      "title": "/speckit.tinyspec.implement -- before you run this"
+    }
+  },
+  "tinyspec-tinyspec": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/tinyspec.md`"
+      ],
+      "title": "/speckit.tinyspec.tinyspec -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "Lightweight spec for small, self-contained changes."
+      ],
+      "hard_exists": [
+        "specs/<feat>/tinyspec.md"
+      ],
+      "soft": [],
+      "title": "/speckit.tinyspec.tinyspec -- before you run this"
+    }
+  },
+  "typescript-advanced-types": {
+    "post": {
+      "title": "/speckit.typescript.advanced.types -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.typescript.advanced.types -- before you run this"
+    }
+  },
+  "typescript-quality": {
+    "post": {
+      "title": "/speckit.typescript.quality -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.typescript.quality -- before you run this"
+    }
+  },
+  "unstuck": {
+    "post": {
+      "title": "/speckit.unstuck -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.unstuck -- before you run this"
+    }
+  },
+  "verify": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/verify-report.md`"
+      ],
+      "title": "/speckit.verify -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.tasks (mandatory)"
+      ],
+      "context": [
+        "Non-destructive post-implementation verification gate. Validates the implementation against spec.md, plan.md, tasks.md, and constitution.md. Runs as a local speckit-verify agent (spawned as a sub-agent)."
+      ],
+      "hard_exists": [
+        "specs/<feat>/verify-report.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/tasks.md"
+      ],
+      "soft": [],
+      "title": "/speckit.verify -- before you run this"
+    }
+  },
+  "verify-on-windows": {
+    "post": {
+      "title": "/speckit.verify.on.windows -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.verify.on.windows -- before you run this"
+    }
+  },
+  "verify-run": {
+    "post": {
+      "title": "/speckit.verify.run -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.verify.run -- before you run this"
+    }
+  },
+  "verify-tasks": {
+    "post": {
+      "postconditions": [
+        "`specs/<feat>/verify-tasks-report.md`"
+      ],
+      "title": "/speckit.verify.tasks -- what to do next"
+    },
+    "pre": {
+      "came_from": [
+        "/speckit.tasks (mandatory)"
+      ],
+      "context": [
+        "Detects phantom completions in a fresh context to avoid confirmation bias. Verifies that tasks marked [X] in tasks.md are backed by real implementation. Runs as a local speckit-verify-tasks agent."
+      ],
+      "hard_exists": [
+        "specs/<feat>/verify-tasks-report.md"
+      ],
+      "hard_missing": [
+        "specs/<feat>/tasks.md"
+      ],
+      "soft": [],
+      "title": "/speckit.verify.tasks -- before you run this"
+    }
+  },
+  "verify-tasks-run": {
+    "post": {
+      "title": "/speckit.verify.tasks.run -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.verify.tasks.run -- before you run this"
+    }
+  },
+  "verify-tasks-verify-tasks": {
+    "post": {
+      "title": "/speckit.verify.tasks.verify.tasks -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.verify.tasks.verify.tasks -- before you run this"
+    }
+  },
+  "visual-design-foundations": {
+    "post": {
+      "title": "/speckit.visual.design.foundations -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.visual.design.foundations -- before you run this"
+    }
+  },
+  "wcag-audit-patterns": {
+    "post": {
+      "title": "/speckit.wcag.audit.patterns -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.wcag.audit.patterns -- before you run this"
+    }
+  },
+  "web-component-design": {
+    "post": {
+      "title": "/speckit.web.component.design -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.web.component.design -- before you run this"
+    }
+  },
+  "web-fetch": {
+    "post": {
+      "title": "/speckit.web.fetch -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.web.fetch -- before you run this"
+    }
+  },
+  "worktree-clean": {
+    "post": {
+      "title": "/speckit.worktree.clean -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.worktree.clean -- before you run this"
+    }
+  },
+  "worktree-create": {
+    "post": {
+      "title": "/speckit.worktree.create -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.worktree.create -- before you run this"
+    }
+  },
+  "worktree-list": {
+    "post": {
+      "title": "/speckit.worktree.list -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.worktree.list -- before you run this"
+    }
+  },
+  "write-a-skill": {
+    "post": {
+      "title": "/speckit.write.a.skill -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.write.a.skill -- before you run this"
+    }
+  },
+  "write-agentic": {
+    "post": {
+      "title": "/speckit.write.agentic -- what to do next"
+    },
+    "pre": {
+      "context": [
+        "TODO: define prerequisites"
+      ],
+      "soft": [],
+      "title": "/speckit.write.agentic -- before you run this"
+    }
+  }
+}

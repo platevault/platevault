@@ -20,5 +20,16 @@
       ".mjs": "javascript",
       ".cjs": "javascript"
     }
+  },
+  "bash-language-server": {
+    "command": "bash-language-server",
+    "args": [
+      "start"
+    ],
+    "transport": "stdio",
+    "extensionToLanguage": {
+      ".sh": "shellscript",
+      ".bash": "shellscript"
+    }
   }
 }
