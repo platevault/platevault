@@ -180,6 +180,26 @@ describe('computeNightObservability — US5 Moon time-series (T027/T031/T032)', 
   });
 });
 
+describe('computeNightObservability — includeMoonGeometry=false fast path (CI perf FIX)', () => {
+  it('skips the Moon time-series (empty samples/windows, zeroed reference state)', () => {
+    const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS, false);
+    expect(night.moonSamples).toEqual([]);
+    expect(night.moonUpWindows).toEqual([]);
+    expect(night.moonIllumination).toBe(0);
+    expect(night.moonAgeFromFullDays).toBe(0);
+  });
+
+  it('still computes the target-only fields identically to the full call (samples/transit/rise/set/darkWindow)', () => {
+    const full = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS, true);
+    const fast = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS, false);
+    expect(fast.samples).toEqual(full.samples);
+    expect(fast.transit).toEqual(full.transit);
+    expect(fast.rise).toEqual(full.rise);
+    expect(fast.set).toEqual(full.set);
+    expect(fast.darkWindow).toEqual(full.darkWindow);
+  });
+});
+
 describe('target↔Moon separation vs an independent ephemeris (SC-009, reviewer FIX item 1)', () => {
   // Reference data fetched live from the public JPL Horizons API (DE441),
   // NOT derived from astronomy-engine, at a fixed instant:

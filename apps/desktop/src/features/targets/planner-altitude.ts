@@ -142,6 +142,15 @@ export interface AltitudeSubject {
  *   (Track A, Settings → Target Planner) for `moonFreeMinutesByBand` (US5).
  *   Defaults to the shipped table; prefer `useGuidanceParams()` from the host
  *   page so a live settings edit recomputes moon-free hours (SC-008).
+ * @param includeMoonGeometry - Pass `false` for a full-catalogue sort/group
+ *   pass (`TargetsTable.tsx`'s pre-virtualization `useMemo`, potentially
+ *   thousands of rows) — computing the Moon time-series for every row there
+ *   is a real perf cliff (found via a Layer-2 CI timeout against the full
+ *   ~13k-entry bundled seed catalogue). Defaults to `true` (single-target
+ *   callers: `TargetDetailV2`, and the per-visible-row recompute for
+ *   `GuidanceCell`). `false` zeroes `separationScalars`/`moonFreeMinutesByBand`
+ *   (never fabricating a non-zero value) — `bestDate` is unaffected, it's
+ *   cheap (Sun-RA-table based) and always computed regardless of this flag.
  */
 export function altitudeFor(
   subject: AltitudeSubject,
@@ -149,6 +158,7 @@ export function altitudeFor(
   site: ObserverSite | null | undefined = activeSite(),
   dateMs: number = Date.now(),
   moonAvoidanceParams: MoonAvoidanceParams = DEFAULT_MOON_AVOIDANCE,
+  includeMoonGeometry = true,
 ): RowAltitude {
   const needsCoordinates = subject.raDeg === null || subject.decDeg === null;
   const needsSite = !site;
@@ -156,7 +166,14 @@ export function altitudeFor(
     return { ...DEGRADE_ROW, needsCoordinates, needsSite };
   }
 
-  const night = getNightObservability(subject.id, subject.raDeg, subject.decDeg, site, dateMs);
+  const night = getNightObservability(
+    subject.id,
+    subject.raDeg,
+    subject.decDeg,
+    site,
+    dateMs,
+    includeMoonGeometry,
+  );
   const derived = deriveObservability(night, usableAltDeg, {
     raDegJ2000: subject.raDeg,
     minHorizonAltDeg: site.minHorizonAltDeg,
@@ -196,10 +213,15 @@ export function altitudeFor(
  * @param site - See {@link altitudeFor}. Defaults to the active site.
  * @param dateMs - See {@link altitudeFor}. Defaults to now ("tonight").
  * @param moonAvoidanceParams - See {@link altitudeFor}.
+ * @param includeMoonGeometry - See {@link altitudeFor}. Defaults to `true`;
+ *   callers doing a full-catalogue pass MUST pass `false`.
  *
  * Memoization of the underlying positions is `planner-derive.ts`'s job
- * (per target/site/day); this function itself is cheap enough to call inline
- * from render/sort/group code without an extra memo layer.
+ * (per target/site/day/`includeMoonGeometry`); this function itself is cheap
+ * enough to call inline from render/sort/group code without an extra memo
+ * layer — PROVIDED `includeMoonGeometry` is `false` for a full-catalogue pass
+ * (see {@link altitudeFor}'s doc for why: the Moon time-series alone is not
+ * cheap at catalogue scale).
  */
 export function rowAltitudeFor(
   t: TargetListItem,
@@ -207,6 +229,7 @@ export function rowAltitudeFor(
   site: ObserverSite | null | undefined = activeSite(),
   dateMs: number = Date.now(),
   moonAvoidanceParams: MoonAvoidanceParams = DEFAULT_MOON_AVOIDANCE,
+  includeMoonGeometry = true,
 ): RowAltitude {
   return altitudeFor(
     { id: t.id, raDeg: t.raDeg, decDeg: t.decDeg },
@@ -214,5 +237,6 @@ export function rowAltitudeFor(
     site,
     dateMs,
     moonAvoidanceParams,
+    includeMoonGeometry,
   );
 }

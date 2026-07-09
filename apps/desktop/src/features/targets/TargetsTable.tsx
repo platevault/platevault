@@ -245,7 +245,10 @@ function groupTargets(
   const byKey = new Map<string, Array<{ target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning }>>();
   for (const t of targets) {
     const key = groupHeadlineOf(t, groupBy);
-    const alt = rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams);
+    // includeMoonGeometry=false: this pass runs over the FULL (possibly
+    // ~13k-entry) catalogue for sort/group — the Moon time-series is only
+    // computed per visible row at render time (see the row-render loop).
+    const alt = rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false);
     const moon = deriveRowMoonPlanning(t, night, guidanceParams);
     const bucket = byKey.get(key);
     if (bucket) bucket.push({ target: t, alt, moon });
@@ -480,10 +483,12 @@ export function TargetsTable({
 
   const flatRows = useMemo(() => {
     if (useMultiGroup) {
-      // Pre-compute altitude + moon planning for all items (needed for sort + display).
+      // Pre-compute altitude + moon planning for all items (needed for sort +
+      // display). includeMoonGeometry=false: full-catalogue pass, see the
+      // legacy-path comment below for why.
       const withAlt = targets.map((t) => ({
         target: t,
-        alt: rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams),
+        alt: rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false),
         moon: deriveRowMoonPlanning(t, night, guidanceParams),
       }));
       // Sort the flat list first.
@@ -516,7 +521,7 @@ export function TargetsTable({
           kind: 'target',
           key: t.id,
           target: t,
-          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams),
+          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false),
           moon: moonMap.get(t.id) ?? UNKNOWN_ROW_PLANNING,
           depth: vrow.depth,
         };
@@ -528,9 +533,13 @@ export function TargetsTable({
       return flattenGroups(groups);
     }
     // Default: no grouping selected → FLAT sorted list (no group headers).
+    // includeMoonGeometry=false: this is a full-catalogue pass (potentially
+    // ~13k rows pre-filter/pre-windowing) needed only for sort — the real
+    // Moon time-series is computed per visible row at render time instead
+    // (a real Layer-2 CI perf regression otherwise: see rowAltitudeFor's doc).
     const withAlt = targets.map((t) => ({
       target: t,
-      alt: rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams),
+      alt: rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false),
       moon: deriveRowMoonPlanning(t, night, guidanceParams),
     }));
     const sortedWithAlt = [...withAlt].sort((a, b) =>
@@ -706,6 +715,12 @@ export function TargetsTable({
               const t = row.target;
               const alt = row.alt;
               const moon = row.moon;
+              // Real per-band moon-free hours (US5/T029), recomputed HERE at
+              // render time — only for the ~20-30 rows actually windowed on
+              // screen, not the full (possibly ~13k-entry) catalogue `alt`
+              // came from (that pass used includeMoonGeometry=false for
+              // performance; see rowAltitudeFor's doc).
+              const altMoon = rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, true);
               const showAltDesig = t.effectiveLabel !== t.primaryDesignation;
               const isSelected = selected === t.id;
 
@@ -846,7 +861,9 @@ export function TargetsTable({
                       params={guidanceParams}
                       targetLabel={t.effectiveLabel}
                       moonFreeMinutesByBand={
-                        alt.needsCoordinates || alt.needsSite ? null : alt.moonFreeMinutesByBand
+                        altMoon.needsCoordinates || altMoon.needsSite
+                          ? null
+                          : altMoon.moonFreeMinutesByBand
                       }
                     />
                   </td>

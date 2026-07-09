@@ -126,6 +126,28 @@ describe('rowAltitudeFor — US4 darkWindowHours (T035)', () => {
   });
 });
 
+describe('rowAltitudeFor — includeMoonGeometry=false fast path (CI perf FIX)', () => {
+  it('leaves maxAlt/visible/imagingTime/darkWindowHours identical to the full computation', () => {
+    const t = item('NGC 7000', 313, 44);
+    const full = rowAltitudeFor(t, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS, undefined, true);
+    const fast = rowAltitudeFor(t, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS, undefined, false);
+    expect(fast.maxAltDeg).toBe(full.maxAltDeg);
+    expect(fast.visibleTonight).toBe(full.visibleTonight);
+    expect(fast.hoursAboveUsable).toBe(full.hoursAboveUsable);
+    expect(fast.darkWindowHours).toEqual(full.darkWindowHours);
+  });
+
+  it('zeroes moonFreeMinutesByBand/separationScalars honestly rather than fabricating a value', () => {
+    const t = item('NGC 7000', 313, 44);
+    const fast = rowAltitudeFor(t, USABLE_ALT_DEG, AMSTERDAM, WINTER_NIGHT_MS, undefined, false);
+    expect(fast.hoursAboveUsable).toBeGreaterThan(0);
+    for (const minutes of Object.values(fast.moonFreeMinutesByBand)) {
+      expect(minutes).toBe(0);
+    }
+    expect(fast.separationScalars.atTransitDeg).toBe('moon-not-up');
+  });
+});
+
 // ── T013: degrade states (no throw) ──────────────────────────────────────────
 
 describe('altitudeFor / rowAltitudeFor — T013 degrade states', () => {

@@ -144,7 +144,11 @@ function minSeparationOverDark(
  * where the target clears the usable altitude AND NOT (Moon above the
  * horizon AND separation below that band's Lorentzian minimum for the
  * night's Moon age). Zero for every band when there is no dark window
- * (FR-017) — never fabricated.
+ * (FR-017), OR when Moon geometry wasn't computed for this `night`
+ * (`computeNightObservability`'s `includeMoonGeometry=false` fast path,
+ * `night.moonSamples` empty) — "not computed" must degrade to zero, NOT to
+ * "no interference found" (which `nearestMoonSample` returning `null` would
+ * otherwise silently imply): never fabricated.
  */
 function moonFreeMinutesByBand(
   night: NightObservability,
@@ -153,7 +157,7 @@ function moonFreeMinutesByBand(
   params: MoonAvoidanceParams,
 ): Record<Band, number> {
   const dark = night.darkWindow;
-  if (!dark) return { ...ZERO_BY_BAND };
+  if (!dark || night.moonSamples.length === 0) return { ...ZERO_BY_BAND };
 
   const out: Record<Band, number> = { ...ZERO_BY_BAND };
   for (const s of night.samples) {
@@ -264,8 +268,15 @@ function siteKey(site: ObserverSite): string {
 
 /**
  * Cached night observability for a target at a site/date. Positions are computed
- * once per `(targetId, site, day)`; repeated calls (e.g. threshold drags) reuse
- * the cached result so only `deriveObservability` re-runs (SC-003).
+ * once per `(targetId, site, day, includeMoonGeometry)`; repeated calls (e.g.
+ * threshold drags) reuse the cached result so only `deriveObservability`
+ * re-runs (SC-003).
+ *
+ * @param includeMoonGeometry - See `computeNightObservability`'s doc — pass
+ *   `false` for a full-catalogue sort/group pass (cheap: target altitude
+ *   only) and `true` only for the rows actually being displayed (list-row
+ *   GuidanceCell, detail pane). Part of the cache key: a `false` request
+ *   never returns a stale/incomplete `true`-shaped entry or vice versa.
  */
 export function getNightObservability(
   targetId: string,
@@ -273,12 +284,13 @@ export function getNightObservability(
   decDegJ2000: number,
   site: ObserverSite,
   dateMs: number,
+  includeMoonGeometry = true,
 ): NightObservability {
-  const key = `${targetId}@${siteKey(site)}@${dayKey(dateMs)}`;
+  const key = `${targetId}@${siteKey(site)}@${dayKey(dateMs)}@${includeMoonGeometry ? 'moon' : 'nomoon'}`;
   const hit = cache.get(key);
   if (hit) return hit.night;
 
-  const night = computeNightObservability(raDegJ2000, decDegJ2000, site, dateMs);
+  const night = computeNightObservability(raDegJ2000, decDegJ2000, site, dateMs, includeMoonGeometry);
   if (cache.size >= CACHE_LIMIT) {
     // Simple bound: drop the oldest insertion.
     const oldest = cache.keys().next().value;

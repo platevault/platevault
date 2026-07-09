@@ -342,6 +342,19 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
       date, US2). Moon topocentric altitude (for Moon-up) is a genuinely new per-sample `Equator`/`Horizon`
       call against `Body.Moon` — not a duplicate of anything Track A computes (Track A only has a single
       geocentric direction vector, not a horizon-relative time series).
+      CI FIX (real perf regression found by the Real-UI E2E leg, `targets_planner_real_astronomy_after_
+      site_creation`): the Moon time-series added ~3 extra astronomy-engine calls per 10-min sample; the
+      full-catalogue sort/group pass in `TargetsTable.tsx` (potentially ~13k rows pre-filter/pre-window,
+      not just the visible ones) was calling it for EVERY row, not just the ~20-30 actually rendered —
+      pinned the real webview's main thread long enough that WebDriver's own script-execution timed out on
+      both retries. Fixed with a `computeNightObservability`/`getNightObservability`/`altitudeFor`/
+      `rowAltitudeFor` `includeMoonGeometry` param (default `true`; cache-keyed so a `false` request never
+      returns a stale `true`-shaped entry): `TargetsTable.tsx`'s full-catalogue pass now passes `false`
+      (cheap: target altitude only, needed for sort), and a per-visible-row `rowAltitudeFor(..., true)`
+      recompute at render time (only ~20-30 rows) feeds `GuidanceCell`'s moon-free-hours prop instead.
+      `false` zeroes `moonFreeMinutesByBand`/`separationScalars` honestly (never fabricating "no
+      interference found" from absent data — `planner-derive.ts`'s guard). `TargetDetailV2.tsx` (one
+      target) is unaffected, still defaults to `true`.
 - [X] T028 [US5] Extend `planner-derive.ts`: three separation scalars (transit / min-over-dark / dark-midpoint,
       "Moon not up" where below horizon — FR-020) and per-band `moonFreeMinutesByBand` = Σ dark intervals where
       `alt ≥ usable ∧ ¬(MoonUp ∧ sep(t) < lorentzianMinSep(band, moonAge))`, importing `lorentzianMinSep` from

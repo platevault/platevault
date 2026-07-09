@@ -167,6 +167,23 @@ describe('deriveObservability — US5 per-band moon-free minutes (T028, SC-010)'
       expect(derived.moonFreeMinutesByBand[band]).toBe(0);
     }
   });
+
+  it('includeMoonGeometry=false (CI perf FIX fast path) degrades to zero, never fabricating full imaging time', () => {
+    // A naive "no moonSamples => treat as no interference" reading would make
+    // every band equal totalImagingMinutes here (there IS a dark window and
+    // imaging time) — that would be a fabricated non-zero value for data that
+    // was never computed. Must be honestly zero instead.
+    const night = getNightObservability('t-fast', 180, 0, AMSTERDAM, WINTER_NIGHT_MS, false);
+    expect(night.moonSamples).toEqual([]);
+    const derived = deriveObservability(night, 30, { moonAvoidanceParams: DEFAULT_MOON_AVOIDANCE });
+    expect(derived.totalImagingMinutes).toBeGreaterThan(0);
+    for (const band of BANDS) {
+      expect(derived.moonFreeMinutesByBand[band]).toBe(0);
+    }
+    expect(derived.separationScalars.atTransitDeg).toBe('moon-not-up');
+    expect(derived.separationScalars.minOverDarkDeg).toBe('moon-not-up');
+    expect(derived.separationScalars.atDarkMidpointDeg).toBe('moon-not-up');
+  });
 });
 
 describe('deriveObservability — US2 bestDate (T025, FR-009)', () => {
