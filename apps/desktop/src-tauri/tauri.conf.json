@@ -37,7 +37,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "PLACEHOLDER-NOT-A-REAL-KEY-see-specs-051-tauri-shell-integration-tasks-md-T060",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMzMzJFRjQzNUMxNkVBNTgKUldSWTZoWmNRKzh5d3hnZGNJSUl5dkpiN2RuQTVPYUcycHp6SzN1d0tIWWtWNG1vSGZ6bXE2cnYK",
       "endpoints": [
         "https://github.com/nightwatch-astro/alm/releases/latest/download/latest.json"
       ]
