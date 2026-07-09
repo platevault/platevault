@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0 (2026-07-09)
+
+
+### Bug Fixes
+
+* **ci:** read the Cargo.toml version correctly in the release gate ([eb0511c](https://github.com/nightwatch-astro/alm/commit/eb0511c09dc58ad54aa40d5acd13ab50bbe077fb))
+* **e2e:** harden project-wizard journey against windows first-render stalls ([#481](https://github.com/nightwatch-astro/alm/issues/481)) ([9de7011](https://github.com/nightwatch-astro/alm/commit/9de701195be24d4f12d8974884c56333f65a1fd2))
+* **updater:** set the real minisign updater public key ([a33dc42](https://github.com/nightwatch-astro/alm/commit/a33dc427c23712b9d5737e859af32b7a2fbfeca2))
+
+
+### Chores
+
+* reset release baseline to 0.x ([cbd9137](https://github.com/nightwatch-astro/alm/commit/cbd91378271fb9d3fce1bf3dfc943c927c3a4b94))
+
 ## 1.0.0 (2026-07-06)
 
 
