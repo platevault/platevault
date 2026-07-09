@@ -306,6 +306,19 @@ prefill) remains deferred — see its note above (not cheap, and blocked on step
       instants throughout (no manual local-time arithmetic that could double-apply a DST offset); no dedicated
       DST-boundary-date test was added beyond the existing rise/set/transit tests (all of which already run
       against real `Date` math) — flagged as a coverage gap if a dedicated DST fixture is wanted later.
+      Also extended the Playwright mock suite: `tests/e2e/targets_planner.spec.ts` "Planner date picker +
+      per-band moon-free hours" block — 9.4a picks a date ~6 months out and asserts the Img time cell changes
+      then "Tonight" restores the exact original value (round-trip proof, not just "some value changed");
+      9.4b asserts the Filters guidance popover shows a per-band "Xh moon-free" figure (T029). NOT executed
+      in this lane's sandbox — see report ("e2e execution" finding): ALL specs in this file, including
+      pre-existing ones untouched by this PR, fail identically in this sandbox because port 5173 is already
+      occupied by a non-mocked dev server instance outside this sandbox's process visibility
+      (`VITE_USE_MOCKS` gets baked in at that server's start time, so `reuseExistingServer` silently reuses
+      an unmocked instance and every IPC call rejects with "Failed to load targets" / similar) — confirmed via
+      `CI=1 pnpm exec playwright test` failing with "http://127.0.0.1:5173 is already used"; not a regression
+      from this PR. The tests follow the file's exact existing conventions (`seedObservingSite`,
+      `targetRow`, `COL` indices) and should be re-verified in an environment where the harness's own
+      webServer can actually start.
 
 **Checkpoint**: arbitrary-date planning + best-date column. — MET (no second "Best date" table column; see
 T025's note on why the value surfaces in the detail pane instead of duplicating Track A's Opposition column).
