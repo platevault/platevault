@@ -87,6 +87,14 @@ mechanism itself.
   `tasks.md`; all 21 open issues in the #320–#340 range were stale-open
   (code already shipped). T079 (Windows E2E) remains genuinely open — left
   unticked, issue #340 left open.
+- **Lane D / 048 concurrent-session conflict (2026-07-09).** A separate,
+  fresh local worktree (branch `048-complete-per-frame-inventory`, created
+  2026-07-09, no commits at check time) is independently working spec 048.
+  **Owner directive:** lane D proceeds in reconcile-and-complete mode when
+  it unlocks — rebase onto whatever the external session has landed (branch
+  or merged PRs), run a fresh `speckit-verify mode:tasks` against real code
+  first, then implement only the verified remainder. SPEC_STATUS 048 row
+  updated accordingly.
 - **T078 retroactive sync.conflicts run (2026-07-09).** Found a genuine
   041↔006 lifecycle contradiction: 041 FR-051/SC-018 mandate removing the
   session review lifecycle entirely, but a later shipped 006 iteration
