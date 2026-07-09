@@ -40,6 +40,7 @@ Every issue lives here for the life of the run. Status: `OPEN` / `FILED #NN` /
 | B3 | validation-gap | Wizard · Step 1 Source Folders | Prior run: nonexistent path (`Q:\…`), illegal chars (`D:\bad<>\|chars`), and a relative path were all accepted into the wizard buffer with **no error**; empty input is a guarded no-op; duplicate path silently deduped. Register-time validation at Confirm/Scan was NEVER verified. **Priority re-test this run.** | OPEN — re-verify from scratch |
 | B4 | info | Project wizard · Calibration (Journey 5) | Prior run: tool auto-detection is REAL on this build. Open issue #327 claims the Project-wizard Calibration step renders hardcoded mock masters — verify explicitly in Journey 5. | INFO — verify J5 |
 | B5 | info | Wizard nav | Prior run: folder-card buffer survives Back/Forward navigation. Re-confirm. | INFO |
+| B6 | doc-drift | Run mechanics / reset recipe | Documented fresh-install reset ("wipe `wizard-test.db` only") is **incomplete**: the wizard folder buffer (`alm-setup-wizard-state`), theme (`alm.theme`), favourites, cleanup decisions, and path hints all persist in `localStorage`. A true fresh-install reset needs DB wipe **AND** `localStorage.clear()`. Confirmed this run: DB wipe alone rehydrated 5 stale folder cards + `warm-clay` theme. Clearing LS with an already-wiped DB caused **no** redirect loop. | OPEN — note in journey docs |
 
 > B1–B5 were observed by the **prior** run session on this same build. Under the
 > restart directive they are carried forward as claims to **re-verify from
@@ -52,6 +53,19 @@ observed evidence / deviations / issues filed`)_
 
 ### Journey 1 — First-run setup → data sources
 
-Environment: commit `8097d9c6`, fresh DB.
+Environment: commit `8097d9c6`, fresh DB **and** cleared `localStorage`.
 
-_pending first test_
+**Fresh-install prep (this run):** killed `desktop_shell`/`node`/`cargo`,
+`Remove-Item wizard-test.db*`, relaunched (`Finished in 1.07s` — no recompile,
+source unchanged), reconnected bridge. First read showed 5 **stale** folder cards
++ `warm-clay` theme rehydrated from `localStorage`; cleared all 15 LS keys +
+reloaded → clean state confirmed. See **B6**.
+
+**Test 1 — Fresh install lands on the setup wizard — PASS.**
+- Route `#/setup`; step indicator "STEP 1 OF 6"; heading "Where does your data
+  live?"; 0 leftover folder cards; wizard buffer re-initialised empty
+  (`sources: []`). No blank window, no redirect loop.
+- Deviation from doc: doc says "Step 1 of 5"; app is **6 steps** (B1). Expected —
+  the 6th step (Observing Site, 044-US3) shipped after the doc was written.
+
+_awaiting human checkpoint before Test 2._
