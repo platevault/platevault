@@ -59,9 +59,11 @@
 - Tauri MCP bridge (optional): `cargo tauri dev --config
   src-tauri\tauri.dev.conf.json` (bridge WS on `0.0.0.0:9223`), connect with
   `driver_session host=localhost port=9223`, invoke via `webview_execute_js` →
-  `window.__TAURI__.core.invoke('<snake_command>', {args})`. There is no
-  known backend command to fake an ObserverSite for this pre-#440 test —
-  don't try to force Test 6c until #440 actually merges.
+  `window.__TAURI__.core.invoke('<snake_command>', {args})`. To fake an
+  ObserverSite via the bridge instead of the UI, call `settings_update` with
+  scope `'observing'` and values `{observingSites: [...], observingActiveSiteId,
+  observingDefaultSiteId, usableAltitudeDeg}` (see `observing-sites/site-store.ts`
+  for the exact shape) — the real site-creation UI (Test 6b) is the normal path.
 
 ## Preconditions
 1. Deploy as above; complete first-run setup (bundled seed catalog loads

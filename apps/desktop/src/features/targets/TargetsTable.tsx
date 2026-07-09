@@ -37,11 +37,12 @@
  *
  * Task #85 — PLANNING COLUMNS:
  *   The low-value Constellation/Magnitude columns are replaced with
- *   planning-relevant ones driven by the STUB altitude model (planner-altitude.ts):
- *   max altitude tonight, a tiny inline opposition/altitude SPARKLINE per row, and
- *   a visible-tonight indicator. STUB — real values arrive with ephemeris +
- *   observer location (#58); the list endpoint has no coordinates (#57), so these
- *   are derived deterministically from the designation, not from the sky.
+ *   planning-relevant ones driven by the real per-site ephemeris
+ *   (`planner-altitude.ts`/`planner-astronomy.ts`, spec 044 Track B,
+ *   astronomy-engine): max altitude tonight, a tiny inline altitude SPARKLINE
+ *   per row, and a visible-tonight indicator, all computed from the target's
+ *   real J2000 coordinates and the active observing site — never derived from
+ *   the designation.
  *
  * Spec 047 real Track-A astronomy columns (date/time + catalogued RA/Dec only;
  * replaces the former spec 044 §3 mock columns):
@@ -52,8 +53,8 @@
  *     hover/focus explanation popover.
  *   - Opposition: real next-opposition date (US4, `astro/opposition.ts`),
  *     date-level + relative "in N days/months"; unknown → "—".
- *   - Imaging time: hours above the user-configured altitude threshold tonight
- *     (Track B placeholder per FR-015 — unchanged).
+ *   - Imaging time: real hours above the user-configured altitude threshold
+ *     tonight (spec 044 Track B, dark-window-gated).
  *   All are SORTABLE; the usable-altitude threshold is configurable via Settings.
  *
  * Task #82:
@@ -352,7 +353,7 @@ const COLUMNS: Array<{
   { key: 'star', label: () => '★', className: 'alm-targets-cell--center', title: () => m.targets_col_favourite() },
   { key: 'designation', label: () => m.targets_col_designation(), sort: 'designation' },
   { key: 'type', label: () => m.cmp_target_search_type_label(), sort: 'type' },
-  { key: 'maxAlt', label: () => m.targets_col_max_alt(), sort: 'maxAlt', className: 'alm-targets-cell--num', title: () => m.targets_table_approx_max_alt() },
+  { key: 'maxAlt', label: () => m.targets_col_max_alt(), sort: 'maxAlt', className: 'alm-targets-cell--num', title: () => m.targets_table_max_alt_title() },
   { key: 'spark', label: () => m.targets_col_tonight(), className: 'alm-targets-cell--spark' },
   { key: 'visible', label: () => m.targets_col_visible(), sort: 'visible', className: 'alm-targets-cell--center', title: () => m.targets_col_visible_title() },
   { key: 'opposition', label: () => m.targets_col_opposition(), sort: 'opposition', className: 'alm-targets-cell--opposition', title: () => m.targets_table_next_opposition() },
@@ -752,13 +753,13 @@ export function TargetsTable({
                   <td>
                     <Pill variant="ghost">{formatType(t.objectType)}</Pill>
                   </td>
-                  {/* STUB (#58): max altitude tonight from the approximate model. */}
+                  {/* Real peak altitude tonight (spec 044 Track B ephemeris). */}
                   <td className="alm-targets-cell--num">
-                    <span title={m.targets_table_approx_max_alt()}>
+                    <span title={m.targets_table_max_alt_title()}>
                       {Math.round(alt.maxAltDeg)}°
                     </span>
                   </td>
-                  {/* STUB (#58): inline altitude sparkline for the night. */}
+                  {/* Real inline altitude sparkline for the night (spec 044 Track B). */}
                   <td className="alm-targets-cell--spark">
                     <AltitudeSparkline alt={alt} label={m.targets_table_alt_sparkline_aria({ label: t.effectiveLabel })} />
                   </td>

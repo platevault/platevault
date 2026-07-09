@@ -1078,7 +1078,7 @@
   "targets_page_no_match": "No catalog targets match the current filters.",
   "targets_page_search_aria": "Search targets",
   "targets_page_search_placeholder": "Search targets...",
-  "targets_table_approx_max_alt": "Approximate max altitude tonight",
+  "targets_table_max_alt_title": "Peak altitude tonight",
   "targets_table_next_opposition": "Next opposition date",
   "targets_opposition_unknown_title": "Opposition date unknown — this target has no coordinates.",
   "targets_opposition_in_days": [
