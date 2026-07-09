@@ -36,3 +36,18 @@ button { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
 .alm-link { color: var(--alm-link); }
 .alm-link:hover { text-decoration: underline; }
+
+/* Respect the OS "reduce motion" setting app-wide: collapse every transition
+   and animation to an instant, and stop looping animations (e.g. the
+   .alm-spin loading spinner) after a single frame. Near-zero rather than 0 so
+   transitionend/animationend handlers still fire. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

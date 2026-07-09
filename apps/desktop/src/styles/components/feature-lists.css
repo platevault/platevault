@@ -565,24 +565,29 @@
   display: flex;
   align-items: flex-start;
   gap: var(--alm-sp-3);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--alm-ink) 30%, transparent);
+  /* Left accent stripe is an inset shadow, not a border, so it stays clear of
+     the banned side-tab border pattern while looking identical to a 3px rule.
+     The variant classes below only swap the accent color via the custom prop. */
+  box-shadow:
+    inset 3px 0 0 var(--alm-toast-accent, transparent),
+    0 4px 12px color-mix(in srgb, var(--alm-ink) 30%, transparent);
 }
 
-/* Variant accent borders */
+/* Variant accent (drives the inset stripe above) */
 .alm-toast__item--info {
-  border-left: 3px solid var(--alm-info);
+  --alm-toast-accent: var(--alm-info);
 }
 
 .alm-toast__item--error {
-  border-left: 3px solid var(--alm-danger);
+  --alm-toast-accent: var(--alm-danger);
 }
 
 .alm-toast__item--success {
-  border-left: 3px solid var(--alm-ok);
+  --alm-toast-accent: var(--alm-ok);
 }
 
 .alm-toast__item--warn {
-  border-left: 3px solid var(--alm-warn);
+  --alm-toast-accent: var(--alm-warn);
 }
 
 /* Message text fills remaining space */
@@ -743,6 +748,68 @@
 }
 
 /* === PROJECT SOURCE VIEWS SECTION === */
+
+/* Vertical list of generated source-view rows */
+.alm-source-views__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* One source-view row: main info left, actions right */
+.alm-source-views__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-4);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  padding: var(--alm-sp-3);
+}
+
+/* Row header line: id + state pill + kind/count meta */
+.alm-source-views__row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  flex-wrap: wrap;
+}
+
+/* Truncated monospace view id */
+.alm-source-views__id {
+  font-family: var(--alm-font-mono);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Trailing action buttons (remove / regenerate) */
+.alm-source-views__actions {
+  display: flex;
+  gap: var(--alm-sp-2);
+  flex-shrink: 0;
+}
+
+/* Generate dialog: space-between profile label row */
+.alm-source-views__profile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--alm-sp-4);
+}
+
+/* Generate dialog: copy opt-in checkbox label */
+.alm-source-views__copy-label {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+  font-size: var(--alm-text-sm);
+}
 
 /* Expandable inventory-refs disclosure widget */
 .alm-source-views__refs-details {

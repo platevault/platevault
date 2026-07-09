@@ -206,12 +206,8 @@ export function SourceViewsSection({
 
   if (loading) {
     return (
-      <Section
-        title={m.projects_source_views_title()}
-        defaultOpen={defaultOpen}
-        right={generateButton}
-      >
-        <p className="text-muted text-sm">{m.common_loading()}</p>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
+        <p className="alm-text-sm alm-text-muted">{m.common_loading()}</p>
         {dialog}
       </Section>
     );
@@ -234,12 +230,8 @@ export function SourceViewsSection({
 
   if (views.length === 0) {
     return (
-      <Section
-        title={m.projects_source_views_title()}
-        defaultOpen={defaultOpen}
-        right={generateButton}
-      >
-        <p className="text-muted text-sm">{m.projects_source_views_empty()}</p>
+      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
+        <p className="alm-text-sm alm-text-muted">{m.projects_source_views_empty()}</p>
         {dialog}
       </Section>
     );
@@ -252,17 +244,17 @@ export function SourceViewsSection({
       right={generateButton}
     >
       {dialog}
-      <ul className="flex flex-col gap-3">
+      <ul className="alm-source-views__list">
         {views.map((view) => (
           <li
             key={view.id}
-            className="flex items-center justify-between gap-4 rounded border border-border p-3"
+            className="alm-source-views__row"
             data-testid={`source-view-row-${view.id}`}
           >
-            <div className="flex flex-col gap-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="alm-stack-1 alm-rail">
+              <div className="alm-source-views__row-head">
                 <span
-                  className="font-mono text-xs text-muted truncate"
+                  className="alm-source-views__id"
                   title={view.id}
                 >
                   {view.id.slice(0, 8)}…
@@ -270,10 +262,8 @@ export function SourceViewsSection({
                 <Pill variant={viewStateVariant(view.state)}>
                   {viewStateLabel(view.state)}
                 </Pill>
-                <span className="text-xs text-muted">{view.kind}</span>
-                <span className="text-xs text-muted">
-                  {view.itemCount} {m.projects_source_views_items_unit()}
-                </span>
+                <span className="alm-text-xs alm-text-muted">{view.kind}</span>
+                <span className="alm-text-xs alm-text-muted">{view.itemCount} {m.projects_source_views_items_unit()}</span>
               </div>
 
               {/* FR-033 / T078: per-item inventory refs. T016: each item shows
@@ -282,7 +272,7 @@ export function SourceViewsSection({
                   broken-reference detail, distinct from the on-demand Verify
                   report below. */}
               {view.items.length > 0 && (
-                <details className="text-xs text-muted alm-source-views__refs-details">
+                <details className="alm-source-views__refs-details alm-text-xs alm-text-muted">
                   <summary className="alm-source-views__refs-summary">
                     {m.projects_source_views_inventory_ref_count({
                       count: view.items.length,
@@ -379,7 +369,7 @@ export function SourceViewsSection({
               <ViewAuditHistory viewId={view.id} onViewPlan={onPlanCreated} />
             </div>
 
-            <div className="flex gap-2 shrink-0">
+            <div className="alm-source-views__actions">
               {canVerifyView(view.state) && (
                 <Btn
                   size="sm"

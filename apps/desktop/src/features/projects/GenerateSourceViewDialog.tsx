@@ -142,51 +142,41 @@ export function GenerateSourceViewDialog({
         </>
       }
     >
-      <div className="flex items-center justify-between gap-4">
-        <span className="text-muted text-sm">
+      <div className="alm-source-views__profile-row">
+        <span className="alm-text-sm alm-text-muted">
           {m.projects_source_views_generate_profile_label()}
         </span>
-        <span className="text-sm">
-          {m.projects_source_views_generate_profile_default()}
-        </span>
+        <span className="alm-text-sm">{m.projects_source_views_generate_profile_default()}</span>
       </div>
 
-      <p className="text-muted text-sm">
-        {m.projects_source_views_generate_kind_hint()}
-      </p>
+      <p className="alm-text-sm alm-text-muted">{m.projects_source_views_generate_kind_hint()}</p>
 
-      {linkKinds &&
-        (linkKinds.sourceViewLinkKindIntraDrive ??
-          linkKinds.sourceViewLinkKindCrossDrive) && (
-          <div className="text-sm" data-testid="generate-view-link-kinds">
-            <span className="text-muted">
-              {m.projects_source_views_generate_kind_settings_label()}:
-            </span>{' '}
-            {linkKinds.sourceViewLinkKindIntraDrive && (
-              <span>
-                {m.projects_source_views_generate_kind_intra_drive({
-                  kind: linkKinds.sourceViewLinkKindIntraDrive,
-                })}
-              </span>
-            )}
-            {linkKinds.sourceViewLinkKindIntraDrive &&
-              linkKinds.sourceViewLinkKindCrossDrive &&
-              ' · '}
-            {linkKinds.sourceViewLinkKindCrossDrive && (
-              <span>
-                {m.projects_source_views_generate_kind_cross_drive({
-                  kind: linkKinds.sourceViewLinkKindCrossDrive,
-                })}
-              </span>
-            )}
-          </div>
-        )}
+      {linkKinds && (linkKinds.sourceViewLinkKindIntraDrive ?? linkKinds.sourceViewLinkKindCrossDrive) && (
+        <div className="alm-text-sm" data-testid="generate-view-link-kinds">
+          <span className="alm-text-muted">
+            {m.projects_source_views_generate_kind_settings_label()}:
+          </span>{' '}
+          {linkKinds.sourceViewLinkKindIntraDrive && (
+            <span>
+              {m.projects_source_views_generate_kind_intra_drive({
+                kind: linkKinds.sourceViewLinkKindIntraDrive,
+              })}
+            </span>
+          )}
+          {linkKinds.sourceViewLinkKindIntraDrive && linkKinds.sourceViewLinkKindCrossDrive && ' · '}
+          {linkKinds.sourceViewLinkKindCrossDrive && (
+            <span>
+              {m.projects_source_views_generate_kind_cross_drive({
+                kind: linkKinds.sourceViewLinkKindCrossDrive,
+              })}
+            </span>
+          )}
+        </div>
+      )}
 
-      <p className="text-muted text-xs">
-        {m.projects_source_views_generate_kind_drift_note()}
-      </p>
+      <p className="alm-text-xs alm-text-muted">{m.projects_source_views_generate_kind_drift_note()}</p>
 
-      <label className="flex items-center gap-2 text-sm">
+      <label className="alm-source-views__copy-label">
         <input
           type="checkbox"
           checked={copyOptIn}

@@ -30,6 +30,7 @@
 import { useState } from 'react';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
+import { revealInOs } from '@/shared/native/reveal';
 import { queryKeys } from '@/data/queryKeys';
 import { queryClient as sharedQueryClient } from '@/data/queryClient';
 import {
@@ -163,10 +164,6 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const [archiveReviewPlanId, setArchiveReviewPlanId] = useState<string | null>(
     null,
   );
-
-  // spec 012 T008: attach the project's filesystem artifact watcher for as
-  // long as this drawer is open; detaches on close/project switch.
-  useProjectArtifactWatcher(projectId);
 
   // spec 012 T008: attach the project's filesystem artifact watcher for as
   // long as this drawer is open; detaches on close/project switch.
@@ -340,6 +337,17 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     void handleTransition(edge, 'Resolved blocker');
   };
 
+  /** Reveal the project folder in the OS file manager (spec 012 / native reveal). */
+  const handleReveal = async () => {
+    if (!project.path) return;
+    try {
+      await revealInOs(project.path, { entityKind: 'project_manifest', entityId: projectId });
+    } catch (err: unknown) {
+      const msg = typeof err === 'string' ? err : (err as Error)?.message ?? m.sessions_toast_reveal_error();
+      addToast({ message: msg, variant: 'error' });
+    }
+  };
+
   // Derive contextual footer actions for the current lifecycle state.
   const footerActions = lifecycleFooterActions(
     lifecycle as ProjectLifecycleState,
@@ -482,7 +490,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
               data-testid="lifecycle-actions"
             >
               {/* Reveal — platform-native label (shared revealLabel()) */}
-              <Btn size="sm" variant="ghost" data-testid="action-reveal">
+              <Btn
+                size="sm"
+                variant="ghost"
+                data-testid="action-reveal"
+                disabled={!project.path}
+                onClick={() => void handleReveal()}
+              >
                 {revealLabel()}
               </Btn>
 

@@ -184,7 +184,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireCamera} onChange={handleCameraToggle} />
             </td>
-            <td className="mono">{m.settings_calmatch_exact()}</td>
+            <td className="alm-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Binning — hard toggle, persists to requireSameBinning */}
@@ -193,7 +193,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireBinning} onChange={handleBinningToggle} />
             </td>
-            <td className="mono">{m.settings_calmatch_exact()}</td>
+            <td className="alm-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Gain — hard toggle, persists to requireSameGain */}
@@ -202,7 +202,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireGain} onChange={handleGainToggle} />
             </td>
-            <td className="mono">{m.settings_calmatch_exact()}</td>
+            <td className="alm-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Offset — hard toggle, persists to requireSameOffset and feeds
@@ -212,7 +212,7 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
             <td>
               <Toggle checked={requireOffset} onChange={handleOffsetToggle} />
             </td>
-            <td className="mono">{m.settings_calmatch_exact()}</td>
+            <td className="alm-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
 
           {/* Sensor temp — soft field: pill label + number input */}

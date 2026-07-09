@@ -31,3 +31,5 @@ export type { WizardShellProps, WizardStep } from './WizardShell';
 export { ToastContainer } from './ToastContainer';
 export { InfoTip } from './InfoTip';
 export type { InfoTipProps } from './InfoTip';
+export { Tooltip } from './Tooltip';
+export type { TooltipProps } from './Tooltip';

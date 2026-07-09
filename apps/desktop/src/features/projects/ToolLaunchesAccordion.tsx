@@ -200,10 +200,7 @@ export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
   }
 
   return (
-    <div
-      className="tool-launches-accordion"
-      data-testid="tool-launches-accordion"
-    >
+    <div data-testid="tool-launches-accordion">
       {groups.map((group, idx) => (
         <ArtifactGroupSection
           key={group.toolLaunchId ?? `unattributed-${idx}`}
