@@ -168,15 +168,21 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   // `commands.inventoryReconcileRun` but had zero frontend callers before this
   // (`git grep -rl inventoryReconcileRun apps/desktop/src` matched only the
   // generated bindings) — session/inventory frame counts could only refresh
-  // by waiting out the 30s default query `staleTime`. Invalidating the
-  // sessions query on completion makes a manual reconcile's effect visible
-  // immediately instead of leaving stale counts on screen.
+  // by waiting out the 30s default query `staleTime`. Two independent readers
+  // need invalidating: `sessions.all()` backs `SessionSourcePicker` (real-UI
+  // journey evidence: its frame count goes stale after reconcile) and the
+  // `["inventory"]` prefix backs the Sessions/Inventory page's own query
+  // (`useInventorySources`, `sessions/store.ts`) — same invalidation the
+  // existing `useInvalidateInventory()` hook there performs.
   const handleReconcile = async (root: LibraryRoot) => {
     setReconcilingId(root.id);
     setReconcileError(null);
     try {
       await reconcileRoot({ rootId: root.id });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all() }),
+        queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+      ]);
       loadRoots();
     } catch (err: unknown) {
       setReconcileError(errMessage(err));

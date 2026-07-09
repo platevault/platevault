@@ -77,7 +77,7 @@ beforeEach(() => {
 });
 
 describe('DataSources — Reconcile', () => {
-  it('calls inventory_reconcile_run with the root id and invalidates the sessions query on completion', async () => {
+  it('calls inventory_reconcile_run with the root id and invalidates both the sessions and inventory queries on completion', async () => {
     mockRootsList.mockResolvedValue({ status: 'ok', data: [makeRoot()] });
     mockReconcileRun.mockResolvedValue({
       status: 'ok',
@@ -94,9 +94,16 @@ describe('DataSources — Reconcile', () => {
     await waitFor(() => {
       expect(mockReconcileRun).toHaveBeenCalledWith({ rootId: 'root-1', reason: 'on_demand' });
     });
+    // Both readers of frame counts need invalidating: `SessionSourcePicker`
+    // (backed by `sessions.all()`) and the Sessions/Inventory page's own
+    // `useInventorySources` query (backed by the `["inventory"]` prefix,
+    // the same key `useInvalidateInventory()` invalidates elsewhere).
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith(
         expect.objectContaining({ queryKey: queryKeys.sessions.all() }),
+      );
+      expect(invalidateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ queryKey: ['inventory'] }),
       );
     });
   });
