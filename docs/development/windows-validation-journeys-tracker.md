@@ -86,7 +86,7 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | Step 3 Configuration | ❌ | **theme selector broken** (#504); density no wizard preview (#505); protection eval (#506); SIMBAD toggle OK |
 | Step 4 Observing Site | ✅ | lat/long range-validated with accessible errors; empty name allowed (B16); map picker (#491) |
 | Step 5 Confirm | ✅ | summary accurate; shows depth not org (B15) |
-| T4 Finish → Inbox + persistence | ⏳ | Finish→Inbox ✅; density on main pages ✅; DB `firstrun_state=complete` ✅; **relaunch check in progress** |
+| T4 Finish → Inbox + persistence | ✅ | Finish→Inbox ✅; density on main pages ✅; relaunch (no DB reset) → main page not `/setup`, `firstrun_state=complete`, 14 roots persisted ✅ |
 | T5 Data Sources: Rescan | ⬜ | re-runs without re-prompting path |
 | T6 Data Sources: Remap (verify→apply, no file move) | ⬜ | Apply only after Verify; no bytes move |
 | T7 Data Sources: Disable (reversible, no confirm) | ⬜ | history stays; re-enable no dialog |
