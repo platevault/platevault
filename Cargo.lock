@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "desktop_shell"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "app_core",
  "audit",
