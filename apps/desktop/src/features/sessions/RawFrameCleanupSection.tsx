@@ -12,14 +12,25 @@
  */
 
 import { useState } from 'react';
-import { Section, Banner, Btn, EmptyState, RadioGroup, Table, Pill } from '@/ui';
+import {
+  Section,
+  Banner,
+  Btn,
+  EmptyState,
+  RadioGroup,
+  Table,
+  Pill,
+} from '@/ui';
 import type { TableColumn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { formatBytes } from '@/lib/format';
 import { errMessage } from '@/lib/errors';
 import { addToast } from '@/shared/toast';
 import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
-import { useRawFrameCleanupScan, useGenerateRawFrameCleanupPlan } from '@/features/inventory/store';
+import {
+  useRawFrameCleanupScan,
+  useGenerateRawFrameCleanupPlan,
+} from '@/features/inventory/store';
 import type { RawFrameCleanupCandidate } from '@/bindings/index';
 
 export interface RawFrameCleanupSectionProps {
@@ -44,7 +55,9 @@ export function RawFrameCleanupSection({
   const scan = useRawFrameCleanupScan();
   const generate = useGenerateRawFrameCleanupPlan();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [destination, setDestination] = useState<'archive' | 'trash'>('archive');
+  const [destination, setDestination] = useState<'archive' | 'trash'>(
+    'archive',
+  );
   const [reviewPlanId, setReviewPlanId] = useState<string | null>(null);
 
   const result = scan.data;
@@ -90,7 +103,9 @@ export function RawFrameCleanupSection({
       {
         onSuccess: (res) => {
           addToast({
-            message: m.projects_cleanup_plan_created_toast({ count: res.itemCount }),
+            message: m.projects_cleanup_plan_created_toast({
+              count: res.itemCount,
+            }),
             variant: 'info',
           });
           setReviewPlanId(res.planId);
@@ -108,7 +123,9 @@ export function RawFrameCleanupSection({
           type="checkbox"
           checked={selected.has(c.frameId)}
           onChange={() => toggle(c.frameId)}
-          aria-label={m.sessions_rawcleanup_select_aria({ path: c.relativePath })}
+          aria-label={m.sessions_rawcleanup_select_aria({
+            path: c.relativePath,
+          })}
           data-testid={`raw-cleanup-select-${c.frameId}`}
         />
       ),
@@ -141,18 +158,29 @@ export function RawFrameCleanupSection({
           disabled={scan.isPending}
           data-testid="raw-cleanup-scan-btn"
         >
-          {scan.isPending ? m.sessions_rawcleanup_scanning() : m.sessions_rawcleanup_scan_btn()}
+          {scan.isPending
+            ? m.sessions_rawcleanup_scanning()
+            : m.sessions_rawcleanup_scan_btn()}
         </Btn>
         {hasCandidates && (
-          <span className="alm-cleanup-scan__reclaimable" data-testid="raw-cleanup-reclaimable">
-            {m.projects_cleanup_reclaimable({ size: formatBytes(selectedBytes) })}
+          <span
+            className="alm-cleanup-scan__reclaimable"
+            data-testid="raw-cleanup-reclaimable"
+          >
+            {m.projects_cleanup_reclaimable({
+              size: formatBytes(selectedBytes),
+            })}
           </span>
         )}
       </div>
 
-      {scan.isError && <Banner variant="danger">{errMessage(scan.error)}</Banner>}
+      {scan.isError && (
+        <Banner variant="danger">{errMessage(scan.error)}</Banner>
+      )}
 
-      {result && !hasCandidates && <EmptyState title={m.sessions_rawcleanup_empty_title()} />}
+      {result && !hasCandidates && (
+        <EmptyState title={m.sessions_rawcleanup_empty_title()} />
+      )}
 
       {hasCandidates && (
         <>
@@ -186,7 +214,9 @@ export function RawFrameCleanupSection({
                 ? m.sessions_rawcleanup_generating()
                 : m.sessions_rawcleanup_generate_btn()}
             </Btn>
-            {generate.isError && <Banner variant="danger">{errMessage(generate.error)}</Banner>}
+            {generate.isError && (
+              <Banner variant="danger">{errMessage(generate.error)}</Banner>
+            )}
           </div>
         </>
       )}

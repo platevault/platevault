@@ -26,15 +26,21 @@ import type {
 
 /** On-demand `inventory.frame.list` scan for a session or root (T014). */
 export function useFrameListScan() {
-  return useMutation<InventoryFrameListResponse, Error, InventoryFrameListScope>({
-    mutationFn: (scope) => ipc.inventoryFrameList({ scope, includeMissing: true }),
+  return useMutation<
+    InventoryFrameListResponse,
+    Error,
+    InventoryFrameListScope
+  >({
+    mutationFn: (scope) =>
+      ipc.inventoryFrameList({ scope, includeMissing: true }),
   });
 }
 
 /** On-demand `inventory.reconcile.run` pass for one root (T022). */
 export function useReconcileRoot() {
   return useMutation<InventoryReconcileRunResponse, Error, { rootId: string }>({
-    mutationFn: ({ rootId }) => ipc.inventoryReconcileRun({ rootId, reason: 'on_demand' }),
+    mutationFn: ({ rootId }) =>
+      ipc.inventoryReconcileRun({ rootId, reason: 'on_demand' }),
   });
 }
 
@@ -64,7 +70,10 @@ export function useSetRootConfig(rootId: string) {
   return useMutation<
     RootInventoryConfig,
     Error,
-    { reconcileMode?: ReconcileMode | null; detection?: DetectionConfigUpdate | null }
+    {
+      reconcileMode?: ReconcileMode | null;
+      detection?: DetectionConfigUpdate | null;
+    }
   >({
     mutationFn: (patch) =>
       ipc.inventoryRootConfigSet({
@@ -73,7 +82,9 @@ export function useSetRootConfig(rootId: string) {
         detection: patch.detection ?? null,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.inventory.rootConfig(rootId) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.inventory.rootConfig(rootId),
+      });
     },
   });
 }
@@ -85,7 +96,8 @@ export function useRawFrameCleanupScan() {
     Error,
     { scope: RawFrameCleanupScope; kinds?: RawFrameType[] }
   >({
-    mutationFn: ({ scope, kinds }) => ipc.cleanupRawFramesScan({ scope, kinds: kinds ?? null }),
+    mutationFn: ({ scope, kinds }) =>
+      ipc.cleanupRawFramesScan({ scope, kinds: kinds ?? null }),
   });
 }
 

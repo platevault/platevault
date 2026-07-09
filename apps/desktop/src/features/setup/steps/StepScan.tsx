@@ -119,7 +119,8 @@ function SourceSummary({ state }: SourceSummaryProps) {
   // path string when registration failed; skip rendering in that case since
   // it is not a valid root id.
   const hasRegisteredRoot = rootId !== source.path;
-  const isFrameSource = source.kind === 'light_frames' || source.kind === 'calibration';
+  const isFrameSource =
+    source.kind === 'light_frames' || source.kind === 'calibration';
 
   const totalItems = items.length;
   const totalFiles = items.reduce((acc, it) => acc + it.fileCount, 0);
@@ -206,7 +207,9 @@ function SourceSummary({ state }: SourceSummaryProps) {
 
       {/* Spec 048 US4 T035: per-root reconcile mode + detection triggers,
           set up at add-time with documented defaults pre-selected. */}
-      {isFrameSource && hasRegisteredRoot && <RootDetectionConfig rootId={rootId} />}
+      {isFrameSource && hasRegisteredRoot && (
+        <RootDetectionConfig rootId={rootId} />
+      )}
 
       {/* ── Always-visible transient states (below header, outside collapse) ── */}
       {/* These are small/short and don't benefit from collapse. */}

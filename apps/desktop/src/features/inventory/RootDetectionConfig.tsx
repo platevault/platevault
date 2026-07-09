@@ -51,7 +51,12 @@ export function RootDetectionConfig({ rootId }: RootDetectionConfigProps) {
     );
   }
 
-  return <RootDetectionConfigPanel rootId={rootId} onClose={() => setExpanded(false)} />;
+  return (
+    <RootDetectionConfigPanel
+      rootId={rootId}
+      onClose={() => setExpanded(false)}
+    />
+  );
 }
 
 function RootDetectionConfigPanel({
@@ -65,7 +70,10 @@ function RootDetectionConfigPanel({
   const setConfig = useSetRootConfig(rootId);
 
   return (
-    <div className="alm-settings__group" data-testid={`root-detection-${rootId}`}>
+    <div
+      className="alm-settings__group"
+      data-testid={`root-detection-${rootId}`}
+    >
       <div className="alm-settings__group-title">
         {m.inventory_detection_title()}
         <Btn size="sm" variant="ghost" onClick={onClose}>
@@ -73,37 +81,56 @@ function RootDetectionConfigPanel({
         </Btn>
       </div>
 
-      {isLoading && <div className="alm-data-sources__status">{m.common_loading()}</div>}
-      {error && <div className="alm-data-sources__load-error">{errMessage(error)}</div>}
+      {isLoading && (
+        <div className="alm-data-sources__status">{m.common_loading()}</div>
+      )}
+      {error && (
+        <div className="alm-data-sources__load-error">{errMessage(error)}</div>
+      )}
 
       {data && (
         <>
           <div className="alm-settings__row">
-            <div className="alm-settings__row-label">{m.inventory_detection_mode_label()}</div>
+            <div className="alm-settings__row-label">
+              {m.inventory_detection_mode_label()}
+            </div>
             <div className="alm-settings__row-content">
               <select
                 className="alm-select"
                 value={data.reconcileMode}
                 aria-label={m.inventory_detection_mode_label()}
                 onChange={(e) =>
-                  setConfig.mutate({ reconcileMode: e.target.value as ReconcileMode })
+                  setConfig.mutate({
+                    reconcileMode: e.target.value as ReconcileMode,
+                  })
                 }
               >
-                <option value="flag_missing">{m.inventory_detection_mode_flag()}</option>
-                <option value="auto_reconcile">{m.inventory_detection_mode_auto()}</option>
+                <option value="flag_missing">
+                  {m.inventory_detection_mode_flag()}
+                </option>
+                <option value="auto_reconcile">
+                  {m.inventory_detection_mode_auto()}
+                </option>
               </select>
             </div>
           </div>
 
           <div className="alm-settings__row">
-            <div className="alm-settings__row-label">{m.inventory_detection_live_label()}</div>
+            <div className="alm-settings__row-label">
+              {m.inventory_detection_live_label()}
+            </div>
             <div className="alm-settings__row-content">
               <Toggle
                 aria-label={m.inventory_detection_live_label()}
                 checked={data.detection.live}
                 onChange={(v) =>
                   setConfig.mutate({
-                    detection: { live: v, scheduled: null, onOpen: null, followSymlinks: null },
+                    detection: {
+                      live: v,
+                      scheduled: null,
+                      onOpen: null,
+                      followSymlinks: null,
+                    },
                   })
                 }
               />
@@ -120,7 +147,12 @@ function RootDetectionConfigPanel({
                 checked={data.detection.scheduled}
                 onChange={(v) =>
                   setConfig.mutate({
-                    detection: { live: null, scheduled: v, onOpen: null, followSymlinks: null },
+                    detection: {
+                      live: null,
+                      scheduled: v,
+                      onOpen: null,
+                      followSymlinks: null,
+                    },
                   })
                 }
               />
@@ -128,14 +160,21 @@ function RootDetectionConfigPanel({
           </div>
 
           <div className="alm-settings__row">
-            <div className="alm-settings__row-label">{m.inventory_detection_on_open_label()}</div>
+            <div className="alm-settings__row-label">
+              {m.inventory_detection_on_open_label()}
+            </div>
             <div className="alm-settings__row-content">
               <Toggle
                 aria-label={m.inventory_detection_on_open_label()}
                 checked={data.detection.onOpen}
                 onChange={(v) =>
                   setConfig.mutate({
-                    detection: { live: null, scheduled: null, onOpen: v, followSymlinks: null },
+                    detection: {
+                      live: null,
+                      scheduled: null,
+                      onOpen: v,
+                      followSymlinks: null,
+                    },
                   })
                 }
               />
@@ -152,7 +191,12 @@ function RootDetectionConfigPanel({
                 checked={data.detection.followSymlinks}
                 onChange={(v) =>
                   setConfig.mutate({
-                    detection: { live: null, scheduled: null, onOpen: null, followSymlinks: v },
+                    detection: {
+                      live: null,
+                      scheduled: null,
+                      onOpen: null,
+                      followSymlinks: v,
+                    },
                   })
                 }
               />
@@ -160,7 +204,9 @@ function RootDetectionConfigPanel({
           </div>
 
           {setConfig.isError && (
-            <div className="alm-data-sources__add-error">{errMessage(setConfig.error)}</div>
+            <div className="alm-data-sources__add-error">
+              {errMessage(setConfig.error)}
+            </div>
           )}
         </>
       )}

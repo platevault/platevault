@@ -641,6 +641,7 @@ function RootCard({
         {!isOffline && RECONCILABLE_CATEGORIES.includes(root.category) && (
           <Btn
             size="sm"
+            data-testid={`reconcile-now-${root.id}`}
             onClick={() => onReconcile(root)}
             disabled={reconciling}
           >

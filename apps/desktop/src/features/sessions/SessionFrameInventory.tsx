@@ -89,7 +89,9 @@ function RelinkControl({
         }
         data-testid={`relink-confirm-${frame.frameId}`}
       >
-        {relink.isPending ? m.common_saving() : m.sessions_frame_inventory_relink_confirm_btn()}
+        {relink.isPending
+          ? m.common_saving()
+          : m.sessions_frame_inventory_relink_confirm_btn()}
       </Btn>
       <Btn
         size="sm"
@@ -103,7 +105,10 @@ function RelinkControl({
         {m.common_cancel()}
       </Btn>
       {relink.isError && (
-        <span className="alm-field-error" data-testid={`relink-error-${frame.frameId}`}>
+        <span
+          className="alm-field-error"
+          data-testid={`relink-error-${frame.frameId}`}
+        >
           {errMessage(relink.error)}
         </span>
       )}
@@ -111,7 +116,9 @@ function RelinkControl({
   );
 }
 
-export function SessionFrameInventory({ sessionId }: SessionFrameInventoryProps) {
+export function SessionFrameInventory({
+  sessionId,
+}: SessionFrameInventoryProps) {
   const scan = useFrameListScan();
   const result = scan.data;
 
@@ -130,12 +137,17 @@ export function SessionFrameInventory({ sessionId }: SessionFrameInventoryProps)
       f.state === 'missing' ? (
         <Pill variant="warn">{m.sessions_frame_inventory_state_missing()}</Pill>
       ) : null,
-    relink: f.state === 'missing' ? <RelinkControl frame={f} onRelinked={runScan} /> : null,
+    relink:
+      f.state === 'missing' ? (
+        <RelinkControl frame={f} onRelinked={runScan} />
+      ) : null,
   }));
 
   return (
     <div className="alm-settings__group" data-testid="session-frame-inventory">
-      <div className="alm-settings__group-title">{m.sessions_frame_inventory_title()}</div>
+      <div className="alm-settings__group-title">
+        {m.sessions_frame_inventory_title()}
+      </div>
       <div className="alm-cleanup-scan__controls">
         <Btn
           size="sm"
@@ -148,7 +160,10 @@ export function SessionFrameInventory({ sessionId }: SessionFrameInventoryProps)
             : m.sessions_frame_inventory_scan_btn()}
         </Btn>
         {result && (
-          <span className="alm-cleanup-scan__reclaimable" data-testid="frame-inventory-summary">
+          <span
+            className="alm-cleanup-scan__reclaimable"
+            data-testid="frame-inventory-summary"
+          >
             {m.sessions_frame_inventory_summary({
               count: result.presentCount,
               size: formatBytes(result.presentSizeBytes),
@@ -156,8 +171,12 @@ export function SessionFrameInventory({ sessionId }: SessionFrameInventoryProps)
           </span>
         )}
       </div>
-      {scan.isError && <Banner variant="danger">{errMessage(scan.error)}</Banner>}
-      {result && result.frames.length > 0 && <Table columns={columns()} rows={rows} />}
+      {scan.isError && (
+        <Banner variant="danger">{errMessage(scan.error)}</Banner>
+      )}
+      {result && result.frames.length > 0 && (
+        <Table columns={columns()} rows={rows} />
+      )}
     </div>
   );
 }

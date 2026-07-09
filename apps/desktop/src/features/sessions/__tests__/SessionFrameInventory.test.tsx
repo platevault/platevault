@@ -17,16 +17,22 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { InventoryFrameListResponse } from '@/bindings/index';
 
-const { mockScanMutate, mockRelinkMutate, scanState, relinkState } = vi.hoisted(() => ({
-  mockScanMutate: vi.fn(),
-  mockRelinkMutate: vi.fn(),
-  scanState: {
-    data: undefined as InventoryFrameListResponse | undefined,
-    isPending: false,
-    isError: false,
-  },
-  relinkState: { isPending: false, isError: false, error: undefined as Error | undefined },
-}));
+const { mockScanMutate, mockRelinkMutate, scanState, relinkState } = vi.hoisted(
+  () => ({
+    mockScanMutate: vi.fn(),
+    mockRelinkMutate: vi.fn(),
+    scanState: {
+      data: undefined as InventoryFrameListResponse | undefined,
+      isPending: false,
+      isError: false,
+    },
+    relinkState: {
+      isPending: false,
+      isError: false,
+      error: undefined as Error | undefined,
+    },
+  }),
+);
 
 vi.mock('@/features/inventory/store', () => ({
   useFrameListScan: () => ({ ...scanState, mutate: mockScanMutate }),
@@ -91,22 +97,33 @@ describe('SessionFrameInventory (spec 048 T014/T025)', () => {
   it('renders the panel and calls inventory.frame.list on demand (no fabricated frames)', () => {
     render(<SessionFrameInventory sessionId="session-1" />);
     expect(screen.getByTestId('session-frame-inventory')).toBeInTheDocument();
-    expect(screen.queryByTestId('frame-inventory-row-frame-1')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('frame-inventory-row-frame-1'),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('frame-inventory-scan-btn'));
-    expect(mockScanMutate).toHaveBeenCalledWith({ sessionId: 'session-1', rootId: null });
+    expect(mockScanMutate).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      rootId: null,
+    });
   });
 
   it('shows the real present count + disk total and a Missing pill for missing frames', () => {
     scanState.data = listResult();
     render(<SessionFrameInventory sessionId="session-1" />);
 
-    expect(screen.getByTestId('frame-inventory-summary')).toHaveTextContent('1 present');
-    expect(screen.getByTestId('frame-inventory-summary')).toHaveTextContent('1.0 KB');
+    expect(screen.getByTestId('frame-inventory-summary')).toHaveTextContent(
+      '1 present',
+    );
+    expect(screen.getByTestId('frame-inventory-summary')).toHaveTextContent(
+      '1.0 KB',
+    );
 
     const missingRow = screen.getByTestId('frame-inventory-row-frame-2');
     expect(within(missingRow).getByText('Missing')).toBeInTheDocument();
-    expect(within(missingRow).getByTestId('relink-open-frame-2')).toBeInTheDocument();
+    expect(
+      within(missingRow).getByTestId('relink-open-frame-2'),
+    ).toBeInTheDocument();
 
     const presentRow = screen.getByTestId('frame-inventory-row-frame-1');
     expect(within(presentRow).queryByText('Missing')).not.toBeInTheDocument();
@@ -135,13 +152,19 @@ describe('SessionFrameInventory (spec 048 T014/T025)', () => {
       expect.objectContaining({ message: 'Frame relinked' }),
     );
     // Re-scans to reflect the real post-relink state.
-    expect(mockScanMutate).toHaveBeenCalledWith({ sessionId: 'session-1', rootId: null });
+    expect(mockScanMutate).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      rootId: null,
+    });
   });
 
   it('a hash.mismatch relink error renders inline, never as a fake success', () => {
     scanState.data = listResult();
     relinkState.isError = true;
-    relinkState.error = { name: 'ContractError', message: 'hash.mismatch' } as Error;
+    relinkState.error = {
+      name: 'ContractError',
+      message: 'hash.mismatch',
+    } as Error;
     render(<SessionFrameInventory sessionId="session-1" />);
 
     fireEvent.click(screen.getByTestId('relink-open-frame-2'));

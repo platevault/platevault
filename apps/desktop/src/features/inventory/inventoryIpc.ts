@@ -31,7 +31,9 @@ export async function inventoryFrameList(
   req: InventoryFrameListRequest,
 ): Promise<InventoryFrameListResponse> {
   return unwrap(
-    await commands.inventoryFrameList(req as Parameters<typeof commands.inventoryFrameList>[0]),
+    await commands.inventoryFrameList(
+      req as Parameters<typeof commands.inventoryFrameList>[0],
+    ),
   );
 }
 
