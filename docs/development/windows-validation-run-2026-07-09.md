@@ -178,5 +178,15 @@ are recursive; the depth option does nothing. **B17 → #509** (recommend droppi
 the option entirely). `roots_list.fileCount` reads 0 for all (scan counts live
 elsewhere; minor).
 
-_Not yet finished (Finish not clicked). Pending: depth-semantics retest, Step 2
-Tools validation._
+**Org (organized/unorganized) — VERIFIED CONSUMED (contrast depth).** Unlike
+`scan_depth`, `organization_state` is load-bearing: `crates/app/inbox/src/confirm.rs`
+branches on it at ingest — **Organized → catalogue-in-place** (record where the
+file is, no move); **Unorganized → move** to the pattern-resolved destination
+(confirm.rs:221-298; tests `organized_source_emits_catalogue_actions` /
+`unorganized_source_emits_move_actions`). Read per-source. So the org half of the
+matrix is meaningful downstream — to verify behaviorally in the Inbox journey
+(organized roots catalogue-in-place, unorganized roots move).
+
+**Wizard steps 1–5 all validated.** Step 6 Finish not yet clicked. Pending:
+Finish + Test 4 persistence + density on main pages, then Data Sources + Journeys
+2–10.
