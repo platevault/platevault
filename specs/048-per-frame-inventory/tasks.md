@@ -84,26 +84,26 @@ description: "Task list for 048-per-frame-inventory"
 ### Tests (US2)
 - [X] T016 [P] [US2] Integration test: delete a frame on disk → reconcile → `state = missing`, counts/totals drop, and assert **zero** filesystem mutations (spy/temp-dir snapshot before/after).
   <!-- done: crates/fs/inventory/src/reconcile.rs:175-183 (deleted_frame_reports_missing, pure read-only walk — reconcile_root never writes to disk by construction) + crates/app/core/src/frame_inventory.rs:549-593 (DB-level integration: reconcile_run_backfills_zero_size_and_reports_missing) -->
-- [ ] T017 [P] [US2] Integration test: auto-reconcile mode drops the frame from active membership while the record is retained as `missing` (queryable with `include_missing`).
-  <!-- not done: auto-reconcile mode has zero functional effect today (see T021) — frame_inventory.rs:455 explicitly discards config.reconcile_mode (`let _ = matches!(...)`), so no test could pass here since the behavior doesn't exist. -->
+- [X] T017 [P] [US2] Integration test: auto-reconcile mode drops the frame from active membership while the record is retained as `missing` (queryable with `include_missing`).
+  <!-- done: crates/app/core/src/frame_inventory.rs::tests::auto_reconcile_mode_drops_frame_from_membership_but_retains_record (+ flag_missing_mode_retains_frame_in_session_membership as the contrast case) -->
 - [X] T018 [P] [US2] Integration test: recovered frame flips back to present; changed-size present frame is updated in place (not missing).
   <!-- done: crates/fs/inventory/src/reconcile.rs:199-209 (size_change_is_reported_present_with_corrected_size_not_missing) + crates/app/core/src/frame_inventory.rs (reconcile_run_recovers_previously_missing_frame) -->
-- [ ] T019 [P] [US2] Unit test: relink succeeds on sha256 match; `hash.mismatch` on a same-size different file (proves size is not the key).
-  <!-- not done: inventory.frame.relink is a stub that always returns internal.error (apps/desktop/src-tauri/src/commands/inventory_frame.rs:58-78, "not yet implemented (spec 048 US2 T025)"). No hash-match test exists. -->
+- [X] T019 [P] [US2] Unit test: relink succeeds on sha256 match; `hash.mismatch` on a same-size different file (proves size is not the key).
+  <!-- done: crates/app/core/src/frame_inventory.rs::tests::relink_first_attempt_populates_hash_and_rehomes + relink_second_attempt_same_size_different_content_is_hash_mismatch (4-byte candidates, same size, different content) -->
 
 ### Implementation (US2)
 - [X] T020 [US2] Complete the reconcile walker (T003): present/`missing`/recovered transitions, `last_seen_at` update, size backfill; emit `frame.missing`/`frame.recovered`; report progress (SC-005, non-blocking).
   <!-- mostly done: crates/app/core/src/frame_inventory.rs::run_reconcile (present/missing/recovered transitions, size backfill, events all real and tested). REMAINING GAP: progress_pct is hardcoded to 100 (terminal-only summary, no incremental progress reporting) — SC-005 "reports progress throughout" not met for very large roots (see T043a, also not done). Marked done for the transition/event substance; progress-streaming gap called out explicitly rather than silently accepted. -->
-- [ ] T021 [US2] Apply per-root `reconcile.mode`: flag-missing (retain in membership, flagged) vs auto-reconcile (drop from active membership, retain record — NEVER hard-delete). Guarantee no filesystem mutation (INV-2).
-  <!-- not done: frame_inventory.rs:451-455 loads config.reconcile_mode but explicitly discards its effect (`let _ = matches!(config.reconcile_mode, ReconcileMode::AutoReconcile);` with a comment deferring to "a future US2 T021 patch"). Auto-reconcile and flag-missing currently behave identically. -->
+- [X] T021 [US2] Apply per-root `reconcile.mode`: flag-missing (retain in membership, flagged) vs auto-reconcile (drop from active membership, retain record — NEVER hard-delete). Guarantee no filesystem mutation (INV-2).
+  <!-- done: crates/app/core/src/frame_inventory.rs::drop_frame_from_session_membership + drop_frame_from_table, wired into run_reconcile's Missing branch when config.reconcile_mode == AutoReconcile. Only the owning session's frame_ids JSON array is touched — the file_record row itself is never modified by this function, preserving INV-4. Tested (see T017). -->
 - [X] T022 [US2] `inventory.reconcile.run` command (on-demand) + long-running status/progress.
   <!-- partial: the on-demand command exists and works (apps/desktop/src-tauri/src/commands/inventory_frame.rs:47-53, real request/response). No long-running status/progress STREAM exists (single request/response only; progress_pct hardcoded terminal 100, see T020) and no frontend caller exists (see T014). Marked done for "the command exists and works, on-demand"; streaming + UI trigger remain gaps, called out under T020/T014. -->
 - [ ] T023 [US2] Per-root live watch: extend `crates/fs/inventory/src/watcher.rs` to raw/calibration roots with a per-root registry (model on `ArtifactWatcherRegistry` attach/detach); live events schedule a scoped reconcile, they don't mutate records directly. Respect symlink gate (T004).
   <!-- not done: crates/fs/inventory/src/watcher.rs:7 explicit doc comment "Per research R8, only inbox folders are watched — raw/calibration/project [roots are not]". No per-root raw/calibration watcher registry exists. -->
 - [ ] T024 [US2] Removable/network opt-out + polling/rescan fallback when live is off/unreliable; on-open and scheduled triggers.
   <!-- not done: no polling scheduler, on-open trigger, or scheduled-cadence trigger found anywhere in the reconcile/watcher code. detection.scheduled/on_open config fields exist in root_config (T005) but nothing reads them to actually trigger a pass. -->
-- [ ] T025 [US2] `inventory.frame.relink`: sha256 computed on demand for the two files; re-home on match, `hash.mismatch` otherwise; emit `frame.relinked`; populate `content_hash` lazily.
-  <!-- not done: apps/desktop/src-tauri/src/commands/inventory_frame.rs:55-79 is an explicit contract-shape stub that always returns internal.error; the sha256 comparison, re-home, and content_hash population logic does not exist. -->
+- [X] T025 [US2] `inventory.frame.relink`: sha256 computed on demand for the two files; re-home on match, `hash.mismatch` otherwise; emit `frame.relinked`; populate `content_hash` lazily.
+  <!-- done: crates/app/core/src/frame_inventory.rs::relink_frame + sha256_hex, wired into apps/desktop/src-tauri/src/commands/inventory_frame.rs (replaces the prior always-erroring stub). DESIGN NOTE (documented in the function's doc comment): a `missing` frame's original bytes are unreadable at its recorded path by definition, so there is no baseline hash to compare against on a frame's FIRST relink — content_hash is lazily populated from the candidate's hash at that point (matches data-model.md: "populated only on user-initiated relink"). Any SUBSEQUENT relink attempt for the same frame_id must match that stored hash or fails with hash.mismatch. Tested (T019). -->
 - [ ] T026 [US2] Wire raw-root reconciler/watcher lifecycle at startup in `apps/desktop/src-tauri/src/lib.rs` (near `start_inbox_plan_listener`) and to library/project open.
   <!-- not done: no such wiring in run_app (apps/desktop/src-tauri/src/lib.rs:995+); only spec-005 inbox listener, spec-019 log forwarder, spec-024 manifest subscriber, and spec-012 artifact watcher registry are started there. Blocked on T023/T024 not existing yet. -->
 
@@ -144,8 +144,8 @@ All of US3 (T027–T031) is **in-flight on PR #500** (`048-complete-per-frame-in
 ### Tests (US4)
 - [X] T032 [P] [US4] Contract test: `inventory.root_config.get` returns documented defaults when unset; `set` persists and round-trips.
   <!-- done: crates/app/settings/src/root_config.rs:168-178 (get_returns_documented_defaults_when_unset), :180-194 (set_reconcile_mode_round_trips) -->
-- [ ] T033 [P] [US4] Integration test: changing mode to auto-reconcile takes effect on the next reconcile.
-  <!-- not done: mode is loaded in run_reconcile (frame_inventory.rs:421) but its effect is explicitly discarded (frame_inventory.rs:451-455) — see T021. No test could pass since the behavior doesn't exist yet. -->
+- [X] T033 [P] [US4] Integration test: changing mode to auto-reconcile takes effect on the next reconcile.
+  <!-- done: folded into crates/app/core/src/frame_inventory.rs::tests::auto_reconcile_mode_drops_frame_from_membership_but_retains_record, which calls app_core_settings::root_config::set_root_config(AutoReconcile) then asserts the very next reconcile pass applies it -->
 
 ### Implementation (US4)
 - [X] T034 [US4] `inventory.root_config.{get,set}` over the T005 KV.
