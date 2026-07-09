@@ -336,6 +336,7 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
         onClose={() => setReviewPlanId(null)}
         title={m.projects_cleanup_review_title()}
         onApplied={() => scan.mutate(projectId)}
+        onRetryCreated={setReviewPlanId}
       />
     </Section>
   );
