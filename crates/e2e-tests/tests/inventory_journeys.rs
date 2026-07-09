@@ -6,31 +6,26 @@
 //! `projects.create`, `inventory.reconcile.run`
 //! (`apps/desktop/src-tauri/src/commands/inventory_frame.rs`, spec 048 T006).
 //!
-//! Real DOM: the project's "Add sources" session picker
+//! Real DOM (trigger): Settings → Data Sources
+//! (`apps/desktop/src/features/settings/DataSources.tsx`) now renders a
+//! per-root "Reconcile now" button (`reconcile-now-<rootId>` testid) wired to
+//! `inventory.reconcile.run` — previously a documented gap (zero frontend
+//! callers; see git history on this file for the prior invoke-bridge
+//! workaround). This journey clicks that REAL button rather than invoking
+//! the command directly.
+//!
+//! Real DOM (effect): the project's "Add sources" session picker
 //! (`SessionSourcePicker`, mounted from `EditProjectPane`) queries
 //! `sessions.list` — the spec-048 T014 active/non-missing `frame_count`
 //! read path (`crates/app/core/src/sessions.rs::active_frame_summary`) — and
 //! renders it per-session. This journey reads that REAL, product-rendered
-//! frame count before and after a real reconcile pass, rather than asserting
-//! only the `inventory.reconcile.run` IPC response.
+//! frame count before and after the real, UI-triggered reconcile pass.
 //!
 //! Catalogue-in-place: same reasoning as `source_view_journeys.rs` — the
 //! `roots.register` default (`organized`) keeps both fixture files at their
 //! literal on-disk paths, so this journey can delete one of them directly to
 //! simulate a real, external raw-frame loss (the disconnected-drive /
 //! moved-by-another-tool scenario spec 048 exists to detect).
-//!
-//! KNOWN GAP (documented, not faked): `inventory.reconcile.run`,
-//! `inventory.frame.list`, and `inventory.root_config.{get,set}`
-//! have real backend implementations (spec 048 T006) but ZERO frontend
-//! callers today (`git grep -rl inventoryReconcileRun apps/desktop/src`
-//! matches only the generated `bindings/index.ts` file) — there is no
-//! button, setting, or scheduled trigger anywhere in the product UI that
-//! invokes a reconcile pass. This journey therefore triggers the reconcile
-//! pass over the invoke bridge (same convention as `artifact.watcher.attach`
-//! in `journeys.rs::cleanup_plan_review` for a backend surface with no UI
-//! affordance yet) and proves its REAL, UI-visible effect on a genuine
-//! product screen, rather than fabricating a UI trigger that does not exist.
 //!
 //! Run (CI): `cargo nextest run -p e2e_tests --profile e2e --run-ignored all`
 //! (serial, `.config/nextest.toml`). See `crates/e2e-tests/tests/journeys.rs`
@@ -80,8 +75,9 @@ async fn complete_first_run(app: &E2eApp) -> anyhow::Result<()> {
     app.complete_first_run_gate().await
 }
 
-/// External raw-frame deletion → `inventory.reconcile.run` → the real
-/// Add-sources session picker's frame count drops from 2 to 1.
+/// External raw-frame deletion → clicking the real "Reconcile now" button
+/// (Settings → Data Sources) → the real Add-sources session picker's frame
+/// count drops from 2 to 1.
 #[tokio::test]
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow::Result<()> {
@@ -273,36 +269,30 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
     anyhow::ensure!(!lose_path.exists(), "fixture file was not actually removed: {lose_path:?}");
     anyhow::ensure!(keep_path.exists(), "the surviving frame must still be present: {keep_path:?}");
 
-    // ── 5. Real backend mutation: inventory.reconcile.run ──
-    //
-    // No product UI exposes a reconcile trigger today (KNOWN GAP, module
-    // docs), so this is invoked directly over the bridge.
-    let reconcile: serde_json::Value = app
-        .invoke(
-            "inventory_reconcile_run",
-            json!({ "req": { "rootId": root_id, "reason": "on_demand" } }),
-        )
-        .await?;
-    anyhow::ensure!(
-        reconcile["newlyMissing"].as_i64() == Some(1),
-        "expected exactly 1 newly-missing frame: {reconcile}"
-    );
-    anyhow::ensure!(
-        reconcile["present"].as_i64() == Some(1),
-        "expected exactly 1 still-present frame: {reconcile}"
-    );
+    // ── 5. Real UI trigger: click "Reconcile now" on the root's card in ──
+    // Settings → Data Sources. This is the real button added by spec 048
+    // T022 (frontend) — `inventory.reconcile.run` previously had zero UI
+    // callers; see this file's module docs for the prior invoke-bridge
+    // workaround this replaces.
+    app.goto_route("/settings/sources").await?;
+    app.wait_bridge_ready(Duration::from_secs(15)).await?;
+    let reconcile_testid = format!("reconcile-now-{root_id}");
+    app.wait_testid(&reconcile_testid, Duration::from_secs(15))
+        .await?
+        .click()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to click the real Reconcile now button: {e}"))?;
 
     // ── 5b. Poll the SAME backend read the picker uses until it reflects ──
     // the drop, BEFORE reloading (mirrors the fix for
-    // sessions_ui_derived_view_invariants, `git log 5c4ab4c5`: `inbox.plan
-    // .apply`/`inventory.reconcile.run` returning does not guarantee every
-    // downstream read is immediately consistent — a single page load only
-    // fetches once, and if that one fetch lands before the backend state is
-    // fully settled, nothing thereafter retriggers a refetch for
-    // `wait_testid_text` to catch. `reconcile["present"]/["newlyMissing"]`
-    // above already assert the response shape; this additionally proves
-    // `sessions.list` itself — the exact command the picker queries — has
-    // caught up before the reload below, so the reload's one-shot fetch
+    // sessions_ui_derived_view_invariants, `git log 5c4ab4c5`: a command
+    // returning does not guarantee every downstream read is immediately
+    // consistent — a single page load only fetches once, and if that one
+    // fetch lands before the backend state is fully settled, nothing
+    // thereafter retriggers a refetch for `wait_testid_text` to catch. This
+    // proves `sessions.list` itself — the exact command the picker queries —
+    // has caught up (i.e. the UI-triggered reconcile actually completed and
+    // took effect) before the reload below, so the reload's one-shot fetch
     // cannot race it.
     app.invoke_until("sessions_list", json!({}), INVOKE_TIMEOUT, |v: &serde_json::Value| {
         v.as_array().is_some_and(|arr| {
