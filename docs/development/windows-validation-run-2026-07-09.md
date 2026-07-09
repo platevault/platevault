@@ -46,6 +46,11 @@ Every issue lives here for the life of the run. Status: `OPEN` / `FILED #NN` /
 | B9 | **bug** | Backend · `register_source` (roots_register + roots_register_batch) | **Overlapping roots are accepted.** With `…\ALM test\Lights` registered, registering nested child `…\Lights\1` AND parent `…\ALM test` both succeed — via the single command **and** the batch path the wizard Confirm uses (all 3 items `status: success`). No `path.overlaps` check exists. Violates required rules: a root must not be *within* another root (#3) nor a *parent* of another (#4). Overlap → double-scan / ambiguous ownership / duplicate ingest. Evidence: commit 8097d9c6. | FILED #501 (bug) |
 | B10 | validation-gap / UX | Wizard · Step 1 (frontend) | Buffer accepts any string as a folder card with **no add-time validation** — invalid paths only fail later at Confirm/register. Exact-duplicate dedup is **silent** (no "already added" message). Recommend validating the 4 rules at add-time with inline SR-accessible feedback. | FILED #502 |
 | B11 | **bug** | Backend · `register_source` | Duplicate-path error `path.already_registered` has **`severity: "warning"`**; it must be **`blocking`** (registration cannot proceed on a duplicate). Human-directed. | FILED #501 (folded) |
+| B12 | **bug** | Wizard · Step 3 Configuration | **Theme selector broken**: dropdown has only **one option ("Light")** and its value doesn't match the live theme (`observatory-dark`), so it can't toggle the theme. Theme mechanism itself works (global `<html data-theme>`). Human-noticed + confirmed. | FILED #504 (bug) |
+| B13 | ux / bug | Wizard · Step 3 Configuration | **Display density has no live effect in the wizard.** Value persists to `alm-preferences` but the wizard renders outside the Shell (`Shell.tsx:96` applies `density-${d}` to `.alm-frame` on main pages only), so no preview. Inconsistent with theme (which is global). Confirm density works on main pages post-setup. Human-noticed. | FILED #505 |
+| B14 | evaluation / tech-debt | Source protection (spec 016/018) | **NOT deprecated** — wired + consumed by cleanup/permanent-delete safety (`plans.rs` `PlanBlockedByProtection`), per-source override exists (`SourceProtectionOverride.tsx`) but only in Settings, wizard has global default only. Human evaluation: (1) surface per-source protection on Step 1 cards; (2) likely **drop the configurable default** — hardcode a sensible pre-fill like org/depth do — to cut the 3-surface complexity. | FILED #506 (+2 design comments) |
+| B15 | observation | Wizard · Step 5 Confirm | Confirm summary lists per-folder **scan depth** but not the **organized/unorganized** state. Minor — consider showing org too. | OPEN (minor) |
+| B16 | observation | Wizard · Step 4 Observing Site | **Name accepts empty** (Continue stays enabled) — site name not required. Lat/long ARE properly validated (see positive result). Decide if name should be required. | OPEN (minor) |
 
 > B1–B5 were observed by the **prior** run session on this same build. Under the
 > restart directive they are carried forward as claims to **re-verify from
@@ -132,4 +137,33 @@ Wizard buffer verified: all 14 cards' org/depth selects match their combo name
 rendered). Expected scan: `single` depth finds top-level only, `recursive` finds
 all — verifying next.
 
-_awaiting human checkpoint before Confirm→Scan (registers 14 roots)._
+**Wizard traversal + step validation (steps 2–5).**
+Registered all 14 via the real wizard (Confirm→Start scan). Steps: 1 Folders →
+2 Tools → 3 Config → 4 Observing Site → 5 Confirm → 6 Scan.
+
+- **Step 5 Confirm — PASS + assertion held.** `roots_list` = **0** at Confirm
+  (no registration/scan before leaving Confirm ✓). Summary groups all 14 folders
+  by category with per-folder depth labels. Shows depth but not org state (B15).
+- **Step 4 Observing Site — validation PASS (positive).** lat `999`/`abc` →
+  blocked, "Latitude must be a number between -90 and 90."; lon `999`/`abc` →
+  blocked, "Longitude must be a number between -180 and 180."; valid → Continue
+  re-enables. This is the correct inline+accessible validation the folder-path
+  step (B10) lacks. Empty **Name** allowed (B16).
+- **Step 3 Configuration — examined (had been skipped).** 4 controls: SIMBAD
+  toggle ✓ works; Display density ✗ no wizard effect (**B13** #505); Default
+  source protection (**B14** #506 — evaluate/simplify); Theme selector ✗ broken,
+  one option (**B12** #504). Density/protection option vocab correct.
+- **Step 2 Processing Tools — NOT yet validated** (accepted blind on first pass;
+  revisit pending).
+
+**Scan results (Step 6) — depth semantics OPEN.** All 14 registered + scanned to
+"Done". Per-folder counts: light rec/single both **2 files · 2 folders**; cal
+both **4 · 2**; proj both **2 · 2**; inbox both **6 · 2**. Every `single`-depth
+root shows identical counts to its recursive twin AND "2 folders" (i.e. it
+descended into `sub/`). BUT the fixtures are only 2 levels deep, so this can't
+distinguish "single = top-level only" (bug) from "single = one level of
+recursion" (correct). **Must retest with a 3-level fixture to judge — OPEN.**
+`roots_list.fileCount` reads 0 for all (scan counts live elsewhere; minor).
+
+_Not yet finished (Finish not clicked). Pending: depth-semantics retest, Step 2
+Tools validation._
