@@ -52,6 +52,7 @@ Every issue lives here for the life of the run. Status: `OPEN` / `FILED #NN` /
 | B15 | observation | Wizard · Step 5 Confirm | Confirm summary lists per-folder **scan depth** but not the **organized/unorganized** state. Minor — consider showing org too. | OPEN (minor) |
 | B16 | observation | Wizard · Step 4 Observing Site | **Name accepts empty** (Continue stays enabled) — site name not required. Lat/long ARE properly validated (see positive result). Decide if name should be required. | OPEN (minor) |
 | B17 | **bug** + product decision | Scanner · `scan_depth` (spec 003) | **`single` depth is a no-op** — `scan_dir` always recurses; `ScanOptions` has no depth field; `ScanDepth::Single` is never read (only written). Recommendation (human-directed): **drop single/recursive entirely, always recursive** — no realistic advantage, conflicts with no-overlap (#501), astro libs are hierarchical, and single-level silently loses files. | FILED #509 (bug + drop rec) |
+| B18 | ux / polish | Wizard · Step 2 Processing Tools | Layout inconsistent ("vibe-coded"): redundant green pills (**"Detected"** header pill + separate **"OK"** path pill = same meaning), **"Redetect" text button** should be a retry (↻) icon, and small-caps `EXECUTABLE` label + pill styling don't match the design system. Human-noticed (screenshot). | FILED #510 |
 
 > B1–B5 were observed by the **prior** run session on this same build. Under the
 > restart directive they are carried forward as claims to **re-verify from
@@ -154,8 +155,12 @@ Registered all 14 via the real wizard (Confirm→Start scan). Steps: 1 Folders �
   toggle ✓ works; Display density ✗ no wizard effect (**B13** #505); Default
   source protection (**B14** #506 — evaluate/simplify); Theme selector ✗ broken,
   one option (**B12** #504). Density/protection option vocab correct.
-- **Step 2 Processing Tools — NOT yet validated** (accepted blind on first pass;
-  revisit pending).
+- **Step 2 Processing Tools — detection PASS + UI issues.** PixInsight
+  (`C:\Program Files\PixInsight\bin\PixInsight.exe`) and Siril
+  (`C:\Program Files\Siril\bin\siril.exe`) both **Detected · OK**, both enabled
+  (confirms B4: detection is real). UI polish issues → **B18** #510 (redundant
+  Detected/OK pills, Redetect should be a retry icon, inconsistent typography).
+  Functional toggle/redetect/bad-binary-path validation not run (deferred).
 
 **Scan results (Step 6) — depth semantics OPEN.** All 14 registered + scanned to
 "Done". Per-folder counts: light rec/single both **2 files · 2 folders**; cal
