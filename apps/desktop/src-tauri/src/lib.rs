@@ -28,7 +28,8 @@ use crate::commands::calibration_tolerances::{
     calibration_tolerances_get, calibration_tolerances_update,
 };
 use crate::commands::cleanup::{
-    cleanup_plan_generate, cleanup_policy_get, cleanup_policy_update, cleanup_scan,
+    cleanup_plan_generate, cleanup_policy_get, cleanup_policy_update, cleanup_raw_frames_generate,
+    cleanup_raw_frames_scan, cleanup_scan,
 };
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::{
@@ -331,6 +332,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         cleanup_policy_update,
         cleanup_scan,
         cleanup_plan_generate,
+        cleanup_raw_frames_scan,
+        cleanup_raw_frames_generate,
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,
@@ -558,6 +561,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         cleanup_policy_update,
         cleanup_scan,
         cleanup_plan_generate,
+        cleanup_raw_frames_scan,
+        cleanup_raw_frames_generate,
         // calibration tolerances (spec 030)
         calibration_tolerances_get,
         calibration_tolerances_update,

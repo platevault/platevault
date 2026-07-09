@@ -1212,6 +1212,29 @@ export const commands = {
 	 */
 	cleanupPlanGenerate: (request: GenerateCleanupPlanRequest) => typedError<GenerateCleanupPlanResult, ContractError_Serialize>(__TAURI_INVOKE("cleanup_plan_generate", { request })),
 	/**
+	 *  `cleanup.raw_frames.scan` — pure, read-only raw sub-frame cleanup preview
+	 *  for a root or session (spec 048 US3). Distinct from `cleanup.scan`, which
+	 *  enumerates a project's processing artifacts; this enumerates present,
+	 *  non-protected per-frame inventory entries. Creates NO plan and performs
+	 *  NO filesystem mutation.
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure or an invalid/empty scope.
+	 */
+	cleanupRawFramesScan: (request: RawFrameCleanupScanRequest_Deserialize) => typedError<RawFrameCleanupScanResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("cleanup_raw_frames_scan", { request })),
+	/**
+	 *  `cleanup.raw_frames.generate` — materialise a reviewable cleanup plan for
+	 *  user-selected raw sub-frames (spec 048 US3). Reuses the same protection
+	 *  generator tail as `cleanup.plan.generate` (PR #408 overlap guard,
+	 *  `.astro-plan-archive/<planId>/` destination). Performs NO filesystem
+	 *  mutation (FR-019).
+	 * 
+	 *  # Errors
+	 *  Returns `ContractError` on database failure or when no selected frame id
+	 *  resolves to a present `file_record` row.
+	 */
+	cleanupRawFramesGenerate: (request: RawFrameCleanupGenerateRequest_Deserialize) => typedError<GenerateCleanupPlanResult, ContractError_Serialize>(__TAURI_INVOKE("cleanup_raw_frames_generate", { request })),
+	/**
 	 *  `calibration.tolerances.get` — returns current calibration matching tolerances.
 	 * 
 	 *  # Errors
@@ -1438,11 +1461,9 @@ export const commands = {
 	 *  `inventory.frame.relink` — relink a surfaced missing frame to a candidate
 	 *  file under the same root, confirmed by sha256 content hash.
 	 * 
-	 *  Stub (US2 T025 not yet implemented): always returns `internal.error`
-	 *  rather than silently claiming a match. Contract shape only.
-	 * 
 	 *  # Errors
-	 *  Always returns `ContractError` until T025 lands.
+	 *  Returns `ContractError` (`frame.not_found`, `root.unavailable`,
+	 *  `file.not_found`, `hash.mismatch`) per `app_core::frame_inventory::relink_frame`.
 	 */
 	inventoryFrameRelink: (req: InventoryFrameRelinkRequest) => typedError<InventoryFrameRelinkResponse, ContractError_Serialize>(__TAURI_INVOKE("inventory_frame_relink", { req })),
 	/**
@@ -6797,6 +6818,148 @@ export type ProvenanceReadResponse_Serialize = {
 };
 
 export type ProvenanceResponseStatus = "success" | "error";
+
+/**  One raw sub-frame cleanup candidate (a present, non-protected `file_record`). */
+export type RawFrameCleanupCandidate = RawFrameCleanupCandidate_Serialize | RawFrameCleanupCandidate_Deserialize;
+
+/**  One raw sub-frame cleanup candidate (a present, non-protected `file_record`). */
+export type RawFrameCleanupCandidate_Deserialize = {
+	frameId: string,
+	sessionId: string | null,
+	rootId: string,
+	relativePath: string,
+	frameType: RawFrameType,
+	sizeBytes: number,
+	/**
+	 *  Resolved protection level (e.g. `"protected"`/`"unprotected"`),
+	 *  surfaced BEFORE generating a plan (constitution II).
+	 */
+	protection: string,
+	/**
+	 *  Confidence the classification is correct, `0.0..=1.0`. Raw frame
+	 *  classification is deterministic (derived from the owning session's
+	 *  kind, not inferred), so this is always `1.0` today; the field exists
+	 *  so a future ambiguous-classification path has somewhere to report
+	 *  uncertainty (FR-023).
+	 */
+	confidence: number | null,
+};
+
+/**  One raw sub-frame cleanup candidate (a present, non-protected `file_record`). */
+export type RawFrameCleanupCandidate_Serialize = {
+	frameId: string,
+	sessionId?: string | null,
+	rootId: string,
+	relativePath: string,
+	frameType: RawFrameType,
+	sizeBytes: number,
+	/**
+	 *  Resolved protection level (e.g. `"protected"`/`"unprotected"`),
+	 *  surfaced BEFORE generating a plan (constitution II).
+	 */
+	protection: string,
+	/**
+	 *  Confidence the classification is correct, `0.0..=1.0`. Raw frame
+	 *  classification is deterministic (derived from the owning session's
+	 *  kind, not inferred), so this is always `1.0` today; the field exists
+	 *  so a future ambiguous-classification path has somewhere to report
+	 *  uncertainty (FR-023).
+	 */
+	confidence: number | null,
+};
+
+/**  Request envelope for the raw sub-frame `cleanup.plan.generate`. */
+export type RawFrameCleanupGenerateRequest = RawFrameCleanupGenerateRequest_Serialize | RawFrameCleanupGenerateRequest_Deserialize;
+
+/**  Request envelope for the raw sub-frame `cleanup.plan.generate`. */
+export type RawFrameCleanupGenerateRequest_Deserialize = {
+	selectedFrameIds: string[],
+	title?: string | null,
+	/**
+	 *  `"archive"` (default) or `"trash"` — canonical vocabulary per
+	 *  migration 0040 / spec 033 vocab split.
+	 */
+	destructiveDestination?: string | null,
+};
+
+/**  Request envelope for the raw sub-frame `cleanup.plan.generate`. */
+export type RawFrameCleanupGenerateRequest_Serialize = {
+	selectedFrameIds: string[],
+	title?: string | null,
+	/**
+	 *  `"archive"` (default) or `"trash"` — canonical vocabulary per
+	 *  migration 0040 / spec 033 vocab split.
+	 */
+	destructiveDestination?: string | null,
+};
+
+/**  Request envelope for the raw sub-frame `cleanup.candidates.scan`. */
+export type RawFrameCleanupScanRequest = RawFrameCleanupScanRequest_Serialize | RawFrameCleanupScanRequest_Deserialize;
+
+/**  Request envelope for the raw sub-frame `cleanup.candidates.scan`. */
+export type RawFrameCleanupScanRequest_Deserialize = {
+	scope: RawFrameCleanupScope_Deserialize,
+	/**  Restrict to specific raw frame kinds; all kinds when absent. */
+	kinds?: RawFrameType[] | null,
+};
+
+/**  Request envelope for the raw sub-frame `cleanup.candidates.scan`. */
+export type RawFrameCleanupScanRequest_Serialize = {
+	scope: RawFrameCleanupScope_Serialize,
+	/**  Restrict to specific raw frame kinds; all kinds when absent. */
+	kinds?: RawFrameType[] | null,
+};
+
+/**
+ *  Response payload for the raw sub-frame `cleanup.candidates.scan`.
+ *  Grouping by session is a client-side concern over `session_id` on each
+ *  candidate — no separate grouped shape is needed.
+ */
+export type RawFrameCleanupScanResponse = RawFrameCleanupScanResponse_Serialize | RawFrameCleanupScanResponse_Deserialize;
+
+/**
+ *  Response payload for the raw sub-frame `cleanup.candidates.scan`.
+ *  Grouping by session is a client-side concern over `session_id` on each
+ *  candidate — no separate grouped shape is needed.
+ */
+export type RawFrameCleanupScanResponse_Deserialize = {
+	candidates: RawFrameCleanupCandidate_Deserialize[],
+	totalReclaimableBytes: number,
+};
+
+/**
+ *  Response payload for the raw sub-frame `cleanup.candidates.scan`.
+ *  Grouping by session is a client-side concern over `session_id` on each
+ *  candidate — no separate grouped shape is needed.
+ */
+export type RawFrameCleanupScanResponse_Serialize = {
+	candidates: RawFrameCleanupCandidate_Serialize[],
+	totalReclaimableBytes: number,
+};
+
+/**
+ *  Scope for `cleanup.candidates.scan` (raw sub-frame variant) — exactly one
+ *  of `session_id`/`root_id` is expected to be set.
+ */
+export type RawFrameCleanupScope = RawFrameCleanupScope_Serialize | RawFrameCleanupScope_Deserialize;
+
+/**
+ *  Scope for `cleanup.candidates.scan` (raw sub-frame variant) — exactly one
+ *  of `session_id`/`root_id` is expected to be set.
+ */
+export type RawFrameCleanupScope_Deserialize = {
+	sessionId: string | null,
+	rootId: string | null,
+};
+
+/**
+ *  Scope for `cleanup.candidates.scan` (raw sub-frame variant) — exactly one
+ *  of `session_id`/`root_id` is expected to be set.
+ */
+export type RawFrameCleanupScope_Serialize = {
+	sessionId?: string | null,
+	rootId?: string | null,
+};
 
 /**  Raw frame kind for a per-frame inventory entry. */
 export type RawFrameType = "light" | "dark" | "flat" | "bias";
