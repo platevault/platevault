@@ -105,3 +105,25 @@ mechanism itself.
   spec.md annotations) rather than reverting either side's shipped code.
   Flagged to the product owner for override if this reconciliation is
   wrong. T078 ticked; issue #339 closed citing the record.
+- **Lane 0b + lane A merged (2026-07-09).** #487 (CI quick wins — dropped
+  the redundant workspace build, Linux-only fmt/clippy/doctests + a
+  Windows cargo-check backstop, tauri-webdriver binstall, CHANGELOG
+  excluded from the typos config, `ccd2f490`) and #494 (2 flake
+  stabilizations, `759a8907`) both merged. **Lane A finding: the
+  historical "workspace-test red" baseline is now STALE** — `cargo test
+  --workspace` is fully green on `main` (1980/1980, confirmed by #494's
+  own run). This supersedes the long-standing
+  `preexisting-workspace-test-breakage` note; future lanes may use
+  `cargo test --workspace` directly again instead of per-crate `-p`
+  workarounds.
+- **Wave-2 lanes spawned (2026-07-09).** nD (048 reconcile-and-complete,
+  per the concurrent-session directive above), nE (037 completion +
+  coverage-matrix + `testing.md`), nM (macOS Real-UI descope per #489 +
+  the reconcile-flake stabilization below).
+- **CI triage (2026-07-09).** `reconcile_drops_externally_deleted_frame`
+  confirmed an intermittent cross-PR flake (root-cause theory: reconcile
+  completion racing UI polling lag, no query invalidation on completion —
+  owned by lane nM's stabilization work). #499 (lane nB) carries a
+  **separate real regression**,
+  `targets_planner_real_astronomy_after_site_creation`, currently in a fix
+  round — not the same failure class as the reconcile flake.
