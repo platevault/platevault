@@ -32,8 +32,14 @@ harnesses, CI, and docs themselves. Paths are repo-relative.
 > reference `tauri-webdriver` instead of `tauri-driver`/`msedgedriver`.
 >
 > **Status 2026-07-09 (close-out)**: Setup/Foundational phase fully resolved —
-> T001/T004 done (tempfile confirmed present; no live-network tag needed, `#[ignore]`
-> repurposed for the L1/L2 split instead), T003/T006 confirmed superseded (no
+> T001/T004 done (tempfile confirmed present; no additional live-network tag
+> needed for this feature's own suites — `app_core`/`crates/e2e-tests` stay
+> offline via `FakeResolver`/the bundled seed cache, `#[ignore]` repurposed for
+> the L1/L2 split instead. **Correction**: this is scoped, not workspace-wide —
+> `crates/targeting/resolver/tests/simbad_live.rs` is a pre-existing, ungated
+> suite hitting the real SIMBAD endpoint by default under `cargo test
+> --workspace`; untouched, not re-gated here, tracked as a separate backlog
+> item), T003/T006 confirmed superseded (no
 > change from the 2026-06-19 note). T031 confirmed already implemented
 > (`preflight()` in `crates/e2e-tests/tests/common/mod.rs`, not touched — owned
 > by that lane). T032 found and fixed a real gap: `just test-e2e` called a
@@ -58,7 +64,7 @@ Story labels map to spec user stories US1–US5.
 - [X] T001 ~~Add Rust dev-dependencies for the integration layer (`wiremock`, ensure `tempfile`)~~ **PARTIALLY SUPERSEDED** — `tempfile` is already a `[dev-dependencies]` workspace entry in `crates/app/core/Cargo.toml` (used by the T005 harness). `wiremock` was never added: superseded by the same T003/T006 decision below (offline `FakeResolver`/`FakeSpawner` test doubles, no HTTP-boundary mock needed).
 - [ ] T002 [P] ~~Add E2E dev-dependency `better-sqlite3` to `apps/desktop/package.json`~~ **SUPERSEDED** — the thirtyfour harness (`crates/e2e-tests`) asserts through the real UI via element find/text and the `invoke()` bridge; no JS DB reader is needed. `better-sqlite3` is not added.
 - [ ] T003 [P] ~~Create shared test-fixture dir `tests/fixtures/` with SIMBAD response samples~~ **SUPERSEDED** — no fixture dir was created; the in-repo `targeting::FakeResolver` test double (offline, in-memory) covers every SIMBAD scenario the fixtures would have (success/ambiguous/not-found/error) without a filesystem/HTTP fixture layer to maintain. See `crates/targeting/tests/simbad_resolution_integration.rs`.
-- [X] T004 Decide and document the integration-test tagging mechanism so the default suite stays deterministic/offline, per research D2 + open items; record in `quickstart.md` — **decision: no live/network tag is needed.** Re-verified 2026-07-09: no test anywhere in the workspace makes a real network call (`grep` for a live-SIMBAD `#[ignore]`/feature gate returns nothing) — SIMBAD resolution is exercised entirely offline (`FakeResolver` at Layer 1, the bundled seed cache at Layer 2), matching the resolve-on-demand + bundled-seed pivot that obsoleted the original hosted-catalog/live-test plan. The `#[ignore]` attribute that DOES exist in this feature (`crates/e2e-tests/tests/*.rs`) serves a different purpose than the one T004 originally envisioned: gating Layer-2 real-UI journeys out of the Layer-1 `cargo test --workspace` run (no WebDriver/display there), opted back in via `--run-ignored all` in `e2e.yml`. Documented in `quickstart.md`.
+- [X] T004 Decide and document the integration-test tagging mechanism so the default suite stays deterministic/offline, per research D2 + open items; record in `quickstart.md` — **decision, scoped to this feature's suites: no additional live/network tag is needed for `app_core` (Layer 1) or `crates/e2e-tests` (Layer 2)** — both exercise SIMBAD entirely offline (`FakeResolver` at Layer 1, the bundled seed cache at Layer 2), matching the resolve-on-demand + bundled-seed pivot that obsoleted the original hosted-catalog/live-test plan. **Correction (2026-07-09, reviewer-caught)**: this does NOT hold workspace-wide — `crates/targeting/resolver/tests/simbad_live.rs` is a pre-existing, ungated suite that runs as part of the default `cargo test --workspace` and hits the real SIMBAD TAP endpoint (skips only on a transient network error, never on principle). Untouched here; not re-gated (a separate backlog item, per reviewer instruction, not this task's call to make). The `#[ignore]` attribute that DOES exist in this feature's own suites (`crates/e2e-tests/tests/*.rs`) serves a different purpose than the one T004 originally envisioned: gating Layer-2 real-UI journeys out of the Layer-1 `cargo test --workspace` run (no WebDriver/display there), opted back in via `--run-ignored all` in `e2e.yml`. Documented in `quickstart.md`.
 
 ## Phase 2: Foundational (blocking prerequisites)
 

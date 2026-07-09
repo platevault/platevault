@@ -27,9 +27,15 @@ structurally cannot prove.
 just test-integration      # cargo test --workspace (real SQLite, real migrations)
 ```
 
-No special prerequisites beyond the Rust toolchain. Deterministic and
-offline — no test makes a real network call; SIMBAD is exercised via the
-in-repo `FakeResolver` test double, not the network. Each test gets an
+No special prerequisites beyond the Rust toolchain. The `app_core`
+integration suites (`crates/app/core/tests/*.rs`) and the Layer-2
+`crates/e2e-tests` suite are deterministic and offline — SIMBAD is
+exercised via the in-repo `FakeResolver` test double / bundled seed cache,
+not the network. One pre-existing exception: `crates/targeting/resolver/
+tests/simbad_live.rs` is an ungated live-network suite that runs as part of
+the default `cargo test --workspace` and hits the real SIMBAD TAP endpoint
+(skips only on a transient network error, never on principle — see that
+file's module doc for SC-004 rationale). Each test gets an
 isolated in-memory/tempdir-backed database with all migrations applied
 (`crates/app/core/tests/support/mod.rs`).
 

@@ -16,12 +16,23 @@ just test-integration          # → cargo test --workspace
 
 ### Tagging mechanism (T004)
 
-No live-network tag is needed: no test anywhere in the workspace makes a real
-network call. SIMBAD resolution is exercised entirely offline — the in-repo
+No additional live-network tag was added for the app_core/e2e-tests suites
+in scope here: `app_core`'s integration tests (Layer 1) and
+`crates/e2e-tests` (Layer 2) exercise SIMBAD entirely offline — the in-repo
 `targeting::FakeResolver` test double at Layer 1, and the bundled offline
 seed cache at Layer 2 (`targets_journeys.rs` deliberately avoids a live
 lookup, flaky in CI). This supersedes research D2's original `wiremock`
 HTTP-boundary-stub plan (see `contracts/coverage-matrix.md`).
+
+**Pre-existing exception, not covered by that decision**:
+`crates/targeting/resolver/tests/simbad_live.rs` is a separate, ungated
+suite that runs as part of the **default** `cargo test --workspace` and
+hits the real SIMBAD TAP endpoint (SC-004 live coverage; skips only on a
+transient network error via its own `resolve_or_skip` helper, or when
+`ALM_SKIP_LIVE_SIMBAD=1` is set — never gated by `#[ignore]` or a cargo
+feature). Untouched by this feature; tracked separately as a backlog item
+(whether it should be feature/`#[ignore]`-gated is a product/CI-policy call,
+not decided here).
 
 The `#[ignore]` attribute that DOES exist in this feature
 (`crates/e2e-tests/tests/*.rs`) serves a different purpose: it gates every
