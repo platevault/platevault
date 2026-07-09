@@ -1,6 +1,29 @@
 {
   "PreToolUse": [
     {
+      "matcher": "Grep|Glob|Read",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/code-intelligence/scripts/code-discovery-steer.sh",
+          "timeout": 3
+        }
+      ],
+      "_apm_source": "code-intelligence"
+    },
+    {
+      "matcher": "Skill",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/dispatcher.py ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/nodes.json pre",
+          "timeout": 5,
+          "statusMessage": "Checking SpecKit DAG preconditions..."
+        }
+      ],
+      "_apm_source": "speckit-dag-hooks"
+    },
+    {
       "matcher": "Bash",
       "hooks": [
         {
@@ -31,15 +54,14 @@
       "_apm_source": "speckit"
     },
     {
-      "matcher": "Grep|Glob|Read",
+      "matcher": "Bash",
       "hooks": [
         {
           "type": "command",
-          "command": ".claude/hooks/code-intelligence/scripts/code-discovery-steer.sh",
-          "timeout": 3
+          "command": ".claude/hooks/release-please/scripts/release-please-guard.sh"
         }
       ],
-      "_apm_source": "code-intelligence"
+      "_apm_source": "release-please"
     },
     {
       "matcher": "Skill",
@@ -50,18 +72,6 @@
         }
       ],
       "_apm_source": "speckit"
-    },
-    {
-      "matcher": "Skill",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/dispatcher.py ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/nodes.json pre",
-          "timeout": 5,
-          "statusMessage": "Checking SpecKit DAG preconditions..."
-        }
-      ],
-      "_apm_source": "speckit-dag-hooks"
     },
     {
       "matcher": "apply_patch|Edit|Write|MultiEdit",
@@ -76,6 +86,31 @@
     }
   ],
   "PostToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/code-intelligence/scripts/reindex-after-commit.sh",
+          "if": "Bash(git commit*)",
+          "timeout": 30,
+          "async": true
+        }
+      ],
+      "_apm_source": "code-intelligence"
+    },
+    {
+      "matcher": "Skill",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/dispatcher.py ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/nodes.json post",
+          "timeout": 5,
+          "statusMessage": "Loading SpecKit next-step context..."
+        }
+      ],
+      "_apm_source": "speckit-dag-hooks"
+    },
     {
       "matcher": "apply_patch|Edit|Write|MultiEdit",
       "hooks": [
@@ -196,36 +231,11 @@
       "hooks": [
         {
           "type": "command",
-          "command": ".claude/hooks/code-intelligence/scripts/reindex-after-commit.sh",
-          "if": "Bash(git commit*)",
-          "async": true,
-          "timeout": 30
-        }
-      ],
-      "_apm_source": "code-intelligence"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
           "command": ".claude/hooks/speckit/scripts/speckit-task-commit-check.sh",
           "if": "Bash(git commit*)"
         }
       ],
       "_apm_source": "speckit"
-    },
-    {
-      "matcher": "Skill",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/dispatcher.py ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/nodes.json post",
-          "timeout": 5,
-          "statusMessage": "Loading SpecKit next-step context..."
-        }
-      ],
-      "_apm_source": "speckit-dag-hooks"
     }
   ],
   "UserPromptSubmit": [
@@ -271,8 +281,8 @@
         {
           "type": "command",
           "command": ".claude/hooks/code-intelligence/scripts/codebase-index.sh",
-          "async": true,
-          "statusMessage": "Indexing codebase..."
+          "statusMessage": "Indexing codebase...",
+          "async": true
         }
       ],
       "_apm_source": "code-intelligence"
@@ -288,6 +298,16 @@
         }
       ],
       "_apm_source": "code-intelligence"
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/steering-pragmatic/scripts/inject-working-style.sh",
+          "timeout": 5
+        }
+      ],
+      "_apm_source": "steering-pragmatic"
     }
   ]
 }

@@ -40,18 +40,6 @@
         "_apm_source": "speckit"
       },
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/hooks-quality/scripts/quality-before-commit.sh",
-            "if": "Bash(git commit*)",
-            "timeout": 10
-          }
-        ],
-        "_apm_source": "hooks-quality"
-      },
-      {
         "hooks": [
           {
             "type": "command",
@@ -73,6 +61,28 @@
         "_apm_source": "code-intelligence"
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/hooks-quality/scripts/quality-before-commit.sh",
+            "if": "Bash(git commit*)",
+            "timeout": 10
+          }
+        ],
+        "_apm_source": "hooks-quality"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/release-please/scripts/release-please-guard.sh"
+          }
+        ],
+        "_apm_source": "release-please"
+      },
+      {
         "matcher": "apply_patch|Edit|Write|MultiEdit",
         "hooks": [
           {
@@ -85,6 +95,29 @@
       }
     ],
     "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/dispatcher.py $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/nodes.json post",
+            "timeout": 5
+          }
+        ],
+        "_apm_source": "speckit-dag-hooks"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/code-intelligence/scripts/reindex-after-commit.sh",
+            "if": "Bash(git commit*)",
+            "async": true,
+            "timeout": 30
+          }
+        ],
+        "_apm_source": "code-intelligence"
+      },
       {
         "matcher": "apply_patch|Edit|Write|MultiEdit",
         "hooks": [
@@ -220,29 +253,6 @@
           }
         ],
         "_apm_source": "speckit"
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/dispatcher.py $(git rev-parse --show-toplevel)/.codex/hooks/speckit-dag-hooks/scripts/nodes.json post",
-            "timeout": 5
-          }
-        ],
-        "_apm_source": "speckit-dag-hooks"
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".codex/hooks/code-intelligence/scripts/reindex-after-commit.sh",
-            "if": "Bash(git commit*)",
-            "async": true,
-            "timeout": 30
-          }
-        ],
-        "_apm_source": "code-intelligence"
       }
     ],
     "SessionStart": [
@@ -260,6 +270,16 @@
       }
     ],
     "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/steering-pragmatic/scripts/inject-working-style.sh",
+            "timeout": 5
+          }
+        ],
+        "_apm_source": "steering-pragmatic"
+      },
       {
         "hooks": [
           {
