@@ -77,4 +77,33 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
       );
     });
   });
+
+  it('a user edit before the mount fetch resolves is not clobbered by the stale response', async () => {
+    // Mount-time `getSettings('cleanup')` is left unresolved until after the
+    // user has already edited a row — reproduces the real race (mock IPC's
+    // randomized latency letting the fetch resolve after a fast click).
+    let resolveGet: ((value: { values: Record<string, unknown> }) => void) | undefined;
+    mockGetSettings.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGet = resolve;
+      }),
+    );
+
+    render(<Cleanup save={vi.fn()} />);
+
+    const row = await screen.findByRole('row', { name: new RegExp(DARK_FRAMES_ROW) });
+    fireEvent.click(within(row).getByRole('button', { name: 'Keep' }));
+    await waitFor(() => {
+      expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent('Keep');
+    });
+
+    // The stale fetch now resolves with the (pre-edit) default — it must be
+    // ignored, not applied on top of the user's edit.
+    resolveGet?.({ values: {} });
+
+    // Give the resolved promise's `.then` a tick to run before asserting it
+    // did NOT revert the row.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent('Keep');
+  });
 });
