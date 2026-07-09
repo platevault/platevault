@@ -64,3 +64,26 @@ mechanism itself.
   release-please-generated `CHANGELOG.md`. **Decision:** surgical
   `SKIP=typos` authorized once for lane `n0b`; durable fix is excluding
   `CHANGELOG.md` from the typos config, landing in the `n0b` PR.
+- **macOS Real-UI, no viable alternative found (2026-07-09).** Internal issue
+  #489 filed ("Real-UI E2E: macOS leg blocked — tauri-plugin-webdriver
+  upstream failure", labels `bug`/`spec:037`). A project-history search found
+  no viable alternative: 037 `research.md` D4 already surveyed the field (the
+  `danielraffel` webdriver-automation plugin was never adopted; CrabNebula
+  Cloud rejected as paid; `safaridriver`/AXUI/CDP never explored); the
+  `tauri-plugin-mcp-bridge` is architecturally macOS-capable but non-WebDriver,
+  dev-only per D4, and unvalidated headless — a future spike, not a fix.
+  **Owner directive applied:** lane `nM` disables the macOS Real-UI leg on
+  PRs, keeping a `workflow_dispatch` re-test path without
+  `continue-on-error`; macOS coverage relies on unit + integration + mock
+  suites. Watch item: `tauri-plugin-webdriver` releases + the mcp-bridge
+  spike idea live in #489.
+- **Lane ownership clarification (2026-07-09).** Lanes J (Windows validation)
+  and K (final hand-off) are externally owned by the campaign session, not
+  by any coder lane in this run — feature-PR lanes author verify-on-windows
+  scenario text but never execute it on Windows themselves.
+- **041 verify-then-close outcome (2026-07-09, this lane).** Zero phantom
+  completions found. Inverse drift instead: 6 tasks (T071/T072/T073/T076/
+  T077/T081) were implemented-and-tested on `main` but left unticked in
+  `tasks.md`; all 21 open issues in the #320–#340 range were stale-open
+  (code already shipped). T078 (sync-conflicts record) and T079 (Windows
+  E2E) remain genuinely open — left unticked, issues #339/#340 left open.
