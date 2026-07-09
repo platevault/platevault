@@ -48,4 +48,19 @@ mechanism itself.
 
 ## Updates
 
-(Appended as decisions are relayed from `main`.)
+- **Real-UI E2E audit (2026-07-09).** macOS leg is hard-broken upstream in
+  `tauri-plugin-webdriver` 0.2.1 (embedded `:4445` server never starts on
+  macOS runners; upstream's own CI is red on macOS, issue tracker disabled,
+  no newer release; no `safaridriver` path for embedded WKWebView). ubuntu/
+  windows legs verified reliable (only true product bugs caught in the last
+  ~15 runs). **Decision:** new lane `nM` removes macOS from the PR matrix →
+  `workflow_dispatch`-only, without `continue-on-error` (true signal for
+  future upstream re-tests), adds job-level `timeout-minutes`, and adds
+  `desktop_shell` stdout/stderr capture on launch failure in the e2e harness.
+  Merge bar unchanged: Integration + mock + Real-UI ubuntu+windows required.
+  Re-check `tauri-plugin-webdriver` releases periodically.
+- **Pre-push typos hook false-positives (2026-07-09).** First push of any new
+  branch trips a full-scan fallback that flags commit-hash substrings in
+  release-please-generated `CHANGELOG.md`. **Decision:** surgical
+  `SKIP=typos` authorized once for lane `n0b`; durable fix is excluding
+  `CHANGELOG.md` from the typos config, landing in the `n0b` PR.
