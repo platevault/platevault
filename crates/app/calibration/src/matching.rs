@@ -780,6 +780,8 @@ pub async fn masters_get(
     let session_count = u32::try_from(used_by_session_ids.len()).unwrap_or(0);
     let project_count = u32::try_from(used_by_project_ids.len()).unwrap_or(0);
 
+    let missing_flag = compute_missing_flag(pool, &r.id).await?;
+
     Ok(contracts_core::calibration::MasterDetail {
         id: r.id.clone(),
         kind: cal_kind,
@@ -800,7 +802,43 @@ pub async fn masters_get(
         used_by_project_ids,
         compatible_sessions: vec![],
         usage_stats: contracts_core::calibration::MasterUsageStats { session_count, project_count },
+        missing_flag,
     })
+}
+
+/// spec 048 US5 (FR-024/025): compute a master's derived "missing" flag from
+/// live presence state. Always recomputed — never cached — so it clears
+/// automatically once the referenced frame/artifact returns to present
+/// (data-model.md "Calibration match flag — derived annotation").
+///
+/// PATH A (generated master artifact missing) takes precedence over PATH B
+/// (raw source sub missing) when both apply: a missing generated file is the
+/// more actionable / specific signal for the user to act on.
+///
+/// # Errors
+/// Returns `Err(String)` on database failure.
+async fn compute_missing_flag(
+    pool: &SqlitePool,
+    master_id: &str,
+) -> Result<Option<contracts_core::calibration::CalibrationMatchMissingFlag>, String> {
+    use contracts_core::calibration::CalibrationMatchMissingFlag as Flag;
+
+    if let Some(state) =
+        assign_repo::master_artifact_state(pool, master_id).await.map_err(|e| e.to_string())?
+    {
+        if state != "present" {
+            return Ok(Some(Flag::MasterMissing));
+        }
+    }
+
+    if assign_repo::master_has_missing_source_frame(pool, master_id)
+        .await
+        .map_err(|e| e.to_string())?
+    {
+        return Ok(Some(Flag::SourceSubsMissing));
+    }
+
+    Ok(None)
 }
 
 fn str_to_cal_kind(kind: &str) -> contracts_core::calibration::CalibrationKind {

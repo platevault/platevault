@@ -506,10 +506,15 @@ pub async fn mark_missing(
                 artifact_id: artifact_id.to_owned(),
                 project_id: project_id.to_owned(),
                 path: path.to_owned(),
-                at: now,
+                at: now.clone(),
             },
         )
         .await;
+
+    // spec 048 US5 (FR-024, PATH A): flag any calibration match whose
+    // master's generated master file is this now-missing artifact.
+    emit_calibration_match_flag_for_artifact(pool, bus, artifact_id, &now, false).await;
+
     Ok(())
 }
 
@@ -538,11 +543,66 @@ pub async fn mark_recovered(
                 artifact_id: artifact_id.to_owned(),
                 project_id: project_id.to_owned(),
                 path: path.to_owned(),
-                at: now,
+                at: now.clone(),
             },
         )
         .await;
+
+    // spec 048 US5 (FR-025): clear "master missing" on any calibration match
+    // whose master's generated master file is this now-recovered artifact.
+    emit_calibration_match_flag_for_artifact(pool, bus, artifact_id, &now, true).await;
+
     Ok(())
+}
+
+/// spec 048 US5 (FR-024/025, PATH A): emit `calibration_match.source_missing`
+/// / `.source_recovered` for every calibration match whose master's
+/// generated master file is `artifact_id`. Best-effort — a lookup/publish
+/// failure here must not fail the artifact reconcile pass, since the flag is
+/// re-derived live on next read regardless (never the durable record).
+async fn emit_calibration_match_flag_for_artifact(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    artifact_id: &str,
+    at: &str,
+    recovered: bool,
+) {
+    let Ok(assignments) =
+        persistence_db::repositories::calibration_assignment::find_by_source_artifact(
+            pool,
+            artifact_id,
+        )
+        .await
+    else {
+        return;
+    };
+    for assignment in assignments {
+        if recovered {
+            let _ = bus
+                .publish(
+                    audit::event_bus::TOPIC_CALIBRATION_MATCH_SOURCE_RECOVERED,
+                    Source::System,
+                    audit::event_bus::CalibrationMatchSourceRecovered {
+                        match_id: assignment.id,
+                        frame_id: artifact_id.to_owned(),
+                        at: at.to_owned(),
+                    },
+                )
+                .await;
+        } else {
+            let _ = bus
+                .publish(
+                    audit::event_bus::TOPIC_CALIBRATION_MATCH_SOURCE_MISSING,
+                    Source::System,
+                    audit::event_bus::CalibrationMatchSourceMissing {
+                        match_id: assignment.id,
+                        frame_id: artifact_id.to_owned(),
+                        at: at.to_owned(),
+                    },
+                )
+                .await;
+        }
+    }
 }
 
 // ── reattribute ───────────────────────────────────────────────────────────────
