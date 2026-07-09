@@ -26,6 +26,8 @@ import {
 import { EmptyState, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
+import { SessionFrameInventory } from './SessionFrameInventory';
+import { RawFrameCleanupSection } from './RawFrameCleanupSection';
 
 interface Props {
   session: InventorySession | null;
@@ -227,6 +229,14 @@ export function SessionDetail({
           )}
         </div>
       </div>
+
+      {/* Spec 048 T014/T025: on-demand per-frame inventory (present count +
+          disk total) with a relink action for frames flagged missing. */}
+      <SessionFrameInventory sessionId={session.id} />
+
+      {/* Spec 048 US3 T031: raw sub-frame cleanup review, grouped by this
+          session — previously impossible (no per-frame inventory to scan). */}
+      <RawFrameCleanupSection sessionId={session.id} defaultOpen={false} />
     </DetailPanel>
   );
 }
