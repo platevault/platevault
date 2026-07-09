@@ -155,11 +155,18 @@ jobs:
       - uses: taiki-e/install-action@nextest
         if: needs.changes.outputs.run == 'true'
 
+      # cargo-binstall fetches a prebuilt tauri-webdriver binary when the
+      # crate publishes one, falling back to `cargo install` (source build)
+      # automatically otherwise — never slower than the plain `cargo install`
+      # this replaces, often much faster.
+      - uses: taiki-e/install-action@cargo-binstall
+        if: needs.changes.outputs.run == 'true'
+
       # Install the tauri-webdriver CLI proxy.
       # It bridges W3C client (:4444) → plugin embedded server (:4445).
       - name: Install tauri-webdriver CLI
         if: needs.changes.outputs.run == 'true'
-        run: cargo install tauri-webdriver --locked
+        run: cargo binstall tauri-webdriver --locked --no-confirm
 
       - uses: pnpm/action-setup@v4
         if: needs.changes.outputs.run == 'true'

@@ -189,8 +189,9 @@ jobs:
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm --filter @astro-plan/desktop run lint:eslint
 
+      # Formatting is OS-agnostic; running it on all 3 legs is pure redundancy.
       - name: Rust format
-        if: needs.changes.outputs.rust == 'true'
+        if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo fmt --all --check
 
       # Self-test the changed-crate scoping helper's mapping/closure logic
@@ -208,14 +209,16 @@ jobs:
         if: runner.os == 'Linux' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true')
         run: just db-boundary
 
+      # Compilation warnings/lints are OS-agnostic; running clippy on all 3 legs
+      # is pure redundancy — the nextest step below builds the workspace anyway.
       - name: Clippy (workspace, all targets, deny warnings)
-        if: needs.changes.outputs.rust == 'true'
+        if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       # --- Layer 1: real-backend integration + unit tests ---
-      - name: Build workspace
-        if: needs.changes.outputs.rust == 'true'
-        run: cargo build --workspace
+      # No standalone `cargo build --workspace` step: clippy --all-targets
+      # (above, Linux) and nextest (below, every OS) each already build every
+      # target they need, so a dedicated build step only duplicated work.
 
       # Scope `cargo test` to the changed workspace members plus their
       # reverse-dependency closure (see scripts/ci-affected-crates.sh). Any
@@ -246,9 +249,10 @@ jobs:
             cargo nextest run --profile ci --no-tests=pass $args
           fi
 
-      # nextest does not run doctests; keep them in a dedicated step.
+      # nextest does not run doctests; keep them in a dedicated step. Doctest
+      # output is OS-agnostic, so Linux-only avoids running it 3x.
       - name: Rust doctests
-        if: needs.changes.outputs.rust == 'true'
+        if: runner.os == 'Linux' && needs.changes.outputs.rust == 'true'
         run: cargo test --workspace --doc
 
       - name: Frontend unit tests
