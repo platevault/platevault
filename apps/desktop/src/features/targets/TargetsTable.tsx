@@ -71,7 +71,7 @@ import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link } from '@tanstack/react-router';
 import type { TargetListItem, TargetObjectType } from '@/bindings/index';
-import { Pill, Banner, tableIndent } from '@/ui';
+import { Pill, Banner, Skeleton, tableIndent } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
@@ -770,6 +770,14 @@ export function TargetsTable({
   }));
 
   const count = targets.length;
+
+  if (count === 0 && loading) {
+    return (
+      <div className="alm-targets-table__empty">
+        <Skeleton variant="block" count={8} label={m.common_loading()} />
+      </div>
+    );
+  }
 
   if (count === 0 && !loading) {
     return <div className="alm-targets-table__empty">{emptyMessage}</div>;

@@ -27,7 +27,7 @@
 
 import { useMemo, type ReactNode } from 'react';
 import type { InventorySource, InventorySession } from '@/bindings/index';
-import { Table, Pill, tableIndent } from '@/ui';
+import { Table, Pill, Skeleton, tableIndent } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { m } from '@/lib/i18n';
 import type { TableColumn, TableRow } from '@/ui';
@@ -324,7 +324,11 @@ export function SessionsTable({
 
   return (
     <div className="alm-listtable" data-testid="sessions-list">
-      {visualRows.length === 0 && !loading ? (
+      {visualRows.length === 0 && loading ? (
+        <div className="alm-listtable__empty">
+          <Skeleton variant="block" count={8} label={m.common_loading()} />
+        </div>
+      ) : visualRows.length === 0 && !loading ? (
         <div className="alm-listtable__empty">{m.sessions_no_match()}</div>
       ) : (
         <Table

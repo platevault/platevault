@@ -23,7 +23,7 @@
  * through ProjectsPage, which only has the lightweight ProjectSummaryDto.
  */
 
-import { Banner } from '@/ui';
+import { Banner, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
 import { useProjectDetail } from './store';
 import { ProjectNotesSection } from './ProjectNotesSection';
@@ -45,7 +45,9 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
 
   if (loading && !project) {
     return (
-      <div className="alm-project-bottom__loading">{m.common_loading()}</div>
+      <div className="alm-project-bottom__loading">
+        <Skeleton count={4} label={m.common_loading()} />
+      </div>
     );
   }
 

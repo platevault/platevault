@@ -189,10 +189,11 @@ beforeEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('TargetsPage', () => {
-  it('1. shows a loading footer while listTargets is in flight', () => {
+  it('1. shows a loading skeleton while listTargets is in flight', () => {
     mockListTargets.mockReturnValue(new Promise(() => {}));
     render(<TargetsPage />);
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    // Loading now renders a skeleton (role="status") instead of a text footer.
+    expect(screen.getByTestId('skeleton')).toBeInTheDocument();
   });
 
   it('2. renders target rows from backend response', async () => {

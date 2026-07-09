@@ -24,7 +24,7 @@
 
 import { useState } from 'react';
 import { Check, AlertTriangle } from 'lucide-react';
-import { Section, Table, Pill, EmptyState, Banner, Btn } from '@/ui';
+import { Section, Table, Pill, EmptyState, Banner, Btn, Skeleton } from '@/ui';
 import type { PillVariant } from '@/ui';
 import type {
   CalibrationMatchDto,
@@ -353,11 +353,12 @@ export function MatchCandidatesPanel({
   if (loading) {
     return (
       <Section title={m.calibration_compatible_sessions_title()}>
-        <div
-          className="alm-match-candidates__loading"
-          data-testid="suggest-loading"
-        >
-          {m.calibration_compatible_sessions_loading()}
+        <div className="alm-match-candidates__loading">
+          <Skeleton
+            count={4}
+            data-testid="suggest-loading"
+            label={m.calibration_compatible_sessions_loading()}
+          />
         </div>
       </Section>
     );

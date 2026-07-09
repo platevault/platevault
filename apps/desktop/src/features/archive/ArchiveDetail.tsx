@@ -1,6 +1,6 @@
 import { DetailPane, DetailHeader, PropertyTable } from '@/components';
 import { m } from '@/lib/i18n';
-import { Pill, Section, Table, EmptyState } from '@/ui';
+import { Pill, Section, Table, EmptyState, Skeleton } from '@/ui';
 import { formatBytes } from '@/lib/format';
 import { useArchiveAudit } from './store';
 import type { ArchiveEntry } from '@/bindings/index';
@@ -74,7 +74,7 @@ export function ArchiveDetail({ item }: Props) {
 
       <Section title={m.archive_audit_history_title()} count={history.length}>
         {loading ? (
-          <EmptyState title={m.common_loading()} />
+          <Skeleton count={4} label={m.common_loading()} />
         ) : error ? (
           <EmptyState title={m.archive_load_error()} />
         ) : (

@@ -201,7 +201,8 @@ describe('TargetDetailV2', () => {
   it('1. shows loading state while fetch is in flight', () => {
     mockGetTargetDetail.mockReturnValue(new Promise(() => {}));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    // Loading now renders a skeleton (role="status") instead of text.
+    expect(screen.getByTestId('skeleton')).toBeInTheDocument();
   });
 
   it('2. renders effectiveLabel in header', async () => {

@@ -24,7 +24,7 @@
  */
 
 import { useMemo } from 'react';
-import { Pill, Table, EmptyState, tableIndent } from '@/ui';
+import { Pill, Table, EmptyState, Skeleton, tableIndent } from '@/ui';
 import type { PillVariant, TableColumn, TableRow } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
@@ -341,8 +341,13 @@ export function MastersTable({
 
   if (loading) {
     return (
-      <div className="alm-calib-table__status" data-testid="masters-loading">
-        {m.calibration_loading()}
+      <div className="alm-calib-table__status">
+        <Skeleton
+          variant="block"
+          count={6}
+          data-testid="masters-loading"
+          label={m.calibration_loading()}
+        />
       </div>
     );
   }

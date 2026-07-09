@@ -36,7 +36,7 @@ import type {
   TargetAstroFormat,
 } from '@/bindings';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
-import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
+import { Pill, Section, EmptyState, Banner, Btn, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
 import {
   altitudeFor,
@@ -534,7 +534,7 @@ export function TargetDetailV2({
   if (loadState.status === 'loading') {
     return (
       <DetailPane>
-        <EmptyState title={m.common_loading()} desc="" />
+        <Skeleton count={5} label={m.common_loading()} />
       </DetailPane>
     );
   }
@@ -807,9 +807,7 @@ export function TargetDetailV2({
         <div>
           <p className="alm-planner__link-col-title">{m.common_sessions()}</p>
           {sessionsLoading ? (
-            <span className="alm-planner__link-empty">
-              {m.common_loading()}
-            </span>
+            <Skeleton count={3} width="80%" label={m.common_loading()} />
           ) : sessions.length === 0 ? (
             <span className="alm-planner__link-empty">
               {m.targets_detail_no_sessions()}
@@ -852,9 +850,7 @@ export function TargetDetailV2({
         <div>
           <p className="alm-planner__link-col-title">{m.common_projects()}</p>
           {projectsLoading ? (
-            <span className="alm-planner__link-empty">
-              {m.common_loading()}
-            </span>
+            <Skeleton count={3} width="80%" label={m.common_loading()} />
           ) : projects.length === 0 ? (
             <span className="alm-planner__link-empty">
               {m.targets_detail_no_projects_linked()}

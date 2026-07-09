@@ -20,7 +20,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import type { InboxListItem } from '@/bindings/index';
-import { Table, tableIndent, type TableColumn, type TableRow } from '@/ui';
+import { Table, tableIndent, Skeleton, type TableColumn, type TableRow } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { groupByDimensions, type GroupNode } from './grouping';
 import { ACCESSORS, dimLabel } from './InboxControls';
@@ -154,6 +154,8 @@ export interface InboxListProps {
    * Owned by the page.
    */
   kindFilter?: string;
+  /** When true, the detection list is still loading — show skeleton rows. */
+  loading?: boolean;
   /** Active sort state. Owned by the page. */
   sort?: InboxSort;
   /** Called when the user clicks a sortable column header. */
@@ -236,6 +238,7 @@ export function InboxList({
   filterType,
   dims = [],
   kindFilter,
+  loading = false,
   sort = DEFAULT_INBOX_SORT,
   onSort,
 }: InboxListProps) {
@@ -436,7 +439,11 @@ export function InboxList({
 
   return (
     <div className="alm-listtable" data-testid="inbox-list">
-      {visualRows.length === 0 ? (
+      {visualRows.length === 0 && loading ? (
+        <div className="alm-listtable__empty">
+          <Skeleton variant="block" count={8} label={m.common_loading()} />
+        </div>
+      ) : visualRows.length === 0 ? (
         <div className="alm-listtable__empty">{m.inbox_no_detections()}</div>
       ) : (
         <Table

@@ -20,7 +20,7 @@
 import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { m } from '@/lib/i18n';
-import { Table, tableIndent } from '@/ui';
+import { Table, tableIndent, Skeleton } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import type { TableColumn, TableRow } from '@/ui';
 import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
@@ -260,7 +260,7 @@ export function ProjectsTable({
   if (loading && projects.length === 0) {
     return (
       <div className="alm-projects-table__empty">
-        {m.projects_table_loading()}
+        <Skeleton variant="block" count={6} label={m.projects_table_loading()} />
       </div>
     );
   }
