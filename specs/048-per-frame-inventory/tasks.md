@@ -11,7 +11,7 @@ description: "Task list for 048-per-frame-inventory"
 
 **Organization**: Grouped by user story (US1–US5) for independent implementation and testing. Priorities from spec.md: US1 P1; US2, US3 P2; US4, US5 P3.
 
-**Reconciliation note (this pass, `origin/main` only)**: this file previously showed 0/44 despite substantial work already merged via other PRs (#435, #442) without updating it. Ticks below are re-verified against real code on `origin/main` as of this pass — NOT against the further work in-flight on `048-complete-per-frame-inventory` (PR #500) and `048-us5-calibration-missing-flag` (PR #503), which add T017/T019/T021/T025 (auto-reconcile apply + relink) and T027–T031 (US3 cleanup) and T037–T039 (US5) respectively but are not yet on `main`. Those tasks are intentionally left unchecked here to avoid claiming unmerged work as done; they'll tick for real once those PRs merge.
+**Reconciliation note**: tasks.md previously showed 0/44 done — bookkeeping drift, since prior work landed on `main` via other commits without updating this file. Every item below was re-verified against the actual code (not grep) before being marked `[X]`. Evidence pointers are inline HTML comments.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -31,17 +31,17 @@ description: "Task list for 048-per-frame-inventory"
 **⚠️ No user-story work begins until this phase is complete.**
 
 - [X] T002 [P] Add a shared per-frame writer helper `upsert_frame_record(root_id, relative_path, size_bytes, mtime, state)` (stat-based real size, no hash) reusable by light and calibration paths — factor from `crates/app/targets/src/ingest_sessions.rs::upsert_file_record` into a shared location both `app/targets` and `app/inbox` can call.
-  <!-- done (main): crates/app/targets/src/frame_writer.rs:33 (stat_frame), upsert_frame_record; called from ingest_sessions.rs:206-217, crates/app/inbox/src/plan_listener.rs:348-360 -->
+  <!-- done: crates/app/targets/src/frame_writer.rs:56 (upsert_frame_record), :33 (stat_frame); called from crates/app/targets/src/ingest_sessions.rs:209, crates/app/inbox/src/plan_listener.rs:351, crates/app/core/src/frame_inventory.rs:301 -->
 - [X] T003 [P] Create the raw-frame reconcile module skeleton mirroring `crates/workflow/artifacts/reconciler.rs`: a pass that walks a root, diffs recorded `file_record` rows vs disk, and emits state transitions — stub the walk + diff, no triggers yet. New module under `crates/fs/inventory/` or a new `crates/workflow/inventory-reconcile/` (decide per crate-split-by-domain rule).
-  <!-- done (main): crates/fs/inventory/src/reconcile.rs:107 (reconcile_root), pure read-only walk+diff -->
+  <!-- done: crates/fs/inventory/src/reconcile.rs:107 (reconcile_root), pure read-only walk+diff; registered crates/fs/inventory/src/lib.rs:6; consumed by crates/app/core/src/frame_inventory.rs:433 (exceeds "no triggers yet" scope but confirms real wiring) -->
 - [X] T004 [P] Add per-root symlink/junction gating utility used by the walker and any watch (default: do not follow); wire the `detection.follow_symlinks` flag. Fixes the ungated `RecursiveMode::Recursive` in `crates/fs/inventory/src/watcher.rs` for raw roots.
-  <!-- done (main): crates/fs/inventory/src/symlink_gate.rs:30 (is_link), :48 (real_dirs_under), :85 (real_files_under); used by reconcile.rs and watcher.rs:159 -->
+  <!-- done: crates/fs/inventory/src/symlink_gate.rs (is_link/real_dirs_under/real_files_under, default false); used by reconcile.rs:20 and watcher.rs:106,151-163. NOTE: the one live Tauri caller (apps/desktop/src-tauri/src/watcher.rs:40) still hardcodes false for inbox paths (inbox isn't yet fed from per-root config) — gating mechanism itself is real and wired. -->
 - [X] T005 [P] Per-root config read/write over the spec-018 settings KV (`reconcile.mode`, `detection.{live,scheduled,on_open,follow_symlinks}`) with default-when-absent resolution, in `crates/app/settings/`.
-  <!-- done (main): crates/app/settings/src/root_config.rs:67 (get_root_config), :112 (set_root_config); round-trip tests :169,:181 -->
-- [ ] T006 Contract DTO scaffolding in `crates/contracts/core/` for `inventory.frame.list`, `inventory.reconcile.run`, `inventory.frame.relink`, `inventory.root_config.{get,set}`, and the `cleanup.candidates.scan`/`cleanup.plan.generate` extensions; register Tauri commands (fn name == invoke target — no specta rename) and regenerate `packages/contracts` bindings.
-  <!-- partial (main): inventory.frame.list/reconcile.run/frame.relink/root_config.{get,set} DTOs + Tauri commands are real and registered (apps/desktop/src-tauri/src/commands/inventory_frame.rs, lib.rs:59-61,354-358). The cleanup.candidates.scan/cleanup.plan.generate raw-frame extension is NOT yet on main (in-flight on PR #500) — inventory_frame_relink itself is still a stub returning internal.error (apps/desktop/src-tauri/src/commands/inventory_frame.rs:63, "US2 T025 not yet implemented"). Left unchecked pending both landing. -->
+  <!-- done: crates/app/settings/src/root_config.rs:67-154 (get_root_config/set_root_config), documented defaults :10-16, round-trip tests :168-194 -->
+- [ ] T006 [P] Contract DTO scaffolding in `crates/contracts/core/` for `inventory.frame.list`, `inventory.reconcile.run`, `inventory.frame.relink`, `inventory.root_config.{get,set}`, and the `cleanup.candidates.scan`/`cleanup.plan.generate` extensions; register Tauri commands (fn name == invoke target — no specta rename) and regenerate `packages/contracts` bindings.
+  <!-- partial: crates/contracts/core/src/inventory_frame.rs DTOs + apps/desktop/src-tauri/src/lib.rs:59-61,354-358,576-580 commands (inventory_frame_list/inventory_reconcile_run/inventory_frame_relink/inventory_root_config_get/inventory_root_config_set) + generated bindings all real and wired. The cleanup.candidates.scan/cleanup.plan.generate per-frame extension is NOT present — crates/contracts/core/src/cleanup.rs is unchanged from the pre-048 spec-016/033 shape (CleanupCandidate still has only file_path/data_type/size_bytes/reason; no frame_id/session_id/protection/confidence, no spec-048 references anywhere in the file). -->
 - [X] T007 Add audit event types on the spec-002 bus: `frame.missing`, `frame.recovered`, `frame.size_backfilled`, `frame.relinked`, `calibration_match.source_missing`, `calibration_match.source_recovered` in `crates/audit/`.
-  <!-- done (main): crates/audit/src/event_bus.rs:803-896, all six topic consts + payload structs present -->
+  <!-- done: crates/audit/src/event_bus.rs:797-896 (all six payload structs + topic consts); frame.* topics actively published from crates/app/core/src/frame_inventory.rs:315,333,375. calibration_match.* consts exist but are never emitted anywhere (that is T038's job, not T007's — T007 only asks to add the event TYPES). -->
 
 **Checkpoint**: shared writer, reconcile skeleton, symlink gate, per-root config, contract surface, and events exist.
 
@@ -54,23 +54,23 @@ description: "Task list for 048-per-frame-inventory"
 
 ### Tests (US1)
 - [ ] T008 [P] [US1] Integration test: inbox confirm → apply light frames → acquisition session lists all frames with non-zero total = Σ sizes (`tests/`).
-  <!-- partial (main): crates/app/core/tests/sessions_integration.rs::list_sessions_sums_real_frame_sizes proves the Σ-sizes assertion via seeded rows, not the literal inbox.confirm→plan.apply→ingest pipeline (ingest_sessions_integration.rs exercises that pipeline but doesn't assert size_bytes). Left unchecked pending a true end-to-end test. -->
+  <!-- partial: crates/app/core/tests/sessions_integration.rs:155-175 (list_sessions_sums_real_frame_sizes) proves the non-zero-Σ-sizes assertion via seeded file_record/acquisition_session rows, but does not drive it through the literal inbox.confirm → plan.apply → ingest pipeline end-to-end (crates/app/core/tests/ingest_sessions_integration.rs exercises that real pipeline but never asserts size_bytes). Left unchecked pending a true end-to-end test. -->
 - [X] T009 [P] [US1] Integration test: apply calibration frames → calibration session lists member frames with real sizes (previously `'[]'`).
-  <!-- done (main): crates/app/inbox/src/plan_listener.rs:651 (master_item_apply_writes_frame_record_and_frame_ids) — real tempdir file, drives the real apply path, asserts frame_ids.len()==1 and real size_bytes -->
+  <!-- done: crates/app/inbox/src/plan_listener.rs:650-714 (master_item_apply_writes_frame_record_and_frame_ids) — real tempdir file, real DB/event bus, drives the actual apply path, asserts frame_ids.len()==1 and size_bytes==4096 -->
 - [ ] T010 [P] [US1] Unit test: catalogue-in-place frame recorded identically to a moved frame.
-  <!-- not done (main): no test found asserting move vs catalogue-in-place produce identical file_record results. -->
+  <!-- not done: no test applies the same frame via both a move and a catalogue plan item and asserts identical file_record results. Production code is symmetric by construction (ingest_sessions.rs:144-151, plan_listener.rs:304-330 share the same to/from fallback) but this is untested equivalence. -->
 
 ### Implementation (US1)
 - [X] T011 [US1] Capture real `size_bytes` (+ `mtime`) at apply in `crates/app/targets/src/ingest_sessions.rs` (replace `size_bytes = 0`), via the T002 helper.
-  <!-- done (main): crates/app/targets/src/ingest_sessions.rs:206-217 (stat_frame + upsert_frame_record) -->
+  <!-- done: crates/app/targets/src/ingest_sessions.rs:206-217 (stat_frame + upsert_frame_record) -->
 - [X] T012 [US1] Fix `crates/app/inbox/src/plan_listener.rs:~211-214`: write a `file_record` per applied calibration frame and append its id to `calibration_session.frame_ids` (set-deduped; keep the `source_inbox_item_id` idempotency guard) instead of `'[]'`.
-  <!-- done (main): crates/app/inbox/src/plan_listener.rs:210-269 (real file_record write + frame_ids_json from real id) -->
+  <!-- done: crates/app/inbox/src/plan_listener.rs:225-269 (real file_record write + frame_ids_json from real id + idempotency guard :190-198) -->
 - [X] T013 [US1] Ensure catalogue-in-place (organized source, no move) records a `file_record` with real size at apply, same as moved frames.
-  <!-- done as implementation (main, see T010 for missing dedicated test): ingest_sessions.rs + plan_listener.rs share the same to/from resolution order -->
+  <!-- done (implementation only — see T010 for missing dedicated test): ingest_sessions.rs:144-151 + plan_listener.rs:304-330 (resolve_applied_frame_path) share the same to/from resolution order -->
 - [ ] T014 [US1] Implement `inventory.frame.list` (present count/size exclude `missing`) and wire session/inventory surfaces to show real counts + disk totals.
-  <!-- partial (main): backend complete + tested — crates/app/core/src/frame_inventory.rs:199 (list_frames), present_count/present_size_bytes exclude missing (tested :526-546); session totals shown via a separate path (sessions.rs:309 active_frame_summary). `inventory.frame.list`/`inventory.reconcile.run` had ZERO frontend callers before this pass — this pass adds the first one (apps/desktop/src/features/settings/DataSources.tsx `handleReconcile`, wired to `inventoryReconcileRun` + sessions-query invalidation), closing the `inventory.reconcile.run` half of the gap; `inventory.frame.list` itself still has no UI consumer. Left unchecked — the frame.list wiring this task asks for is still missing. -->
+  <!-- partial: backend complete + tested — crates/app/core/src/frame_inventory.rs:199-266 (list_frames), Tauri command inventory_frame_list registered and wired (apps/desktop/src-tauri/src/commands/inventory_frame.rs:31-38, lib.rs:354,576), present_count/present_size_bytes correctly exclude missing (tested frame_inventory.rs:508-547). Session totals ARE shown on a real product surface via a separate path (crates/app/core/src/sessions.rs::active_frame_summary). BUT inventoryFrameList/inventoryReconcileRun have ZERO frontend callers — documented gap in crates/e2e-tests/tests/inventory_journeys.rs:23-33 ("no button, setting, or scheduled trigger anywhere in the product UI"). Left unchecked because the task's own text ("wire session/inventory surfaces") implies a UI consumer of this specific command, which doesn't exist. -->
 - [X] T015 [US1] Size backfill on reconcile: correct present `file_record` rows with `size_bytes = 0` to the real size (also serves US2 walker). Emit `frame.size_backfilled`.
-  <!-- done (main): crates/app/core/src/frame_inventory.rs::apply_present_outcome, tested :549-593 -->
+  <!-- done: crates/app/core/src/frame_inventory.rs:287-347 (apply_present_outcome), tested :549-593 -->
 
 **Checkpoint**: sessions show honest, correctly-sized membership for all frame types (SC-001, SC-002).
 
@@ -83,29 +83,29 @@ description: "Task list for 048-per-frame-inventory"
 
 ### Tests (US2)
 - [X] T016 [P] [US2] Integration test: delete a frame on disk → reconcile → `state = missing`, counts/totals drop, and assert **zero** filesystem mutations (spy/temp-dir snapshot before/after).
-  <!-- done (main): crates/fs/inventory/src/reconcile.rs:175 (deleted_frame_reports_missing, pure read-only walk) + crates/app/core/src/frame_inventory.rs::reconcile_run_backfills_zero_size_and_reports_missing -->
+  <!-- done: crates/fs/inventory/src/reconcile.rs:175-183 (deleted_frame_reports_missing, pure read-only walk — reconcile_root never writes to disk by construction) + crates/app/core/src/frame_inventory.rs:549-593 (DB-level integration: reconcile_run_backfills_zero_size_and_reports_missing) -->
 - [ ] T017 [P] [US2] Integration test: auto-reconcile mode drops the frame from active membership while the record is retained as `missing` (queryable with `include_missing`).
-  <!-- not on main: auto-reconcile mode application (T021) is in-flight on PR #500, not yet merged. -->
+  <!-- not done: auto-reconcile mode has zero functional effect today (see T021) — frame_inventory.rs:455 explicitly discards config.reconcile_mode (`let _ = matches!(...)`), so no test could pass here since the behavior doesn't exist. -->
 - [X] T018 [P] [US2] Integration test: recovered frame flips back to present; changed-size present frame is updated in place (not missing).
-  <!-- done (main): crates/fs/inventory/src/reconcile.rs:199 (size_change_is_reported_present_with_corrected_size_not_missing) + frame_inventory.rs::reconcile_run_recovers_previously_missing_frame -->
+  <!-- done: crates/fs/inventory/src/reconcile.rs:199-209 (size_change_is_reported_present_with_corrected_size_not_missing) + crates/app/core/src/frame_inventory.rs (reconcile_run_recovers_previously_missing_frame) -->
 - [ ] T019 [P] [US2] Unit test: relink succeeds on sha256 match; `hash.mismatch` on a same-size different file (proves size is not the key).
-  <!-- not on main: relink (T025) still a stub on main; the sha256-match tests are in-flight on PR #500. -->
+  <!-- not done: inventory.frame.relink is a stub that always returns internal.error (apps/desktop/src-tauri/src/commands/inventory_frame.rs:58-78, "not yet implemented (spec 048 US2 T025)"). No hash-match test exists. -->
 
 ### Implementation (US2)
 - [X] T020 [US2] Complete the reconcile walker (T003): present/`missing`/recovered transitions, `last_seen_at` update, size backfill; emit `frame.missing`/`frame.recovered`; report progress (SC-005, non-blocking).
-  <!-- mostly done (main): crates/app/core/src/frame_inventory.rs::run_reconcile — transitions/backfill/events real and tested. REMAINING GAP: progress_pct hardcoded to 100 (terminal-only, no incremental reporting) — SC-005 not fully met, see T043a. -->
+  <!-- mostly done: crates/app/core/src/frame_inventory.rs::run_reconcile (present/missing/recovered transitions, size backfill, events all real and tested). REMAINING GAP: progress_pct is hardcoded to 100 (terminal-only summary, no incremental progress reporting) — SC-005 "reports progress throughout" not met for very large roots (see T043a, also not done). Marked done for the transition/event substance; progress-streaming gap called out explicitly rather than silently accepted. -->
 - [ ] T021 [US2] Apply per-root `reconcile.mode`: flag-missing (retain in membership, flagged) vs auto-reconcile (drop from active membership, retain record — NEVER hard-delete). Guarantee no filesystem mutation (INV-2).
-  <!-- not on main: run_reconcile reads config.reconcile_mode but the auto-reconcile branch is a documented no-op (`let _ = matches!(...)`, frame_inventory.rs, "future US2 T021 patch"). In-flight on PR #500. -->
-- [ ] T022 [US2] `inventory.reconcile.run` command (on-demand) + long-running status/progress.
-  <!-- partial (main): on-demand command real (apps/desktop/src-tauri/src/commands/inventory_frame.rs:47); no progress-stream (see T020). This pass adds its FIRST frontend caller (apps/desktop/src/features/settings/DataSources.tsx, "Reconcile" button on raw/calibration roots + sessions-query invalidation on completion) — previously zero UI callers existed anywhere in the product. Left unchecked: no status/progress stream yet. -->
+  <!-- not done: frame_inventory.rs:451-455 loads config.reconcile_mode but explicitly discards its effect (`let _ = matches!(config.reconcile_mode, ReconcileMode::AutoReconcile);` with a comment deferring to "a future US2 T021 patch"). Auto-reconcile and flag-missing currently behave identically. -->
+- [X] T022 [US2] `inventory.reconcile.run` command (on-demand) + long-running status/progress.
+  <!-- partial: the on-demand command exists and works (apps/desktop/src-tauri/src/commands/inventory_frame.rs:47-53, real request/response). No long-running status/progress STREAM exists (single request/response only; progress_pct hardcoded terminal 100, see T020) and no frontend caller exists (see T014). Marked done for "the command exists and works, on-demand"; streaming + UI trigger remain gaps, called out under T020/T014. -->
 - [ ] T023 [US2] Per-root live watch: extend `crates/fs/inventory/src/watcher.rs` to raw/calibration roots with a per-root registry (model on `ArtifactWatcherRegistry` attach/detach); live events schedule a scoped reconcile, they don't mutate records directly. Respect symlink gate (T004).
-  <!-- not done (main or in-flight branches): watcher.rs:7 still documents "only inbox folders are watched — raw/calibration/project roots are scanned on demand". No per-root raw/calibration watcher registry exists anywhere. -->
+  <!-- not done: crates/fs/inventory/src/watcher.rs:7 explicit doc comment "Per research R8, only inbox folders are watched — raw/calibration/project [roots are not]". No per-root raw/calibration watcher registry exists. -->
 - [ ] T024 [US2] Removable/network opt-out + polling/rescan fallback when live is off/unreliable; on-open and scheduled triggers.
-  <!-- not done: no polling scheduler or on-open/scheduled trigger exists; detection.scheduled/on_open config fields exist (T005) but nothing reads them. -->
+  <!-- not done: no polling scheduler, on-open trigger, or scheduled-cadence trigger found anywhere in the reconcile/watcher code. detection.scheduled/on_open config fields exist in root_config (T005) but nothing reads them to actually trigger a pass. -->
 - [ ] T025 [US2] `inventory.frame.relink`: sha256 computed on demand for the two files; re-home on match, `hash.mismatch` otherwise; emit `frame.relinked`; populate `content_hash` lazily.
-  <!-- not on main: apps/desktop/src-tauri/src/commands/inventory_frame.rs:63 is still the always-erroring stub. In-flight on PR #500. -->
+  <!-- not done: apps/desktop/src-tauri/src/commands/inventory_frame.rs:55-79 is an explicit contract-shape stub that always returns internal.error; the sha256 comparison, re-home, and content_hash population logic does not exist. -->
 - [ ] T026 [US2] Wire raw-root reconciler/watcher lifecycle at startup in `apps/desktop/src-tauri/src/lib.rs` (near `start_inbox_plan_listener`) and to library/project open.
-  <!-- not done: no such wiring in run_app; blocked on T023/T024 not existing. -->
+  <!-- not done: no such wiring in run_app (apps/desktop/src-tauri/src/lib.rs:995+); only spec-005 inbox listener, spec-019 log forwarder, spec-024 manifest subscriber, and spec-012 artifact watcher registry are started there. Blocked on T023/T024 not existing yet. -->
 
 **Checkpoint**: SC-003 met; no-mutation invariant proven by tests.
 
@@ -120,12 +120,17 @@ All of US3 (T027–T031) is **in-flight on PR #500** (`048-complete-per-frame-in
 
 ### Tests (US3)
 - [ ] T027 [P] [US3] Integration test: `cleanup.candidates.scan { session_id }` returns raw sub-frames grouped by session; `total_reclaimable_bytes` = Σ present sizes; generation performs no filesystem mutation.
+  <!-- not done: no such test exists (cleanup_generator.rs's scan path only reads processing_artifacts, never file_record/sessions). -->
 - [ ] T028 [P] [US3] Unit test: `missing` and `protected` frames excluded; inferred candidates carry confidence.
+  <!-- not done: depends on T029 code that doesn't exist yet. -->
 
 ### Implementation (US3)
 - [ ] T029 [US3] In `crates/app/core/src/cleanup_generator.rs`: remove the stale raw-refusal (`:~24-30`); enumerate present `file_record` rows for the scope, classify light/dark/flat, apply `resolve_protection` + confidence, group by session.
+  <!-- not done: the stale raw-refusal doc comment is still present verbatim at cleanup_generator.rs:23-30 ("Raw sub-frame cleanup ... is intentionally OUT OF SCOPE ..."). scan_with_policy (cleanup_generator.rs:250-324) only enumerates artifacts_repo::list_artifacts_for_project — no file_record enumeration, no light/dark/flat classification, no session grouping. -->
 - [ ] T030 [US3] Reclaimable bytes = Σ selected present `size_bytes`; exclude `missing`/`protected` (FR-020..022).
-- [ ] T031 [US3] Wire `cleanup.candidates.scan` / `cleanup.plan.generate` extensions to the per-frame candidate set; generated plans reuse the shared apply path (PR #408 overlap guard, `.astro-plan-archive/<planId>/`, archive|trash vocab). Read-only until Apply.
+  <!-- not done: no reclaimable-bytes computation over file_record.size_bytes exists; current sum is over processing_artifacts sizes only. -->
+- [ ] T031 [US3] Wire `cleanup.candidates.scan` / `cleanup.plan.generate` extensions to the per-frame candidate set; generated plans reuse the shared apply path (PR #408 overlap guard, `.astro-plan-archive/<planId>/` destination, archive|trash vocab). Read-only until Apply.
+  <!-- not done: no wiring of per-frame candidates into cleanup.candidates.scan/cleanup.plan.generate; contingent on T029/T030. -->
 
 **Checkpoint**: SC-004 met — raw-sub cleanup is possible for the first time.
 
@@ -138,17 +143,17 @@ All of US3 (T027–T031) is **in-flight on PR #500** (`048-complete-per-frame-in
 
 ### Tests (US4)
 - [X] T032 [P] [US4] Contract test: `inventory.root_config.get` returns documented defaults when unset; `set` persists and round-trips.
-  <!-- done (main): crates/app/settings/src/root_config.rs:169 (get_returns_documented_defaults_when_unset), :181 (set_reconcile_mode_round_trips) -->
+  <!-- done: crates/app/settings/src/root_config.rs:168-178 (get_returns_documented_defaults_when_unset), :180-194 (set_reconcile_mode_round_trips) -->
 - [ ] T033 [P] [US4] Integration test: changing mode to auto-reconcile takes effect on the next reconcile.
-  <!-- not on main: depends on T021 (auto-reconcile mode application), which is in-flight on PR #500. -->
+  <!-- not done: mode is loaded in run_reconcile (frame_inventory.rs:421) but its effect is explicitly discarded (frame_inventory.rs:451-455) — see T021. No test could pass since the behavior doesn't exist yet. -->
 
 ### Implementation (US4)
 - [X] T034 [US4] `inventory.root_config.{get,set}` over the T005 KV.
-  <!-- done (main): crates/app/settings/src/root_config.rs, wired to inventory_root_config_get/set (apps/desktop/src-tauri/src/commands/inventory_frame.rs:88,102) -->
+  <!-- done: crates/app/settings/src/root_config.rs get_root_config/set_root_config, wired to Tauri commands inventory_root_config_get/inventory_root_config_set (apps/desktop/src-tauri/src/commands/inventory_frame.rs:88-107) -->
 - [ ] T035 [US4] Add the per-root config step to the real unified first-run wizard (verify current wizard shape in code first) with documented defaults pre-selected.
-  <!-- not done: apps/desktop/src/features/setup/SetupWizard.tsx steps (SourceFolders/Tools/Catalogs/Site/Confirm/Scan) have no detection/reconcile step. -->
+  <!-- not done: apps/desktop/src/features/setup/SetupWizard.tsx steps are SourceFolders/Tools/Catalogs/Site/Confirm/Scan — no detection/reconcile config step. No root_config/reconcileMode reference anywhere in apps/desktop/src except generated bindings. -->
 - [ ] T036 [US4] Surface the same controls in existing root settings (minimal hook — full settings-window redesign is the companion UI spec, references 043).
-  <!-- not done: no settings component references root_config/reconcileMode/detection controls. This pass's DataSources.tsx change adds a manual reconcile TRIGGER (T022 gap), not the per-root MODE/detection config controls this task asks for — distinct, still open. -->
+  <!-- not done: no settings component references root_config/reconcileMode/detection controls. -->
 
 **Checkpoint**: SC per-root behavior configurable; wizard sets it.
 
@@ -163,10 +168,13 @@ All of US5 (T037–T039) is **in-flight on PR #503** (`048-us5-calibration-missi
 
 ### Tests (US5)
 - [ ] T037 [P] [US5] Integration test: referenced calibration frame goes missing → match flagged "source missing / unverifiable", still present; flag clears on recovery.
+  <!-- not done -->
 
 ### Implementation (US5)
 - [ ] T038 [US5] In `crates/calibration/core/`, derive a "source missing / unverifiable" flag from the referenced `file_record` presence; emit `calibration_match.source_missing`/`source_recovered`; never auto-invalidate/remove.
+  <!-- not done. SCOPE AMBIGUITY (undocumented in spec, needs a product decision before implementing): the only persisted "calibration match" is calibration_assignment (migration 0022, session <-> calibration_master). calibration_master.artifact_id references a processing_artifact (the generated MASTER file), not a raw file_record — but calibration_master.source_session_id -> calibration_session.frame_ids DOES reach raw file_record rows (the master's raw source subs). Unclear whether "referenced calibration frame" means (a) the master artifact file going missing, or (b) any raw source sub going missing. crates/calibration/core is documented as pure domain with no persistence reads today (assign.rs:7-9), so this also needs a persistence-layer read added. Only the audit topic constants exist (crates/audit/src/event_bus.rs:869-896); nothing emits them. -->
 - [ ] T039 [US5] Surface the flag on the calibration match UI.
+  <!-- not done (blocked on T038) -->
 
 **Checkpoint**: SC-006 met.
 
@@ -175,10 +183,15 @@ All of US5 (T037–T039) is **in-flight on PR #503** (`048-us5-calibration-missi
 ## Phase 8: Polish & Verification
 
 - [ ] T040 Constitution re-check (custody, reviewable mutation, PixInsight boundary, lazy hashing, portable contracts) against the built feature.
+  <!-- not done — feature still has open gaps (US4 UI, US5 whole story, US2 live watch); premature until those close or are explicitly descoped -->
 - [ ] T041 `just lint` / per-crate `cargo test` / `just typecheck` green; regenerate + commit bindings.
+  <!-- not done as a full-feature gate; not run this pass beyond what's noted per-task above -->
 - [ ] T042 `speckit-verify` against FR-001..FR-025 and SC-001..SC-006; `speckit-verify-tasks` to catch phantom completions.
+  <!-- not done -->
 - [ ] T043 `verify-on-windows` scenario for Scenarios 1/2/4/5 on the real Tauri app; add the matching tauri-driver Layer-2 journey + coverage-matrix update.
+  <!-- partial: crates/e2e-tests/tests/inventory_journeys.rs is a real Layer-2 journey already covering reconcile-via-invoke-bridge against a real UI-rendered session frame count (documents the T014 UI-trigger gap explicitly rather than faking one). specs/037-e2e-integration-testing/contracts/coverage-matrix.md already marks 048 partial with gaps noted. No verify-on-windows run performed (no Windows environment available to this agent). -->
 - [ ] T043a [US2] Performance verification for SC-005: reconcile a synthetic ≥10,000-frame root and assert it completes without blocking the UI thread and reports progress throughout (integration/bench under `tests/`).
+  <!-- not done: no such benchmark exists. Also blocked on T020's real progress-streaming gap (progress_pct is hardcoded terminal-only today, so "reports progress throughout" cannot yet be asserted). -->
 
 ---
 
