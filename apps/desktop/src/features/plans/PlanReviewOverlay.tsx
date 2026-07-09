@@ -275,6 +275,9 @@ export function PlanReviewOverlay({
       ariaLabel={title ?? m.plans_review_overlay_title()}
       closeOnBackdrop={!busy}
       footer={footer}
+      // The item table owns its own scroll region (below); the body itself
+      // must not also scroll, or the item list would double-scroll.
+      bodyClassName="alm-modal__body--fill"
       data-testid="plan-review-overlay"
     >
       {planLoading && plan == null ? (
@@ -290,8 +293,20 @@ export function PlanReviewOverlay({
               ` ${m.plans_review_bytes_required({ size: formatBytes(plan.totalBytesRequired) })}`}
           </Banner>
 
-          {/* Every proposed item, reviewable before approval (SC-001). */}
-          <Table columns={columns} rows={rows} data-testid="plan-review-items" />
+          {/* Every proposed item, reviewable before approval (SC-001).
+              Virtualized (shared `.alm-listtable` pattern, spec 017 T050):
+              plans can carry hundreds of items, so the table owns its own
+              bounded scroll region instead of rendering every row — the
+              summary/gate/progress/footer above and below stay pinned. */}
+          <div className="alm-listtable">
+            <Table
+              columns={columns}
+              rows={rows}
+              virtualized
+              scrollClassName="alm-listtable__scroll"
+              data-testid="plan-review-items"
+            />
+          </div>
 
           {/* Spec-016 protection gate: protected items require acknowledgement
               before Approve & apply unlocks. */}

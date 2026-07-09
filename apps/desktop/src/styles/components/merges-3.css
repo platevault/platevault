@@ -1160,6 +1160,19 @@
   padding: var(--alm-sp-4);
 }
 
+/* Body variant for content that owns its own internal scroll region (e.g. a
+   virtualized list/table) instead of the whole body scrolling — matches the
+   `.alm-page/__bar/__scroll` convention (only content scrolls, chrome stays
+   pinned) applied inside a modal. `overflow: hidden` on the body itself
+   deliberately drops the default `overflow-y: auto` — the child managing its
+   own scroll (via `.alm-listtable`/`.alm-listtable__scroll`) requires the
+   body NOT to also scroll, or the list would double-scroll. */
+.alm-modal__body--fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .alm-modal__footer {
   flex-shrink: 0;
   display: flex;

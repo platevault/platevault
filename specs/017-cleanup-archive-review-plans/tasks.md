@@ -383,37 +383,44 @@ the user can send the archive subtree to OS trash or permanently delete it.
   research.md.
   <!-- Added a "Spec 017" row to docs/research/index.md's Feature research
        decisions section, linking specs/017-cleanup-archive-review-plans/research.md. -->
-- [x] T050 [P] Performance check: list render under 100 ms for 200 plans;
+- [ ] T050 [P] Performance check: list render under 100 ms for 200 plans;
   detail under 150 ms for 2000 items.
-  <!-- MEASURED. Literal target does not exist (T015/T016: no standalone Plans
-       list/detail page in the shipped v4 UI). Measured the equivalent real
-       surface — PlanReviewOverlay rendering a 200-item plan — using React's
-       Profiler `actualDuration` (isolates React's own render/commit cost;
-       excludes jsdom/test-harness wall-clock noise) with the plan + protection
-       check data pre-seeded via `queryClient.setQueryData` so no
-       fetch/microtask latency is included (throwaway vitest probe, not
-       committed to the suite — same rationale as this repo's own
-       CI-timing-flakiness convention in apps/desktop/playwright.config.ts for
-       not landing hard timing assertions).
-       RESULT: 8 commits, total actualDuration 233.37ms, dominated by one
-       182.72ms commit (the initial full-200-row mount); the other 7 commits
-       (state settling: protection-check resolving, gate readiness) cost
-       <30ms combined. FAILS the 100ms budget as literally measured (jsdom
-       DOM operations are typically slower than a real Chromium/WebView2
-       engine, so this is a worst-case bound, not a browser-accurate one).
-       ROOT CAUSE (structural, filed not fixed): the shared Table component
-       (apps/desktop/src/ui/Table.tsx) already supports opt-in row
-       virtualization (`virtualized` prop, `@tanstack/react-virtual`,
-       Table.tsx:51-58,82-88) but PlanReviewOverlay does not use it
-       (Table.tsx:242 — no `virtualized` prop passed) — the 200 rows mount
-       unconditionally. Enabling it needs a bounded-height scroll sub-region
-       for the item table nested inside the modal body, which today scrolls
-       as one column per the app's ".alm-page/__bar/__scroll" convention —
-       that's a layout decision (does the item table get its own scrolling
-       sub-region, changing the overlay's visual structure?), not a drop-in
-       prop flip, so left as a filed structural note rather than something to
-       decide unilaterally in this pass. -->
-- [ ] T051 Accessibility audit on PlansListPage and PlanDetailPage for the
+  <!-- RE-MEASURED after enabling virtualization (see T051 fix). UX call made
+       by the orchestrator: gave the item table the shared `.alm-listtable`
+       virtualized pattern (apps/desktop/src/features/plans/PlanReviewOverlay.tsx:294-303,
+       `virtualized` + `scrollClassName="alm-listtable__scroll"`, same pattern
+       as SessionsTable.tsx/InboxList.tsx), a new `.alm-modal__body--fill`
+       Modal-body variant so the body no longer scrolls itself (CSS:
+       merges-3.css `.alm-modal__body--fill`), and `.alm-plan-review` now
+       `flex: 1; min-height: 0` to fill it (redesign-detail.css). Header,
+       summary banner, protection gate, progress, and footer all stay pinned;
+       only the item table scrolls.
+       DETERMINISTIC RESULT (not timing, not flaky): DOM row count for a
+       200-item plan dropped from 200/200 to 64/200 — confirmed via a vitest
+       probe reading `document.querySelectorAll('[data-testid^="plan-review-item-"]')`
+       (jsdom's existing global virtualizer layout shim,
+       apps/desktop/vitest.setup.ts:53-105, gives the `data-virtual-scroll`
+       container a 2000px viewport, so `@tanstack/react-virtual` genuinely
+       windows the list in tests, not just production).
+       TIMING RESULT (honest, not cherry-picked): same React Profiler
+       `actualDuration` methodology as before, 4 runs each, same session:
+       BEFORE (200/200 rows): 232.45, 197.71, 179.25, 135.47ms (mean ≈186ms).
+       AFTER (64/200 rows): 238.41, 154.02, 200.50, 212.48ms (mean ≈201ms).
+       The two ranges overlap — this specific jsdom-Profiler total-duration
+       metric does NOT show a clear win, and NEITHER before nor after
+       consistently meets the literal 100ms budget in this harness. This is
+       expected, not a red flag: jsdom has no real layout/paint pipeline, so
+       the Profiler only measures React's own reconciliation cost, which
+       virtualization's bookkeeping (measuring, spacer math) partly offsets at
+       this list size — the actual mechanism virtualization protects (DOM
+       node count, hence real browser layout/paint/GC cost) is NOT something
+       jsdom can measure, which is exactly why the 200/64 row-count result
+       above is the trustworthy piece of evidence here, not the ms numbers.
+       NOT TICKED per instruction ("tick only if the number actually meets
+       budget") — the literal ms target is not demonstrated met by anything
+       measurable in this sandbox; a real Chromium/Tauri perf pass is still
+       the way to validate the ms budget, same recommendation as before. -->
+- [x] T051 Accessibility audit on PlansListPage and PlanDetailPage for the
   state-aware action bar (focus order, button labels; includes `paused` state).
   <!-- AUDITED (real surface, since PlansListPage/PlanDetailPage don't exist —
        see T050). Findings:
@@ -430,32 +437,19 @@ the user can send the archive subtree to OS trash or permanently delete it.
        - PASS (no fix needed): the new Destination column reuses the exact
          same `<span>` pattern as the pre-existing Source path column — no new
          a11y surface introduced.
-       - STRUCTURAL, FILED not fixed: same root cause as T050 — an
-         unvirtualized 200+ row table is also an a11y concern (very long
-         sequential tab-through with no way to jump), independent of a
-         concrete `paused`-state gap: `paused` has NO UI anywhere in
-         apps/desktop/src/features/{plans,archive}/** (grepped — no
-         "paused"/"Pause"/"Resume" string or branch exists in
-         PlanReviewOverlay or ArchivePage). Adding pause/resume affordances is
-         new product surface, not an audit fix — filed for a design call, not
-         invented here.
-       No cheap fixes were found beyond what's already compliant; the two
-       findings above both trace back to the same virtualization decision
-       filed under T050. -->
-- [ ] T051 Accessibility audit on PlansListPage and PlanDetailPage for the
-  state-aware action bar (focus order, button labels; includes `paused` state).
-  <!-- Literal target does not exist (see T050). Audited the equivalent real
-       surface, PlanReviewOverlay's footer: all states (draft/ready_for_review,
-       terminal failed/partially_applied, applied) render exactly two clearly
-       labeled text buttons via the shared Btn component (no icon-only
-       affordances), footer swaps via the `applied`/`retryable` booleans so
-       focus always lands on visible, enabled controls, and the live-progress
-       region already carries `role="status" aria-live="polite"`
-       (PlanReviewOverlay.tsx:301-306). No regressions found from this PR's new
-       Destination column (plain `<span>` cells, same pattern as the existing
-       Source path column) or the new retry footer branch. `paused` state is
-       NOT handled by this overlay (no pause/resume UI exists anywhere in
-       apps/desktop/src/features/plans|archive — out of scope to add here). -->
+       - FIXED (was STRUCTURAL/filed, now resolved — see T050): the
+         unvirtualized 200+ row table meant a very long sequential tab-through
+         with no way to jump. Enabling `.alm-listtable` virtualization windows
+         the DOM to ~64 rows at a time (confirmed above), directly shrinking
+         the tab-through — same fix as T050, not a separate change.
+       - Still open, correctly NOT built here per explicit instruction:
+         `paused` has NO UI anywhere in apps/desktop/src/features/{plans,archive}/**
+         (grepped — no "paused"/"Pause"/"Resume" string or branch exists in
+         PlanReviewOverlay or ArchivePage). This is new product surface, not
+         an audit fix — routed to the spec-025 apply-executor tail lane per
+         the orchestrator's direction; not built here.
+       No cheap fixes were found beyond what's already compliant; the one
+       structural finding above is now fixed (T050), not just filed. -->
 - [ ] T052 Coordinate handoff edge with spec 025: confirm `applying`,
   `paused`, `applied`, `partially_applied`, `failed`, `cancelled` are
   written only by the apply executor.
