@@ -27,6 +27,7 @@ const {
   mockPlansGet,
   mockPlansApprove,
   mockPlansDiscard,
+  mockPlansRetry,
   mockProtectionCheck,
   mockAcknowledge,
   mockApplyPlan,
@@ -34,6 +35,7 @@ const {
   mockPlansGet: vi.fn(),
   mockPlansApprove: vi.fn(),
   mockPlansDiscard: vi.fn(),
+  mockPlansRetry: vi.fn(),
   mockProtectionCheck: vi.fn(),
   mockAcknowledge: vi.fn(),
   mockApplyPlan: vi.fn(),
@@ -44,6 +46,7 @@ vi.mock('@/bindings/index', () => ({
     plansGet: mockPlansGet,
     plansApprove: mockPlansApprove,
     plansDiscard: mockPlansDiscard,
+    plansRetry: mockPlansRetry,
     planProtectionCheckCmd: mockProtectionCheck,
     protectionPlanAcknowledged: mockAcknowledge,
   },
@@ -192,6 +195,24 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     expect(screen.getByText(/Nothing has been changed on disk/)).toBeInTheDocument();
   });
 
+  it('renders the destination for archive items and a deletion cue for delete items (FR-003)', async () => {
+    mockPlansGet.mockResolvedValue(
+      ok(
+        plan({
+          items: [
+            item({ to: '.astro-plan-archive/plan-1/item-0-light_001.xisf' }),
+            item({ id: 'item-1', index: 1, name: 'raw_002.fits', action: 'delete', to: '' }),
+          ],
+        }),
+      ),
+    );
+    renderOverlay();
+    expect(
+      await screen.findByText('.astro-plan-archive/plan-1/item-0-light_001.xisf'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Deleted, not moved')).toBeInTheDocument();
+  });
+
   it('keeps Approve & apply disabled until protected items are acknowledged', async () => {
     renderOverlay();
     const approveBtn = await screen.findByTestId('plan-review-approve-apply');
@@ -233,6 +254,49 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     fireEvent.click(await screen.findByText('Discard plan'));
     await waitFor(() => expect(mockPlansDiscard).toHaveBeenCalledWith('plan-1'));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('offers "Generate retry plan" after a partially_applied outcome and drives plans.retry (US5, T037)', async () => {
+    mockProtectionCheck.mockResolvedValue(
+      ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),
+    );
+    mockApplyPlan.mockImplementation(
+      (args: { id: string; onEvent?: (e: OperationEvent) => void }) => {
+        const mk = (
+          sequence: number,
+          eventType: OperationEvent['eventType'],
+          payload: unknown,
+        ): OperationEvent => ({
+          contractVersion: '1.0.0',
+          operationId: 'op-1',
+          eventType,
+          sequence,
+          payload,
+        });
+        args.onEvent?.(mk(0, 'item_started', { itemsTotal: 2 }));
+        args.onEvent?.(mk(1, 'item_applied', {}));
+        args.onEvent?.(mk(2, 'item_failed', {}));
+        args.onEvent?.(mk(3, 'failed', {}));
+        return Promise.resolve({ planId: args.id, runId: 'op-1', newState: 'partially_applied' });
+      },
+    );
+    mockPlansRetry.mockResolvedValue(
+      ok({ newPlanId: 'plan-2', parentPlanId: 'plan-1', itemsTotal: 1 }),
+    );
+
+    const onRetryCreated = vi.fn();
+    renderOverlay({ onRetryCreated });
+
+    const approveBtn = await screen.findByTestId('plan-review-approve-apply');
+    await waitFor(() => expect(approveBtn).not.toBeDisabled());
+    fireEvent.click(approveBtn);
+
+    const retryBtn = await screen.findByTestId('plan-review-retry');
+    expect(screen.getByText('1 item failed')).toBeInTheDocument();
+
+    fireEvent.click(retryBtn);
+    await waitFor(() => expect(mockPlansRetry).toHaveBeenCalledWith('plan-1', 'failed'));
+    await waitFor(() => expect(onRetryCreated).toHaveBeenCalledWith('plan-2'));
   });
 
   it('cannot approve a plan with zero items (FR-014)', async () => {
