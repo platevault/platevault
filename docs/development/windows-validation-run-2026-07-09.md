@@ -51,6 +51,7 @@ Every issue lives here for the life of the run. Status: `OPEN` / `FILED #NN` /
 | B14 | evaluation / tech-debt | Source protection (spec 016/018) | **NOT deprecated** — wired + consumed by cleanup/permanent-delete safety (`plans.rs` `PlanBlockedByProtection`), per-source override exists (`SourceProtectionOverride.tsx`) but only in Settings, wizard has global default only. Human evaluation: (1) surface per-source protection on Step 1 cards; (2) likely **drop the configurable default** — hardcode a sensible pre-fill like org/depth do — to cut the 3-surface complexity. | FILED #506 (+2 design comments) |
 | B15 | observation | Wizard · Step 5 Confirm | Confirm summary lists per-folder **scan depth** but not the **organized/unorganized** state. Minor — consider showing org too. | OPEN (minor) |
 | B16 | observation | Wizard · Step 4 Observing Site | **Name accepts empty** (Continue stays enabled) — site name not required. Lat/long ARE properly validated (see positive result). Decide if name should be required. | OPEN (minor) |
+| B17 | **bug** + product decision | Scanner · `scan_depth` (spec 003) | **`single` depth is a no-op** — `scan_dir` always recurses; `ScanOptions` has no depth field; `ScanDepth::Single` is never read (only written). Recommendation (human-directed): **drop single/recursive entirely, always recursive** — no realistic advantage, conflicts with no-overlap (#501), astro libs are hierarchical, and single-level silently loses files. | FILED #509 (bug + drop rec) |
 
 > B1–B5 were observed by the **prior** run session on this same build. Under the
 > restart directive they are carried forward as claims to **re-verify from
@@ -160,10 +161,12 @@ Registered all 14 via the real wizard (Confirm→Start scan). Steps: 1 Folders �
 "Done". Per-folder counts: light rec/single both **2 files · 2 folders**; cal
 both **4 · 2**; proj both **2 · 2**; inbox both **6 · 2**. Every `single`-depth
 root shows identical counts to its recursive twin AND "2 folders" (i.e. it
-descended into `sub/`). BUT the fixtures are only 2 levels deep, so this can't
-distinguish "single = top-level only" (bug) from "single = one level of
-recursion" (correct). **Must retest with a 3-level fixture to judge — OPEN.**
-`roots_list.fileCount` reads 0 for all (scan counts live elsewhere; minor).
+descended into `sub/`). **RESOLVED via code (no 3-level fixture needed):
+`scan_depth` `single` is a no-op** — `scan_dir` recurses unconditionally,
+`ScanOptions` has no depth field, `ScanDepth::Single` is never read. So all scans
+are recursive; the depth option does nothing. **B17 → #509** (recommend dropping
+the option entirely). `roots_list.fileCount` reads 0 for all (scan counts live
+elsewhere; minor).
 
 _Not yet finished (Finish not clicked). Pending: depth-semantics retest, Step 2
 Tools validation._
