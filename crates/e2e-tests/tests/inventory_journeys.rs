@@ -340,6 +340,17 @@ async fn reconcile_drops_externally_deleted_frame_from_real_ui_count() -> anyhow
         .await?
         .click()
         .await?;
+
+    // Deterministic fix for the cross-PR flake (CI evidence: "last seen:
+    // Some(\"2\")" surviving the full 15s wait — only possible from a
+    // served-stale-cache render, since step 5b above already proved a fresh
+    // backend read returns 1). `driver.refresh()` above is meant to force a
+    // fresh QueryClient, but is not a guaranteed proof of that on every
+    // WebDriver backend; explicitly invalidating the exact query the picker
+    // reads removes the dependency on the reload actually having discarded
+    // the 30s-`staleTime` cache (`E2eApp::invalidate_query` doc comment).
+    app.invalidate_query(r#"["sessions"]"#).await?;
+
     let frames_after = app
         .wait_testid_text(
             &format!("session-picker-frames-{session_id}"),

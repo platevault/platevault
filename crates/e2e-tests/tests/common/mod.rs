@@ -31,8 +31,11 @@
 
 #![allow(dead_code)]
 
+use std::collections::VecDeque;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
@@ -203,7 +206,7 @@ impl E2eApp {
         }
         reset_window_state();
 
-        let mut driver_proc = spawn_tauri_webdriver()
+        let (mut driver_proc, proc_log) = spawn_tauri_webdriver()
             .context("failed to spawn the tauri-webdriver CLI on port 4444")?;
 
         let app_binary = app_binary_path()?;
@@ -249,8 +252,9 @@ impl E2eApp {
                             format!(
                                 "WebDriver session not created within {LAUNCH_TIMEOUT:?} \
                                  against {TAURI_WEBDRIVER_URL} — is `tauri-webdriver` \
-                                 running, and was {} built with `--features e2e`?",
-                                app_binary.display()
+                                 running, and was {} built with `--features e2e`?\n{}",
+                                app_binary.display(),
+                                proc_log.dump()
                             )
                         });
                     }
@@ -656,6 +660,54 @@ impl E2eApp {
             ),
             Err(e) => json!({ "dump_testid_diagnostics_execute_error": e.to_string() }),
         }
+    }
+
+    /// Force TanStack Query to invalidate + refetch every query whose key has
+    /// `key_json` (a JSON array literal, e.g. `["sessions"]`) as a prefix, via
+    /// the E2E-only `window.__ALM_E2E__.queryClient` bridge
+    /// (`apps/desktop/src/main.tsx`, `VITE_E2E` gate) — the SAME QueryClient
+    /// instance the mounted page reads from, not a page reload.
+    ///
+    /// Exists because `inventory.reconcile.run` has no frontend invalidation
+    /// hook today (documented KNOWN GAP, `inventory_journeys.rs` module docs;
+    /// `docs/development/orchestration-2026-07-06.md` D13e): a query younger
+    /// than its 30s `staleTime` (`apps/desktop/src/data/queryClient.ts`)
+    /// serves its cached value on remount/refocus WITHOUT a network refetch,
+    /// so a `driver.refresh()` alone is only a reliable proof of freshness if
+    /// the reload fully discarded the prior QueryClient's cache — not
+    /// guaranteed on every WebDriver backend (root cause of the cross-PR
+    /// `reconcile_drops_externally_deleted_frame_from_real_ui_count` flake,
+    /// CI evidence: "last seen: Some(\"2\")" persisting the entire 15s wait,
+    /// only possible from a served-stale-cache render, not a fresh backend
+    /// read). Awaits `invalidateQueries`'s returned promise, which TanStack
+    /// Query resolves only once every currently-active matching query's
+    /// refetch settles, so the caller can assert the freshly-rendered DOM
+    /// immediately after this returns. Test-side workaround only — does not
+    /// substitute for the still-open frontend invalidation-wiring follow-up.
+    pub async fn invalidate_query(&self, key_json: &str) -> Result<()> {
+        let script = format!(
+            r#"
+            var callback = arguments[arguments.length - 1];
+            var e2e = window.__ALM_E2E__;
+            if (!e2e || !e2e.queryClient) {{
+                callback({{ ok: false, error: '__ALM_E2E__.queryClient bridge missing (build with VITE_E2E=1)' }});
+                return;
+            }}
+            e2e.queryClient.invalidateQueries({{ queryKey: {key_json} }}).then(function () {{
+                callback({{ ok: true }});
+            }}).catch(function (err) {{
+                callback({{ ok: false, error: String(err) }});
+            }});
+        "#
+        );
+        let outcome: InvokeOutcome = self
+            .driver
+            .execute_async(&script, vec![])
+            .await
+            .context("invalidate_query execute_async failed")?
+            .convert()
+            .context("failed to deserialise invalidate_query result")?;
+        outcome.into_result::<Value>().map(drop)
     }
 
     /// Drain the last ~30 real browser console entries (chromedriver/
@@ -1362,6 +1414,65 @@ fn app_binary_path() -> Result<PathBuf> {
     Ok(workspace_root.join("target").join("debug").join(binary_name))
 }
 
+/// Cap on buffered lines per stream in [`ProcLog`] — [`E2eApp::launch_with`]'s
+/// failure path is the only reader and only cares about the tail of a
+/// [`LAUNCH_TIMEOUT`]-bounded window, so this stays cheap even if the CLI or
+/// app is chatty for the rest of a long-running journey.
+const DIAGNOSTIC_LOG_LINES: usize = 200;
+
+/// Bounded ring-buffer capture of the `tauri-webdriver` CLI child process's
+/// stdout/stderr, drained continuously by background threads (see
+/// [`drain_into`]) — diagnostics only, never read except on a launch failure
+/// in [`E2eApp::launch_with`]. Previously nothing surfaced whether the app
+/// even started on a launch failure (undiagnosable macOS `Connection refused`
+/// runs, issue #489); the CLI's own child (`desktop_shell`) inherits stdio
+/// from the CLI by default, so piping the CLI's streams transitively
+/// captures the app's own console output too, not just the CLI's log.
+struct ProcLog {
+    stdout: Arc<Mutex<VecDeque<String>>>,
+    stderr: Arc<Mutex<VecDeque<String>>>,
+}
+
+impl ProcLog {
+    fn dump(&self) -> String {
+        format!(
+            "--- tauri-webdriver CLI stdout (last {DIAGNOSTIC_LOG_LINES} lines; \
+             desktop_shell inherits this fd by default, so its own console output \
+             normally appears here too) ---\n{}\n\
+             --- tauri-webdriver CLI stderr ---\n{}",
+            Self::render(&self.stdout),
+            Self::render(&self.stderr),
+        )
+    }
+
+    fn render(buf: &Arc<Mutex<VecDeque<String>>>) -> String {
+        let lines = buf.lock().unwrap();
+        if lines.is_empty() {
+            "<empty>".to_owned()
+        } else {
+            lines.iter().cloned().collect::<Vec<_>>().join("\n")
+        }
+    }
+}
+
+/// Spawn a background thread draining `reader` line-by-line into `buf`
+/// (bounded to [`DIAGNOSTIC_LOG_LINES`]). Draining is mandatory, not just for
+/// diagnostics: an unread OS pipe fills and blocks the writing process once
+/// its buffer is full, which would hang the CLI — and therefore the app it
+/// launched — mid-journey, long after a successful launch moved past the
+/// code that reads this buffer's contents.
+fn drain_into<R: std::io::Read + Send + 'static>(reader: R, buf: Arc<Mutex<VecDeque<String>>>) {
+    std::thread::spawn(move || {
+        for line in BufReader::new(reader).lines().map_while(Result::ok) {
+            let mut buf = buf.lock().unwrap();
+            if buf.len() >= DIAGNOSTIC_LOG_LINES {
+                buf.pop_front();
+            }
+            buf.push_back(line);
+        }
+    });
+}
+
 /// Spawn the `tauri-webdriver` CLI proxy as a background child process.
 ///
 /// Mirrors `.github/workflows/e2e.yml`: the CLI is installed once
@@ -1369,19 +1480,36 @@ fn app_binary_path() -> Result<PathBuf> {
 /// session. `--port`/`--native-port` are passed explicitly even though they
 /// match the CLI's and plugin's defaults, so a future default change upstream
 /// doesn't silently break the pairing.
-fn spawn_tauri_webdriver() -> Result<Child> {
-    Command::new("tauri-webdriver")
+///
+/// stdout/stderr are piped (not inherited) and drained into a [`ProcLog`] so
+/// a launch failure can print what the CLI (and transitively, the app it
+/// launched) actually did — see [`ProcLog`]'s docs.
+fn spawn_tauri_webdriver() -> Result<(Child, ProcLog)> {
+    let mut child = Command::new("tauri-webdriver")
         .arg("--port")
         .arg("4444")
         .arg("--native-port")
         .arg("4445")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| {
             anyhow!(
                 "failed to spawn tauri-webdriver: {e} \
                  (install with `cargo install tauri-webdriver --locked`)"
             )
-        })
+        })?;
+
+    let stdout_buf = Arc::new(Mutex::new(VecDeque::new()));
+    let stderr_buf = Arc::new(Mutex::new(VecDeque::new()));
+    if let Some(stdout) = child.stdout.take() {
+        drain_into(stdout, stdout_buf.clone());
+    }
+    if let Some(stderr) = child.stderr.take() {
+        drain_into(stderr, stderr_buf.clone());
+    }
+
+    Ok((child, ProcLog { stdout: stdout_buf, stderr: stderr_buf }))
 }
 
 /// Reset the application database so each test starts from a clean state.
