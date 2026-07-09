@@ -45,6 +45,12 @@ export interface PlanReviewOverlayProps {
   onApplied?: () => void;
   /** Called after the plan is discarded. */
   onDiscarded?: () => void;
+  /**
+   * Called after `plans.retry` creates a new plan from this one's failed
+   * items (US5, T037). The caller decides how to surface it — the shared
+   * pattern is to re-point this same overlay's `planId` at the new plan.
+   */
+  onRetryCreated?: (newPlanId: string) => void;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,6 +76,7 @@ export function PlanReviewOverlay({
   title,
   onApplied,
   onDiscarded,
+  onRetryCreated,
 }: PlanReviewOverlayProps) {
   const queryClient = useQueryClient();
 
@@ -89,11 +96,18 @@ export function PlanReviewOverlay({
 
   const [approving, setApproving] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  // The apply run's final `PlanState` (US5/T037): distinct from
+  // `progress.terminal`, which only tracks the event-stream outcome and
+  // cannot tell `partially_applied` apart from `applied`. Retry needs the
+  // real terminal plan state to decide whether to offer "Generate retry plan".
+  const [finalState, setFinalState] = useState<string | null>(null);
   const { progress, run: runApply, reset: resetApply } = usePlanApplyProgress();
 
-  const busy = approving || discarding || progress.running;
-  const applied = progress.terminal === 'completed';
+  const busy = approving || discarding || retrying || progress.running;
+  const applied = finalState === 'applied';
+  const retryable = finalState === 'failed' || finalState === 'partially_applied';
 
   const invalidatePlan = useCallback(() => {
     if (planId !== null) {
@@ -108,6 +122,7 @@ export function PlanReviewOverlay({
     resetApply();
     setApplyError(null);
     setGateReady(false);
+    setFinalState(null);
     onClose();
   }, [busy, onClose, resetApply]);
 
@@ -127,6 +142,7 @@ export function PlanReviewOverlay({
 
     const response = await runApply({ id: planId, approvalToken: token });
     invalidatePlan();
+    setFinalState(response?.newState ?? 'failed');
     if (response !== null && response.newState === 'applied') {
       addToast({ message: m.plans_review_apply_success_toast(), variant: 'success' });
       onApplied?.();
@@ -144,6 +160,7 @@ export function PlanReviewOverlay({
       onDiscarded?.();
       resetApply();
       setGateReady(false);
+      setFinalState(null);
       onClose();
     } catch (e) {
       setApplyError(e instanceof Error ? e.message : String(e));
@@ -152,15 +169,39 @@ export function PlanReviewOverlay({
     }
   }, [planId, busy, onDiscarded, onClose, resetApply]);
 
+  /** Generate a retry plan from this plan's failed items (US5, T037) — the
+   * plan-review flow's only entry point since there is no standalone Plans
+   * list to reopen a terminal plan from (T015/T016 OBSOLETE-BY-DESIGN). */
+  const handleGenerateRetryPlan = useCallback(async () => {
+    if (planId === null || busy) return;
+    setRetrying(true);
+    setApplyError(null);
+    try {
+      const res = unwrap(await commands.plansRetry(planId, 'failed'));
+      addToast({ message: m.plans_review_retry_created_toast(), variant: 'info' });
+      resetApply();
+      setGateReady(false);
+      setFinalState(null);
+      onRetryCreated?.(res.newPlanId);
+    } catch (e) {
+      setApplyError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRetrying(false);
+    }
+  }, [planId, busy, resetApply, onRetryCreated]);
+
   // ── Items table ────────────────────────────────────────────────────────────
 
   const columns = [
     { key: 'name', label: m.plans_review_col_item() },
     { key: 'action', label: m.plans_review_col_action() },
     { key: 'from', label: m.plans_review_col_from() },
+    { key: 'to', label: m.plans_review_col_to() },
     { key: 'protection', label: m.plans_review_col_protection() },
   ];
 
+  // FR-003: every item shows its destination path or, for `delete`-action
+  // items (no destination — the source is removed in place), a deletion cue.
   const rows = (plan?.items ?? []).map((item) => ({
     _testid: `plan-review-item-${item.index}`,
     _rowClassName:
@@ -168,6 +209,12 @@ export function PlanReviewOverlay({
     name: item.name,
     action: <Pill variant={actionPillVariant(item.action)}>{item.action}</Pill>,
     from: <span className="alm-mono">{item.from}</span>,
+    to:
+      item.action === 'delete' ? (
+        <span className="alm-cell--muted">{m.plans_review_deletion_target()}</span>
+      ) : (
+        <span className="alm-mono">{item.to}</span>
+      ),
     protection:
       item.protection === 'protected' ? (
         <Pill variant="warn">{m.settings_cleanup_protection_protected()}</Pill>
@@ -180,6 +227,20 @@ export function PlanReviewOverlay({
 
   const footer = applied ? (
     <Btn onClick={handleClose}>{m.common_close()}</Btn>
+  ) : retryable ? (
+    <>
+      <Btn variant="ghost" onClick={handleClose} disabled={busy}>
+        {m.common_close()}
+      </Btn>
+      <Btn
+        variant="danger"
+        onClick={() => void handleGenerateRetryPlan()}
+        disabled={busy}
+        data-testid="plan-review-retry"
+      >
+        {retrying ? m.plans_review_retrying() : m.plans_review_retry_btn()}
+      </Btn>
+    </>
   ) : (
     <>
       <Btn variant="ghost" onClick={() => void handleDiscard()} disabled={busy}>
@@ -214,6 +275,9 @@ export function PlanReviewOverlay({
       ariaLabel={title ?? m.plans_review_overlay_title()}
       closeOnBackdrop={!busy}
       footer={footer}
+      // The item table owns its own scroll region (below); the body itself
+      // must not also scroll, or the item list would double-scroll.
+      bodyClassName="alm-modal__body--fill"
       data-testid="plan-review-overlay"
     >
       {planLoading && plan == null ? (
@@ -229,8 +293,20 @@ export function PlanReviewOverlay({
               ` ${m.plans_review_bytes_required({ size: formatBytes(plan.totalBytesRequired) })}`}
           </Banner>
 
-          {/* Every proposed item, reviewable before approval (SC-001). */}
-          <Table columns={columns} rows={rows} data-testid="plan-review-items" />
+          {/* Every proposed item, reviewable before approval (SC-001).
+              Virtualized (shared `.alm-listtable` pattern, spec 017 T050):
+              plans can carry hundreds of items, so the table owns its own
+              bounded scroll region instead of rendering every row — the
+              summary/gate/progress/footer above and below stay pinned. */}
+          <div className="alm-listtable">
+            <Table
+              columns={columns}
+              rows={rows}
+              virtualized
+              scrollClassName="alm-listtable__scroll"
+              data-testid="plan-review-items"
+            />
+          </div>
 
           {/* Spec-016 protection gate: protected items require acknowledgement
               before Approve & apply unlocks. */}

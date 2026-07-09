@@ -16,6 +16,7 @@ live in this directory; feature-scoped research lives under
 
 Each active feature records its research in its spec folder. Notable:
 
+- Spec 017 — Cleanup And Archive Review Plans: [`specs/017-cleanup-archive-review-plans/research.md`](../../specs/017-cleanup-archive-review-plans/research.md) (plan review UX, state machine, archive destination convention, retry model).
 - Spec 018 — Settings Configuration Model: [`specs/018-settings-configuration-model/research.md`](../../specs/018-settings-configuration-model/research.md) (persistence shape, audit policy, override resolution, schema versioning).
 - Spec 021 — Developer Contract Diagnostics: [`specs/021-developer-contract-diagnostics/research.md`](../../specs/021-developer-contract-diagnostics/research.md) (recording proxy, `dev-tools` compile-time feature gate, replay safety, redaction).
 

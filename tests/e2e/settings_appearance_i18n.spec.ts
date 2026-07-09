@@ -91,10 +91,25 @@ test.describe("Journey 10 · Settings configuration model (spec 018)", () => {
     await expect(row.getByRole("button", { name: "Archive" })).toHaveClass(
       /alm-seg__btn--active/,
     );
-    await row.getByRole("button", { name: "Keep" }).click();
-    await expect(row.getByRole("button", { name: "Keep" })).toHaveClass(
-      /alm-seg__btn--active/,
-    );
+    // The real race: Cleanup's mount effect fires `settings_get('cleanup')`
+    // (mock IPC has a randomized 50-150ms artificial latency, see
+    // `apps/desktop/src/api/mocks.ts` `mockInvoke`'s `delay(50 + random*100)`).
+    // If that in-flight fetch resolves AFTER this click, its (still-default)
+    // response clobbers the just-set local state back to "Archive" — a
+    // one-shot stomp, so a longer *read-only* wait on the assertion can never
+    // recover once it has happened. `toPass` retries the whole click+assert
+    // unit: a follow-up click after the mount fetch has long since settled
+    // always sticks, which is Playwright's documented pattern for actions
+    // that can be silently undone by a late-resolving async effect — not a
+    // sleep, since it only re-acts when the assertion is actually still
+    // failing.
+    await expect(async () => {
+      await row.getByRole("button", { name: "Keep" }).click();
+      await expect(row.getByRole("button", { name: "Keep" })).toHaveClass(
+        /alm-seg__btn--active/,
+        { timeout: 1_000 },
+      );
+    }).toPass({ timeout: 15_000 });
 
     // `save()` debounces via useAutoSave (300ms) before it actually calls
     // `settings_update`; wait it out so the mock has genuinely persisted the
@@ -112,8 +127,12 @@ test.describe("Journey 10 · Settings configuration model (spec 018)", () => {
 
     const rowAfter = page.getByRole("row").filter({ hasText: "Raw dark frames" });
     await expect(rowAfter).toBeVisible();
+    // No stomp risk here (single settings_get after remount, no competing
+    // local click) — just the same mock IPC latency, so a longer read-only
+    // wait is sufficient.
     await expect(rowAfter.getByRole("button", { name: "Keep" })).toHaveClass(
       /alm-seg__btn--active/,
+      { timeout: 15_000 },
     );
   });
 });

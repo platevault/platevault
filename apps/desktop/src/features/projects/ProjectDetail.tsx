@@ -646,6 +646,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         onClose={() => setArchiveReviewPlanId(null)}
         title={m.projects_archive_review_title()}
         onApplied={handleArchivePlanApplied}
+        onRetryCreated={setArchiveReviewPlanId}
       />
     </DetailPane>
   );

@@ -262,10 +262,16 @@
 }
 
 /* ── Shared plan review overlay (spec 017 WP-E) ───────────────────────────── */
+/* `flex: 1; min-height: 0` makes this fill the modal's `--fill` body (which
+   no longer scrolls itself, T050) so the nested `.alm-listtable` item table
+   is the one region that scrolls — everything else here keeps its natural
+   content height. */
 .alm-plan-review {
   display: flex;
   flex-direction: column;
   gap: var(--alm-sp-3);
+  flex: 1;
+  min-height: 0;
 }
 
 .alm-plan-review__status {

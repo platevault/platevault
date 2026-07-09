@@ -500,6 +500,8 @@ pub async fn generate_source_view(
         resolved_kinds.insert(idx, resolved.kind);
     }
 
+    let used_copy_fallback = resolved_kinds.values().any(|kind| *kind == Materialization::Copy);
+
     if !drift_notices.is_empty() {
         warnings.push(GenerationWarning {
             code: GenerationWarningCode::CapabilityDrift,
@@ -609,7 +611,7 @@ pub async fn generate_source_view(
         .await
         .map_err(|e| db_internal_ctx(e, "advance generation plan to ready_for_review"))?;
 
-    Ok(SourceViewGenerateResponse { plan_id, warnings })
+    Ok(SourceViewGenerateResponse { plan_id, warnings, used_copy_fallback })
 }
 
 #[cfg(test)]

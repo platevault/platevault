@@ -57,6 +57,7 @@ import type { DestructiveDestination, PendingRootPick } from "./PlanPanel";
 import { buildBreakdownFromActions } from "./PlanPanel";
 import type { InboxBreakdownTarget } from "./store";
 import {
+	mergeRescanRoots,
 	normalizeConfirmError,
 	useApplySelectedInboxPlans,
 	useInboxClassification,
@@ -144,22 +145,47 @@ export function InboxPage() {
 		refreshOpenPlans();
 	}, [refreshList, refreshOpenPlans]);
 
-	// Derive the unique roots from the current item list so rescan knows which
-	// roots to ping (FR-005). Deduplicated by rootId.
-	const roots = useMemo(() => {
-		const seen = new Set<string>();
-		const result: Array<{ rootId: string; rootAbsolutePath: string }> = [];
-		for (const item of items) {
-			if (!seen.has(item.rootId)) {
-				seen.add(item.rootId);
-				result.push({
+	// Registered inbox-category roots (FR-005): rescan must reach every active
+	// registered root, not just ones with existing items — a freshly registered
+	// root has zero items until its first scan, so deriving targets from
+	// `items` alone made "Rescan all roots" silently skip it.
+	const [registeredInboxRoots, setRegisteredInboxRoots] = useState<
+		Array<{ rootId: string; rootAbsolutePath: string }>
+	>([]);
+	useEffect(() => {
+		let alive = true;
+		commands
+			.rootsList()
+			.then(unwrap)
+			.then((rs) => {
+				if (!alive) return;
+				setRegisteredInboxRoots(
+					rs
+						.filter((r) => r.category === "inbox" && r.active)
+						.map((r) => ({ rootId: r.id, rootAbsolutePath: r.path })),
+				);
+			})
+			.catch(() => {
+				/* roots are optional UI sugar — ignore fetch failures */
+			});
+		return () => {
+			alive = false;
+		};
+	}, []);
+
+	// Union of registered inbox roots and any root already surfaced via items
+	// (covers a root whose registration briefly lags an in-flight scan).
+	const roots = useMemo(
+		() =>
+			mergeRescanRoots(
+				registeredInboxRoots,
+				items.map((item) => ({
 					rootId: item.rootId,
 					rootAbsolutePath: item.rootAbsolutePath,
-				});
-			}
-		}
-		return result;
-	}, [items]);
+				})),
+			),
+		[items, registeredInboxRoots],
+	);
 
 	const onRescanComplete = useCallback(() => refreshAll(), [refreshAll]);
 	const { loading: rescanLoading, rescan } = useInboxRescan(

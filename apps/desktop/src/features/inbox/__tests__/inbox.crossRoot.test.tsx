@@ -233,3 +233,43 @@ describe('T039-4: useInboxRescan (FR-005)', () => {
     expect(onComplete).toHaveBeenCalledOnce();
   });
 });
+
+// ── mergeRescanRoots (bugfix: registered root with zero items) ─────────────────
+
+describe('mergeRescanRoots (FR-005 — registered root with no items)', () => {
+  it('includes a registered root that has no items yet', async () => {
+    const { mergeRescanRoots } = await import('../store');
+
+    const registeredRoots = [
+      { rootId: 'root-empty', rootAbsolutePath: '/astro/new-root' },
+    ];
+    const itemRoots: Array<{ rootId: string; rootAbsolutePath: string }> = [];
+
+    expect(mergeRescanRoots(registeredRoots, itemRoots)).toEqual([
+      { rootId: 'root-empty', rootAbsolutePath: '/astro/new-root' },
+    ]);
+  });
+
+  it('dedupes by rootId, preferring the registered-root entry', async () => {
+    const { mergeRescanRoots } = await import('../store');
+
+    const registeredRoots = [
+      { rootId: 'root-001', rootAbsolutePath: '/astro/raw' },
+    ];
+    const itemRoots = [
+      { rootId: 'root-001', rootAbsolutePath: '/astro/raw' },
+      { rootId: 'root-002', rootAbsolutePath: '/astro/legacy' },
+    ];
+
+    expect(mergeRescanRoots(registeredRoots, itemRoots)).toEqual([
+      { rootId: 'root-001', rootAbsolutePath: '/astro/raw' },
+      { rootId: 'root-002', rootAbsolutePath: '/astro/legacy' },
+    ]);
+  });
+
+  it('returns an empty list when nothing is registered and no items exist', async () => {
+    const { mergeRescanRoots } = await import('../store');
+
+    expect(mergeRescanRoots([], [])).toEqual([]);
+  });
+});
