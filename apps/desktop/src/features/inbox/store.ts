@@ -385,6 +385,34 @@ export interface RescanState {
   error: string | null;
 }
 
+export interface RescanRoot {
+  rootId: string;
+  rootAbsolutePath: string;
+}
+
+/**
+ * Merge registered inbox roots with any root already surfaced via the
+ * current item list, deduped by rootId (registered roots take precedence).
+ *
+ * A freshly registered root has zero items until its first scan, so deriving
+ * rescan targets from the item list alone would silently skip it — this is
+ * why callers must pass the registered-root list, not just item-derived roots.
+ */
+export function mergeRescanRoots(
+  registeredRoots: RescanRoot[],
+  itemRoots: RescanRoot[],
+): RescanRoot[] {
+  const seen = new Set<string>();
+  const result: RescanRoot[] = [];
+  for (const r of [...registeredRoots, ...itemRoots]) {
+    if (!seen.has(r.rootId)) {
+      seen.add(r.rootId);
+      result.push(r);
+    }
+  }
+  return result;
+}
+
 /**
  * Trigger a rescan of all registered roots (FR-005).
  * On completion, calls onComplete so the caller can refresh the list.
