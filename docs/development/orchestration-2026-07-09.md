@@ -151,3 +151,15 @@ mechanism itself.
   runner crashes + linker OOM under heavy concurrent CI load, not code —
   no fix lane needed for those failures specifically; re-run rather than
   debug when the failure signature matches.
+- **Lane nM/nE merged (2026-07-09).** #528 (`3e9203b1`, lane nM) re-expressed
+  its macOS Real-UI increment on top of owner's #533 baseline: the
+  `workflow_dispatch` re-test path, job timeouts, launch-failure
+  diagnostics, and the `reconcile_drops_externally_deleted_frame` flake fix
+  (see the CI triage entry above). #531 (`35f86be4`, lane nE) closed out
+  spec 037: coverage-matrix refresh, `testing.md` Layer-2 rewrite, a new
+  StepSite wizard mock spec (`tests/e2e/setup_wizard_site_step.spec.ts`),
+  the dead `test:e2e:real` script fixed, and an offline-coverage claim
+  corrected re `crates/targeting/resolver/tests/simbad_live.rs` (hits the
+  real SIMBAD endpoint by design, not re-gated, flagged as a separate
+  backlog item). SPEC_STATUS 037 row flipped to effectively complete
+  (35/40; 5 open are deliberate SUPERSEDED decisions, not gaps).

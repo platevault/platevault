@@ -75,7 +75,7 @@ still landing PRs and these rows will move again once those lanes report.
 | 033 validation-bugfix-remediation | 🟡 Partial | 83/92; blocked on 017 cleanup generator |
 | 035 simbad-target-resolution | ✅ Implemented | validated end-to-end 2026-06-23 |
 | 036 retire-legacy-targets | ✅ Implemented | PR #255 |
-| 037 e2e-integration-testing | 🟠 Partial / housekeeping only | 29/39; Layer-1 + CI Stage A done; Layer-2 tauri-driver journeys merged (`1419b1a0` / #403) — `search.global`/`sessions.list`/`calibration.masters` are real backends. `sessions.transition` was **deleted** by spec 041 FR-051 (not pending); remaining tasks are superseded/housekeeping. The Layer-2 journeys found+fixed a real bug: lifecycle `TransitionRequest` was undeserializable (#423, fixed by #424) — evidence the layer works |
+| 037 e2e-integration-testing | ✅ Effectively complete (35/40; 5 open are deliberate SUPERSEDED decisions, not gaps) | Layer-1 + CI Stage A done; Layer-2 tauri-driver journeys merged (`1419b1a0`/#403) — `search.global`/`sessions.list`/`calibration.masters` are real backends. `sessions.transition` was **deleted** by spec 041 FR-051 (not pending). PR #531 (`35f86be4`, lane nE) closed T038/T039 with evidence: `contracts/coverage-matrix.md` refreshed (StepSite gap closed via new `tests/e2e/setup_wizard_site_step.spec.ts`; 046 i18n + 047 moon-pill items re-verified already-closed), `docs/development/testing.md` Layer-2 section rewritten, the dead `test:e2e:real` script fixed (`apps/desktop/scripts/run-e2e-real.sh` now backs `apps/desktop/package.json`'s script), and an offline-coverage claim corrected — `crates/targeting/resolver/tests/simbad_live.rs` is a pre-existing, ungated suite that hits the real SIMBAD endpoint as part of the default `cargo test --workspace` (not re-gated here, flagged as a separate backlog item). T001–T003/T006–T008 remain unchecked by design (SUPERSEDED — offline `FakeResolver`/`FakeSpawner` test doubles replaced the originally-planned `wiremock`/`better-sqlite3` approach). Still-open follow-up (not regressions): full 6-step wizard happy path E2E, Data Sources management E2E |
 | 037 ipc-wrapper-removal | ✅ Complete | All caller areas migrated + merged 2026-07-03 (sessions #369, shell #372, settings #373, setup #374, targets #375, inbox #376, projects #377, dev #378, + fix `ad3497e1`); **0 live `@/api/commands` imports**. dev-tools commands generated under `--features dev-tools` (option C). Phase-4 teardown done: `commands.ts` + its guard test deleted, dead mocks removed, SC-001/SC-005 enforced by `api/ipc-boundary.guard.test.ts`; also swept guided + source-views callers |
 | 038 wizard-scan-step | ✅ Implemented | merged (no committed tasks.md) |
 | 039 cross-root-inbox | 🔴 Superseded by 041 | Scope fully implemented via 041 — cross-root `inbox_list`, inbox optional (`REQUIRED_KINDS`), rescan-all, bounded/virtualized. All 3 US + 7 FR + 5 SC verified in code 2026-07-03. No plan/tasks.md authored |
@@ -123,7 +123,7 @@ PROJECTS CHAIN
 INFRA / CROSS-CUTTING (mostly independent)
   018 settings ✅   021 dev-diagnostics 🟡   019 log-viewer ✅
   046 i18n ✅   042 stdlib ✅   043 ui-redesign 🟡 (merged to main via #349; remainder open)
-  037 e2e 🟠 ◀── Layer-2 tauri-driver journeys merged (#403); only housekeeping tasks remain (sessions.transition deleted by 041, not pending)
+  037 e2e ✅ ◀── Layer-2 tauri-driver journeys merged (#403); closed out via #531 (35/40, 5 open by design as SUPERSEDED)
   037 ipc-removal ✅ (all phases done+merged; commands.ts deleted, guards in CI)
   026 source-view-removal 🟡 (vestigial, product-decision-pending; lane G reviewing)
   048 per-frame-inventory 🟠 (in-flight, lane D active)   049 source-view-generation 🟠 (in-flight, lane F active, 32/46 tasks)
@@ -160,8 +160,8 @@ lane does not touch `.github/workflows/**`, tags, or release PRs.
 ## Blocked / not-yet-actionable
 
 - **033 validation-bugfix** — dead cleanup-plan path depends on the **017** generator; do 017 first.
-- **037 e2e** — no longer blocked: Layer-2 tauri-driver journeys merged (#403); `sessions.transition` was deleted by 041 FR-051, not pending. Remaining tasks are housekeeping only.
-- **044 planner-astronomy** — Track B (astronomy-engine) now specced and in progress on `044-targets-planner-track-b`; see the 044 row.
+- **037 e2e** — closed out via #531; see the 037 row. No longer a blocked/not-yet-actionable item.
+- **044 planner-astronomy** — Track B (astronomy-engine) complete minus 2 deferred tasks; see the 044 row.
 
 ## Deviations of record
 
