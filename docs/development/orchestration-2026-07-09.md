@@ -126,4 +126,28 @@ mechanism itself.
   owned by lane nM's stabilization work). #499 (lane nB) carries a
   **separate real regression**,
   `targets_planner_real_astronomy_after_site_creation`, currently in a fix
-  round — not the same failure class as the reconcile flake.
+  round — not the same failure class as the reconcile flake. **Resolved**:
+  #499's fix round completed and merged (`1a0c4644`, see below).
+- **Lane nC/nB/nD merged (2026-07-09).** #492 (017, `bbbd11ff` — destination
+  path preview + retry-plan action + virtualized overlay +
+  quickstart/a11y/perf-honest, 42/51), #499 (044 Track B, `1a0c4644` — real
+  Moon geometry + dark-window awareness for future-night planning, plus the
+  13k-row moon-geometry perf regression fix; Track B complete minus T017/
+  T036 deferred, 36/40), #517 (048, `0463bbd2`, lane nD — reconcile wiring +
+  a settings-edits-silently-reverted fix + a manual reconcile action, 048
+  now 15/44, still shared with the external session's open #500/#503).
+  SPEC_STATUS 017/044/048 rows updated accordingly.
+- **macOS Real-UI descope superseded (2026-07-09).** Owner's own #533
+  (`a1da9a20`) landed a simpler macOS-drop directly on `main` ahead of lane
+  nM's version. Lane nM is rebasing to re-express its increment (the
+  `workflow_dispatch` re-test input, job timeouts, launch-failure
+  diagnostics, and the `reconcile_drops_externally_deleted_frame` flake fix)
+  on top of #533 rather than duplicating the descope itself.
+- **Lane nF spawned (2026-07-09).** 049 tail, reconcile-first against the
+  external session's open #490/#500/#503 (same posture as nD/048: rebase +
+  fresh `speckit-verify mode:tasks` before implementing only the verified
+  remainder).
+- **CI infra-red note (2026-07-09).** This session's CI reds were traced to
+  runner crashes + linker OOM under heavy concurrent CI load, not code —
+  no fix lane needed for those failures specifically; re-run rather than
+  debug when the failure signature matches.
