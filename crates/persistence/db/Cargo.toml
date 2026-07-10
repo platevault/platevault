@@ -8,7 +8,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-audit = { path = "../../audit" }
+audit_types = { path = "../../audit-types" }
 domain_core = { path = "../../domain/core" }
 patterns = { path = "../../patterns" }
 sea-query.workspace = true
@@ -19,6 +19,14 @@ thiserror.workspace = true
 time.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+
+# `audit` depends on `persistence_db` (for events-table SQL), so it cannot be
+# a normal dependency here (cycle). Cargo permits dev-dependency cycles: this
+# is test-only, letting `tests/*.rs` construct a real `EventBus` (which
+# implements `audit_types::EventPublisher`) to pass into
+# `SqliteLifecycleRepository::new`.
+[dev-dependencies]
+audit = { path = "../../audit" }
 
 [lints]
 workspace = true

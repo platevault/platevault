@@ -473,7 +473,10 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 name = "audit"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "audit_types",
  "domain_core",
+ "persistence_db",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -482,6 +485,18 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "tokio",
+]
+
+[[package]]
+name = "audit_types"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "domain_core",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "specta",
 ]
 
 [[package]]
@@ -1403,7 +1418,7 @@ dependencies = [
 
 [[package]]
 name = "desktop_shell"
-version = "0.0.0"
+version = "0.2.0"
 dependencies = [
  "app_core",
  "audit",
@@ -4138,6 +4153,7 @@ name = "persistence_db"
 version = "0.1.0"
 dependencies = [
  "audit",
+ "audit_types",
  "domain_core",
  "patterns",
  "sea-query",

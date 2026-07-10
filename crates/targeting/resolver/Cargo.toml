@@ -44,6 +44,9 @@ percent-encoding.workspace = true
 csv.workspace = true
 # Fuzzy matching: token-set similarity + Damerau-Levenshtein (R2).
 strsim = "0.11"
+# db-boundary-zero: production dependency (not dev-only) so cache.rs's raw
+# sqlx sites can move into `persistence_db::repositories::q_resolver`.
+persistence_db = { path = "../../persistence/db" }
 
 [features]
 # Enables the seeded in-memory test fixture (FakeResolver) for use in
@@ -53,9 +56,6 @@ test-fixture = []
 [[test]]
 name = "simbad_live"
 path = "tests/simbad_live.rs"
-
-[dev-dependencies]
-persistence_db = { path = "../../persistence/db" }
 
 [lints]
 workspace = true
