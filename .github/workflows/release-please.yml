@@ -44,20 +44,21 @@ jobs:
       tag_name: ${{ steps.release.outputs.tag_name }}
       release_body: ${{ steps.release.outputs.body }}
     steps:
-      # Mint a short-lived GitHub App installation token from the org-owned
-      # `nightwatch-astro-ci` app (contents:write + pull_requests:write). This
-      # is the cross-org-correct identity: unlike a personal PAT it needs no
-      # org approval and no lifetime management, and unlike the default
-      # GITHUB_TOKEN its releases/tags DO trigger downstream workflows
-      # (release-gate on `push: tags`) and its PR checks are not held as
-      # `action_required`. Requires the NIGHTWATCH_APP_ID / _PRIVATE_KEY org
-      # secrets to be visible to this repo and the app installed on it.
+      # Mint a short-lived GitHub App installation token from the shared org
+      # release app (contents:write + pull_requests:write). This is the
+      # cross-org-correct identity: unlike a personal PAT it needs no org
+      # approval and no lifetime management, and unlike the default GITHUB_TOKEN
+      # its releases/tags DO trigger downstream workflows (release-gate on
+      # `push: tags`) and its PR checks are not held as `action_required`.
+      # Credentials are provisioned org-wide (visibility=all):
+      #   RELEASE_APP_CLIENT_ID  — Actions variable
+      #   RELEASE_APP_PRIVATE_KEY — Actions secret
       - name: Mint release-please app token
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ secrets.NIGHTWATCH_APP_ID }}
-          private-key: ${{ secrets.NIGHTWATCH_APP_PRIVATE_KEY }}
+          app-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - name: Run release-please
         id: release
