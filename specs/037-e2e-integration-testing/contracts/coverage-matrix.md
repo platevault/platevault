@@ -221,16 +221,16 @@ everything neither automated layer reaches.
 
 | Journey | Layer-1 | Layer-2 | Mock-Playwright | Manual-Windows doc |
 |---|:--:|:--:|:--:|---|
-| 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions only | `windows-journeys/journey-01-first-run-setup.md` |
-| 2 Ingest → reclassify → confirm (move) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs`): mixed-folder split, unclassified-frame-type gate + bulk reclassify, missing-path-attribute gate, Confirm-doesn't-move + Apply-moves-to-shown-path. Root-picker prompt (2+ roots) and stale-plan refusal remain unautomated (follow-up) | ❌ none | `windows-journeys/journey-02-inbox-ingest-move.md` |
-| 3 Ingest → confirm (catalogue-in-place) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs::inbox_ui_catalogue_in_place_zero_moves_byte_identical`): organized root → 0-move catalogue plan, no root picker, no destination-absolute cell, byte-identical apply | ❌ none | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
-| 4 Sessions review (derived) | ✅ | 🟡 real-UI (`sessions_journeys.rs`): nothing before apply, real session row appears automatically, no review-lifecycle controls anywhere, no-op rescan never duplicates. Notes-edit invariant (Test 4) found untestable — see finding below | 🟡 rows/detail render only | `windows-journeys/journey-04-sessions-review.md` |
-| 5 Project lifecycle | ✅ | 🟡 real-UI (`lifecycle_ui_journeys.rs`): create-wizard makes real `lights/`/`darks/` folders under the registered project library root (PR #414 regression guard) + blocks a duplicate name with a real inline field error. Attach/remove-source UX, manifests/notes, tool launch, artifact watcher still IPC-only | 🟡 transition button only (pill-refresh `test.skip`) | `windows-journeys/journey-05-project-lifecycle.md` |
-| 6 Cleanup scan→review→apply | ✅ | ✅ `cleanup_plan_review` now applies past `approved` via `plans.apply.direct` + asserts the real FS move + audit (2026-07-05) | ❌ none | `windows-journeys/journey-06-cleanup-scan-apply.md` |
-| 7 Archive → delete | ✅ (backend only) | ✅ `archive_lifecycle_apply_trash_permanent_delete` (`archive_journeys.rs`, NEW 2026-07-05): real apply + `archive.list` + `archive.send_to_trash`/`archive.permanently_delete` metadata + `blockPermanentDelete` gate | ❌ none | `windows-journeys/journey-07-archive-delete.md` |
-| 8 Calibration masters → matching | ✅ | 🟡 real-UI (`calibration_ui_journeys.rs`): masters ingest as individual items + kind-conditional detail (Tests 1/2). Matching/assign UI (Tests 3-5) found UNREACHABLE from the real app during this pass — see finding below, not automatable until fixed | ❌ none | `windows-journeys/journey-08-calibration-masters-matching.md` |
-| 9 Targets & planning | ✅ (backend only) | 🟡 real-UI (`targets_journeys.rs`): add-target no-dup, stub-disclosure guard (no site), real astronomy after site creation (#440 confirmed landed) | ❌ **none at all** | `windows-journeys/journey-09-targets-planning.md` |
-| 10 Settings/appearance/i18n | ✅ | 🟡 real-UI (`settings_journeys.rs`): no-global-Save + real auto-save round-trip, theme live-apply + cross-relaunch persistence. Remaining sub-tests (altitude clamp, log-panel layout/export, 1100×720 convention, translated backend errors, command palette, sidebar persistence) still route-load-smoke only | ❌ none | `windows-journeys/journey-10-settings-appearance-i18n.md` |
+| 1 First-run → data sources | ✅ | 🟡 wizard redirect + resolve + create only | 🟡 legacy-state + index-redirect regressions + **Observing Site step (`setup_wizard_site_step.spec.ts`, NEW 2026-07-09)**: optional-copy render, blank-skip advances to Confirm, out-of-range-latitude inline validation, field retention across Back/Continue. Full 6-step happy path and Data-Sources management (rescan/remap/disable/delete/reveal) still uncovered | `windows-journeys/journey-01-first-run-setup.md` |
+| 2 Ingest → reclassify → confirm (move) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs`): mixed-folder split, unclassified-frame-type gate + bulk reclassify, missing-path-attribute gate, Confirm-doesn't-move + Apply-moves-to-shown-path. Root-picker prompt (2+ roots) and stale-plan refusal remain unautomated (follow-up) | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448, 2026-07-05): mixed-folder split, needs-review gate + bulk reclassify, single-type confirm→plan toast, plan-approval overlay review→apply/cancel | `windows-journeys/journey-02-inbox-ingest-move.md` |
+| 3 Ingest → confirm (catalogue-in-place) | ✅ | ✅ real-UI (`inbox_ui_journeys.rs::inbox_ui_catalogue_in_place_zero_moves_byte_identical`): organized root → 0-move catalogue plan, no root picker, no destination-absolute cell, byte-identical apply | ✅ `inbox_ingest_confirm.spec.ts` (batch 1, PR #448): catalogue-in-place plan distinguishable from a move plan in the review overlay | `windows-journeys/journey-03-inbox-catalogue-in-place.md` |
+| 4 Sessions review (derived) | ✅ | 🟡 real-UI (`sessions_journeys.rs`): nothing before apply, real session row appears automatically, no review-lifecycle controls anywhere, no-op rescan never duplicates. Notes-edit invariant (Test 4) found untestable — see finding below | 🟡 rows/detail render only (`lifecycle_detail.spec.ts`, pre-existing) | `windows-journeys/journey-04-sessions-review.md` |
+| 5 Project lifecycle | ✅ | 🟡 real-UI (`lifecycle_ui_journeys.rs`): create-wizard makes real `lights/`/`darks/` folders under the registered project library root (PR #414 regression guard) + blocks a duplicate name with a real inline field error. Attach/remove-source UX, manifests/notes, tool launch, artifact watcher still IPC-only | ✅ `project_lifecycle_create.spec.ts` (batch 3, PR #453, 2026-07-05): creation-wizard happy path, duplicate-name inline block, empty-name Create-disabled gate; `project_lifecycle_surfaces.spec.ts` + `project_lifecycle_transitions_full.spec.ts` (landed same window): notes autosave, manifests/outputs/tool-launch affordance, attach/remove-source guards, full state-machine transitions. `lifecycle_transitions.spec.ts` (pre-existing): transition button + pill-refresh (`test.skip`, real-backend only) | `windows-journeys/journey-05-project-lifecycle.md` |
+| 6 Cleanup scan→review→apply | ✅ | ✅ `cleanup_plan_review` now applies past `approved` via `plans.apply.direct` + asserts the real FS move + audit (2026-07-05) | ✅ `cleanup_review.spec.ts` (batch 2, PR #447, 2026-07-05): scan→review candidates with confidence+protection→generate plan→protection gate→approve & apply | `windows-journeys/journey-06-cleanup-scan-apply.md` |
+| 7 Archive → delete | ✅ (backend only) | ✅ `archive_lifecycle_apply_trash_permanent_delete` (`archive_journeys.rs`, NEW 2026-07-05): real apply + `archive.list` + `archive.send_to_trash`/`archive.permanently_delete` metadata + `blockPermanentDelete` gate | ✅ `archive_lifecycle.spec.ts` (batch 2, PR #447, 2026-07-05): archive page listing + canonical actions, send-to-trash, typed-`DELETE` permanent-delete gate | `windows-journeys/journey-07-archive-delete.md` |
+| 8 Calibration masters → matching | ✅ | 🟡 real-UI (`calibration_ui_journeys.rs`): masters ingest as individual items + kind-conditional detail (Tests 1/2). Matching/assign UI (Tests 3-5) found UNREACHABLE from the real app during this pass — see finding below, not automatable until fixed | ✅ `calibration_masters_matching.spec.ts` (batch 4, PR #452, 2026-07-05): masters as individual items with kind-conditional Filter/Exposure columns, aging pill + fingerprint detail, per-project match-status confidence, configurable matching tolerances | `windows-journeys/journey-08-calibration-masters-matching.md` |
+| 9 Targets & planning | ✅ (backend only) | 🟡 real-UI (`targets_journeys.rs`): add-target no-dup, stub-disclosure guard (no site), real astronomy after site creation (#440 confirmed landed) | ✅ `targets_planner.spec.ts` (batch 5, PR #454, 2026-07-05 + planner site-gate regression guard): no-site prompt / real-astronomy-after-site-creation / persisted-site-after-reload (9.1a–c), catalog list + typeahead + on-demand SIMBAD resolve (9.2a–c), honest-empty favourites/sessions states (9.3a–b) | `windows-journeys/journey-09-targets-planning.md` |
+| 10 Settings/appearance/i18n | ✅ | 🟡 real-UI (`settings_journeys.rs`): no-global-Save + real auto-save round-trip, theme live-apply + cross-relaunch persistence. Remaining sub-tests (altitude clamp, log-panel layout/export, 1100×720 convention, translated backend errors, command palette, sidebar persistence) still route-load-smoke only | ✅ `settings_appearance_i18n.spec.ts` (batch 6, PR #455, 2026-07-05; stabilized PR #494): Ingestion/Cleanup panes auto-save round-trip, 4-theme switch + persistence, 1100×720 pinned-header layout convention, no-raw-message-key + plural-form (audit event count) i18n assertions, log-panel filter/Escape-close | `windows-journeys/journey-10-settings-appearance-i18n.md` |
 
 Legend: ✅ solid coverage at that layer · 🟡 partial/IPC-only/smoke-only ·
 ❌ none. Layer-1 "✅" means the backend logic is real-tested; it says
@@ -429,3 +429,39 @@ mock-Playwright layer's own parallel batched fix-list (batches 1–7 there
 target the same gaps from the mock-layer side where a mock CAN reach the
 behavior — see the "Layer-2-only flows" section above for which ones a mock
 never will).
+
+## Mock-Playwright batch completion + StepSite gap closed — 2026-07-09
+
+All 6 fixer batches from `e2e-mock-coverage-audit-2026-07-05.md`'s
+prioritized list landed the same day they were audited (PRs #447 batch 2,
+#448 batch 1, #452 batch 4, #453 batch 3, #454 batch 5, #455 batch 6; #494
+later stabilized a flake in #455's suite). Batch 7 (retire the orphaned
+`tests/integration/*.spec.ts` first-run specs, outside `playwright.config.ts`'s
+`testDir`) is also done (`4c221a63`/`824291b6`). The per-journey table above
+is updated accordingly — Journeys 2/3/5/6/7/8/9/10 move from "❌ none" to
+"✅" at the Mock-Playwright layer.
+
+This pass (spec 037 close-out) additionally verified the remaining named
+gaps in that audit against today's code and closed the one still genuinely
+open and mock-reachable: **`StepSite.tsx`** (the first-run wizard's
+Observing Site step, spec 044 US3/T016) had no dedicated test at any layer,
+mock or vitest — `tests/e2e/setup_wizard_site_step.spec.ts` (NEW) now covers
+its own rendering/copy, `siteStepError` inline validation, the FR-025
+optional/skippable behavior, and field-value retention across Back/Continue.
+Real site persistence (`saveSites`) is NOT exercised here — `SetupWizard.
+handleFinish` gates that whole branch behind `!isMockMode`, so it is
+structurally unreachable from this mock layer; it stays covered by
+`ObservingSites.test.tsx` (vitest, the Settings editor sharing the same
+field set) and the Layer-2 `targets_journeys.rs` site-creation journey.
+
+The other two named audit targets were re-verified as **already closed** by
+the existing batch work, not newly gapped: 046 i18n cross-cutting
+(no-raw-message-key + plural-form assertions) and 047 moon-pill/opposition
+disclosure are both exercised by `settings_appearance_i18n.spec.ts` and
+`targets_planner.spec.ts` respectively (see the per-journey table).
+
+**Still open (not closed this pass, out of this task's named scope)**: the
+full 6-step wizard happy path (Sources→Tools→Config→Site→Confirm→Scan) end
+to end, and Data Sources management (rescan/remap/disable/delete/reveal) —
+both remain "UNCOVERED" per the original audit and are follow-up candidates,
+not regressions.
