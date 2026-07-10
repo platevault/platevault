@@ -1,4 +1,4 @@
-# Real-UI E2E — thirtyfour + cargo-nextest + tauri-plugin-webdriver (all OS)
+# Real-UI E2E — thirtyfour + cargo-nextest + tauri-plugin-webdriver (Linux + Windows)
 #
 # Drives the built desktop_shell binary through its real webview UI using
 # tauri-plugin-webdriver (Choochmeque) — an embedded W3C WebDriver server
@@ -7,8 +7,8 @@
 #
 # Why plugin-everywhere instead of the old tauri-driver approach:
 # - tauri-driver is Linux+Windows only (no WKWebView WebDriver on macOS).
-# - tauri-plugin-webdriver works on Linux, Windows, AND macOS — one harness,
-#   one CI path, no msedgedriver version matching, no WebKitWebDriver apt dep.
+# - tauri-plugin-webdriver works on Linux and Windows — one harness, one CI
+#   path, no msedgedriver version matching, no WebKitWebDriver apt dep.
 # - The plugin is compile-gated behind the `e2e` feature on desktop_shell, so
 #   release binaries never include the automation surface (Constitution V).
 # - WebdriverIO has been retired; the Rust thirtyfour+nextest stack is the
@@ -23,26 +23,21 @@
 #   tauri-webdriver CLI, no e2e-feature app build, and no served frontend —
 #   skips them; this workflow opts back in with `--run-ignored all`.
 #   `--no-tests=warn` is kept only as a defensive fallback; it should never
-#   actually trigger since every journey runs on all 3 OS uniformly.
-# - The 3-OS matrix proves the runner AND the journeys work on every platform.
+#   actually trigger since every journey runs on both Linux and Windows.
+# - The Linux + Windows matrix proves the runner AND the journeys work on the
+#   supported platforms.
 # - This workflow runs independently of ci.yml (Layer-1 integration). Ordering /
 #   merge-gating is enforced by branch-protection required checks, not a
 #   cross-workflow `needs` (which GitHub only supports for reusable workflows).
 #
-# macOS is best-effort, not required (see `docs/development/testing.md`'s
-# Layer-2 note: "Required on Windows + Linux; best-effort on macOS (no
-# official WKWebView WebDriver)"). In practice the embedded
-# `tauri-plugin-webdriver` server on `desktop_shell` never becomes reachable
-# on `macos-latest` GitHub runners: the app boots (build succeeds), but the
-# `tauri-webdriver` CLI proxy gets `Connection refused (os error 61)` against
-# the plugin's native port on every attempt until the 120s launch deadline —
-# reproduced identically on every open PR (e.g. CI runs 28712192291 and
-# 28712185403), never a per-PR regression. The plugin's own upstream E2E
-# workflow (Choochmeque/tauri-plugin-webdriver) fails its macos-latest leg on
-# essentially every recent run too, so this is an upstream/runner-side
-# limitation, not something fixable in this repo. `continue-on-error` keeps
-# the leg running — so coverage isn't silently dropped and a future upstream
-# fix is visible — without blocking every PR on it.
+# macOS leg REMOVED: tauri-plugin-webdriver has no working macOS WebDriver on
+# GitHub runners. The `tauri-webdriver` CLI proxy receives `Connection refused
+# (os error 61)` on every attempt until the 120s session deadline — reproduced
+# identically on every recent run (e.g. CI runs 28712192291 and 28712185403),
+# never a per-PR regression. The upstream plugin's own CI
+# (Choochmeque/tauri-plugin-webdriver) also fails its macos-latest leg on
+# essentially every recent run. This is an upstream/runner-side limitation, not
+# fixable in this repo. Linux + Windows is the supported matrix.
 
 name: Real-UI E2E (thirtyfour + nextest + tauri-plugin-webdriver)
 
@@ -123,11 +118,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    # macOS is best-effort (see header comment): a runner-side
-    # tauri-plugin-webdriver connectivity issue, not a per-PR regression.
-    continue-on-error: ${{ matrix.os == 'macos-latest' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -210,6 +202,6 @@ jobs:
         if: runner.os == 'Linux' && needs.changes.outputs.run == 'true'
         run: xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
 
-      - name: Run E2E (Windows / macOS)
+      - name: Run E2E (Windows)
         if: runner.os != 'Linux' && needs.changes.outputs.run == 'true'
         run: cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
