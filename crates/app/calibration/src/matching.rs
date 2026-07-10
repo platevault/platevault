@@ -49,6 +49,7 @@ use contracts_core::calibration_match::{
 use domain_core::ids::Timestamp;
 use persistence_db::repositories::calibration_assignment::{self as assign_repo, UpsertParams};
 use persistence_db::repositories::inventory::{get_session_context_by_ids, SessionContextRow};
+use persistence_db::repositories::q_calibration;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use time::format_description::well_known::Rfc3339;
@@ -512,75 +513,34 @@ fn apply_session_context(
 /// Returns `None` when no fingerprint exists for the session.
 async fn load_session(pool: &SqlitePool, session_id: &str) -> Result<Option<SessionInfo>, String> {
     // Validate session exists first (for proper "not found" error).
-    let exists: Option<(String,)> =
-        sqlx::query_as("SELECT id FROM acquisition_session WHERE id = ?")
-            .bind(session_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+    let exists = q_calibration::acquisition_session_exists(pool, session_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    if exists.is_none() {
+    if !exists {
         return Ok(None);
     }
 
     // Try to load fingerprint.
-    let row: Option<(
-        String,         // id
-        Option<String>, // session_type
-        Option<f64>,    // gain
-        Option<f64>,    // offset_val
-        Option<f64>,    // exposure_s
-        Option<f64>,    // temp_c
-        Option<String>, // filter_name
-        Option<f64>,    // rotation_deg
-        Option<String>, // binning
-        Option<String>, // optic_train
-        Option<String>, // observing_night_date
-        Option<i64>,    // has_observer_location
-        Option<i64>,    // has_exposure_start_utc
-    )> = sqlx::query_as(
-        "
-        SELECT id, session_type, gain, offset_val, exposure_s,
-               temp_c, filter_name, rotation_deg, binning, optic_train,
-               observing_night_date, has_observer_location, has_exposure_start_utc
-        FROM acquisition_fingerprint
-        WHERE id = ?
-        ",
-    )
-    .bind(session_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let row = q_calibration::get_acquisition_fingerprint(pool, session_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(Some(match row {
-        Some((
-            id,
-            session_type,
-            gain,
-            offset,
-            exposure_s,
-            temp_c,
-            filter,
-            rotation_deg,
-            binning,
-            optic_train,
-            observing_night_date,
-            has_observer_location,
-            has_exposure_start_utc,
-        )) => SessionInfo {
-            id,
-            session_type: session_type.unwrap_or_else(|| "light".to_owned()),
-            gain,
-            offset,
-            exposure_s,
-            temp_c,
-            filter,
-            rotation_deg,
-            binning,
-            optic_train,
-            observing_night_date,
-            has_observer_location: has_observer_location.unwrap_or(0) != 0,
-            has_exposure_start_utc: has_exposure_start_utc.unwrap_or(0) != 0,
+        Some(r) => SessionInfo {
+            id: r.id,
+            session_type: r.session_type.unwrap_or_else(|| "light".to_owned()),
+            gain: r.gain,
+            offset: r.offset_val,
+            exposure_s: r.exposure_s,
+            temp_c: r.temp_c,
+            filter: r.filter_name,
+            rotation_deg: r.rotation_deg,
+            binning: r.binning,
+            optic_train: r.optic_train,
+            observing_night_date: r.observing_night_date,
+            has_observer_location: r.has_observer_location.unwrap_or(0) != 0,
+            has_exposure_start_utc: r.has_exposure_start_utc.unwrap_or(0) != 0,
         },
         // No fingerprint row → session exists but has no metadata.
         // Guard A6 will reject with observer_location_missing.
@@ -599,31 +559,8 @@ async fn load_masters(
     pool: &SqlitePool,
     kinds: &[CalibrationKind],
 ) -> Result<Vec<MasterInfo>, String> {
-    let rows: Vec<(
-        String,         // id
-        String,         // calibration_type
-        Option<f64>,    // gain
-        Option<f64>,    // offset_val
-        Option<f64>,    // exposure_s
-        Option<f64>,    // temp_c
-        Option<String>, // filter_name
-        Option<f64>,    // rotation_deg
-        Option<String>, // binning
-        Option<String>, // optic_train
-        Option<String>, // source_session_id
-        Option<String>, // observing_night_date
-    )> = sqlx::query_as(
-        "
-        SELECT id, calibration_type, gain, offset_val, exposure_s,
-               temp_c, filter_name, rotation_deg, binning, optic_train,
-               source_session_id, observing_night_date
-        FROM calibration_fingerprint
-        WHERE calibration_type IN ('dark', 'flat', 'bias')
-        ",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let rows =
+        q_calibration::list_calibration_fingerprints(pool).await.map_err(|e| e.to_string())?;
 
     let type_filter: Vec<&str> = kinds
         .iter()
@@ -637,41 +574,26 @@ async fn load_masters(
 
     Ok(rows
         .into_iter()
-        .filter(|(_, ct, ..)| type_filter.is_empty() || type_filter.contains(&ct.as_str()))
-        .filter_map(
-            |(
-                id,
-                ct,
-                gain,
-                offset,
-                exposure_s,
-                temp_c,
-                filter,
-                rotation_deg,
-                binning,
-                optic_train,
-                source_session_id,
-                observing_night_date,
-            )| {
-                // DB CHECK constrains `calibration_type` to dark/flat/bias;
-                // anything unparseable is skipped, preserving prior behavior.
-                let kind: CalibrationKind = ct.parse().ok()?;
-                Some(MasterInfo {
-                    id,
-                    kind,
-                    gain,
-                    offset,
-                    exposure_s,
-                    temp_c,
-                    filter,
-                    rotation_deg,
-                    binning,
-                    optic_train,
-                    source_session_id,
-                    observing_night_date,
-                })
-            },
-        )
+        .filter(|r| type_filter.is_empty() || type_filter.contains(&r.calibration_type.as_str()))
+        .filter_map(|r| {
+            // DB CHECK constrains `calibration_type` to dark/flat/bias;
+            // anything unparseable is skipped, preserving prior behavior.
+            let kind: CalibrationKind = r.calibration_type.parse().ok()?;
+            Some(MasterInfo {
+                id: r.id,
+                kind,
+                gain: r.gain,
+                offset: r.offset_val,
+                exposure_s: r.exposure_s,
+                temp_c: r.temp_c,
+                filter: r.filter_name,
+                rotation_deg: r.rotation_deg,
+                binning: r.binning,
+                optic_train: r.optic_train,
+                source_session_id: r.source_session_id,
+                observing_night_date: r.observing_night_date,
+            })
+        })
         .collect())
 }
 
@@ -680,67 +602,29 @@ async fn load_master_by_id(
     pool: &SqlitePool,
     master_id: &str,
 ) -> Result<Option<MasterInfo>, String> {
-    let row: Option<(
-        String,
-        String,
-        Option<f64>,
-        Option<f64>,
-        Option<f64>,
-        Option<f64>,
-        Option<String>,
-        Option<f64>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-    )> = sqlx::query_as(
-        "
-        SELECT id, calibration_type, gain, offset_val, exposure_s,
-               temp_c, filter_name, rotation_deg, binning, optic_train,
-               source_session_id, observing_night_date
-        FROM calibration_fingerprint
-        WHERE id = ?
-        ",
-    )
-    .bind(master_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let row = q_calibration::get_calibration_fingerprint(pool, master_id)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    Ok(row.and_then(
-        |(
-            id,
-            ct,
-            gain,
-            offset,
-            exposure_s,
-            temp_c,
-            filter,
-            rotation_deg,
-            binning,
-            optic_train,
-            source_session_id,
-            observing_night_date,
-        )| {
-            // DB CHECK constrains `calibration_type` to dark/flat/bias;
-            // anything unparseable is skipped, preserving prior behavior.
-            let kind: CalibrationKind = ct.parse().ok()?;
-            Some(MasterInfo {
-                id,
-                kind,
-                gain,
-                offset,
-                exposure_s,
-                temp_c,
-                filter,
-                rotation_deg,
-                binning,
-                optic_train,
-                source_session_id,
-                observing_night_date,
-            })
-        },
-    ))
+    Ok(row.and_then(|r| {
+        // DB CHECK constrains `calibration_type` to dark/flat/bias;
+        // anything unparseable is skipped, preserving prior behavior.
+        let kind: CalibrationKind = r.calibration_type.parse().ok()?;
+        Some(MasterInfo {
+            id: r.id,
+            kind,
+            gain: r.gain,
+            offset: r.offset_val,
+            exposure_s: r.exposure_s,
+            temp_c: r.temp_c,
+            filter: r.filter_name,
+            rotation_deg: r.rotation_deg,
+            binning: r.binning,
+            optic_train: r.optic_train,
+            source_session_id: r.source_session_id,
+            observing_night_date: r.observing_night_date,
+        })
+    }))
 }
 
 /// Load `MatchingRuleConfig` from persisted settings keys, falling back to defaults.
@@ -803,69 +687,34 @@ async fn load_config(pool: &SqlitePool) -> MatchingRuleConfig {
 pub async fn masters_list(
     pool: &SqlitePool,
 ) -> Result<Vec<contracts_core::calibration::CalibrationMaster>, String> {
-    let rows: Vec<(
-        String,         // id
-        String,         // kind
-        String,         // created_at
-        i64,            // size_bytes
-        Option<f64>,    // fp_gain
-        Option<f64>,    // fp_exposure_s
-        Option<f64>,    // fp_temp_c
-        Option<String>, // fp_filter_name
-        Option<String>, // fp_binning
-        Option<String>, // fp_optic_train (used as camera)
-        Option<String>, // source_session_id
-    )> = sqlx::query_as(
-        "SELECT id, kind, created_at, size_bytes,
-                fp_gain, fp_exposure_s, fp_temp_c, fp_filter_name, fp_binning,
-                fp_optic_train, source_session_id
-         FROM calibration_master_view
-         ORDER BY created_at DESC",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let rows = q_calibration::list_calibration_masters(pool).await.map_err(|e| e.to_string())?;
 
     let now = OffsetDateTime::now_utc();
     let masters = rows
         .into_iter()
-        .map(
-            |(
-                id,
-                kind,
-                created_at,
-                size_bytes,
-                gain,
-                exposure_s,
-                temp_c,
-                filter_name,
-                binning,
-                optic_train,
-                source_session_id,
-            )| {
-                let age_days = compute_age_days(&created_at, now);
-                let cal_kind = str_to_cal_kind(&kind);
-                contracts_core::calibration::CalibrationMaster {
-                    id: id.clone(),
-                    kind: cal_kind,
-                    fingerprint: contracts_core::calibration::CalibrationFingerprint {
-                        camera: optic_train.unwrap_or_default(),
-                        sensor_mode: None,
-                        exposure_s: exposure_s.unwrap_or(0.0),
-                        temp_c,
-                        gain: gain.unwrap_or(0.0),
-                        binning: binning.unwrap_or_else(|| "1x1".to_owned()),
-                        filter: filter_name,
-                    },
-                    source_session_id: source_session_id.unwrap_or_else(|| id.clone()),
-                    created_at,
-                    age_days,
-                    size_bytes: u64::try_from(size_bytes).unwrap_or(0),
-                    used_by_session_ids: vec![],
-                    used_by_project_ids: vec![],
-                }
-            },
-        )
+        .map(|r| {
+            let age_days = compute_age_days(&r.created_at, now);
+            let cal_kind = str_to_cal_kind(&r.kind);
+            contracts_core::calibration::CalibrationMaster {
+                id: r.id.clone(),
+                kind: cal_kind,
+                fingerprint: contracts_core::calibration::CalibrationFingerprint {
+                    camera: r.fp_optic_train.unwrap_or_default(),
+                    sensor_mode: None,
+                    exposure_s: r.fp_exposure_s.unwrap_or(0.0),
+                    temp_c: r.fp_temp_c,
+                    gain: r.fp_gain.unwrap_or(0.0),
+                    binning: r.fp_binning.unwrap_or_else(|| "1x1".to_owned()),
+                    filter: r.fp_filter_name,
+                },
+                source_session_id: r.source_session_id.unwrap_or_else(|| r.id.clone()),
+                created_at: r.created_at,
+                age_days,
+                size_bytes: u64::try_from(r.size_bytes).unwrap_or(0),
+                used_by_session_ids: vec![],
+                used_by_project_ids: vec![],
+            }
+        })
         .collect();
 
     Ok(masters)
@@ -879,89 +728,42 @@ pub async fn masters_get(
     pool: &SqlitePool,
     master_id: &str,
 ) -> Result<contracts_core::calibration::MasterDetail, String> {
-    let row: Option<(
-        String,
-        String,
-        String,
-        i64,
-        Option<f64>,
-        Option<f64>,
-        Option<f64>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-    )> = sqlx::query_as(
-        "SELECT id, kind, created_at, size_bytes,
-                fp_gain, fp_exposure_s, fp_temp_c, fp_filter_name, fp_binning,
-                fp_optic_train, source_session_id
-         FROM calibration_master_view
-         WHERE id = ?",
-    )
-    .bind(master_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let row =
+        q_calibration::get_calibration_master(pool, master_id).await.map_err(|e| e.to_string())?;
 
-    let (
-        id,
-        kind,
-        created_at,
-        size_bytes,
-        gain,
-        exposure_s,
-        temp_c,
-        filter_name,
-        binning,
-        optic_train,
-        source_session_id,
-    ) = row.ok_or_else(|| format!("master.not_found: {master_id}"))?;
+    let r = row.ok_or_else(|| format!("master.not_found: {master_id}"))?;
 
     let now = OffsetDateTime::now_utc();
-    let age_days = compute_age_days(&created_at, now);
-    let cal_kind = str_to_cal_kind(&kind);
+    let age_days = compute_age_days(&r.created_at, now);
+    let cal_kind = str_to_cal_kind(&r.kind);
 
     // Load sessions assigned to this master via calibration_assignment.
-    let used_sessions: Vec<(String,)> =
-        sqlx::query_as("SELECT session_id FROM calibration_assignment WHERE master_id = ?")
-            .bind(&id)
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default();
-    let used_by_session_ids: Vec<String> = used_sessions.into_iter().map(|(s,)| s).collect();
+    let used_by_session_ids =
+        q_calibration::list_assignment_session_ids(pool, &r.id).await.unwrap_or_default();
 
     // Load projects linked to sessions that use this master.
-    let used_projects: Vec<(String,)> = sqlx::query_as(
-        "SELECT DISTINCT ps.project_id
-         FROM project_sources ps
-         JOIN calibration_assignment ca ON ca.session_id = ps.session_id
-         WHERE ca.master_id = ?",
-    )
-    .bind(&id)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
-    let used_by_project_ids: Vec<String> = used_projects.into_iter().map(|(p,)| p).collect();
+    let used_by_project_ids =
+        q_calibration::list_assignment_project_ids(pool, &r.id).await.unwrap_or_default();
 
     let session_count = u32::try_from(used_by_session_ids.len()).unwrap_or(0);
     let project_count = u32::try_from(used_by_project_ids.len()).unwrap_or(0);
 
     Ok(contracts_core::calibration::MasterDetail {
-        id: id.clone(),
+        id: r.id.clone(),
         kind: cal_kind,
         fingerprint: contracts_core::calibration::CalibrationFingerprint {
-            camera: optic_train.unwrap_or_default(),
+            camera: r.fp_optic_train.unwrap_or_default(),
             sensor_mode: None,
-            exposure_s: exposure_s.unwrap_or(0.0),
-            temp_c,
-            gain: gain.unwrap_or(0.0),
-            binning: binning.unwrap_or_else(|| "1x1".to_owned()),
-            filter: filter_name,
+            exposure_s: r.fp_exposure_s.unwrap_or(0.0),
+            temp_c: r.fp_temp_c,
+            gain: r.fp_gain.unwrap_or(0.0),
+            binning: r.fp_binning.unwrap_or_else(|| "1x1".to_owned()),
+            filter: r.fp_filter_name,
         },
-        source_session_id: source_session_id.unwrap_or_else(|| id.clone()),
-        created_at,
+        source_session_id: r.source_session_id.unwrap_or_else(|| r.id.clone()),
+        created_at: r.created_at,
         age_days,
-        size_bytes: u64::try_from(size_bytes).unwrap_or(0),
+        size_bytes: u64::try_from(r.size_bytes).unwrap_or(0),
         used_by_session_ids,
         used_by_project_ids,
         compatible_sessions: vec![],
