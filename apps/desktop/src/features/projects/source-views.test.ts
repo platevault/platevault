@@ -15,9 +15,12 @@ import {
   viewStateVariant,
   canRemoveView,
   canRegenerateView,
+  canVerifyView,
+  brokenItemStateLabel,
   listPreparedViews,
   removePreparedView,
   regeneratePreparedView,
+  verifySourceView,
 } from './source-views';
 import type { PreparedViewSummary } from './source-views';
 
@@ -25,10 +28,11 @@ import type { PreparedViewSummary } from './source-views';
 // source-views now calls commands.preparedview* + unwrap; mock the bindings'
 // Result envelope and let the real unwrap run.
 
-const { mockList, mockRemove, mockRegenerate } = vi.hoisted(() => ({
+const { mockList, mockRemove, mockRegenerate, mockVerify } = vi.hoisted(() => ({
   mockList: vi.fn(),
   mockRemove: vi.fn(),
   mockRegenerate: vi.fn(),
+  mockVerify: vi.fn(),
 }));
 
 vi.mock('@/bindings/index', () => ({
@@ -36,6 +40,7 @@ vi.mock('@/bindings/index', () => ({
     preparedviewList: mockList,
     preparedviewRemove: mockRemove,
     preparedviewRegenerate: mockRegenerate,
+    sourceviewVerify: mockVerify,
   },
 }));
 
@@ -155,6 +160,52 @@ describe('canRegenerateView', () => {
   });
 });
 
+// ── canVerifyView / brokenItemStateLabel (spec 049 US4) ───────────────────────
+
+describe('canVerifyView', () => {
+  it('allows verification for current', () => {
+    expect(canVerifyView('current')).toBe(true);
+  });
+
+  it('allows verification for stale', () => {
+    expect(canVerifyView('stale')).toBe(true);
+  });
+
+  it('blocks verification for removed', () => {
+    expect(canVerifyView('removed')).toBe(false);
+  });
+
+  it('blocks verification for failed', () => {
+    expect(canVerifyView('failed')).toBe(false);
+  });
+
+  it('blocks verification for kind_diverged', () => {
+    expect(canVerifyView('kind_diverged')).toBe(false);
+  });
+});
+
+describe('brokenItemStateLabel', () => {
+  it('describes missing', () => {
+    expect(brokenItemStateLabel('missing')).toContain('missing');
+  });
+
+  it('describes moved', () => {
+    expect(brokenItemStateLabel('moved')).toContain('moved');
+  });
+
+  it('describes unresolved_link', () => {
+    expect(brokenItemStateLabel('unresolved_link')).toContain('resolve');
+  });
+
+  it('describes changed_kind', () => {
+    expect(brokenItemStateLabel('changed_kind')).toContain('kind');
+  });
+
+  it('falls back to the raw state string for unknown values', () => {
+    expect(brokenItemStateLabel('unknown_future_state' as never)).toBe('unknown_future_state');
+  });
+});
+
 // ── API wrappers ──────────────────────────────────────────────────────────────
 
 const sampleView: PreparedViewSummary = {
@@ -222,6 +273,42 @@ describe('regeneratePreparedView', () => {
     mockRegenerate.mockRejectedValueOnce({ code: 'view.not_found', message: 'missing' });
 
     await expect(regeneratePreparedView('gone')).rejects.toMatchObject({
+      code: 'view.not_found',
+    });
+  });
+});
+
+describe('verifySourceView', () => {
+  it('calls sourceview.verify with viewId and returns a clean result', async () => {
+    mockVerify.mockResolvedValueOnce(ok({ clean: true, brokenItems: [] }));
+
+    const result = await verifySourceView('view-1');
+
+    expect(mockVerify).toHaveBeenCalledWith('view-1');
+    expect(result.clean).toBe(true);
+    expect(result.brokenItems).toEqual([]);
+  });
+
+  it('returns broken items without throwing (read-only check)', async () => {
+    mockVerify.mockResolvedValueOnce(
+      ok({
+        clean: false,
+        brokenItems: [
+          { inventoryItemId: 'frame-1', viewRelativePath: '/dest/light1.fits', state: 'moved' },
+        ],
+      }),
+    );
+
+    const result = await verifySourceView('view-broken');
+    expect(result.clean).toBe(false);
+    expect(result.brokenItems).toHaveLength(1);
+    expect(result.brokenItems?.[0].state).toBe('moved');
+  });
+
+  it('surfaces view.not_found error', async () => {
+    mockVerify.mockRejectedValueOnce({ code: 'view.not_found', message: 'missing' });
+
+    await expect(verifySourceView('gone')).rejects.toMatchObject({
       code: 'view.not_found',
     });
   });

@@ -12,6 +12,7 @@ import { CalibrationMatching } from './CalibrationMatching';
 import { ResolverSettings } from './ResolverSettings';
 import { PlannerSettings } from './PlannerSettings';
 import { Cleanup } from './Cleanup';
+import { SourceViews } from './SourceViews';
 import { General } from './General';
 import { Advanced } from './Advanced';
 import { AuditLog } from './AuditLog';
@@ -27,6 +28,7 @@ const PANES = [
   { id: 'catalogs', label: () => m.settings_nav_pane_catalogs() },
   { id: 'planner', label: () => m.settings_nav_pane_planner() },
   { id: 'cleanup', label: () => m.settings_nav_pane_cleanup() },
+  { id: 'source-views', label: () => m.settings_nav_pane_source_views() },
   { id: 'general', label: () => m.settings_nav_pane_general() },
   { id: 'advanced', label: () => m.settings_nav_pane_advanced() },
   { id: 'audit', label: () => m.settings_nav_pane_audit() },
@@ -37,7 +39,7 @@ type PaneId = (typeof PANES)[number]['id'];
 // Grouped sub-nav (Library / Processing / Application).
 const NAV_GROUPS: { label: () => string; panes: PaneId[] }[] = [
   { label: () => m.settings_nav_group_library(), panes: ['sources', 'equipment', 'ingestion', 'naming', 'catalogs', 'planner'] },
-  { label: () => m.settings_nav_group_processing(), panes: ['tools', 'cal', 'cleanup'] },
+  { label: () => m.settings_nav_group_processing(), panes: ['tools', 'cal', 'cleanup', 'source-views'] },
   { label: () => m.settings_nav_group_application(), panes: ['general', 'advanced', 'audit'] },
 ];
 
@@ -79,6 +81,10 @@ const PANE_META: Record<PaneId, { title: () => string; desc: () => string }> = {
     title: () => m.settings_pane_cleanup_title(),
     desc: () => m.settings_pane_cleanup_desc(),
   },
+  'source-views': {
+    title: () => m.settings_pane_source_views_title(),
+    desc: () => m.settings_pane_source_views_desc(),
+  },
   general: {
     title: () => m.settings_pane_general_title(),
     desc: () => m.settings_pane_general_desc(),
@@ -107,6 +113,7 @@ function renderPane(
     case 'catalogs':  return <ResolverSettings save={save} />;
     case 'planner':   return <PlannerSettings />;
     case 'cleanup':   return <Cleanup save={save} />;
+    case 'source-views': return <SourceViews save={save} />;
     case 'general':   return <General />;
     case 'advanced':  return <Advanced save={save} />;
     case 'audit':     return <AuditLog />;

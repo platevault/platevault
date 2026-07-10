@@ -3,11 +3,15 @@
  * Spec 049 — source view generation (first-materialization) helper.
  *
  * Provides typed wrappers over `preparedview.list`, `preparedview.remove`,
- * `preparedview.regenerate`, and `sourceview.generate` Tauri commands.
+ * `preparedview.regenerate`, `sourceview.generate`, and `sourceview.verify`
+ * Tauri commands.
  *
  * All write operations return a `planId` that must be routed through the
  * standard `plans.approve` → `plan.apply` pipeline (spec 017/025).
  * Destructive destination is always `archive` (R-026-Dest-Archive).
+ *
+ * `sourceview.verify` (spec 049 US4) is read-only: it never mutates the
+ * filesystem and never auto-repairs (FR-014/FR-015).
  */
 
 import { m } from '@/lib/i18n';
@@ -109,6 +113,25 @@ export interface SourceViewGenerateResponse {
   usedCopyFallback?: boolean;
 }
 
+// ── Spec 049 US4: verify before processing ─────────────────────────────────────
+
+/** Why a single item failed verification (spec 049 US4). */
+export type BrokenItemState = 'missing' | 'moved' | 'unresolved_link' | 'changed_kind';
+
+/** One broken/missing/stale item reported by `sourceview.verify`. */
+export interface BrokenItem {
+  inventoryItemId: string;
+  viewRelativePath: string;
+  state: BrokenItemState;
+}
+
+/** Response from `sourceview.verify`. Read-only — no mutation, no auto-repair. */
+export interface SourceViewVerifyResponse {
+  /** True when every item resolved to a present canonical source (SC-006). */
+  clean: boolean;
+  brokenItems?: BrokenItem[];
+}
+
 // ── Command wrappers ──────────────────────────────────────────────────────────
 // Migrated off the hand-rolled local `invoke` onto the generated bindings +
 // unwrap (spec 037 SC-001). Runtime shapes match the local DTOs above, so the
@@ -158,6 +181,49 @@ export async function generateSourceView(
   req: SourceViewGenerateRequest,
 ): Promise<SourceViewGenerateResponse> {
   return unwrap(await commands.sourceviewGenerate(req)) as SourceViewGenerateResponse;
+}
+
+/**
+ * `sourceview.verify` (spec 049 US4) — read-only pre-processing check that
+ * every link in a generated view still resolves to a present source.
+ *
+ * Never mutates the filesystem and never auto-repairs (FR-014/FR-015);
+ * repair is via `regeneratePreparedView`.
+ */
+export async function verifySourceView(viewId: string): Promise<SourceViewVerifyResponse> {
+  return unwrap(await commands.sourceviewVerify(viewId)) as SourceViewVerifyResponse;
+}
+
+// ── Spec 049 T041: per-project destination override ────────────────────────────
+
+/** Response from `sourceview.destination.get`. `undefined`/`null` = no override persisted. */
+export interface SourceViewDestinationGetResponse {
+  destination?: string;
+}
+
+/**
+ * `sourceview.destination.get` (spec 049 T041) — read the persisted
+ * per-project destination override, if any (FR-021b).
+ */
+export async function getSourceViewDestinationOverride(
+  projectId: string,
+): Promise<SourceViewDestinationGetResponse> {
+  return unwrap(
+    await commands.sourceviewDestinationGet(projectId),
+  ) as SourceViewDestinationGetResponse;
+}
+
+/**
+ * `sourceview.destination.set` (spec 049 T041) — persist (or clear, passing
+ * `undefined`) the per-project destination override (FR-021b). Applies at
+ * the next generation unless a per-generation `destinationOverride` is also
+ * given (per-generation wins).
+ */
+export async function setSourceViewDestinationOverride(
+  projectId: string,
+  destination: string | undefined,
+): Promise<void> {
+  unwrap(await commands.sourceviewDestinationSet({ projectId, destination }));
 }
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -210,4 +276,29 @@ export function canRemoveView(state: ViewState): boolean {
 /** True when the regenerate action is available for this view state. */
 export function canRegenerateView(state: ViewState): boolean {
   return state === 'removed' || state === 'stale';
+}
+
+/**
+ * True when verify-before-processing is available for this view state
+ * (spec 049 US4) — a materialized view (`current` or `stale`) has a real
+ * destination tree on disk to check.
+ */
+export function canVerifyView(state: ViewState): boolean {
+  return state === 'current' || state === 'stale';
+}
+
+/** Human-readable reason for a broken verification item (spec 049 US4). */
+export function brokenItemStateLabel(state: BrokenItemState): string {
+  switch (state) {
+    case 'missing':
+      return m.projects_source_views_verify_state_missing();
+    case 'moved':
+      return m.projects_source_views_verify_state_moved();
+    case 'unresolved_link':
+      return m.projects_source_views_verify_state_unresolved_link();
+    case 'changed_kind':
+      return m.projects_source_views_verify_state_changed_kind();
+    default:
+      return state;
+  }
 }

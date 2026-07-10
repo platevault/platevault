@@ -149,6 +149,78 @@ fn join_portable(base: &Utf8Path, segment: &str) -> Utf8PathBuf {
     }
 }
 
+/// T042/FR-018: the classic Windows `MAX_PATH` limit (260 characters,
+/// including the drive/UNC prefix and the trailing NUL the Win32 APIs count
+/// against — so the actual usable path length is 259; a 260-character path
+/// has no room left for the NUL and already exceeds the limit). Extracted as
+/// a pure function (not gated on `cfg!(windows)`) so the length-threshold
+/// logic itself is unit-testable on every host platform — only the
+/// *emission* of the warning is Windows-only (macOS/Linux filesystems don't
+/// share this constraint).
+fn exceeds_windows_long_path_limit(path: &str) -> bool {
+    path.len() >= 260
+}
+
+// ── T041: per-project destination override (FR-021b) ───────────────────────
+//
+// Persisted as a generic settings KV row (`crates/persistence/db`'s
+// `settings` table, migration 0013) rather than a new table — this is a
+// single string per project, not a structured/typed settings field. Key
+// shape: `source_view.<project_id>.destination`.
+
+fn destination_override_key(project_id: &str) -> String {
+    format!("source_view.{project_id}.destination")
+}
+
+/// Read the persisted per-project destination override, if any (FR-021b).
+///
+/// # Errors
+///
+/// Returns an `internal.*` error on database failure.
+pub async fn get_destination_override(
+    pool: &SqlitePool,
+    project_id: &str,
+) -> Result<Option<String>, ContractError> {
+    let raw = persistence_db::repositories::settings::get_raw(
+        pool,
+        &destination_override_key(project_id),
+    )
+    .await
+    .map_err(|e| db_internal_ctx(e, "read source view destination override"))?;
+    Ok(raw.and_then(|v| v.as_str().map(str::to_owned)))
+}
+
+/// Persist (or clear, when `destination` is `None`) the per-project
+/// destination override (FR-021b).
+///
+/// # Errors
+///
+/// Returns an `internal.*` error on database failure.
+pub async fn set_destination_override(
+    pool: &SqlitePool,
+    project_id: &str,
+    destination: Option<&str>,
+) -> Result<(), ContractError> {
+    let key = destination_override_key(project_id);
+    match destination {
+        Some(dest) => {
+            persistence_db::repositories::settings::set_raw(
+                pool,
+                &key,
+                &serde_json::Value::String(dest.to_owned()),
+            )
+            .await
+            .map_err(|e| db_internal_ctx(e, "write source view destination override"))?;
+        }
+        None => {
+            persistence_db::repositories::settings::delete_key(pool, &key)
+                .await
+                .map_err(|e| db_internal_ctx(e, "clear source view destination override"))?;
+        }
+    }
+    Ok(())
+}
+
 /// A single planned link: canonical source (root + relative path) → the
 /// view-relative destination path, plus the inventory reference to carry
 /// into `PreparedSourceViewItem.inventory_item_id` on successful apply.
@@ -213,14 +285,26 @@ pub async fn generate_source_view(
     // stable view-folder slug; the DB `PreparedSourceView.id` is a distinct
     // identifier assigned at first-materialization (apply time) — the folder
     // slug does not need to equal it, only to be stable and collision-free.
+    //
+    // T041 precedence: per-generation `destinationOverride` (request) >
+    // per-project persisted override (settings KV) > envelope default.
     let plan_id = new_id();
-    let destination_root: Utf8PathBuf = req.destination_override.as_deref().map_or_else(
-        || {
-            let root = Utf8PathBuf::from(&project.path);
-            join_portable(&join_portable(&root, "source-views"), &plan_id)
-        },
-        Utf8PathBuf::from,
-    );
+    let project_destination_override = if req.destination_override.is_some() {
+        None // per-generation override already wins; skip the DB read.
+    } else {
+        get_destination_override(pool, &req.project_id).await?
+    };
+    let destination_root: Utf8PathBuf = req
+        .destination_override
+        .as_deref()
+        .or(project_destination_override.as_deref())
+        .map_or_else(
+            || {
+                let root = Utf8PathBuf::from(&project.path);
+                join_portable(&join_portable(&root, "source-views"), &plan_id)
+            },
+            Utf8PathBuf::from,
+        );
 
     for src in &sources {
         let Some((root_id, session_key, frame_ids_json)) =
@@ -429,6 +513,29 @@ pub async fn generate_source_view(
                 ErrorSeverity::Blocking,
                 false,
             ));
+        }
+    }
+
+    // T042/FR-018: on Windows, a destination path exceeding the classic
+    // 260-character limit is surfaced as a warning (not a failure — some
+    // destinations opt into long-path support) rather than producing a
+    // truncated tree. Windows-specific: macOS/Linux filesystems don't share
+    // this constraint.
+    if cfg!(windows) {
+        let mut long_paths: BTreeSet<String> = BTreeSet::new();
+        for item in &planned {
+            let abs = join_portable(&destination_root, item.dest_relative.as_str());
+            if exceeds_windows_long_path_limit(abs.as_str()) {
+                long_paths.insert(abs.into_string());
+            }
+        }
+        if !long_paths.is_empty() {
+            warnings.push(GenerationWarning {
+                code: GenerationWarningCode::LongPath,
+                message: "one or more destination paths exceed the Windows 260-character limit"
+                    .to_owned(),
+                items: long_paths.into_iter().collect(),
+            });
         }
     }
 
@@ -1000,5 +1107,97 @@ mod tests {
             .expect("partial coverage must still surface a warning");
         assert!(warning.items.contains(&"sess2".to_owned()));
         assert!(!warning.items.contains(&"sess1".to_owned()));
+    }
+
+    // ── T041: per-project destination override (FR-021b) ────────────────────
+
+    #[tokio::test]
+    async fn destination_override_roundtrips_and_defaults_to_none() {
+        let db = setup().await;
+        insert_project(&db, "p1", "ready", "/tmp/proj-override").await;
+
+        assert_eq!(get_destination_override(db.pool(), "p1").await.unwrap(), None);
+
+        set_destination_override(db.pool(), "p1", Some("/custom/dest")).await.unwrap();
+        assert_eq!(
+            get_destination_override(db.pool(), "p1").await.unwrap(),
+            Some("/custom/dest".to_owned())
+        );
+
+        // Clearing (None) removes the override.
+        set_destination_override(db.pool(), "p1", None).await.unwrap();
+        assert_eq!(get_destination_override(db.pool(), "p1").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn generate_uses_persisted_project_override_when_no_per_generation_override() {
+        let db = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let project_path = format!("{}/proj", dir.path().to_str().unwrap());
+        std::fs::create_dir_all(&project_path).unwrap();
+        insert_project(&db, "p1", "ready", &project_path).await;
+        insert_root(&db, "root1", dir.path().to_str().unwrap()).await;
+        std::fs::write(format!("{}/light1.fits", dir.path().to_str().unwrap()), b"x").unwrap();
+        insert_file_record(&db, "frame1", "root1", "light1.fits").await;
+        insert_acquisition_session(&db, "sess1", "root1", &["frame1"]).await;
+        link_project_source(&db, "p1", "sess1").await;
+
+        let custom_dest = format!("{}/custom-dest", dir.path().to_str().unwrap());
+        set_destination_override(db.pool(), "p1", Some(&custom_dest)).await.unwrap();
+
+        let resp = generate_source_view(db.pool(), &req("p1")).await.unwrap();
+        let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+        let link_item = items.iter().find(|i| i.action == "link").unwrap();
+        assert!(
+            link_item.to_relative_path.starts_with(&custom_dest),
+            "expected destination under the persisted override, got {}",
+            link_item.to_relative_path
+        );
+    }
+
+    #[tokio::test]
+    async fn generate_per_generation_override_wins_over_persisted_project_override() {
+        let db = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let project_path = format!("{}/proj", dir.path().to_str().unwrap());
+        std::fs::create_dir_all(&project_path).unwrap();
+        insert_project(&db, "p1", "ready", &project_path).await;
+        insert_root(&db, "root1", dir.path().to_str().unwrap()).await;
+        std::fs::write(format!("{}/light1.fits", dir.path().to_str().unwrap()), b"x").unwrap();
+        insert_file_record(&db, "frame1", "root1", "light1.fits").await;
+        insert_acquisition_session(&db, "sess1", "root1", &["frame1"]).await;
+        link_project_source(&db, "p1", "sess1").await;
+
+        let project_dest = format!("{}/project-dest", dir.path().to_str().unwrap());
+        set_destination_override(db.pool(), "p1", Some(&project_dest)).await.unwrap();
+        let per_gen_dest = format!("{}/per-gen-dest", dir.path().to_str().unwrap());
+
+        let mut request = req("p1");
+        request.destination_override = Some(per_gen_dest.clone());
+        let resp = generate_source_view(db.pool(), &request).await.unwrap();
+        let items = plans_repo::list_plan_items(db.pool(), &resp.plan_id).await.unwrap();
+        let link_item = items.iter().find(|i| i.action == "link").unwrap();
+        assert!(
+            link_item.to_relative_path.starts_with(&per_gen_dest),
+            "expected per-generation override to win, got {}",
+            link_item.to_relative_path
+        );
+        assert!(!link_item.to_relative_path.starts_with(&project_dest));
+    }
+
+    // ── T042/FR-018: Windows long-path threshold ─────────────────────────────
+
+    #[test]
+    fn exceeds_windows_long_path_limit_is_false_at_and_below_259() {
+        // 259 is the last usable length — the 260th slot is reserved for the
+        // Win32 trailing NUL.
+        assert!(!exceeds_windows_long_path_limit(&"a".repeat(259)));
+        assert!(!exceeds_windows_long_path_limit("a"));
+    }
+
+    #[test]
+    fn exceeds_windows_long_path_limit_is_true_at_and_above_260() {
+        assert!(exceeds_windows_long_path_limit(&"a".repeat(260)));
+        assert!(exceeds_windows_long_path_limit(&"a".repeat(261)));
     }
 }
