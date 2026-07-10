@@ -61,6 +61,7 @@ import type {
   AuditListResponse,
   AuditFilterDto,
   AuditPaginationDto,
+  InventoryReconcileRunResponse,
 } from '@/bindings/index';
 
 export type {
@@ -85,6 +86,7 @@ export type {
   CreateFilter,
   UpdateFilter,
   RemapVerification,
+  InventoryReconcileRunResponse,
 };
 export type { PatternPartDto as PatternPart };
 export type { PatternValidateResponse, PatternPreviewResponse, PathPatternPreviewResponse };
@@ -194,6 +196,17 @@ export async function rescanRoot(args: {
       rootAbsolutePath: args.rootAbsolutePath,
       followSymlinks: false,
     }),
+  );
+}
+
+/**
+ * `inventory.reconcile.run` — run an on-demand per-frame reconciliation pass
+ * over a root (spec 048 T022). Read-only walk: reports `missing`/`recovered`/
+ * `size_backfilled` counts, never mutates a file.
+ */
+export async function reconcileRoot(args: { rootId: string }): Promise<InventoryReconcileRunResponse> {
+  return unwrap(
+    await commands.inventoryReconcileRun({ rootId: args.rootId, reason: 'on_demand' }),
   );
 }
 

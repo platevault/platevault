@@ -7,6 +7,7 @@ import {
   listRoots,
   registerRoot,
   rescanRoot,
+  reconcileRoot,
   setRootActive,
   deleteRoot,
   settingsSourceOverrideSet,
@@ -16,6 +17,8 @@ import type { LibraryRoot } from '@/bindings/types';
 import type { RootCategory } from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
+import { queryClient } from '@/data/queryClient';
+import { queryKeys } from '@/data/queryKeys';
 import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
 import { RemapRootDialog } from './RemapRootDialog';
@@ -57,6 +60,10 @@ export function DataSources({ save: _save }: DataSourcesProps) {
 
   // ── Rescan (P6a) ──────────────────────────────────────────────────────────
   const [rescanningId, setRescanningId] = useState<string | null>(null);
+
+  // ── Reconcile (spec 048 T022) ─────────────────────────────────────────────
+  const [reconcilingId, setReconcilingId] = useState<string | null>(null);
+  const [reconcileError, setReconcileError] = useState<string | null>(null);
 
   // ── Remap dialog (P6a) ────────────────────────────────────────────────────
   const [remapRoot, setRemapRoot] = useState<LibraryRoot | null>(null);
@@ -152,6 +159,35 @@ export function DataSources({ save: _save }: DataSourcesProps) {
       console.error('Rescan failed:', errMessage(err));
     } finally {
       setRescanningId(null);
+    }
+  };
+
+  // Per-frame reconcile (missing/recovered/size-backfill) only applies to
+  // raw/calibration roots — those are the categories `file_record` rows are
+  // populated for (light + calibration frame apply). The command exists on
+  // `commands.inventoryReconcileRun` but had zero frontend callers before this
+  // (`git grep -rl inventoryReconcileRun apps/desktop/src` matched only the
+  // generated bindings) — session/inventory frame counts could only refresh
+  // by waiting out the 30s default query `staleTime`. Two independent readers
+  // need invalidating: `sessions.all()` backs `SessionSourcePicker` (real-UI
+  // journey evidence: its frame count goes stale after reconcile) and the
+  // `["inventory"]` prefix backs the Sessions/Inventory page's own query
+  // (`useInventorySources`, `sessions/store.ts`) — same invalidation the
+  // existing `useInvalidateInventory()` hook there performs.
+  const handleReconcile = async (root: LibraryRoot) => {
+    setReconcilingId(root.id);
+    setReconcileError(null);
+    try {
+      await reconcileRoot({ rootId: root.id });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all() }),
+        queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+      ]);
+      loadRoots();
+    } catch (err: unknown) {
+      setReconcileError(errMessage(err));
+    } finally {
+      setReconcilingId(null);
     }
   };
 
@@ -292,6 +328,12 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         </div>
       )}
 
+      {reconcileError && (
+        <div className="alm-data-sources__add-error">
+          {m.settings_datasources_reconcile_error({ error: reconcileError })}
+        </div>
+      )}
+
       {grouped.map(({ category, roots: groupRoots }) => (
         <div key={category} className="alm-data-sources__group">
           <h4 className="alm-data-sources__group-label">
@@ -303,6 +345,8 @@ export function DataSources({ save: _save }: DataSourcesProps) {
               root={root}
               onRescan={handleRescan}
               rescanning={rescanningId === root.id}
+              onReconcile={handleReconcile}
+              reconciling={reconcilingId === root.id}
               onRemap={setRemapRoot}
               onToggleActive={requestToggleActive}
               togglingActive={togglingActiveId === root.id}
@@ -437,10 +481,16 @@ export function DataSources({ save: _save }: DataSourcesProps) {
 
 // ── Per-root card ─────────────────────────────────────────────────────────────
 
+// Categories `file_record` rows are populated for (spec 048) — the only
+// roots a reconcile pass has anything to diff against.
+const RECONCILABLE_CATEGORIES: RootCategory[] = ['raw', 'calibration'];
+
 interface RootCardProps {
   root: LibraryRoot;
   onRescan: (root: LibraryRoot) => void;
   rescanning: boolean;
+  onReconcile: (root: LibraryRoot) => void;
+  reconciling: boolean;
   onRemap: (root: LibraryRoot) => void;
   onToggleActive: (root: LibraryRoot) => void;
   togglingActive: boolean;
@@ -452,6 +502,8 @@ function RootCard({
   root,
   onRescan,
   rescanning,
+  onReconcile,
+  reconciling,
   onRemap,
   onToggleActive,
   togglingActive,
@@ -507,6 +559,11 @@ function RootCard({
         {!isOffline && (
           <Btn size="sm" onClick={() => onRescan(root)} disabled={rescanning}>
             {rescanning ? m.common_rescanning() : m.common_rescan()}
+          </Btn>
+        )}
+        {!isOffline && RECONCILABLE_CATEGORIES.includes(root.category) && (
+          <Btn size="sm" onClick={() => onReconcile(root)} disabled={reconciling}>
+            {reconciling ? m.common_reconciling() : m.common_reconcile()}
           </Btn>
         )}
         {!isOffline && (

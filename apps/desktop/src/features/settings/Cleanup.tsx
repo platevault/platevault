@@ -8,7 +8,7 @@
 // `"Delete"`. Loaded via the same `settings.get('cleanup')` call as the rest
 // of this pane and saved via the same `save()` prop, so changes are audited
 // (FR-007).
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { Toggle, SegControl, Pill, Banner } from '@/ui';
 import { getSettings } from './settingsIpc';
 import { CLEANUP_TYPES, CLEANUP_STAGE_ORDER, type CleanupTypeFixture } from '@/data/fixtures/settings';
@@ -76,12 +76,19 @@ export function Cleanup({ save }: CleanupProps) {
     }
   };
 
+  // Guards the mount-time fetch below against clobbering a user edit that
+  // happens while it's still in flight: the fetch has no way to know its
+  // response is stale once the user has already changed something, so it
+  // must check this ref (not just `cancelled`, which only covers unmount)
+  // before applying its (now-outdated) snapshot.
+  const editedRef = useRef(false);
+
   // Load persisted values from backend on mount (T015).
   useEffect(() => {
     let cancelled = false;
     getSettings({ scope: 'cleanup' })
       .then((data) => {
-        if (cancelled) return;
+        if (cancelled || editedRef.current) return;
         applyValues(data.values as Record<string, unknown>);
       })
       .catch(() => {
@@ -95,6 +102,7 @@ export function Cleanup({ save }: CleanupProps) {
 
   // ── Per-type action table — database-backed (spec 051 US3, T023) ─────────
   const handleTableChange = (id: number, action: string) => {
+    editedRef.current = true;
     setActions((prev) => {
       const next = { ...prev, [id]: action as CleanupAction };
       save('cleanup', { cleanupTypeOverrides: serializeCleanupTypeOverrides(next) });
@@ -128,6 +136,7 @@ export function Cleanup({ save }: CleanupProps) {
           <Toggle
             checked={blockPermanentDelete}
             onChange={(v) => {
+              editedRef.current = true;
               setBlockPermanentDelete(v);
               save('cleanup', { blockPermanentDelete: v });
             }}
@@ -142,6 +151,7 @@ export function Cleanup({ save }: CleanupProps) {
             className="alm-select alm-cleanup__protection-select"
             value={defaultProtection}
             onChange={(e) => {
+              editedRef.current = true;
               const v = e.target.value as DefaultProtection;
               setDefaultProtection(v);
               save('cleanup', { defaultProtection: v });
