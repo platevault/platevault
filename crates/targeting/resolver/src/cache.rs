@@ -539,7 +539,8 @@ pub async fn list_all(pool: &SqlitePool) -> CacheResult<Vec<TargetListRow>> {
 
     rows.into_iter()
         .map(|row| {
-            let id = Uuid::parse_str(&row.id).map_err(|e| CacheError::InvalidUuid(row.id.clone(), e))?;
+            let id =
+                Uuid::parse_str(&row.id).map_err(|e| CacheError::InvalidUuid(row.id.clone(), e))?;
             let aliases = aliases_by_id.remove(&row.id).unwrap_or_default();
             Ok(TargetListRow {
                 id,
@@ -579,8 +580,7 @@ pub async fn insert_user_alias(
     let alias_id = Uuid::new_v4().to_string();
     let target_id_str = target_id.to_string();
     let rows_affected =
-        q_resolver::insert_user_alias(pool, &alias_id, &target_id_str, alias, &normalized)
-            .await?;
+        q_resolver::insert_user_alias(pool, &alias_id, &target_id_str, alias, &normalized).await?;
 
     if rows_affected == 0 {
         // Alias already exists — return the existing id.

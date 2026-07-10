@@ -233,9 +233,8 @@ pub async fn list_all_target_aliases(pool: &SqlitePool) -> DbResult<Vec<TargetAl
 ///
 /// Returns [`crate::DbError::Database`] on query failure.
 pub async fn count_canonical_targets(pool: &SqlitePool) -> DbResult<i64> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM canonical_target")
-        .fetch_one(pool)
-        .await?;
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM canonical_target").fetch_one(pool).await?;
     Ok(count)
 }
 
