@@ -150,13 +150,15 @@ fn join_portable(base: &Utf8Path, segment: &str) -> Utf8PathBuf {
 }
 
 /// T042/FR-018: the classic Windows `MAX_PATH` limit (260 characters,
-/// including the drive/UNC prefix and trailing NUL the Win32 APIs count
-/// against). Extracted as a pure function (not gated on `cfg!(windows)`) so
-/// the length-threshold logic itself is unit-testable on every host platform
-/// — only the *emission* of the warning is Windows-only (macOS/Linux
-/// filesystems don't share this constraint).
+/// including the drive/UNC prefix and the trailing NUL the Win32 APIs count
+/// against — so the actual usable path length is 259; a 260-character path
+/// has no room left for the NUL and already exceeds the limit). Extracted as
+/// a pure function (not gated on `cfg!(windows)`) so the length-threshold
+/// logic itself is unit-testable on every host platform — only the
+/// *emission* of the warning is Windows-only (macOS/Linux filesystems don't
+/// share this constraint).
 fn exceeds_windows_long_path_limit(path: &str) -> bool {
-    path.len() > 260
+    path.len() >= 260
 }
 
 // ── T041: per-project destination override (FR-021b) ───────────────────────
@@ -1186,13 +1188,16 @@ mod tests {
     // ── T042/FR-018: Windows long-path threshold ─────────────────────────────
 
     #[test]
-    fn exceeds_windows_long_path_limit_is_false_at_and_below_260() {
-        assert!(!exceeds_windows_long_path_limit(&"a".repeat(260)));
+    fn exceeds_windows_long_path_limit_is_false_at_and_below_259() {
+        // 259 is the last usable length — the 260th slot is reserved for the
+        // Win32 trailing NUL.
+        assert!(!exceeds_windows_long_path_limit(&"a".repeat(259)));
         assert!(!exceeds_windows_long_path_limit("a"));
     }
 
     #[test]
-    fn exceeds_windows_long_path_limit_is_true_above_260() {
+    fn exceeds_windows_long_path_limit_is_true_at_and_above_260() {
+        assert!(exceeds_windows_long_path_limit(&"a".repeat(260)));
         assert!(exceeds_windows_long_path_limit(&"a".repeat(261)));
     }
 }

@@ -38,29 +38,23 @@ struct SourceResolution {
 }
 
 async fn resolve_source(pool: &SqlitePool, inventory_item_id: &str) -> SourceResolution {
-    let Ok(Some((root_id, relative_path, state))) = sqlx::query_as::<_, (String, String, String)>(
-        "SELECT root_id, relative_path, state FROM file_record WHERE id = ?",
-    )
-    .bind(inventory_item_id)
-    .fetch_optional(pool)
-    .await
-    else {
+    use persistence_db::repositories::inventory;
+
+    let Ok(Some(record)) = inventory::get_file_record_lookup(pool, inventory_item_id).await else {
         return SourceResolution { abs_path: None, source_gone: true };
     };
 
-    if state == "missing" || state == "rejected" {
+    if record.state == "missing" || record.state == "rejected" {
         return SourceResolution { abs_path: None, source_gone: true };
     }
 
-    let root_path = persistence_db::repositories::inventory::get_library_root_path(pool, &root_id)
-        .await
-        .unwrap_or(None);
+    let root_path = inventory::get_library_root_path(pool, &record.root_id).await.unwrap_or(None);
     let Some(root_path) = root_path else {
         return SourceResolution { abs_path: None, source_gone: true };
     };
 
     SourceResolution {
-        abs_path: Some(camino::Utf8PathBuf::from(root_path).join(&relative_path)),
+        abs_path: Some(camino::Utf8PathBuf::from(root_path).join(&record.relative_path)),
         source_gone: false,
     }
 }

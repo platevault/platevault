@@ -365,6 +365,33 @@ pub async fn get_library_root_state(pool: &SqlitePool, root_id: &str) -> DbResul
     Ok(row.map(|(s,)| s))
 }
 
+/// Minimal `file_record` fields needed to resolve a canonical source's
+/// current path + presence for verification (spec 049 US4).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct FileRecordLookupRow {
+    pub root_id: String,
+    pub relative_path: String,
+    pub state: String,
+}
+
+/// Look up a `file_record` row by id (spec 049 `sourceview.verify`'s
+/// read-only source-resolution step). Returns `None` when no row exists.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_file_record_lookup(
+    pool: &SqlitePool,
+    file_record_id: &str,
+) -> DbResult<Option<FileRecordLookupRow>> {
+    let row = sqlx::query_as::<_, FileRecordLookupRow>(
+        "SELECT root_id, relative_path, state FROM file_record WHERE id = ?",
+    )
+    .bind(file_record_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
