@@ -163,3 +163,15 @@ mechanism itself.
   real SIMBAD endpoint by design, not re-gated, flagged as a separate
   backlog item). SPEC_STATUS 037 row flipped to effectively complete
   (35/40; 5 open are deliberate SUPERSEDED decisions, not gaps).
+- **Lane nF merged (2026-07-09).** #535 (`de28d844`) closed out spec 049's
+  US4 verify chain end-to-end: contract + read-only `VerifySourceView` use
+  case + DTOs + `sourceview_verify` command + UI action, a Settings →
+  Source Views pane, per-project/per-generation destination overrides, and
+  a Windows long-path warning. T031 (per-frame selection) parked with an
+  honest blocked-on-external-048 note (048's `inventory.frame.*` contract
+  isn't merged yet — #500/#503/#507 still open); the deferred
+  materialization-summary UX item was confirmed already covered by #490.
+  SPEC_STATUS 049 row updated to 41/46.
+- **Lane nG spawned (2026-07-09).** Spec 026 (generated-source-view-removal)
+  stale-detection + audit tail, building on #535's verify machinery
+  (`source_view_verify.rs`).
