@@ -19,14 +19,25 @@
  * Moon geometry — real lunar distance, per-band filter guidance, and next
  * opposition — is spec 047 Track A and lives in `astro/row-planning.ts`
  * (`RowMoonPlanning`, computed from the shared `ObservingNight` + catalogued
- * RA/Dec), NOT in this module. This module owns tonight altitude / imaging time
- * only.
+ * RA/Dec), NOT in this module. This module owns tonight altitude / imaging time.
+ *
+ * US2/US5 (T024/T027-T029): also exposes `bestDate` (FR-009), the three real
+ * target↔Moon separation scalars, and per-band moon-free minutes for the
+ * chosen `(site, date)` — thin pass-through of `planner-derive.ts`'s
+ * `DerivedObservability`, not a second computation.
  */
 
 import type { TargetListItem } from '@/bindings/index';
 import type { ObserverSite } from './observing-sites/observer-site';
 import { activeSite } from './observing-sites/site-store';
-import { deriveObservability, getNightObservability } from './planner-derive';
+import {
+  deriveObservability,
+  getNightObservability,
+  UNKNOWN_SEPARATION_SCALARS,
+  type BestImagingDate,
+  type SeparationScalars,
+} from './planner-derive';
+import { BANDS, DEFAULT_MOON_AVOIDANCE, type Band, type MoonAvoidanceParams } from './astro/moon-avoidance';
 
 /**
  * Default usable-altitude threshold (degrees above horizon for imaging).
@@ -61,13 +72,44 @@ export interface RowAltitude {
   needsCoordinates: boolean;
   /** T013/US6: true when there is no active observing site. */
   needsSite: boolean;
+  /** Date the target transits at local midnight (US2, FR-009); `null` = unknown coordinates. */
+  bestDate: BestImagingDate | null;
+  /** Three real target↔Moon separation reference figures (US5, FR-020). */
+  separationScalars: SeparationScalars;
+  /** Per-band moon-free imaging minutes for the chosen night (US5, FR-022). */
+  moonFreeMinutesByBand: Record<Band, number>;
+  /**
+   * US4/T033: true when the site/date has no qualifying dark window under the
+   * chosen twilight (e.g. high-latitude summer) — total/per-band imaging time
+   * is correctly zero, but the UI MUST disclose the reason rather than
+   * implying the target is simply too low (FR-017). Always `false` in the
+   * degrade states (no astronomy is attempted there at all).
+   */
+  noDarkWindow: boolean;
+  /**
+   * The dark window's `[startHour, endHour]` on the SAME `tHour` axis as
+   * `points` (T035: lets the detail-pane graph shade twilight vs dark);
+   * `null` when there is no dark window (`noDarkWindow`) or in the degrade
+   * states.
+   */
+  darkWindowHours: { startHour: number; endHour: number } | null;
 }
+
+const ZERO_BY_BAND: Record<Band, number> = Object.fromEntries(BANDS.map((b) => [b, 0])) as Record<
+  Band,
+  number
+>;
 
 const DEGRADE_ROW: Omit<RowAltitude, 'needsCoordinates' | 'needsSite'> = {
   points: [],
   maxAltDeg: 0,
   hoursAboveUsable: 0,
   visibleTonight: false,
+  bestDate: null,
+  separationScalars: UNKNOWN_SEPARATION_SCALARS,
+  moonFreeMinutesByBand: ZERO_BY_BAND,
+  noDarkWindow: false,
+  darkWindowHours: null,
 };
 
 /** A minimal shape sufficient to compute tonight observability (T012 fallback reuse). */
@@ -93,13 +135,30 @@ export interface AltitudeSubject {
  * @param site - The observer site to compute against. Defaults to the
  *   currently active site (`site-store.ts`); pass `null` explicitly to force
  *   the no-site degrade state.
- * @param dateMs - Any epoch-ms instant on the observing night. Defaults to now.
+ * @param dateMs - Any epoch-ms instant on the observing night. Defaults to now
+ *   ("tonight"); pass the Planner's chosen date (`planner-date-store.ts`,
+ *   US2/T024) to plan an arbitrary future night.
+ * @param moonAvoidanceParams - Active per-band Moon-avoidance parameters
+ *   (Track A, Settings → Target Planner) for `moonFreeMinutesByBand` (US5).
+ *   Defaults to the shipped table; prefer `useGuidanceParams()` from the host
+ *   page so a live settings edit recomputes moon-free hours (SC-008).
+ * @param includeMoonGeometry - Pass `false` for a full-catalogue sort/group
+ *   pass (`TargetsTable.tsx`'s pre-virtualization `useMemo`, potentially
+ *   thousands of rows) — computing the Moon time-series for every row there
+ *   is a real perf cliff (found via a Layer-2 CI timeout against the full
+ *   ~13k-entry bundled seed catalogue). Defaults to `true` (single-target
+ *   callers: `TargetDetailV2`, and the per-visible-row recompute for
+ *   `GuidanceCell`). `false` zeroes `separationScalars`/`moonFreeMinutesByBand`
+ *   (never fabricating a non-zero value) — `bestDate` is unaffected, it's
+ *   cheap (Sun-RA-table based) and always computed regardless of this flag.
  */
 export function altitudeFor(
   subject: AltitudeSubject,
   usableAltDeg: number = USABLE_ALT_DEG,
   site: ObserverSite | null | undefined = activeSite(),
   dateMs: number = Date.now(),
+  moonAvoidanceParams: MoonAvoidanceParams = DEFAULT_MOON_AVOIDANCE,
+  includeMoonGeometry = true,
 ): RowAltitude {
   const needsCoordinates = subject.raDeg === null || subject.decDeg === null;
   const needsSite = !site;
@@ -107,8 +166,20 @@ export function altitudeFor(
     return { ...DEGRADE_ROW, needsCoordinates, needsSite };
   }
 
-  const night = getNightObservability(subject.id, subject.raDeg, subject.decDeg, site, dateMs);
-  const derived = deriveObservability(night, usableAltDeg);
+  const night = getNightObservability(
+    subject.id,
+    subject.raDeg,
+    subject.decDeg,
+    site,
+    dateMs,
+    includeMoonGeometry,
+  );
+  const derived = deriveObservability(night, usableAltDeg, {
+    raDegJ2000: subject.raDeg,
+    minHorizonAltDeg: site.minHorizonAltDeg,
+    moonAvoidanceParams,
+    bestDateFromMs: dateMs,
+  });
   const points: AltPoint[] = night.samples.map((s) => ({
     tHour: (s.tMs - night.nightStartMs) / 3_600_000,
     altDeg: s.altDeg,
@@ -120,6 +191,16 @@ export function altitudeFor(
     visibleTonight: derived.visibleTonight,
     needsCoordinates: false,
     needsSite: false,
+    bestDate: derived.bestDate,
+    separationScalars: derived.separationScalars,
+    moonFreeMinutesByBand: derived.moonFreeMinutesByBand,
+    noDarkWindow: night.darkWindow === null,
+    darkWindowHours: night.darkWindow
+      ? {
+          startHour: (night.darkWindow.startMs - night.nightStartMs) / 3_600_000,
+          endHour: (night.darkWindow.endMs - night.nightStartMs) / 3_600_000,
+        }
+      : null,
   };
 }
 
@@ -131,16 +212,31 @@ export function altitudeFor(
  * @param usableAltDeg - See {@link altitudeFor}.
  * @param site - See {@link altitudeFor}. Defaults to the active site.
  * @param dateMs - See {@link altitudeFor}. Defaults to now ("tonight").
+ * @param moonAvoidanceParams - See {@link altitudeFor}.
+ * @param includeMoonGeometry - See {@link altitudeFor}. Defaults to `true`;
+ *   callers doing a full-catalogue pass MUST pass `false`.
  *
  * Memoization of the underlying positions is `planner-derive.ts`'s job
- * (per target/site/day); this function itself is cheap enough to call inline
- * from render/sort/group code without an extra memo layer.
+ * (per target/site/day/`includeMoonGeometry`); this function itself is cheap
+ * enough to call inline from render/sort/group code without an extra memo
+ * layer — PROVIDED `includeMoonGeometry` is `false` for a full-catalogue pass
+ * (see {@link altitudeFor}'s doc for why: the Moon time-series alone is not
+ * cheap at catalogue scale).
  */
 export function rowAltitudeFor(
   t: TargetListItem,
   usableAltDeg: number = USABLE_ALT_DEG,
   site: ObserverSite | null | undefined = activeSite(),
   dateMs: number = Date.now(),
+  moonAvoidanceParams: MoonAvoidanceParams = DEFAULT_MOON_AVOIDANCE,
+  includeMoonGeometry = true,
 ): RowAltitude {
-  return altitudeFor({ id: t.id, raDeg: t.raDeg, decDeg: t.decDeg }, usableAltDeg, site, dateMs);
+  return altitudeFor(
+    { id: t.id, raDeg: t.raDeg, decDeg: t.decDeg },
+    usableAltDeg,
+    site,
+    dateMs,
+    moonAvoidanceParams,
+    includeMoonGeometry,
+  );
 }

@@ -37,11 +37,12 @@
  *
  * Task #85 — PLANNING COLUMNS:
  *   The low-value Constellation/Magnitude columns are replaced with
- *   planning-relevant ones driven by the STUB altitude model (planner-altitude.ts):
- *   max altitude tonight, a tiny inline opposition/altitude SPARKLINE per row, and
- *   a visible-tonight indicator. STUB — real values arrive with ephemeris +
- *   observer location (#58); the list endpoint has no coordinates (#57), so these
- *   are derived deterministically from the designation, not from the sky.
+ *   planning-relevant ones driven by the real per-site ephemeris
+ *   (`planner-altitude.ts`/`planner-astronomy.ts`, spec 044 Track B,
+ *   astronomy-engine): max altitude tonight, a tiny inline altitude SPARKLINE
+ *   per row, and a visible-tonight indicator, all computed from the target's
+ *   real J2000 coordinates and the active observing site — never derived from
+ *   the designation.
  *
  * Spec 047 real Track-A astronomy columns (date/time + catalogued RA/Dec only;
  * replaces the former spec 044 §3 mock columns):
@@ -52,8 +53,8 @@
  *     hover/focus explanation popover.
  *   - Opposition: real next-opposition date (US4, `astro/opposition.ts`),
  *     date-level + relative "in N days/months"; unknown → "—".
- *   - Imaging time: hours above the user-configured altitude threshold tonight
- *     (Track B placeholder per FR-015 — unchanged).
+ *   - Imaging time: real hours above the user-configured altitude threshold
+ *     tonight (spec 044 Track B, dark-window-gated).
  *   All are SORTABLE; the usable-altitude threshold is configurable via Settings.
  *
  * Task #82:
@@ -90,6 +91,7 @@ import { m } from '@/lib/i18n';
 import { useFavourites } from './useFavourites';
 import { useActiveSite } from './observing-sites/site-store';
 import type { ObserverSite } from './observing-sites/observer-site';
+import { usePlannerDateMs } from './planner-date-store';
 import {
   groupByDimensions,
   flattenVisibleGroups,
@@ -238,11 +240,15 @@ function groupTargets(
   site: ObserverSite | null,
   night: ObservingNight | null,
   guidanceParams: MoonAvoidanceParams,
+  dateMs: number,
 ): TargetGroup[] {
   const byKey = new Map<string, Array<{ target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning }>>();
   for (const t of targets) {
     const key = groupHeadlineOf(t, groupBy);
-    const alt = rowAltitudeFor(t, usableAltDeg, site);
+    // includeMoonGeometry=false: this pass runs over the FULL (possibly
+    // ~13k-entry) catalogue for sort/group — the Moon time-series is only
+    // computed per visible row at render time (see the row-render loop).
+    const alt = rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false);
     const moon = deriveRowMoonPlanning(t, night, guidanceParams);
     const bucket = byKey.get(key);
     if (bucket) bucket.push({ target: t, alt, moon });
@@ -350,7 +356,7 @@ const COLUMNS: Array<{
   { key: 'star', label: () => '★', className: 'alm-targets-cell--center', title: () => m.targets_col_favourite() },
   { key: 'designation', label: () => m.targets_col_designation(), sort: 'designation' },
   { key: 'type', label: () => m.cmp_target_search_type_label(), sort: 'type' },
-  { key: 'maxAlt', label: () => m.targets_col_max_alt(), sort: 'maxAlt', className: 'alm-targets-cell--num', title: () => m.targets_table_approx_max_alt() },
+  { key: 'maxAlt', label: () => m.targets_col_max_alt(), sort: 'maxAlt', className: 'alm-targets-cell--num', title: () => m.targets_table_max_alt_title() },
   { key: 'spark', label: () => m.targets_col_tonight(), className: 'alm-targets-cell--spark' },
   { key: 'visible', label: () => m.targets_col_visible(), sort: 'visible', className: 'alm-targets-cell--center', title: () => m.targets_col_visible_title() },
   { key: 'opposition', label: () => m.targets_col_opposition(), sort: 'opposition', className: 'alm-targets-cell--opposition', title: () => m.targets_table_next_opposition() },
@@ -459,6 +465,11 @@ export function TargetsTable({
   // banner below prompts the user to add one.
   const site = useActiveSite();
 
+  // US2/T024: the Planner's chosen date (defaults to "tonight", never
+  // persisted — FR-008). Every rowAltitudeFor call below reads it so choosing
+  // a different date recomputes the whole table (SC-004).
+  const dateMs = usePlannerDateMs();
+
   // Grouping + sorting + per-row altitude are all derived here so a filter
   // or sort change does one O(n) pass off the render hot path, not per-row work
   // inside the virtualized render loop. usableAltDeg + site are included in the
@@ -472,10 +483,12 @@ export function TargetsTable({
 
   const flatRows = useMemo(() => {
     if (useMultiGroup) {
-      // Pre-compute altitude + moon planning for all items (needed for sort + display).
+      // Pre-compute altitude + moon planning for all items (needed for sort +
+      // display). includeMoonGeometry=false: full-catalogue pass, see the
+      // legacy-path comment below for why.
       const withAlt = targets.map((t) => ({
         target: t,
-        alt: rowAltitudeFor(t, usableAltDeg, site),
+        alt: rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false),
         moon: deriveRowMoonPlanning(t, night, guidanceParams),
       }));
       // Sort the flat list first.
@@ -508,7 +521,7 @@ export function TargetsTable({
           kind: 'target',
           key: t.id,
           target: t,
-          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg, site),
+          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false),
           moon: moonMap.get(t.id) ?? UNKNOWN_ROW_PLANNING,
           depth: vrow.depth,
         };
@@ -516,13 +529,17 @@ export function TargetsTable({
     }
     // Single-tier legacy grouping ONLY if a caller explicitly asks for it.
     if (groupBy) {
-      const groups = groupTargets(targets, sort, groupBy, usableAltDeg, site, night, guidanceParams);
+      const groups = groupTargets(targets, sort, groupBy, usableAltDeg, site, night, guidanceParams, dateMs);
       return flattenGroups(groups);
     }
     // Default: no grouping selected → FLAT sorted list (no group headers).
+    // includeMoonGeometry=false: this is a full-catalogue pass (potentially
+    // ~13k rows pre-filter/pre-windowing) needed only for sort — the real
+    // Moon time-series is computed per visible row at render time instead
+    // (a real Layer-2 CI perf regression otherwise: see rowAltitudeFor's doc).
     const withAlt = targets.map((t) => ({
       target: t,
-      alt: rowAltitudeFor(t, usableAltDeg, site),
+      alt: rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false),
       moon: deriveRowMoonPlanning(t, night, guidanceParams),
     }));
     const sortedWithAlt = [...withAlt].sort((a, b) =>
@@ -531,7 +548,7 @@ export function TargetsTable({
     return sortedWithAlt.map(
       (r): FlatRow => ({ kind: 'target', key: r.target.id, target: r.target, alt: r.alt, moon: r.moon, depth: 0 }),
     );
-  }, [targets, sort, groupBy, usableAltDeg, site, night, guidanceParams, useMultiGroup, dims, collapsed]);
+  }, [targets, sort, groupBy, usableAltDeg, site, night, guidanceParams, dateMs, useMultiGroup, dims, collapsed]);
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -698,6 +715,12 @@ export function TargetsTable({
               const t = row.target;
               const alt = row.alt;
               const moon = row.moon;
+              // Real per-band moon-free hours (US5/T029), recomputed HERE at
+              // render time — only for the ~20-30 rows actually windowed on
+              // screen, not the full (possibly ~13k-entry) catalogue `alt`
+              // came from (that pass used includeMoonGeometry=false for
+              // performance; see rowAltitudeFor's doc).
+              const altMoon = rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, true);
               const showAltDesig = t.effectiveLabel !== t.primaryDesignation;
               const isSelected = selected === t.id;
 
@@ -745,19 +768,29 @@ export function TargetsTable({
                   <td>
                     <Pill variant="ghost">{formatType(t.objectType)}</Pill>
                   </td>
-                  {/* STUB (#58): max altitude tonight from the approximate model. */}
+                  {/* Real peak altitude tonight (spec 044 Track B ephemeris). */}
                   <td className="alm-targets-cell--num">
-                    <span title={m.targets_table_approx_max_alt()}>
+                    <span title={m.targets_table_max_alt_title()}>
                       {Math.round(alt.maxAltDeg)}°
                     </span>
                   </td>
-                  {/* STUB (#58): inline altitude sparkline for the night. */}
+                  {/* Real inline altitude sparkline for the night (spec 044 Track B). */}
                   <td className="alm-targets-cell--spark">
                     <AltitudeSparkline alt={alt} label={m.targets_table_alt_sparkline_aria({ label: t.effectiveLabel })} />
                   </td>
-                  {/* MOCK (#58): visible-tonight indicator (peaks above usable alt). */}
+                  {/* Visible-tonight indicator (peaks above usable alt).
+                      US4/T033: a site/date with no qualifying dark window
+                      (FR-017) discloses that explicitly instead of implying
+                      the target is simply too low. */}
                   <td className="alm-targets-cell--center">
-                    {alt.visibleTonight ? (
+                    {alt.noDarkWindow ? (
+                      <span
+                        className="alm-targets-vis alm-targets-vis--no"
+                        title={m.targets_table_no_dark_window_title()}
+                      >
+                        ○<span className="alm-targets-vis__label">{m.targets_table_no_dark_window()}</span>
+                      </span>
+                    ) : alt.visibleTonight ? (
                       <span
                         className="alm-targets-vis alm-targets-vis--yes"
                         title={m.targets_table_visible_reaches_title({ deg: Math.round(alt.maxAltDeg), hours: alt.hoursAboveUsable.toFixed(1), threshold: usableAltDeg })}
@@ -827,6 +860,11 @@ export function TargetsTable({
                       moon={moon}
                       params={guidanceParams}
                       targetLabel={t.effectiveLabel}
+                      moonFreeMinutesByBand={
+                        altMoon.needsCoordinates || altMoon.needsSite
+                          ? null
+                          : altMoon.moonFreeMinutesByBand
+                      }
                     />
                   </td>
                   {/* MOCK (spec 044): hours above the usable-altitude threshold. */}

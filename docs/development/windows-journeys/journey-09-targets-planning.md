@@ -13,26 +13,22 @@
   columns (astronomy-engine runs client-side).
 - Changed surfaces: **Targets** page (catalog list, Add target, target
   detail), the planner's astronomy columns and altitude graph.
-- **CRITICAL, verified against the actual code on 2026-07-05 — read before
-  testing**: spec 047 (Moon phase, per-target lunar separation, filter
-  guidance, opposition) and spec 044 Track B (real per-site altitude,
-  rise/set, imaging time) are both **implemented in code** on `main`
-  (`apps/desktop/src/features/targets/planner-altitude.ts`,
-  `TargetsTable.tsx`, `astro/moon-state.ts`) — but **every one of those real
-  values is gated behind a default "observing site" existing**
-  (`apps/desktop/src/features/targets/site-gate.ts`, spec 047 decision D7),
-  and `readSiteExists()` is **hardcoded to always return `false`** with a
-  `TODO(spec-044)` comment — there is currently **no UI or backend command on
-  `main` that can create an ObserverSite at all** (that ships with spec 044
-  US3 / PR #440, which is **open, not merged**, as of this writing). This
-  means: **on `main` today, the real astronomy your cowork session will
-  actually see rendered is NONE of it** — every target row and the target
-  detail's astronomy will show the "set up your observing site" prompt /
-  the placeholder fallback, no matter how the code looks. Do not be
-  surprised if Tests 6a/6b below show placeholders; that is the CORRECT,
-  expected, verified-against-code behavior right now, not a bug in your
-  test run. Re-run this journey once PR #440 merges to actually exercise the
-  real astronomy path (see Test 6c).
+- **UPDATED 2026-07-09 — the gated-off framing below (Tests 6a/6b/6c) is now
+  STALE and describes a state `main` no longer has.** Since this doc was
+  written: spec 044 US3 (site CRUD, PR #440-equivalent) merged, and
+  `site-gate.ts`'s `readSiteExists()` was fixed to read the real observing-site
+  store instead of a hardcoded `false` (PR #450, commit `4e5c3a4f`). **A
+  working site-creation UI now exists** (first-run wizard Site step, and
+  Settings → Target Planner → Observing Sites), and once a default site
+  exists, spec 047 (Moon phase, lunar separation, filter guidance, opposition)
+  and spec 044 Track B (real per-site altitude, rise/set, imaging time, date
+  picker, per-band moon-free hours, dark-window disclosure — see Test 7) all
+  render for real. Tests 6a/6b/6c are KEPT below as regression checks for the
+  no-site (gated-off) state, which is still a real, reachable state (a fresh
+  install with no site configured) — but do NOT expect them to represent
+  "the only state `main` can be in" the way the original note implied. If you
+  see real astronomy on a fresh install with no wizard site step completed,
+  that's a regression in the gate itself — report it.
 - Automated coverage baseline today: **this journey has NO Layer-2 coverage
   and no Playwright mock coverage at all** (confirmed by both
   `verify-on-windows-journeys.md` and
@@ -63,9 +59,11 @@
 - Tauri MCP bridge (optional): `cargo tauri dev --config
   src-tauri\tauri.dev.conf.json` (bridge WS on `0.0.0.0:9223`), connect with
   `driver_session host=localhost port=9223`, invoke via `webview_execute_js` →
-  `window.__TAURI__.core.invoke('<snake_command>', {args})`. There is no
-  known backend command to fake an ObserverSite for this pre-#440 test —
-  don't try to force Test 6c until #440 actually merges.
+  `window.__TAURI__.core.invoke('<snake_command>', {args})`. To fake an
+  ObserverSite via the bridge instead of the UI, call `settings_update` with
+  scope `'observing'` and values `{observingSites: [...], observingActiveSiteId,
+  observingDefaultSiteId, usableAltitudeDeg}` (see `observing-sites/site-store.ts`
+  for the exact shape) — the real site-creation UI (Test 6b) is the normal path.
 
 ## Preconditions
 1. Deploy as above; complete first-run setup (bundled seed catalog loads
@@ -153,34 +151,85 @@ FAIL if:
   data) regardless of whether the underlying value happens to be
   placeholder or real.
 
-### Test 6b — Confirm the site-setup prompt is the ONLY path shown (regression check)
+### Test 6b — A working site-creation path exists (Settings and/or first-run wizard)
 Steps:
-1. Look for any way, in the current UI, to create/configure an observing
-   site (wizard step, Settings pane, or a button in the prompt itself).
+1. Reset to fresh first-run (see Windows environment mechanics) and check
+   whether the setup wizard has a "Site" step (name/lat/lon/timezone).
+2. Separately, go to Settings → Target Planner → Observing Sites and add a
+   site there.
 Expected:
-- No functional site-creation UI exists yet on `main` (spec 044 US3 / PR #440
-  is still open). If a "set up your site" button exists, clicking it either
-  does nothing yet or navigates to an incomplete pane.
+- BOTH paths work: completing the wizard's Site step OR adding a site in
+  Settings persists a real, active `ObserverSite` and the planner starts
+  rendering real astronomy immediately (no relaunch needed).
 FAIL if:
-- You find a WORKING site-creation flow that actually flips
-  `readSiteExists()` — if so, this is significant news: it means #440 (or
-  equivalent) landed since this document was written and the whole
-  "gated-off" framing above is stale. Report this explicitly as a finding,
-  re-run Test 6c, and flag this document for an update.
+- Neither path actually persists a site (i.e. `readSiteExists()`/the planner
+  never flips to real astronomy) — that would mean a real regression in the
+  already-merged site-gate fix (PR #450) or site CRUD (spec 044 US3).
 
-### Test 6c — (Only run after PR #440 merges) Real astronomy renders once a site exists
+### Test 6c — Real astronomy renders once a site exists
 Steps:
-1. Create a default observing site via the (now-merged) site-creation UI.
+1. Create a default observing site via either path in Test 6b.
 2. Re-open Targets and a target's detail page.
 Expected:
 - Max altitude, sparkline, Opposition, Lunar separation, Filters, and Image
   time now compute from the real per-site ephemeris (spec 044 Track B +
-  047 Track A), still with an "approximate" disclosure where the model has
-  known limits, but no longer literal placeholders.
+  047 Track A) — genuine numbers that change when you switch the active site
+  or the usable-altitude threshold, not a placeholder pattern.
 FAIL if:
-- Values still look like the old hash-derived placeholder pattern (stable
-  across reloads but not reacting to a changed site/date), which would mean
-  the site-gate flip point wasn't actually wired despite #440 merging.
+- Values look like the old hash-derived placeholder pattern (stable across
+  reloads but not reacting to a changed site/threshold) — that would be a
+  real regression, not expected behavior.
+
+### Test 7 — Track B: date picker, best-imaging date, Moon separation, moon-free hours, dark-window disclosure, altitude graph (spec 044 Track B, requires Test 6b's site to exist)
+Steps:
+1. In the Targets top bar, find the date field (label "Plan for") next to
+   the Moon summary widget. Note today's Max altitude / Visible / Image time
+   values for one target row.
+2. Change the date to ~6 months from today. Observe the same target's Max
+   altitude / Visible / Image time.
+3. Click "Tonight" (appears once you've changed the date) to reset.
+4. Open a target's detail page. In the Tonight panel, find a "Best date"
+   stat row alongside Max alt / Img time / Lunar dist.
+5. In the same detail page, open the Filters guidance popover (hover/click
+   the filter pills). Look for a per-band "Xh moon-free" figure next to each
+   band's required-separation figure (e.g. next to "Ha: needs ≥ 60°").
+6. Look at the Tonight altitude graph. Note the shaded band (usable-altitude
+   region, should hug the curve where it's above the dashed guide line, not
+   a static full-width band) and — if the current site/date has any evening/
+   morning twilight before/after full darkness — a faint muted shading at
+   the very start/end of the graph.
+7. If your site/date has a genuine no-dark-window night (try a far-north
+   site like 65-70°N latitude in June/July), check that the Visible column
+   shows an explicit "No dark window" state (not "peaks below threshold"),
+   and the detail page shows an info banner saying so above the (still-real)
+   altitude curve.
+Expected:
+- Step 2: the values change to genuinely different numbers for the new date
+  (not the same as tonight's).
+- Step 3: values return to matching today's from step 1.
+- Step 4: a real date + "in N days"/"in N months" appears, in the same
+  format as the Targets table's existing "Opposition" column (this is
+  intentional — they're the same underlying anti-solar-transit
+  calculation for a fixed deep-sky target, just surfaced in two different
+  places; NOT a bug if they show the same date for the same target).
+- Step 5: every band shows a distinct, plausible hour figure (0 to roughly
+  the target's total imaging hours for the night); a narrowband figure
+  (Ha/SII/OIII) should generally be ≥ a broadband one (L/R/G/B) for the same
+  target/night (narrowband tolerates the Moon much more closely).
+- Step 6: the green/ok shading only covers the portion of the curve that is
+  actually above the dashed usable-altitude line — it should visibly follow
+  the curve's shape, not just be a fixed horizontal band.
+- Step 7: "No dark window" (or equivalent wording), never a silent/generic
+  "not visible", and never a fabricated dark window.
+FAIL if:
+- Changing the date doesn't change any values (date picker not wired).
+- The per-band moon-free figures are all identical/zero regardless of band
+  or clearly implausible (e.g. exceeding the total imaging time for the
+  night).
+- The usable-altitude shading is a static band unrelated to the curve.
+- A genuinely no-dark-window night shows a concrete (fabricated) imaging
+  time or "peaks below threshold" instead of an explicit no-dark-window
+  disclosure.
 
 ## Troubleshooting
 - Blank window: restart the dev server; if still blank, `pnpm install` with
@@ -191,25 +240,21 @@ FAIL if:
 
 ## Report back
 Per Test: PASS / FAIL + one line of what you saw. Explicitly call out in your
-report whether Test 6a/6b behaved as documented (gated-off) or whether you
-found working real astronomy on `main` without #440 — that would be
-important, unexpected news either way.
+report whether the no-site (Test 6a) and site-created (Test 6b/6c/7) paths
+both behaved as documented — that both states are reachable, and each renders
+what it should.
 
 ## E2E-sync (coverage bookkeeping — not for the Windows agent)
 
-- **Everything in this journey** — `automatable` in principle, but **zero
-  Layer-2 coverage and zero mock coverage today**, and spec 047's own task
-  list explicitly defers verify-on-windows to a separate lane (this
-  document). Flagged in the batched new-journey plan as **"Batch: Targets
-  catalog + SIMBAD resolve-on-demand + identity"** (testable today,
-  independent of the site gate) and separately **"Batch: Real planner
-  astronomy end-to-end"** (blocked on PR #440 merging — until then, a
-  Layer-2 journey here could only prove the gated-off prompt renders, not
-  the real astronomy, which is arguably still useful as a regression guard
-  but should be named honestly, e.g. `targets_planner_site_gate_prompt`
-  rather than implying real-astronomy coverage it can't yet provide).
-- The stub-disclosure requirement (Test 6a) is explicitly called out in the
-  product journey doc as safety-critical — this is a good first Layer-2
-  candidate since it's independent of the site-gate blocker: assert that
-  every one of the six astronomy columns and the altitude graph carry a
-  disclosure affordance, regardless of gate state.
+- **Everything in this journey** — `automatable` in principle. The site-gate
+  blocker described in earlier revisions of this doc is resolved (PR #450 +
+  spec 044 US3), so a Layer-2/Playwright-mock journey covering Test 6b/6c/7
+  is no longer blocked on backend state the way it once was; it remains
+  unimplemented as of this revision (this document is still the only
+  verification lane for Test 7's specific behaviors — date picker,
+  best-imaging date, per-band moon-free hours, dark-window disclosure, the
+  visx altitude graph).
+- The stub-disclosure requirement (Test 6a) remains safety-critical:
+  assert that every astronomy column and the altitude graph carry a
+  disclosure affordance in the no-site state, regardless of what real
+  astronomy Test 6b/6c/7 can show once a site exists.

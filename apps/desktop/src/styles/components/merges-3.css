@@ -491,6 +491,11 @@
 .alm-guidance-popup__band-state--not-viable {
   color: var(--alm-text-muted);
 }
+/* spec 044 Track B, US5/T029: real per-band moon-free imaging hours. */
+.alm-guidance-popup__band-moonfree {
+  color: var(--alm-text-muted);
+  font-variant-numeric: tabular-nums;
+}
 
 /* Settings pane: narrow number input + unit label. */
 .alm-settings__num-input {
@@ -1368,4 +1373,15 @@
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
+}
+
+/* ── Planner date picker (spec 044 Track B, US2/T024) ────────────────────── */
+.alm-planner-date-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+.alm-planner-date-picker .alm-field-label {
+  margin: 0;
+  white-space: nowrap;
 }

@@ -259,6 +259,69 @@ test.describe("PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)", () =>
   });
 });
 
+test.describe("Planner date picker + per-band moon-free hours (spec 044 Track B US2/US5)", () => {
+  /**
+   * T024 (FR-008/SC-004): choosing a different planning date recomputes the
+   * table's observability for that night. M 31's transit altitude is
+   * date-independent (culmination only depends on lat/dec), so this asserts
+   * against the date-DEPENDENT "Img time" figure instead: jumping the date
+   * forward by ~half a year moves to the opposite season, which changes the
+   * dark-window/imaging-time figure for essentially any real test-run date
+   * (the only false-negative window is exactly at an equinox-like coincidence,
+   * vanishingly unlikely). Resetting via "Tonight" must restore the original
+   * value exactly, proving the round-trip (not just "some value changed").
+   */
+  test("9.4a · choosing a future date changes Img time, and Tonight restores it", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    seedObservingSite(page);
+    await page.goto("/#/targets");
+    await disableGuidedTourOverlay(page);
+
+    const m31 = targetRow(page, "M 31");
+    await expect(m31).toBeVisible({ timeout: 8_000 });
+    const imgTimeCell = m31.locator("td").nth(COL.imagingTime);
+    const beforeText = await imgTimeCell.textContent();
+
+    const dateInput = page.getByLabel("Plan for");
+    await expect(dateInput).toBeVisible();
+    const today = new Date();
+    const future = new Date(today.getTime() + 182 * 86_400_000);
+    const futureValue = future.toISOString().slice(0, 10);
+    await dateInput.fill(futureValue);
+
+    const resetBtn = page.getByRole("button", { name: "Tonight" });
+    await expect(resetBtn).toBeVisible();
+    await expect(imgTimeCell).not.toHaveText(beforeText ?? "");
+
+    await resetBtn.click();
+    await expect(resetBtn).toHaveCount(0);
+    await expect(imgTimeCell).toHaveText(beforeText ?? "");
+  });
+
+  /**
+   * T029 (FR-007/FR-022): the Filters guidance popover shows each band's real
+   * moon-free imaging hours alongside Track A's required-separation figure.
+   */
+  test("9.4b · the Filters guidance popover shows per-band moon-free hours", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    seedObservingSite(page);
+    await page.goto("/#/targets");
+    await disableGuidedTourOverlay(page);
+
+    const m31 = targetRow(page, "M 31");
+    await expect(m31).toBeVisible({ timeout: 8_000 });
+    await m31.locator(".alm-guidance-cell__trigger").click();
+
+    const popup = page.getByTestId("guidance-explain-popup");
+    await expect(popup).toBeVisible();
+    await expect(popup).toContainText(/h moon-free/);
+  });
+});
+
 test.describe("Target catalog + SIMBAD resolve-on-demand (spec 035 / 023)", () => {
   /**
    * The Targets page lists the seed catalog (spec 035 US1 local seed). Both
