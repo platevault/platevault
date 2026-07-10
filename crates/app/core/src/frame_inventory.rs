@@ -38,15 +38,6 @@ fn internal(msg: impl std::fmt::Display) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, msg.to_string(), ErrorSeverity::Fatal, true)
 }
 
-/// Maps a raw `sqlx::Error` (from direct queries in this module) to a
-/// `ContractError`. Distinct from `app_core_errors::db_err`, which maps
-/// `persistence_db::DbError` (the repository-layer error type used by
-/// `get_library_root_path` below).
-#[allow(clippy::needless_pass_by_value)] // used as a `map_err` callback, which owns `sqlx::Error`
-fn sqlx_db_err_owned(e: sqlx::Error) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-}
-
 /// Raw row shape shared by both list paths.
 struct FrameRow {
     id: String,
@@ -79,24 +70,21 @@ async fn frame_ids_for_session(
     pool: &SqlitePool,
     session_id: &str,
 ) -> Result<Option<(Vec<String>, RawFrameType)>, ContractError> {
-    if let Some((frame_ids_json,)) =
-        sqlx::query_as::<_, (String,)>("SELECT frame_ids FROM acquisition_session WHERE id = ?")
-            .bind(session_id)
-            .fetch_optional(pool)
+    if let Some(frame_ids_json) =
+        persistence_db::repositories::q_core::get_acquisition_session_frame_ids(pool, session_id)
             .await
-            .map_err(sqlx_db_err_owned)?
+            .map_err(db_err)?
     {
         let ids: Vec<String> = serde_json::from_str(&frame_ids_json).unwrap_or_default();
         return Ok(Some((ids, RawFrameType::Light)));
     }
 
-    if let Some((frame_ids_json, kind)) = sqlx::query_as::<_, (String, String)>(
-        "SELECT frame_ids, kind FROM calibration_session WHERE id = ?",
-    )
-    .bind(session_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(sqlx_db_err_owned)?
+    if let Some((frame_ids_json, kind)) =
+        persistence_db::repositories::q_core::get_calibration_session_frame_ids_and_kind(
+            pool, session_id,
+        )
+        .await
+        .map_err(db_err)?
     {
         let ids: Vec<String> = serde_json::from_str(&frame_ids_json).unwrap_or_default();
         return Ok(Some((ids, raw_frame_type_from_calibration_kind(&kind))));
@@ -105,50 +93,28 @@ async fn frame_ids_for_session(
     Ok(None)
 }
 
+fn frame_row_from_repo_row(r: persistence_db::repositories::q_core::FileRecordRow) -> FrameRow {
+    FrameRow {
+        id: r.id,
+        root_id: r.root_id,
+        relative_path: r.relative_path,
+        size_bytes: r.size_bytes,
+        state: r.state,
+    }
+}
+
 async fn rows_by_ids(pool: &SqlitePool, ids: &[String]) -> Result<Vec<FrameRow>, ContractError> {
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let mut builder = sqlx::QueryBuilder::new(
-        "SELECT id, root_id, relative_path, size_bytes, state FROM file_record WHERE id IN (",
-    );
-    let mut separated = builder.separated(", ");
-    for id in ids {
-        separated.push_bind(id);
-    }
-    separated.push_unseparated(")");
-    let rows: Vec<(String, String, String, i64, String)> =
-        builder.build_query_as().fetch_all(pool).await.map_err(sqlx_db_err_owned)?;
-    Ok(rows
-        .into_iter()
-        .map(|(id, root_id, relative_path, size_bytes, state)| FrameRow {
-            id,
-            root_id,
-            relative_path,
-            size_bytes,
-            state,
-        })
-        .collect())
+    let rows = persistence_db::repositories::q_core::file_records_by_ids(pool, ids)
+        .await
+        .map_err(db_err)?;
+    Ok(rows.into_iter().map(frame_row_from_repo_row).collect())
 }
 
 async fn rows_by_root(pool: &SqlitePool, root_id: &str) -> Result<Vec<FrameRow>, ContractError> {
-    let rows: Vec<(String, String, String, i64, String)> = sqlx::query_as(
-        "SELECT id, root_id, relative_path, size_bytes, state FROM file_record WHERE root_id = ?",
-    )
-    .bind(root_id)
-    .fetch_all(pool)
-    .await
-    .map_err(sqlx_db_err_owned)?;
-    Ok(rows
-        .into_iter()
-        .map(|(id, root_id, relative_path, size_bytes, state)| FrameRow {
-            id,
-            root_id,
-            relative_path,
-            size_bytes,
-            state,
-        })
-        .collect())
+    let rows = persistence_db::repositories::q_core::file_records_by_root(pool, root_id)
+        .await
+        .map_err(db_err)?;
+    Ok(rows.into_iter().map(frame_row_from_repo_row).collect())
 }
 
 /// Best-effort reverse lookup: which session (if any) references `frame_id`,
@@ -164,24 +130,18 @@ async fn owning_session_frame_type(
 ) -> Result<(Option<String>, RawFrameType), ContractError> {
     let like = format!("%\"{frame_id}\"%");
 
-    if let Some((session_id,)) = sqlx::query_as::<_, (String,)>(
-        "SELECT id FROM acquisition_session WHERE frame_ids LIKE ? LIMIT 1",
-    )
-    .bind(&like)
-    .fetch_optional(pool)
-    .await
-    .map_err(sqlx_db_err_owned)?
+    if let Some(session_id) =
+        persistence_db::repositories::q_core::find_acquisition_session_id_by_frame_like(pool, &like)
+            .await
+            .map_err(db_err)?
     {
         return Ok((Some(session_id), RawFrameType::Light));
     }
 
-    if let Some((session_id, kind)) = sqlx::query_as::<_, (String, String)>(
-        "SELECT id, kind FROM calibration_session WHERE frame_ids LIKE ? LIMIT 1",
-    )
-    .bind(&like)
-    .fetch_optional(pool)
-    .await
-    .map_err(sqlx_db_err_owned)?
+    if let Some((session_id, kind)) =
+        persistence_db::repositories::q_core::find_calibration_session_by_frame_like(pool, &like)
+            .await
+            .map_err(db_err)?
     {
         return Ok((Some(session_id), raw_frame_type_from_calibration_kind(&kind)));
     }
@@ -363,13 +323,9 @@ async fn apply_missing_outcome(
     }
     tally.newly_missing += 1;
     let now = iso_now();
-    sqlx::query(
-        "UPDATE file_record SET state = 'missing', last_seen_at = last_seen_at WHERE id = ?",
-    )
-    .bind(&row.id)
-    .execute(pool)
-    .await
-    .map_err(sqlx_db_err_owned)?;
+    persistence_db::repositories::q_core::mark_file_record_missing(pool, &row.id)
+        .await
+        .map_err(db_err)?;
 
     bus.publish(
         audit::event_bus::TOPIC_FRAME_MISSING,

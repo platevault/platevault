@@ -39,11 +39,6 @@ use contracts_core::sessions::{
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 
-/// One `acquisition_session` row joined with its canonical target (spec 035
-/// US4/T044). Columns: id, session_key, legacy target_id, frame_ids (JSON),
-/// created_at, canonical_target_id, canonical primary designation.
-type SessionRow = (String, String, Option<String>, String, String, Option<String>, Option<String>);
-
 // -- Public use-case functions ------------------------------------------------
 
 /// `sessions.list` -- return all acquisition sessions from real DB rows.
@@ -58,32 +53,17 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
     // resolved target name (`primary_designation`) surfaces in the read path.
     // `canonical_target_id` (migration 0046) is the spec-035 link; it coexists
     // with the legacy `target_id` (→ old `target` table, left NULL by ingest).
-    let rows: Vec<SessionRow> = sqlx::query_as(
-        "SELECT s.id, s.session_key, s.target_id, s.frame_ids, s.created_at,
-                s.canonical_target_id, ct.primary_designation
-         FROM acquisition_session s
-         LEFT JOIN canonical_target ct ON ct.id = s.canonical_target_id
-         ORDER BY s.created_at DESC",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let rows = persistence_db::repositories::q_core::list_sessions_joined(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let mut sessions = Vec::with_capacity(rows.len());
-    for (
-        id,
-        session_key_json,
-        target_id,
-        frame_ids_json,
-        _created_at,
-        canonical_target_id,
-        canonical_name,
-    ) in rows
-    {
+    for row in rows {
+        let id = row.id;
         let fp = load_fingerprint(pool, &id).await?;
-        let mut sk = parse_session_key(&session_key_json, fp.as_ref());
+        let mut sk = parse_session_key(&row.session_key, fp.as_ref());
         // Prefer the canonical target's display designation when linked.
-        if let Some(name) = canonical_name.filter(|n| !n.is_empty()) {
+        if let Some(name) = row.canonical_target_name.filter(|n| !n.is_empty()) {
             sk.target = name;
         }
         // Spec 041 FR-051: sessions are derived, already-confirmed inventory —
@@ -94,14 +74,14 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
         // spec 048 US1: frame_count/total_size_bytes are the ACTIVE (non-missing)
         // file_record members — honest counts/totals, not the raw array length
         // (which may retain `missing` ids in flag-missing mode).
-        let (frame_count, total_size_bytes) = active_frame_summary(pool, &frame_ids_json).await?;
+        let (frame_count, total_size_bytes) = active_frame_summary(pool, &row.frame_ids).await?;
         // TODO(037): total_integration_seconds -- not stored; requires frame-level data.
         let total_integration_seconds = 0.0_f64;
         // TODO(037): metadata -- not stored as structured provenance rows yet.
         let metadata = HashMap::new();
         // Surface the canonical target id (spec 035) when the legacy target_id is
         // absent — ingested sessions link via canonical_target_id (R10).
-        let target_ids = target_id.or(canonical_target_id).into_iter().collect();
+        let target_ids = row.target_id.or(row.canonical_target_id).into_iter().collect();
         let project_ids = load_project_ids(pool, &id).await?;
         // TODO(037): warnings -- not stored; derive from fingerprint in future.
         let warnings = Vec::new();
@@ -130,31 +110,15 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
 /// # Errors
 /// Returns `Err(String)` on database failure or when the session is absent.
 pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, String> {
-    let row: Option<SessionRow> = sqlx::query_as(
-        "SELECT s.id, s.session_key, s.target_id, s.frame_ids, s.created_at,
-                s.canonical_target_id, ct.primary_designation
-         FROM acquisition_session s
-         LEFT JOIN canonical_target ct ON ct.id = s.canonical_target_id
-         WHERE s.id = ?",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let row = persistence_db::repositories::q_core::get_session_joined(pool, id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("session.not_found: {id}"))?;
 
-    let (
-        id,
-        session_key_json,
-        target_id,
-        frame_ids_json,
-        _created_at,
-        canonical_target_id,
-        canonical_name,
-    ) = row.ok_or_else(|| format!("session.not_found: {id}"))?;
-
+    let id = row.id;
     let fp = load_fingerprint(pool, &id).await?;
-    let mut sk = parse_session_key(&session_key_json, fp.as_ref());
-    if let Some(name) = canonical_name.filter(|n| !n.is_empty()) {
+    let mut sk = parse_session_key(&row.session_key, fp.as_ref());
+    if let Some(name) = row.canonical_target_name.filter(|n| !n.is_empty()) {
         sk.target = name;
     }
     // Spec 041 FR-051: sessions are derived, already-confirmed inventory —
@@ -163,12 +127,12 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     // TODO(037): optical_train_id -- fingerprint stores name, not UUID.
     let optical_train_id = fp.as_ref().and_then(|f| f.optic_train.clone()).unwrap_or_default();
     // spec 048 US1: active (non-missing) frame_count/total_size_bytes.
-    let (frame_count, total_size_bytes) = active_frame_summary(pool, &frame_ids_json).await?;
+    let (frame_count, total_size_bytes) = active_frame_summary(pool, &row.frame_ids).await?;
     // TODO(037): total_integration_seconds -- not stored.
     let total_integration_seconds = 0.0_f64;
     // TODO(037): metadata -- not stored as structured provenance rows yet.
     let metadata = HashMap::new();
-    let target_ids = target_id.or(canonical_target_id).into_iter().collect();
+    let target_ids = row.target_id.or(row.canonical_target_id).into_iter().collect();
     let project_ids = load_project_ids(pool, &id).await?;
     // TODO(037): warnings -- not stored.
     let warnings = Vec::new();
@@ -234,26 +198,17 @@ struct Fingerprint {
     observing_night_date: Option<String>,
 }
 
-type FingerprintRow =
-    Option<(Option<f64>, Option<String>, Option<String>, Option<String>, Option<String>)>;
-
 async fn load_fingerprint(pool: &SqlitePool, id: &str) -> Result<Option<Fingerprint>, String> {
-    let row: FingerprintRow = sqlx::query_as(
-        "SELECT gain, filter_name, binning, optic_train, observing_night_date
-         FROM acquisition_fingerprint
-         WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let row = persistence_db::repositories::q_core::get_fingerprint(pool, id)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    Ok(row.map(|(gain, filter_name, binning, optic_train, observing_night_date)| Fingerprint {
-        gain,
-        filter_name,
-        binning,
-        optic_train,
-        observing_night_date,
+    Ok(row.map(|r| Fingerprint {
+        gain: r.gain,
+        filter_name: r.filter_name,
+        binning: r.binning,
+        optic_train: r.optic_train,
+        observing_night_date: r.observing_night_date,
     }))
 }
 
@@ -311,31 +266,17 @@ async fn active_frame_summary(
     frame_ids_json: &str,
 ) -> Result<(u32, u64), String> {
     let ids: Vec<String> = serde_json::from_str(frame_ids_json).unwrap_or_default();
-    if ids.is_empty() {
-        return Ok((0, 0));
-    }
-    let mut builder = sqlx::QueryBuilder::new(
-        "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM file_record WHERE state != 'missing' AND id IN (",
-    );
-    let mut separated = builder.separated(", ");
-    for id in &ids {
-        separated.push_bind(id);
-    }
-    separated.push_unseparated(")");
-    let (count, total): (i64, i64) =
-        builder.build_query_as().fetch_one(pool).await.map_err(|e| e.to_string())?;
+    let (count, total) = persistence_db::repositories::q_core::active_frame_summary(pool, &ids)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok((u32::try_from(count.max(0)).unwrap_or(0), u64::try_from(total.max(0)).unwrap_or(0)))
 }
 
 /// Load project ids linked to a session via `project_sources`.
 async fn load_project_ids(pool: &SqlitePool, session_id: &str) -> Result<Vec<String>, String> {
-    let rows: Vec<(String,)> =
-        sqlx::query_as("SELECT project_id FROM project_sources WHERE inventory_session_id = ?")
-            .bind(session_id)
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default();
-    Ok(rows.into_iter().map(|(p,)| p).collect())
+    Ok(persistence_db::repositories::q_core::project_ids_for_session(pool, session_id)
+        .await
+        .unwrap_or_default())
 }
 
 /// Load calibration matches for a session from `calibration_assignment`.
@@ -343,25 +284,25 @@ async fn load_calibration_matches(
     pool: &SqlitePool,
     session_id: &str,
 ) -> Result<Vec<SessionCalibrationMatch>, String> {
-    let rows: Vec<(String, String, f64, String)> = sqlx::query_as(
-        "SELECT master_id, calibration_type, confidence, mismatched_dimensions
-         FROM calibration_assignment
-         WHERE session_id = ?",
-    )
-    .bind(session_id)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
+    let rows =
+        persistence_db::repositories::q_core::calibration_matches_for_session(pool, session_id)
+            .await
+            .unwrap_or_default();
 
     Ok(rows
         .into_iter()
-        .map(|(master_id, calibration_type, score, mismatch_json)| {
+        .map(|r| {
             // DB CHECK constrains `calibration_type` to dark/flat/bias; unknown
             // values fall back to Dark, preserving prior behavior.
-            let kind = calibration_type.parse().unwrap_or(CalibrationKind::Dark);
+            let kind = r.calibration_type.parse().unwrap_or(CalibrationKind::Dark);
             let soft_mismatches: Vec<String> =
-                serde_json::from_str(&mismatch_json).unwrap_or_default();
-            SessionCalibrationMatch { master_id, kind, score, soft_mismatches }
+                serde_json::from_str(&r.mismatched_dimensions).unwrap_or_default();
+            SessionCalibrationMatch {
+                master_id: r.master_id,
+                kind,
+                score: r.confidence,
+                soft_mismatches,
+            }
         })
         .collect())
 }
@@ -371,20 +312,13 @@ async fn load_history(
     pool: &SqlitePool,
     session_id: &str,
 ) -> Result<Vec<SessionHistoryEntry>, String> {
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT at, trigger, actor
-         FROM audit_log_entry
-         WHERE entity_type = 'acquisition_session' AND entity_id = ?
-         ORDER BY at ASC",
-    )
-    .bind(session_id)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
+    let rows = persistence_db::repositories::q_core::session_history(pool, session_id)
+        .await
+        .unwrap_or_default();
 
     Ok(rows
         .into_iter()
-        .map(|(timestamp, event, actor)| SessionHistoryEntry { timestamp, event, actor })
+        .map(|r| SessionHistoryEntry { timestamp: r.at, event: r.trigger, actor: r.actor })
         .collect())
 }
 
