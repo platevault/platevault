@@ -30,14 +30,21 @@
 #   merge-gating is enforced by branch-protection required checks, not a
 #   cross-workflow `needs` (which GitHub only supports for reusable workflows).
 #
-# macOS leg REMOVED: tauri-plugin-webdriver has no working macOS WebDriver on
-# GitHub runners. The `tauri-webdriver` CLI proxy receives `Connection refused
-# (os error 61)` on every attempt until the 120s session deadline — reproduced
-# identically on every recent run (e.g. CI runs 28712192291 and 28712185403),
-# never a per-PR regression. The upstream plugin's own CI
-# (Choochmeque/tauri-plugin-webdriver) also fails its macos-latest leg on
-# essentially every recent run. This is an upstream/runner-side limitation, not
-# fixable in this repo. Linux + Windows is the supported matrix.
+# macOS leg REMOVED from the default matrix: tauri-plugin-webdriver has no
+# working macOS WebDriver on GitHub runners. The `tauri-webdriver` CLI proxy
+# receives `Connection refused (os error 61)` on every attempt until the 120s
+# session deadline — reproduced identically on every recent run (e.g. CI runs
+# 28712192291 and 28712185403), never a per-PR regression. The upstream
+# plugin's own CI (Choochmeque/tauri-plugin-webdriver) also fails its
+# macos-latest leg on essentially every recent run. This is an
+# upstream/runner-side limitation, not fixable in this repo (full audit:
+# issue #489). Linux + Windows is the supported matrix.
+#
+# A `workflow_dispatch` `run_macos` input can still add macos-latest back for
+# a one-off re-test, WITHOUT `continue-on-error` — a genuine red/green signal
+# so a future upstream fix is discoverable, instead of never re-checking.
+# Layer-1 `cargo test --workspace` (ci.yml) stays required on macOS; only this
+# real-UI WebDriver leg is affected.
 
 name: Real-UI E2E (thirtyfour + nextest + tauri-plugin-webdriver)
 
@@ -46,6 +53,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      run_macos:
+        description: >-
+          Also run the macOS Real-UI leg (best-effort re-test of issue #489 —
+          no continue-on-error, so this is a genuine signal).
+        type: boolean
+        default: false
 
 concurrency:
   group: e2e-${{ github.workflow }}-${{ github.ref }}
@@ -73,6 +87,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       run: ${{ steps.decide.outputs.run }}
+      os_matrix: ${{ steps.matrix.outputs.os_matrix }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v4
@@ -111,6 +126,19 @@ jobs:
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "e2e changes: run=$run"
+      # macOS only joins the matrix on an explicit workflow_dispatch with
+      # run_macos=true (see header comment, issue #489) — never on
+      # pull_request/push.
+      - id: matrix
+        shell: bash
+        env:
+          RUN_MACOS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_macos == true }}
+        run: |
+          if [ "$RUN_MACOS" = "true" ]; then
+            echo 'os_matrix=["ubuntu-latest","windows-latest","macos-latest"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'os_matrix=["ubuntu-latest","windows-latest"]' >> "$GITHUB_OUTPUT"
+          fi
 
   real-ui-e2e:
     name: Real-UI E2E — ${{ matrix.os }}
@@ -118,8 +146,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: ${{ fromJson(needs.changes.outputs.os_matrix) }}
     runs-on: ${{ matrix.os }}
+    # Backstop beyond nextest's own slow-timeout + the 120s app-launch
+    # deadline: observed full-job durations are ~13-20min on ubuntu/windows
+    # (CI runs 29031373925, 29033234950) and highly variable on macOS
+    # (30-60+min, including the 120s-per-attempt launch-failure loop, issue
+    # #489) when it does run via workflow_dispatch — pick a ceiling with
+    # headroom over the worst observed case rather than the typical one.
+    timeout-minutes: ${{ matrix.os == 'macos-latest' && 60 || 45 }}
 
     steps:
       - uses: actions/checkout@v4
@@ -202,6 +237,8 @@ jobs:
         if: runner.os == 'Linux' && needs.changes.outputs.run == 'true'
         run: xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
 
-      - name: Run E2E (Windows)
+      # Also covers macOS when it joins the matrix via workflow_dispatch
+      # run_macos (header comment) — a dedicated step would be identical.
+      - name: Run E2E (Windows / macOS)
         if: runner.os != 'Linux' && needs.changes.outputs.run == 'true'
         run: cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
