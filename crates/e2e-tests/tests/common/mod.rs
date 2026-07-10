@@ -668,25 +668,30 @@ impl E2eApp {
     /// (`apps/desktop/src/main.tsx`, `VITE_E2E` gate) — the SAME QueryClient
     /// instance the mounted page reads from, not a page reload.
     ///
-    /// Exists because `inventory.reconcile.run` has no frontend invalidation
-    /// hook today (documented KNOWN GAP, `inventory_journeys.rs` module docs;
-    /// `docs/development/orchestration-2026-07-06.md` D13e): a query younger
-    /// than its 30s `staleTime` (`apps/desktop/src/data/queryClient.ts`)
-    /// serves its cached value on remount/refocus WITHOUT a network refetch,
-    /// so a `driver.refresh()` alone is only a reliable proof of freshness if
-    /// the reload fully discarded the prior QueryClient's cache — not
-    /// guaranteed on every WebDriver backend (root cause of the cross-PR
+    /// Exists because a query younger than its 30s `staleTime`
+    /// (`apps/desktop/src/data/queryClient.ts`) serves its cached value on
+    /// remount/refocus WITHOUT a network refetch, so a `driver.refresh()`
+    /// alone is only a reliable proof of freshness if the reload fully
+    /// discarded the prior QueryClient's cache — not guaranteed on every
+    /// WebDriver backend (root cause of the cross-PR
     /// `reconcile_drops_externally_deleted_frame_from_real_ui_count` flake,
     /// CI evidence: "last seen: Some(\"2\")" persisting the entire 15s wait,
     /// only possible from a served-stale-cache render, not a fresh backend
     /// read). Awaits `invalidateQueries`'s returned promise, which TanStack
     /// Query resolves only once every currently-active matching query's
     /// refetch settles, so the caller can assert the freshly-rendered DOM
-    /// immediately after this returns. Test-side workaround only — does not
-    /// substitute for the still-open frontend invalidation-wiring follow-up
-    /// (lane nD, PR #517, adds `sessions.all` + `inventory` prefix
-    /// invalidation on reconcile completion); remove this call once that
-    /// lands and `driver.refresh()` alone proves sufficient again.
+    /// immediately after this returns.
+    ///
+    /// Lane nD's frontend reconcile invalidation (PR #517, MERGED) wires
+    /// `sessions.all` + `inventory` prefix invalidation into the real
+    /// "Reconcile" button's click handler
+    /// (`apps/desktop/src/features/settings/DataSources.tsx::handleReconcile`)
+    /// — but this journey triggers `inventory.reconcile.run` directly over
+    /// the invoke bridge (documented KNOWN GAP, no UI trigger for that path),
+    /// which #517's handler never runs. This call is now belt-and-braces
+    /// rather than the only fix for a known-missing product hook; keep it
+    /// until the bridge-triggered path has a few weeks of green CI, then
+    /// re-evaluate whether `driver.refresh()` alone is sufficient.
     pub async fn invalidate_query(&self, key_json: &str) -> Result<()> {
         let script = format!(
             r#"
