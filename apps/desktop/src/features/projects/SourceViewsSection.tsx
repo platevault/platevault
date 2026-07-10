@@ -24,12 +24,19 @@ import {
   listPreparedViews,
   removePreparedView,
   regeneratePreparedView,
+  verifySourceView,
   viewStateLabel,
   viewStateVariant,
   canRemoveView,
   canRegenerateView,
+  canVerifyView,
+  brokenItemStateLabel,
 } from './source-views';
-import type { PreparedViewSummary, PreparedViewItemDetail } from './source-views';
+import type {
+  PreparedViewSummary,
+  PreparedViewItemDetail,
+  SourceViewVerifyResponse,
+} from './source-views';
 import { errMessage } from '@/lib/errors';
 import { GenerateSourceViewDialog } from './GenerateSourceViewDialog';
 
@@ -51,6 +58,7 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
   const [error, setError] = useState<string | null>(null);
   const [busyViewId, setBusyViewId] = useState<string | null>(null);
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [verifyResults, setVerifyResults] = useState<Record<string, SourceViewVerifyResponse>>({});
 
   function handleGenerated(planId: string) {
     onPlanCreated?.(planId);
@@ -139,6 +147,25 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
       addToast({
         variant: 'warn',
         message: m.projects_source_views_regen_failed({ code }),
+      });
+    } finally {
+      setBusyViewId(null);
+    }
+  }
+
+  async function handleVerify(viewId: string) {
+    setBusyViewId(viewId);
+    try {
+      const resp = await verifySourceView(viewId);
+      setVerifyResults((prev) => ({ ...prev, [viewId]: resp }));
+    } catch (err: unknown) {
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err).code)
+          : 'internal';
+      addToast({
+        variant: 'warn',
+        message: m.projects_source_views_verify_failed({ code }),
       });
     } finally {
       setBusyViewId(null);
@@ -234,9 +261,51 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                   {m.projects_source_views_kind_mismatch()}
                 </Banner>
               )}
+
+              {/* Spec 049 US4: read-only verify-before-processing report — no
+                  mutation affordance; repair is via Regenerate above. */}
+              {verifyResults[view.id] && (
+                <Banner
+                  variant={verifyResults[view.id].clean ? 'info' : 'warn'}
+                  data-testid={`verify-view-result-${view.id}`}
+                >
+                  {verifyResults[view.id].clean ? (
+                    m.projects_source_views_verify_clean()
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      <span>
+                        {m.projects_source_views_verify_broken_summary({
+                          count: String(verifyResults[view.id].brokenItems?.length ?? 0),
+                        })}
+                      </span>
+                      <ul className="alm-source-views__refs-list">
+                        {(verifyResults[view.id].brokenItems ?? []).map((item) => (
+                          <li key={item.inventoryItemId} className="alm-source-views__refs-item">
+                            {item.viewRelativePath} — {brokenItemStateLabel(item.state)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </Banner>
+              )}
             </div>
 
             <div className="flex gap-2 shrink-0">
+              {canVerifyView(view.state) && (
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  disabled={busyViewId !== null}
+                  onClick={() => handleVerify(view.id)}
+                  data-testid={`verify-view-${view.id}`}
+                >
+                  {busyViewId === view.id
+                    ? m.common_working()
+                    : m.projects_source_views_verify_btn()}
+                </Btn>
+              )}
+
               {canRemoveView(view.state) && (
                 <Btn
                   size="sm"

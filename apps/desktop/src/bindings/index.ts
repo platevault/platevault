@@ -1667,6 +1667,40 @@ export const commands = {
 	 */
 	sourceviewGenerate: (req: SourceViewGenerateRequest) => typedError<SourceViewGenerateResponse, ContractError_Serialize>(__TAURI_INVOKE("sourceview_generate", { req })),
 	/**
+	 *  `sourceview.verify` — read-only check that every link in a generated
+	 *  source view still resolves to a present canonical source.
+	 * 
+	 *  Never mutates the filesystem and never auto-repairs (FR-014/FR-015);
+	 *  repair is via explicit `preparedview.regenerate`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with code `view.not_found` when the view does
+	 *  not exist, or an `internal.*` error on failure.
+	 */
+	sourceviewVerify: (viewId: string) => typedError<SourceViewVerifyResponse, ContractError_Serialize>(__TAURI_INVOKE("sourceview_verify", { viewId })),
+	/**
+	 *  `sourceview.destination.get` — read the persisted per-project destination
+	 *  override (FR-021b). `destination: null` means no override is persisted and
+	 *  the project-envelope default applies.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` on database failure.
+	 */
+	sourceviewDestinationGet: (projectId: string) => typedError<SourceViewDestinationGetResponse, ContractError_Serialize>(__TAURI_INVOKE("sourceview_destination_get", { projectId })),
+	/**
+	 *  `sourceview.destination.set` — persist (or clear, with `destination: null`)
+	 *  the per-project destination override (FR-021b). Applied at the next
+	 *  `sourceview.generate` call for this project unless a per-generation
+	 *  `destinationOverride` is also given (per-generation wins).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` on database failure.
+	 */
+	sourceviewDestinationSet: (req: SourceViewDestinationSetRequest) => typedError<SourceViewDestinationSetResponse, ContractError_Serialize>(__TAURI_INVOKE("sourceview_destination_set", { req })),
+	/**
 	 *  `dev.contracts.list` — list all registered contracts (spec 021 US1).
 	 * 
 	 *  Returns `dev_mode.disabled` when the runtime `devMode` setting is off.
@@ -2148,6 +2182,31 @@ export type BatchSessionResultDto_Serialize = {
 
 /**  Overall batch operation status. */
 export type BatchStatus = "success" | "partial" | "failure";
+
+/**  One broken/missing/stale item in a verified view. */
+export type BrokenItem = {
+	inventoryItemId: string,
+	viewRelativePath: string,
+	state: BrokenItemState,
+};
+
+/**  Why a single item failed verification (contract `brokenItems[].state`). */
+export type BrokenItemState = 
+/**  The destination path itself no longer exists on disk. */
+"missing" | 
+/**  The canonical source (inventory reference) no longer resolves. */
+"moved" | 
+/**
+ *  The destination link is present but does not resolve to a live source
+ *  (a dangling symlink, or its target no longer matches the canonical
+ *  source path).
+ */
+"unresolved_link" | 
+/**
+ *  The on-disk materialization kind no longer matches the kind recorded
+ *  for this item (spec 026 FR-008 mixed-kind concept, per-item).
+ */
+"changed_kind";
 
 /**  Calendar data for the sessions calendar view. */
 export type CalendarData = {
@@ -7356,6 +7415,25 @@ export type SourceRole = "light" | "dark" | "flat" | "bias";
  */
 export type SourceSelection = "selected" | "candidate";
 
+/**  Response: `None` when no override is persisted (the envelope default applies). */
+export type SourceViewDestinationGetResponse = {
+	destination?: string | null,
+};
+
+/**
+ *  Request: persist (or clear, with `destination: null`) the per-project
+ *  destination override.
+ */
+export type SourceViewDestinationSetRequest = {
+	projectId: string,
+	destination?: string | null,
+};
+
+/**  Bare success response for `sourceview.destination.set`. */
+export type SourceViewDestinationSetResponse = {
+	ok: boolean,
+};
+
 /**
  *  Request: create a `prepared_view_generation` plan first-materializing a
  *  project's selected lights + matched calibration as link actions.
@@ -7398,6 +7476,17 @@ export type SourceViewGenerateResponse = {
 	 *  distinctly instead of a generic success message.
 	 */
 	usedCopyFallback?: boolean,
+};
+
+/**  Success response for `sourceview.verify`. */
+export type SourceViewVerifyResponse = {
+	/**
+	 *  `true` when every item resolved to a present canonical source (safe to
+	 *  process — SC-006). `false` iff `broken_items` is non-empty.
+	 */
+	clean: boolean,
+	/**  Empty when `clean`. One entry per broken/missing/stale item. */
+	brokenItems?: BrokenItem[],
 };
 
 export type StatusSummary = {

@@ -93,3 +93,37 @@ pub struct SourceViewGenerateResponse {
     #[serde(default)]
     pub used_copy_fallback: bool,
 }
+
+// ── T041: per-project destination override (FR-021b) ────────────────────────
+
+/// Request: read the persisted per-project destination override.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceViewDestinationGetRequest {
+    pub project_id: String,
+}
+
+/// Response: `None` when no override is persisted (the envelope default applies).
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceViewDestinationGetResponse {
+    #[serde(default)]
+    pub destination: Option<String>,
+}
+
+/// Request: persist (or clear, with `destination: null`) the per-project
+/// destination override.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceViewDestinationSetRequest {
+    pub project_id: String,
+    #[serde(default)]
+    pub destination: Option<String>,
+}
+
+/// Bare success response for `sourceview.destination.set`.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceViewDestinationSetResponse {
+    pub ok: bool,
+}

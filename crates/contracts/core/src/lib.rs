@@ -33,6 +33,7 @@ pub mod search;
 pub mod sessions;
 pub mod settings;
 pub mod source_view_generate;
+pub mod source_view_verify;
 pub mod status;
 pub mod targets;
 pub mod tools;

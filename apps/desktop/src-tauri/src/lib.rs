@@ -82,7 +82,8 @@ use crate::commands::plans::{
 };
 use crate::commands::preferences::{preferences_get, preferences_set};
 use crate::commands::prepared_views::{
-    preparedview_list, preparedview_regenerate, preparedview_remove, sourceview_generate,
+    preparedview_list, preparedview_regenerate, preparedview_remove, sourceview_destination_get,
+    sourceview_destination_set, sourceview_generate, sourceview_verify,
 };
 use crate::commands::projects::{
     projects_channels_dismiss_drift, projects_channels_reinfer, projects_create,
@@ -383,6 +384,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         preparedview_regenerate,
         // source view generation (spec 049)
         sourceview_generate,
+        sourceview_verify,
+        sourceview_destination_get,
+        sourceview_destination_set,
     ])
 }
 
@@ -605,6 +609,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         preparedview_regenerate,
         // source view generation (spec 049)
         sourceview_generate,
+        sourceview_verify,
+        sourceview_destination_get,
+        sourceview_destination_set,
         // developer diagnostics (spec 021) — dev-tools build only
         dev_contracts_list,
         dev_calls_list,

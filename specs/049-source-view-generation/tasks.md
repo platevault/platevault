@@ -23,7 +23,7 @@ tests are treated as required, not optional.
 ## Phase 1: Setup (Shared)
 
 - [x] T001 [SETUP] Confirm reuse surfaces compile as baselines: `crates/project/structure` (`PreparedSourceView`), `crates/fs/planner` (`FilesystemPlan`), `crates/patterns` resolver, `crates/workflow/profiles`, `crates/calibration/core`. No code change — record entry points in a scratch note for the implementers.
-- [ ] T002 [P] [SETUP] Add a `Source Views` settings section id to the settings section registry (frontend + `crates/domain/core` section map) so the new keys have a home. DEFERRED: only consumer is T030 (Phase 7 settings pane), out of scope for US1.
+- [x] T002 [P] [SETUP] Add a `Source Views` settings section id to the settings section registry (frontend + `crates/domain/core` section map) so the new keys have a home. Corrected path (no `section map` concept exists in `crates/domain/core`; the actual registry is the Tauri-layer `scope_keys` in `apps/desktop/src-tauri/src/commands/settings.rs`, `"sourceViews"` scope already added by T029): the frontend home is now T030's `source-views` pane id in `SettingsPage.tsx` (`PANES`/`NAV_GROUPS`).
 
 ---
 

@@ -1677,6 +1677,52 @@ export async function mockInvoke(
     }
 
     case 'preparedview_list': {
+      // Spec 049 US4 mock coverage: proj-002 carries two already-materialized
+      // views so the Playwright mock suite can exercise "Verify before
+      // processing" (clean + broken paths) without also mocking
+      // generate/apply. Every other project keeps the pre-existing empty
+      // list.
+      const projectId = (_args as { projectId?: string } | undefined)?.projectId;
+      if (projectId === 'proj-002') {
+        return {
+          views: [
+            {
+              id: 'mock-sv-view-clean',
+              projectId: 'proj-002',
+              kind: 'symlink',
+              state: 'current',
+              createdAt: '2026-05-19T20:00:00Z',
+              itemCount: 1,
+              items: [
+                {
+                  id: 'mock-sv-item-clean-1',
+                  inventoryItemId: 'mock-sv-inv-clean-1',
+                  viewRelativePath: '/mock/source-views/clean/light_001.fits',
+                  materialization: 'symlink',
+                  lastObservedState: 'present',
+                },
+              ],
+            },
+            {
+              id: 'mock-sv-view-broken',
+              projectId: 'proj-002',
+              kind: 'symlink',
+              state: 'current',
+              createdAt: '2026-05-19T20:00:00Z',
+              itemCount: 1,
+              items: [
+                {
+                  id: 'mock-sv-item-broken-1',
+                  inventoryItemId: 'mock-sv-inv-broken-1',
+                  viewRelativePath: '/mock/source-views/broken/light_002.fits',
+                  materialization: 'symlink',
+                  lastObservedState: 'present',
+                },
+              ],
+            },
+          ],
+        };
+      }
       return { views: [] };
     }
 
@@ -1686,6 +1732,25 @@ export async function mockInvoke(
 
     case 'preparedview_regenerate': {
       return { planId: 'mock-plan-regen-001', unresolvedItemCount: 0 };
+    }
+
+    case 'sourceview_verify': {
+      // FR-014/FR-015: read-only, no mutation, no auto-repair — the mock
+      // simply reports canned clean/broken results keyed by view id.
+      const viewId = (_args as { viewId?: string } | undefined)?.viewId;
+      if (viewId === 'mock-sv-view-broken') {
+        return {
+          clean: false,
+          brokenItems: [
+            {
+              inventoryItemId: 'mock-sv-inv-broken-1',
+              viewRelativePath: '/mock/source-views/broken/light_002.fits',
+              state: 'moved',
+            },
+          ],
+        };
+      }
+      return { clean: true, brokenItems: [] };
     }
 
     // spec 012 T008: watcher attach/detach — no real filesystem watching in
