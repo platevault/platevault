@@ -2,9 +2,11 @@
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
+use std::sync::Arc;
 
-use audit::bus::EventBus;
-use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
+use audit_types::{
+    EventPublisher, LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+};
 use domain_core::ids::{AuditId, EntityId, Timestamp};
 use domain_core::lifecycle::data_asset::EntityType;
 use domain_core::lifecycle::provenance::{ProvenanceTag, ProvenancedValue};
@@ -186,13 +188,18 @@ fn state_column_for(entity_type: EntityType) -> &'static str {
 /// SQLite-backed implementation of [`LifecycleRepository`].
 pub struct SqliteLifecycleRepository {
     pool: sqlx::SqlitePool,
-    bus: EventBus,
+    bus: Arc<dyn EventPublisher>,
 }
 
 impl SqliteLifecycleRepository {
+    /// `bus` is generic over [`EventPublisher`] (not the concrete `audit::EventBus`)
+    /// so this crate never depends on `audit` — `audit` depends on
+    /// `persistence_db` for its `events`-table SQL, so the reverse edge would
+    /// cycle. Callers pass their `EventBus` value unchanged; it implements
+    /// `EventPublisher`.
     #[must_use]
-    pub fn new(pool: sqlx::SqlitePool, bus: EventBus) -> Self {
-        Self { pool, bus }
+    pub fn new(pool: sqlx::SqlitePool, bus: impl EventPublisher + 'static) -> Self {
+        Self { pool, bus: Arc::new(bus) }
     }
 
     #[must_use]
@@ -427,22 +434,18 @@ impl LifecycleRepository for SqliteLifecycleRepository {
 
         tx.commit().await?;
 
-        // Publish event after successful commit.
-        let _ = self
-            .bus
-            .publish(
-                TOPIC_LIFECYCLE_TRANSITION_APPLIED,
-                Source::System,
-                LifecycleTransitionApplied {
-                    entity_type: transition.entity_type,
-                    entity_id: transition.entity_id.to_string(),
-                    from_state: transition.from_state.clone(),
-                    to_state: transition.to_state.clone(),
-                    actor: transition.actor.clone(),
-                    at: applied_at,
-                },
-            )
-            .await;
+        // Publish event after successful commit (fire-and-forget — publish
+        // failure must never roll back or fail an already-committed transition).
+        let event_payload = serde_json::to_value(LifecycleTransitionApplied {
+            entity_type: transition.entity_type,
+            entity_id: transition.entity_id.to_string(),
+            from_state: transition.from_state.clone(),
+            to_state: transition.to_state.clone(),
+            actor: transition.actor.clone(),
+            at: applied_at,
+        })
+        .unwrap_or(Value::Null);
+        self.bus.publish(TOPIC_LIFECYCLE_TRANSITION_APPLIED, Source::System, event_payload).await;
 
         Ok(TransitionRecord {
             audit_id,

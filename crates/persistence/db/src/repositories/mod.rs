@@ -14,6 +14,7 @@ pub mod audit;
 pub mod calibration_assignment;
 pub mod calibration_tolerances;
 pub mod equipment;
+pub mod events;
 pub mod first_run;
 pub mod guided_flow;
 pub mod inbox;
@@ -26,6 +27,16 @@ pub mod prepared_source_views;
 pub mod project_notes;
 pub mod projects;
 pub mod provenance;
+// q_* modules are empty scaffolding stubs for the db-boundary-zero drain
+// nodes (each node owns exactly one, avoiding file-creation collisions).
+pub mod q_calibration;
+pub mod q_core;
+pub mod q_desktop;
+pub mod q_inbox;
+pub mod q_projects;
+pub mod q_resolver;
+pub mod q_targets_ingest;
+pub mod q_targets_mgmt;
 pub mod session_snapshot;
 pub mod settings;
 pub mod source_protection;

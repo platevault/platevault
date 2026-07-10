@@ -12,6 +12,7 @@ members = [
   "crates/app/settings",
   "crates/app/targets",
   "crates/audit",
+  "crates/audit-types",
   "crates/calibration/core",
   "crates/calibration/master-detect",
   "crates/contracts/core",

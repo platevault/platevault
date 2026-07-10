@@ -4,12 +4,16 @@
 //! `events` table (durable, survives restart) and a tokio broadcast channel
 //! (in-process, non-durable). Replay reads from the `events` table with a
 //! monotonic `event_id` cursor.
+//!
+//! Durable reads/writes delegate to `persistence_db::repositories::events`
+//! (db-boundary-zero) rather than issuing raw SQL here.
 
+use audit_types::{EventPublisher, Source};
 use serde::Serialize;
 use sqlx::SqlitePool;
 use tokio::sync::broadcast;
 
-use crate::event_bus::{EventEnvelope, Source};
+use crate::event_bus::EventEnvelope;
 
 /// Capacity of the broadcast channel.  Lagging receivers are dropped with
 /// `RecvError::Lagged`; they must re-subscribe and query the durable table.
@@ -21,7 +25,7 @@ pub enum BusError {
     #[error("serialisation error: {0}")]
     Serialise(#[from] serde_json::Error),
     #[error("database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(#[from] persistence_db::DbError),
 }
 
 /// Hybrid live + durable event bus.
@@ -81,13 +85,14 @@ impl EventBus {
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
         let payload_str = serde_json::to_string(&value)?;
 
-        sqlx::query("INSERT INTO events (topic, source, emitted_at, payload) VALUES (?, ?, ?, ?)")
-            .bind(topic)
-            .bind(source_str)
-            .bind(&emitted_at)
-            .bind(&payload_str)
-            .execute(&self.pool)
-            .await?;
+        persistence_db::repositories::events::insert_event(
+            &self.pool,
+            topic,
+            source_str,
+            &emitted_at,
+            &payload_str,
+        )
+        .await?;
 
         // 2. Broadcast to live subscribers.
         // `send` errors only when there are NO receivers at all (which is fine).
@@ -118,38 +123,34 @@ impl EventBus {
         topic_filter: Option<&str>,
         since: Option<i64>,
     ) -> Result<Vec<EventEnvelope<serde_json::Value>>, BusError> {
-        // Use runtime-checked queries (sqlx::query) rather than sqlx::query! macros
-        // because the DATABASE_URL env var is not set at compile time for this crate.
         let since_id = since.unwrap_or(0);
 
-        let rows: Vec<(i64, String, String, String)> = if let Some(topic) = topic_filter {
-            sqlx::query_as::<_, (i64, String, String, String)>(
-                "SELECT event_id, topic, emitted_at, payload \
-                 FROM events WHERE event_id > ? AND topic = ? ORDER BY event_id ASC",
-            )
-            .bind(since_id)
-            .bind(topic)
-            .fetch_all(&self.pool)
-            .await?
+        let rows = if let Some(topic) = topic_filter {
+            persistence_db::repositories::events::list_since_by_topic(&self.pool, since_id, topic)
+                .await?
         } else {
-            sqlx::query_as::<_, (i64, String, String, String)>(
-                "SELECT event_id, topic, emitted_at, payload \
-                 FROM events WHERE event_id > ? ORDER BY event_id ASC",
-            )
-            .bind(since_id)
-            .fetch_all(&self.pool)
-            .await?
+            persistence_db::repositories::events::list_since(&self.pool, since_id).await?
         };
 
         let mut envelopes = Vec::with_capacity(rows.len());
-        for (_event_id, topic, _emitted_at, payload_str) in rows {
-            let payload: serde_json::Value = serde_json::from_str(&payload_str)?;
+        for row in rows {
+            let payload: serde_json::Value = serde_json::from_str(&row.payload)?;
             // Restore semantics: always emit with Source::Restore (R-Source-1).
-            let envelope = EventEnvelope::new(&topic, Source::Restore, payload);
+            let envelope = EventEnvelope::new(&row.topic, Source::Restore, payload);
             envelopes.push(envelope);
         }
 
         Ok(envelopes)
+    }
+}
+
+/// Lets `persistence_db` repositories (e.g. `lifecycle::SqliteLifecycleRepository`)
+/// publish through this bus without depending on the `audit` crate (which
+/// depends on `persistence_db`, so the reverse edge would cycle).
+#[async_trait::async_trait]
+impl EventPublisher for EventBus {
+    async fn publish(&self, topic: &str, source: Source, payload: serde_json::Value) {
+        let _ = EventBus::publish(self, topic, source, payload).await;
     }
 }
 
