@@ -509,9 +509,7 @@ pub async fn confirm(
     }
 
     // 12. Transition plan to ready_for_review
-    sqlx::query("UPDATE plans SET state = 'ready_for_review' WHERE id = ?")
-        .bind(&plan_id)
-        .execute(pool)
+    plans_repo::update_plan_state(pool, &plan_id, "ready_for_review")
         .await
         .map_err(|e| db_internal_ctx(e, "transition plan to ready_for_review"))?;
 

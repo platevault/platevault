@@ -14,6 +14,7 @@ use std::collections::HashMap;
 
 use metadata_core;
 use persistence_db::repositories::inbox::{self as inbox_repo};
+use persistence_db::repositories::q_inbox;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -263,12 +264,9 @@ pub async fn reclassify_v2(
     let source_group_id = match (req.source_group_id, req.inbox_item_id) {
         (Some(sg), _) => {
             // Verify the source group exists.
-            let exists: Option<(String,)> =
-                sqlx::query_as("SELECT id FROM inbox_source_groups WHERE id = ?")
-                    .bind(&sg)
-                    .fetch_optional(pool)
-                    .await
-                    .map_err(|e| db_internal_ctx(e, "look up source group"))?;
+            let exists = q_inbox::get_source_group_by_id(pool, &sg)
+                .await
+                .map_err(|e| db_internal_ctx(e, "look up source group"))?;
             if exists.is_none() {
                 return Err(ContractError::new(
                     ErrorCode::InboxItemNotFound,
@@ -468,17 +466,12 @@ pub async fn reclassify_v2(
                     continue;
                 }
             };
-            sqlx::query(
-                "UPDATE inbox_classification_evidence
-                 SET manual_override = ?,
-                     override_stale  = 0,
-                     evidence_source = 'manual_override'
-                 WHERE inbox_item_id = ? AND relative_file_path = ?",
+            q_inbox::set_manual_override_reset_stale(
+                pool,
+                inbox_item_id,
+                file_path,
+                frame_type_str,
             )
-            .bind(frame_type_str)
-            .bind(inbox_item_id)
-            .bind(file_path)
-            .execute(pool)
             .await
             .map_err(|e| db_internal_ctx(e, "write frameType manual_override"))?;
         } else {
@@ -512,14 +505,11 @@ pub async fn reclassify_v2(
     // file_records Vec that materialize_sub_items expects.
 
     // Fetch source group row for root_id / relative_path / lane.
-    let sg_row: Option<(String, String, Option<String>)> =
-        sqlx::query_as("SELECT root_id, relative_path, lane FROM inbox_source_groups WHERE id = ?")
-            .bind(&source_group_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| db_internal_ctx(e, "fetch source group for re-split"))?;
+    let sg_row = q_inbox::get_source_group_by_id(pool, &source_group_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "fetch source group for re-split"))?;
 
-    let (root_id, relative_path, lane_opt) = sg_row.ok_or_else(|| {
+    let sg_row = sg_row.ok_or_else(|| {
         ContractError::new(
             ErrorCode::InboxItemNotFound,
             format!("Source group row missing during re-split: {source_group_id}"),
@@ -527,7 +517,8 @@ pub async fn reclassify_v2(
             false,
         )
     })?;
-    let lane = lane_opt.unwrap_or_else(|| "fits".to_owned());
+    let (root_id, relative_path) = (sg_row.root_id, sg_row.relative_path);
+    let lane = sg_row.lane.unwrap_or_else(|| "fits".to_owned());
 
     // Build file_records from persisted metadata. We have no abs paths here
     // (reclassify carries no root path), so we pass an empty file_paths slice
