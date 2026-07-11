@@ -83,6 +83,37 @@ pub struct ItemProgressEvent {
     pub audit_reason: Option<String>,
 }
 
+impl ItemProgressEvent {
+    /// Build a terminal-transition event with the rollback fields at their
+    /// non-rollback defaults (`rollback_attempted: false`,
+    /// `rollback_outcome: NotApplicable`, `rollback_message: None`).
+    ///
+    /// Covers every executor-loop transition that never invokes rollback
+    /// (skip, gate refusal, stale, protected, success); the one site that
+    /// carries a real rollback outcome (a failed mutation) builds the struct
+    /// directly instead.
+    #[must_use]
+    pub fn terminal(
+        item_id: impl Into<String>,
+        prior_state: impl Into<String>,
+        new_state: impl Into<String>,
+        failure: Option<PlanItemFailure>,
+        audit_reason: Option<String>,
+    ) -> Self {
+        Self {
+            item_id: item_id.into(),
+            prior_state: prior_state.into(),
+            new_state: new_state.into(),
+            at: Timestamp::now_iso(),
+            failure,
+            rollback_attempted: false,
+            rollback_outcome: RollbackOutcome::NotApplicable,
+            rollback_message: None,
+            audit_reason,
+        }
+    }
+}
+
 /// Final outcome of an `execute_plan` call.
 #[derive(Clone, Debug)]
 pub enum ApplyOutcome {
@@ -331,17 +362,13 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
         if skip_set.take(&item.id) {
             tracing::debug!(item_id = %item.id, "user-skipped item");
             callbacks
-                .on_item_progress(ItemProgressEvent {
-                    item_id: item.id.clone(),
-                    prior_state: "pending".to_owned(),
-                    new_state: "skipped".to_owned(),
-                    at: Timestamp::now_iso(),
-                    failure: None,
-                    rollback_attempted: false,
-                    rollback_outcome: RollbackOutcome::NotApplicable,
-                    rollback_message: None,
-                    audit_reason: None,
-                })
+                .on_item_progress(ItemProgressEvent::terminal(
+                    item.id.clone(),
+                    "pending",
+                    "skipped",
+                    None,
+                    None,
+                ))
                 .await;
             counts.skipped += 1;
             continue;
@@ -361,17 +388,13 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                 ),
             );
             callbacks
-                .on_item_progress(ItemProgressEvent {
-                    item_id: item.id.clone(),
-                    prior_state: "pending".to_owned(),
-                    new_state: "refused".to_owned(),
-                    at: Timestamp::now_iso(),
-                    failure: Some(failure),
-                    rollback_attempted: false,
-                    rollback_outcome: RollbackOutcome::NotApplicable,
-                    rollback_message: None,
-                    audit_reason: Some("destructive_unconfirmed".to_owned()),
-                })
+                .on_item_progress(ItemProgressEvent::terminal(
+                    item.id.clone(),
+                    "pending",
+                    "refused",
+                    Some(failure),
+                    Some("destructive_unconfirmed".to_owned()),
+                ))
                 .await;
             counts.failed += 1;
             continue;
@@ -388,17 +411,13 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                     let audit_reason = gate_failure.code.as_str().to_owned();
                     let triggers_pause = gate_failure.code.triggers_pause();
                     callbacks
-                        .on_item_progress(ItemProgressEvent {
-                            item_id: item.id.clone(),
-                            prior_state: "applying".to_owned(),
-                            new_state: "refused".to_owned(),
-                            at: Timestamp::now_iso(),
-                            failure: Some(gate_failure),
-                            rollback_attempted: false,
-                            rollback_outcome: RollbackOutcome::NotApplicable,
-                            rollback_message: None,
-                            audit_reason: Some(audit_reason),
-                        })
+                        .on_item_progress(ItemProgressEvent::terminal(
+                            item.id.clone(),
+                            "applying",
+                            "refused",
+                            Some(gate_failure),
+                            Some(audit_reason),
+                        ))
                         .await;
                     counts.failed += 1;
                     if triggers_pause {
@@ -428,17 +447,13 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                 let failure_clone = stale_failure.clone();
 
                 callbacks
-                    .on_item_progress(ItemProgressEvent {
-                        item_id: item.id.clone(),
-                        prior_state: "applying".to_owned(),
-                        new_state: "stale".to_owned(),
-                        at: Timestamp::now_iso(),
-                        failure: Some(failure_clone),
-                        rollback_attempted: false,
-                        rollback_outcome: RollbackOutcome::NotApplicable,
-                        rollback_message: None,
-                        audit_reason: Some("stale".to_owned()),
-                    })
+                    .on_item_progress(ItemProgressEvent::terminal(
+                        item.id.clone(),
+                        "applying",
+                        "stale",
+                        Some(failure_clone),
+                        Some("stale".to_owned()),
+                    ))
                     .await;
 
                 counts.failed += 1;
@@ -462,17 +477,13 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
                 format!("item {} is protected by source policy", item.id),
             );
             callbacks
-                .on_item_progress(ItemProgressEvent {
-                    item_id: item.id.clone(),
-                    prior_state: "applying".to_owned(),
-                    new_state: "failed".to_owned(),
-                    at: Timestamp::now_iso(),
-                    failure: Some(failure),
-                    rollback_attempted: false,
-                    rollback_outcome: RollbackOutcome::NotApplicable,
-                    rollback_message: None,
-                    audit_reason: Some("protected".to_owned()),
-                })
+                .on_item_progress(ItemProgressEvent::terminal(
+                    item.id.clone(),
+                    "applying",
+                    "failed",
+                    Some(failure),
+                    Some("protected".to_owned()),
+                ))
                 .await;
             counts.failed += 1;
             continue;
@@ -506,17 +517,13 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
         match op_result {
             Ok(()) => {
                 callbacks
-                    .on_item_progress(ItemProgressEvent {
-                        item_id: item.id.clone(),
-                        prior_state: "applying".to_owned(),
-                        new_state: "succeeded".to_owned(),
-                        at: Timestamp::now_iso(),
-                        failure: None,
-                        rollback_attempted: false,
-                        rollback_outcome: RollbackOutcome::NotApplicable,
-                        rollback_message: None,
-                        audit_reason: None,
-                    })
+                    .on_item_progress(ItemProgressEvent::terminal(
+                        item.id.clone(),
+                        "applying",
+                        "succeeded",
+                        None,
+                        None,
+                    ))
                     .await;
                 counts.succeeded += 1;
             }
