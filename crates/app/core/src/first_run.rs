@@ -122,11 +122,14 @@ async fn check_duplicate(
 
 fn db_to_contract(e: persistence_db::DbError) -> ContractError {
     let msg = e.to_string();
-    drop(e);
     if msg.contains("UNIQUE constraint failed") {
         ContractError::new(ErrorCode::PathAlreadyRegistered, msg, ErrorSeverity::Warning, false)
     } else {
-        ContractError::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Fatal, true)
+        // Delegate the non-UNIQUE fallback to the canonical mapper (T1-c) so
+        // `NotFound` is classified `Blocking`/non-retryable instead of the
+        // hand-rolled `Fatal`/`retryable=true` this used to apply to every
+        // variant, including missing rows.
+        crate::errors::db_err(e)
     }
 }
 
@@ -650,6 +653,21 @@ mod tests {
 
         let err = check_duplicate(&pool, "/tmp", SourceKind::Project).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PathAlreadyRegisteredDifferentKind);
+    }
+
+    /// T1-c: `db_to_contract`'s fallback arm now delegates to the canonical
+    /// `db_err` mapper, so a `NotFound` (missing row) is `Blocking`/
+    /// non-retryable rather than the hand-rolled `Fatal`/`retryable=true`
+    /// this used to apply to every `DbError` variant.
+    #[tokio::test]
+    async fn remove_source_not_found_is_blocking_not_fatal() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+
+        let err = remove_source(&pool, "does-not-exist").await.unwrap_err();
+        assert_eq!(err.severity, ErrorSeverity::Blocking);
+        assert!(!err.retryable);
     }
 
     #[tokio::test]

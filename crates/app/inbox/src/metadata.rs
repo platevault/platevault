@@ -17,6 +17,7 @@
 
 use std::collections::HashMap;
 
+use app_core_errors::db_err;
 use patterns::{resolve_pattern_str, MetadataBundle};
 use persistence_db::repositories::inbox::{self as repo};
 use persistence_db::repositories::settings as settings_repo;
@@ -54,9 +55,8 @@ pub async fn get_inbox_item_metadata(
 
     // 2. Load the per-file metadata rows + evidence rows, then join in memory by
     //    relative path. Metadata rows are the spine (one per enumerated file).
-    let meta_rows =
-        repo::list_inbox_file_metadata(pool, inbox_item_id).await.map_err(|e| db_err(&e))?;
-    let evidence_rows = repo::list_evidence(pool, inbox_item_id).await.map_err(|e| db_err(&e))?;
+    let meta_rows = repo::list_inbox_file_metadata(pool, inbox_item_id).await.map_err(db_err)?;
+    let evidence_rows = repo::list_evidence(pool, inbox_item_id).await.map_err(db_err)?;
 
     // Index evidence by relative path for O(1) lookup while iterating metadata.
     let evidence_by_path: HashMap<&str, &repo::InboxEvidenceRow> =
@@ -151,10 +151,6 @@ pub async fn get_inbox_item_metadata(
     Ok(files)
 }
 
-fn db_err(e: &persistence_db::DbError) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-}
-
 /// Compute the mandatory-attribute gate for a file from the already-built DTO
 /// (spec 041 T070 / FR-047 / R-14).
 ///
@@ -211,9 +207,8 @@ async fn missing_path_attributes(
     let Some(ft) = m.frame_type_effective.as_deref() else {
         return Ok(vec!["image type".to_owned()]);
     };
-    let pattern = settings_repo::effective_pattern_for(pool, ft, m.is_master)
-        .await
-        .map_err(|e| db_err(&e))?;
+    let pattern =
+        settings_repo::effective_pattern_for(pool, ft, m.is_master).await.map_err(db_err)?;
     let Some(pattern) = pattern else {
         return Ok(vec!["image type".to_owned()]);
     };

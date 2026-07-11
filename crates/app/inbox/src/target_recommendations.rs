@@ -24,6 +24,7 @@
 //! `app_core_targets::ingest_sessions::propagate_target_to_projects`.
 #![allow(clippy::doc_markdown)] // RA/Dec, FOV, OBJECT are domain terms
 
+use app_core_errors::db_err;
 use persistence_db::repositories::inbox::{self as repo, InboxPointingRow};
 use sqlx::SqlitePool;
 
@@ -43,10 +44,6 @@ use targeting_resolver::cache;
 /// with the whole sky. The use-case accepts an override so callers/settings can
 /// tune it later; this is the baked-in default.
 pub const DEFAULT_FIXED_RADIUS_DEG: f64 = 5.0;
-
-fn db_err(e: &persistence_db::DbError) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-}
 
 fn not_found(msg: String) -> ContractError {
     ContractError::new(ErrorCode::InboxItemNotFound, msg, ErrorSeverity::Blocking, false)
@@ -83,7 +80,7 @@ pub async fn target_recommendations(
     let item_id = resolve_item_id(pool, target).await?;
 
     // 2. Load per-file pointing + optics for the sub-group.
-    let rows = repo::list_inbox_pointing(pool, &item_id).await.map_err(|e| db_err(&e))?;
+    let rows = repo::list_inbox_pointing(pool, &item_id).await.map_err(db_err)?;
 
     // Display hint only (R-17): first non-blank OBJECT, never used for matching.
     let object_hint = rows
@@ -172,8 +169,7 @@ async fn resolve_item_id(
             Ok(id.clone())
         }
         RecommendationTarget::SourceGroup(sg) => {
-            let ids =
-                repo::list_item_ids_for_source_group(pool, sg).await.map_err(|e| db_err(&e))?;
+            let ids = repo::list_item_ids_for_source_group(pool, sg).await.map_err(db_err)?;
             ids.into_iter()
                 .next()
                 .ok_or_else(|| not_found(format!("no inbox items for source group: {sg}")))
