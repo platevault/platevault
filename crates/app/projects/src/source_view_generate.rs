@@ -49,7 +49,7 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::new_id;
 use domain_core::source_view::Materialization;
 use patterns::{resolve_pattern_str, MetadataBundle, ResolveError};
-use persistence_db::repositories::{plans as plans_repo, projects as projects_repo};
+use persistence_db::repositories::{plans as plans_repo, projects as projects_repo, q_projects};
 use sqlx::SqlitePool;
 
 use app_core_errors::db_internal_ctx;
@@ -108,14 +108,10 @@ struct FrameRow {
 async fn frames_for_ids(pool: &SqlitePool, ids: &[String]) -> Vec<FrameRow> {
     let mut out = Vec::with_capacity(ids.len());
     for id in ids {
-        if let Ok(Some(row)) = sqlx::query_as::<_, (String, String)>(
-            "SELECT relative_path, state FROM file_record WHERE id = ?",
-        )
-        .bind(id)
-        .fetch_optional(pool)
-        .await
+        if let Ok(Some((relative_path, state))) =
+            q_projects::get_file_record_path_and_state(pool, id).await
         {
-            out.push(FrameRow { id: id.clone(), relative_path: row.0, state: row.1 });
+            out.push(FrameRow { id: id.clone(), relative_path, state });
         }
         // Missing rows are silently absent here — the caller treats an id
         // with no resolved frame as unresolved (FR-019).
@@ -307,18 +303,19 @@ pub async fn generate_source_view(
         );
 
     for src in &sources {
-        let Some((root_id, session_key, frame_ids_json)) =
-            sqlx::query_as::<_, (String, String, String)>(
-                "SELECT root_id, session_key, frame_ids FROM acquisition_session WHERE id = ?",
-            )
-            .bind(&src.inventory_session_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| db_internal_ctx(e, "load acquisition session"))?
+        let Some(session) =
+            q_projects::get_acquisition_session_view(pool, &src.inventory_session_id)
+                .await
+                .map_err(|e| db_internal_ctx(e, "load acquisition session"))?
         else {
             unresolved_refs.push(src.inventory_session_id.clone());
             continue;
         };
+        let q_projects::AcquisitionSessionViewRow {
+            root_id,
+            session_key,
+            frame_ids: frame_ids_json,
+        } = session;
 
         // Resolve the light-frame destination directory once per session
         // (session/night → filter → exposure grouping, US2 AS1): the
@@ -359,13 +356,10 @@ pub async fn generate_source_view(
         }
 
         // 3. Matched calibration (best-effort; not a generation prerequisite — FR-010a).
-        let assignments: Vec<(String, String)> = sqlx::query_as(
-            "SELECT calibration_type, master_id FROM calibration_assignment WHERE session_id = ?",
-        )
-        .bind(&src.inventory_session_id)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
+        let assignments: Vec<(String, String)> =
+            q_projects::list_calibration_assignment_types(pool, &src.inventory_session_id)
+                .await
+                .unwrap_or_default();
 
         if assignments.is_empty() {
             sessions_without_calibration.push(src.inventory_session_id.clone());
@@ -378,13 +372,9 @@ pub async fn generate_source_view(
         );
 
         for (cal_type, master_id) in assignments {
-            let Some((cal_root_id, cal_frame_ids_json)) = sqlx::query_as::<_, (String, String)>(
-                "SELECT root_id, frame_ids FROM calibration_session WHERE id = ?",
-            )
-            .bind(&master_id)
-            .fetch_optional(pool)
-            .await
-            .unwrap_or(None) else {
+            let Some((cal_root_id, cal_frame_ids_json)) =
+                q_projects::get_calibration_session_view(pool, &master_id).await.unwrap_or(None)
+            else {
                 unresolved_refs.push(master_id.clone());
                 continue;
             };

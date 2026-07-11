@@ -30,7 +30,7 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::new_id;
 use domain_core::lifecycle::prepared_source::ALLOWED_PROJECT_STATES_FOR_VIEW_OPS;
 use persistence_db::repositories::{
-    plans as plans_repo, prepared_source_views as views_repo, projects as projects_repo,
+    plans as plans_repo, prepared_source_views as views_repo, projects as projects_repo, q_projects,
 };
 use sqlx::SqlitePool;
 
@@ -318,11 +318,8 @@ pub async fn regenerate_prepared_view(
 
     for item in &items {
         // Check inventory resolution against the file_record table.
-        let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM file_record WHERE id = ?")
-            .bind(&item.inventory_item_id)
-            .fetch_one(pool)
-            .await
-            .unwrap_or(false);
+        let exists =
+            q_projects::file_record_exists(pool, &item.inventory_item_id).await.unwrap_or(false);
 
         if exists {
             resolved_items.push(item);
