@@ -8,11 +8,13 @@
  * back to `window.prompt`.
  */
 
-import { useState, useCallback } from 'react';
 import { dirname } from 'pathe';
 import { commands } from '@/bindings';
-import { errMessage } from '@/lib/errors';
+import { unwrap } from '@/api/ipc';
+import { errMessage, isContractError } from '@/lib/errors';
 import { m } from '@/lib/i18n';
+import { useAsyncAction } from './useAsyncAction';
+import type { DirectoryPickResponse, FilePickResponse_Serialize } from '@/bindings/index';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -177,20 +179,19 @@ export async function pickDirectory(
 
   const requestId = crypto.randomUUID();
 
-  const response = await commands.nativeDirectoryPick({
-    requestId,
-    defaultPath: resolvedDefault ?? null,
-  });
-
-  if (response.status === 'error') {
-    const message = response.error.message;
+  let result: DirectoryPickResponse;
+  try {
+    result = unwrap(
+      await commands.nativeDirectoryPick({ requestId, defaultPath: resolvedDefault ?? null }),
+    );
+  } catch (err: unknown) {
+    const message = isContractError(err) ? err.message : errMessage(err);
     if (message.includes('cancelled') || message.includes('canceled')) {
       return { path: null, cancelled: true };
     }
     throw new PickerError_impl('picker.directory_failed', message);
   }
 
-  const result = response.data;
   if (result.cancelled || result.path === null) {
     return { path: null, cancelled: true };
   }
@@ -223,21 +224,19 @@ export async function pickFile(
 
   const requestId = crypto.randomUUID();
 
-  const response = await commands.nativeFilePick({
-    requestId,
-    filters,
-    defaultPath: resolvedDefault ?? null,
-  });
-
-  if (response.status === 'error') {
-    const message = response.error.message;
+  let result: FilePickResponse_Serialize;
+  try {
+    result = unwrap(
+      await commands.nativeFilePick({ requestId, filters, defaultPath: resolvedDefault ?? null }),
+    );
+  } catch (err: unknown) {
+    const message = isContractError(err) ? err.message : errMessage(err);
     if (message.includes('cancelled') || message.includes('canceled')) {
       return { path: null, selectedFilter: null, cancelled: true };
     }
     throw new PickerError_impl('picker.file_failed', message);
   }
 
-  const result = response.data;
   if (result.cancelled || result.path === null) {
     return { path: null, selectedFilter: null, cancelled: true };
   }
@@ -285,32 +284,18 @@ export interface UseDirectoryPickerReturn {
  * Cancellation does NOT set the error state.
  */
 export function useDirectoryPicker(): UseDirectoryPickerReturn {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<PickerError | null>(null);
-
-  const pick = useCallback(
-    async (defaultPath?: string, kind?: LastPathKind): Promise<DirectoryPickResult> => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await pickDirectory(defaultPath, kind);
-        return result;
-      } catch (err: unknown) {
-        const pickerErr: PickerError = isPickerError(err)
-          ? err
-          : { code: 'picker.unknown', message: errMessage(err) };
-        setError(pickerErr);
-        return { path: null, cancelled: false };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
+  const { run, loading, error, clearError } = useAsyncAction<
+    [defaultPath?: string, kind?: LastPathKind],
+    DirectoryPickResult,
+    PickerError
+  >(
+    pickDirectory,
+    (err) =>
+      isPickerError(err) ? err : { code: 'picker.unknown', message: errMessage(err) },
+    { path: null, cancelled: false },
   );
 
-  const clearError = useCallback(() => setError(null), []);
-
-  return { pick, loading, error, clearError };
+  return { pick: run, loading, error, clearError };
 }
 
 export interface UseFilePickerReturn {
@@ -329,34 +314,16 @@ export interface UseFilePickerReturn {
  * Cancellation does NOT set the error state.
  */
 export function useFilePicker(): UseFilePickerReturn {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<PickerError | null>(null);
-
-  const pick = useCallback(
-    async (
-      filters: FileFilter[],
-      defaultPath?: string,
-      kind?: LastPathKind,
-    ): Promise<FilePickResult> => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await pickFile(filters, defaultPath, kind);
-        return result;
-      } catch (err: unknown) {
-        const pickerErr: PickerError = isPickerError(err)
-          ? err
-          : { code: 'picker.unknown', message: errMessage(err) };
-        setError(pickerErr);
-        return { path: null, selectedFilter: null, cancelled: false };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
+  const { run, loading, error, clearError } = useAsyncAction<
+    [filters: FileFilter[], defaultPath?: string, kind?: LastPathKind],
+    FilePickResult,
+    PickerError
+  >(
+    pickFile,
+    (err) =>
+      isPickerError(err) ? err : { code: 'picker.unknown', message: errMessage(err) },
+    { path: null, selectedFilter: null, cancelled: false },
   );
 
-  const clearError = useCallback(() => setError(null), []);
-
-  return { pick, loading, error, clearError };
+  return { pick: run, loading, error, clearError };
 }

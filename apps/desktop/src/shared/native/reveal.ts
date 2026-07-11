@@ -8,9 +8,10 @@
  * console and returns a stub response.
  */
 
-import { useState, useCallback } from 'react';
 import { commands } from '@/bindings';
-import { errMessage } from '@/lib/errors';
+import { unwrap } from '@/api/ipc';
+import { errMessage, isContractError } from '@/lib/errors';
+import { useAsyncAction } from './useAsyncAction';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -87,22 +88,23 @@ export async function revealInOs(
 
   const requestId = crypto.randomUUID();
 
-  const response = await commands.nativeReveal({
-    requestId,
-    path,
-    entityKind: ctx?.entityKind ?? null,
-    entityId: ctx?.entityId ?? null,
-  });
-
-  if (response.status === 'error') {
-    const err = response.error;
-    if (err.code === 'path.not_exists' || err.message.includes('not found') || err.message.includes('does not exist')) {
+  try {
+    return unwrap(
+      await commands.nativeReveal({
+        requestId,
+        path,
+        entityKind: ctx?.entityKind ?? null,
+        entityId: ctx?.entityId ?? null,
+      }),
+    );
+  } catch (err: unknown) {
+    const code = isContractError(err) ? err.code : '';
+    const message = isContractError(err) ? err.message : errMessage(err);
+    if (code === 'path.not_exists' || message.includes('not found') || message.includes('does not exist')) {
       throw new RevealError_impl('path.not_exists', `Path does not exist: ${path}`, path);
     }
-    throw new RevealError_impl('os.command_failed', err.message, path);
+    throw new RevealError_impl('os.command_failed', message, path);
   }
-
-  return response.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,34 +139,18 @@ export interface UseRevealInOsReturn {
  * can render a toast with a "Copy path" action (T029).
  */
 export function useRevealInOs(): UseRevealInOsReturn {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<RevealError | null>(null);
-
-  const reveal = useCallback(
-    async (path: string, ctx?: RevealContext): Promise<RevealResult | null> => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await revealInOs(path, ctx);
-        return result;
-      } catch (err: unknown) {
-        const revErr: RevealError = isRevealError(err)
-          ? err
-          : {
-              code: 'os.command_failed',
-              message: errMessage(err),
-              path,
-            };
-        setError(revErr);
-        return null;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
+  const { run, loading, error, clearError } = useAsyncAction<
+    [path: string, ctx?: RevealContext],
+    RevealResult | null,
+    RevealError
+  >(
+    revealInOs,
+    (err, path) =>
+      isRevealError(err)
+        ? err
+        : { code: 'os.command_failed', message: errMessage(err), path },
+    null,
   );
 
-  const clearError = useCallback(() => setError(null), []);
-
-  return { reveal, loading, error, clearError };
+  return { reveal: run, loading, error, clearError };
 }

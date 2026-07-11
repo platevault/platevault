@@ -19,6 +19,7 @@ import { errMessage } from '@/lib/errors';
 import { m } from '@/lib/i18n';
 import { queryClient } from '@/data/queryClient';
 import { queryKeys } from '@/data/queryKeys';
+import { useInvalidateInventory } from '@/features/sessions/store';
 import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
 import { RemapRootDialog } from './RemapRootDialog';
@@ -51,6 +52,8 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const invalidateInventory = useInvalidateInventory();
 
   const [showAdd, setShowAdd] = useState(false);
   const [addingPath, setAddingPath] = useState('');
@@ -171,18 +174,16 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   // by waiting out the 30s default query `staleTime`. Two independent readers
   // need invalidating: `sessions.all()` backs `SessionSourcePicker` (real-UI
   // journey evidence: its frame count goes stale after reconcile) and the
-  // `["inventory"]` prefix backs the Sessions/Inventory page's own query
-  // (`useInventorySources`, `sessions/store.ts`) — same invalidation the
-  // existing `useInvalidateInventory()` hook there performs.
+  // inventory prefix backs the Sessions/Inventory page's own query
+  // (`useInventorySources`, `sessions/store.ts`) via the shared
+  // `useInvalidateInventory()` hook.
   const handleReconcile = async (root: LibraryRoot) => {
     setReconcilingId(root.id);
     setReconcileError(null);
     try {
       await reconcileRoot({ rootId: root.id });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all() }),
-        queryClient.invalidateQueries({ queryKey: ['inventory'] }),
-      ]);
+      invalidateInventory();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all() });
       loadRoots();
     } catch (err: unknown) {
       setReconcileError(errMessage(err));

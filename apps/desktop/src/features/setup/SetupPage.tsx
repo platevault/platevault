@@ -1,6 +1,7 @@
 import { usePreference } from '@/data/preferences';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
+import { checkFirstRunComplete } from '@/app/first-run';
 import { m } from '@/lib/i18n';
 import { SetupWizard } from './SetupWizard';
 
@@ -15,26 +16,18 @@ export function SetupPage() {
       return;
     }
 
-    const useMocks = import.meta.env.VITE_USE_MOCKS === 'true';
-    if (useMocks) {
-      setChecking(false);
-      return;
-    }
-
+    // Single source of truth for the first-run gate (also used by the index
+    // route) — handles mock mode, the backend round-trip, and the fallback to
+    // the cached preference internally.
     let cancelled = false;
-    import('@/bindings/index')
-      .then(({ commands }) => commands.firstrunState())
-      .then((result) => {
-        if (cancelled) return;
-        if (result.status === 'ok' && Boolean(result.data.completedAt)) {
-          void navigate({ to: '/inbox' });
-        } else {
-          setChecking(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setChecking(false);
-      });
+    void checkFirstRunComplete().then((complete) => {
+      if (cancelled) return;
+      if (complete) {
+        void navigate({ to: '/inbox' });
+      } else {
+        setChecking(false);
+      }
+    });
     return () => { cancelled = true; };
   }, [setupCompleted, navigate]);
 

@@ -16,6 +16,7 @@
 
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+import { ipcArgs } from '@/lib/ipc-args';
 import type { ProjectState, TransitionActor } from '@/bindings/index';
 
 export type ProjectLifecycleState = ProjectState;
@@ -77,7 +78,7 @@ export async function applyProjectLifecycleTransition(
   // spec-037 `lifecycle_integrity` E2E journey.
   return unwrap(
     await commands.lifecycleTransitionApply(
-      req as unknown as Parameters<typeof commands.lifecycleTransitionApply>[0],
+      ipcArgs<typeof commands.lifecycleTransitionApply>(req),
     ),
   ) as LifecycleTransitionResponse;
 }

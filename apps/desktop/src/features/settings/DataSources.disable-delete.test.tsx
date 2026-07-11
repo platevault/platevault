@@ -18,9 +18,16 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { DataSources } from './DataSources';
+import { queryClient } from '@/data/queryClient';
 import type { LibraryRoot } from '@/bindings/types';
 import { m } from '@/lib/i18n';
+
+function wrapper({ children }: { children: ReactNode }) {
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 // Mocks the generated bindings surface (spec 037) so the real `settingsIpc`
@@ -92,7 +99,7 @@ describe('DataSources — Disable/Enable', () => {
       .mockResolvedValueOnce(ok([makeRoot({ active: false })]));
     mockSetActive.mockResolvedValue(ok(null));
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     fireEvent.click(screen.getByRole('button', { name: /^Disable$/i }));
@@ -114,7 +121,7 @@ describe('DataSources — Disable/Enable', () => {
     mockRootsList.mockResolvedValue(ok([makeRoot({ active: false })]));
     mockSetActive.mockResolvedValue(ok(null));
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     fireEvent.click(screen.getByRole('button', { name: /^Enable$/i }));
@@ -129,7 +136,7 @@ describe('DataSources — Disable/Enable', () => {
   it('shows a "Disabled" pill for a disabled root', async () => {
     mockRootsList.mockResolvedValue(ok([makeRoot({ active: false })]));
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     expect(screen.getByText(m.settings_datasources_disabled_pill())).toBeInTheDocument();
@@ -143,7 +150,7 @@ describe('DataSources — Delete', () => {
       .mockResolvedValueOnce(ok([]));
     mockDelete.mockResolvedValue(ok(null));
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     fireEvent.click(screen.getByRole('button', { name: /^Delete$/i }));
@@ -164,7 +171,7 @@ describe('DataSources — Delete', () => {
   it('does not show a Delete button for an online root', async () => {
     mockRootsList.mockResolvedValue(ok([makeRoot({ online: true })]));
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument();
@@ -182,7 +189,7 @@ describe('DataSources — Delete', () => {
       }),
     );
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     fireEvent.click(screen.getByRole('button', { name: /^Delete$/i }));

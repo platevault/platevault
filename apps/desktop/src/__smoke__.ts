@@ -74,7 +74,6 @@ import { InboxDetail } from '@/features/inbox/InboxDetail';
 
 import { CalibrationPage } from '@/features/calibration/CalibrationPage';
 import { CalibrationDetail } from '@/features/calibration/CalibrationDetail';
-import { MastersList } from '@/features/calibration/MastersList';
 import { MasterDetail } from '@/features/calibration/MasterDetail';
 
 import { TargetsPage } from '@/features/targets/TargetsPage';
@@ -157,7 +156,6 @@ export type SmokeCheck = {
   inboxDetail: typeof InboxDetail;
   calibrationPage: typeof CalibrationPage;
   calibrationDetail: typeof CalibrationDetail;
-  mastersList: typeof MastersList;
   masterDetail: typeof MasterDetail;
   targetsPage: typeof TargetsPage;
   targetList: typeof TargetList;

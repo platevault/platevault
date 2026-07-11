@@ -2,7 +2,6 @@
 // Matches design V3 mock data.
 
 import type {
-  ProjectDetail,
   ProjectSource,
   ProjectSourceView,
   ProjectOutput,
@@ -47,8 +46,38 @@ export const PROJECTS_DATA: ProjectFixture[] = [
 
 // ─── Project List ───────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const projects: any[] = [
+/**
+ * Legacy design-V3 detail-record shape (snake_case, pre-dates the generated
+ * camelCase `ProjectDetailDto_Serialize` contract). Only `projects[0]` is
+ * actually consumed (spread into `projectDetail` below) — kept as a record
+ * array, not `ProjectFixture[]`, since the two shapes are unrelated.
+ */
+interface ProjectFixtureRecord {
+  id: string;
+  name: string;
+  workflow_profile_id: string;
+  root_path: string;
+  state: ProjectFixture['state'];
+  blocked_reason?: string;
+  verification_state: string;
+  cleanup_state: { reclaimable_bytes: number };
+  integration_hours: number;
+  target_ids: string[];
+  source_map: {
+    lights: string[];
+    darks: string[];
+    flats: string[];
+    bias: string[];
+    dark_flats: string[];
+  };
+  source_view_ids: string[];
+  output_ids: string[];
+  processing_directory: string;
+  output_directory: string;
+  updatedAt: string;
+}
+
+export const projects: ProjectFixtureRecord[] = [
   {
     id: uuid('440301'),
     name: 'NGC 7000 · HOO',
@@ -261,7 +290,14 @@ const ngc7000Artifacts: ProjectArtifactGroup[] = [
   { type: 'Unknown', count: 3, total_size_bytes: 1_258_291, cleanup_eligibility: 'none', confidence: 'low', tool: '?', protected: false, warning: 'needs classification' },
 ];
 
-export const projectDetail: ProjectDetail = {
+// NOTE: this legacy design-V3 detail record (snake_case fields, `projects[0]`
+// spread) predates the generated `ProjectDetailDto_Serialize` contract and
+// does NOT structurally match it (camelCase fields, different shape) — it has
+// no remaining consumers (superseded by `mockProjectSummaries` /
+// `mockProjectDetailFor` below). Left untyped-annotation rather than
+// re-shaped, since giving it the real DTO type would require rewriting every
+// field for a fixture nothing reads.
+export const projectDetail = {
   ...projects[0],
   targets: ['NGC 7000 (primary)'],
   sources: ngc7000Sources,

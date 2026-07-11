@@ -16,20 +16,21 @@
  *   name.empty, name.too_long, name.duplicate, tool.unknown,
  *   path.invalid, path.collision.
  *
- * Uses @base-ui-components/react/dialog for focus-trapping modal behaviour,
- * consistent with ConfirmOverlay.
+ * Uses the shared `Modal` for chrome/focus-trapping (spec 043 consolidation):
+ * the form lives in `children`, and the footer's submit button targets it via
+ * the HTML `form` attribute (base-ui portals the popup, so a `<form>`
+ * wrapping `<Modal>` in JSX would NOT be its actual DOM ancestor).
  */
 
-import { useState, useCallback } from 'react';
+import { useId, useState, useCallback } from 'react';
 import { m } from '@/lib/i18n';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Dialog } from '@base-ui-components/react/dialog';
 import { Btn, RadioGroup, Pill } from '@/ui';
 import type { RadioOption } from '@/ui';
 import { callCreateProject } from '@/features/projects/store';
 import type { TargetSuggestion } from '@/bindings/aliases';
-import { TargetSearch } from '@/components';
+import { Modal, TargetSearch } from '@/components';
 import type { ProjectCreateResult } from '@/bindings/index';
 import {
   createProjectFormSchema,
@@ -62,6 +63,8 @@ export interface CreateProjectDialogProps {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectDialogProps) {
+  const formId = useId();
+
   // spec 035 US1: selected canonical target (optional). The current
   // projects.create contract has no target field, so the selection is held in
   // local state for now; persisting the association requires a backend contract
@@ -82,18 +85,13 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
     mode: 'onSubmit',
   });
 
-  // Reset form when dialog opens/closes
-  const handleOpenChange = useCallback(
-    (isOpen: boolean) => {
-      if (!isOpen) {
-        reset({ name: '', tool: 'PixInsight', path: '', notes: '' });
-        setTarget(null);
-        setServerError(null);
-        onClose();
-      }
-    },
-    [onClose, reset],
-  );
+  // Reset form state and close.
+  const closeAndReset = useCallback(() => {
+    reset({ name: '', tool: 'PixInsight', path: '', notes: '' });
+    setTarget(null);
+    setServerError(null);
+    onClose();
+  }, [onClose, reset]);
 
   // ── Submit ──────────────────────────────────────────────────────────────────
   // zod (via the resolver) covers the synchronous rules (name/path required,
@@ -120,7 +118,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
         notes: values.notes.trim() || undefined,
         canonicalTargetId: target?.targetId ?? null,
       });
-      handleOpenChange(false);
+      closeAndReset();
       onSuccess(result);
     } catch (err: unknown) {
       setServerError(mapCreateProjectErrorCode(createProjectErrorCode(err)));
@@ -128,148 +126,139 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Backdrop className="alm-confirm-overlay__backdrop" />
-        <Dialog.Popup
-          className="alm-confirm-overlay alm-create-project__popup"
-          aria-label={m.projects_create_btn()}
-        >
-          <form onSubmit={rhfHandleSubmit(onValid)} noValidate>
-            {/* Header */}
-            <div className="alm-confirm-overlay__header">
-              <Dialog.Title className="alm-confirm-overlay__title">{m.projects_create_title()}</Dialog.Title>
-              <Dialog.Description className="alm-confirm-overlay__description">
-                {m.projects_create_desc()}
-              </Dialog.Description>
-            </div>
+    <Modal
+      open={open}
+      onClose={closeAndReset}
+      title={m.projects_create_title()}
+      subtitle={m.projects_create_desc()}
+      size="md"
+      className="alm-create-project__popup"
+      ariaLabel={m.projects_create_btn()}
+      footer={
+        <>
+          <Btn type="button" variant="ghost" onClick={closeAndReset} disabled={isSubmitting}>
+            {m.common_cancel()}
+          </Btn>
+          <Btn type="submit" form={formId} variant="primary" disabled={isSubmitting}>
+            {isSubmitting ? m.projects_create_creating() : m.projects_create_btn()}
+          </Btn>
+        </>
+      }
+    >
+      {/* The footer's submit button is rendered outside this element by Modal
+          (separate `footer` slot) — it targets this form via `form={formId}`. */}
+      <form
+        id={formId}
+        className="alm-create-project__body"
+        onSubmit={rhfHandleSubmit(onValid)}
+        noValidate
+      >
+        {/* Name */}
+        <div>
+          <label className="alm-field-label" htmlFor="cp-name">{m.projects_name_label()}</label>
+          <input
+            id="cp-name"
+            className="alm-input"
+            type="text"
+            placeholder={m.projects_create_name_placeholder()}
+            maxLength={MAX_NAME_LEN + 10}
+            aria-invalid={Boolean(errors.name)}
+            aria-describedby={errors.name ? 'name-error' : undefined}
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: moves focus to the first field when the Create Project modal opens (expected modal behaviour)
+            autoFocus
+            {...register('name')}
+          />
+          {errors.name && (
+            <span id="name-error" role="alert" className="alm-field-error">
+              {errors.name.message}
+            </span>
+          )}
+        </div>
 
-            {/* Body */}
-            <div className="alm-confirm-overlay__body alm-create-project__body">
-
-              {/* Name */}
-              <div>
-                { }
-                <label className="alm-field-label" htmlFor="cp-name">{m.projects_name_label()}</label>
-                <input
-                  id="cp-name"
-                  className="alm-input"
-                  type="text"
-                  placeholder={m.projects_create_name_placeholder()}
-                  maxLength={MAX_NAME_LEN + 10}
-                  aria-invalid={Boolean(errors.name)}
-                  aria-describedby={errors.name ? 'name-error' : undefined}
-                  // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: moves focus to the first field when the Create Project modal opens (expected modal behaviour)
-                  autoFocus
-                  {...register('name')}
-                />
-                {errors.name && (
-                  <span id="name-error" role="alert" className="alm-field-error">
-                    {errors.name.message}
-                  </span>
+        {/* Target (optional) — spec 035 US1 */}
+        <div>
+          {target ? (
+            <>
+              <span className="alm-field-label">{m.projects_create_target_label()}</span>
+              <div className="alm-create-project__target-row">
+                <Pill variant="accent">{target.primaryDesignation}</Pill>
+                {target.commonName && (
+                  <span className="alm-field-hint">{target.commonName}</span>
                 )}
+                <Btn type="button" variant="ghost" onClick={() => setTarget(null)}>
+                  {m.common_change()}
+                </Btn>
               </div>
+            </>
+          ) : (
+            <TargetSearch
+              label={m.projects_create_target_search_label()}
+              placeholder={m.projects_create_target_search_placeholder()}
+              onSelect={setTarget}
+            />
+          )}
+        </div>
 
-              {/* Target (optional) — spec 035 US1 */}
-              <div>
-                {target ? (
-                  <>
-                    <span className="alm-field-label">{m.projects_create_target_label()}</span>
-                    <div className="alm-create-project__target-row">
-                      <Pill variant="accent">{target.primaryDesignation}</Pill>
-                      {target.commonName && (
-                        <span className="alm-field-hint">{target.commonName}</span>
-                      )}
-                      <Btn type="button" variant="ghost" onClick={() => setTarget(null)}>
-                        {m.common_change()}
-                      </Btn>
-                    </div>
-                  </>
-                ) : (
-                  <TargetSearch
-                    label={m.projects_create_target_search_label()}
-                    placeholder={m.projects_create_target_search_placeholder()}
-                    onSelect={setTarget}
-                  />
-                )}
-              </div>
+        {/* Tool */}
+        <div>
+          <label className="alm-field-label">{m.projects_tool_label()}</label>
+          <Controller
+            control={control}
+            name="tool"
+            render={({ field }) => (
+              <RadioGroup
+                options={toolOptions()}
+                value={field.value}
+                onChange={(v) => field.onChange(v)}
+                aria-label={m.projects_tool_label()}
+              />
+            )}
+          />
+          {errors.tool && (
+            <span role="alert" className="alm-field-error">{errors.tool.message}</span>
+          )}
+        </div>
 
-              {/* Tool */}
-              <div>
-                { }
-                <label className="alm-field-label">{m.projects_tool_label()}</label>
-                <Controller
-                  control={control}
-                  name="tool"
-                  render={({ field }) => (
-                    <RadioGroup
-                      options={toolOptions()}
-                      value={field.value}
-                      onChange={(v) => field.onChange(v)}
-                      aria-label={m.projects_tool_label()}
-                    />
-                  )}
-                />
-                {errors.tool && (
-                  <span role="alert" className="alm-field-error">{errors.tool.message}</span>
-                )}
-              </div>
+        {/* Path */}
+        <div>
+          <label className="alm-field-label" htmlFor="cp-path">
+            {m.projects_create_path_label()}
+            <span className="alm-field-hint"> {m.projects_create_path_hint()}</span>
+          </label>
+          <input
+            id="cp-path"
+            className="alm-input"
+            type="text"
+            placeholder={m.projects_create_path_placeholder()}
+            aria-invalid={Boolean(errors.path)}
+            aria-describedby={errors.path ? 'path-error' : undefined}
+            {...register('path')}
+          />
+          {errors.path && (
+            <span id="path-error" role="alert" className="alm-field-error">
+              {errors.path.message}
+            </span>
+          )}
+        </div>
 
-              {/* Path */}
-              <div>
-                { }
-                <label className="alm-field-label" htmlFor="cp-path">
-                  {m.projects_create_path_label()}
-                  <span className="alm-field-hint"> {m.projects_create_path_hint()}</span>
-                </label>
-                <input
-                  id="cp-path"
-                  className="alm-input"
-                  type="text"
-                  placeholder={m.projects_create_path_placeholder()}
-                  aria-invalid={Boolean(errors.path)}
-                  aria-describedby={errors.path ? 'path-error' : undefined}
-                  {...register('path')}
-                />
-                {errors.path && (
-                  <span id="path-error" role="alert" className="alm-field-error">
-                    {errors.path.message}
-                  </span>
-                )}
-              </div>
+        {/* Notes */}
+        <div>
+          <label className="alm-field-label" htmlFor="cp-notes">{m.projects_create_notes_label()}</label>
+          <textarea
+            id="cp-notes"
+            className="alm-input"
+            placeholder={m.projects_create_notes_placeholder()}
+            rows={3}
+            maxLength={MAX_NOTES_LEN + 10}
+            {...register('notes')}
+          />
+        </div>
 
-              {/* Notes */}
-              <div>
-                { }
-                <label className="alm-field-label" htmlFor="cp-notes">{m.projects_create_notes_label()}</label>
-                <textarea
-                  id="cp-notes"
-                  className="alm-input"
-                  placeholder={m.projects_create_notes_placeholder()}
-                  rows={3}
-                  maxLength={MAX_NOTES_LEN + 10}
-                  {...register('notes')}
-                />
-              </div>
-
-              {/* Server error */}
-              {serverError && (
-                <span role="alert" className="alm-field-error">{serverError}</span>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="alm-confirm-overlay__footer">
-              <Btn type="button" variant="ghost" onClick={() => handleOpenChange(false)} disabled={isSubmitting}>
-                {m.common_cancel()}
-              </Btn>
-              <Btn type="submit" variant="primary" disabled={isSubmitting}>
-                {isSubmitting ? m.projects_create_creating() : m.projects_create_btn()}
-              </Btn>
-            </div>
-          </form>
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+        {/* Server error */}
+        {serverError && (
+          <span role="alert" className="alm-field-error">{serverError}</span>
+        )}
+      </form>
+    </Modal>
   );
 }

@@ -20,8 +20,15 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { DataSources } from './DataSources';
+import { queryClient } from '@/data/queryClient';
 import type { LibraryRoot } from '@/bindings/types';
+
+function wrapper({ children }: { children: ReactNode }) {
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 // Mocks the generated bindings surface (spec 037) so the real `settingsIpc`
@@ -93,7 +100,7 @@ describe('DataSources — Rescan', () => {
       });
     mockScanFolder.mockResolvedValue({ status: 'ok', data: { items: [] } });
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     fireEvent.click(screen.getByRole('button', { name: /^Rescan$/i }));
@@ -124,7 +131,7 @@ describe('DataSources — Rescan', () => {
       }),
     );
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     fireEvent.click(screen.getByRole('button', { name: /^Rescan$/i }));
@@ -144,7 +151,7 @@ describe('DataSources — Rescan', () => {
     mockRootsList.mockResolvedValue({ status: 'ok', data: [makeRoot()] });
     mockScanFolder.mockResolvedValue({ status: 'ok', data: { items: [] } });
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     fireEvent.click(screen.getByRole('button', { name: /^Rescan$/i }));

@@ -15,6 +15,7 @@ import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/data/queryKeys";
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+import { ipcArgs } from '@/lib/ipc-args';
 import type {
   InboxListItem,
   InboxListResponse,
@@ -319,7 +320,7 @@ export function useInboxReclassify(inboxItemId: string) {
       try {
         const result = unwrap(
           await commands.inboxReclassify(
-            { inboxItemId, overrides } as Parameters<typeof commands.inboxReclassify>[0],
+            ipcArgs<typeof commands.inboxReclassify>({ inboxItemId, overrides }),
           ),
         );
         setState({ loading: false, result, error: null });
