@@ -66,23 +66,16 @@ fn validate_endpoint(endpoint: &str) -> Result<(), ContractError> {
 
 /// Read the singleton `resolver_settings` row.
 async fn read_row(pool: &SqlitePool) -> Result<ResolverSettings, ContractError> {
-    let row: Option<(i64, String, i64, i64)> = sqlx::query_as(
-        "SELECT online_enabled, simbad_endpoint, debounce_ms, request_timeout_secs
-         FROM resolver_settings WHERE id = 1",
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?;
+    let row = persistence_db::repositories::q_targets_mgmt::get_resolver_settings(pool)
+        .await
+        .map_err(db_err)?;
 
-    Ok(row.map_or_else(
-        defaults,
-        |(online_enabled, simbad_endpoint, debounce_ms, request_timeout_secs)| ResolverSettings {
-            online_enabled: online_enabled != 0,
-            simbad_endpoint,
-            debounce_ms: u32::try_from(debounce_ms.max(0)).unwrap_or(300),
-            request_timeout_secs: u32::try_from(request_timeout_secs.max(0)).unwrap_or(10),
-        },
-    ))
+    Ok(row.map_or_else(defaults, |r| ResolverSettings {
+        online_enabled: r.online_enabled != 0,
+        simbad_endpoint: r.simbad_endpoint,
+        debounce_ms: u32::try_from(r.debounce_ms.max(0)).unwrap_or(300),
+        request_timeout_secs: u32::try_from(r.request_timeout_secs.max(0)).unwrap_or(10),
+    }))
 }
 
 /// `target.resolution.settings` (get) — return the current resolver settings.
@@ -125,21 +118,13 @@ pub async fn update(
     let debounce_ms = i64::from(s.debounce_ms.max(1));
     let timeout_secs = i64::from(s.request_timeout_secs.max(1));
 
-    sqlx::query(
-        "INSERT INTO resolver_settings
-            (id, online_enabled, simbad_endpoint, debounce_ms, request_timeout_secs)
-         VALUES (1, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-            online_enabled       = excluded.online_enabled,
-            simbad_endpoint      = excluded.simbad_endpoint,
-            debounce_ms          = excluded.debounce_ms,
-            request_timeout_secs = excluded.request_timeout_secs",
+    persistence_db::repositories::q_targets_mgmt::upsert_resolver_settings(
+        pool,
+        i64::from(s.online_enabled),
+        &s.simbad_endpoint,
+        debounce_ms,
+        timeout_secs,
     )
-    .bind(i64::from(s.online_enabled))
-    .bind(&s.simbad_endpoint)
-    .bind(debounce_ms)
-    .bind(timeout_secs)
-    .execute(pool)
     .await
     .map_err(db_err)?;
 
