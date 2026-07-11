@@ -684,6 +684,194 @@ validate(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Spec 025 T009/T029/T035/T036/T048 — plan.apply/cancel/item.skip/item.retry/
+// resume response shapes. These contracts nest `$defs` off the schema root
+// (not off a $id-addressable Request/Response pair), so build a wrapper that
+// carries the response variant's shape plus the root `$defs` for `$ref`
+// resolution instead of using `ajv.addSchema`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function responseSchema(fullSchema, testId) {
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    $id: `urn:test:${testId}`,
+    oneOf: fullSchema.properties.response.oneOf,
+    $defs: fullSchema.$defs,
+  };
+}
+
+// T009: plan.apply response shape (success + failure).
+const planApplySchema = loadSchema("specs/025-filesystem-plan-application/contracts/plan.apply.json");
+const planApplyResponseSchema = responseSchema(planApplySchema, "plan-apply-response");
+
+validate(
+  "T009 plan.apply success response is valid",
+  planApplyResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    planId: "plan-001",
+    runId: "run-001",
+    newState: "applying",
+  },
+  true
+);
+
+validate(
+  "T009 plan.apply failure response (plan.invalid_state) is valid",
+  planApplyResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "plan.invalid_state", message: "plan is not approved", currentState: "applying" }],
+  },
+  true
+);
+
+validate(
+  "T009 DRIFT: plan.apply success without 'runId' must be rejected",
+  planApplyResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    planId: "plan-001",
+    newState: "applying",
+  },
+  false
+);
+
+// T029 (spec 025): plan.cancel response shape.
+const planCancelSchema = loadSchema("specs/025-filesystem-plan-application/contracts/plan.cancel.json");
+const planCancelResponseSchema = responseSchema(planCancelSchema, "plan-cancel-response");
+
+validate(
+  "025-T029 plan.cancel success response is valid",
+  planCancelResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    planId: "plan-001",
+    cancelledAt: "2026-07-09T00:00:00Z",
+    itemsApplied: 3,
+    itemsCancelled: 2,
+  },
+  true
+);
+
+validate(
+  "025-T029 plan.cancel plan.not_in_apply failure response is valid",
+  planCancelResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "plan.not_in_apply", message: "plan is not applying or paused", currentState: "applied" }],
+  },
+  true
+);
+
+// T035: plan.item.skip response shape.
+const planItemSkipSchema = loadSchema(
+  "specs/025-filesystem-plan-application/contracts/plan.item.skip.json"
+);
+const planItemSkipResponseSchema = responseSchema(planItemSkipSchema, "plan-item-skip-response");
+
+validate(
+  "T035 plan.item.skip success response is valid",
+  planItemSkipResponseSchema,
+  { status: "success", contractVersion: "2.0.0", requestId, itemId: "item-001", newState: "skipped" },
+  true
+);
+
+validate(
+  "T035 plan.item.skip item.not_pending failure response is valid",
+  planItemSkipResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "item.not_pending", message: "item is not pending", currentItemState: "succeeded" }],
+  },
+  true
+);
+
+// T036: plan.item.retry response shape.
+const planItemRetrySchema = loadSchema(
+  "specs/025-filesystem-plan-application/contracts/plan.item.retry.json"
+);
+const planItemRetryResponseSchema = responseSchema(planItemRetrySchema, "plan-item-retry-response");
+
+validate(
+  "T036 plan.item.retry success response is valid",
+  planItemRetryResponseSchema,
+  { status: "success", contractVersion: "2.0.0", requestId, itemId: "item-001", newState: "applying" },
+  true
+);
+
+validate(
+  "T036 plan.item.retry item.not_failed failure response is valid",
+  planItemRetryResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "item.not_failed", message: "item is not failed", currentItemState: "pending" }],
+  },
+  true
+);
+
+// T048: plan.resume response shape — success and `run.not_paused` (the two
+// paths actually implemented by `resume_plan`; see crates/app/core/src/plan_apply.rs).
+// The re-validation failure codes (`volume.still.unavailable`, `disk.still.full`,
+// `item.still.stale`) are schema-valid but NOT YET produced by the
+// implementation — resume_plan's docstring documents trusting the caller for
+// v1. Tracked as a follow-up (see tasks.md).
+const planResumeSchema = loadSchema("specs/025-filesystem-plan-application/contracts/plan.resume.json");
+const planResumeResponseSchema = responseSchema(planResumeSchema, "plan-resume-response");
+
+validate(
+  "T048 plan.resume success response is valid",
+  planResumeResponseSchema,
+  {
+    status: "success",
+    contractVersion: "2.0.0",
+    requestId,
+    planId: "plan-001",
+    runId: "run-001",
+    resumedAt: "2026-07-09T00:00:00Z",
+  },
+  true
+);
+
+validate(
+  "T048 plan.resume run.not_paused failure response is valid",
+  planResumeResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "run.not_paused", message: "plan is not paused" }],
+  },
+  true
+);
+
+validate(
+  "T048 plan.resume item.still.stale failure response is schema-valid (code reserved, not yet produced)",
+  planResumeResponseSchema,
+  {
+    status: "failure",
+    contractVersion: "2.0.0",
+    requestId,
+    errors: [{ code: "item.still.stale", message: "source file changed again while paused" }],
+  },
+  true
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Report
 // ─────────────────────────────────────────────────────────────────────────────
 
