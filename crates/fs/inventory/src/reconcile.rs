@@ -12,12 +12,12 @@
 //! is the walk + diff primitive those triggers will call into.
 //!
 //! Symlink/junction gating (spec 048 T004/R6) is applied via
-//! [`crate::symlink_gate::real_files_under`] so a linked subtree is never
+//! [`fs_pathsafe::real_files_under`] so a linked subtree is never
 //! traversed unless the root has explicitly enabled it.
 
 use std::path::{Path, PathBuf};
 
-use crate::symlink_gate::real_files_under;
+use fs_pathsafe::real_files_under;
 
 /// One inventoried frame's identity + expected size, as recorded in
 /// `file_record` for the root being reconciled.
@@ -88,7 +88,7 @@ impl ReconcileReport {
 /// against disk.
 ///
 /// This function performs **read-only** filesystem access (`stat`/`readdir`
-/// via [`crate::symlink_gate::real_files_under`]) and never mutates a file.
+/// via [`fs_pathsafe::real_files_under`]) and never mutates a file.
 /// Symlinked/junction subtrees are never traversed unless
 /// `follow_symlinks` is `true` for this root (spec 048 R6/FR-017).
 ///

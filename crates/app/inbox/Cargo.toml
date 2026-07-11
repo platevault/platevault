@@ -13,6 +13,7 @@ app_core_targets = { path = "../targets" }
 audit = { path = "../../audit" }
 calibration_master_detect = { path = "../../calibration/master-detect" }
 contracts_core = { path = "../../contracts/core" }
+fs_pathsafe = { path = "../../fs/pathsafe" }
 metadata_core = { path = "../../metadata/core" }
 metadata_fits = { path = "../../metadata/fits" }
 metadata_video = { path = "../../metadata/video" }

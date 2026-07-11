@@ -9,10 +9,12 @@
 
 use std::sync::Arc;
 
-use camino::{Utf8Path, Utf8PathBuf};
-use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use camino::Utf8PathBuf;
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
+
+use crate::notify_bridge::SimpleEventKind;
 
 /// Events emitted by the watcher service.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -44,17 +46,14 @@ impl PathEventKind {
     }
 }
 
-/// Diagnostic sink for a non-UTF-8 watcher path that cannot be represented as a
-/// faithful UTF-8 wire string. We deliberately do **not** lossy-convert; the
-/// event is dropped. The lossy `to_string_lossy` rendering is used here only for
-/// the human-readable diagnostic, never for the emitted payload.
-fn tracing_skip_non_utf8(path: &std::path::Path) {
-    // `fs_inventory` has no `tracing` dependency; emit a stderr diagnostic so the
-    // skip is observable without corrupting the wire payload.
-    eprintln!(
-        "fs_inventory::watcher: skipping non-UTF-8 path (cannot emit faithful UTF-8 event): {}",
-        path.to_string_lossy()
-    );
+impl From<SimpleEventKind> for PathEventKind {
+    fn from(kind: SimpleEventKind) -> Self {
+        match kind {
+            SimpleEventKind::Created => Self::Added,
+            SimpleEventKind::Removed => Self::Removed,
+            SimpleEventKind::Modified => Self::Modified,
+        }
+    }
 }
 
 /// Manages a filesystem watcher scoped to inbox directories.
@@ -92,7 +91,7 @@ impl WatcherService {
     /// `follow_symlinks` gates traversal (spec 048 T004, constitution "MUST
     /// NOT follow symlinks or junctions unless explicitly enabled per
     /// root"): when `false` (the default for inbox folders), each path is
-    /// walked ourselves via [`crate::symlink_gate::real_dirs_under`] and every
+    /// walked ourselves via [`fs_pathsafe::real_dirs_under`] and every
     /// real (non-link) subdirectory is watched individually with
     /// `RecursiveMode::NonRecursive`, so a linked subtree is never traversed
     /// at the OS level. When `true`, the previous behaviour is preserved: a
@@ -114,36 +113,19 @@ impl WatcherService {
                 return;
             };
 
-            // `notify` yields `std::path::PathBuf`, which can be non-UTF-8 on a
-            // raw disk. We convert each path losslessly via `Utf8Path::from_path`.
-            // A non-UTF-8 path is *skipped* (not lossy-converted): we cannot emit
-            // a faithful UTF-8 wire string for it, so the event is dropped with a
-            // diagnostic rather than corrupting the path. Constitution §I: never
-            // silently mangle a user path.
-            let make = |kind: PathEventKind, paths: &[std::path::PathBuf]| {
-                paths
-                    .iter()
-                    .filter_map(|p| {
-                        if let Some(utf8) = Utf8Path::from_path(p) {
-                            Some(kind.into_event(utf8.as_str().to_owned()))
-                        } else {
-                            tracing_skip_non_utf8(p);
-                            None
-                        }
-                    })
-                    .collect::<Vec<InboxFileEvent>>()
+            let Some(simple_kind) = crate::notify_bridge::classify(event.kind) else {
+                return;
             };
+            let kind = PathEventKind::from(simple_kind);
 
-            let events: Vec<InboxFileEvent> = match event.kind {
-                EventKind::Create(_) => make(PathEventKind::Added, &event.paths),
-                EventKind::Remove(_) => make(PathEventKind::Removed, &event.paths),
-                EventKind::Modify(_) => make(PathEventKind::Modified, &event.paths),
-                _ => Vec::new(),
-            };
-
-            for evt in events {
+            for path in &event.paths {
+                let Some(utf8) =
+                    crate::notify_bridge::utf8_path_or_skip(path, "fs_inventory::watcher")
+                else {
+                    continue;
+                };
                 // Ignore send errors — they mean no subscribers are active.
-                let _ = tx.send(evt);
+                let _ = tx.send(kind.into_event(utf8.into_string()));
             }
         })
         .map_err(|e| format!("failed to create filesystem watcher: {e}"))?;
@@ -156,7 +138,7 @@ impl WatcherService {
                 continue;
             }
 
-            for dir in crate::symlink_gate::real_dirs_under(path.as_std_path(), false) {
+            for dir in fs_pathsafe::real_dirs_under(path.as_std_path(), false) {
                 watcher
                     .watch(&dir, RecursiveMode::NonRecursive)
                     .map_err(|e| format!("failed to watch {}: {e}", dir.display()))?;

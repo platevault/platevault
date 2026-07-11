@@ -21,9 +21,11 @@
 
 use std::sync::Arc;
 
-use camino::{Utf8Path, Utf8PathBuf};
-use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use camino::Utf8PathBuf;
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc;
+
+use crate::notify_bridge::SimpleEventKind;
 
 /// A filesystem event forwarded to the async consumer.
 #[derive(Clone, Debug)]
@@ -42,6 +44,16 @@ pub enum ArtifactEventKind {
     Removed,
 }
 
+impl From<SimpleEventKind> for ArtifactEventKind {
+    fn from(kind: SimpleEventKind) -> Self {
+        match kind {
+            SimpleEventKind::Created => Self::Created,
+            SimpleEventKind::Modified => Self::Modified,
+            SimpleEventKind::Removed => Self::Removed,
+        }
+    }
+}
+
 /// RAII guard that keeps the watcher alive.
 ///
 /// Drop this to stop watching and close the channel.
@@ -52,6 +64,15 @@ pub struct WatcherGuard {
 
 /// Start the filesystem watcher over `paths`.
 ///
+/// `follow_symlinks` gates traversal (constitution "MUST NOT follow symlinks
+/// or junctions unless explicitly enabled per root", duplication-and-
+/// abstraction audit T1-a): when `false`, each path is walked ourselves via
+/// [`fs_pathsafe::real_dirs_under`] and every real (non-link) subdirectory is
+/// watched individually with `RecursiveMode::NonRecursive`, mirroring
+/// [`crate::watcher::WatcherService::start`]. When `true`, a single
+/// `RecursiveMode::Recursive` watch per path is used (the OS watcher may then
+/// follow links under it).
+///
 /// Returns an `mpsc::Receiver` and a `WatcherGuard`.  Drop the guard to stop.
 ///
 /// # Errors
@@ -61,6 +82,7 @@ pub struct WatcherGuard {
 pub fn start_artifact_watcher(
     paths: &[Utf8PathBuf],
     channel_capacity: usize,
+    follow_symlinks: bool,
 ) -> Result<(mpsc::Receiver<ArtifactFileEvent>, WatcherGuard), String> {
     let (tx, rx) = mpsc::channel::<ArtifactFileEvent>(channel_capacity);
     let tx = Arc::new(tx);
@@ -69,36 +91,38 @@ pub fn start_artifact_watcher(
     let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
         let Ok(event) = res else { return };
 
-        let kind = match event.kind {
-            EventKind::Create(_) => ArtifactEventKind::Created,
-            EventKind::Modify(_) => ArtifactEventKind::Modified,
-            EventKind::Remove(_) => ArtifactEventKind::Removed,
-            _ => return,
+        let Some(simple_kind) = crate::notify_bridge::classify(event.kind) else {
+            return;
         };
+        let kind = ArtifactEventKind::from(simple_kind);
 
-        for path in event.paths {
-            // `notify` yields `std::path::PathBuf`; convert losslessly. A
-            // non-UTF-8 path is skipped (not lossy-converted) so downstream
-            // detection never receives a corrupted path. Constitution §I.
-            let Some(utf8) = Utf8Path::from_path(&path) else {
-                eprintln!(
-                    "fs_inventory::artifact_watcher: skipping non-UTF-8 path: {}",
-                    path.to_string_lossy()
-                );
+        for path in &event.paths {
+            let Some(utf8) =
+                crate::notify_bridge::utf8_path_or_skip(path, "fs_inventory::artifact_watcher")
+            else {
                 continue;
             };
             if utf8.is_dir() {
                 continue;
             }
-            let _ = handler_tx.try_send(ArtifactFileEvent { path: utf8.to_owned(), kind });
+            let _ = handler_tx.try_send(ArtifactFileEvent { path: utf8, kind });
         }
     })
     .map_err(|e| format!("failed to create artifact watcher: {e}"))?;
 
     for path in paths {
-        watcher
-            .watch(path.as_std_path(), RecursiveMode::Recursive)
-            .map_err(|e| format!("failed to watch {path}: {e}"))?;
+        if follow_symlinks {
+            watcher
+                .watch(path.as_std_path(), RecursiveMode::Recursive)
+                .map_err(|e| format!("failed to watch {path}: {e}"))?;
+            continue;
+        }
+
+        for dir in fs_pathsafe::real_dirs_under(path.as_std_path(), false) {
+            watcher
+                .watch(&dir, RecursiveMode::NonRecursive)
+                .map_err(|e| format!("failed to watch {}: {e}", dir.display()))?;
+        }
     }
 
     let guard = WatcherGuard { _watcher: watcher, _tx: tx };
@@ -111,8 +135,11 @@ mod tests {
 
     #[test]
     fn start_on_nonexistent_path_returns_error() {
-        let result =
-            start_artifact_watcher(&[Utf8PathBuf::from("/nonexistent/path/for/watcher/test")], 16);
+        let result = start_artifact_watcher(
+            &[Utf8PathBuf::from("/nonexistent/path/for/watcher/test")],
+            16,
+            false,
+        );
         assert!(result.is_err(), "expected error for nonexistent path");
     }
 
@@ -120,7 +147,7 @@ mod tests {
     async fn start_on_temp_dir_succeeds_and_guard_drops_cleanly() {
         let dir = tempfile::tempdir().unwrap();
         let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-        let (mut rx, guard) = start_artifact_watcher(&[root], 16).unwrap();
+        let (mut rx, guard) = start_artifact_watcher(&[root], 16, false).unwrap();
 
         drop(guard);
 
@@ -135,7 +162,8 @@ mod tests {
         // Canonicalize so emitted event paths match `file_path` (macOS reports
         // /private/var/... while tempdir() returns /var/...).
         let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
-        let (mut rx, _guard) = start_artifact_watcher(std::slice::from_ref(&root), 64).unwrap();
+        let (mut rx, _guard) =
+            start_artifact_watcher(std::slice::from_ref(&root), 64, false).unwrap();
 
         let file_path = root.join("test_artifact.xisf");
         std::fs::write(&file_path, b"data").unwrap();
@@ -150,5 +178,35 @@ mod tests {
             }
         };
         assert!(received, "expected ArtifactFileEvent for the created file");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn symlinked_subtree_is_not_traversed_unless_enabled() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let canonical_root = dir.path().canonicalize().unwrap();
+        let real_target = canonical_root.join("real_target");
+        std::fs::create_dir_all(&real_target).unwrap();
+
+        let scan_root = canonical_root.join("scan_root");
+        std::fs::create_dir_all(&scan_root).unwrap();
+        symlink(&real_target, scan_root.join("linked")).unwrap();
+        let scan_root_utf8 = Utf8PathBuf::from_path_buf(scan_root).unwrap();
+
+        let (mut rx, _guard) =
+            start_artifact_watcher(std::slice::from_ref(&scan_root_utf8), 64, false).unwrap();
+
+        // A file written behind the un-enabled symlink must never surface an
+        // event — the watcher was never attached to that subtree.
+        std::fs::write(real_target.join("hidden.fits"), b"data").unwrap();
+
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(500);
+        let received = tokio::time::timeout_at(deadline, rx.recv()).await;
+        assert!(
+            received.is_err(),
+            "must not observe an event for a file behind an un-enabled symlink"
+        );
     }
 }

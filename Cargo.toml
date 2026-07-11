@@ -20,6 +20,7 @@ members = [
   "crates/domain/core",
   "crates/fs/executor",
   "crates/fs/inventory",
+  "crates/fs/pathsafe",
   "crates/metadata/core",
   "crates/metadata/fits",
   "crates/metadata/video",

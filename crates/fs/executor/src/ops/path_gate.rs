@@ -76,31 +76,18 @@ pub fn resolve_and_validate(
         // there can be no symlink for a non-existent path component.
         match current.symlink_metadata() {
             Ok(meta) => {
-                if meta.file_type().is_symlink() {
+                // Shared reparse-aware classification (symlink + Windows
+                // FILE_ATTRIBUTE_REPARSE_POINT junction check) — see
+                // `fs_pathsafe` for the one implementation both this gate and
+                // `fs_inventory` walk against.
+                if fs_pathsafe::is_link_or_junction_metadata(&meta) {
                     return Err(PlanItemFailure::with_code(
                         FailureCode::SymlinkComponent,
                         format!(
-                            "path component '{current}' is a symlink; \
+                            "path component '{current}' is a symlink or junction; \
                              refusing to traverse (link-following is disabled for this root)"
                         ),
                     ));
-                }
-                #[cfg(windows)]
-                {
-                    // On Windows, junctions report as dirs but with reparse points.
-                    // The `trash` crate handles junctions separately; we detect via
-                    // the FILE_ATTRIBUTE_REPARSE_POINT attribute.
-                    use std::os::windows::fs::MetadataExt;
-                    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-                    if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-                        return Err(PlanItemFailure::with_code(
-                            FailureCode::SymlinkComponent,
-                            format!(
-                                "path component '{current}' is a junction/reparse-point; \
-                                 refusing to traverse"
-                            ),
-                        ));
-                    }
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {

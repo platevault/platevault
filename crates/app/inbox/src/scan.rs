@@ -287,17 +287,19 @@ fn scan_dir(
         }
 
         let Ok(file_type) = entry.file_type() else { continue };
+        // Reparse-aware check (symlink + Windows junction) shared with
+        // fs_inventory/fs_executor — see `fs_pathsafe` (duplication-and-
+        // abstraction audit T1-a).
+        let is_link = fs_pathsafe::is_link_or_junction(&path);
 
-        if file_type.is_symlink() && !options.follow_symlinks {
-            // Constitution §I: skip symlinks unless explicitly enabled.
+        if is_link && !options.follow_symlinks {
+            // Constitution §I: skip symlinks/junctions unless explicitly enabled.
             continue;
         }
 
-        if file_type.is_dir()
-            || (file_type.is_symlink() && options.follow_symlinks && path.is_dir())
-        {
+        if file_type.is_dir() || (is_link && options.follow_symlinks && path.is_dir()) {
             subdirs.push(path);
-        } else if file_type.is_file() || (file_type.is_symlink() && options.follow_symlinks) {
+        } else if file_type.is_file() || (is_link && options.follow_symlinks) {
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
 
             if is_fits_extension(&ext) {
@@ -507,5 +509,44 @@ mod tests {
         let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
         assert_eq!(items.len(), 1);
         assert!(items[0].masters.is_empty(), "dummy file cannot be a master");
+    }
+
+    /// Constitution §I regression: a symlinked subdirectory reachable from the
+    /// scan root must not be traversed unless `follow_symlinks` is enabled.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_subdir_not_traversed_by_default() {
+        use std::os::unix::fs::symlink;
+
+        let tmp = tmpdir();
+        let real_target = tmp.path().join("real_target");
+        fs::create_dir_all(&real_target).unwrap();
+        write_file(&real_target, "hidden.fits", b"hidden");
+
+        let scan_root_dir = tmp.path().join("scan_root");
+        fs::create_dir_all(&scan_root_dir).unwrap();
+        symlink(&real_target, scan_root_dir.join("linked")).unwrap();
+
+        let items = scan_root(&scan_root_dir, &ScanOptions::default()).unwrap();
+        assert!(items.is_empty(), "must not see files behind an un-enabled symlink");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_subdir_traversed_when_follow_symlinks_enabled() {
+        use std::os::unix::fs::symlink;
+
+        let tmp = tmpdir();
+        let real_target = tmp.path().join("real_target");
+        fs::create_dir_all(&real_target).unwrap();
+        write_file(&real_target, "visible.fits", b"visible");
+
+        let scan_root_dir = tmp.path().join("scan_root");
+        fs::create_dir_all(&scan_root_dir).unwrap();
+        symlink(&real_target, scan_root_dir.join("linked")).unwrap();
+
+        let options = ScanOptions { follow_symlinks: true };
+        let items = scan_root(&scan_root_dir, &options).unwrap();
+        assert_eq!(items.len(), 1, "symlinked subdir is traversed when explicitly enabled");
     }
 }
