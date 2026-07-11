@@ -83,6 +83,14 @@ pub mod migrate;
 // ── Per-root reconcile/detection configuration (spec 048 T005) ──────────────
 pub mod root_config;
 
+// ── In-memory settings-bag snapshot cache (F0 foundation) ────────────────────
+//
+// Defines the cache handle + `pub invalidate_settings_bag`/`store_settings_bag`
+// only. Wiring `get_settings` to read through the cache and calling
+// `invalidate_settings_bag` from `update_setting`/`restore_defaults`/
+// `set_source_override` is downstream (W-SETTINGS) work.
+pub mod caches;
+
 // ── Error mapping ──────────────────────────────────────────────────────────
 //
 // Canonical mappers live in `app_core_errors` (US11 T142). `db_err` now routes

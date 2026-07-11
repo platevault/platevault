@@ -7,6 +7,10 @@
 //! surface stays byte-identical for `desktop_shell` and every other consumer.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
+/// Process-global in-memory cache statics for calibration config + masters
+/// snapshots (in-memory caching layer, F0 foundation). See each accessor's
+/// doc comment for its owning write-site invalidation calls.
+pub mod caches;
 pub mod equipment;
 mod matching;
 mod tolerances;

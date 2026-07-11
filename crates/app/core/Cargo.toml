@@ -29,6 +29,8 @@ persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 workflow_artifacts = { path = "../../workflow/artifacts" }
 workflow_profiles = { path = "../../workflow/profiles" }
+# In-memory caching layer (F0 foundation).
+app_core_cache = { path = "../cache" }
 camino = { workspace = true }
 dashmap = { workspace = true }
 hex.workspace = true

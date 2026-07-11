@@ -137,6 +137,7 @@ dependencies = [
 name = "app_core_calibration"
 version = "0.1.0"
 dependencies = [
+ "app_core_cache",
  "audit",
  "calibration_core",
  "contracts_core",
@@ -164,6 +165,7 @@ dependencies = [
 name = "app_core_inbox"
 version = "0.1.0"
 dependencies = [
+ "app_core_cache",
  "app_core_errors",
  "app_core_targets",
  "audit",
@@ -239,6 +241,7 @@ dependencies = [
 name = "app_core_settings"
 version = "0.1.0"
 dependencies = [
+ "app_core_cache",
  "app_core_errors",
  "audit",
  "contracts_core",
@@ -259,6 +262,7 @@ dependencies = [
 name = "app_core_targets"
 version = "0.1.0"
 dependencies = [
+ "app_core_cache",
  "app_core_errors",
  "audit",
  "contracts_core",
@@ -272,6 +276,7 @@ dependencies = [
  "sqlx",
  "targeting",
  "targeting_resolver",
+ "tempfile",
  "time",
  "tokio",
  "tracing",

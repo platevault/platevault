@@ -8,6 +8,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+app_core_cache = { path = "../cache" }
 audit = { path = "../../audit" }
 calibration_core = { path = "../../calibration/core" }
 contracts_core = { path = "../../contracts/core" }
