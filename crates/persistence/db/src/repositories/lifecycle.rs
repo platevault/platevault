@@ -183,6 +183,22 @@ fn state_column_for(entity_type: EntityType) -> &'static str {
     }
 }
 
+/// Raw `ledger_view` row, decoded by column name via `#[derive(FromRow)]`
+/// instead of a hand-rolled positional-tuple `query_as` + manual per-field
+/// map (Tier-3 dedup/abstraction audit). `entity_id`/`entity_type` are kept
+/// as plain strings here — parsing them into typed `EntityId`/`EntityType`
+/// is a separate domain concern handled in `list_assets_ledger`.
+#[derive(sqlx::FromRow)]
+struct RawLedgerRow {
+    entity_type: String,
+    entity_id: String,
+    state: String,
+    title: Option<String>,
+    path: Option<String>,
+    project_id: Option<String>,
+    updated_at: Option<String>,
+}
+
 // ── SQLite-backed implementation ──────────────────────────────────────────────
 
 /// SQLite-backed implementation of [`LifecycleRepository`].
@@ -306,19 +322,10 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         // AssertSqlSafe: every dynamic portion above is either a static
         // identifier, a fixed `?` placeholder, or an integer literal derived
         // from typed `u32` filter fields. User-supplied strings flow through
-        // `bind` calls below.
-        let mut q = sqlx::query_as::<
-            _,
-            (
-                String,
-                String,
-                String,
-                Option<String>,
-                Option<String>,
-                Option<String>,
-                Option<String>,
-            ),
-        >(sqlx::AssertSqlSafe(sql));
+        // `bind` calls below. Named-column `FromRow` decoding (vs. a
+        // positional tuple) keeps this immune to the SELECT list being
+        // reordered (T1-d Tier-3).
+        let mut q = sqlx::query_as::<_, RawLedgerRow>(sqlx::AssertSqlSafe(sql));
         for v in &string_binds {
             q = q.bind(v);
         }
@@ -326,26 +333,21 @@ impl LifecycleRepository for SqliteLifecycleRepository {
         let raw = q.fetch_all(&self.pool).await?;
 
         let mut rows = Vec::with_capacity(raw.len());
-        for (et_str, id_str, state, title, path, project_id, updated_at) in raw {
-            let uuid = Uuid::parse_str(&id_str)
-                .map_err(|e| DbError::NotFound(format!("bad uuid {id_str}: {e}")))?;
-            let entity_id = EntityId::from_uuid(uuid);
-            let entity_type = parse_entity_type(&et_str);
-            let project_id = match project_id {
-                Some(s) => Some(EntityId::from_uuid(
-                    Uuid::parse_str(&s)
-                        .map_err(|e| DbError::NotFound(format!("bad project uuid {s}: {e}")))?,
-                )),
+        for r in raw {
+            let entity_id = EntityId::from_uuid(parse_stored_uuid(&r.entity_id)?);
+            let entity_type = parse_entity_type(&r.entity_type);
+            let project_id = match r.project_id {
+                Some(s) => Some(EntityId::from_uuid(parse_stored_uuid(&s)?)),
                 None => None,
             };
             rows.push(LedgerRow {
                 entity_id,
                 entity_type,
-                current_state: state,
-                title,
-                path,
+                current_state: r.state,
+                title: r.title,
+                path: r.path,
                 project_id,
-                updated_at,
+                updated_at: r.updated_at,
             });
         }
 
@@ -547,6 +549,18 @@ fn provenance_asset_type(entity_type: EntityType) -> &'static str {
     }
 }
 
+/// Parses a UUID read back from a stored id column.
+///
+/// A malformed UUID here is row *corruption*, not a missing row — mapping it
+/// to `DbError::NotFound` (as this used to) mislabels a decode failure as
+/// "no such entity". `sqlx::Error::Decode` is the closest existing fit for a
+/// bad-value-in-storage error without adding a new `DbError` variant; the
+/// ideal long-term shape is a dedicated `DbError::Decode` variant (T1-d).
+fn parse_stored_uuid(s: &str) -> DbResult<Uuid> {
+    Uuid::parse_str(s)
+        .map_err(|e| DbError::Database(sqlx::Error::Decode(format!("bad uuid {s}: {e}").into())))
+}
+
 fn parse_entity_type(s: &str) -> EntityType {
     match s {
         "file_record" => EntityType::FileRecord,
@@ -670,5 +684,33 @@ mod tests {
         let repo = InMemoryLifecycleRepository;
         let rows = repo.list_assets_ledger(LedgerFilter::default()).await.unwrap();
         assert!(rows.is_empty());
+    }
+
+    /// T1-d: a malformed stored UUID is row corruption, not a missing row.
+    /// Previously this path mapped to `DbError::NotFound`, mislabeling a
+    /// decode failure as "no such entity"; it must now surface as a
+    /// non-`NotFound` variant instead.
+    #[tokio::test]
+    async fn list_assets_ledger_reports_corrupt_uuid_as_non_notfound() {
+        let db = crate::Database::in_memory().await.expect("in-memory connect");
+        db.migrate().await.expect("migrations");
+        let bus = audit::bus::EventBus::new(db.pool().clone(), 16);
+        let repo = super::SqliteLifecycleRepository::new(db.pool().clone(), bus);
+
+        sqlx::query(
+            "INSERT INTO library_root \
+             (id, label, current_path, kind, state, last_seen_at, created_at) \
+             VALUES ('not-a-uuid', 'lr', '/tmp/lr', 'local', 'active', \
+                     '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let err = repo.list_assets_ledger(LedgerFilter::default()).await.unwrap_err();
+        assert!(
+            !matches!(err, crate::DbError::NotFound(_)),
+            "corrupt uuid must not be reported as NotFound: {err:?}"
+        );
     }
 }

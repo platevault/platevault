@@ -528,20 +528,13 @@ fn parse_state(s: &str) -> Option<project::ProjectState> {
     })
 }
 
+/// Parses via `PlanState`'s `serde` mapping (`#[serde(rename_all =
+/// "snake_case")]`) instead of a hand-rolled match, so this stays in sync
+/// with `app_core::plans::parse_plan_state`'s sibling parser rather than
+/// drifting on new variants (audit T1-b). An unrecognised/corrupt value
+/// yields `None`, which `validate_edge` already treats as an invalid edge.
 fn parse_plan(s: &str) -> Option<plan_lifecycle::PlanState> {
-    Some(match s {
-        "draft" => plan_lifecycle::PlanState::Draft,
-        "ready_for_review" => plan_lifecycle::PlanState::ReadyForReview,
-        "approved" => plan_lifecycle::PlanState::Approved,
-        "applying" => plan_lifecycle::PlanState::Applying,
-        "paused" => plan_lifecycle::PlanState::Paused,
-        "applied" => plan_lifecycle::PlanState::Applied,
-        "partially_applied" => plan_lifecycle::PlanState::PartiallyApplied,
-        "failed" => plan_lifecycle::PlanState::Failed,
-        "cancelled" => plan_lifecycle::PlanState::Cancelled,
-        "discarded" => plan_lifecycle::PlanState::Discarded,
-        _ => return None,
-    })
+    serde_json::from_value(serde_json::Value::String(s.to_owned())).ok()
 }
 
 fn parse_file_record(s: &str) -> Option<inventory::InventoryState> {
@@ -672,6 +665,31 @@ mod tests {
             action_label: None,
             actor,
         })
+    }
+
+    // ── parse_plan (audit T1-b sibling parser) ─────────────────────────────
+
+    #[test]
+    fn parse_plan_accepts_every_snake_case_variant() {
+        for (raw, expected) in [
+            ("draft", plan_lifecycle::PlanState::Draft),
+            ("ready_for_review", plan_lifecycle::PlanState::ReadyForReview),
+            ("approved", plan_lifecycle::PlanState::Approved),
+            ("applying", plan_lifecycle::PlanState::Applying),
+            ("paused", plan_lifecycle::PlanState::Paused),
+            ("applied", plan_lifecycle::PlanState::Applied),
+            ("partially_applied", plan_lifecycle::PlanState::PartiallyApplied),
+            ("failed", plan_lifecycle::PlanState::Failed),
+            ("cancelled", plan_lifecycle::PlanState::Cancelled),
+            ("discarded", plan_lifecycle::PlanState::Discarded),
+        ] {
+            assert_eq!(parse_plan(raw), Some(expected), "for {raw:?}");
+        }
+    }
+
+    #[test]
+    fn parse_plan_rejects_unknown_value() {
+        assert_eq!(parse_plan("bogus_corrupt_state"), None);
     }
 
     #[tokio::test]
