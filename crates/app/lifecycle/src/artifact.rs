@@ -776,6 +776,56 @@ mod tests {
         );
     }
 
+    /// T018: classify -> override -> rescan -> override preserved. A rescan
+    /// is a second `detect()` call on the same path; the A8 in-place-update
+    /// branch never touches `kind`/`classification_source` (see
+    /// `detect_inplace_update_on_rerun`), so an override must survive it —
+    /// this asserts that combination explicitly rather than relying on two
+    /// separate tests to imply it.
+    #[tokio::test]
+    async fn classify_override_survives_rescan() {
+        let pool = make_pool().await;
+        let bus = make_bus(&pool);
+
+        let art_id = detect(
+            &pool,
+            &bus,
+            "proj-1",
+            "output/img.xisf",
+            "pixinsight",
+            512,
+            "2026-06-01T09:55:00Z",
+            "2026-06-01T10:00:00Z",
+        )
+        .await
+        .unwrap();
+
+        classify_override(&pool, &bus, "proj-1", &art_id, Some("master"), None).await.unwrap();
+
+        // Rescan: same path, updated size/mtime (e.g. the file grew).
+        let rescanned_id = detect(
+            &pool,
+            &bus,
+            "proj-1",
+            "output/img.xisf",
+            "pixinsight",
+            1024,
+            "2026-06-01T11:55:00Z",
+            "2026-06-01T12:00:00Z",
+        )
+        .await
+        .unwrap();
+        assert_eq!(art_id, rescanned_id, "rescan must update the same row, not create a new one");
+
+        let artifacts = list(&pool, "proj-1", &[]).await.unwrap();
+        let row = artifacts.iter().find(|a| a.id == art_id).unwrap();
+        assert_eq!(row.kind, "master", "override kind must survive a rescan");
+        assert_eq!(
+            row.classification_source, "manual_override",
+            "override source must survive a rescan"
+        );
+    }
+
     #[tokio::test]
     async fn detect_inplace_update_on_rerun() {
         let pool = make_pool().await;
