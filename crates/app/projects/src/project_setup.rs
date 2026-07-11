@@ -49,6 +49,7 @@ use domain_core::project::validate::{
 use persistence_db::repositories::first_run as first_run_repo;
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::projects as repo;
+use persistence_db::repositories::q_projects;
 use project_structure::{required_folders, ProcessingTool as StructureTool, MARKER_FILENAME};
 use sqlx::SqlitePool;
 
@@ -486,20 +487,15 @@ pub async fn create(
     // dangling id is rejected rather than silently stored. Spec-035 additive
     // association; absent → stored as NULL (existing behaviour unchanged).
     if let Some(ctid) = req.canonical_target_id.as_deref() {
-        let exists: Option<(String,)> =
-            sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
-                .bind(ctid)
-                .fetch_optional(pool)
-                .await
-                .map_err(|e| {
-                    ContractError::new(
-                        ErrorCode::InternalDatabase,
-                        format!("{e}"),
-                        ErrorSeverity::Fatal,
-                        true,
-                    )
-                })?;
-        if exists.is_none() {
+        let exists = q_projects::canonical_target_exists(pool, ctid).await.map_err(|e| {
+            ContractError::new(
+                ErrorCode::InternalDatabase,
+                format!("{e}"),
+                ErrorSeverity::Fatal,
+                true,
+            )
+        })?;
+        if !exists {
             return Err(ContractError::new(
                 ErrorCode::CanonicalTargetNotFound,
                 "The selected target was not found.",
