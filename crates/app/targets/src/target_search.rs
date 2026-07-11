@@ -30,16 +30,7 @@ fn db_err(e: &targeting_resolver::cache::CacheError) -> ContractError {
 // ── Enum mapping (cache → contract DTO) ─────────────────────────────────────
 //
 // Shared mappers live in `crate::target_dto` (US11 T143).
-use crate::target_dto::{map_object_type, map_source};
-
-/// Find the common name (a `common_name` alias) for a cached target, if any.
-fn common_name(target: &CachedTarget) -> Option<String> {
-    target
-        .aliases
-        .iter()
-        .find(|a| matches!(a.kind, targeting_resolver::AliasKind::CommonName))
-        .map(|a| a.alias.clone())
-}
+use crate::target_dto::{common_name, map_object_type, map_source};
 
 // ── Catalogue derivation (T029) ─────────────────────────────────────────────
 //

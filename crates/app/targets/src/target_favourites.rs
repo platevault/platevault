@@ -14,21 +14,23 @@ use sqlx::SqlitePool;
 
 use contracts_core::targets::{
     TargetFavouriteAddResult, TargetFavouriteRemoveResult, TargetFavouriteRequest,
-    TargetFavouritesListResult, TargetOpError,
+    TargetFavouritesListResult,
 };
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::Timestamp;
 use persistence_db::repositories::target_favourites;
 
-fn db_err(e: impl std::fmt::Display) -> TargetOpError {
-    TargetOpError { code: "internal.database".to_owned(), message: format!("{e}"), details: None }
+fn db_err(e: impl std::fmt::Display) -> ContractError {
+    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
-fn not_found(id: &str) -> TargetOpError {
-    TargetOpError {
-        code: "target.not_found".to_owned(),
-        message: format!("Target '{id}' not found."),
-        details: None,
-    }
+fn not_found(id: &str) -> ContractError {
+    ContractError::new(
+        ErrorCode::TargetNotFound,
+        format!("Target '{id}' not found."),
+        ErrorSeverity::Blocking,
+        false,
+    )
 }
 
 /// `targets.favourites.list` — return the ids of every currently-favourited
@@ -36,8 +38,8 @@ fn not_found(id: &str) -> TargetOpError {
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `internal.database`.
-pub async fn list(pool: &SqlitePool) -> Result<TargetFavouritesListResult, TargetOpError> {
+/// Returns [`ContractError`] with code `internal.database`.
+pub async fn list(pool: &SqlitePool) -> Result<TargetFavouritesListResult, ContractError> {
     let target_ids = target_favourites::list_favourites(pool).await.map_err(db_err)?;
     Ok(TargetFavouritesListResult { target_ids })
 }
@@ -48,12 +50,12 @@ pub async fn list(pool: &SqlitePool) -> Result<TargetFavouritesListResult, Targe
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `target.not_found` (the id does not
+/// Returns [`ContractError`] with code `target.not_found` (the id does not
 /// reference an existing `canonical_target` row) or `internal.database`.
 pub async fn add(
     pool: &SqlitePool,
     req: &TargetFavouriteRequest,
-) -> Result<TargetFavouriteAddResult, TargetOpError> {
+) -> Result<TargetFavouriteAddResult, ContractError> {
     let exists = target_favourites::target_exists(pool, &req.target_id).await.map_err(db_err)?;
     if !exists {
         return Err(not_found(&req.target_id));
@@ -77,11 +79,11 @@ pub async fn add(
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `internal.database`.
+/// Returns [`ContractError`] with code `internal.database`.
 pub async fn remove(
     pool: &SqlitePool,
     req: &TargetFavouriteRequest,
-) -> Result<TargetFavouriteRemoveResult, TargetOpError> {
+) -> Result<TargetFavouriteRemoveResult, ContractError> {
     target_favourites::remove_favourite(pool, &req.target_id).await.map_err(db_err)?;
     Ok(TargetFavouriteRemoveResult { target_id: req.target_id.clone() })
 }
@@ -137,7 +139,7 @@ mod tests {
         let err = add(db.pool(), &TargetFavouriteRequest { target_id: "missing".to_owned() })
             .await
             .unwrap_err();
-        assert_eq!(err.code, "target.not_found");
+        assert_eq!(err.code, ErrorCode::TargetNotFound);
     }
 
     #[tokio::test]

@@ -23,9 +23,10 @@ use contracts_core::targets::{
     TargetAliasAddRequest, TargetAliasAddResult, TargetAliasRemoveRequest, TargetAliasRemoveResult,
     TargetDetailV3, TargetDisplayAliasClearRequest, TargetDisplayAliasSetRequest, TargetGetRequest,
     TargetListItem, TargetNoteGetRequest, TargetNoteGetResult, TargetNoteUpdateRequest,
-    TargetNoteUpdateResult, TargetOpError, TargetProjectItem, TargetProjectsListRequest,
-    TargetSessionItem, TargetSessionsListRequest,
+    TargetNoteUpdateResult, TargetProjectItem, TargetProjectsListRequest, TargetSessionItem,
+    TargetSessionsListRequest,
 };
+use contracts_core::ContractError;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
@@ -36,14 +37,14 @@ use crate::commands::lifecycle::AppState;
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// Returns `Err(ContractError)` with code `target.not_found`,
 /// `target.invalid_id`, or `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_get(
     state: State<'_, AppState>,
     req: TargetGetRequest,
-) -> Result<TargetDetailV3, TargetOpError> {
+) -> Result<TargetDetailV3, ContractError> {
     tracing::debug!("target.get id={}", req.target_id);
     app_core::target_management::get(state.repo.pool(), &req).await
 }
@@ -54,10 +55,10 @@ pub async fn target_get(
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `internal.database`.
+/// Returns `Err(ContractError)` with code `internal.database`.
 #[tauri::command]
 #[specta::specta]
-pub async fn target_list(state: State<'_, AppState>) -> Result<Vec<TargetListItem>, TargetOpError> {
+pub async fn target_list(state: State<'_, AppState>) -> Result<Vec<TargetListItem>, ContractError> {
     tracing::debug!("target.list");
     app_core::target_management::list(state.repo.pool()).await
 }
@@ -68,14 +69,14 @@ pub async fn target_list(state: State<'_, AppState>) -> Result<Vec<TargetListIte
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `target.not_found`, `alias.blank`,
+/// Returns `Err(ContractError)` with code `target.not_found`, `alias.blank`,
 /// or `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_alias_add(
     state: State<'_, AppState>,
     req: TargetAliasAddRequest,
-) -> Result<TargetAliasAddResult, TargetOpError> {
+) -> Result<TargetAliasAddResult, ContractError> {
     tracing::debug!("target.alias.add target_id={} alias={:?}", req.target_id, req.alias);
     app_core::target_management::alias_add(state.repo.pool(), &req).await
 }
@@ -89,14 +90,14 @@ pub async fn target_alias_add(
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `alias.not_found`,
+/// Returns `Err(ContractError)` with code `alias.not_found`,
 /// `alias.not_removable`, or `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_alias_remove(
     state: State<'_, AppState>,
     req: TargetAliasRemoveRequest,
-) -> Result<TargetAliasRemoveResult, TargetOpError> {
+) -> Result<TargetAliasRemoveResult, ContractError> {
     tracing::debug!("target.alias.remove target_id={} alias_id={}", req.target_id, req.alias_id);
     app_core::target_management::alias_remove(state.repo.pool(), &req).await
 }
@@ -110,14 +111,14 @@ pub async fn target_alias_remove(
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// Returns `Err(ContractError)` with code `target.not_found`,
 /// `target.invalid_id`, or `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_display_alias_set(
     state: State<'_, AppState>,
     req: TargetDisplayAliasSetRequest,
-) -> Result<TargetDetailV3, TargetOpError> {
+) -> Result<TargetDetailV3, ContractError> {
     tracing::debug!(
         "target.display_alias.set target_id={} display_alias={:?}",
         req.target_id,
@@ -135,14 +136,14 @@ pub async fn target_display_alias_set(
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// Returns `Err(ContractError)` with code `target.not_found`,
 /// `target.invalid_id`, or `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_display_alias_clear(
     state: State<'_, AppState>,
     req: TargetDisplayAliasClearRequest,
-) -> Result<TargetDetailV3, TargetOpError> {
+) -> Result<TargetDetailV3, ContractError> {
     tracing::debug!("target.display_alias.clear target_id={}", req.target_id);
     app_core::target_management::display_alias_clear(state.repo.pool(), &req).await
 }
@@ -156,14 +157,14 @@ pub async fn target_display_alias_clear(
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// Returns `Err(ContractError)` with code `target.not_found`,
 /// `target.invalid_id`, or `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_sessions_list(
     state: State<'_, AppState>,
     req: TargetSessionsListRequest,
-) -> Result<Vec<TargetSessionItem>, TargetOpError> {
+) -> Result<Vec<TargetSessionItem>, ContractError> {
     tracing::debug!("target.sessions.list target_id={}", req.target_id);
     app_core::target_management::sessions_list(state.repo.pool(), &req).await
 }
@@ -177,14 +178,14 @@ pub async fn target_sessions_list(
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// Returns `Err(ContractError)` with code `target.not_found`,
 /// `target.invalid_id`, or `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_projects_list(
     state: State<'_, AppState>,
     req: TargetProjectsListRequest,
-) -> Result<Vec<TargetProjectItem>, TargetOpError> {
+) -> Result<Vec<TargetProjectItem>, ContractError> {
     tracing::debug!("target.projects.list target_id={}", req.target_id);
     app_core::target_management::projects_list(state.repo.pool(), &req).await
 }
@@ -197,14 +198,14 @@ pub async fn target_projects_list(
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// Returns `Err(ContractError)` with code `target.not_found`,
 /// `target.invalid_id`, or `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_note_get(
     state: State<'_, AppState>,
     req: TargetNoteGetRequest,
-) -> Result<TargetNoteGetResult, TargetOpError> {
+) -> Result<TargetNoteGetResult, ContractError> {
     tracing::debug!("target.note.get target_id={}", req.target_id);
     app_core::target_management::note_get(state.repo.pool(), &req).await
 }
@@ -217,14 +218,14 @@ pub async fn target_note_get(
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `target.not_found`,
+/// Returns `Err(ContractError)` with code `target.not_found`,
 /// `target.invalid_id`, or `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_note_update(
     state: State<'_, AppState>,
     req: TargetNoteUpdateRequest,
-) -> Result<TargetNoteUpdateResult, TargetOpError> {
+) -> Result<TargetNoteUpdateResult, ContractError> {
     tracing::debug!("target.note.update target_id={} notes_len={}", req.target_id, req.notes.len());
     app_core::target_management::note_update(state.repo.pool(), &state.bus, &req).await
 }

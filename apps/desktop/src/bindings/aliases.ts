@@ -21,7 +21,6 @@ export type {
 
   // ── Targets gen-3 (spec 036) ──────────────────────────────────────────────
   TargetDetailV3_Deserialize as TargetDetailV3,
-  TargetOpError_Serialize as TargetOpError,
 
   // ── SIMBAD resolution (spec 035) ──────────────────────────────────────────
   // Request params → _Deserialize (what the backend deserializes from us);
