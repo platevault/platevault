@@ -45,8 +45,13 @@ path = "target_resolution_parity_test.rs"
 name = "envelope_specta_schemars_agreement"
 path = "envelope_specta_schemars_agreement.rs"
 
+[[test]]
+name = "project_tool_enum_parity"
+path = "project_tool_enum_parity.rs"
+
 [dev-dependencies]
 contracts_core = { path = "../../crates/contracts/core" }
+domain_core = { path = "../../crates/domain/core" }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
