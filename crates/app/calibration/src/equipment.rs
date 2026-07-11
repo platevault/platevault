@@ -11,6 +11,7 @@ use contracts_core::equipment::{
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use persistence_db::repositories::equipment as repo;
+use persistence_db::repositories::q_calibration;
 use sqlx::SqlitePool;
 
 // ── Error mapping ──────────────────────────────────────────────────────────
@@ -87,18 +88,7 @@ pub async fn find_or_create_camera_by_alias(
     camera.auto_detected = true;
 
     // Mark auto_detected in the database.
-    sqlx::query("UPDATE cameras SET auto_detected = 1 WHERE id = ?")
-        .bind(&camera.id)
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?;
+    q_calibration::mark_camera_auto_detected(pool, &camera.id).await.map_err(db_to_contract)?;
 
     Ok(camera)
 }
@@ -168,18 +158,7 @@ pub async fn find_or_create_telescope_by_alias(
     let mut scope = repo::create_telescope(pool, &req).await.map_err(db_to_contract)?;
     scope.auto_detected = true;
 
-    sqlx::query("UPDATE telescopes SET auto_detected = 1 WHERE id = ?")
-        .bind(&scope.id)
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?;
+    q_calibration::mark_telescope_auto_detected(pool, &scope.id).await.map_err(db_to_contract)?;
 
     Ok(scope)
 }
@@ -286,18 +265,7 @@ pub async fn find_or_create_filter_by_name(
     let mut filter = repo::create_filter(pool, &req).await.map_err(db_to_contract)?;
     filter.auto_detected = true;
 
-    sqlx::query("UPDATE filters SET auto_detected = 1 WHERE id = ?")
-        .bind(&filter.id)
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?;
+    q_calibration::mark_filter_auto_detected(pool, &filter.id).await.map_err(db_to_contract)?;
 
     Ok(filter)
 }
