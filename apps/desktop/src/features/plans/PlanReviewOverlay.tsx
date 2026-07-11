@@ -104,7 +104,8 @@ export function PlanReviewOverlay({
   // cannot tell `partially_applied` apart from `applied`. Retry needs the
   // real terminal plan state to decide whether to offer "Generate retry plan".
   const [finalState, setFinalState] = useState<string | null>(null);
-  const { progress, run: runApply, reset: resetApply } = usePlanApplyProgress();
+  const [resuming, setResuming] = useState(false);
+  const { progress, run: runApply, resume: resumeApply, reset: resetApply } = usePlanApplyProgress();
 
   const busy = approving || discarding || retrying || progress.running;
   const applied = finalState === 'applied';
@@ -169,6 +170,17 @@ export function PlanReviewOverlay({
       setDiscarding(false);
     }
   }, [planId, busy, onDiscarded, onClose, resetApply]);
+
+  /** Resume a paused apply run (R-Pause-1, T048-T050). Minimal, honest
+   * surface: reflects the real `plan.resume` call outcome, nothing simulated. */
+  const handleResume = useCallback(async () => {
+    if (planId === null || resuming) return;
+    setResuming(true);
+    setApplyError(null);
+    const ok = await resumeApply(planId);
+    setResuming(false);
+    if (!ok) setApplyError(m.plans_review_resume_failed());
+  }, [planId, resuming, resumeApply]);
 
   /** Generate a retry plan from this plan's failed items (US5, T037) — the
    * plan-review flow's only entry point since there is no standalone Plans
@@ -318,7 +330,7 @@ export function PlanReviewOverlay({
           <PlanProtectionGate planId={plan.id} onAcknowledgedChange={setGateReady} />
 
           {/* Live apply progress (D17 — spec 025 progress UI, absorbed here). */}
-          {(progress.running || progress.terminal !== null) && (
+          {(progress.running || progress.terminal !== null || progress.paused) && (
             <div
               className="alm-plan-review__progress"
               role="status"
@@ -340,6 +352,25 @@ export function PlanReviewOverlay({
               )}
               {progress.failed > 0 &&
                 ` ${m.plans_review_progress_failed({ count: progress.failed })}`}
+              {progress.paused && (
+                <>
+                  {' '}
+                  <Pill variant="warn" data-testid="plan-review-paused-badge">
+                    {m.plans_review_paused_badge({
+                      reason: progress.pauseReason ?? m.common_unknown(),
+                    })}
+                  </Pill>{' '}
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void handleResume()}
+                    disabled={resuming}
+                    data-testid="plan-review-resume"
+                  >
+                    {resuming ? m.plans_review_resuming() : m.plans_review_resume_btn()}
+                  </Btn>
+                </>
+              )}
             </div>
           )}
 

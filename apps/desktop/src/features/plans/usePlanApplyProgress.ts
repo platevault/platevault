@@ -12,6 +12,8 @@
 
 import { useCallback, useState } from 'react';
 import { applyPlan } from './planApply';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import type { OperationEvent, PlanApplyResponse } from '@/bindings/index';
 
 export interface PlanApplyProgress {
@@ -27,6 +29,19 @@ export interface PlanApplyProgress {
   terminal: 'completed' | 'failed' | null;
   /** The most recent streamed event type, for fine-grained UI. */
   lastEventType: OperationEvent['eventType'] | null;
+  /**
+   * Whether the run has halted on a pause condition (R-Pause-1: volume
+   * unavailable, disk full, or a stale source file). Derived from the
+   * backend's `warning` long-op event, which carries `pauseReason`/`runId`
+   * (spec 042 US16). `plan.resume` re-validates the condition server-side;
+   * this hook only reflects what the backend reports.
+   */
+  paused: boolean;
+  /** Human-readable pause reason as reported by the backend, else null. */
+  pauseReason: string | null;
+  /** Run id needed to call `plan.resume`; set once a pause or the initial
+   * apply response reports one. */
+  runId: string | null;
 }
 
 const IDLE: PlanApplyProgress = {
@@ -36,6 +51,9 @@ const IDLE: PlanApplyProgress = {
   total: null,
   terminal: null,
   lastEventType: null,
+  paused: false,
+  pauseReason: null,
+  runId: null,
 };
 
 /** Extract a numeric `itemsTotal` from an event payload when present. */
@@ -43,6 +61,15 @@ function readItemsTotal(payload: unknown): number | null {
   if (payload && typeof payload === 'object' && 'itemsTotal' in payload) {
     const v = (payload as { itemsTotal?: unknown }).itemsTotal;
     return typeof v === 'number' ? v : null;
+  }
+  return null;
+}
+
+/** Extract a string field from an event payload when present. */
+function readStringField(payload: unknown, field: string): string | null {
+  if (payload && typeof payload === 'object' && field in payload) {
+    const v = (payload as Record<string, unknown>)[field];
+    return typeof v === 'string' ? v : null;
   }
   return null;
 }
@@ -66,6 +93,8 @@ export function usePlanApplyProgress() {
                 case 'item_started': {
                   const total = readItemsTotal(event.payload);
                   if (total != null) next.total = total;
+                  const runId = readStringField(event.payload, 'runId');
+                  if (runId != null) next.runId = runId;
                   break;
                 }
                 case 'item_applied':
@@ -74,6 +103,16 @@ export function usePlanApplyProgress() {
                 case 'item_failed':
                   next.failed = prev.failed + 1;
                   break;
+                case 'warning': {
+                  // Pause condition (R-Pause-1): volume unavailable, disk
+                  // full, or a stale source file. The run has halted; it
+                  // stays `running` (busy) until cancelled or resumed.
+                  next.paused = true;
+                  next.pauseReason = readStringField(event.payload, 'pauseReason');
+                  const runId = readStringField(event.payload, 'runId');
+                  if (runId != null) next.runId = runId;
+                  break;
+                }
                 case 'completed':
                   next.running = false;
                   next.terminal = 'completed';
@@ -100,5 +139,27 @@ export function usePlanApplyProgress() {
     [],
   );
 
-  return { progress, run, reset };
+  /**
+   * Resume a paused run (`plan.resume`, R-Pause-1). Calls the real backend
+   * command and clears the local `paused` flag on success — the plan's DB
+   * state moves `paused -> applying`. NOTE: as of this writing the backend
+   * does not yet re-spawn the executor to continue the run's remaining
+   * pending items (tracked separately); this affordance faithfully reflects
+   * whatever the backend does, it does not simulate completion.
+   */
+  const resume = useCallback(
+    async (planId: string): Promise<boolean> => {
+      if (progress.runId === null) return false;
+      try {
+        unwrap(await commands.plansResume(planId, progress.runId));
+        setProgress((prev) => ({ ...prev, paused: false, pauseReason: null }));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [progress.runId],
+  );
+
+  return { progress, run, resume, reset };
 }
