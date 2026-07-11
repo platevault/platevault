@@ -847,50 +847,48 @@ pub async fn set_overrides(
     };
 
     // Step 3: upsert non-type overrides into inbox_file_overrides.
-    if true {
-        let sg_id = &source_group_id;
-        let now = time::OffsetDateTime::now_utc()
-            .format(&time::format_description::well_known::Rfc3339)
-            .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    let sg_id = &source_group_id;
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
 
-        // Helper: upsert a single property_key/value pair.
-        // Uses INSERT OR REPLACE so subsequent set_overrides calls overwrite.
-        let upsert_override = |key: &'static str, val: String| {
-            let id = Uuid::new_v4().to_string();
-            let sg = sg_id.clone();
-            let rfp = relative_file_path.to_owned();
-            let ts = now.clone();
-            async move {
-                sqlx::query(
-                    "INSERT INTO inbox_file_overrides \
-                     (id, source_group_id, relative_file_path, property_key, value, \
-                      override_stale, set_at) \
-                     VALUES (?, ?, ?, ?, ?, 0, ?) \
-                     ON CONFLICT(source_group_id, relative_file_path, property_key) \
-                     DO UPDATE SET value = excluded.value, \
-                                   override_stale = 0, \
-                                   set_at = excluded.set_at",
-                )
-                .bind(id)
-                .bind(sg)
-                .bind(rfp)
-                .bind(key)
-                .bind(val)
-                .bind(ts)
-                .execute(pool)
-                .await
-            }
-        };
+    // Helper: upsert a single property_key/value pair.
+    // Uses INSERT OR REPLACE so subsequent set_overrides calls overwrite.
+    let upsert_override = |key: &'static str, val: String| {
+        let id = Uuid::new_v4().to_string();
+        let sg = sg_id.clone();
+        let rfp = relative_file_path.to_owned();
+        let ts = now.clone();
+        async move {
+            sqlx::query(
+                "INSERT INTO inbox_file_overrides \
+                 (id, source_group_id, relative_file_path, property_key, value, \
+                  override_stale, set_at) \
+                 VALUES (?, ?, ?, ?, ?, 0, ?) \
+                 ON CONFLICT(source_group_id, relative_file_path, property_key) \
+                 DO UPDATE SET value = excluded.value, \
+                               override_stale = 0, \
+                               set_at = excluded.set_at",
+            )
+            .bind(id)
+            .bind(sg)
+            .bind(rfp)
+            .bind(key)
+            .bind(val)
+            .bind(ts)
+            .execute(pool)
+            .await
+        }
+    };
 
-        if let Some(f) = filter {
-            upsert_override("filter", f.to_owned()).await?;
-        }
-        if let Some(e) = exposure_s {
-            upsert_override("exposureS", e.to_string()).await?;
-        }
-        if let Some(b) = binning {
-            upsert_override("binning", b.to_owned()).await?;
-        }
+    if let Some(f) = filter {
+        upsert_override("filter", f.to_owned()).await?;
+    }
+    if let Some(e) = exposure_s {
+        upsert_override("exposureS", e.to_string()).await?;
+    }
+    if let Some(b) = binning {
+        upsert_override("binning", b.to_owned()).await?;
     }
 
     Ok(rows > 0)

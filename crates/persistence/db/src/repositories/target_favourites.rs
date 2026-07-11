@@ -12,20 +12,10 @@ use sqlx::SqlitePool;
 
 use crate::DbResult;
 
-/// Returns `true` when `target_id` references an existing `canonical_target`
-/// row. Used by the `targets.favourites.add` use case to distinguish
-/// `target.not_found` from a genuine database error before inserting.
-///
-/// # Errors
-///
-/// Returns [`crate::DbError::Database`] on query failure.
-pub async fn target_exists(pool: &SqlitePool, target_id: &str) -> DbResult<bool> {
-    let row: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
-        .bind(target_id)
-        .fetch_optional(pool)
-        .await?;
-    Ok(row.is_some())
-}
+/// Whether a `canonical_target` row exists for `target_id`. Used by the
+/// `targets.favourites.add` use case to distinguish `target.not_found` from a
+/// genuine database error before inserting.
+pub use super::q_targets_mgmt::target_exists;
 
 /// Read back the stored `favourited_at` for `target_id`, or `None` if the
 /// target is not currently favourited.
