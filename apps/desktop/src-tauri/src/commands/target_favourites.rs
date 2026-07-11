@@ -13,8 +13,9 @@
 
 use contracts_core::targets::{
     TargetFavouriteAddResult, TargetFavouriteRemoveResult, TargetFavouriteRequest,
-    TargetFavouritesListResult, TargetOpError,
+    TargetFavouritesListResult,
 };
+use contracts_core::ContractError;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
@@ -26,12 +27,12 @@ use crate::commands::lifecycle::AppState;
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `internal.database`.
+/// Returns `Err(ContractError)` with code `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_favourites_list(
     state: State<'_, AppState>,
-) -> Result<TargetFavouritesListResult, TargetOpError> {
+) -> Result<TargetFavouritesListResult, ContractError> {
     tracing::debug!("targets.favourites.list");
     app_core::target_favourites::list(state.repo.pool()).await
 }
@@ -42,14 +43,14 @@ pub async fn target_favourites_list(
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `target.not_found` or
+/// Returns `Err(ContractError)` with code `target.not_found` or
 /// `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_favourites_add(
     state: State<'_, AppState>,
     req: TargetFavouriteRequest,
-) -> Result<TargetFavouriteAddResult, TargetOpError> {
+) -> Result<TargetFavouriteAddResult, ContractError> {
     tracing::debug!("targets.favourites.add target_id={}", req.target_id);
     app_core::target_favourites::add(state.repo.pool(), &req).await
 }
@@ -60,13 +61,13 @@ pub async fn target_favourites_add(
 ///
 /// # Errors
 ///
-/// Returns `Err(TargetOpError)` with code `internal.database`.
+/// Returns `Err(ContractError)` with code `internal.database`.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_favourites_remove(
     state: State<'_, AppState>,
     req: TargetFavouriteRequest,
-) -> Result<TargetFavouriteRemoveResult, TargetOpError> {
+) -> Result<TargetFavouriteRemoveResult, ContractError> {
     tracing::debug!("targets.favourites.remove target_id={}", req.target_id);
     app_core::target_favourites::remove(state.repo.pool(), &req).await
 }

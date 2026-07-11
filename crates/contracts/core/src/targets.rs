@@ -111,17 +111,6 @@ pub struct TargetDetail {
 //
 // Contracts per `specs/036-retire-legacy-targets/contracts/target-management.md`.
 
-/// Generic error envelope for target operations (gen-3).
-#[derive(Clone, Debug, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct TargetOpError {
-    /// Error code string (e.g. `"target.not_found"`, `"alias.duplicate"`).
-    pub code: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<crate::JsonAny>,
-}
-
 /// Kind of a target alias (gen-3).
 ///
 /// - `"designation"` — a SIMBAD catalog designation (read-only, not removable).

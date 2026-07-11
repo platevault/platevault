@@ -27,7 +27,8 @@ import { X } from 'lucide-react';
 import { useNavigate, Link } from '@tanstack/react-router';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
-import type { TargetDetailV3, TargetOpError } from '@/bindings/aliases';
+import type { TargetDetailV3 } from '@/bindings/aliases';
+import type { ContractError } from '@/lib/errors';
 import type { TargetListItem } from '@/bindings/index';
 import type { TargetSessionItem, TargetProjectItem } from '@/bindings';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
@@ -104,8 +105,8 @@ function fmtDec(deg: number): string {
   return `${sign}${String(dd).padStart(2, '0')}°${String(mm).padStart(2, '0')}′${ss.toFixed(0).padStart(2, '0')}″`;
 }
 
-/** Map TargetOpError.code to a user-readable message. */
-function errorMessage(err: TargetOpError, fallback: string): string {
+/** Map ContractError.code to a user-readable message. */
+function errorMessage(err: ContractError, fallback: string): string {
   switch (err.code) {
     case 'alias.blank':
       return m.targets_detail_alias_blank();
@@ -430,7 +431,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       setAliasInput('');
       load();
     } catch (err) {
-      const e = err as TargetOpError;
+      const e = err as ContractError;
       setAliasError(errorMessage(e, m.targets_detail_add_alias_failed()));
     }
   }, [targetId, aliasInput, load]);
@@ -443,7 +444,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         unwrap(await commands.targetAliasRemove({ targetId, aliasId }));
         load();
       } catch (err) {
-        const e = err as TargetOpError;
+        const e = err as ContractError;
         setActionError(errorMessage(e, m.targets_detail_remove_alias_failed()));
       }
     },
@@ -461,7 +462,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       setDisplayAliasInput(data.displayAlias ?? '');
       setDisplayAliasEditing(false);
     } catch (err) {
-      const e = err as TargetOpError;
+      const e = err as ContractError;
       setActionError(errorMessage(e, m.targets_detail_set_display_alias_failed()));
     }
   }, [targetId, displayAliasInput]);
@@ -475,7 +476,7 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       setDisplayAliasInput('');
       setDisplayAliasEditing(false);
     } catch (err) {
-      const e = err as TargetOpError;
+      const e = err as ContractError;
       setActionError(errorMessage(e, m.targets_detail_clear_display_alias_failed()));
     }
   }, [targetId]);

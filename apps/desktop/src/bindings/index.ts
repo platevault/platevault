@@ -154,27 +154,27 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetGet: (req: TargetGetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_get", { req })),
+	targetGet: (req: TargetGetRequest) => typedError<TargetDetailV3_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_get", { req })),
 	/**
 	 *  `target.list` — list all canonical targets ordered by primary designation.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `internal.database`.
+	 *  Returns `Err(ContractError)` with code `internal.database`.
 	 */
-	targetList: () => typedError<TargetListItem_Serialize[], TargetOpError_Serialize>(__TAURI_INVOKE("target_list")),
+	targetList: () => typedError<TargetListItem_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("target_list")),
 	/**
 	 *  `target.alias.add` — add a user alias to a canonical target (gen-3).
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`, `alias.blank`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`, `alias.blank`,
 	 *  or `internal.database`.
 	 */
-	targetAliasAdd: (req: TargetAliasAddRequest) => typedError<TargetAliasAddResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_alias_add", { req })),
+	targetAliasAdd: (req: TargetAliasAddRequest) => typedError<TargetAliasAddResult, ContractError_Serialize>(__TAURI_INVOKE("target_alias_add", { req })),
 	/**
 	 *  `target.alias.remove` — remove a user alias from a canonical target (gen-3).
 	 * 
@@ -183,10 +183,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `alias.not_found`,
+	 *  Returns `Err(ContractError)` with code `alias.not_found`,
 	 *  `alias.not_removable`, or `internal.database`.
 	 */
-	targetAliasRemove: (req: TargetAliasRemoveRequest) => typedError<TargetAliasRemoveResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_alias_remove", { req })),
+	targetAliasRemove: (req: TargetAliasRemoveRequest) => typedError<TargetAliasRemoveResult, ContractError_Serialize>(__TAURI_INVOKE("target_alias_remove", { req })),
 	/**
 	 *  `target.display_alias.set` — set the user presentation label (FR-012).
 	 * 
@@ -195,10 +195,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetDisplayAliasSet: (req: TargetDisplayAliasSetRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_display_alias_set", { req })),
+	targetDisplayAliasSet: (req: TargetDisplayAliasSetRequest) => typedError<TargetDetailV3_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_display_alias_set", { req })),
 	/**
 	 *  `target.display_alias.clear` — clear the user presentation label (FR-012).
 	 * 
@@ -207,10 +207,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetDisplayAliasClear: (req: TargetDisplayAliasClearRequest) => typedError<TargetDetailV3_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_display_alias_clear", { req })),
+	targetDisplayAliasClear: (req: TargetDisplayAliasClearRequest) => typedError<TargetDetailV3_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_display_alias_clear", { req })),
 	/**
 	 *  `target.sessions.list` — list acquisition sessions linked to a canonical target.
 	 * 
@@ -219,10 +219,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetSessionsList: (req: TargetSessionsListRequest) => typedError<TargetSessionItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target_sessions_list", { req })),
+	targetSessionsList: (req: TargetSessionsListRequest) => typedError<TargetSessionItem[], ContractError_Serialize>(__TAURI_INVOKE("target_sessions_list", { req })),
 	/**
 	 *  `target.projects.list` — list projects linked to a canonical target.
 	 * 
@@ -231,10 +231,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetProjectsList: (req: TargetProjectsListRequest) => typedError<TargetProjectItem[], TargetOpError_Serialize>(__TAURI_INVOKE("target_projects_list", { req })),
+	targetProjectsList: (req: TargetProjectsListRequest) => typedError<TargetProjectItem[], ContractError_Serialize>(__TAURI_INVOKE("target_projects_list", { req })),
 	/**
 	 *  `target.note.get` — read observing notes for a canonical target.
 	 * 
@@ -242,10 +242,10 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetNoteGet: (req: TargetNoteGetRequest) => typedError<TargetNoteGetResult_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_note_get", { req })),
+	targetNoteGet: (req: TargetNoteGetRequest) => typedError<TargetNoteGetResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_note_get", { req })),
 	/**
 	 *  `target.note.update` — write observing notes for a canonical target.
 	 * 
@@ -253,36 +253,36 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found`,
+	 *  Returns `Err(ContractError)` with code `target.not_found`,
 	 *  `target.invalid_id`, or `internal.database`.
 	 */
-	targetNoteUpdate: (req: TargetNoteUpdateRequest) => typedError<TargetNoteUpdateResult_Serialize, TargetOpError_Serialize>(__TAURI_INVOKE("target_note_update", { req })),
+	targetNoteUpdate: (req: TargetNoteUpdateRequest) => typedError<TargetNoteUpdateResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_note_update", { req })),
 	/**
 	 *  `targets.favourites.list` — list the ids of every currently-favourited
 	 *  canonical target.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `internal.database`.
+	 *  Returns `Err(ContractError)` with code `internal.database`.
 	 */
-	targetFavouritesList: () => typedError<TargetFavouritesListResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_favourites_list")),
+	targetFavouritesList: () => typedError<TargetFavouritesListResult, ContractError_Serialize>(__TAURI_INVOKE("target_favourites_list")),
 	/**
 	 *  `targets.favourites.add` — favourite a canonical target. Idempotent.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `target.not_found` or
+	 *  Returns `Err(ContractError)` with code `target.not_found` or
 	 *  `internal.database`.
 	 */
-	targetFavouritesAdd: (req: TargetFavouriteRequest) => typedError<TargetFavouriteAddResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_favourites_add", { req })),
+	targetFavouritesAdd: (req: TargetFavouriteRequest) => typedError<TargetFavouriteAddResult, ContractError_Serialize>(__TAURI_INVOKE("target_favourites_add", { req })),
 	/**
 	 *  `targets.favourites.remove` — unfavourite a canonical target. Idempotent.
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(TargetOpError)` with code `internal.database`.
+	 *  Returns `Err(ContractError)` with code `internal.database`.
 	 */
-	targetFavouritesRemove: (req: TargetFavouriteRequest) => typedError<TargetFavouriteRemoveResult, TargetOpError_Serialize>(__TAURI_INVOKE("target_favourites_remove", { req })),
+	targetFavouritesRemove: (req: TargetFavouriteRequest) => typedError<TargetFavouriteRemoveResult, ContractError_Serialize>(__TAURI_INVOKE("target_favourites_remove", { req })),
 	/**
 	 *  `target.resolve` — cache-first resolution of a designation / common name (or
 	 *  FITS OBJECT value) against the local cache + bundled seed, falling back to
@@ -2978,8 +2978,8 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
 /**  `plan.required` appears in `ContractError` in `transition_use_case.rs`. */
 "plan.required" | 
 /**
- *  Appears in `TargetOpError.code: String` (`target_management.rs`).
- *  Included per task instruction ("include when unsure — superset is safe").
+ *  Reserved: no current call site returns this — `target.alias.add`
+ *  resolves a duplicate idempotently rather than erroring.
  */
 "alias.duplicate" | "alias.blank" | "alias.not_found" | "alias.not_removable" | "target.not_found" | "target.invalid_id" | 
 /**
@@ -7818,25 +7818,6 @@ export type TargetNoteUpdateResult_Serialize = {
  *  Mapped uniformly from SIMBAD `otype`; unknown values map to `Other`.
  */
 export type TargetObjectType = "galaxy" | "planetary_nebula" | "emission_nebula" | "reflection_nebula" | "dark_nebula" | "open_cluster" | "globular_cluster" | "supernova_remnant" | "galaxy_cluster" | "double_star" | "asterism" | "other";
-
-/**  Generic error envelope for target operations (gen-3). */
-export type TargetOpError = TargetOpError_Serialize | TargetOpError_Deserialize;
-
-/**  Generic error envelope for target operations (gen-3). */
-export type TargetOpError_Deserialize = {
-	/**  Error code string (e.g. `"target.not_found"`, `"alias.duplicate"`). */
-	code: string,
-	message: string,
-	details: unknown | null,
-};
-
-/**  Generic error envelope for target operations (gen-3). */
-export type TargetOpError_Serialize = {
-	/**  Error code string (e.g. `"target.not_found"`, `"alias.duplicate"`). */
-	code: string,
-	message: string,
-	details?: unknown | null,
-};
 
 /**
  *  A linked project returned by `target.projects.list` (spec 023 US3).

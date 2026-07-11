@@ -296,9 +296,9 @@ pub enum ErrorCode {
     #[serde(rename = "plan.required")]
     PlanRequired,
 
-    // ── Target / alias codes that flow through ContractError in some paths ────
-    /// Appears in `TargetOpError.code: String` (`target_management.rs`).
-    /// Included per task instruction ("include when unsure — superset is safe").
+    // ── Target / alias codes ───────────────────────────────────────────────────
+    /// Reserved: no current call site returns this — `target.alias.add`
+    /// resolves a duplicate idempotently rather than erroring.
     #[serde(rename = "alias.duplicate")]
     AliasDuplicate,
     #[serde(rename = "alias.blank")]

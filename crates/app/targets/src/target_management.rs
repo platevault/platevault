@@ -21,9 +21,9 @@ use contracts_core::targets::{
     TargetAliasRemoveRequest, TargetAliasRemoveResult, TargetDetailV3,
     TargetDisplayAliasClearRequest, TargetDisplayAliasSetRequest, TargetGetRequest, TargetListItem,
     TargetNoteGetRequest, TargetNoteGetResult, TargetNoteUpdateRequest, TargetNoteUpdateResult,
-    TargetOpError, TargetProjectItem, TargetProjectsListRequest, TargetSessionItem,
-    TargetSessionsListRequest,
+    TargetProjectItem, TargetProjectsListRequest, TargetSessionItem, TargetSessionsListRequest,
 };
+use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::Timestamp;
 use targeting_resolver::cache::{self, CachedTarget, TargetListRow};
 use targeting_resolver::AliasKind;
@@ -35,38 +35,38 @@ const MAX_NOTE_BYTES: usize = 16_384;
 
 // ── Error helpers ────────────────────────────────────────────────────────────
 
-fn not_found(id: &str) -> TargetOpError {
-    TargetOpError {
-        code: "target.not_found".to_owned(),
-        message: format!("Target '{id}' not found."),
-        details: None,
-    }
+fn not_found(id: &str) -> ContractError {
+    ContractError::new(
+        ErrorCode::TargetNotFound,
+        format!("Target '{id}' not found."),
+        ErrorSeverity::Blocking,
+        false,
+    )
 }
 
-fn db_err(e: &cache::CacheError) -> TargetOpError {
-    TargetOpError { code: "internal.database".to_owned(), message: format!("{e}"), details: None }
+/// Map any DB-layer error (`cache::CacheError` or `persistence_db::DbError`) to
+/// the `internal.database` `ContractError` shape. Collapses the previously
+/// byte-identical `db_err`/`persist_err` pair (Tier-3 dedup).
+fn db_err(e: impl std::fmt::Display) -> ContractError {
+    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
-/// Map a [`persistence_db::DbError`] from a `q_targets_mgmt` repository call to
-/// the `internal.database` op-error shape (mirrors [`db_err`] for `CacheError`).
-fn persist_err(e: &persistence_db::DbError) -> TargetOpError {
-    TargetOpError { code: "internal.database".to_owned(), message: format!("{e}"), details: None }
+fn invalid_id(id: &str) -> ContractError {
+    ContractError::new(
+        ErrorCode::TargetInvalidId,
+        format!("'{id}' is not a valid target id."),
+        ErrorSeverity::Blocking,
+        false,
+    )
 }
 
-fn invalid_id(id: &str) -> TargetOpError {
-    TargetOpError {
-        code: "target.invalid_id".to_owned(),
-        message: format!("'{id}' is not a valid target id."),
-        details: None,
-    }
-}
-
-fn alias_not_removable() -> TargetOpError {
-    TargetOpError {
-        code: "alias.not_removable".to_owned(),
-        message: "Only user-added aliases (kind='user') can be removed.".to_owned(),
-        details: None,
-    }
+fn alias_not_removable() -> ContractError {
+    ContractError::new(
+        ErrorCode::AliasNotRemovable,
+        "Only user-added aliases (kind='user') can be removed.",
+        ErrorSeverity::Blocking,
+        false,
+    )
 }
 
 // ── Enum mapping ─────────────────────────────────────────────────────────────
@@ -85,11 +85,11 @@ fn map_alias_kind(k: AliasKind) -> ContractAliasKind {
 async fn load_alias_dtos(
     pool: &SqlitePool,
     target_id_str: &str,
-) -> Result<Vec<TargetAliasDto>, TargetOpError> {
+) -> Result<Vec<TargetAliasDto>, ContractError> {
     let rows =
         persistence_db::repositories::q_targets_mgmt::list_target_aliases(pool, target_id_str)
             .await
-            .map_err(|e| persist_err(&e))?;
+            .map_err(db_err)?;
 
     Ok(rows
         .into_iter()
@@ -139,14 +139,14 @@ fn list_row_to_item(row: TargetListRow) -> TargetListItem {
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// Returns [`ContractError`] with code `target.not_found`, `target.invalid_id`,
 /// or `internal.database`.
 pub async fn get(
     pool: &SqlitePool,
     req: &TargetGetRequest,
-) -> Result<TargetDetailV3, TargetOpError> {
+) -> Result<TargetDetailV3, ContractError> {
     let uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
-    let target = cache::get_by_id(pool, uuid).await.map_err(|e| db_err(&e))?;
+    let target = cache::get_by_id(pool, uuid).await.map_err(db_err)?;
     match target {
         None => Err(not_found(&req.target_id)),
         Some(t) => {
@@ -162,9 +162,9 @@ pub async fn get(
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `internal.database`.
-pub async fn list(pool: &SqlitePool) -> Result<Vec<TargetListItem>, TargetOpError> {
-    let rows = cache::list_all(pool).await.map_err(|e| db_err(&e))?;
+/// Returns [`ContractError`] with code `internal.database`.
+pub async fn list(pool: &SqlitePool) -> Result<Vec<TargetListItem>, ContractError> {
+    let rows = cache::list_all(pool).await.map_err(db_err)?;
     Ok(rows.into_iter().map(list_row_to_item).collect())
 }
 
@@ -175,39 +175,41 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<TargetListItem>, TargetOpErro
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// Returns [`ContractError`] with code `target.not_found`, `target.invalid_id`,
 /// `alias.blank`, or `internal.database`.
 pub async fn alias_add(
     pool: &SqlitePool,
     req: &TargetAliasAddRequest,
-) -> Result<TargetAliasAddResult, TargetOpError> {
+) -> Result<TargetAliasAddResult, ContractError> {
     let uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
 
     // Verify the target exists.
     let exists =
         persistence_db::repositories::q_targets_mgmt::target_exists(pool, &uuid.to_string())
             .await
-            .map_err(|e| persist_err(&e))?;
+            .map_err(db_err)?;
     if !exists {
         return Err(not_found(&req.target_id));
     }
 
     if req.alias.trim().is_empty() {
-        return Err(TargetOpError {
-            code: "alias.blank".to_owned(),
-            message: "Alias must not be blank.".to_owned(),
-            details: None,
-        });
+        return Err(ContractError::new(
+            ErrorCode::AliasBlank,
+            "Alias must not be blank.",
+            ErrorSeverity::Blocking,
+            false,
+        ));
     }
 
-    let result = cache::insert_user_alias(pool, uuid, &req.alias).await.map_err(|e| db_err(&e))?;
+    let result = cache::insert_user_alias(pool, uuid, &req.alias).await.map_err(db_err)?;
 
     match result {
-        None => Err(TargetOpError {
-            code: "alias.blank".to_owned(),
-            message: "Alias normalizes to empty string.".to_owned(),
-            details: None,
-        }),
+        None => Err(ContractError::new(
+            ErrorCode::AliasBlank,
+            "Alias normalizes to empty string.",
+            ErrorSeverity::Blocking,
+            false,
+        )),
         Some((alias_id, alias_display)) => Ok(TargetAliasAddResult {
             alias: TargetAliasDto {
                 id: alias_id,
@@ -225,12 +227,12 @@ pub async fn alias_add(
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `alias.not_found`, `alias.not_removable`,
+/// Returns [`ContractError`] with code `alias.not_found`, `alias.not_removable`,
 /// or `internal.database`.
 pub async fn alias_remove(
     pool: &SqlitePool,
     req: &TargetAliasRemoveRequest,
-) -> Result<TargetAliasRemoveResult, TargetOpError> {
+) -> Result<TargetAliasRemoveResult, ContractError> {
     // First check whether the alias exists at all (to distinguish "not found"
     // from "not removable").
     let row = persistence_db::repositories::q_targets_mgmt::get_alias_kind(
@@ -239,18 +241,18 @@ pub async fn alias_remove(
         &req.target_id,
     )
     .await
-    .map_err(|e| persist_err(&e))?;
+    .map_err(db_err)?;
 
     match row {
-        None => Err(TargetOpError {
-            code: "alias.not_found".to_owned(),
-            message: format!("Alias '{}' not found on target '{}'.", req.alias_id, req.target_id),
-            details: None,
-        }),
+        None => Err(ContractError::new(
+            ErrorCode::AliasNotFound,
+            format!("Alias '{}' not found on target '{}'.", req.alias_id, req.target_id),
+            ErrorSeverity::Blocking,
+            false,
+        )),
         Some(kind) if kind != "user" => Err(alias_not_removable()),
         Some(_) => {
-            let deleted =
-                cache::delete_user_alias(pool, &req.alias_id).await.map_err(|e| db_err(&e))?;
+            let deleted = cache::delete_user_alias(pool, &req.alias_id).await.map_err(db_err)?;
             Ok(TargetAliasRemoveResult { removed: deleted })
         }
     }
@@ -262,15 +264,14 @@ pub async fn alias_remove(
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// Returns [`ContractError`] with code `target.not_found`, `target.invalid_id`,
 /// or `internal.database`.
 pub async fn display_alias_set(
     pool: &SqlitePool,
     req: &TargetDisplayAliasSetRequest,
-) -> Result<TargetDetailV3, TargetOpError> {
+) -> Result<TargetDetailV3, ContractError> {
     let uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
-    let updated =
-        cache::set_display_alias(pool, uuid, &req.display_alias).await.map_err(|e| db_err(&e))?;
+    let updated = cache::set_display_alias(pool, uuid, &req.display_alias).await.map_err(db_err)?;
     if !updated {
         return Err(not_found(&req.target_id));
     }
@@ -282,14 +283,14 @@ pub async fn display_alias_set(
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// Returns [`ContractError`] with code `target.not_found`, `target.invalid_id`,
 /// or `internal.database`.
 pub async fn display_alias_clear(
     pool: &SqlitePool,
     req: &TargetDisplayAliasClearRequest,
-) -> Result<TargetDetailV3, TargetOpError> {
+) -> Result<TargetDetailV3, ContractError> {
     let uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
-    let updated = cache::clear_display_alias(pool, uuid).await.map_err(|e| db_err(&e))?;
+    let updated = cache::clear_display_alias(pool, uuid).await.map_err(db_err)?;
     if !updated {
         return Err(not_found(&req.target_id));
     }
@@ -306,28 +307,24 @@ pub async fn display_alias_clear(
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// Returns [`ContractError`] with code `target.not_found`, `target.invalid_id`,
 /// or `internal.database`.
 pub async fn sessions_list(
     pool: &SqlitePool,
     req: &TargetSessionsListRequest,
-) -> Result<Vec<TargetSessionItem>, TargetOpError> {
+) -> Result<Vec<TargetSessionItem>, ContractError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
     // Verify the target exists.
     let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
         .await
-        .map_err(|e| persist_err(&e))?;
+        .map_err(db_err)?;
     if !exists {
         return Err(not_found(&req.target_id));
     }
     let rows =
         persistence_db::repositories::targets::list_sessions_for_target(pool, &req.target_id)
             .await
-            .map_err(|e| TargetOpError {
-                code: "internal.database".to_owned(),
-                message: format!("{e}"),
-                details: None,
-            })?;
+            .map_err(db_err)?;
     Ok(rows
         .into_iter()
         .map(|r| TargetSessionItem {
@@ -347,27 +344,23 @@ pub async fn sessions_list(
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// Returns [`ContractError`] with code `target.not_found`, `target.invalid_id`,
 /// or `internal.database`.
 pub async fn projects_list(
     pool: &SqlitePool,
     req: &TargetProjectsListRequest,
-) -> Result<Vec<TargetProjectItem>, TargetOpError> {
+) -> Result<Vec<TargetProjectItem>, ContractError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
     let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
         .await
-        .map_err(|e| persist_err(&e))?;
+        .map_err(db_err)?;
     if !exists {
         return Err(not_found(&req.target_id));
     }
     let rows =
         persistence_db::repositories::targets::list_projects_for_target(pool, &req.target_id)
             .await
-            .map_err(|e| TargetOpError {
-                code: "internal.database".to_owned(),
-                message: format!("{e}"),
-                details: None,
-            })?;
+            .map_err(db_err)?;
     Ok(rows
         .into_iter()
         .map(|r| TargetProjectItem { id: r.id, name: r.name, lifecycle: r.lifecycle })
@@ -381,26 +374,22 @@ pub async fn projects_list(
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// Returns [`ContractError`] with code `target.not_found`, `target.invalid_id`,
 /// or `internal.database`.
 pub async fn note_get(
     pool: &SqlitePool,
     req: &TargetNoteGetRequest,
-) -> Result<TargetNoteGetResult, TargetOpError> {
+) -> Result<TargetNoteGetResult, ContractError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
     let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
         .await
-        .map_err(|e| persist_err(&e))?;
+        .map_err(db_err)?;
     if !exists {
         return Err(not_found(&req.target_id));
     }
     let notes = persistence_db::repositories::targets::get_target_notes(pool, &req.target_id)
         .await
-        .map_err(|e| TargetOpError {
-            code: "internal.database".to_owned(),
-            message: format!("{e}"),
-            details: None,
-        })?;
+        .map_err(db_err)?;
     Ok(TargetNoteGetResult { notes })
 }
 
@@ -416,17 +405,17 @@ pub async fn note_get(
 ///
 /// # Errors
 ///
-/// Returns [`TargetOpError`] with code `target.not_found`, `target.invalid_id`,
+/// Returns [`ContractError`] with code `target.not_found`, `target.invalid_id`,
 /// `note.content_too_large`, or `internal.database`.
 pub async fn note_update(
     pool: &SqlitePool,
     bus: &EventBus,
     req: &TargetNoteUpdateRequest,
-) -> Result<TargetNoteUpdateResult, TargetOpError> {
+) -> Result<TargetNoteUpdateResult, ContractError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
     let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
         .await
-        .map_err(|e| persist_err(&e))?;
+        .map_err(db_err)?;
     if !exists {
         return Err(not_found(&req.target_id));
     }
@@ -434,24 +423,18 @@ pub async fn note_update(
     let trimmed = req.notes.trim();
     // FR-004: reject notes exceeding 16 KB UTF-8.
     if trimmed.len() > MAX_NOTE_BYTES {
-        return Err(TargetOpError {
-            code: "note.content_too_large".to_owned(),
-            message: format!(
-                "Note body exceeds the 16 384-byte limit ({} bytes supplied).",
-                trimmed.len()
-            ),
-            details: None,
-        });
+        return Err(ContractError::new(
+            ErrorCode::NoteContentTooLarge,
+            format!("Note body exceeds the 16 384-byte limit ({} bytes supplied).", trimmed.len()),
+            ErrorSeverity::Blocking,
+            false,
+        ));
     }
     let stored: Option<&str> = if trimmed.is_empty() { None } else { Some(trimmed) };
     let updated =
         persistence_db::repositories::targets::set_target_notes(pool, &req.target_id, stored)
             .await
-            .map_err(|e| TargetOpError {
-                code: "internal.database".to_owned(),
-                message: format!("{e}"),
-                details: None,
-            })?;
+            .map_err(db_err)?;
     if !updated {
         // Should not happen (we verified existence above), but be defensive.
         return Err(not_found(&req.target_id));
@@ -541,7 +524,7 @@ mod tests {
         let db = setup().await;
         let req = TargetGetRequest { target_id: Uuid::new_v4().to_string() };
         let err = get(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "target.not_found");
+        assert_eq!(err.code, ErrorCode::TargetNotFound);
     }
 
     #[tokio::test]
@@ -549,7 +532,7 @@ mod tests {
         let db = setup().await;
         let req = TargetGetRequest { target_id: "not-a-uuid".to_owned() };
         let err = get(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "target.invalid_id");
+        assert_eq!(err.code, ErrorCode::TargetInvalidId);
     }
 
     // ── target.list ───────────────────────────────────────────────────────────
@@ -722,7 +705,7 @@ mod tests {
         let id = seed_m31(&db).await;
         let req = TargetAliasAddRequest { target_id: id.to_string(), alias: "   ".to_owned() };
         let err = alias_add(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "alias.blank");
+        assert_eq!(err.code, ErrorCode::AliasBlank);
     }
 
     #[tokio::test]
@@ -733,7 +716,7 @@ mod tests {
             alias: "Foo".to_owned(),
         };
         let err = alias_add(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "target.not_found");
+        assert_eq!(err.code, ErrorCode::TargetNotFound);
     }
 
     // ── target.alias.remove ───────────────────────────────────────────────────
@@ -765,7 +748,7 @@ mod tests {
             alias_id: designation.id.clone(),
         };
         let err = alias_remove(db.pool(), &rem_req).await.unwrap_err();
-        assert_eq!(err.code, "alias.not_removable");
+        assert_eq!(err.code, ErrorCode::AliasNotRemovable);
     }
 
     #[tokio::test]
@@ -777,7 +760,7 @@ mod tests {
             alias_id: Uuid::new_v4().to_string(),
         };
         let err = alias_remove(db.pool(), &rem_req).await.unwrap_err();
-        assert_eq!(err.code, "alias.not_found");
+        assert_eq!(err.code, ErrorCode::AliasNotFound);
     }
 
     // ── target.display_alias.set / clear ─────────────────────────────────────
@@ -821,7 +804,7 @@ mod tests {
             display_alias: "X".to_owned(),
         };
         let err = display_alias_set(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "target.not_found");
+        assert_eq!(err.code, ErrorCode::TargetNotFound);
     }
 
     #[tokio::test]
@@ -906,7 +889,7 @@ mod tests {
         let db = setup().await;
         let req = TargetSessionsListRequest { target_id: Uuid::new_v4().to_string() };
         let err = sessions_list(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "target.not_found");
+        assert_eq!(err.code, ErrorCode::TargetNotFound);
     }
 
     #[tokio::test]
@@ -914,7 +897,7 @@ mod tests {
         let db = setup().await;
         let req = TargetSessionsListRequest { target_id: "not-a-uuid".to_owned() };
         let err = sessions_list(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "target.invalid_id");
+        assert_eq!(err.code, ErrorCode::TargetInvalidId);
     }
 
     // ── target.projects.list (spec 023 US3) ──────────────────────────────────
@@ -945,7 +928,7 @@ mod tests {
         let db = setup().await;
         let req = TargetProjectsListRequest { target_id: Uuid::new_v4().to_string() };
         let err = projects_list(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "target.not_found");
+        assert_eq!(err.code, ErrorCode::TargetNotFound);
     }
 
     // ── target.note.get / target.note.update (spec 023 US4) ──────────────────
@@ -1012,7 +995,7 @@ mod tests {
         let db = setup().await;
         let req = TargetNoteGetRequest { target_id: Uuid::new_v4().to_string() };
         let err = note_get(db.pool(), &req).await.unwrap_err();
-        assert_eq!(err.code, "target.not_found");
+        assert_eq!(err.code, ErrorCode::TargetNotFound);
     }
 
     #[tokio::test]
@@ -1024,7 +1007,7 @@ mod tests {
             notes: "x".to_owned(),
         };
         let err = note_update(db.pool(), &bus, &req).await.unwrap_err();
-        assert_eq!(err.code, "target.not_found");
+        assert_eq!(err.code, ErrorCode::TargetNotFound);
     }
 
     // ── SC-003 / US4-AS3: note survives alias mutations ───────────────────────
@@ -1078,7 +1061,11 @@ mod tests {
         let oversized = "x".repeat(MAX_NOTE_BYTES + 1);
         let req = TargetNoteUpdateRequest { target_id: id.to_string(), notes: oversized };
         let err = note_update(db.pool(), &bus, &req).await.unwrap_err();
-        assert_eq!(err.code, "note.content_too_large", "FR-004: notes >16 KB must be rejected");
+        assert_eq!(
+            err.code,
+            ErrorCode::NoteContentTooLarge,
+            "FR-004: notes >16 KB must be rejected"
+        );
     }
 
     /// A note exactly at the 16 384-byte limit must be accepted.

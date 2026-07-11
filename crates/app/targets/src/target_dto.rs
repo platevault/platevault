@@ -6,7 +6,8 @@
 //! is pure consolidation with no behavior change.
 
 use contracts_core::targets::{TargetObjectType, TargetSource};
-use targeting_resolver::{ObjectType, TargetSource as CacheSource};
+use targeting_resolver::cache::CachedTarget;
+use targeting_resolver::{AliasKind, ObjectType, TargetSource as CacheSource};
 
 /// Map a resolver-domain [`ObjectType`] to the contract [`TargetObjectType`].
 #[must_use]
@@ -35,4 +36,13 @@ pub(crate) fn map_source(s: CacheSource) -> TargetSource {
         CacheSource::Resolved => TargetSource::Resolved,
         CacheSource::UserOverride => TargetSource::UserOverride,
     }
+}
+
+/// Find the common name (a `common_name` alias) for a cached target, if any.
+///
+/// Previously duplicated byte-for-byte in `target_resolve.rs` and
+/// `target_search.rs` (Tier-3 dedup).
+#[must_use]
+pub(crate) fn common_name(target: &CachedTarget) -> Option<String> {
+    target.aliases.iter().find(|a| matches!(a.kind, AliasKind::CommonName)).map(|a| a.alias.clone())
 }
