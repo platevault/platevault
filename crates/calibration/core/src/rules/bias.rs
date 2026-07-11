@@ -29,17 +29,10 @@ pub fn evaluate(
     let mut confidence = 1.0_f64;
 
     // ── Hard rule: gain ───────────────────────────────────────────────────────
-    match (session.gain, master.gain) {
-        (Some(sg), Some(mg)) => {
-            if (sg - mg).abs() < 1e-9 {
-                matched.push(MatchedDim::exact(Dimension::Gain));
-            } else {
-                return None;
-            }
-        }
-        _ => {
-            return None;
-        }
+    if crate::rules::hard_rule_numeric(session.gain, master.gain) {
+        matched.push(MatchedDim::exact(Dimension::Gain));
+    } else {
+        return None;
     }
 
     // ── Hard rule: offset (controlled by config.require_same_offset) ─────────
@@ -47,7 +40,7 @@ pub fn evaluate(
     // Mirrors the dark rule: strict by default, relaxable via policy flag.
     match (session.offset, master.offset) {
         (Some(so), Some(mo)) => {
-            if (so - mo).abs() < 1e-9 {
+            if (so - mo).abs() < crate::rules::HARD_RULE_EPSILON {
                 matched.push(MatchedDim::exact(Dimension::Offset));
             } else if config.require_same_offset {
                 return None;

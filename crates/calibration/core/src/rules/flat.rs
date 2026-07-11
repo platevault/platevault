@@ -32,63 +32,34 @@ pub fn evaluate(
     let mut confidence = 1.0_f64;
 
     // ── Hard rule: filter ─────────────────────────────────────────────────────
-    match (&session.filter, &master.filter) {
-        (Some(sf), Some(mf)) => {
-            if sf == mf {
-                matched.push(MatchedDim::exact_string(Dimension::Filter, sf));
-            } else {
-                return None;
-            }
+    match (session.filter.as_deref(), master.filter.as_deref()) {
+        (Some(sf), Some(mf)) if crate::rules::hard_rule_string(Some(sf), Some(mf)) => {
+            matched.push(MatchedDim::exact_string(Dimension::Filter, sf));
         }
-        (None, _) | (_, None) => {
-            // Missing filter metadata — hard rule cannot be satisfied.
-            mismatched.push(MismatchedDim::metadata_missing(Dimension::Filter));
-            return None;
-        }
+        _ => return None,
     }
 
     // ── Hard rule: binning ────────────────────────────────────────────────────
-    match (&session.binning, &master.binning) {
-        (Some(sb), Some(mb)) => {
-            if sb == mb {
-                matched.push(MatchedDim::exact_string(Dimension::Binning, sb));
-            } else {
-                return None;
-            }
+    match (session.binning.as_deref(), master.binning.as_deref()) {
+        (Some(sb), Some(mb)) if crate::rules::hard_rule_string(Some(sb), Some(mb)) => {
+            matched.push(MatchedDim::exact_string(Dimension::Binning, sb));
         }
-        _ => {
-            mismatched.push(MismatchedDim::metadata_missing(Dimension::Binning));
-            return None;
-        }
+        _ => return None,
     }
 
     // ── Hard rule: optic_train ────────────────────────────────────────────────
-    match (&session.optic_train, &master.optic_train) {
-        (Some(st), Some(mt)) => {
-            if st == mt {
-                matched.push(MatchedDim::exact_string(Dimension::OpticTrain, st));
-            } else {
-                return None;
-            }
+    match (session.optic_train.as_deref(), master.optic_train.as_deref()) {
+        (Some(st), Some(mt)) if crate::rules::hard_rule_string(Some(st), Some(mt)) => {
+            matched.push(MatchedDim::exact_string(Dimension::OpticTrain, st));
         }
-        _ => {
-            mismatched.push(MismatchedDim::metadata_missing(Dimension::OpticTrain));
-            return None;
-        }
+        _ => return None,
     }
 
     // ── Hard rule: gain (exact, no tolerance — 2026-05-23 decision) ───────────
-    match (session.gain, master.gain) {
-        (Some(sg), Some(mg)) => {
-            if (sg - mg).abs() < 1e-9 {
-                matched.push(MatchedDim::exact(Dimension::Gain));
-            } else {
-                return None;
-            }
-        }
-        _ => {
-            return None;
-        }
+    if crate::rules::hard_rule_numeric(session.gain, master.gain) {
+        matched.push(MatchedDim::exact(Dimension::Gain));
+    } else {
+        return None;
     }
 
     // ── Soft rule: rotation ───────────────────────────────────────────────────
