@@ -40,21 +40,41 @@ violate the project's "verify before closing" bar. Tracked here, unchanged:
 - **025 T1-2 (safety)** — library-root path join + escape/symlink check before
   apply; separate destructive-confirm signal from `is_protected`; per-item audit
   on bulk cancel. Do before any real `plan.apply`.
+  **RESOLVED** (spec 033 T016–T023a, all `[X]`; real-backend e2e proof: T015 /
+  `crates/e2e-tests/tests/journeys.rs::plan_review_apply_with_audit`, CI-green
+  on Linux+Windows 2026-07-11).
 - **016 T1-1** — protection gating is blocked on the unbuilt cleanup-plan
   generator, not just tagging; reviving it needs that generator to emit items
   carrying real source/category (then call `resolve_protection`).
+  **RESOLVED** (spec 033 T043–T045, all `[X]`).
 - **009 T1-3** — persist a typed blocked-reason (migration + `project_health`
   write + DTO) so the banner shows the real reason; reconcile the two project
   tables; audit auto-transitions.
+  **RESOLVED** (spec 033 T050–T055, all `[X]`).
 - **006 / 007 / 023** — populate session `root_id`, calibration fingerprints, and
   `target_id` FK from ingestion; replace the `search.global` fixture stub with a
   real cross-entity query. **023 nav**: "Targets" in primary nav is a v4-vs-spec
   conflict needing a product decision (not silently changed).
+  **RESOLVED** (spec 033 T037–T039 `[X]`; `root_id` specifically closed via
+  T036a, verified 2026-07-11 against real code — `upsert_session` in
+  `crates/app/targets/src/ingest_sessions.rs` sets it on every insert/append,
+  landed on `main` via issue #470/`c526dc10`). **023 nav** decision: "Targets"
+  stays primary nav (spec-033-decisions memory, 2026-05-23) — not a residual gap.
 - **014 T1-4** — implement minisign signature verification before the catalogs
   repo ships (external-blocked today).
+  **RESOLVED** (spec 033 T068 `[X]`).
 - **024 / 012 / 010** — manifest subscriber (needs async-capable root resolver),
   artifact watcher (needs notify loop + watch paths), guided auto-advance
   (frontend event wiring).
+  **RESOLVED** (spec 033 T027–T030, all `[X]`; real-trigger-to-real-consumer e2e
+  proof added 2026-07-11: T024 for the manifest subscriber
+  — `apps/desktop/src-tauri/tests/workflow_run_manifest_e2e.rs` — and T025 for
+  the artifact watcher's live (not just attach-reconciliation) path —
+  `apps/desktop/src-tauri/tests/artifact_watcher_live_drop.rs`).
+
+As of 2026-07-11 (spec 033 tail-sweep pass), every item in this "Remaining"
+list is closed with automated evidence — see `specs/033-validation-bugfix-remediation/tasks.md`
+for the authoritative per-task ledger.
 
 ## Gate truth (independently re-run in WSL, 2026-06-17)
 

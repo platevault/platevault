@@ -299,6 +299,52 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     await waitFor(() => expect(onRetryCreated).toHaveBeenCalledWith('plan-2'));
   });
 
+  it('shows the catalog message (not "[object Object]") when retry rejects with a ContractError', async () => {
+    mockProtectionCheck.mockResolvedValue(
+      ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),
+    );
+    mockApplyPlan.mockImplementation(
+      (args: { id: string; onEvent?: (e: OperationEvent) => void }) => {
+        const mk = (
+          sequence: number,
+          eventType: OperationEvent['eventType'],
+          payload: unknown,
+        ): OperationEvent => ({
+          contractVersion: '1.0.0',
+          operationId: 'op-1',
+          eventType,
+          sequence,
+          payload,
+        });
+        args.onEvent?.(mk(0, 'item_started', { itemsTotal: 2 }));
+        args.onEvent?.(mk(1, 'item_applied', {}));
+        args.onEvent?.(mk(2, 'item_failed', {}));
+        args.onEvent?.(mk(3, 'failed', {}));
+        return Promise.resolve({ planId: args.id, runId: 'op-1', newState: 'partially_applied' });
+      },
+    );
+    // `plans.retry` rejects with a ContractError — the real shape a Tauri
+    // command failure takes on the wire (not a native Error).
+    mockPlansRetry.mockRejectedValue({
+      code: 'no.items.to.retry',
+      message: 'no failed/skipped items on plan plan-1',
+    });
+
+    renderOverlay();
+
+    const approveBtn = await screen.findByTestId('plan-review-approve-apply');
+    await waitFor(() => expect(approveBtn).not.toBeDisabled());
+    fireEvent.click(approveBtn);
+
+    const retryBtn = await screen.findByTestId('plan-review-retry');
+    fireEvent.click(retryBtn);
+
+    await waitFor(() => expect(mockPlansRetry).toHaveBeenCalledWith('plan-1', 'failed'));
+    expect(await screen.findByText('There are no items to retry.')).toBeInTheDocument();
+    expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
+    expect(screen.queryByText('no.items.to.retry')).not.toBeInTheDocument();
+  });
+
   it('cannot approve a plan with zero items (FR-014)', async () => {
     mockPlansGet.mockResolvedValue(ok(plan({ items: [], itemsTotal: 0, itemsPending: 0 })));
     mockProtectionCheck.mockResolvedValue(
