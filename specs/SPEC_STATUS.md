@@ -101,15 +101,15 @@ FOUNDATION (all ✅ — nothing blocked here)
   002 lifecycle ✅   020 router ✅   030/031 (superseded/closed)
 
 INBOX CHAIN
-  005 mixed-folder 🔴 ─▶ 041 inbox-plan-surface ✅ ─┬─▶ 039 cross-root-inbox ⚪
-  038 wizard-scan ✅                                ├─▶ 025 plan-application 🟡 (rollback test + 10k-perf remain)
+  005 mixed-folder 🔴 ─▶ 041 inbox-plan-surface ✅ ─┬─▶ 039 cross-root-inbox 🔴 (superseded, fully implemented via 041)
+  038 wizard-scan ✅                                ├─▶ 025 plan-application 🟡 (closeout-ready, 52/59 via #589)
   016 protection ✅ ─▶ 017 cleanup/archive 🟡 ──────┼─▶ 033 validation-bugfix 🟡 (closeout-ready, 92/96 via #561)
                                                     └───┘
 
 TARGETS CHAIN
   013 fits-lookup 🟡 ┐
   014 catalog 🔴 ────┴─▶ 035 SIMBAD ✅ ─┬─▶ 036 retire-legacy ✅
-                                        ├─▶ 023 target-identity ⚪ (tasks not generated)
+                                        ├─▶ 023 target-identity ✅ (closed, gen-3 delivery)
                                         └─▶ 006 sessions ✅ ─▶ 044 planner-astronomy 🔵 (Track B in-flight on main, lane B active) ─▶ 047 moon-filters ✅ (merged to main via #349)
 
 CALIBRATION CHAIN
@@ -140,9 +140,7 @@ their rows above). The frontier below reflects what's left after that.
 | Priority | Spec | Why ready | Size |
 |---|---|---|---|
 | 1 | **025 T012** (resume-executor gap, issue #575) | Product decision pending: release-blocker vs known limitation — `resume_plan` doesn't re-spawn the executor for pending items | 🟡 Medium (real production fix, not just a test) |
-| 2 | **039 cross-root-inbox** | Greenfield; 041 base on main; needs plan/tasks | 🟡 Medium |
 | 2 | **008 US1-5** (guided-flow duplication, issue #586) | `CreateProjectDialog` validation logic duplicated instead of reused by spec 010's guided flow | 🟢 Small |
-| 3 | **023 target-identity** | 035 done; needs `/speckit.tasks` to generate tasks | ⚪ Plan exists, 0 tasks |
 | 3 | **050 publishable-crate-extractions** | Plan-of-record (#429); all extraction tasks unblocked but unstarted | 🟡 Medium, multi-crate |
 | active | **043 ui-redesign** | Merged to `main`; remainder (target↔project linkage #54, Outputs/Cleanup backend model, pill-system, splitters) unblocked | 🟡 Small–Medium remainder |
 | active | **051 US8/US9** | Shell-integration foundation (US1–US7, US10-groundwork) merged; notifications + release-native-behavior plugins not yet registered | 🟡 Small–Medium |
