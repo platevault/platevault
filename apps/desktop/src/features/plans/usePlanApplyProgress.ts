@@ -12,6 +12,8 @@
 
 import { useCallback, useState } from 'react';
 import { applyPlan } from './planApply';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
 import type { OperationEvent, PlanApplyResponse } from '@/bindings/index';
 
 export interface PlanApplyProgress {
@@ -27,6 +29,30 @@ export interface PlanApplyProgress {
   terminal: 'completed' | 'failed' | null;
   /** The most recent streamed event type, for fine-grained UI. */
   lastEventType: OperationEvent['eventType'] | null;
+  /**
+   * Whether the run has halted on a pause condition (R-Pause-1: volume
+   * unavailable, disk full, or a stale source file). Derived from the
+   * backend's `warning` long-op event, which carries `pauseReason`/`runId`
+   * (spec 042 US16). `plan.resume` re-validates the condition server-side;
+   * this hook only reflects what the backend reports.
+   */
+  paused: boolean;
+  /** Human-readable pause reason as reported by the backend, else null. */
+  pauseReason: string | null;
+  /** Run id needed to call `plan.resume`; set once a pause or the initial
+   * apply response reports one. */
+  runId: string | null;
+  /**
+   * `true` immediately after a successful `plan.resume` call. The backend
+   * currently only flips the plan's DB state and does not re-spawn the
+   * executor (known limitation — see issue #575), so no further progress
+   * events will arrive on this run's channel. Rendered as a distinct,
+   * non-progressing state rather than as `running` so the UI never implies
+   * work is happening when it isn't. Cleared the instant a *real* event
+   * does arrive (any event proves the run is alive again), so a future fix
+   * to the backend continuation gap self-heals this without a UI change.
+   */
+  resumeStalled: boolean;
 }
 
 const IDLE: PlanApplyProgress = {
@@ -36,6 +62,10 @@ const IDLE: PlanApplyProgress = {
   total: null,
   terminal: null,
   lastEventType: null,
+  paused: false,
+  pauseReason: null,
+  runId: null,
+  resumeStalled: false,
 };
 
 /** Extract a numeric `itemsTotal` from an event payload when present. */
@@ -43,6 +73,15 @@ function readItemsTotal(payload: unknown): number | null {
   if (payload && typeof payload === 'object' && 'itemsTotal' in payload) {
     const v = (payload as { itemsTotal?: unknown }).itemsTotal;
     return typeof v === 'number' ? v : null;
+  }
+  return null;
+}
+
+/** Extract a string field from an event payload when present. */
+function readStringField(payload: unknown, field: string): string | null {
+  if (payload && typeof payload === 'object' && field in payload) {
+    const v = (payload as Record<string, unknown>)[field];
+    return typeof v === 'string' ? v : null;
   }
   return null;
 }
@@ -61,11 +100,19 @@ export function usePlanApplyProgress() {
           approvalToken: args.approvalToken,
           onEvent: (event: OperationEvent) => {
             setProgress((prev) => {
-              const next: PlanApplyProgress = { ...prev, lastEventType: event.eventType };
+              // Any event proves the run is alive, so a post-resume "stalled"
+              // read is stale the moment a new event arrives.
+              const next: PlanApplyProgress = {
+                ...prev,
+                lastEventType: event.eventType,
+                resumeStalled: false,
+              };
               switch (event.eventType) {
                 case 'item_started': {
                   const total = readItemsTotal(event.payload);
                   if (total != null) next.total = total;
+                  const runId = readStringField(event.payload, 'runId');
+                  if (runId != null) next.runId = runId;
                   break;
                 }
                 case 'item_applied':
@@ -74,6 +121,16 @@ export function usePlanApplyProgress() {
                 case 'item_failed':
                   next.failed = prev.failed + 1;
                   break;
+                case 'warning': {
+                  // Pause condition (R-Pause-1): volume unavailable, disk
+                  // full, or a stale source file. The run has halted; it
+                  // stays `running` (busy) until cancelled or resumed.
+                  next.paused = true;
+                  next.pauseReason = readStringField(event.payload, 'pauseReason');
+                  const runId = readStringField(event.payload, 'runId');
+                  if (runId != null) next.runId = runId;
+                  break;
+                }
                 case 'completed':
                   next.running = false;
                   next.terminal = 'completed';
@@ -100,5 +157,39 @@ export function usePlanApplyProgress() {
     [],
   );
 
-  return { progress, run, reset };
+  /**
+   * Resume a paused run (`plan.resume`, R-Pause-1). Calls the real backend
+   * command; the plan's DB state moves `paused -> applying` on success.
+   *
+   * The backend does not yet re-spawn the executor to continue the run's
+   * remaining pending items (issue #575), so no `item_*`/`completed` events
+   * will follow. Landing on `running: true` here would render as an
+   * indefinite "Applying…" with every action disabled (`busy` gates the
+   * whole footer) — a real UI trap, since the run genuinely never
+   * progresses. Instead land on the distinct `resumeStalled` state:
+   * `running` stays `false` so the footer's Close/Discard remain usable,
+   * and the progress panel shows an honest "not yet restarted" message
+   * instead of implying live progress.
+   */
+  const resume = useCallback(
+    async (planId: string): Promise<boolean> => {
+      if (progress.runId === null) return false;
+      try {
+        unwrap(await commands.plansResume(planId, progress.runId));
+        setProgress((prev) => ({
+          ...prev,
+          running: false,
+          paused: false,
+          pauseReason: null,
+          resumeStalled: true,
+        }));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [progress.runId],
+  );
+
+  return { progress, run, resume, reset };
 }

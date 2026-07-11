@@ -82,11 +82,15 @@ counterparts (contract-backed, audited) are tracked separately.
 - [x] US1-4. Tool field: RadioGroup seeded with PixInsight default. All three
   `ProjectTool` values rendered. Submit button disabled when `!tool`.
 
-- [ ] US1-5. Optional sources field (`AddSourcePicker.tsx`): deferred.
-  No confirmed Inventory sessions exist (spec 003 not shipped). The dialog
-  accepts `initialSources: []` at the contract level; the picker surface is
-  deferred to when spec 003 ships inventory data. _Reason: picking from an
-  empty inventory is a dead UI; the contract already handles the empty case._
+- [ ] US1-5. Optional sources field (`AddSourcePicker.tsx`): RE-ADJUDICATED,
+  stays deferred but the original rationale is stale. Spec 003 (sessions,
+  the renamed "Inventory") shipped; the equivalent picker
+  (`SessionSourcePicker.tsx`) exists and is proven wired into
+  `EditProjectPane.tsx` (US1b-1/US3-4, below). `CreateProjectDialog.tsx`
+  still hardcodes `initialSources: []` — wiring the picker into the create
+  flow is a real, bounded UI feature addition (new field + state + tests),
+  not a reconciliation of existing coverage, so it's left for a follow-up
+  pass rather than expanded into this sweep.
 
 - [x] US1-6. "New project" click handler opens the dialog. Static button
   replaced with `<Btn onClick={() => setCreateOpen(true)}>`.
@@ -108,15 +112,18 @@ counterparts (contract-backed, audited) are tracked separately.
 
 ## US 1b — Source Remove (P2)
 
-- [ ] US1b-1. Wire source-remove rows in `EditProjectPane.tsx` to
-  `useRemoveProjectSource`.
-  _Deferred: the EditProjectPane sources section renders source rows but the
-  remove icon/button row is not yet present. The backend use case is fully
-  implemented and tested (see F-3). UI wiring deferred to a follow-up pass
-  once spec 003 Inventory ships and sources can actually be linked._
+- [x] US1b-1. Wire source-remove rows in `EditProjectPane.tsx` to
+  `useRemoveProjectSource`. DONE (WP-008-C, landed since the original note):
+  `EditProjectPane.tsx` lists current sources with a per-row Remove button
+  wired to `callRemoveProjectSource`/`handleRemoveSource`, with a confirm
+  step. Evidence: 17 passing tests in `EditProjectPane.test.tsx`, including
+  `lists current sources with a Remove affordance` and
+  `removes a source when Remove is clicked`.
 
-- [ ] US1b-2..US1b-5: Backend logic complete (lifecycle gate tested in Rust).
-  UI lifecycle-gating in the remove row: deferred with US1b-1.
+- [x] US1b-2..US1b-5: Backend logic complete (lifecycle gate tested in Rust).
+  UI lifecycle-gating in the remove row: DONE — `isSourceRemoveLocked(lifecycle)`
+  disables Remove per lifecycle state; test `hides the add-sources toggle and
+  disables Remove when the project is archived` in `EditProjectPane.test.tsx`.
 
 ## US 1c — Channel Drift Detection (P3)
 
@@ -134,7 +141,11 @@ counterparts (contract-backed, audited) are tracked separately.
 
 ## US 2 — Onboard An Existing Project (P2)
 
-- [ ] US2-1..US2-7: **Deferred.** Reason: no mockup precedent exists and
+- [ ] US2-1..US2-7: RE-VERIFIED, stays deferred — checked `docs/design/` for a
+  since-added onboard-existing-project mockup; none exists (the only
+  "onboarding" wireframes found are first-run wizard variants, a different
+  flow). Design pass genuinely still required before implementation; not a
+  reconciliation candidate. **Deferred.** Reason: no mockup precedent exists and
   design research R6 (three-way marker reconciliation) has not been validated
   against a real library root. The building blocks are in place:
   - `project_structure::parse_marker()` handles the three-way reconcile logic
@@ -160,10 +171,13 @@ counterparts (contract-backed, audited) are tracked separately.
   Tool select disabled when `isToolLocked(lifecycle)`.
   All fields disabled when `isReadOnly(lifecycle)`.
 
-- [ ] US3-4. Inline "Add source" row wired to `AddSourcePicker.tsx`: deferred
-  with US1-5 (no Inventory yet).
+- [x] US3-4. Inline "Add source" row wired to `AddSourcePicker.tsx`: DONE —
+  `EditProjectPane.tsx`'s "Add sources" toggle reveals `SessionSourcePicker`
+  (the shipped replacement for the planned `AddSourcePicker.tsx`), selection
+  wired through `addSelection`/`callAddProjectSource` (WP-008-C). Evidence:
+  `EditProjectPane.test.tsx` (17 passing tests, including add-source flows).
 
-- [ ] US3-5. Source-remove icon: deferred with US1b-1.
+- [x] US3-5. Source-remove icon: DONE, same evidence as US1b-1 above.
 
 - [x] US3-6. Channel inference preview renders in `EditProjectPane` from
   `channels` state (synced from `project.channels`). Inferred channels show
@@ -199,14 +213,35 @@ counterparts (contract-backed, audited) are tracked separately.
 
 ## Cross-Cutting
 
-- [ ] X-1. Update steering index entry for `specs/008-` once tasks land.
-- [ ] X-2. Contract snapshot test for enum drift between JSON Schemas and Rust
-  domain types: deferred (no snapshot tooling wired yet).
-- [ ] X-3. Coordinate with spec 010 (guided first project flow): `CreateProjectDialog`
-  accepts `open`/`onClose`/`onSuccess` props and has no internal navigation,
-  so it is already invocable from an external orchestrator without behavior
-  change.
-- [ ] X-4. Coordinate with spec 011 (tool launch): `update` emits a
+- [x] X-1. Update steering index entry for `specs/008-` once tasks land.
+  OBSOLETE-BY-DESIGN: the per-spec "steering index" this referred to no
+  longer exists — project steering was restructured into hand-maintained
+  domain rule files under `.claude/rules/` (no per-spec-number entries;
+  `grep -rl "008-project-create" .claude/rules/` = no hits). Nothing to
+  update.
+- [x] X-2. Contract snapshot test for enum drift between JSON Schemas and Rust
+  domain types: DONE. Added `tests/contract/project_tool_enum_parity.rs`
+  (3 tests) reusing the existing schema-parity harness pattern from
+  `tests/contract/contract_schema_parity.rs` — asserts `project.create.json`
+  and `project.update.json`'s `ProcessingTool` enum matches
+  `contracts_core::projects_v2::ProjectTool`'s serialized values, and that
+  `ProjectTool` matches `domain_core::project::validate::VALID_TOOLS` (three
+  independently hand-maintained sources of truth for the same vocabulary).
+- [ ] X-3. Coordinate with spec 010 (guided first project flow): RE-VERIFIED,
+  correcting the record — the claim ("already invocable... without behavior
+  change") was never exercised. Spec 010's `WizardPage.tsx` does NOT import
+  `CreateProjectDialog`; its own comment says it "ported CreateProjectDialog's
+  live duplicate-name pre-check" — i.e. spec 010 duplicated the validation
+  logic into a second implementation rather than reusing the component. This
+  is a minor drift risk (two places to keep name/duplicate-check rules in
+  sync) worth a follow-up, not something to refactor inside this sweep.
+  Tracked as issue #586.
+- [ ] X-4. Coordinate with spec 011 (tool launch): RE-VERIFIED, still
+  accurate — checked both the Rust side (`grep -rn project.updated crates/`
+  finds only the publisher in `project_setup.rs`, no subscriber) and the
+  frontend (`apps/desktop/src/features/projects/tool-launch.ts` has no
+  `project.updated`/invalidation wiring). Genuinely still deferred. `update`
+  emits a
   `project.updated` audit event with `fieldsUpdated` including `"tool"` when
   the tool changes. Spec 011 should subscribe to this event to invalidate
   launcher caches. The event emission is live; spec 011 wiring is deferred.
@@ -222,8 +257,9 @@ F-1 ─► F-2 ─► F-3 ─► F-4 ─► F-5 ─► F-6
                                     ├─► US3-1 ─► US3-2 ─► US3-3, US3-6 ✓
                                     └─► US4-1 (via F-2) ─► US4-2 ─► US4-3, US4-4 ✓
 
-US1-5 / US3-4: depend on spec 003 Inventory — deferred.
-US1b-1..US1b-5 (remove UI): deferred with US1-5.
+US1-5: spec 003 shipped; CreateProjectDialog still hasn't picked up the source
+picker — deferred as net-new UI scope, not a spec-003 blocker anymore.
+US3-4, US1b-1..US1b-5 (remove/add-source UI): DONE (WP-008-C) — see ticked items above.
 US2-3 depends on spec 004 (native filesystem controls) — backend ready, UI deferred.
 ```
 
@@ -245,11 +281,12 @@ US2-3 depends on spec 004 (native filesystem controls) — backend ready, UI def
 
 | Item | Reason | Unblocked By |
 |------|--------|--------------|
-| US1-5 `AddSourcePicker` | No confirmed Inventory sessions (spec 003 pending) | spec 003 |
-| US1b-1..US1b-5 remove UI | Needs source rows in EditPane (depends on US1-5) | spec 003 |
+| US1-5 `AddSourcePicker` in Create dialog | `SessionSourcePicker` exists and works (proven in Edit); wiring it into Create is net-new UI scope | Follow-up UI pass |
 | US2 Onboard wizard | No design precedent; marker logic ready in backend | Design pass |
-| US3-4 Add source inline | Depends on AddSourcePicker (US1-5) | spec 003 |
-| US3-5 Source remove icon | Depends on remove UI (US1b-1) | spec 003 |
-| X-1 Steering index | Minor doc update | Any |
-| X-2 Snapshot test | No snapshot tooling | Tooling |
+| X-3 spec 010 dedup | Guided flow ported the validation logic instead of reusing `CreateProjectDialog` | Follow-up refactor |
+| X-4 spec 011 cache invalidation | `project.updated` has no subscriber in tool-launch (Rust or frontend) | spec 011 follow-up |
 | Playwright smokes | WSL headless, no Tauri runtime | CI/E2E env |
+
+Closed since the original notes were written: US1b-1..US1b-5 and US3-4/US3-5
+(WP-008-C source add/remove UI), X-1 (steering-index mechanism retired), X-2
+(snapshot test added).

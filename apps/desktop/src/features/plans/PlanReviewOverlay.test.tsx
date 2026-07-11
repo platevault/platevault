@@ -28,6 +28,7 @@ const {
   mockPlansApprove,
   mockPlansDiscard,
   mockPlansRetry,
+  mockPlansResume,
   mockProtectionCheck,
   mockAcknowledge,
   mockApplyPlan,
@@ -36,6 +37,7 @@ const {
   mockPlansApprove: vi.fn(),
   mockPlansDiscard: vi.fn(),
   mockPlansRetry: vi.fn(),
+  mockPlansResume: vi.fn(),
   mockProtectionCheck: vi.fn(),
   mockAcknowledge: vi.fn(),
   mockApplyPlan: vi.fn(),
@@ -47,6 +49,7 @@ vi.mock('@/bindings/index', () => ({
     plansApprove: mockPlansApprove,
     plansDiscard: mockPlansDiscard,
     plansRetry: mockPlansRetry,
+    plansResume: mockPlansResume,
     planProtectionCheckCmd: mockProtectionCheck,
     protectionPlanAcknowledged: mockAcknowledge,
   },
@@ -343,6 +346,63 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     expect(await screen.findByText('There are no items to retry.')).toBeInTheDocument();
     expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
     expect(screen.queryByText('no.items.to.retry')).not.toBeInTheDocument();
+  });
+
+  it('shows a paused badge and Resume affordance on a pause condition, and calls plan.resume (R-Pause-1, T048-T050)', async () => {
+    mockProtectionCheck.mockResolvedValue(
+      ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),
+    );
+    mockApplyPlan.mockImplementation(
+      (args: { id: string; onEvent?: (e: OperationEvent) => void }) => {
+        const mk = (
+          sequence: number,
+          eventType: OperationEvent['eventType'],
+          payload: unknown,
+        ): OperationEvent => ({
+          contractVersion: '1.0.0',
+          operationId: 'op-1',
+          eventType,
+          sequence,
+          payload,
+        });
+        args.onEvent?.(mk(0, 'item_started', { itemsTotal: 2, runId: 'run-1' }));
+        args.onEvent?.(mk(1, 'item_applied', {}));
+        args.onEvent?.(
+          mk(2, 'warning', { runId: 'run-1', pauseReason: 'item.stale', planId: args.id }),
+        );
+        // No terminal event — a paused run stops streaming until resumed/cancelled.
+        return Promise.resolve({ planId: args.id, runId: 'run-1', newState: 'applying' });
+      },
+    );
+    mockPlansResume.mockResolvedValue(
+      ok({ planId: 'plan-1', runId: 'run-1', resumedAt: '2026-07-09T00:00:00Z' }),
+    );
+
+    renderOverlay();
+    const approveBtn = await screen.findByTestId('plan-review-approve-apply');
+    await waitFor(() => expect(approveBtn).not.toBeDisabled());
+    fireEvent.click(approveBtn);
+
+    expect(await screen.findByTestId('plan-review-paused-badge')).toHaveTextContent(
+      'Paused — item.stale',
+    );
+
+    fireEvent.click(screen.getByTestId('plan-review-resume'));
+    await waitFor(() => expect(mockPlansResume).toHaveBeenCalledWith('plan-1', 'run-1'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('plan-review-paused-badge')).not.toBeInTheDocument(),
+    );
+
+    // Regression: resume_plan doesn't re-spawn the executor (#575), so no
+    // further events ever arrive on this channel. The UI must not render as
+    // active progress (no "Applying X of Y…", no infinite-busy trap) and
+    // must keep an escape affordance available instead.
+    expect(await screen.findByTestId('plan-review-resume-stalled-badge')).toHaveTextContent(
+      /not restarted yet/i,
+    );
+    expect(screen.queryByText(/Applying \d+ of \d+/)).not.toBeInTheDocument();
+    expect(screen.getByText('Discard plan')).not.toBeDisabled();
+    expect(screen.getByTestId('plan-review-approve-apply')).not.toBeDisabled();
   });
 
   it('cannot approve a plan with zero items (FR-014)', async () => {

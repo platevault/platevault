@@ -1969,6 +1969,40 @@ mod tests {
         assert_eq!(err.code, ErrorCode::PlanNotInApply);
     }
 
+    /// T038 gap-fill: `retry_plan_item`'s success path had zero coverage at
+    /// any level prior to this test (only the not-applying rejection was
+    /// tested). Drives the item failed -> applying transition directly
+    /// (bypassing the executor, so no live `ActiveRun` is required) and
+    /// asserts both the response and the persisted item state.
+    #[tokio::test]
+    async fn retry_plan_item_transitions_failed_item_to_applying() {
+        let (db, _bus) = setup().await;
+        insert_approved_plan_with_items(&db, "p-retry", 1).await;
+        plans_repo::update_plan_state(db.pool(), "p-retry", "applying").await.unwrap();
+        apply_repo::item_failed(db.pool(), "p-retry-item-0", "p-retry", "permission.denied")
+            .await
+            .unwrap();
+
+        let resp = retry_plan_item(db.pool(), "p-retry", "p-retry-item-0").await.unwrap();
+        assert_eq!(resp.item_id, "p-retry-item-0");
+        assert_eq!(resp.new_state, "applying");
+
+        let items = plans_repo::list_plan_items(db.pool(), "p-retry").await.unwrap();
+        let item = items.iter().find(|i| i.id == "p-retry-item-0").unwrap();
+        assert_eq!(item.item_state, "applying", "retried item must move failed -> applying in DB");
+    }
+
+    #[tokio::test]
+    async fn retry_plan_item_rejects_non_failed_item() {
+        let (db, _bus) = setup().await;
+        insert_approved_plan_with_items(&db, "p-retry2", 1).await;
+        plans_repo::update_plan_state(db.pool(), "p-retry2", "applying").await.unwrap();
+
+        // Item is still `pending` (never failed) — retry must reject it.
+        let err = retry_plan_item(db.pool(), "p-retry2", "p-retry2-item-0").await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::ItemNotFailed);
+    }
+
     #[tokio::test]
     async fn get_apply_status_returns_plan_state() {
         let (db, _bus) = setup().await;
