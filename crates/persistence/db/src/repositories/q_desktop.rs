@@ -1,3 +1,395 @@
-//! Scaffolding stub for the db-boundary-zero drain node owning `q_desktop`.
-//! Populated with free-fn repository queries as that node's raw-sqlx sites
-//! are migrated out of production code.
+//! Desktop Tauri command repository (db-boundary-zero drain).
+//!
+//! Backs `apps/desktop/src-tauri/src/commands/inbox.rs`,
+//! `commands/status.rs`, `commands/target_lookup.rs`, and the spec 035 US4
+//! ingest-resolution drain in `lib.rs`. Free functions only, mirroring the
+//! `inventory`/`targets` repository idiom (no repo struct/trait).
+
+use sqlx::SqlitePool;
+
+use crate::DbResult;
+
+// ── inbox.scan.folder support (spec 041 T065) ──────────────────────────────────
+
+/// Insert (or reuse, via `INSERT OR IGNORE`) the folder-level PLACEHOLDER
+/// `inbox_items` row (`group_key = ''`) for a scanned folder, linked to its
+/// source group.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_inbox_folder_placeholder(
+    pool: &SqlitePool,
+    id: &str,
+    root_id: &str,
+    relative_path: &str,
+    source_group_id: &str,
+    file_count: i64,
+    content_signature: &str,
+    lane: &str,
+    format: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO inbox_items
+            (id, root_id, relative_path, source_group_id, file_count, discovered_at,
+             last_scanned_at, content_signature, state, lane, format, is_master_item)
+         VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, 'pending_classification', ?, ?, 0)",
+    )
+    .bind(id)
+    .bind(root_id)
+    .bind(relative_path)
+    .bind(source_group_id)
+    .bind(file_count)
+    .bind(content_signature)
+    .bind(lane)
+    .bind(format)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Folder-placeholder `inbox_items` row shape (`group_key = ''`), scoped by
+/// `(root_id, relative_path)`.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct InboxPlaceholderRow {
+    pub id: String,
+    pub state: String,
+    pub file_count: i64,
+    pub lane: String,
+    pub content_signature: Option<String>,
+    pub format: Option<String>,
+}
+
+/// Fetch the authoritative folder-placeholder `inbox_items` row (`group_key =
+/// ''`) for a scanned folder. Scoping to the placeholder avoids returning an
+/// arbitrary single-type sub-item once `classify` has materialized them.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn get_inbox_placeholder_row(
+    pool: &SqlitePool,
+    root_id: &str,
+    relative_path: &str,
+) -> DbResult<Option<InboxPlaceholderRow>> {
+    let row = sqlx::query_as::<_, InboxPlaceholderRow>(
+        "SELECT id, state, file_count, lane, content_signature, format
+         FROM inbox_items
+         WHERE root_id = ? AND relative_path = ? AND group_key = ''",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+/// Insert (or reuse, via `INSERT OR IGNORE`) the individual `inbox_items` row
+/// for a single detected calibration master.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_inbox_master_item(
+    pool: &SqlitePool,
+    id: &str,
+    root_id: &str,
+    relative_path: &str,
+    lane: &str,
+    format: &str,
+    frame_type: &str,
+    filter: Option<&str>,
+    exposure_s: Option<f64>,
+) -> DbResult<()> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO inbox_items
+            (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
+             content_signature, state, lane, format, is_master_item,
+             master_frame_type, master_filter, master_exposure_s)
+         VALUES (?, ?, ?, 1, datetime('now'), datetime('now'), '', 'pending_classification',
+                 ?, ?, 1, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(root_id)
+    .bind(relative_path)
+    .bind(lane)
+    .bind(format)
+    .bind(frame_type)
+    .bind(filter)
+    .bind(exposure_s)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Individual master-item `inbox_items` row shape, scoped by `(root_id,
+/// relative_path)`.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct InboxMasterItemRow {
+    pub id: String,
+    pub state: String,
+    pub file_count: i64,
+    pub lane: String,
+    pub content_signature: Option<String>,
+    pub is_master_item: i64,
+    pub master_frame_type: Option<String>,
+    pub master_filter: Option<String>,
+    pub master_exposure_s: Option<f64>,
+}
+
+/// Fetch the authoritative `inbox_items` row for an individual master file
+/// (may have existed from a prior scan).
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn get_inbox_master_item_row(
+    pool: &SqlitePool,
+    root_id: &str,
+    relative_path: &str,
+) -> DbResult<Option<InboxMasterItemRow>> {
+    let row = sqlx::query_as::<_, InboxMasterItemRow>(
+        "SELECT id, state, file_count, lane, content_signature,
+                is_master_item, master_frame_type, master_filter, master_exposure_s
+         FROM inbox_items WHERE root_id = ? AND relative_path = ?",
+    )
+    .bind(root_id)
+    .bind(relative_path)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+// ── status.summary (spec 030 T023) ──────────────────────────────────────────────
+
+/// Count unacknowledged inbox items (`pending_classification` or
+/// `classified`) across all registered roots.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn count_unacknowledged_inbox_items(pool: &SqlitePool) -> DbResult<i64> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM inbox_items i
+         JOIN registered_sources r ON r.id = i.root_id
+         WHERE i.state IN ('pending_classification', 'classified')",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+/// Count all `acquisition_session` rows.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn count_acquisition_sessions(pool: &SqlitePool) -> DbResult<i64> {
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM acquisition_session").fetch_one(pool).await?;
+    Ok(count)
+}
+
+/// Count all rows in the `calibration_master_view` projection.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn count_calibration_masters(pool: &SqlitePool) -> DbResult<i64> {
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM calibration_master_view").fetch_one(pool).await?;
+    Ok(count)
+}
+
+/// Count all `canonical_target` rows.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn count_canonical_targets(pool: &SqlitePool) -> DbResult<i64> {
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM canonical_target").fetch_one(pool).await?;
+    Ok(count)
+}
+
+/// Count all `projects` rows.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn count_projects(pool: &SqlitePool) -> DbResult<i64> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM projects").fetch_one(pool).await?;
+    Ok(count)
+}
+
+// ── resolver_settings read (spec 035 target.resolve + US4 ingest drain) ───────
+
+/// Singleton `resolver_settings` row (id = 1): online toggle, SIMBAD
+/// endpoint, and request timeout, read by both `target.resolve` and the
+/// background ingest-resolution drain.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResolverSettingsRow {
+    pub online_enabled: i64,
+    pub simbad_endpoint: String,
+    pub request_timeout_secs: i64,
+}
+
+/// Fetch the singleton `resolver_settings` row (id = 1).
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn get_resolver_settings(pool: &SqlitePool) -> DbResult<Option<ResolverSettingsRow>> {
+    let row = sqlx::query_as::<_, ResolverSettingsRow>(
+        "SELECT online_enabled, simbad_endpoint, request_timeout_secs \
+         FROM resolver_settings WHERE id = 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Database;
+
+    async fn setup() -> Database {
+        let db = Database::in_memory().await.expect("in-memory DB");
+        db.migrate().await.expect("migrations");
+        db
+    }
+
+    #[tokio::test]
+    async fn status_counts_are_zero_on_fresh_db() {
+        let db = setup().await;
+        assert_eq!(count_unacknowledged_inbox_items(db.pool()).await.unwrap(), 0);
+        assert_eq!(count_acquisition_sessions(db.pool()).await.unwrap(), 0);
+        assert_eq!(count_calibration_masters(db.pool()).await.unwrap(), 0);
+        assert_eq!(count_canonical_targets(db.pool()).await.unwrap(), 0);
+        assert_eq!(count_projects(db.pool()).await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn resolver_settings_seeded_by_migration_0031() {
+        let db = setup().await;
+        let row = get_resolver_settings(db.pool()).await.unwrap().expect("seeded singleton row");
+        assert_eq!(row.online_enabled, 1, "default online_enabled per migration 0031");
+        assert_eq!(row.request_timeout_secs, 10, "default request_timeout_secs");
+    }
+
+    /// Registers a real `registered_sources` row via `first_run::register_source_batch`
+    /// (same path the desktop scan/inbox code uses) — `inbox_items.root_id` is a
+    /// real FK, and `INSERT OR IGNORE` silently drops rows on FK violation.
+    async fn register_test_root(pool: &sqlx::SqlitePool) -> String {
+        use domain_core::first_run::{
+            OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth,
+            SourceKind,
+        };
+        let batch_req = RegisterSourceBatchRequest {
+            sources: vec![RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            }],
+        };
+        let batch_resp =
+            crate::repositories::first_run::register_source_batch(pool, &batch_req).await.unwrap();
+        batch_resp.items[0].source_id.as_deref().unwrap().to_owned()
+    }
+
+    #[tokio::test]
+    async fn inbox_folder_placeholder_round_trips() {
+        let db = setup().await;
+        let root_id = register_test_root(db.pool()).await;
+        // source_group_id is a real FK (inbox_source_groups.id); INSERT OR
+        // IGNORE silently drops the row on FK/CHECK violation instead of
+        // erroring, so the group must exist first.
+        crate::repositories::inbox::upsert_inbox_source_group(
+            db.pool(),
+            &crate::repositories::inbox::UpsertSourceGroup {
+                id: "sg-1",
+                root_id: &root_id,
+                relative_path: "2026-01-01/Lights",
+                content_signature: Some("sig-abc"),
+                format: Some("fits"),
+                lane: Some("move"),
+            },
+        )
+        .await
+        .unwrap();
+
+        insert_inbox_folder_placeholder(
+            db.pool(),
+            "item-1",
+            &root_id,
+            "2026-01-01/Lights",
+            "sg-1",
+            10,
+            "sig-abc",
+            "fits",
+            "fits",
+        )
+        .await
+        .unwrap();
+
+        let row = get_inbox_placeholder_row(db.pool(), &root_id, "2026-01-01/Lights")
+            .await
+            .unwrap()
+            .expect("row inserted");
+        assert_eq!(row.id, "item-1");
+        assert_eq!(row.state, "pending_classification");
+        assert_eq!(row.file_count, 10);
+        assert_eq!(row.lane, "fits");
+        assert_eq!(row.content_signature.as_deref(), Some("sig-abc"));
+        assert_eq!(row.format.as_deref(), Some("fits"));
+
+        // INSERT OR IGNORE: a second insert with a different id must not
+        // overwrite the original row.
+        insert_inbox_folder_placeholder(
+            db.pool(),
+            "item-2",
+            &root_id,
+            "2026-01-01/Lights",
+            "sg-1",
+            20,
+            "sig-def",
+            "video",
+            "xisf",
+        )
+        .await
+        .unwrap();
+        let row = get_inbox_placeholder_row(db.pool(), &root_id, "2026-01-01/Lights")
+            .await
+            .unwrap()
+            .expect("row still present");
+        assert_eq!(row.id, "item-1", "OR IGNORE keeps the original row");
+    }
+
+    #[tokio::test]
+    async fn inbox_master_item_round_trips() {
+        let db = setup().await;
+        let root_id = register_test_root(db.pool()).await;
+        insert_inbox_master_item(
+            db.pool(),
+            "master-1",
+            &root_id,
+            "2026-01-01/Flats/flat_L_001.fits",
+            "fits",
+            "fits",
+            "flat",
+            Some("L"),
+            Some(2.5),
+        )
+        .await
+        .unwrap();
+
+        let row =
+            get_inbox_master_item_row(db.pool(), &root_id, "2026-01-01/Flats/flat_L_001.fits")
+                .await
+                .unwrap()
+                .expect("row inserted");
+        assert_eq!(row.id, "master-1");
+        assert_eq!(row.file_count, 1);
+        assert_eq!(row.is_master_item, 1);
+        assert_eq!(row.master_frame_type.as_deref(), Some("flat"));
+        assert_eq!(row.master_filter.as_deref(), Some("L"));
+        assert_eq!(row.master_exposure_s, Some(2.5));
+    }
+}
