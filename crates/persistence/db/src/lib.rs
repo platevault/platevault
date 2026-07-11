@@ -81,13 +81,21 @@ impl Database {
 
     /// Run all pending migrations from `./migrations/`.
     ///
+    /// Also runs the spec 026 T006a `kind_diverged` reconciliation scan
+    /// (idempotent, no-op on a fresh DB) — this is data reconciliation over
+    /// existing rows, not a schema change, so it belongs here rather than as
+    /// a versioned `.sql` migration.
+    ///
     /// # Errors
     ///
-    /// Returns [`DbError::Migration`] if any migration script fails.
+    /// Returns [`DbError::Migration`] if any migration script fails, or a
+    /// database error if the reconciliation scan fails.
     // Touched for spec 051 (migration 0061) to force `sqlx::migrate!`
     // re-embed (project memory: stale-embed guard).
     pub async fn migrate(&self) -> DbResult<()> {
         sqlx::migrate!("./migrations").run(&self.pool).await?;
+        crate::repositories::prepared_source_views::reconcile_kind_diverged_views(&self.pool)
+            .await?;
         Ok(())
     }
 
