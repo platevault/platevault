@@ -92,6 +92,12 @@ pub(crate) async fn check_project_lifecycle(
 
 /// List all prepared source views for a project.
 ///
+/// Refreshes each non-terminal view's staleness (T014/T015 sweep) before
+/// reporting it, so the returned `state`/`last_observed_state` reflect the
+/// live filesystem rather than whatever was last observed — this is the
+/// list's own load path (`SourceViewsSection` calls it on mount), so no
+/// separate "check staleness" action is needed for the badge to be honest.
+///
 /// # Errors
 ///
 /// Returns `ContractError` on database failure.
@@ -103,6 +109,8 @@ pub async fn list_views(
 
     let mut views = Vec::with_capacity(rows.len());
     for row in rows {
+        crate::source_view_verify::sweep_view_staleness(pool, &row.id).await?;
+        let row = views_repo::get_view(pool, &row.id).await.map_err(db_err)?;
         let raw_items = views_repo::list_view_items(pool, &row.id).await.map_err(db_err)?;
         let item_count = i64::try_from(raw_items.len()).unwrap_or(i64::MAX);
         let items: Vec<PreparedViewItemDetail> = raw_items
