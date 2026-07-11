@@ -21,10 +21,21 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { DataSources } from './DataSources';
 import { queryClient } from '@/data/queryClient';
 import { queryKeys } from '@/data/queryKeys';
 import type { LibraryRoot } from '@/bindings/types';
+
+// `DataSources` invalidates via BOTH the module-level `queryClient` singleton
+// (handleReconcile's own `queryClient.invalidateQueries` call) and the
+// `useInvalidateInventory()` hook (which reads it via `useQueryClient()`) —
+// the tests below spy on the singleton, so the provider must supply that SAME
+// instance, not a fresh `new QueryClient()`.
+function wrapper({ children }: { children: ReactNode }) {
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
 
 const {
   mockRootsList,
@@ -86,7 +97,7 @@ describe('DataSources — Reconcile', () => {
 
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     fireEvent.click(screen.getByRole('button', { name: /^Reconcile$/i }));
@@ -117,7 +128,7 @@ describe('DataSources — Reconcile', () => {
       }),
     );
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
     fireEvent.click(screen.getByRole('button', { name: /^Reconcile$/i }));
@@ -142,7 +153,7 @@ describe('DataSources — Reconcile', () => {
       data: [makeRoot({ id: 'root-2', path: '/astro/projects', category: 'project' })],
     });
 
-    render(<DataSources save={vi.fn()} />);
+    render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/projects', { selector: 'code' }));
 
     expect(screen.queryByRole('button', { name: /^Reconcile$/i })).not.toBeInTheDocument();
