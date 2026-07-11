@@ -24,15 +24,13 @@ seed cache at Layer 2 (`targets_journeys.rs` deliberately avoids a live
 lookup, flaky in CI). This supersedes research D2's original `wiremock`
 HTTP-boundary-stub plan (see `contracts/coverage-matrix.md`).
 
-**Pre-existing exception, not covered by that decision**:
-`crates/targeting/resolver/tests/simbad_live.rs` is a separate, ungated
-suite that runs as part of the **default** `cargo test --workspace` and
-hits the real SIMBAD TAP endpoint (SC-004 live coverage; skips only on a
-transient network error via its own `resolve_or_skip` helper, or when
-`ALM_SKIP_LIVE_SIMBAD=1` is set — never gated by `#[ignore]` or a cargo
-feature). Untouched by this feature; tracked separately as a backlog item
-(whether it should be feature/`#[ignore]`-gated is a product/CI-policy call,
-not decided here).
+**Pre-existing exception, not covered by that decision** (RESOLVED by the
+spec-tails release-hardening sweep): `crates/targeting/resolver/tests/simbad_live.rs`
+is a separate live-network suite; it is now opt-in — skipped by default,
+set `ALM_LIVE_SIMBAD=1` to exercise it against the real SIMBAD TAP endpoint
+(SC-004 live coverage; still skips gracefully on a transient network error
+via its own `resolve_or_skip` helper once opted in). No longer runs
+unconditionally in `cargo test --workspace`.
 
 The `#[ignore]` attribute that DOES exist in this feature
 (`crates/e2e-tests/tests/*.rs`) serves a different purpose: it gates every

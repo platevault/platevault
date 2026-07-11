@@ -4,13 +4,18 @@
 //! to the TAP sync endpoint, TSV parsing, alias set construction, and
 //! coordinate/object-type mapping.
 //!
-//! Unlike a `#[ignore]`-gated suite, these run as part of the **default**
-//! `cargo test` so SC-004 has live coverage. To stay deterministic where there
-//! is no network (offline dev, sandboxed CI), each test issues a **single**
-//! resolve via [`resolve_or_skip`] and distinguishes a transient outage
-//! (`Network`/`Timeout`/`Disabled` → log + skip, never fail) from a genuine
-//! data/parse mismatch (→ fail). One network request per test keeps SIMBAD
-//! from rate-limiting the suite. Set `ALM_SKIP_LIVE_SIMBAD=1` to force-skip.
+//! **Opt-in, not run by default.** Every other suite in this workspace is
+//! offline (see `docs/development/testing.md`); a live-network test that
+//! silently runs in every `cargo test --workspace` invocation is a hidden
+//! nondeterminism and CI-network-dependency risk (flagged in the spec-tails
+//! release-hardening audit). Set `ALM_LIVE_SIMBAD=1` to opt in and get real
+//! SC-004 coverage against the live TAP endpoint; unset (the default) skips
+//! with a clear message and always passes. When opted in, each test still
+//! issues only a **single** resolve via [`resolve_or_skip`] and distinguishes
+//! a transient outage (`Network`/`Timeout`/`Disabled` → log + skip, never
+//! fail) from a genuine data/parse mismatch (→ fail), so a flaky network
+//! blip during an opted-in run still can't fail CI — only a real regression
+//! can.
 //!
 //! # Spec 035 coverage
 //!
@@ -26,13 +31,17 @@ use targeting_resolver::{AliasKind, ObjectType, ResolveError, ResolvedIdentity, 
 /// Resolve `query` against live SIMBAD with exactly one network request.
 ///
 /// Returns `Some(identity)` to proceed with assertions; returns `None` (after
-/// logging) to **skip** when the outage is transient — `ALM_SKIP_LIVE_SIMBAD`
-/// is set, or the resolver reports `Network`/`Timeout`/`Disabled` (offline dev,
-/// sandboxed CI, or a rate-limit hiccup). A genuine data failure
-/// (`NotFound`/`Ambiguous`/`Parse`) **panics**, so real regressions still fail.
+/// logging) to **skip** — the default (`ALM_LIVE_SIMBAD` unset, opt-in not
+/// given), or a transient outage once opted in (the resolver reports
+/// `Network`/`Timeout`/`Disabled`: offline dev, sandboxed CI, or a rate-limit
+/// hiccup). A genuine data failure (`NotFound`/`Ambiguous`/`Parse`) **panics**
+/// even when opted in, so real regressions still fail.
 async fn resolve_or_skip(query: &str, test: &str) -> Option<ResolvedIdentity> {
-    if std::env::var_os("ALM_SKIP_LIVE_SIMBAD").is_some() {
-        eprintln!("SKIP {test}: ALM_SKIP_LIVE_SIMBAD set — SC-004 not exercised this run");
+    if std::env::var_os("ALM_LIVE_SIMBAD").is_none() {
+        eprintln!(
+            "SKIP {test}: ALM_LIVE_SIMBAD not set — live SIMBAD (SC-004) is opt-in; \
+             set ALM_LIVE_SIMBAD=1 to exercise it"
+        );
         return None;
     }
     let resolver = SimbadResolver::new(&SimbadConfig::default())
@@ -69,8 +78,8 @@ fn has_alias(aliases: &[targeting_resolver::ResolvedAlias], needle: &str) -> boo
 
 /// Live SIMBAD resolution of M 31 (Andromeda Galaxy).
 ///
-/// Runs in the default suite; skips gracefully when SIMBAD is unreachable.
-/// Force-skip with `ALM_SKIP_LIVE_SIMBAD=1`.
+/// Opt-in only: skipped unless `ALM_LIVE_SIMBAD=1` is set; skips gracefully
+/// when SIMBAD is unreachable even then.
 ///
 /// Assertions (tolerances generous; SIMBAD coords are precise but we avoid
 /// hard-coding excessive decimal places):
@@ -132,8 +141,8 @@ async fn live_resolve_m31_andromeda_galaxy() {
 
 /// Live SIMBAD resolution of NGC 7293 (Helix Nebula).
 ///
-/// Runs in the default suite; skips gracefully when SIMBAD is unreachable.
-/// Force-skip with `ALM_SKIP_LIVE_SIMBAD=1`.
+/// Opt-in only: skipped unless `ALM_LIVE_SIMBAD=1` is set; skips gracefully
+/// when SIMBAD is unreachable even then.
 ///
 /// NGC 7293 is classified as `PN` (planetary nebula) in SIMBAD — one of the
 /// most stable object-type assignments in the database. Confirmed live:
