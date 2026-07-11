@@ -64,8 +64,10 @@ pub fn is_global_protection_default_key(key: &str) -> bool {
 // ── Settings descriptor table (US11 T144) ────────────────────────────────
 //
 // The stable key registry + per-key rules now live in one place:
-// `descriptors::DESCRIPTORS`. The key set, noisy/overridable membership, and
-// value validation are all derived from that single table.
+// `descriptors::DESCRIPTORS`. The key set, noisy/overridable membership,
+// value validation, `SettingsState` hydration (`apply_value_to_state`), and
+// in-code defaults (`default_value_for_key`) are all derived from that single
+// table.
 mod descriptors;
 
 // ── Ingestion settings (spec 030, package P12) ────────────────────────────
@@ -329,260 +331,36 @@ pub async fn get_settings(
 ///
 /// Unknown keys (structured-path keys like tools.*) are stored in the DB but
 /// not mapped to static SettingsState fields.
-#[allow(clippy::too_many_lines, clippy::assigning_clones)]
 fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
-    match key {
-        "pattern" => {
-            if let Ok(v) = serde_json::from_value(value) {
-                state.pattern = v;
-            }
-        }
-        "autoApplyPattern" => {
-            if let Some(v) = value.as_bool() {
-                state.auto_apply_pattern = v;
-            }
-        }
-        "alwaysPreviewBeforePlan" => {
-            if let Some(v) = value.as_bool() {
-                state.always_preview_before_plan = v;
-            }
-        }
-        "followSymlinks" => {
-            if let Some(v) = value.as_bool() {
-                state.follow_symlinks = v;
-            }
-        }
-        "hashOnScan" => {
-            if let Some(v) = value.as_str() {
-                state.hash_on_scan = v.to_owned();
-            }
-        }
-        "darkMatchTolerance" => {
-            if let Some(v) = value.as_str() {
-                state.dark_match_tolerance = v.to_owned();
-            }
-        }
-        "flatMatching" => {
-            if let Some(v) = value.as_str() {
-                state.flat_matching = v.to_owned();
-            }
-        }
-        "suggestCalibration" => {
-            if let Some(v) = value.as_bool() {
-                state.suggest_calibration = v;
-            }
-        }
-        "logLevel" => {
-            if let Some(v) = value.as_str() {
-                state.log_level = v.to_owned();
-            }
-        }
-        "rememberFollowLogs" => {
-            if let Some(v) = value.as_bool() {
-                state.remember_follow_logs = v;
-            }
-        }
-        "defaultProtection" => {
-            if let Some(v) = value.as_str() {
-                state.default_protection = v.to_owned();
-            }
-        }
-        "blockPermanentDelete" => {
-            if let Some(v) = value.as_bool() {
-                state.block_permanent_delete = v;
-            }
-        }
-        "protectedCategories" => {
-            if let Ok(v) = serde_json::from_value(value) {
-                state.protected_categories = v;
-            }
-        }
-        "currentLibraryId" => {
-            state.current_library_id = value.as_str().map(str::to_owned);
-        }
-        "devMode" => {
-            if let Some(v) = value.as_bool() {
-                state.dev_mode = v;
-            }
-        }
-        "plansListDefaultAgeCutoffDays" => {
-            if let Some(v) = value.as_f64() {
-                state.plans_list_default_age_cutoff_days = v;
-            }
-        }
-        "calibrationDarkTempTolerance" => {
-            if let Some(v) = value.as_f64() {
-                state.calibration_dark_temp_tolerance = v;
-            }
-        }
-        "calibrationPrefillSuggestion" => {
-            if let Some(v) = value.as_bool() {
-                state.calibration_prefill_suggestion = v;
-            }
-        }
-        "calibrationDarkOverridePenalty" => {
-            if let Some(v) = value.as_f64() {
-                state.calibration_dark_override_penalty = v;
-            }
-        }
-        "calibrationFlatOverridePenalty" => {
-            if let Some(v) = value.as_f64() {
-                state.calibration_flat_override_penalty = v;
-            }
-        }
-        "calibrationBiasOverridePenalty" => {
-            if let Some(v) = value.as_f64() {
-                state.calibration_bias_override_penalty = v;
-            }
-        }
-        "calibrationAgingThresholdDays" => {
-            if let Some(v) = value.as_f64() {
-                state.calibration_aging_threshold_days = v;
-            }
-        }
-        "imagetypNormalizationUserMappings" => {
-            if let Ok(v) = serde_json::from_value(value) {
-                state.imagetyp_normalization_user_mappings = v;
-            }
-        }
-        "patternsByType" => {
-            if let Ok(v) = serde_json::from_value(value) {
-                state.patterns_by_type = v;
-            }
-        }
-        "toolWatchExtensions" => {
-            if let Ok(v) = serde_json::from_value(value) {
-                state.tool_watch_extensions = v;
-            }
-        }
-        "toolAttributionWindowHours" => {
-            if let Some(v) = value.as_f64() {
-                state.tool_attribution_window_hours = v;
-            }
-        }
-        "observingSites" => {
-            if let Ok(v) = serde_json::from_value(value) {
-                state.observing_sites = v;
-            }
-        }
-        "observingDefaultSiteId" => {
-            state.observing_default_site_id = value.as_str().map(str::to_owned);
-        }
-        "observingActiveSiteId" => {
-            state.observing_active_site_id = value.as_str().map(str::to_owned);
-        }
-        "usableAltitudeDeg" => {
-            if let Some(v) = value.as_f64() {
-                state.usable_altitude_deg = v;
-            }
-        }
-        "plannerMoonAvoidance" => {
-            if let Ok(v) = serde_json::from_value(value) {
-                state.planner_moon_avoidance = v;
-            }
-        }
-        "sourceViewLinkKindIntraDrive" => {
-            if let Some(v) = value.as_str() {
-                state.source_view_link_kind_intra_drive = v.to_owned();
-            }
-        }
-        "sourceViewLinkKindCrossDrive" => {
-            if let Some(v) = value.as_str() {
-                state.source_view_link_kind_cross_drive = v.to_owned();
-            }
-        }
-        "cleanupTypeOverrides" => {
-            if let Ok(v) = serde_json::from_value(value) {
-                state.cleanup_type_overrides = v;
-            }
-        }
-        _ => {
-            // Structured-path keys are not mapped to static SettingsState fields.
-            // Use resolve_setting(key, source_id) to read them individually.
-        }
+    if let Some(descriptor) = descriptors::descriptor_for(key) {
+        (descriptor.apply)(value, state);
     }
+    // Else: structured-path keys are not mapped to static SettingsState
+    // fields. Use resolve_setting(key, source_id) to read them individually.
 }
 
 /// Return the in-code default value for a given key as `serde_json::Value`.
 fn default_value_for_key(key: &str) -> Value {
-    let defaults = SettingsState::default();
-    match key {
-        "pattern" => serde_json::to_value(&defaults.pattern).unwrap_or(Value::Null),
-        "autoApplyPattern" => Value::Bool(defaults.auto_apply_pattern),
-        "alwaysPreviewBeforePlan" => Value::Bool(defaults.always_preview_before_plan),
-        "followSymlinks" => Value::Bool(defaults.follow_symlinks),
-        "hashOnScan" => Value::String(defaults.hash_on_scan),
-        "darkMatchTolerance" => Value::String(defaults.dark_match_tolerance),
-        "flatMatching" => Value::String(defaults.flat_matching),
-        "suggestCalibration" => Value::Bool(defaults.suggest_calibration),
-        "logLevel" => Value::String(defaults.log_level),
-        "rememberFollowLogs" => Value::Bool(defaults.remember_follow_logs),
-        "defaultProtection" => Value::String(defaults.default_protection),
-        "blockPermanentDelete" => Value::Bool(defaults.block_permanent_delete),
-        "protectedCategories" => {
-            serde_json::to_value(&defaults.protected_categories).unwrap_or(Value::Null)
-        }
-        "devMode" => Value::Bool(defaults.dev_mode),
-        "plansListDefaultAgeCutoffDays" => {
-            serde_json::json!(defaults.plans_list_default_age_cutoff_days)
-        }
-        "calibrationDarkTempTolerance" => {
-            serde_json::json!(defaults.calibration_dark_temp_tolerance)
-        }
-        "calibrationPrefillSuggestion" => Value::Bool(defaults.calibration_prefill_suggestion),
-        "calibrationDarkOverridePenalty" => {
-            serde_json::json!(defaults.calibration_dark_override_penalty)
-        }
-        "calibrationFlatOverridePenalty" => {
-            serde_json::json!(defaults.calibration_flat_override_penalty)
-        }
-        "calibrationBiasOverridePenalty" => {
-            serde_json::json!(defaults.calibration_bias_override_penalty)
-        }
-        "calibrationAgingThresholdDays" => {
-            serde_json::json!(defaults.calibration_aging_threshold_days)
-        }
-        "imagetypNormalizationUserMappings" => {
-            serde_json::to_value(&defaults.imagetyp_normalization_user_mappings)
-                .unwrap_or(Value::Null)
-        }
-        // Read-side falls back to per-type/per-frame-type built-in defaults, so
-        // the stored default for both is an empty object (no explicit overrides).
-        "patternsByType" | "cleanupTypeOverrides" => Value::Object(serde_json::Map::new()),
-        "toolWatchExtensions" => {
-            serde_json::to_value(&defaults.tool_watch_extensions).unwrap_or(Value::Null)
-        }
-        "toolAttributionWindowHours" => {
-            serde_json::json!(defaults.tool_attribution_window_hours)
-        }
-        "observingSites" => serde_json::to_value(&defaults.observing_sites).unwrap_or(Value::Null),
-        // Nullable-by-design (no default site until the user/wizard creates one).
-        "observingDefaultSiteId" | "observingActiveSiteId" => Value::Null,
-        "usableAltitudeDeg" => serde_json::json!(defaults.usable_altitude_deg),
-        "plannerMoonAvoidance" => {
-            serde_json::to_value(&defaults.planner_moon_avoidance).unwrap_or(Value::Null)
-        }
-        "sourceViewLinkKindIntraDrive" => Value::String(defaults.source_view_link_kind_intra_drive),
-        "sourceViewLinkKindCrossDrive" => Value::String(defaults.source_view_link_kind_cross_drive),
-        // Structured-path: tools.<id>.bundle_id resolves the seed default
-        // when no user override is stored (spec 018 T042).
-        _ if is_tools_bundle_id_key(key) => {
-            if let Some(tool_id) =
-                key.strip_prefix("tools.").and_then(|r| r.strip_suffix(".bundle_id"))
-            {
-                if let Some(profile) = workflow_profiles::seed::find(tool_id) {
-                    return match profile.bundle_id {
-                        // Known bundle ID from seed (may be wrong on non-macOS; callers
-                        // should prefer the per-OS auto-detected value when available).
-                        Some(id) => Value::String(id.to_owned()),
-                        None => Value::Null,
-                    };
-                }
-            }
-            Value::Null
-        }
-        _ => Value::Null,
+    if let Some(descriptor) = descriptors::descriptor_for(key) {
+        return (descriptor.default)(SettingsState::default());
     }
+    // Structured-path: tools.<id>.bundle_id resolves the seed default
+    // when no user override is stored (spec 018 T042).
+    if is_tools_bundle_id_key(key) {
+        if let Some(tool_id) = key.strip_prefix("tools.").and_then(|r| r.strip_suffix(".bundle_id"))
+        {
+            if let Some(profile) = workflow_profiles::seed::find(tool_id) {
+                return match profile.bundle_id {
+                    // Known bundle ID from seed (may be wrong on non-macOS; callers
+                    // should prefer the per-OS auto-detected value when available).
+                    Some(id) => Value::String(id.to_owned()),
+                    None => Value::Null,
+                };
+            }
+        }
+        return Value::Null;
+    }
+    Value::Null
 }
 
 // ── update_setting ────────────────────────────────────────────────────────
@@ -981,6 +759,31 @@ mod tests {
             } else {
                 assert!(!default.is_null(), "descriptor key {key} has no in-code default");
             }
+        }
+    }
+
+    /// n5_settingstable guard: every descriptor's `apply` and `default`
+    /// accessors agree — applying a key's in-code default onto a fresh
+    /// `SettingsState` and re-serialising it must reproduce that same default
+    /// value at the key's wire name. Catches a mismatched/misspelled field in
+    /// either accessor (they're independently hand-written closures).
+    #[test]
+    fn descriptor_apply_and_default_round_trip() {
+        for key in descriptors::all_keys() {
+            let default_value = default_value_for_key(key);
+            let mut state = SettingsState::default();
+            apply_value_to_state(key, default_value.clone(), &mut state);
+
+            let serialized = serde_json::to_value(&state).expect("state serializes");
+            let obj = serialized.as_object().expect("state is a JSON object");
+            // Missing key means skip_serializing_if hid a None field (e.g.
+            // currentLibraryId) — that's equivalent to an explicit null.
+            let round_tripped = obj.get(key).cloned().unwrap_or(Value::Null);
+
+            assert_eq!(
+                round_tripped, default_value,
+                "{key}: apply(default_value_for_key) must round-trip through SettingsState"
+            );
         }
     }
 
