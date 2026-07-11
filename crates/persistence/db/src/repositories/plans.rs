@@ -7,7 +7,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use crate::{DbError, DbResult};
 
@@ -120,9 +120,26 @@ pub struct InsertPlanItem<'a> {
 ///
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn insert_plan(pool: &SqlitePool, plan: &InsertPlan<'_>) -> DbResult<i64> {
+    let mut conn = pool.acquire().await?;
+    insert_plan_conn(&mut conn, plan).await
+}
+
+/// Connection-level variant of [`insert_plan`]: takes `&mut SqliteConnection`
+/// (works against a plain connection or a `Transaction` deref) so composite
+/// `*_tx` functions elsewhere in this crate (e.g.
+/// `repositories::projects::create_project_tx`) can compose it with other
+/// writes in one transaction.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub(crate) async fn insert_plan_conn(
+    conn: &mut SqliteConnection,
+    plan: &InsertPlan<'_>,
+) -> DbResult<i64> {
     let now = Timestamp::now_iso();
     let number: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(number), 0) + 1 FROM plans")
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?;
 
     sqlx::query(
@@ -143,7 +160,7 @@ pub async fn insert_plan(pool: &SqlitePool, plan: &InsertPlan<'_>) -> DbResult<i
     .bind(plan.parent_plan_id)
     .bind(plan.total_bytes_required)
     .bind(&now)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
 
     Ok(number)
@@ -155,6 +172,19 @@ pub async fn insert_plan(pool: &SqlitePool, plan: &InsertPlan<'_>) -> DbResult<i
 ///
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn insert_plan_item(pool: &SqlitePool, item: &InsertPlanItem<'_>) -> DbResult<()> {
+    let mut conn = pool.acquire().await?;
+    insert_plan_item_conn(&mut conn, item).await
+}
+
+/// Connection-level variant of [`insert_plan_item`]. See [`insert_plan_conn`].
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub(crate) async fn insert_plan_item_conn(
+    conn: &mut SqliteConnection,
+    item: &InsertPlanItem<'_>,
+) -> DbResult<()> {
     let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO plan_items (
@@ -181,7 +211,7 @@ pub async fn insert_plan_item(pool: &SqlitePool, item: &InsertPlanItem<'_>) -> D
     .bind(item.source_id)
     .bind(item.category)
     .bind(&now)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
 
     // Update items_total and items_pending counters on the parent plan.
@@ -190,7 +220,7 @@ pub async fn insert_plan_item(pool: &SqlitePool, item: &InsertPlanItem<'_>) -> D
          WHERE id = ?",
     )
     .bind(item.plan_id)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
 
     Ok(())
@@ -300,10 +330,25 @@ pub async fn list_plan_items(pool: &SqlitePool, plan_id: &str) -> DbResult<Vec<P
 /// Returns [`DbError::NotFound`] if no plan with `plan_id` exists.
 /// Returns [`DbError::Database`] on connection failure.
 pub async fn update_plan_state(pool: &SqlitePool, plan_id: &str, state: &str) -> DbResult<()> {
+    let mut conn = pool.acquire().await?;
+    update_plan_state_conn(&mut conn, plan_id, state).await
+}
+
+/// Connection-level variant of [`update_plan_state`]. See [`insert_plan_conn`].
+///
+/// # Errors
+///
+/// Returns [`DbError::NotFound`] if no plan with `plan_id` exists.
+/// Returns [`DbError::Database`] on connection failure.
+pub(crate) async fn update_plan_state_conn(
+    conn: &mut SqliteConnection,
+    plan_id: &str,
+    state: &str,
+) -> DbResult<()> {
     let rows = sqlx::query("UPDATE plans SET state = ? WHERE id = ?")
         .bind(state)
         .bind(plan_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
     if rows.rows_affected() == 0 {

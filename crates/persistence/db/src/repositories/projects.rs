@@ -8,8 +8,9 @@
 //! `project_sources` denormalize Inventory data at link time.
 
 use domain_core::ids::Timestamp;
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
+use crate::repositories::plans::{self, InsertPlan, InsertPlanItem};
 use crate::{DbError, DbResult};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,6 +114,22 @@ type ProjectRowTuple = (
 ///
 /// Returns [`DbError::Database`] on constraint violation or query failure.
 pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbResult<String> {
+    let mut conn = pool.acquire().await?;
+    insert_project_conn(&mut conn, data).await
+}
+
+/// Connection-level variant of [`insert_project`]: takes `&mut SqliteConnection`
+/// (works against a plain connection or a `Transaction` deref) so composite
+/// `*_tx` functions (e.g. [`create_project_tx`]) can compose it with other
+/// writes in one transaction.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on constraint violation or query failure.
+async fn insert_project_conn(
+    conn: &mut SqliteConnection,
+    data: &InsertProject<'_>,
+) -> DbResult<String> {
     let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO projects (id, name, tool, lifecycle, path, notes, canonical_target_id, channel_drift, created_at, updated_at)
@@ -127,7 +144,7 @@ pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbRe
     .bind(data.canonical_target_id)
     .bind(&now)
     .bind(&now)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(now)
 }
@@ -613,6 +630,20 @@ pub async fn insert_project_source(
     pool: &SqlitePool,
     data: &InsertProjectSource<'_>,
 ) -> DbResult<()> {
+    let mut conn = pool.acquire().await?;
+    insert_project_source_conn(&mut conn, data).await
+}
+
+/// Connection-level variant of [`insert_project_source`]. See
+/// [`insert_project_conn`].
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on constraint violation or query failure.
+async fn insert_project_source_conn(
+    conn: &mut SqliteConnection,
+    data: &InsertProjectSource<'_>,
+) -> DbResult<()> {
     sqlx::query(
         "INSERT INTO project_sources
             (id, project_id, inventory_session_id,
@@ -627,7 +658,7 @@ pub async fn insert_project_source(
     .bind(data.filter_snapshot)
     .bind(data.exposure_snapshot)
     .bind(data.linked_at)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
@@ -811,6 +842,95 @@ pub async fn list_project_channels(
         .collect())
 }
 
+/// Insert a single project-channel row (no delete). Only used by
+/// [`create_project_tx`]: a brand-new project has no prior channel rows, so
+/// the delete-then-insert [`replace_project_channels`] does is unnecessary.
+async fn insert_project_channel_conn(
+    conn: &mut SqliteConnection,
+    project_id: &str,
+    label: &str,
+    source: &str,
+    added_at: &str,
+) -> DbResult<()> {
+    sqlx::query(
+        "INSERT INTO project_channels (project_id, label, source, added_at)
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind(project_id)
+    .bind(label)
+    .bind(source)
+    .bind(added_at)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+// ── Composite atomic create (T2-a) ──────────────────────────────────────────
+
+/// Input for [`create_project_tx`]: the project row, its initial source
+/// links, inferred channels, and the Constitution II folder-structure plan —
+/// everything `app_projects::project_setup::create` must persist as one
+/// atomic unit.
+///
+/// Folder-plan item resolution (`project_structure::required_folders`) stays
+/// in the app layer; this struct only carries the already-resolved plan rows,
+/// so `persistence_db` does not gain a dependency on `project_structure`.
+pub struct CreateProjectInput<'a> {
+    pub project: InsertProject<'a>,
+    pub sources: &'a [InsertProjectSource<'a>],
+    /// `(label, source)` pairs, already inferred by
+    /// `domain_core::project::channels` (persistence does not infer).
+    pub channels: &'a [(&'a str, &'a str)],
+    /// Timestamp shared by every channel row's `added_at`.
+    pub channels_added_at: &'a str,
+    pub plan: InsertPlan<'a>,
+    pub plan_items: &'a [InsertPlanItem<'a>],
+}
+
+/// Atomically create a project: the project row, its initial source links,
+/// inferred channels, and the Constitution II folder-structure plan (+ items,
+/// advanced to `ready_for_review`) — all in one transaction. A mid-sequence
+/// failure rolls back everything; no half-built project is left behind (see
+/// `docs/development/duplication-and-abstraction-audit.md` T2-a).
+///
+/// Composed via a direct `pool.begin()`/`tx.commit()`, matching every other
+/// multi-statement transaction in this crate (e.g. `plan_apply.rs`,
+/// [`replace_project_channels`]).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on constraint violation or query failure.
+/// On error the transaction is rolled back and no rows from this call persist.
+pub async fn create_project_tx(pool: &SqlitePool, input: &CreateProjectInput<'_>) -> DbResult<()> {
+    let mut tx = pool.begin().await?;
+
+    insert_project_conn(&mut tx, &input.project).await?;
+
+    for source in input.sources {
+        insert_project_source_conn(&mut tx, source).await?;
+    }
+
+    for (label, source) in input.channels {
+        insert_project_channel_conn(
+            &mut tx,
+            input.project.id,
+            label,
+            source,
+            input.channels_added_at,
+        )
+        .await?;
+    }
+
+    plans::insert_plan_conn(&mut tx, &input.plan).await?;
+    for item in input.plan_items {
+        plans::insert_plan_item_conn(&mut tx, item).await?;
+    }
+    plans::update_plan_state_conn(&mut tx, input.plan.id, "ready_for_review").await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -976,5 +1096,159 @@ mod tests {
         assert_eq!(affected, 1);
         let sources = list_project_sources(db.pool(), "p1").await.unwrap();
         assert!(sources.is_empty());
+    }
+
+    // ── create_project_tx: atomicity (T2-a) ────────────────────────────────
+
+    #[tokio::test]
+    async fn create_project_tx_persists_project_sources_channels_and_plan() {
+        let db = setup().await;
+        let sources = [InsertProjectSource {
+            id: "src-1",
+            project_id: "px",
+            inventory_session_id: "inv-1",
+            name_snapshot: "",
+            frames_snapshot: 0,
+            filter_snapshot: "",
+            exposure_snapshot: "",
+            linked_at: "2026-01-01T00:00:00Z",
+        }];
+        let plan_items = [InsertPlanItem {
+            id: "item-1",
+            plan_id: "plan-x",
+            item_index: 0,
+            name: "lights",
+            action: "mkdir",
+            from_root_id: None,
+            from_relative_path: "",
+            to_root_id: None,
+            to_relative_path: "projects/px/lights",
+            reason: "Create project sub-folder",
+            protection: "normal",
+            linked_entity: Some("px"),
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        }];
+        let input = CreateProjectInput {
+            project: project_a("px"),
+            sources: &sources,
+            channels: &[("Ha", "inferred")],
+            channels_added_at: "2026-01-01T00:00:00Z",
+            plan: InsertPlan {
+                id: "plan-x",
+                title: "Create project folder structure",
+                origin: "project",
+                origin_path: Some("projects/px"),
+                plan_type: "project_create",
+                destructive_destination: "archive",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+            plan_items: &plan_items,
+        };
+
+        create_project_tx(db.pool(), &input).await.unwrap();
+
+        let row = get_project(db.pool(), "px").await.unwrap();
+        assert_eq!(row.name, "NGC 7000 NB");
+        let sources = list_project_sources(db.pool(), "px").await.unwrap();
+        assert_eq!(sources.len(), 1);
+        let channels = list_project_channels(db.pool(), "px").await.unwrap();
+        assert_eq!(channels.len(), 1);
+        let plan = crate::repositories::plans::get_plan(db.pool(), "plan-x", false).await.unwrap();
+        assert_eq!(plan.state, "ready_for_review");
+        let items = crate::repositories::plans::list_plan_items(db.pool(), "plan-x").await.unwrap();
+        assert_eq!(items.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn create_project_tx_rolls_back_all_writes_on_mid_sequence_failure() {
+        let db = setup().await;
+        // Two sources sharing the same primary key: the second insert violates
+        // `project_sources.id`'s PRIMARY KEY, forcing a failure *after* the
+        // project row and the first source row have already been written
+        // inside the same transaction.
+        let sources = [
+            InsertProjectSource {
+                id: "dupe-src",
+                project_id: "px",
+                inventory_session_id: "inv-1",
+                name_snapshot: "",
+                frames_snapshot: 0,
+                filter_snapshot: "",
+                exposure_snapshot: "",
+                linked_at: "2026-01-01T00:00:00Z",
+            },
+            InsertProjectSource {
+                id: "dupe-src",
+                project_id: "px",
+                inventory_session_id: "inv-2",
+                name_snapshot: "",
+                frames_snapshot: 0,
+                filter_snapshot: "",
+                exposure_snapshot: "",
+                linked_at: "2026-01-01T00:00:00Z",
+            },
+        ];
+        let plan_items: [InsertPlanItem; 0] = [];
+        let input = CreateProjectInput {
+            project: project_a("px"),
+            sources: &sources,
+            channels: &[("Ha", "inferred")],
+            channels_added_at: "2026-01-01T00:00:00Z",
+            plan: InsertPlan {
+                id: "plan-x",
+                title: "Create project folder structure",
+                origin: "project",
+                origin_path: Some("projects/px"),
+                plan_type: "project_create",
+                destructive_destination: "archive",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+            plan_items: &plan_items,
+        };
+
+        let err = create_project_tx(db.pool(), &input).await.unwrap_err();
+        assert!(matches!(err, DbError::Database(_)), "expected a UNIQUE constraint violation");
+
+        // Full rollback: neither the project row, the first (successfully
+        // inserted-then-rolled-back) source row, the channel row, nor the plan
+        // row — none of which were ever reached after the failing statement —
+        // may persist.
+        let project_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM projects WHERE id = ?")
+            .bind("px")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(
+            project_count, 0,
+            "the project row must not persist after a mid-sequence failure"
+        );
+
+        let source_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM project_sources WHERE project_id = ?")
+                .bind("px")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(source_count, 0, "no partial source rows may persist");
+
+        let channel_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM project_channels WHERE project_id = ?")
+                .bind("px")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(channel_count, 0, "no channel rows may persist");
+
+        let plan_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM plans WHERE id = ?")
+            .bind("plan-x")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(plan_count, 0, "the plan row (never reached) must not persist");
     }
 }

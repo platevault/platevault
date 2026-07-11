@@ -303,99 +303,57 @@ async fn anchor_project_path(pool: &SqlitePool, raw: &str) -> Result<String, Con
 
 // ── Folder plan builder (Constitution II) ─────────────────────────────────────
 
-/// Build and persist a reviewable `FilesystemPlan` for the project folder
-/// structure (Constitution II).
-///
-/// Creates one `mkdir` plan item per sub-folder required by the tool
-/// (from `project_structure::required_folders`) and one `write_manifest` item
-/// for the app-owned project marker.  All paths are relative to the project
-/// root path.  The plan is inserted in `draft` state; the caller advances it
-/// through spec 017 review → spec 025 apply.
-///
-/// Returns the plan `id` as a `String`.
-///
-/// # Errors
-///
-/// Returns [`persistence_db::DbError`] on database failure.
-async fn build_folder_plan(
-    pool: &SqlitePool,
-    project_id: &str,
-    project_path: &str,
-    tool_str: &str,
-) -> Result<String, persistence_db::DbError> {
+/// One resolved (not yet persisted) folder-plan item destination.
+struct FolderPlanItemData {
+    id: String,
+    name: String,
+    action: &'static str,
+    to_relative_path: String,
+    reason: &'static str,
+}
+
+/// Resolved (not yet persisted) folder-structure plan for a project
+/// (Constitution II): one `mkdir` item per sub-folder required by the tool
+/// (`project_structure::required_folders`) plus one `write_manifest` item for
+/// the app-owned project marker.
+struct FolderPlanData {
+    plan_id: String,
+    plan_title: String,
+    items: Vec<FolderPlanItemData>,
+}
+
+/// Resolve the folder-structure plan for `project_path`/`tool_str` without
+/// touching the database (pure). The caller borrows these owned strings into
+/// `persistence_db::repositories::plans::{InsertPlan, InsertPlanItem}` for
+/// [`repo::create_project_tx`], which persists the plan (in `draft`, then
+/// advanced to `ready_for_review`) atomically with the rest of project
+/// creation.
+fn build_folder_plan_data(project_path: &str, tool_str: &str) -> FolderPlanData {
     let plan_id = new_id();
     let tool = StructureTool::parse(tool_str).unwrap_or(StructureTool::PixInsight);
     let folders = required_folders(tool);
-
     let plan_title = format!("Create project folder structure: {project_path}");
-    let plan_data = plans_repo::InsertPlan {
-        id: &plan_id,
-        title: &plan_title,
-        origin: "project",
-        origin_path: Some(project_path),
-        plan_type: "project_create",
-        destructive_destination: "archive",
-        parent_plan_id: None,
-        total_bytes_required: 0,
-    };
-    plans_repo::insert_plan(pool, &plan_data).await?;
 
-    // One mkdir item per required sub-folder.
-    for (idx, folder) in folders.iter().enumerate() {
-        let item_id = new_id();
-        let dest = format!("{project_path}/{}", folder.0);
-        let item_data = plans_repo::InsertPlanItem {
-            id: &item_id,
-            plan_id: &plan_id,
-            item_index: i64::try_from(idx).unwrap_or(0),
-            name: &folder.0,
+    let mut items = Vec::with_capacity(folders.len() + 1);
+    for folder in &folders {
+        items.push(FolderPlanItemData {
+            id: new_id(),
+            name: folder.0.clone(),
             action: "mkdir",
-            from_root_id: None,
-            from_relative_path: "",
-            to_root_id: None,
-            to_relative_path: &dest,
+            to_relative_path: format!("{project_path}/{}", folder.0),
             reason: "Create project sub-folder for tool workflow",
-            protection: "normal",
-            linked_entity: Some(project_id),
-            provenance_json: None,
-            archive_path: None,
-            // Project setup items create app-managed folders/files; source protection
-            // does not apply.
-            source_id: None,
-            category: None,
-        };
-        plans_repo::insert_plan_item(pool, &item_data).await?;
+        });
     }
-
     // One write_manifest item for the project marker file.
-    let marker_index = i64::try_from(folders.len()).unwrap_or(0);
-    let marker_dest = format!("{project_path}/{MARKER_FILENAME}");
-    let marker_id = new_id();
-    let marker_item = plans_repo::InsertPlanItem {
-        id: &marker_id,
-        plan_id: &plan_id,
-        item_index: marker_index,
-        name: MARKER_FILENAME,
+    items.push(FolderPlanItemData {
+        id: new_id(),
+        name: MARKER_FILENAME.to_owned(),
         action: "write_manifest",
-        from_root_id: None,
-        from_relative_path: "",
-        to_root_id: None,
-        to_relative_path: &marker_dest,
+        to_relative_path: format!("{project_path}/{MARKER_FILENAME}"),
         reason: "Write app-owned project marker file",
-        protection: "normal",
-        linked_entity: Some(project_id),
-        provenance_json: None,
-        archive_path: None,
-        // Project marker file creation; source protection does not apply.
-        source_id: None,
-        category: None,
-    };
-    plans_repo::insert_plan_item(pool, &marker_item).await?;
+    });
 
-    // Advance to ready_for_review so the plan is visible in the review UI.
-    plans_repo::update_plan_state(pool, &plan_id, "ready_for_review").await?;
-
-    Ok(plan_id)
+    FolderPlanData { plan_id, plan_title, items }
 }
 
 // ── project.create ────────────────────────────────────────────────────────────
@@ -506,7 +464,12 @@ pub async fn create(
         }
     }
 
-    // 5. Persist the project row (setup_incomplete).
+    // 5. Build the project row, initial source links, inferred channels, and
+    //    the Constitution II folder-structure plan (+ items) — every write
+    //    this use case needs — then persist them as ONE atomic unit via
+    //    `create_project_tx`. A mid-sequence database failure previously left
+    //    a half-built project (project row with no sources/channels/plan);
+    //    see `docs/development/duplication-and-abstraction-audit.md` T2-a.
     let insert = repo::InsertProject {
         id: &project_id,
         name: &req.name,
@@ -516,49 +479,107 @@ pub async fn create(
         notes: req.notes.as_deref(),
         canonical_target_id: req.canonical_target_id.as_deref(),
     };
-    repo::insert_project(pool, &insert).await.map_err(db_err)?;
 
-    // 6. Link initial sources (best-effort: if a source is not found in a future
-    //    Inventory table we just skip it for now — spec 003 integration is pending).
-    //    For now, initial_sources lists inventory_session_ids that we trust.
-    let mut source_rows: Vec<repo::ProjectSourceRow> = Vec::new();
-    for inv_id in &req.initial_sources {
-        let src_id = new_id();
-        let src_data = repo::InsertProjectSource {
-            id: &src_id,
-            project_id: &project_id,
-            inventory_session_id: inv_id,
-            // Snapshot fields will be empty until spec 003 Inventory is wired.
-            name_snapshot: "",
-            frames_snapshot: 0,
-            filter_snapshot: "",
-            exposure_snapshot: "",
-            linked_at: &now,
-        };
-        repo::insert_project_source(pool, &src_data).await.map_err(db_err)?;
-        source_rows.push(repo::ProjectSourceRow {
-            id: src_id,
+    // Link initial sources (best-effort: if a source is not found in a future
+    // Inventory table we just skip it for now — spec 003 integration is
+    // pending). For now, initial_sources lists inventory_session_ids that we
+    // trust. Ids are pre-generated so `source_rows` (used for channel
+    // inference and the response DTOs) and `source_data` (borrowed into the
+    // composite insert) can share them without re-querying the DB.
+    let source_ids: Vec<String> = req.initial_sources.iter().map(|_| new_id()).collect();
+    let source_rows: Vec<repo::ProjectSourceRow> = req
+        .initial_sources
+        .iter()
+        .zip(source_ids.iter())
+        .map(|(inv_id, src_id)| repo::ProjectSourceRow {
+            id: src_id.clone(),
             project_id: project_id.clone(),
             inventory_session_id: inv_id.clone(),
+            // Snapshot fields will be empty until spec 003 Inventory is wired.
             name_snapshot: String::new(),
             frames_snapshot: 0,
             filter_snapshot: String::new(),
             exposure_snapshot: String::new(),
             linked_at: now.clone(),
-        });
-    }
+        })
+        .collect();
+    let source_data: Vec<repo::InsertProjectSource> = req
+        .initial_sources
+        .iter()
+        .zip(source_ids.iter())
+        .map(|(inv_id, src_id)| repo::InsertProjectSource {
+            id: src_id,
+            project_id: &project_id,
+            inventory_session_id: inv_id,
+            name_snapshot: "",
+            frames_snapshot: 0,
+            filter_snapshot: "",
+            exposure_snapshot: "",
+            linked_at: &now,
+        })
+        .collect();
 
-    // 7. Infer channels from initial sources.
+    // Infer channels from initial sources.
     let channels = infer_from_sources(&source_rows);
-    persist_channels(pool, &project_id, &channels).await.map_err(db_err)?;
+    let channel_pairs: Vec<(&str, &str)> =
+        channels.iter().map(|c| (c.label.as_str(), c.source.as_str())).collect();
 
-    // 8. Auto-transition setup_incomplete → ready if sources are present.
+    // Constitution II folder-structure plan.
+    let folder_plan = build_folder_plan_data(&project_path, req.tool.as_db_str());
+    let plan_items: Vec<plans_repo::InsertPlanItem> = folder_plan
+        .items
+        .iter()
+        .enumerate()
+        .map(|(idx, item)| plans_repo::InsertPlanItem {
+            id: &item.id,
+            plan_id: &folder_plan.plan_id,
+            item_index: i64::try_from(idx).unwrap_or(0),
+            name: &item.name,
+            action: item.action,
+            from_root_id: None,
+            from_relative_path: "",
+            to_root_id: None,
+            to_relative_path: &item.to_relative_path,
+            reason: item.reason,
+            protection: "normal",
+            linked_entity: Some(&project_id),
+            provenance_json: None,
+            archive_path: None,
+            // Project setup items create app-managed folders/files; source
+            // protection does not apply.
+            source_id: None,
+            category: None,
+        })
+        .collect();
+    let plan_data = plans_repo::InsertPlan {
+        id: &folder_plan.plan_id,
+        title: &folder_plan.plan_title,
+        origin: "project",
+        origin_path: Some(&project_path),
+        plan_type: "project_create",
+        destructive_destination: "archive",
+        parent_plan_id: None,
+        total_bytes_required: 0,
+    };
+
+    let create_input = repo::CreateProjectInput {
+        project: insert,
+        sources: &source_data,
+        channels: &channel_pairs,
+        channels_added_at: &now,
+        plan: plan_data,
+        plan_items: &plan_items,
+    };
+    repo::create_project_tx(pool, &create_input).await.map_err(db_err)?;
+    let plan_id = folder_plan.plan_id;
+
+    // 6. Auto-transition setup_incomplete → ready if sources are present.
     let final_lifecycle = maybe_auto_ready(pool, bus, &project_id, "setup_incomplete")
         .await
         .map_err(db_err)?
         .unwrap_or_else(|| "setup_incomplete".to_owned());
 
-    // 9. Audit.
+    // 7. Audit.
     let audit_id = new_id();
     bus.publish(
         "project.created",
@@ -578,12 +599,6 @@ pub async fn create(
     let channel_totals = channel_totals_by_filter(&source_rows);
     let channel_dtos: Vec<ProjectChannelDto> =
         channels.into_iter().map(|c| channel_dto_from_domain(c, &now, &channel_totals)).collect();
-
-    // 10. Generate the folder-structure FilesystemPlan (Constitution II).
-    //     plan_id is returned so the UI can link to the spec 017 review surface.
-    let plan_id = build_folder_plan(pool, &project_id, &project_path, req.tool.as_db_str())
-        .await
-        .map_err(db_err)?;
 
     Ok(ProjectCreateResult {
         project_id,
