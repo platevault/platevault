@@ -370,9 +370,7 @@ async fn finalize_archive_lifecycle(
     plan_id: &str,
     project_id: &str,
 ) {
-    use crate::lifecycle::lifecycle_use_case::{
-        build_edge_table, transition_lifecycle, TransitionCommand,
-    };
+    use crate::lifecycle::lifecycle_use_case::{transition_lifecycle, TransitionCommand};
     use domain_core::ids::EntityId;
     use domain_core::lifecycle::data_asset::EntityType;
     use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
@@ -405,8 +403,23 @@ async fn finalize_archive_lifecycle(
         return;
     }
 
+    // Edge-legality guard (Constitution §II). `transition_lifecycle` is un-gated
+    // and `record_transition` only CAS-checks `from_state`, so this closure would
+    // otherwise CAS `<any state> → archived`. Per the domain edge table
+    // (`domain_core::lifecycle::project::is_allowed`) the ONLY legal edges into
+    // `archived` are `completed → archived` and `blocked → archived`. Archive
+    // plans should only ever target completed/blocked projects; if we somehow
+    // reach here from another state, refuse to record an illegal edge and log
+    // for an external watchdog rather than corrupt lifecycle history.
+    if !matches!(current.as_str(), "completed" | "blocked") {
+        tracing::error!(
+            %project_id, %plan_id, from_state = %current,
+            "archive lifecycle closure: refusing illegal edge into 'archived' (legal sources: completed, blocked); leaving lifecycle unchanged"
+        );
+        return;
+    }
+
     let repo = SqliteLifecycleRepository::new(pool.clone(), bus.clone());
-    let table = build_edge_table();
     let cmd = TransitionCommand {
         entity_id: EntityId::from_uuid(uuid),
         entity_type: EntityType::Project,
@@ -417,7 +430,7 @@ async fn finalize_archive_lifecycle(
         request_id: EntityId::new(),
     };
 
-    match transition_lifecycle(&repo, bus, cmd, &table).await {
+    match transition_lifecycle(&repo, bus, cmd).await {
         Ok(_) => {
             if let Err(e) = projects_repo::set_archived_via_plan_id(pool, project_id, plan_id).await
             {
@@ -1935,6 +1948,45 @@ mod tests {
             .await
             .unwrap();
         assert!(archived.is_empty());
+    }
+
+    /// Edge-legality guard (Constitution §II): if an archive plan somehow targets
+    /// a project that is NOT in a legal `* → archived` source state
+    /// (`completed`/`blocked`), the closure must refuse — leaving the lifecycle
+    /// unchanged and recording no archive link — rather than CAS an illegal edge
+    /// into `archived`.
+    #[tokio::test]
+    async fn finalize_archive_lifecycle_refuses_illegal_source_state() {
+        use persistence_db::repositories::projects as projects_repo;
+
+        let (db, bus) = setup().await;
+        let project_id = Uuid::new_v4().to_string();
+        projects_repo::insert_project(
+            db.pool(),
+            &projects_repo::InsertProject {
+                id: &project_id,
+                name: "M31 Ready",
+                tool: "PixInsight",
+                lifecycle: "ready",
+                path: "projects/M31_Ready",
+                notes: None,
+                canonical_target_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        finalize_archive_lifecycle(db.pool(), &bus, "plan-arch-bad", &project_id).await;
+
+        // Lifecycle untouched — no illegal edge recorded.
+        let project = projects_repo::get_project(db.pool(), &project_id).await.unwrap();
+        assert_eq!(
+            project.lifecycle, "ready",
+            "illegal archive source must leave lifecycle unchanged"
+        );
+        // No archive link recorded.
+        let archived = projects_repo::list_archived_projects(db.pool()).await.unwrap();
+        assert!(archived.is_empty(), "no archive link may be recorded for a refused closure");
     }
 
     #[tokio::test]
