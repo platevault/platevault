@@ -42,6 +42,7 @@
 //! Constitution §I/§V: seed data is metadata only; the SQLite cache is the
 //! durable record and the seed is a reproducible projection into it.
 
+use persistence_db::repositories::q_resolver;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
@@ -106,6 +107,9 @@ pub enum SeedError {
     /// A query for first-run state failed.
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
+    /// A `persistence_db` repository call failed.
+    #[error("persistence error: {0}")]
+    Persistence(#[from] persistence_db::DbError),
 }
 
 impl SeedEntry {
@@ -164,8 +168,7 @@ pub fn bundled() -> Result<SeedAsset, SeedError> {
 ///
 /// Returns [`SeedError::Database`] on query failure.
 pub async fn is_first_run(pool: &SqlitePool) -> Result<bool, SeedError> {
-    let (count,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM canonical_target").fetch_one(pool).await?;
+    let count = q_resolver::count_canonical_targets(pool).await?;
     Ok(count == 0)
 }
 

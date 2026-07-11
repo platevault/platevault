@@ -7,15 +7,17 @@
 //!
 //! These functions take a borrowed [`sqlx::SqlitePool`] rather than owning a
 //! connection, matching the spec-013 loader ([`crate::load`]) and the
-//! `persistence_db` repositories. SQL uses the runtime `sqlx::query` /
-//! `sqlx::query_as` API (no compile-time-checked macros), consistent with those
-//! siblings. Identities are written to `canonical_target` / `target_alias`
-//! (migration 0031).
+//! `persistence_db` repositories. Raw SQL lives in
+//! `persistence_db::repositories::q_resolver` (db-boundary-zero); this module
+//! keeps the dedup/precedence/ranking business logic and converts between the
+//! repository's flat rows and this crate's domain types. Identities are
+//! written to `canonical_target` / `target_alias` (migration 0031).
 //!
 //! Typeahead prefix/substring search over `target_alias.normalized` is NOT
 //! implemented here — that is T010 (US1).
 
 use domain_core::ids::Timestamp;
+use persistence_db::repositories::q_resolver;
 use sqlx::{SqliteConnection, SqlitePool};
 use uuid::Uuid;
 
@@ -30,6 +32,9 @@ pub enum CacheError {
     /// Underlying SQLite query failure.
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
+    /// A `persistence_db` repository call failed.
+    #[error("persistence error: {0}")]
+    Persistence(#[from] persistence_db::DbError),
     /// A stored `canonical_target.id` was not a valid UUID.
     #[error("failed to parse target uuid '{0}': {1}")]
     InvalidUuid(String, uuid::Error),
@@ -40,20 +45,6 @@ pub enum CacheError {
 
 /// Convenience result alias for cache operations.
 pub type CacheResult<T> = Result<T, CacheError>;
-
-/// Raw row tuple for a `canonical_target` SELECT (9 columns).
-///
-/// Order: id, simbad_oid, primary_designation, display_alias,
-///        object_type, ra_deg, dec_deg, source, resolved_at.
-type CanonicalTargetRow =
-    (String, Option<i64>, String, Option<String>, String, f64, f64, String, String);
-
-/// Raw row tuple for the `target.list` SELECT (8 columns).
-///
-/// Order: id, primary_designation, display_alias, object_type,
-///        ra_deg, dec_deg, constellation, magnitude.
-type TargetListQueryRow =
-    (String, String, Option<String>, String, f64, f64, Option<String>, Option<f64>);
 
 // ── Read model ────────────────────────────────────────────────────────────────
 
@@ -99,33 +90,24 @@ fn derived_id(designation: &str) -> Uuid {
 
 /// Load the aliases for a target id, ordered by alias.
 async fn load_aliases(pool: &SqlitePool, target_id: &str) -> CacheResult<Vec<ResolvedAlias>> {
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT alias, normalized, kind
-         FROM target_alias
-         WHERE target_id = ?
-         ORDER BY alias ASC",
-    )
-    .bind(target_id)
-    .fetch_all(pool)
-    .await?;
-
+    let rows = q_resolver::select_aliases_for_target(pool, target_id).await?;
     Ok(rows
         .into_iter()
-        .map(|(alias, normalized, kind)| ResolvedAlias {
-            alias,
-            normalized,
-            kind: AliasKind::from_wire(&kind),
+        .map(|r| ResolvedAlias {
+            alias: r.alias,
+            normalized: r.normalized,
+            kind: AliasKind::from_wire(&r.kind),
         })
         .collect())
 }
 
-/// Assemble a [`CachedTarget`] from a `canonical_target` row tuple.
-///
-/// The tuple is 9 columns: id, simbad_oid, primary_designation, display_alias,
-/// object_type, ra_deg, dec_deg, source, resolved_at.
-async fn assemble(pool: &SqlitePool, row: CanonicalTargetRow) -> CacheResult<CachedTarget> {
-    let (
-        id_str,
+/// Assemble a [`CachedTarget`] from a `canonical_target` repository row.
+async fn assemble(
+    pool: &SqlitePool,
+    row: q_resolver::CanonicalTargetRow,
+) -> CacheResult<CachedTarget> {
+    let q_resolver::CanonicalTargetRow {
+        id: id_str,
         simbad_oid,
         primary_designation,
         display_alias,
@@ -134,7 +116,7 @@ async fn assemble(pool: &SqlitePool, row: CanonicalTargetRow) -> CacheResult<Cac
         dec_deg,
         source,
         resolved_at,
-    ) = row;
+    } = row;
     let id = Uuid::parse_str(&id_str).map_err(|e| CacheError::InvalidUuid(id_str.clone(), e))?;
     let source = TargetSource::from_wire(&source)
         .ok_or_else(|| CacheError::InvalidSource(source.clone()))?;
@@ -160,13 +142,7 @@ async fn assemble(pool: &SqlitePool, row: CanonicalTargetRow) -> CacheResult<Cac
 /// Returns [`CacheError::Database`] on query failure, or [`CacheError::InvalidUuid`] /
 /// [`CacheError::InvalidSource`] on a corrupt stored value.
 pub async fn get_by_id(pool: &SqlitePool, id: Uuid) -> CacheResult<Option<CachedTarget>> {
-    let row: Option<CanonicalTargetRow> = sqlx::query_as(
-            "SELECT id, simbad_oid, primary_designation, display_alias, object_type, ra_deg, dec_deg, source, resolved_at
-             FROM canonical_target WHERE id = ?",
-        )
-        .bind(id.to_string())
-        .fetch_optional(pool)
-        .await?;
+    let row = q_resolver::select_canonical_target_by_id(pool, &id.to_string()).await?;
     match row {
         None => Ok(None),
         Some(r) => Ok(Some(assemble(pool, r).await?)),
@@ -183,13 +159,7 @@ pub async fn get_by_simbad_oid(
     pool: &SqlitePool,
     simbad_oid: i64,
 ) -> CacheResult<Option<CachedTarget>> {
-    let row: Option<CanonicalTargetRow> = sqlx::query_as(
-            "SELECT id, simbad_oid, primary_designation, display_alias, object_type, ra_deg, dec_deg, source, resolved_at
-             FROM canonical_target WHERE simbad_oid = ?",
-        )
-        .bind(simbad_oid)
-        .fetch_optional(pool)
-        .await?;
+    let row = q_resolver::select_canonical_target_by_simbad_oid(pool, simbad_oid).await?;
     match row {
         None => Ok(None),
         Some(r) => Ok(Some(assemble(pool, r).await?)),
@@ -209,14 +179,10 @@ pub async fn get_by_normalized(
     pool: &SqlitePool,
     normalized: &str,
 ) -> CacheResult<Option<CachedTarget>> {
-    let target_id: Option<(String,)> =
-        sqlx::query_as("SELECT target_id FROM target_alias WHERE normalized = ? LIMIT 1")
-            .bind(normalized)
-            .fetch_optional(pool)
-            .await?;
+    let target_id = q_resolver::select_target_id_by_normalized_alias(pool, normalized).await?;
     match target_id {
         None => Ok(None),
-        Some((tid,)) => {
+        Some(tid) => {
             let uuid =
                 Uuid::parse_str(&tid).map_err(|e| CacheError::InvalidUuid(tid.clone(), e))?;
             get_by_id(pool, uuid).await
@@ -295,22 +261,13 @@ pub async fn search_by_normalized(
     // bounded multiple of `limit` so dedup across aliases still fills the page;
     // ordering by normalized length favours tighter matches before the cap.
     let fetch_cap = i64::try_from((limit.saturating_mul(8)).clamp(limit, 2000)).unwrap_or(2000);
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT target_id, alias, normalized
-         FROM target_alias
-         WHERE normalized LIKE ? ESCAPE '\\'
-         ORDER BY LENGTH(normalized) ASC, normalized ASC
-         LIMIT ?",
-    )
-    .bind(&pattern)
-    .bind(fetch_cap)
-    .fetch_all(pool)
-    .await?;
+    let rows = q_resolver::search_aliases_by_pattern(pool, &pattern, fetch_cap).await?;
 
     // Pick the best (lowest rank, then shortest alias) hit per target_id.
     let mut best_by_target: std::collections::HashMap<String, Best> =
         std::collections::HashMap::new();
-    for (target_id, alias, normalized) in rows {
+    for row in rows {
+        let (target_id, alias, normalized) = (row.target_id, row.alias, row.normalized);
         let rank = if normalized == q {
             RANK_EXACT
         } else if normalized.starts_with(&q) {
@@ -384,30 +341,20 @@ async fn find_existing(
     identity: &ResolvedIdentity,
     derived: &str,
 ) -> CacheResult<Option<ExistingRow>> {
+    fn into_existing_row(row: q_resolver::ExistingTargetRow) -> CacheResult<ExistingRow> {
+        let source = TargetSource::from_wire(&row.source)
+            .ok_or_else(|| CacheError::InvalidSource(row.source.clone()))?;
+        Ok(ExistingRow { id: row.id, source })
+    }
+
     if let Some(oid) = identity.simbad_oid {
-        let row: Option<(String, String)> =
-            sqlx::query_as("SELECT id, source FROM canonical_target WHERE simbad_oid = ?")
-                .bind(oid)
-                .fetch_optional(&mut *conn)
-                .await?;
-        if let Some((id, source)) = row {
-            let source = TargetSource::from_wire(&source)
-                .ok_or_else(|| CacheError::InvalidSource(source.clone()))?;
-            return Ok(Some(ExistingRow { id, source }));
+        if let Some(row) = q_resolver::find_existing_by_simbad_oid_conn(conn, oid).await? {
+            return into_existing_row(row).map(Some);
         }
     }
-    let row: Option<(String, String)> =
-        sqlx::query_as("SELECT id, source FROM canonical_target WHERE id = ?")
-            .bind(derived)
-            .fetch_optional(&mut *conn)
-            .await?;
-    match row {
+    match q_resolver::find_existing_by_id_conn(conn, derived).await? {
         None => Ok(None),
-        Some((id, source)) => {
-            let source = TargetSource::from_wire(&source)
-                .ok_or_else(|| CacheError::InvalidSource(source.clone()))?;
-            Ok(Some(ExistingRow { id, source }))
-        }
+        Some(row) => into_existing_row(row).map(Some),
     }
 }
 
@@ -422,22 +369,17 @@ async fn write_aliases(
     target_id: &str,
     aliases: &[ResolvedAlias],
 ) -> CacheResult<()> {
-    sqlx::query("DELETE FROM target_alias WHERE target_id = ?")
-        .bind(target_id)
-        .execute(&mut *conn)
-        .await?;
+    q_resolver::delete_aliases_for_target_conn(conn, target_id).await?;
     for a in aliases {
         let alias_id = Uuid::new_v4().to_string();
-        sqlx::query(
-            "INSERT OR IGNORE INTO target_alias (id, target_id, alias, normalized, kind)
-             VALUES (?, ?, ?, ?, ?)",
+        q_resolver::insert_alias_conn(
+            conn,
+            &alias_id,
+            target_id,
+            &a.alias,
+            &a.normalized,
+            a.kind.as_wire(),
         )
-        .bind(&alias_id)
-        .bind(target_id)
-        .bind(&a.alias)
-        .bind(&a.normalized)
-        .bind(a.kind.as_wire())
-        .execute(&mut *conn)
         .await?;
     }
     Ok(())
@@ -504,26 +446,17 @@ pub async fn upsert_resolved_conn(
             // Update in place, keeping the existing id (preserve FK targets).
             // display_alias is NOT included — it is user-owned and must never
             // be overwritten by a re-resolution or seed load (FR-012).
-            sqlx::query(
-                "UPDATE canonical_target SET
-                     simbad_oid          = ?,
-                     primary_designation = ?,
-                     object_type         = ?,
-                     ra_deg              = ?,
-                     dec_deg             = ?,
-                     source              = ?,
-                     resolved_at         = ?
-                 WHERE id = ?",
+            q_resolver::update_canonical_target_conn(
+                conn,
+                &row.id,
+                identity.simbad_oid,
+                &identity.primary_designation,
+                identity.object_type.as_wire(),
+                identity.ra_deg,
+                identity.dec_deg,
+                identity.source.as_wire(),
+                &resolved_at,
             )
-            .bind(identity.simbad_oid)
-            .bind(&identity.primary_designation)
-            .bind(identity.object_type.as_wire())
-            .bind(identity.ra_deg)
-            .bind(identity.dec_deg)
-            .bind(identity.source.as_wire())
-            .bind(&resolved_at)
-            .bind(&row.id)
-            .execute(&mut *conn)
             .await?;
             write_aliases(&mut *conn, &row.id, &identity.aliases).await?;
             let id =
@@ -531,20 +464,17 @@ pub async fn upsert_resolved_conn(
             Ok((id, UpsertOutcome::Updated))
         }
         None => {
-            sqlx::query(
-                "INSERT INTO canonical_target
-                     (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            q_resolver::insert_canonical_target_conn(
+                conn,
+                &derived,
+                identity.simbad_oid,
+                &identity.primary_designation,
+                identity.object_type.as_wire(),
+                identity.ra_deg,
+                identity.dec_deg,
+                identity.source.as_wire(),
+                &resolved_at,
             )
-            .bind(&derived)
-            .bind(identity.simbad_oid)
-            .bind(&identity.primary_designation)
-            .bind(identity.object_type.as_wire())
-            .bind(identity.ra_deg)
-            .bind(identity.dec_deg)
-            .bind(identity.source.as_wire())
-            .bind(&resolved_at)
-            .execute(&mut *conn)
             .await?;
             write_aliases(&mut *conn, &derived, &identity.aliases).await?;
             let id = Uuid::parse_str(&derived)
@@ -591,64 +521,39 @@ pub struct TargetListRow {
 /// Returns [`CacheError::Database`] on query failure, or [`CacheError::InvalidUuid`]
 /// on a corrupt stored id.
 pub async fn list_all(pool: &SqlitePool) -> CacheResult<Vec<TargetListRow>> {
-    let rows: Vec<TargetListQueryRow> = sqlx::query_as(
-        "SELECT id, primary_designation, display_alias, object_type,
-                ra_deg, dec_deg, constellation, magnitude
-         FROM canonical_target
-         ORDER BY primary_designation ASC",
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = q_resolver::list_canonical_targets(pool).await?;
 
     if rows.is_empty() {
         return Ok(Vec::new());
     }
 
     // Batch-load aliases for all returned targets (avoids N+1 queries).
-    // Returns (target_id, alias) ordered by target_id, then alias.
-    let alias_rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT target_id, alias
-         FROM target_alias
-         ORDER BY target_id ASC, alias ASC",
-    )
-    .fetch_all(pool)
-    .await?;
+    let alias_rows = q_resolver::list_all_target_aliases(pool).await?;
 
     // Group aliases by target_id into a lookup map.
     let mut aliases_by_id: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
-    for (target_id, alias) in alias_rows {
-        aliases_by_id.entry(target_id).or_default().push(alias);
+    for r in alias_rows {
+        aliases_by_id.entry(r.target_id).or_default().push(r.alias);
     }
 
     rows.into_iter()
-        .map(
-            |(
-                id_str,
-                primary_designation,
-                display_alias,
-                object_type,
-                ra_deg,
-                dec_deg,
-                constellation,
-                magnitude,
-            )| {
-                let id = Uuid::parse_str(&id_str)
-                    .map_err(|e| CacheError::InvalidUuid(id_str.clone(), e))?;
-                let aliases = aliases_by_id.remove(&id_str).unwrap_or_default();
-                Ok(TargetListRow {
-                    id,
-                    primary_designation,
-                    display_alias,
-                    object_type,
-                    ra_deg,
-                    dec_deg,
-                    constellation,
-                    magnitude,
-                    aliases,
-                })
-            },
-        )
+        .map(|row| {
+            let id =
+                Uuid::parse_str(&row.id).map_err(|e| CacheError::InvalidUuid(row.id.clone(), e))?;
+            let aliases = aliases_by_id.remove(&row.id).unwrap_or_default();
+            Ok(TargetListRow {
+                id,
+                primary_designation: row.primary_designation,
+                display_alias: row.display_alias,
+                object_type: row.object_type,
+                ra_deg: row.ra_deg,
+                dec_deg: row.dec_deg,
+                constellation: row.constellation,
+                magnitude: row.magnitude,
+                aliases,
+            })
+        })
         .collect()
 }
 
@@ -674,26 +579,15 @@ pub async fn insert_user_alias(
     }
     let alias_id = Uuid::new_v4().to_string();
     let target_id_str = target_id.to_string();
-    let result = sqlx::query(
-        "INSERT OR IGNORE INTO target_alias (id, target_id, alias, normalized, kind)
-         VALUES (?, ?, ?, ?, 'user')",
-    )
-    .bind(&alias_id)
-    .bind(&target_id_str)
-    .bind(alias)
-    .bind(&normalized)
-    .execute(pool)
-    .await?;
+    let rows_affected =
+        q_resolver::insert_user_alias(pool, &alias_id, &target_id_str, alias, &normalized).await?;
 
-    if result.rows_affected() == 0 {
+    if rows_affected == 0 {
         // Alias already exists — return the existing id.
-        let existing: Option<(String,)> =
-            sqlx::query_as("SELECT id FROM target_alias WHERE target_id = ? AND normalized = ?")
-                .bind(&target_id_str)
-                .bind(&normalized)
-                .fetch_optional(pool)
+        let existing =
+            q_resolver::select_alias_id_by_target_and_normalized(pool, &target_id_str, &normalized)
                 .await?;
-        Ok(existing.map(|(id,)| (id, alias.to_owned())))
+        Ok(existing.map(|id| (id, alias.to_owned())))
     } else {
         Ok(Some((alias_id, alias.to_owned())))
     }
@@ -708,11 +602,7 @@ pub async fn insert_user_alias(
 ///
 /// Returns [`CacheError::Database`] on query failure.
 pub async fn delete_user_alias(pool: &SqlitePool, alias_id: &str) -> CacheResult<bool> {
-    let result = sqlx::query("DELETE FROM target_alias WHERE id = ? AND kind = 'user'")
-        .bind(alias_id)
-        .execute(pool)
-        .await?;
-    Ok(result.rows_affected() > 0)
+    Ok(q_resolver::delete_user_alias(pool, alias_id).await?)
 }
 
 /// Set the `display_alias` column for a target (FR-012).
@@ -730,12 +620,7 @@ pub async fn set_display_alias(
 ) -> CacheResult<bool> {
     let value: Option<&str> =
         if display_alias.trim().is_empty() { None } else { Some(display_alias) };
-    let result = sqlx::query("UPDATE canonical_target SET display_alias = ? WHERE id = ?")
-        .bind(value)
-        .bind(target_id.to_string())
-        .execute(pool)
-        .await?;
-    Ok(result.rows_affected() > 0)
+    Ok(q_resolver::set_display_alias(pool, &target_id.to_string(), value).await?)
 }
 
 /// Clear the `display_alias` column for a target (sets to NULL).
@@ -746,11 +631,7 @@ pub async fn set_display_alias(
 ///
 /// Returns [`CacheError::Database`] on query failure.
 pub async fn clear_display_alias(pool: &SqlitePool, target_id: Uuid) -> CacheResult<bool> {
-    let result = sqlx::query("UPDATE canonical_target SET display_alias = NULL WHERE id = ?")
-        .bind(target_id.to_string())
-        .execute(pool)
-        .await?;
-    Ok(result.rows_affected() > 0)
+    Ok(q_resolver::clear_display_alias(pool, &target_id.to_string()).await?)
 }
 
 #[cfg(test)]
