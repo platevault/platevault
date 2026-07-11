@@ -175,3 +175,24 @@ mechanism itself.
 - **Lane nG spawned (2026-07-09).** Spec 026 (generated-source-view-removal)
   stale-detection + audit tail, building on #535's verify machinery
   (`source_view_verify.rs`).
+- **Lane nG merged, spec 026 COMPLETE (2026-07-11).** #545 (`384398df`)
+  closed the last 11 tasks (23/23): stale-detection sweep reusing #535's
+  verify classification, per-item audit events + a UI audit history,
+  `kind_diverged` data reconciliation, and real cross-platform per-item
+  apply for view removal/regeneration — backed by a real-executor e2e test
+  that found and fixed 2 latent bugs never exercised by an actual
+  filesystem apply before (empty archive destination on view removal; raw
+  DB id used as a filesystem path on regenerate). The PR survived a rebase
+  over the concurrent external #544 sqlx-drain. SPEC_STATUS 026 row flipped
+  to closed; the spec's long-standing "vestigial, product-decision-pending"
+  status is resolved (049 already restored a live generation path).
+- **Lane nH1 spawned (2026-07-11).** Spec 033 tail (validation-bugfix-
+  remediation remainder) + a dead-code dossier.
+- **DB-boundary baseline sealed at zero (2026-07-11, external #543/#544/
+  #546/#547).** The raw-sqlx-outside-persistence_db baseline was drained to
+  empty across desktop commands (#543), inbox app layer, and the projects
+  app layer (#544), then sealed with a zero-tolerance guard (#546) and
+  marked complete in `docs/development/persistence-layer-hardening.md`
+  (#547). Any new raw `sqlx::` usage outside `crates/persistence/db` now
+  fails CI immediately — no baseline drift budget remains. Not this lane's
+  work; noted for downstream lanes touching persistence.

@@ -65,7 +65,7 @@ still landing PRs and these rows will move again once those lanes report.
 | 023 target-identity-history-notes | ✅ **Closed** | US1–US4 shipped on gen-3 (migration 0048 + `target.sessions.list`/`target.projects.list`/`target.note.*`) + caveats (note-edit audit event, UUID project deep-link, 16 KB note cap) + `speckit-verify` passed. `target.primary.rename` dropped; FR-005/FR-007 deferred |
 | 024 project-manifests-and-notes | ✅ Implemented (closed 2026-06-23) | 32/37; 5 open all DEFERRED (FR-006/export/contract-tests); notes display-on-load fixed at close-out |
 | 025 filesystem-plan-application | 🟡 Partial (out-of-spec) | Real apply shipped via 041; overlap guard FR-017 done (`4b693ea7` / #408); progress UI absorbed into 017's `PlanReviewOverlay`; remaining = rollback integration test T025 + 10k-perf T045 |
-| 026 generated-source-view-removal | 🟡 OPEN — core built, POSSIBLY OBSOLETE | 12/23; remove/regenerate feature fully wired but **vestigial** — no live source-view *generation* path after the 041/043 lifecycle-prep drop. Kept **open** (not closed): P3 (T014–T020 stale-detection + audit) deferred; awaiting product decision to restore generation or retire the surface |
+| 026 generated-source-view-removal | ✅ Implemented (closed) | 23/23. No longer vestigial — spec 049 restored a live generation path (WBPP-ready source views, `54b56d28`/#439), so remove/regenerate is exercised for real. PR #545 (`384398df`, lane nG) closed the remaining P3 scope: stale-detection sweep (`sweep_view_staleness`, reusing #535's verify classification) wired into `list_views` so the UI gets freshened state on every load; per-item audit events + a Settings-adjacent UI audit history (`apps/desktop/src/features/projects/ViewAuditHistory.tsx`); a `kind_diverged` data-reconciliation scan on `Database::migrate()`; and real per-item cross-platform apply for view removal/regeneration, backed by a real-executor e2e test (`crates/e2e-tests/tests/source_view_journeys.rs`) that **found and fixed 2 latent bugs never exercised by an actual filesystem apply before**: `remove_prepared_view` left the archive destination empty (every archive item failed `source.missing`); `regenerate_prepared_view` used the raw DB id as a filesystem path. PR survived a rebase over the concurrent external #544 sqlx-drain |
 | 027 frontend-implementation | ✅ Implemented | 99/99 |
 | 028 frontend-quality-hardening | 🟡 Placeholder | 9/15 |
 | 029 tauri-backend-wiring | ✅ Implemented | 52/52 |
@@ -125,7 +125,7 @@ INFRA / CROSS-CUTTING (mostly independent)
   046 i18n ✅   042 stdlib ✅   043 ui-redesign 🟡 (merged to main via #349; remainder open)
   037 e2e ✅ ◀── Layer-2 tauri-driver journeys merged (#403); closed out via #531 (35/40, 5 open by design as SUPERSEDED)
   037 ipc-removal ✅ (all phases done+merged; commands.ts deleted, guards in CI)
-  026 source-view-removal 🟡 (vestigial, product-decision-pending; lane G reviewing)
+  026 source-view-removal ✅ (23/23, closed via #545)
   048 per-frame-inventory 🟠 (in-flight, lane D active)   049 source-view-generation 🟡 (41/46, T031 blocked on 048)
   050 publishable-crate-extractions 📄 (plan-of-record, PR #429)
   051 tauri-shell-integration 🟡 (US1–US7 + US10-groundwork merged; US8 notifications + US9 release-native-behavior open)
@@ -155,7 +155,7 @@ lane does not touch `.github/workflows/**`, tags, or release PRs.
 
 ## Closeout-ready (verify pass, not new work)
 
-**Closed 2026-07-03:** 006, 007, 011, 019 flipped to Implemented after code-verified closeout (deferred tails documented; 011 T021 + 019 T006/T011/T029 + the `log_recent` bug done this session). 024 was closed earlier via #357 (2026-06-23). **026** deliberately kept **open** (vestigial/possibly-obsolete — product decision pending). No verify-flip work remains in this group.
+**Closed 2026-07-03:** 006, 007, 011, 019 flipped to Implemented after code-verified closeout (deferred tails documented; 011 T021 + 019 T006/T011/T029 + the `log_recent` bug done this session). 024 was closed earlier via #357 (2026-06-23). **026** closed 2026-07-11 via #545 (23/23) — the "vestigial" premise was resolved by spec 049 restoring a live generation path. No verify-flip work remains in this group.
 
 ## Blocked / not-yet-actionable
 
