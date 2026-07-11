@@ -7,7 +7,7 @@
 //! the spec-018 settings field rather than guessing.
 
 use thiserror::Error;
-use time::{Date, Month, OffsetDateTime, UtcOffset};
+use time::{Date, OffsetDateTime, UtcOffset};
 
 /// Observer location subset needed for the night calculation.
 #[derive(Clone, Debug)]
@@ -71,25 +71,8 @@ fn previous_day(d: Date) -> Date {
 }
 
 fn format_date_iso(d: Date) -> String {
-    let month = month_number(d.month());
+    let month = u8::from(d.month());
     format!("{:04}-{:02}-{:02}", d.year(), month, d.day())
-}
-
-const fn month_number(m: Month) -> u8 {
-    match m {
-        Month::January => 1,
-        Month::February => 2,
-        Month::March => 3,
-        Month::April => 4,
-        Month::May => 5,
-        Month::June => 6,
-        Month::July => 7,
-        Month::August => 8,
-        Month::September => 9,
-        Month::October => 10,
-        Month::November => 11,
-        Month::December => 12,
-    }
 }
 
 #[cfg(test)]
