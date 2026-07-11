@@ -227,6 +227,38 @@ pub async fn update_item_observed_state(
     Ok(())
 }
 
+/// Spec 026 T006a: scan all non-terminal views for a pre-existing
+/// `kind`/item-`materialization` mismatch and flip them to `kind_diverged`.
+///
+/// Closes the gap for `PreparedSourceView` rows written before the
+/// mixed-kind check (D-026-H2) was enforced at write time — on a fresh
+/// install this is a no-op (no legacy rows exist); on an upgrade it
+/// reconciles any that do. `removed`/`kind_diverged` rows are excluded:
+/// removed views have no live on-disk representation to diverge, and
+/// already-diverged ones don't need re-flagging. Idempotent — safe to run
+/// on every `Database::migrate()` call.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn reconcile_kind_diverged_views(pool: &SqlitePool) -> DbResult<u64> {
+    let mismatched: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT v.id FROM prepared_source_views v
+         JOIN prepared_source_view_items i ON i.view_id = v.id
+         WHERE v.state NOT IN ('removed', 'kind_diverged')
+           AND i.materialization != v.kind",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(DbError::Database)?;
+
+    let count = u64::try_from(mismatched.len()).unwrap_or(u64::MAX);
+    for (id,) in mismatched {
+        update_view_state(pool, &id, "kind_diverged").await?;
+    }
+    Ok(count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -371,5 +403,76 @@ mod tests {
 
         let views = list_views_for_project(db.pool(), "proj-4").await.unwrap();
         assert_eq!(views.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn reconcile_flags_mismatched_legacy_view_kind_diverged() {
+        let db = setup().await;
+        sqlx::query(
+            "INSERT INTO projects (id, name, tool, lifecycle, path, created_at, updated_at)
+             VALUES ('proj-5', 'Test5', 'PixInsight', 'ready', 'projects/test5', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // Legacy row: view.kind='symlink' but its item was recorded 'copy' —
+        // simulates a pre-mixed-kind-check record.
+        insert_view(
+            db.pool(),
+            &InsertPreparedSourceView { id: "v-legacy", project_id: "proj-5", kind: "symlink" },
+        )
+        .await
+        .unwrap();
+        insert_view_item(
+            db.pool(),
+            &InsertPreparedSourceViewItem {
+                id: "item-legacy",
+                view_id: "v-legacy",
+                inventory_item_id: "inv-legacy",
+                view_relative_path: "Sources/legacy.fit",
+                materialization: "copy",
+            },
+        )
+        .await
+        .unwrap();
+
+        // Clean row: should not be touched.
+        insert_view(
+            db.pool(),
+            &InsertPreparedSourceView { id: "v-clean", project_id: "proj-5", kind: "symlink" },
+        )
+        .await
+        .unwrap();
+        insert_view_item(
+            db.pool(),
+            &InsertPreparedSourceViewItem {
+                id: "item-clean",
+                view_id: "v-clean",
+                inventory_item_id: "inv-clean",
+                view_relative_path: "Sources/clean.fit",
+                materialization: "symlink",
+            },
+        )
+        .await
+        .unwrap();
+
+        let count = reconcile_kind_diverged_views(db.pool()).await.unwrap();
+        assert_eq!(count, 1);
+
+        assert_eq!(get_view(db.pool(), "v-legacy").await.unwrap().state, "kind_diverged");
+        assert_eq!(get_view(db.pool(), "v-clean").await.unwrap().state, "current");
+
+        // Idempotent: a second pass finds nothing new (already-diverged rows
+        // are excluded from the scan).
+        let count_again = reconcile_kind_diverged_views(db.pool()).await.unwrap();
+        assert_eq!(count_again, 0);
+    }
+
+    #[tokio::test]
+    async fn reconcile_is_noop_on_fresh_db_with_no_views() {
+        let db = setup().await;
+        let count = reconcile_kind_diverged_views(db.pool()).await.unwrap();
+        assert_eq!(count, 0);
     }
 }

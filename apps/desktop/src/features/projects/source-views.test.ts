@@ -17,6 +17,7 @@ import {
   canRegenerateView,
   canVerifyView,
   brokenItemStateLabel,
+  observedStateLabel,
   listPreparedViews,
   removePreparedView,
   regeneratePreparedView,
@@ -147,6 +148,10 @@ describe('canRegenerateView', () => {
     expect(canRegenerateView('stale')).toBe(true);
   });
 
+  it('allows regeneration for missing (T014 sweep: whole view folder gone)', () => {
+    expect(canRegenerateView('missing')).toBe(true);
+  });
+
   it('blocks regeneration for current', () => {
     expect(canRegenerateView('current')).toBe(false);
   });
@@ -203,6 +208,34 @@ describe('brokenItemStateLabel', () => {
 
   it('falls back to the raw state string for unknown values', () => {
     expect(brokenItemStateLabel('unknown_future_state' as never)).toBe('unknown_future_state');
+  });
+});
+
+// ── observedStateLabel (spec 026 T014/T015/T016 stale-detection sweep) ────────
+
+describe('observedStateLabel', () => {
+  it('describes present', () => {
+    expect(observedStateLabel('present')).toBe('present');
+  });
+
+  it('describes missing', () => {
+    expect(observedStateLabel('missing')).toContain('missing');
+  });
+
+  it('describes changed_kind', () => {
+    expect(observedStateLabel('changed_kind')).toContain('kind');
+  });
+
+  it('describes diverged', () => {
+    expect(observedStateLabel('diverged')).toContain('diverged');
+  });
+
+  it('describes hash_diverged', () => {
+    expect(observedStateLabel('hash_diverged')).toContain('content');
+  });
+
+  it('falls back to the raw state string for unknown values', () => {
+    expect(observedStateLabel('unknown_future_state')).toBe('unknown_future_state');
   });
 });
 

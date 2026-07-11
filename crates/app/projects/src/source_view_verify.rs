@@ -14,6 +14,7 @@
 use camino::Utf8Path;
 use contracts_core::source_view_verify::{BrokenItem, BrokenItemState, SourceViewVerifyResponse};
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use domain_core::lifecycle::prepared_source::ItemObservedState;
 use persistence_db::repositories::prepared_source_views as views_repo;
 use sqlx::SqlitePool;
 
@@ -27,17 +28,21 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
 }
 
 /// Resolved canonical-source state for one view item's `inventory_item_id`.
-struct SourceResolution {
+///
+/// `pub(crate)`: also reused by `prepared_views::regenerate_prepared_view`
+/// (T013) to resolve each item's real absolute source path for the `link`
+/// plan action, rather than duplicating this file_record→root-path lookup.
+pub(crate) struct SourceResolution {
     /// Absolute path of the canonical source, when the source root and
     /// `file_record` row both resolve.
-    abs_path: Option<camino::Utf8PathBuf>,
+    pub(crate) abs_path: Option<camino::Utf8PathBuf>,
     /// `true` when the `file_record` row is absent or its state is
     /// `missing`/`rejected` — the source itself is gone from the inventory's
     /// point of view (FR-019-style "moved/removed" signal).
-    source_gone: bool,
+    pub(crate) source_gone: bool,
 }
 
-async fn resolve_source(pool: &SqlitePool, inventory_item_id: &str) -> SourceResolution {
+pub(crate) async fn resolve_source(pool: &SqlitePool, inventory_item_id: &str) -> SourceResolution {
     use persistence_db::repositories::inventory;
 
     let Ok(Some(record)) = inventory::get_file_record_lookup(pool, inventory_item_id).await else {
@@ -59,7 +64,10 @@ async fn resolve_source(pool: &SqlitePool, inventory_item_id: &str) -> SourceRes
     }
 }
 
-/// Verify a `PreparedSourceView`'s links without mutating anything.
+/// Classify one view item against the live filesystem + inventory state.
+/// `None` means the item is clean. Shared by `verify_source_view` (read-only
+/// report) and `sweep_view_staleness` (T014/T015: same resolution logic,
+/// persisted) so the two never diverge on what counts as "broken".
 ///
 /// Per item:
 /// 1. The canonical source (`inventory_item_id`) is resolved; a
@@ -72,6 +80,56 @@ async fn resolve_source(pool: &SqlitePool, inventory_item_id: &str) -> SourceRes
 ///    `unresolved_link`.
 /// 4. The recorded `materialization` disagreeing with the actual on-disk
 ///    kind (symlink vs. not) → `changed_kind`.
+fn classify_item(
+    source: &SourceResolution,
+    item: &views_repo::PreparedSourceViewItemRow,
+) -> Option<BrokenItemState> {
+    if source.source_gone {
+        return Some(BrokenItemState::Moved);
+    }
+
+    let dest = Utf8Path::new(&item.view_relative_path);
+    let Ok(lstat) = std::fs::symlink_metadata(dest) else {
+        return Some(BrokenItemState::Missing);
+    };
+
+    let is_symlink = lstat.file_type().is_symlink();
+    let recorded_symlink = item.materialization == "symlink";
+
+    if is_symlink {
+        // Dangling check: `metadata` follows the link; NotFound means the
+        // target no longer exists (FR-015: report, never auto-repair).
+        if std::fs::metadata(dest).is_err() {
+            return Some(BrokenItemState::UnresolvedLink);
+        }
+        // Target resolves — but does it still point at the canonical
+        // source (not merely at *some* live file)?
+        if let Some(expected) = &source.abs_path {
+            let matches_target = std::fs::canonicalize(dest)
+                .ok()
+                .zip(std::fs::canonicalize(expected).ok())
+                .is_some_and(|(actual, expected)| actual == expected);
+            if !matches_target {
+                return Some(BrokenItemState::UnresolvedLink);
+            }
+        }
+        if !recorded_symlink {
+            return Some(BrokenItemState::ChangedKind);
+        }
+    } else if recorded_symlink {
+        // Recorded as a symlink but the destination is a regular file —
+        // the on-disk kind diverged (spec 026 FR-008 mixed-kind concept).
+        return Some(BrokenItemState::ChangedKind);
+    }
+    // Non-symlink destinations (hardlink/copy) that lstat succeeded on
+    // and whose recorded kind wasn't symlink are clean: their bytes are
+    // independent of the source's current inventory path.
+    None
+}
+
+/// Verify a `PreparedSourceView`'s links without mutating anything.
+///
+/// See [`classify_item`] for the per-item resolution rules.
 ///
 /// # Errors
 ///
@@ -90,79 +148,97 @@ pub async fn verify_source_view(
 
     for item in items {
         let source = resolve_source(pool, &item.inventory_item_id).await;
-
-        if source.source_gone {
+        if let Some(state) = classify_item(&source, &item) {
             broken_items.push(BrokenItem {
                 inventory_item_id: item.inventory_item_id,
                 view_relative_path: item.view_relative_path,
-                state: BrokenItemState::Moved,
-            });
-            continue;
-        }
-
-        let dest = Utf8Path::new(&item.view_relative_path);
-        let Ok(lstat) = std::fs::symlink_metadata(dest) else {
-            broken_items.push(BrokenItem {
-                inventory_item_id: item.inventory_item_id,
-                view_relative_path: item.view_relative_path,
-                state: BrokenItemState::Missing,
-            });
-            continue;
-        };
-
-        let is_symlink = lstat.file_type().is_symlink();
-        let recorded_symlink = item.materialization == "symlink";
-
-        if is_symlink {
-            // Dangling check: `metadata` follows the link; NotFound means the
-            // target no longer exists (FR-015: report, never auto-repair).
-            if std::fs::metadata(dest).is_err() {
-                broken_items.push(BrokenItem {
-                    inventory_item_id: item.inventory_item_id,
-                    view_relative_path: item.view_relative_path,
-                    state: BrokenItemState::UnresolvedLink,
-                });
-                continue;
-            }
-            // Target resolves — but does it still point at the canonical
-            // source (not merely at *some* live file)?
-            if let Some(expected) = &source.abs_path {
-                let matches_target = std::fs::canonicalize(dest)
-                    .ok()
-                    .zip(std::fs::canonicalize(expected).ok())
-                    .is_some_and(|(actual, expected)| actual == expected);
-                if !matches_target {
-                    broken_items.push(BrokenItem {
-                        inventory_item_id: item.inventory_item_id,
-                        view_relative_path: item.view_relative_path,
-                        state: BrokenItemState::UnresolvedLink,
-                    });
-                    continue;
-                }
-            }
-            if !recorded_symlink {
-                broken_items.push(BrokenItem {
-                    inventory_item_id: item.inventory_item_id,
-                    view_relative_path: item.view_relative_path,
-                    state: BrokenItemState::ChangedKind,
-                });
-            }
-        } else if recorded_symlink {
-            // Recorded as a symlink but the destination is a regular file —
-            // the on-disk kind diverged (spec 026 FR-008 mixed-kind concept).
-            broken_items.push(BrokenItem {
-                inventory_item_id: item.inventory_item_id,
-                view_relative_path: item.view_relative_path,
-                state: BrokenItemState::ChangedKind,
+                state,
             });
         }
-        // Non-symlink destinations (hardlink/copy) that lstat succeeded on
-        // and whose recorded kind wasn't symlink are clean: their bytes are
-        // independent of the source's current inventory path.
     }
 
     let clean = broken_items.is_empty();
     Ok(SourceViewVerifyResponse { clean, broken_items })
+}
+
+/// Stale-detection sweep (spec 026 US3, T014/T015): recompute every item's
+/// [`ItemObservedState`] from the live filesystem + inventory (same
+/// [`classify_item`] logic as [`verify_source_view`]) and persist it, then
+/// derive and persist the view's own `state` from the aggregate.
+///
+/// Read-only on the filesystem — it only ever `stat`s paths, never writes,
+/// moves, or deletes anything (constitution §II: mutations only via
+/// reviewable plans). The DB writes here are an observation cache, exactly
+/// like inventory scan bookkeeping, not a filesystem mutation.
+///
+/// Terminal view states (`removed`, `kind_diverged`) are skipped: their
+/// on-disk representation is either gone or blocked pending manual
+/// resolution (D-026-H2), so a staleness sweep has nothing meaningful to
+/// report for them.
+///
+/// View state after a sweep:
+/// - `current`  — every item resolved clean.
+/// - `missing`  — every item's destination itself is absent (the whole view
+///   folder is gone).
+/// - `stale`    — some, but not all, items are broken.
+///
+/// # Errors
+///
+/// Returns `view.not_found` or an `internal.*` error on failure.
+pub async fn sweep_view_staleness(pool: &SqlitePool, view_id: &str) -> Result<(), ContractError> {
+    let view = views_repo::get_view(pool, view_id).await.map_err(db_err)?;
+    if view.state == "removed" || view.state == "kind_diverged" {
+        return Ok(());
+    }
+
+    let items = views_repo::list_view_items(pool, view_id).await.map_err(db_err)?;
+    if items.is_empty() {
+        return Ok(());
+    }
+
+    let mut any_broken = false;
+    let mut all_missing = true;
+
+    for item in &items {
+        let source = resolve_source(pool, &item.inventory_item_id).await;
+        let broken = classify_item(&source, item);
+
+        let observed = match broken {
+            None => ItemObservedState::Present,
+            Some(BrokenItemState::Missing) => ItemObservedState::Missing,
+            Some(BrokenItemState::ChangedKind) => ItemObservedState::ChangedKind,
+            Some(BrokenItemState::Moved | BrokenItemState::UnresolvedLink) => {
+                ItemObservedState::Diverged
+            }
+        };
+
+        if broken.is_some() {
+            any_broken = true;
+        }
+        if !matches!(broken, Some(BrokenItemState::Missing)) {
+            all_missing = false;
+        }
+
+        if item.last_observed_state != observed.as_str() {
+            views_repo::update_item_observed_state(pool, &item.id, observed.as_str())
+                .await
+                .map_err(db_err)?;
+        }
+    }
+
+    let new_state = if !any_broken {
+        "current"
+    } else if all_missing {
+        "missing"
+    } else {
+        "stale"
+    };
+
+    if view.state != new_state {
+        views_repo::update_view_state(pool, view_id, new_state).await.map_err(db_err)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -366,5 +442,183 @@ mod tests {
         let resp = verify_source_view(db.pool(), "view3").await.unwrap();
         assert!(!resp.clean);
         assert_eq!(resp.broken_items[0].state, BrokenItemState::Moved);
+    }
+
+    // ── sweep_view_staleness (T014/T015) ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn sweep_marks_clean_view_current() {
+        let db = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let dest_dir = dir.path().join("dest");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::create_dir_all(&dest_dir).unwrap();
+        let source_file = source_dir.join("light1.fits");
+        std::fs::write(&source_file, b"x").unwrap();
+        let dest_file = dest_dir.join("light1.fits");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&source_file, &dest_file).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(&source_file, &dest_file).unwrap();
+
+        insert_project(&db, "p1", dir.path().join("proj").to_str().unwrap()).await;
+        insert_root(&db, "root1", source_dir.to_str().unwrap()).await;
+        insert_file_record(&db, "frame1", "root1", "light1.fits").await;
+
+        views_repo::insert_view(
+            db.pool(),
+            &views_repo::InsertPreparedSourceView { id: "sv1", project_id: "p1", kind: "symlink" },
+        )
+        .await
+        .unwrap();
+        views_repo::insert_view_item(
+            db.pool(),
+            &views_repo::InsertPreparedSourceViewItem {
+                id: "svi1",
+                view_id: "sv1",
+                inventory_item_id: "frame1",
+                view_relative_path: dest_file.to_str().unwrap(),
+                materialization: "symlink",
+            },
+        )
+        .await
+        .unwrap();
+
+        sweep_view_staleness(db.pool(), "sv1").await.unwrap();
+
+        let view = views_repo::get_view(db.pool(), "sv1").await.unwrap();
+        assert_eq!(view.state, "current");
+        let items = views_repo::list_view_items(db.pool(), "sv1").await.unwrap();
+        assert_eq!(items[0].last_observed_state, "present");
+    }
+
+    #[tokio::test]
+    async fn sweep_marks_partially_broken_view_stale() {
+        let db = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let dest_dir = dir.path().join("dest");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::create_dir_all(&dest_dir).unwrap();
+
+        let ok_source = source_dir.join("ok.fits");
+        std::fs::write(&ok_source, b"x").unwrap();
+        let ok_dest = dest_dir.join("ok.fits");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&ok_source, &ok_dest).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(&ok_source, &ok_dest).unwrap();
+
+        // Second item's destination link was never created — reports `missing`.
+        let missing_dest = dest_dir.join("missing.fits");
+
+        insert_project(&db, "p1", dir.path().join("proj").to_str().unwrap()).await;
+        insert_root(&db, "root1", source_dir.to_str().unwrap()).await;
+        insert_file_record(&db, "frame-ok", "root1", "ok.fits").await;
+        insert_file_record(&db, "frame-missing", "root1", "missing.fits").await;
+
+        views_repo::insert_view(
+            db.pool(),
+            &views_repo::InsertPreparedSourceView { id: "sv2", project_id: "p1", kind: "symlink" },
+        )
+        .await
+        .unwrap();
+        views_repo::insert_view_item(
+            db.pool(),
+            &views_repo::InsertPreparedSourceViewItem {
+                id: "svi-ok",
+                view_id: "sv2",
+                inventory_item_id: "frame-ok",
+                view_relative_path: ok_dest.to_str().unwrap(),
+                materialization: "symlink",
+            },
+        )
+        .await
+        .unwrap();
+        views_repo::insert_view_item(
+            db.pool(),
+            &views_repo::InsertPreparedSourceViewItem {
+                id: "svi-missing",
+                view_id: "sv2",
+                inventory_item_id: "frame-missing",
+                view_relative_path: missing_dest.to_str().unwrap(),
+                materialization: "symlink",
+            },
+        )
+        .await
+        .unwrap();
+
+        sweep_view_staleness(db.pool(), "sv2").await.unwrap();
+
+        let view = views_repo::get_view(db.pool(), "sv2").await.unwrap();
+        assert_eq!(view.state, "stale");
+        let items = views_repo::list_view_items(db.pool(), "sv2").await.unwrap();
+        let ok_item = items.iter().find(|i| i.id == "svi-ok").unwrap();
+        let missing_item = items.iter().find(|i| i.id == "svi-missing").unwrap();
+        assert_eq!(ok_item.last_observed_state, "present");
+        assert_eq!(missing_item.last_observed_state, "missing");
+    }
+
+    #[tokio::test]
+    async fn sweep_marks_fully_broken_view_missing() {
+        let db = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let source_dir = dir.path().join("source");
+        let dest_dir = dir.path().join("dest");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::create_dir_all(&dest_dir).unwrap();
+        // Resolvable source, but its destination link was never (or no
+        // longer) created — `missing`, distinct from a `moved`/gone source.
+        std::fs::write(source_dir.join("gone.fits"), b"x").unwrap();
+        let gone_dest = dest_dir.join("gone.fits");
+
+        insert_project(&db, "p1", dir.path().join("proj").to_str().unwrap()).await;
+        insert_root(&db, "root1", source_dir.to_str().unwrap()).await;
+        insert_file_record(&db, "frame-gone", "root1", "gone.fits").await;
+
+        views_repo::insert_view(
+            db.pool(),
+            &views_repo::InsertPreparedSourceView { id: "sv3", project_id: "p1", kind: "symlink" },
+        )
+        .await
+        .unwrap();
+        views_repo::insert_view_item(
+            db.pool(),
+            &views_repo::InsertPreparedSourceViewItem {
+                id: "svi-gone",
+                view_id: "sv3",
+                inventory_item_id: "frame-gone",
+                view_relative_path: gone_dest.to_str().unwrap(),
+                materialization: "symlink",
+            },
+        )
+        .await
+        .unwrap();
+
+        sweep_view_staleness(db.pool(), "sv3").await.unwrap();
+
+        let view = views_repo::get_view(db.pool(), "sv3").await.unwrap();
+        assert_eq!(view.state, "missing");
+        let items = views_repo::list_view_items(db.pool(), "sv3").await.unwrap();
+        assert_eq!(items[0].last_observed_state, "missing");
+    }
+
+    #[tokio::test]
+    async fn sweep_skips_removed_view() {
+        let db = setup().await;
+        insert_project(&db, "p1", "proj/p1").await;
+        views_repo::insert_view(
+            db.pool(),
+            &views_repo::InsertPreparedSourceView { id: "sv4", project_id: "p1", kind: "symlink" },
+        )
+        .await
+        .unwrap();
+        views_repo::mark_view_removed(db.pool(), "sv4").await.unwrap();
+
+        sweep_view_staleness(db.pool(), "sv4").await.unwrap();
+
+        let view = views_repo::get_view(db.pool(), "sv4").await.unwrap();
+        assert_eq!(view.state, "removed");
     }
 }

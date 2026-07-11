@@ -30,7 +30,7 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::new_id;
 use domain_core::lifecycle::prepared_source::ALLOWED_PROJECT_STATES_FOR_VIEW_OPS;
 use persistence_db::repositories::{
-    plans as plans_repo, prepared_source_views as views_repo, projects as projects_repo, q_projects,
+    plans as plans_repo, prepared_source_views as views_repo, projects as projects_repo,
 };
 use sqlx::SqlitePool;
 
@@ -45,6 +45,29 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
         }
         other => app_core_errors::db_err(other),
     }
+}
+
+/// Compute an absolute, collision-free archive destination for a
+/// `prepared_view_removal` plan item.
+///
+/// Parallel copy of `app_core::protection::compute_archive_destination`
+/// (spec 037 Journey 6/7 bugfix — that fix covers `archive_generator`/
+/// `cleanup_generator`, which live in `app_core`; this crate is a dependency
+/// of `app_core`, so the reverse direction isn't available, and the pure
+/// 2-line convention isn't worth promoting to a shared leaf crate for this
+/// lane). Without a real destination, `to_relative_path` fell back to an
+/// empty string and every apply failed `source.missing` on `rename(src, "")`
+/// (found writing the spec 026 T008 end-to-end apply test — this path had
+/// never been exercised by a real filesystem apply before).
+///
+/// Destination convention: `<parent-dir-of-source>/.astro-plan-archive/
+/// <planId>/<itemId>-<fileName>`, matching the sibling copy exactly so
+/// archived-view paths look the same as archived-cleanup paths.
+fn compute_archive_destination(plan_id: &str, item_id: &str, from_relative_path: &str) -> String {
+    let src = camino::Utf8Path::new(from_relative_path);
+    let file_name = src.file_name().unwrap_or(from_relative_path);
+    let parent = src.parent().map_or(".", camino::Utf8Path::as_str);
+    format!("{parent}/.astro-plan-archive/{plan_id}/{item_id}-{file_name}")
 }
 
 pub(crate) fn project_db_err(e: persistence_db::DbError) -> ContractError {
@@ -92,6 +115,12 @@ pub(crate) async fn check_project_lifecycle(
 
 /// List all prepared source views for a project.
 ///
+/// Refreshes each non-terminal view's staleness (T014/T015 sweep) before
+/// reporting it, so the returned `state`/`last_observed_state` reflect the
+/// live filesystem rather than whatever was last observed — this is the
+/// list's own load path (`SourceViewsSection` calls it on mount), so no
+/// separate "check staleness" action is needed for the badge to be honest.
+///
 /// # Errors
 ///
 /// Returns `ContractError` on database failure.
@@ -103,6 +132,8 @@ pub async fn list_views(
 
     let mut views = Vec::with_capacity(rows.len());
     for row in rows {
+        crate::source_view_verify::sweep_view_staleness(pool, &row.id).await?;
+        let row = views_repo::get_view(pool, &row.id).await.map_err(db_err)?;
         let raw_items = views_repo::list_view_items(pool, &row.id).await.map_err(db_err)?;
         let item_count = i64::try_from(raw_items.len()).unwrap_or(i64::MAX);
         let items: Vec<PreparedViewItemDetail> = raw_items
@@ -220,8 +251,13 @@ pub async fn remove_prepared_view(
 
     // 8. One archive action per item, targeting only the view's recorded paths
     //    (T004: actions restricted to view membership — no inventory paths).
+    //    T005/T008: archive_path is pre-computed (see compute_archive_destination)
+    //    — without it the executor's `to_relative_path` fallback is empty and
+    //    every item fails `source.missing` on apply.
     for (idx, item) in items.iter().enumerate() {
         let item_plan_id = new_id();
+        let archive_path =
+            compute_archive_destination(&plan_id, &item_plan_id, &item.view_relative_path);
         plans_repo::insert_plan_item(
             pool,
             &plans_repo::InsertPlanItem {
@@ -238,7 +274,7 @@ pub async fn remove_prepared_view(
                 protection: "normal",
                 linked_entity: Some(view_id),
                 provenance_json: None,
-                archive_path: None,
+                archive_path: Some(&archive_path),
                 // View removal items target app-generated view paths, not user data
                 // sources, so source protection does not apply here.
                 source_id: None,
@@ -311,20 +347,21 @@ pub async fn regenerate_prepared_view(
         ));
     }
 
-    // 6. Resolve each inventory item against the current inventory.
-    //    Items whose inventory_item_id cannot be found are counted as unresolved.
+    // 6. Resolve each inventory item's real absolute source path against the
+    //    current inventory (T013: reuses `source_view_verify::resolve_source`
+    //    — same file_record → library_root lookup `verify`/the sweep use, so
+    //    regeneration and verification never disagree on what "resolved"
+    //    means). Items whose source is gone are counted as unresolved rather
+    //    than targeted by a `link` action with no real source path.
     let mut unresolved_count: u32 = 0;
-    let mut resolved_items: Vec<&views_repo::PreparedSourceViewItemRow> = Vec::new();
+    let mut resolved_items: Vec<(&views_repo::PreparedSourceViewItemRow, camino::Utf8PathBuf)> =
+        Vec::new();
 
     for item in &items {
-        // Check inventory resolution against the file_record table.
-        let exists =
-            q_projects::file_record_exists(pool, &item.inventory_item_id).await.unwrap_or(false);
-
-        if exists {
-            resolved_items.push(item);
-        } else {
-            unresolved_count += 1;
+        let source = crate::source_view_verify::resolve_source(pool, &item.inventory_item_id).await;
+        match source.abs_path {
+            Some(abs_path) if !source.source_gone => resolved_items.push((item, abs_path)),
+            _ => unresolved_count += 1,
         }
     }
 
@@ -348,9 +385,17 @@ pub async fn regenerate_prepared_view(
     .await
     .map_err(|e| db_internal_ctx(e, "insert prepared view plan"))?;
 
-    // 8. One link action per resolved item.
-    for (idx, item) in resolved_items.iter().enumerate() {
+    // 8. One link action per resolved item, targeting its real absolute
+    //    source path (T013). `provenance_json` carries the item's own
+    //    recorded materialization (FR-008: kind is per-item) so the executor
+    //    (`materialization_from_provenance`) recreates the same link kind
+    //    instead of silently falling back to symlink.
+    for (idx, (item, source_abs_path)) in resolved_items.iter().enumerate() {
         let item_plan_id = new_id();
+        let provenance = serde_json::to_string(&serde_json::json!([
+            {"label": "materialization", "value": item.materialization}
+        ]))
+        .ok();
         plans_repo::insert_plan_item(
             pool,
             &plans_repo::InsertPlanItem {
@@ -360,13 +405,13 @@ pub async fn regenerate_prepared_view(
                 name: &item.view_relative_path,
                 action: "link",
                 from_root_id: None,
-                from_relative_path: &item.inventory_item_id,
+                from_relative_path: source_abs_path.as_str(),
                 to_root_id: None,
                 to_relative_path: &item.view_relative_path,
                 reason: "view_regeneration",
                 protection: "normal",
                 linked_entity: Some(view_id),
-                provenance_json: None,
+                provenance_json: provenance.as_deref(),
                 archive_path: None,
                 // View regeneration items target app-generated view paths.
                 source_id: None,

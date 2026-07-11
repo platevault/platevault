@@ -275,7 +275,12 @@ export function canRemoveView(state: ViewState): boolean {
 
 /** True when the regenerate action is available for this view state. */
 export function canRegenerateView(state: ViewState): boolean {
-  return state === 'removed' || state === 'stale';
+  // `missing` (T014 sweep: every item's destination itself is absent — "the
+  // whole view folder is gone") is just as regeneratable as `stale` — the
+  // canonical inventory sources are untouched, only the generated view
+  // needs recreating. Without this, a sweep-observed `missing` view would
+  // have no path back to `current`.
+  return state === 'removed' || state === 'stale' || state === 'missing';
 }
 
 /**
@@ -298,6 +303,31 @@ export function brokenItemStateLabel(state: BrokenItemState): string {
       return m.projects_source_views_verify_state_unresolved_link();
     case 'changed_kind':
       return m.projects_source_views_verify_state_changed_kind();
+    default:
+      return state;
+  }
+}
+
+/**
+ * Human-readable reason for a non-`present` `lastObservedState` (spec 026
+ * T014/T015/T016 stale-detection sweep). Distinct from `brokenItemStateLabel`
+ * (spec 049 US4 on-demand verify): the sweep's `ItemObservedState` vocabulary
+ * (`domain_core::lifecycle::prepared_source`) is coarser — `moved` and
+ * `unresolved_link` both collapse to `diverged` server-side — since it's
+ * persisted background bookkeeping, not a one-shot detailed report.
+ */
+export function observedStateLabel(state: string): string {
+  switch (state) {
+    case 'present':
+      return m.projects_source_views_observed_state_present();
+    case 'missing':
+      return m.projects_source_views_observed_state_missing();
+    case 'changed_kind':
+      return m.projects_source_views_observed_state_changed_kind();
+    case 'diverged':
+      return m.projects_source_views_observed_state_diverged();
+    case 'hash_diverged':
+      return m.projects_source_views_observed_state_hash_diverged();
     default:
       return state;
   }

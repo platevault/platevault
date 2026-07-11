@@ -261,6 +261,96 @@ async fn finalize_view_generation(pool: &SqlitePool, plan_id: &str, project_id: 
     }
 }
 
+// ── Source view removal/regeneration finalization (spec 026 T017/T018) ───────
+
+/// Look up the `PreparedSourceView` id a `prepared_view_removal`/
+/// `prepared_view_regeneration` plan targets, from any item's
+/// `linked_entity` (every item in these plans is linked to the same view —
+/// `prepared_views::remove_prepared_view`/`regenerate_prepared_view`).
+async fn view_id_for_plan(pool: &SqlitePool, plan_id: &str) -> Option<String> {
+    match plans_repo::list_plan_items(pool, plan_id).await {
+        Ok(items) => items.into_iter().find_map(|i| i.linked_entity),
+        Err(e) => {
+            tracing::error!(%plan_id, error=%e, "view finalize: failed to load plan items");
+            None
+        }
+    }
+}
+
+/// Terminal step of a `prepared_view_removal` plan apply (T017/T018).
+///
+/// A clean `applied` terminal means every item was archived away, so the
+/// view's on-disk representation is fully gone — recorded explicitly via
+/// `mark_view_removed` (A4: membership preserved indefinitely for later
+/// regeneration; this is not derivable from a staleness sweep, which cannot
+/// distinguish "removed by this plan" from "some items independently went
+/// missing").
+///
+/// A partial apply leaves a genuinely mixed on-disk state; rather than guess,
+/// this rides the stale-detection sweep (T014) to recompute real per-item
+/// state from disk, same as any other spec-026 US3 sweep.
+///
+/// Best-effort: failures are logged only, never fail the apply (§II).
+async fn finalize_view_removal(pool: &SqlitePool, plan_id: &str, terminal: &str) {
+    use persistence_db::repositories::prepared_source_views as views_repo;
+
+    let Some(view_id) = view_id_for_plan(pool, plan_id).await else {
+        tracing::warn!(%plan_id, "removal finalize: no linked view id on plan items; skipped");
+        return;
+    };
+
+    if terminal == "applied" {
+        if let Err(e) = views_repo::mark_view_removed(pool, &view_id).await {
+            tracing::error!(%plan_id, %view_id, error=%e, "removal finalize: failed to mark view removed");
+        }
+    } else if let Err(e) =
+        app_core_projects::source_view_verify::sweep_view_staleness(pool, &view_id).await
+    {
+        tracing::error!(%plan_id, %view_id, error=?e, "removal finalize: sweep failed after partial apply");
+    }
+}
+
+/// Terminal step of a `prepared_view_regeneration` plan apply (T017/T018).
+///
+/// Unlike removal, a successful regeneration doesn't have a single new
+/// terminal DB state to write — the freshly-created links are just real
+/// files again. Rides the same stale-detection sweep (T014) used for
+/// on-demand staleness checks, so the recorded `state`/`last_observed_state`
+/// reflect the actual outcome (including any items a partial apply left
+/// broken) rather than a hand-maintained approximation.
+///
+/// A successful regeneration is the one legitimate way out of the terminal
+/// `removed` state (A4) — but `sweep_view_staleness` intentionally skips
+/// `removed`/`kind_diverged` views (they have nothing meaningful to sweep in
+/// the general list-load path). So a `removed` view is first cleared to a
+/// neutral non-terminal state here, purely so the sweep actually runs and
+/// re-evaluates the freshly-recreated links, rather than leaving the view
+/// stuck `removed` forever after a successful regeneration.
+///
+/// Best-effort: failures are logged only, never fail the apply (§II).
+async fn finalize_view_regeneration(pool: &SqlitePool, plan_id: &str) {
+    use persistence_db::repositories::prepared_source_views as views_repo;
+
+    let Some(view_id) = view_id_for_plan(pool, plan_id).await else {
+        tracing::warn!(%plan_id, "regeneration finalize: no linked view id on plan items; skipped");
+        return;
+    };
+
+    if let Ok(view) = views_repo::get_view(pool, &view_id).await {
+        if view.state == "removed" {
+            if let Err(e) = views_repo::update_view_state(pool, &view_id, "stale").await {
+                tracing::error!(%plan_id, %view_id, error=%e, "regeneration finalize: failed to clear removed state pre-sweep");
+            }
+        }
+    }
+
+    if let Err(e) =
+        app_core_projects::source_view_verify::sweep_view_staleness(pool, &view_id).await
+    {
+        tracing::error!(%plan_id, %view_id, error=?e, "regeneration finalize: sweep failed");
+    }
+}
+
 // ── Archive lifecycle closure (spec 017 C5) ──────────────────────────────────
 
 /// Terminal step of a successful `origin = archive` plan apply: drive the owning
@@ -978,6 +1068,23 @@ pub async fn apply_plan(
                 {
                     if let Some(project_id) = plan_project_id_owned.as_deref() {
                         finalize_view_generation(&pool_clone, &plan_id_owned, project_id).await;
+                    }
+                }
+
+                // Spec 026 T017/T018: on a (fully or partially) applied
+                // view-removal/regeneration plan, update the PreparedSourceView
+                // state to match reality — see `finalize_view_removal`/
+                // `finalize_view_regeneration` for why removal gets an explicit
+                // terminal write while regeneration rides the staleness sweep.
+                if terminal == "applied" || terminal == "partially_applied" {
+                    match plan_origin_owned.as_str() {
+                        "prepared_view_removal" => {
+                            finalize_view_removal(&pool_clone, &plan_id_owned, &terminal).await;
+                        }
+                        "prepared_view_regeneration" => {
+                            finalize_view_regeneration(&pool_clone, &plan_id_owned).await;
+                        }
+                        _ => {}
                     }
                 }
 
