@@ -934,16 +934,12 @@ fn spawn_ingest_resolution_drain(pool: SqlitePool, bus: EventBus) {
             tokio::time::sleep(interval).await;
 
             // Read resolver settings (online toggle + endpoint + timeout).
-            let settings: Option<(i64, String, i64)> = sqlx::query_as(
-                "SELECT online_enabled, simbad_endpoint, request_timeout_secs \
-                 FROM resolver_settings WHERE id = 1",
-            )
-            .fetch_optional(&pool)
-            .await
-            .unwrap_or(None);
+            let settings = persistence_db::repositories::q_desktop::get_resolver_settings(&pool)
+                .await
+                .unwrap_or(None);
             let (online_enabled, endpoint, timeout_secs) = settings.map_or_else(
                 || (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10),
-                |(o, e, t)| (o != 0, e, t),
+                |r| (r.online_enabled != 0, r.simbad_endpoint, r.request_timeout_secs),
             );
 
             // When online, build a SimbadResolver (falling back to offline if the

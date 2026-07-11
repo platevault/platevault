@@ -41,6 +41,10 @@ use persistence_db::repositories::inbox::{
     get_inbox_source_group_by_path, grouping_keys_for_items, link_placeholder_to_source_group,
     list_unacknowledged_across_roots, upsert_inbox_source_group, UpsertSourceGroup,
 };
+use persistence_db::repositories::q_desktop::{
+    get_inbox_master_item_row, get_inbox_placeholder_row, insert_inbox_folder_placeholder,
+    insert_inbox_master_item,
+};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -394,21 +398,17 @@ async fn persist_folder_placeholder(
             .map_err(|e| ContractError::internal(e.to_string()))?
             .map_or(fallback_sg_id, |row| row.id);
 
-    sqlx::query(
-        "INSERT OR IGNORE INTO inbox_items
-            (id, root_id, relative_path, source_group_id, file_count, discovered_at,
-             last_scanned_at, content_signature, state, lane, format, is_master_item)
-         VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'), ?, 'pending_classification', ?, ?, 0)",
+    insert_inbox_folder_placeholder(
+        pool,
+        &item_id,
+        root_id,
+        &scanned_item.relative_path,
+        &authoritative_sg_id,
+        i64::try_from(persist_file_count).unwrap_or(i64::MAX),
+        &scanned_item.content_signature,
+        scanned_item.lane.as_str(),
+        folder_format_str,
     )
-    .bind(&item_id)
-    .bind(root_id)
-    .bind(&scanned_item.relative_path)
-    .bind(&authoritative_sg_id)
-    .bind(i64::try_from(persist_file_count).unwrap_or(i64::MAX))
-    .bind(&scanned_item.content_signature)
-    .bind(scanned_item.lane.as_str())
-    .bind(folder_format_str)
-    .execute(pool)
     .await
     .map_err(|e| ContractError::internal(e.to_string()))?;
 
@@ -427,38 +427,24 @@ async fn persist_folder_placeholder(
     // the placeholder (`group_key = ''`): once classify has materialized
     // single-type sub-items they share this (root_id, relative_path) and
     // an unscoped lookup would return an arbitrary one of them.
-    let row: Option<(String, String, i64, String, Option<String>, Option<String>)> =
-        sqlx::query_as(
-            "SELECT id, state, file_count, lane, content_signature, format
-             FROM inbox_items
-             WHERE root_id = ? AND relative_path = ? AND group_key = ''",
-        )
-        .bind(root_id)
-        .bind(&scanned_item.relative_path)
-        .fetch_optional(pool)
+    let row = get_inbox_placeholder_row(pool, root_id, &scanned_item.relative_path)
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
-    Ok(row.map(|(id, state, fc, lane, sig, fmt)| InboxItemSummary {
-        inbox_item_id: id,
+    Ok(row.map(|r| InboxItemSummary {
+        inbox_item_id: r.id,
         relative_path: scanned_item.relative_path.clone(),
-        file_count: u32::try_from(fc).unwrap_or(u32::MAX),
-        lane,
-        format: fmt.unwrap_or_else(|| folder_format_str.to_owned()),
-        state,
-        content_signature: sig.unwrap_or_default(),
+        file_count: u32::try_from(r.file_count).unwrap_or(u32::MAX),
+        lane: r.lane,
+        format: r.format.unwrap_or_else(|| folder_format_str.to_owned()),
+        state: r.state,
+        content_signature: r.content_signature.unwrap_or_default(),
         is_master: false,
         master_frame_type: None,
         master_filter: None,
         master_exposure_s: None,
     }))
 }
-
-/// Row shape for an individual master `inbox_items` lookup: `(id, state,
-/// file_count, lane, content_signature, is_master_item, master_frame_type,
-/// master_filter, master_exposure_s)`.
-type MasterItemRow =
-    (String, String, i64, String, Option<String>, i64, Option<String>, Option<String>, Option<f64>);
 
 /// Insert (or reuse) the individual `inbox_items` row for a single detected
 /// calibration master and return its summary, if the row is present.
@@ -472,50 +458,37 @@ async fn persist_master_item(
     let frame_type_str = format!("{:?}", master.detection.frame_type).to_ascii_lowercase();
     let format_str = master.format.as_str();
 
-    sqlx::query(
-        "INSERT OR IGNORE INTO inbox_items
-            (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
-             content_signature, state, lane, format, is_master_item,
-             master_frame_type, master_filter, master_exposure_s)
-         VALUES (?, ?, ?, 1, datetime('now'), datetime('now'), '', 'pending_classification',
-                 ?, ?, 1, ?, ?, ?)",
+    insert_inbox_master_item(
+        pool,
+        &master_item_id,
+        root_id,
+        &master.relative_path,
+        lane,
+        format_str,
+        &frame_type_str,
+        master.filter.as_deref(),
+        master.exposure_s,
     )
-    .bind(&master_item_id)
-    .bind(root_id)
-    .bind(&master.relative_path)
-    .bind(lane)
-    .bind(format_str)
-    .bind(&frame_type_str)
-    .bind(&master.filter)
-    .bind(master.exposure_s)
-    .execute(pool)
     .await
     .map_err(|e| ContractError::internal(e.to_string()))?;
 
     // Fetch authoritative row (may have existed from a prior scan).
-    let row: Option<MasterItemRow> = sqlx::query_as(
-        "SELECT id, state, file_count, lane, content_signature,
-                    is_master_item, master_frame_type, master_filter, master_exposure_s
-             FROM inbox_items WHERE root_id = ? AND relative_path = ?",
-    )
-    .bind(root_id)
-    .bind(&master.relative_path)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| ContractError::internal(e.to_string()))?;
+    let row = get_inbox_master_item_row(pool, root_id, &master.relative_path)
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?;
 
-    Ok(row.map(|(id, state, fc, lane, sig, _is_m, mft, mfilt, mexp)| InboxItemSummary {
-        inbox_item_id: id,
+    Ok(row.map(|r| InboxItemSummary {
+        inbox_item_id: r.id,
         relative_path: master.relative_path.clone(),
-        file_count: u32::try_from(fc).unwrap_or(u32::MAX),
-        lane,
+        file_count: u32::try_from(r.file_count).unwrap_or(u32::MAX),
+        lane: r.lane,
         format: format_str.to_owned(),
-        state,
-        content_signature: sig.unwrap_or_default(),
+        state: r.state,
+        content_signature: r.content_signature.unwrap_or_default(),
         is_master: true,
-        master_frame_type: mft,
-        master_filter: mfilt,
-        master_exposure_s: mexp,
+        master_frame_type: r.master_frame_type,
+        master_filter: r.master_filter,
+        master_exposure_s: r.master_exposure_s,
     }))
 }
 

@@ -16,6 +16,7 @@ use contracts_core::targets::{
     TargetSearchResponse,
 };
 use contracts_core::ContractError;
+use persistence_db::repositories::q_desktop::get_resolver_settings;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;
@@ -50,14 +51,12 @@ pub async fn target_resolve(
     let pool = state.repo.pool();
 
     // Read settings (incl. online_enabled) to decide whether to build a client.
-    let settings: Option<(i64, String, i64)> = sqlx::query_as(
-        "SELECT online_enabled, simbad_endpoint, request_timeout_secs FROM resolver_settings WHERE id = 1",
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| ContractError::internal(e.to_string()))?;
-    let (online_enabled, endpoint, timeout_secs) = settings
-        .map_or_else(|| (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10), |(o, e, t)| (o != 0, e, t));
+    let settings =
+        get_resolver_settings(pool).await.map_err(|e| ContractError::internal(e.to_string()))?;
+    let (online_enabled, endpoint, timeout_secs) = settings.map_or_else(
+        || (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10),
+        |r| (r.online_enabled != 0, r.simbad_endpoint, r.request_timeout_secs),
+    );
 
     // FIX-3: when online resolution is disabled, do NOT construct a reqwest/TLS
     // client (it can fail to build, turning an offline-by-config call into an
