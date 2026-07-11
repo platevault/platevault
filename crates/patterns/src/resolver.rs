@@ -17,8 +17,9 @@
 
 use std::collections::HashMap;
 
+use safe_filename::{sanitize_token_value, SanitizeError};
+
 use crate::registry::{TokenRegistry, TokenTransform};
-use crate::sanitize::{sanitize_token_value, SanitizeError};
 use crate::validator::{validate, ValidationWarning};
 use crate::V1_REGISTRY;
 

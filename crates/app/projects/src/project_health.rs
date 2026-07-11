@@ -28,12 +28,11 @@
 //! - `prepared_source_stale`: requires spec 012 / prepared_source_view table.
 //! - Both are deferred and documented in tasks.md.
 
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use app_core_cache::DebounceCache;
 use audit::bus::EventBus;
 use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
-use moka::sync::Cache;
 use persistence_db::repositories::projects as repo;
 use sqlx::SqlitePool;
 
@@ -77,48 +76,21 @@ impl BlockCondition {
 
 // ── Debounce table ────────────────────────────────────────────────────────────
 
-/// Key for the debounce table: entity + condition kind.
+/// Key for the block-transition debounce cache: entity + condition kind.
+///
+/// Presence of a (non-expired) entry in a [`DebounceCache<DebounceKey>`] means
+/// the signal was emitted within the debounce window and must be suppressed.
+/// The cache's `time_to_live` is the debounce window (see [`DEBOUNCE_WINDOW`]),
+/// so entries auto-expire without manual bookkeeping.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-struct DebounceKey {
+pub struct DebounceKey {
     entity_id: String,
     condition_kind: &'static str,
 }
 
-/// In-process debounce table (P7, D5): a `moka` TTL cache keyed by
-/// `(entity_id, condition_kind)`. Presence of a (non-expired) entry means the
-/// signal was emitted within the debounce window and must be suppressed.
-///
-/// The cache's `time_to_live` is the debounce window, so entries auto-expire
-/// after the window elapses — reproducing the prior hand-rolled
-/// `Instant`-comparison semantics without manual bookkeeping.
-#[derive(Clone)]
-pub struct DebounceTable {
-    last_emitted: Cache<DebounceKey, ()>,
-}
-
-impl DebounceTable {
-    #[must_use]
-    pub fn new(window: Duration) -> Self {
-        Self { last_emitted: Cache::builder().time_to_live(window).build() }
-    }
-
-    /// Returns `true` if the signal should be suppressed (still within the debounce window).
-    pub fn should_suppress(&mut self, entity_id: &str, condition_kind: &'static str) -> bool {
-        let key = DebounceKey { entity_id: entity_id.to_owned(), condition_kind };
-        // If the key is still present (TTL not elapsed) the signal is debounced.
-        if self.last_emitted.get(&key).is_some() {
-            return true;
-        }
-        // Record the emission; the entry expires after the configured TTL.
-        self.last_emitted.insert(key, ());
-        false
-    }
-
-    /// Force-expire an entry (used by tests to simulate elapsed time without sleeping).
-    #[cfg(test)]
-    pub fn expire(&mut self, entity_id: &str, condition_kind: &'static str) {
-        let key = DebounceKey { entity_id: entity_id.to_owned(), condition_kind };
-        self.last_emitted.invalidate(&key);
+impl DebounceKey {
+    fn new(entity_id: &str, condition_kind: &'static str) -> Self {
+        Self { entity_id: entity_id.to_owned(), condition_kind }
     }
 }
 
@@ -225,27 +197,21 @@ pub struct BlockTransitionRecord {
 ///
 /// Returns `Some(record)` when applied, `None` when debounced or already blocked.
 ///
-/// # Panics
-/// Panics if the debounce table mutex is poisoned (only possible if another
-/// thread panicked while holding the lock — should not happen in practice).
-///
 /// # Errors
 /// Returns `HealthError` on database failure.
 pub async fn emit_block_transition(
     pool: &SqlitePool,
     bus: &EventBus,
-    debounce: &Arc<Mutex<DebounceTable>>,
+    debounce: &DebounceCache<DebounceKey>,
     project_id: &str,
     condition: &BlockCondition,
 ) -> Result<Option<BlockTransitionRecord>, HealthError> {
     let condition_kind = condition.kind_str();
 
-    // Debounce check (P7).
-    {
-        let mut table = debounce.lock().expect("debounce lock poisoned");
-        if table.should_suppress(project_id, condition_kind) {
-            return Ok(None);
-        }
+    // Debounce check (P7). `DebounceCache` is `Clone`/`&self` (moka handle is
+    // internally `Arc`-backed), so no external `Arc<Mutex<_>>` is needed.
+    if debounce.should_suppress(&DebounceKey::new(project_id, condition_kind)) {
+        return Ok(None);
     }
 
     let row = repo::get_project(pool, project_id)
@@ -385,6 +351,9 @@ pub async fn emit_unarchive_transition(
 /// Write a durable audit row for a system-driven (actor=system) lifecycle
 /// transition. Used by `check_project_ready_invariant`, `emit_block_transition`,
 /// and `emit_unarchive_transition` to satisfy FR-021 (Constitution §V).
+///
+/// Delegates the raw insert to `persistence_db` (db-boundary rule: no `sqlx` in
+/// the app layer).
 async fn write_auto_transition_audit(
     pool: &SqlitePool,
     project_id: &str,
@@ -392,40 +361,16 @@ async fn write_auto_transition_audit(
     to_state: &str,
     trigger: &str,
 ) -> persistence_db::DbResult<()> {
-    use time::format_description::well_known::Rfc3339;
-    use uuid::Uuid;
-
-    let audit_id = Uuid::new_v4().to_string();
-    let request_id = Uuid::new_v4().to_string();
-    let at = time::OffsetDateTime::now_utc()
-        .format(&Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
-
-    sqlx::query(
-        "INSERT INTO audit_log_entry \
-         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
-          outcome, severity, request_id, at, payload) \
-         VALUES (?, 'project', ?, ?, ?, ?, 'system', 'applied', 'workflow', ?, ?, NULL)",
+    persistence_db::repositories::audit::insert_project_auto_transition(
+        pool, project_id, from_state, to_state, trigger,
     )
-    .bind(&audit_id)
-    .bind(project_id)
-    .bind(from_state)
-    .bind(to_state)
-    .bind(trigger)
-    .bind(&request_id)
-    .bind(&at)
-    .execute(pool)
-    .await?;
-
-    Ok(())
+    .await
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
-
     use audit::bus::EventBus;
     use contracts_core::projects_v2::{ProjectCreateRequest, ProjectSourceAddRequest};
     use persistence_db::Database;
@@ -530,7 +475,7 @@ mod tests {
     #[tokio::test]
     async fn debounce_suppresses_duplicate_block() {
         let (pool, bus) = setup().await;
-        let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
+        let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
         let created =
             project_setup::create(&pool, &bus, &make_create_req("M31 Block Test")).await.unwrap();
         let condition = BlockCondition::SourceMissing { inventory_id: "inv-missing".to_owned() };
@@ -559,7 +504,7 @@ mod tests {
     #[tokio::test]
     async fn debounce_allows_after_window_expires() {
         let (pool, bus) = setup().await;
-        let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
+        let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
         let created =
             project_setup::create(&pool, &bus, &make_create_req("M82 Expiry")).await.unwrap();
         let condition = BlockCondition::SourceMissing { inventory_id: "inv-gone".to_owned() };
@@ -569,10 +514,7 @@ mod tests {
             .unwrap();
 
         // Expire the debounce entry manually (avoids a 60s sleep).
-        {
-            let mut table = debounce.lock().unwrap();
-            table.expire(&created.project_id, "source_missing");
-        }
+        debounce.invalidate(&DebounceKey::new(&created.project_id, "source_missing"));
 
         // Reset lifecycle so the transition can succeed again.
         persistence_db::repositories::projects::update_project_lifecycle(
@@ -593,7 +535,7 @@ mod tests {
     #[tokio::test]
     async fn rapid_source_missing_produces_one_transition() {
         let (pool, bus) = setup().await;
-        let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
+        let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
         let created =
             project_setup::create(&pool, &bus, &make_create_req("IC 1805 Rapid")).await.unwrap();
         let condition = BlockCondition::SourceMissing { inventory_id: "inv-rapid".to_owned() };

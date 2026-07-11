@@ -91,6 +91,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 name = "app_core"
 version = "0.1.0"
 dependencies = [
+ "app_core_cache",
  "app_core_calibration",
  "app_core_errors",
  "app_core_inbox",
@@ -213,13 +214,13 @@ dependencies = [
 name = "app_core_projects"
 version = "0.1.0"
 dependencies = [
+ "app_core_cache",
  "app_core_errors",
  "audit",
  "camino",
  "contracts_core",
  "domain_core",
  "fs_inventory",
- "moka",
  "patterns",
  "persistence_db",
  "project_structure",
@@ -4145,13 +4146,10 @@ checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
 name = "patterns"
 version = "0.1.0"
 dependencies = [
- "proptest",
- "rstest",
+ "safe-filename",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "unicode-normalization",
- "unicode-security",
 ]
 
 [[package]]
@@ -5025,6 +5023,17 @@ name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
+name = "safe-filename"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "rstest",
+ "thiserror 2.0.18",
+ "unicode-normalization",
+ "unicode-security",
+]
 
 [[package]]
 name = "same-file"
@@ -6115,7 +6124,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
- "strsim",
  "targeting",
  "thiserror 2.0.18",
  "time",

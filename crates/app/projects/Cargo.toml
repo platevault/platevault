@@ -8,6 +8,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+app_core_cache = { path = "../cache" }
 app_core_errors = { path = "../errors" }
 audit = { path = "../../audit" }
 camino = { workspace = true }
@@ -18,7 +19,6 @@ patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 workflow_profiles = { path = "../../workflow/profiles" }
-moka = { workspace = true }
 serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true

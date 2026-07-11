@@ -1,15 +1,27 @@
-//! OS-path sanitization pipeline (spec 015 T3.3, data-model.md §Errors).
+//! Security-conscious sanitization of a single path segment / filename
+//! component.
+//!
+//! Turns an arbitrary string (e.g. a metadata value destined for a folder or
+//! file name) into one that is safe to place in a cross-platform path, or
+//! rejects it with a typed [`SanitizeError`]. The pipeline is stricter than a
+//! plain character filter on the trojan-source / homoglyph axis: it strips
+//! bidi overrides and Unicode format characters and rejects mixed-script
+//! confusables.
 //!
 //! Steps (applied in order):
-//! 1. NFC normalization + strip C0/C1 controls, format chars, bidi overrides.  (Ref: A1)
-//! 2. OS character substitution: Windows reserved chars → `_`, trim leading/trailing whitespace and dots.
-//! 3. Path-traversal rejection: `.` or `..` → `path.traversal`.  (Ref: A2)
-//! 4. Windows reserved device-name rejection (CON, PRN, AUX, NUL, COM1–9, LPT1–9),
-//!    case-insensitive, all platforms → `path.reserved_name`.  (Ref: A3)
-//! 5. Unicode confusables detection via `unicode-security` → `pattern.invalid.unicode`.  (Ref: A1)
+//! 1. NFC normalization + strip C0/C1 controls, format chars, bidi overrides.
+//! 2. OS character substitution: Windows reserved chars → `_`, trim
+//!    leading/trailing whitespace and dots.
+//! 3. Path-traversal rejection: `.` or `..`.
+//! 4. Windows reserved device-name rejection (CON, PRN, AUX, NUL, COM1–9,
+//!    LPT1–9), case-insensitive, on all platforms.
+//! 5. Unicode confusables detection via `unicode-security` (mixed-script).
 //!
-//! Each step is exposed individually so the resolver can call them in sequence
-//! and surface the first hard error.
+//! Each step is exposed individually so a caller can run them in sequence and
+//! surface the first hard error, or call [`sanitize_token_value`] for the full
+//! pipeline. `token_name` parameters are a free-text label used only for error
+//! context (this crate is domain-agnostic; it originated as the token-value
+//! sanitizer in a filesystem path-pattern resolver).
 
 use unicode_normalization::UnicodeNormalization;
 use unicode_security::MixedScript;

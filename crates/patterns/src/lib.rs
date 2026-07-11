@@ -17,7 +17,6 @@
 pub mod per_type;
 pub mod registry;
 pub mod resolver;
-pub mod sanitize;
 pub mod validator;
 
 pub use per_type::{

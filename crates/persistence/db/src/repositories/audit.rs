@@ -183,6 +183,51 @@ pub async fn count_audit_entries(pool: &SqlitePool, filter: &AuditLogFilter) -> 
     Ok(u32::try_from(count).unwrap_or(u32::MAX))
 }
 
+/// Insert a system-driven ("auto") project lifecycle-transition audit row.
+///
+/// Owns the raw `INSERT` for `app_core_projects::project_health` so no `sqlx`
+/// lives in the app layer (db-boundary rule). Fixed columns for this path:
+/// `entity_type = 'project'`, `actor = 'system'`, `outcome = 'applied'`,
+/// `severity = 'workflow'`, `payload = NULL`. Generates the `audit_id` /
+/// `request_id` UUIDs and the RFC3339 `at` timestamp.
+///
+/// # Errors
+/// Returns [`DbError`](crate::DbError) if the insert fails.
+pub async fn insert_project_auto_transition(
+    pool: &SqlitePool,
+    project_id: &str,
+    from_state: &str,
+    to_state: &str,
+    trigger: &str,
+) -> DbResult<()> {
+    use time::format_description::well_known::Rfc3339;
+    use uuid::Uuid;
+
+    let audit_id = Uuid::new_v4().to_string();
+    let request_id = Uuid::new_v4().to_string();
+    let at = time::OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+
+    sqlx::query(
+        "INSERT INTO audit_log_entry \
+         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+          outcome, severity, request_id, at, payload) \
+         VALUES (?, 'project', ?, ?, ?, ?, 'system', 'applied', 'workflow', ?, ?, NULL)",
+    )
+    .bind(&audit_id)
+    .bind(project_id)
+    .bind(from_state)
+    .bind(to_state)
+    .bind(trigger)
+    .bind(&request_id)
+    .bind(&at)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{count_audit_entries, list_audit_entries, AuditLogFilter};

@@ -7,14 +7,13 @@
 
 mod support;
 
-use std::sync::{Arc, Mutex};
-
 use app_core::project_health::{
     check_project_ready_invariant, emit_block_transition, emit_unarchive_transition,
-    BlockCondition, DebounceTable, DEBOUNCE_WINDOW,
+    BlockCondition, DEBOUNCE_WINDOW,
 };
 use app_core::transition_use_case::apply_transition;
 use app_core::{project_setup, project_setup::add_source};
+use app_core_cache::DebounceCache;
 use audit::bus::EventBus;
 use contracts_core::lifecycle::{
     ProjectState, ProjectTransitionRequest, TransitionActor, TransitionRequest, TransitionStatus,
@@ -138,7 +137,7 @@ async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
     assert_eq!(result, None, "auto-ready invariant is a no-op when lifecycle != setup_incomplete");
 
     // Step 5: drive the block auto-transition via the health surface.
-    let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
+    let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
     let condition = BlockCondition::SourceMissing { inventory_id: "inv-gone".to_owned() };
     let block_result =
         emit_block_transition(&pool, &bus, &debounce, &project_id, &condition).await.unwrap();
@@ -230,7 +229,7 @@ async fn t046b_no_dual_write_to_legacy_project_table() {
 async fn t048a_auto_block_writes_audit_row() {
     let (pool, bus) = setup().await;
     let project_id = create_project(&pool, &bus, "M42 Block Audit").await;
-    let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
+    let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
 
     let condition = BlockCondition::ToolUnconfigured { tool: "PixInsight".to_owned() };
     let result =
@@ -357,7 +356,7 @@ async fn t048c_auto_unarchive_writes_audit_row_and_emits_event() {
 async fn t048d_typed_blocked_reason_persisted_and_readable() {
     let (pool, bus) = setup().await;
     let project_id = create_project(&pool, &bus, "M8 Blocked Reason").await;
-    let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
+    let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
 
     let condition = BlockCondition::SourceMissing { inventory_id: "inv-missing-42".to_owned() };
     emit_block_transition(&pool, &bus, &debounce, &project_id, &condition).await.unwrap();
@@ -381,7 +380,7 @@ async fn t048d_typed_blocked_reason_persisted_and_readable() {
 async fn t048e_unblocking_clears_blocked_reason() {
     let (pool, bus) = setup().await;
     let project_id = create_project(&pool, &bus, "M101 Clear Reason").await;
-    let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
+    let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
 
     // Block first.
     let condition = BlockCondition::User { note: "manual block".to_owned() };
