@@ -197,14 +197,7 @@ pub async fn count_calibration_masters(pool: &SqlitePool) -> DbResult<i64> {
 }
 
 /// Count all `canonical_target` rows.
-///
-/// # Errors
-/// Returns [`crate::DbError::Database`] on query failure.
-pub async fn count_canonical_targets(pool: &SqlitePool) -> DbResult<i64> {
-    let count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM canonical_target").fetch_one(pool).await?;
-    Ok(count)
-}
+pub use super::q_resolver::count_canonical_targets;
 
 /// Count all `projects` rows.
 ///
@@ -220,26 +213,14 @@ pub async fn count_projects(pool: &SqlitePool) -> DbResult<i64> {
 /// Singleton `resolver_settings` row (id = 1): online toggle, SIMBAD
 /// endpoint, and request timeout, read by both `target.resolve` and the
 /// background ingest-resolution drain.
-#[derive(Debug, Clone, sqlx::FromRow)]
-pub struct ResolverSettingsRow {
-    pub online_enabled: i64,
-    pub simbad_endpoint: String,
-    pub request_timeout_secs: i64,
-}
+///
+/// Same query as [`super::q_targets_mgmt::ResolverSettingsOnlineRow`] /
+/// `get_resolver_settings_online`; re-exported here under this module's
+/// established name so `target_lookup.rs`/`lib.rs` are unaffected.
+pub use super::q_targets_mgmt::ResolverSettingsOnlineRow as ResolverSettingsRow;
 
 /// Fetch the singleton `resolver_settings` row (id = 1).
-///
-/// # Errors
-/// Returns [`crate::DbError::Database`] on query failure.
-pub async fn get_resolver_settings(pool: &SqlitePool) -> DbResult<Option<ResolverSettingsRow>> {
-    let row = sqlx::query_as::<_, ResolverSettingsRow>(
-        "SELECT online_enabled, simbad_endpoint, request_timeout_secs \
-         FROM resolver_settings WHERE id = 1",
-    )
-    .fetch_optional(pool)
-    .await?;
-    Ok(row)
-}
+pub use super::q_targets_mgmt::get_resolver_settings_online as get_resolver_settings;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

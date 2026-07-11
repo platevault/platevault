@@ -106,28 +106,35 @@ pub fn evaluate_assign(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Collect dimensions with hard-rule violations for the given master type.
+///
+/// Uses [`crate::rules::hard_rule_numeric`] / [`crate::rules::hard_rule_string`]
+/// — the same exact-match-or-exclude policy the `rules::{bias,dark,flat}`
+/// evaluators apply — so an assign override's violation list always agrees
+/// with what `suggest` would have excluded.
 fn collect_hard_violations(session: &SessionInfo, master: &MasterInfo) -> Vec<Dimension> {
+    use crate::rules::{hard_rule_numeric, hard_rule_string};
+
     let mut violations = Vec::new();
     match master.kind {
         CalibrationKind::Dark | CalibrationKind::Bias => {
-            if !exact_f64(session.gain, master.gain) {
+            if !hard_rule_numeric(session.gain, master.gain) {
                 violations.push(Dimension::Gain);
             }
-            if !exact_f64(session.offset, master.offset) {
+            if !hard_rule_numeric(session.offset, master.offset) {
                 violations.push(Dimension::Offset);
             }
         }
         CalibrationKind::Flat => {
-            if !exact_string(session.filter.as_deref(), master.filter.as_deref()) {
+            if !hard_rule_string(session.filter.as_deref(), master.filter.as_deref()) {
                 violations.push(Dimension::Filter);
             }
-            if !exact_string(session.binning.as_deref(), master.binning.as_deref()) {
+            if !hard_rule_string(session.binning.as_deref(), master.binning.as_deref()) {
                 violations.push(Dimension::Binning);
             }
-            if !exact_string(session.optic_train.as_deref(), master.optic_train.as_deref()) {
+            if !hard_rule_string(session.optic_train.as_deref(), master.optic_train.as_deref()) {
                 violations.push(Dimension::OpticTrain);
             }
-            if !exact_f64(session.gain, master.gain) {
+            if !hard_rule_numeric(session.gain, master.gain) {
                 violations.push(Dimension::Gain);
             }
         }
@@ -137,20 +144,6 @@ fn collect_hard_violations(session: &SessionInfo, master: &MasterInfo) -> Vec<Di
         }
     }
     violations
-}
-
-fn exact_f64(lhs: Option<f64>, rhs: Option<f64>) -> bool {
-    match (lhs, rhs) {
-        (Some(lv), Some(rv)) => (lv - rv).abs() < 1e-9,
-        _ => false,
-    }
-}
-
-fn exact_string(lhs: Option<&str>, rhs: Option<&str>) -> bool {
-    match (lhs, rhs) {
-        (Some(lv), Some(rv)) => lv == rv,
-        _ => false,
-    }
 }
 
 fn override_penalty_for(kind: CalibrationKind, config: &MatchingRuleConfig) -> f64 {

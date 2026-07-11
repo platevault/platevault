@@ -25,7 +25,7 @@ use crate::DbResult;
 /// One row from `audit_log_entry`, as stored (no enum parsing — that is a
 /// concern of the IPC/contract layer, which maps these strings onto the
 /// `AuditActor`/`AuditOutcome` contract enums).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, sqlx::FromRow)]
 pub struct AuditLogRow {
     pub audit_id: String,
     pub entity_type: String,
@@ -156,62 +156,12 @@ pub async fn list_audit_entries(
     // fragments in `build_where`; every user-supplied value flows through a
     // `?` placeholder bound below. `limit`/`offset` are integer literals
     // derived from typed `u32` filter fields, never user strings.
-    #[allow(clippy::type_complexity)]
-    let mut q = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            String,
-            String,
-            String,
-            String,
-            String,
-            String,
-            Option<String>,
-        ),
-    >(sqlx::AssertSqlSafe(sql));
+    let mut q = sqlx::query_as::<_, AuditLogRow>(sqlx::AssertSqlSafe(sql));
     for v in &binds {
         q = q.bind(v);
     }
 
-    let raw = q.fetch_all(pool).await?;
-
-    Ok(raw
-        .into_iter()
-        .map(
-            |(
-                audit_id,
-                entity_type,
-                entity_id,
-                from_state,
-                to_state,
-                trigger,
-                actor,
-                outcome,
-                severity,
-                request_id,
-                at,
-                payload,
-            )| AuditLogRow {
-                audit_id,
-                entity_type,
-                entity_id,
-                from_state,
-                to_state,
-                trigger,
-                actor,
-                outcome,
-                severity,
-                request_id,
-                at,
-                payload,
-            },
-        )
-        .collect())
+    Ok(q.fetch_all(pool).await?)
 }
 
 /// Count `audit_log_entry` rows matching `filter` (ignores `limit`/`offset`).
