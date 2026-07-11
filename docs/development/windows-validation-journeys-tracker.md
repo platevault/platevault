@@ -76,6 +76,10 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | #554 | Detail pane needs tabular layout + warning relocation | J8 | enhancement |
 | #555 | Type pill too loud / overlaps table content | J8 | enhancement |
 | #556 | "Detection" column mislabelled (shows path) + too wide | J8 | enhancement |
+| #557 | Inbox React infinite render loop (Maximum update depth) | J8 | **bug** (high) |
+| ~~#558~~ | ~~Data Sources Disable no-op~~ — **CLOSED, mis-diagnosis** (Disable works via confirm) | J1 | invalid |
+| #559 | Data Sources has no Delete/Remove action (roots_delete unreachable) | J1 | **bug** |
+| #560 | Remap Verify samples ≤5 file_record paths → vacuous "all found" → silent orphaning | J1 | **bug** (high) |
 
 **Journey → Epic map:** J1 #518 · J2 #519 · J3 #520 · J4 #521 · J5 #522 · J6 #523
 · J7 #524 · J8 #525 · J9 #526 · J10 #527.
@@ -100,11 +104,12 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | Step 4 Observing Site | ✅ | lat/long range-validated with accessible errors; empty name allowed (B16); map picker (#491) |
 | Step 5 Confirm | ✅ | summary accurate; shows depth not org (B15) |
 | T4 Finish → Inbox + persistence | ✅ | Finish→Inbox ✅; density on main pages ✅; relaunch (no DB reset) → main page not `/setup`, `firstrun_state=complete`, 14 roots persisted ✅ |
-| T5 Data Sources: Rescan | ⬜ | re-runs without re-prompting path |
-| T6 Data Sources: Remap (verify→apply, no file move) | ⬜ | Apply only after Verify; no bytes move |
-| T7 Data Sources: Disable (reversible, no confirm) | ⬜ | history stays; re-enable no dialog |
-| T8 Data Sources: Delete (registration-only, dependents block) | ⬜ | files untouched; blocked w/ dependents |
-| T9 "Show in File Explorer" reveal | ⬜ | opens exact folder; OS-native label |
+| T5 Data Sources: Rescan | ✅ | re-runs in place, updates "scanned" timestamp, NO path re-prompt/dialog |
+| T6 Data Sources: Remap (verify→apply, no file move) | ❌ | Flow + gating correct (Verify enables on folder-pick, Apply after Verify). BUT **Verify samples ≤5 `file_record` paths, not 1:1 (#560)** — vacuous "all found" on inbox-only roots (empty sample) → Apply enables → **silent orphaning**. Confirmed live remapping Lights→empty `newfolder`. Full native-picker apply run through the user. |
+| T7 Data Sources: Disable (reversible, has confirm) | ✅ | Disable opens "Disable this source?" **confirm** ("excluded from scans/ingest until re-enabled; history kept"); confirming sets active:false; Enable is immediate. **#558 CLOSED — my mis-diagnosis** (missed the confirm overlay, never completed it). Items kept, not orphaned, when disabled. |
+| T8 Data Sources: Delete (registration-only, dependents block) | ❌ | **No Delete/Remove action in UI (#559)**; backend `roots_delete` unreachable |
+| T9 "Show in File Explorer" reveal | ⬜ | not present on Data Sources rows (only Override/Rescan/Enable-Disable/Remap); reveal lives on other surfaces (native_reveal) — verify on inbox/sessions later |
+| — Inbox infinite render loop (cross-cut) | ❌ | **#557** "Maximum update depth exceeded" ~3.5/s, localized to `#/inbox` (6970 errs/52min); 0 on archive/data-sources |
 
 ---
 
