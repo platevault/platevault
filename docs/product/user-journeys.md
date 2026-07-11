@@ -19,6 +19,10 @@ Each journey lists:
 - **Goal** — what the user is trying to accomplish.
 - **Preconditions** — what state the app/library needs to be in.
 - **Narrative flow** — numbered, UI-surface-level steps (not click-by-click).
+- **Touch & validate** — the journey's coverage contract: every control the
+  journey must exercise and every assertion a run must make (success
+  signals, failure branches, state round-trips). A journey run that skips a
+  Touch & validate item is incomplete, even if the narrative "worked".
 - **Safety & trust notes** — where the constitution's reviewable-plan and
   no-silent-overwrite guarantees show up in this journey.
 - **Scenario files** — the executable, click-by-click version(s).
@@ -36,6 +40,10 @@ here instead of being repeated ten times:
 - **Custody, not conversion.** Cataloguing a source "in place" (an
   already-organized folder) never moves or rewrites files; it only teaches the
   database about them.
+- **Every action answers back.** Each mutating step names its success signal
+  (toast, navigation, visible state change) and its failure signal (refusal
+  reason, per-item error). Journey validation treats "the only evidence was a
+  badge changing somewhere else" as a failed step.
 
 ---
 
@@ -88,6 +96,31 @@ setup").
    - **Delete** (un-register) an **offline** source permanently — this only
      removes PlateVault's registration; files on disk are never touched, and
      the button is blocked if other records still depend on that root.
+
+**Touch & validate:**
+
+- Wizard: every step's forward/back/skip; the organized/unorganized choice on
+  each category card; step navigation affordance (clickable? keyboard?);
+  entering an invalid path, a duplicate path, a nested/overlapping root, and
+  a file-not-folder path — each must be rejected inline *at add time* with a
+  named reason, before anything registers.
+- Confirm step: summary must state, per folder, category **and** organization
+  state; Finish must stay disabled until every scan is terminal, including a
+  0-item folder.
+- Completion: landing page after Finish; relaunch skips `/setup`; "Restart
+  first-run setup" pre-fills prior folders and deletes nothing.
+- Data Sources cards: **Rescan** (feedback: started → finished, count delta),
+  **Disable** then re-**Enable** (state visibly flips, persists across
+  reload, disabled source provably drops out of scan), **Remap** (Verify on
+  an empty folder must not report success; Apply blocked until verified;
+  record re-points with no file movement), **Delete** on an offline root
+  (blocked-with-reason when dependents exist), **Override** protection
+  (set → visible change → *and* backend readback agrees → remove override).
+- Per-source setting override widget: set an override, confirm it is listed,
+  remove it; "Restore defaults" states which settings it resets and every one
+  of them is visible somewhere in the pane.
+- Signals: every button above produces an explicit success or failure signal
+  at the control, not just a log line.
 
 **Safety & trust notes:** remap is preview-then-apply and never touches
 files; delete is registration-only and blocked when dependents exist; native
@@ -157,6 +190,34 @@ root are set up; files exist under the inbox.
    `{target}/{filter}/{date}/light/`) and shown in full before anything
    happens.
 
+**Touch & validate:**
+
+- List chrome: search, file-type filter, kind filter, group control and both
+  secondary sorts, every sortable column header, Rescan; the detection/name
+  column must render a distinguishing name for every item, including files
+  sitting directly in a root.
+- Needs-review gate: banner names the exact missing attribute; affected rows
+  badged; Confirm visibly disabled (distinguishable from enabled at a
+  glance); direct IPC confirm rejected with the typed error; list-level state
+  badge and detail-panel state must agree for the same item.
+- Bulk reclassify: select-all; a homogeneous selection applies cleanly; a
+  selection spanning *different detected types* must warn before overwriting;
+  after any override, the file shows override provenance and a reset path;
+  overrides survive a rescan.
+- Confirm: with one valid root (auto-picked, stated); with 2+ roots (picker
+  forced); item transitions classified → planned visibly in the queue.
+- Plan review overlay: opens from "Review plans (N)"; every item shows
+  action, **source and destination**, protection; Escape and Discard both
+  close without mutation; per-item Apply and Apply-all both work and both
+  report per-item outcomes; a failed item is identifiable by name with a
+  reason.
+- Post-apply: an explicit success signal with a path to the result (e.g.
+  "View session"); inbox badge, "Confirm all (N)" counter, and status-bar
+  breakdown all decrement consistently; the applied action appears in the
+  Audit Log with outcome.
+- Frame-type vocabulary: the status-bar breakdown and type badges use
+  normalized frame-type names (one spelling per type).
+
 **Safety & trust notes:** confirming never moves a file — only a plan
 application does; a stale plan (source file changed on disk after confirm)
 refuses to apply rather than silently applying an outdated action list; a
@@ -208,6 +269,19 @@ organization state **organized**, containing already-sorted files.
    byte-for-byte — the only thing that happened is the database now knows
    about these files, and they become visible in derived views like Sessions.
 
+**Touch & validate:**
+
+- Confirm an item from an organized root: response reports move count 0 and
+  catalogue count = file count; no destination-root picker appears.
+- Review overlay: actions read as catalogue-in-place; each item still shows
+  its (unchanged) path; destructive-destination control is absent or
+  visibly inert for pure catalogue plans.
+- Apply: on-disk file set and hashes unchanged (scenario-level assertion);
+  files become visible in Sessions; success signal + audit record as in
+  Journey 2.
+- Mixed library: one organized and one unorganized root in the same run —
+  the same frame type routes to catalogue vs move purely by root state.
+
 **Safety & trust notes:** "organized" is an explicit, per-root choice made in
 the setup wizard (or when registering a source), and its consequence (move
 vs. leave-in-place) is documented at the point of choice.
@@ -249,6 +323,26 @@ applied (Journey 2 or 3).
    lifecycle transition.
 5. Rescanning the inbox does not resurrect a review state or duplicate
    sessions — the view is deterministic over confirmed metadata.
+
+**Touch & validate:**
+
+- List chrome: target/filter/camera filters, group + secondary sorts, every
+  sortable header; each session row must be distinguishable even when FITS
+  metadata is missing (identity falls back to something human-readable, not
+  N identical "Session — date" rows of dashes).
+- Detail panel: opens on row select and closes on Escape/✕; shows the
+  session's frame type and calibration linkage in addition to what the row
+  already showed; unresolved values render as an explicit unresolved state,
+  not bare dashes that look like confirmed-empty.
+- Links: each linked project chip navigates to that project selected;
+  "Show in File Explorer" opens the session's own folder (not a root
+  ancestor).
+- Derivation: before any apply, the list is empty; after an apply, rows
+  appear with counts matching the plan; a rescan neither duplicates sessions
+  nor resurrects any review state; confirm there are no review/lifecycle
+  controls anywhere on the page.
+- Notes: edit, autosave signal, persistence across navigation (once the
+  notes field ships — its absence is a coverage failure of this journey).
 
 **Safety & trust notes:** this journey is intentionally "boring" — it's a
 read view over already-reviewed, already-applied data, and its absence of
@@ -321,6 +415,34 @@ executable path is useful but not required to exercise creation.
    the next time it's reopened. PlateVault never modifies or deletes an
    artifact file itself.
 
+**Touch & validate:**
+
+- Wizard, every step against the *actual* selection: step 2's session list
+  and running integration total must reflect what is checked, at selection
+  time; step 3's calibration recommendations must be computed from the
+  library's real masters (assert at least one recommendation references a
+  master that exists on the Calibration page); step 5's naming preview must
+  render the *typed* project name; step 6's plan items and disk tree must
+  correspond 1:1 to what apply will create (spot-check two destination
+  paths). Any fixture/demo content on these steps fails the journey.
+- Wizard chrome: duplicate-name inline error; Save draft → leave → resume;
+  Cancel from every step; stepper state at 1100×720.
+- Create: success signal naming the project with a path into it; landing
+  state (project selected/open); Target association persisted when entered
+  via Journey 14.
+- Detail: Sources table shows human names (never raw ids) with real
+  filter/subs/integration per row; Channels palette values carry correct
+  units; lifecycle stepper advances through each state in order, and any
+  refused transition explains itself at the control; Edit sources add/remove
+  including the last-source guard; locked-state (archived) edit refusal.
+- Manifests: generate, list grows append-only, reveal opens the manifest's
+  folder; Notes: autosave signal, byte counter, cap behavior.
+- Tool launch: launch succeeds with a configured tool; containment refusal
+  (working dir outside all roots) reported plainly; OS spawn failure
+  reported plainly.
+- Artifacts: a file dropped in the output folder while open is recorded with
+  kind + confidence; one dropped while closed is picked up on reopen.
+
 **Safety & trust notes:** mkdir-only project scaffolding auto-applies
 because every action in that plan is a folder creation (never a move/copy/
 delete of user files) — anything beyond that still requires explicit review;
@@ -385,6 +507,24 @@ protected files or moving anything without review.
    destination is Archive), and re-scanning afterward shows them gone from
    the candidate list. An empty plan (nothing selected) cannot be approved.
 
+**Touch & validate:**
+
+- Scan: read-only preview on a project *with* candidates (grouped by kind,
+  protected items locked/unselectable, reclaimable total shown) and on one
+  *without* (clear "no candidates" result); scanning twice produces the same
+  result; nothing on disk changes.
+- Destination choice: Archive vs System trash both selectable; the choice is
+  frozen and displayed read-only in the review overlay.
+- Generate → review: item list is 1:1 with the plan; protected items require
+  explicit acknowledgement before Approve enables; an empty plan cannot be
+  approved *and states why it is empty*; Discard leaves disk untouched and
+  returns cleanly.
+- Apply: live per-item progress; per-item outcomes visible afterwards
+  (succeeded/failed with reason); files present at the chosen destination;
+  re-scan shows candidates gone; audit rows carry outcome.
+- Signals: generate, approve, apply, and discard each produce an explicit
+  confirmation.
+
 **Safety & trust notes:** two-step generation (preview, then a separate
 "generate" action) means a scan alone can never turn into a mutation; the
 per-item protection-acknowledgement gate means a user cannot approve-and-miss
@@ -432,6 +572,25 @@ archive location, as a deliberate, plan-gated, reviewable step, and — later
    word `DELETE` to confirm — a half-typed or lowercase confirmation leaves
    the button disabled. "Reveal" uses the platform-native label ("Show in
    File Explorer" on Windows) and is disabled when there's nothing to reveal.
+
+**Touch & validate:**
+
+- Entry: the Archive action's location and its refusal behavior pre-plan
+  (refusal must name the missing precondition, not just no-op).
+- Plan: generate on a project with real files (items list source **and**
+  destination per item) and on one without (empty plan explained, Approve
+  disabled with reason); protected-item acknowledgement gate.
+- Apply: progress, success signal, lifecycle flips to `archived` only after
+  apply; project Edit pane becomes read-only with a stated reason.
+- Archive page: archived project listed; detail shows information beyond the
+  row (audit history with outcome + actor per entry, originating plan
+  reference); reveal opens the archive folder.
+- Send to trash: confirmation, progress, post-state (row state change,
+  audit row); files present in OS recycle bin.
+- Permanent delete: gate requires the literal word `DELETE` (wrong case /
+  partial input leaves the button disabled); cancel path; with
+  "Block permanent delete" ON in Cleanup settings, the action must be
+  unavailable and say why.
 
 **Safety & trust notes:** archiving is the one and only legitimate way a
 project's lifecycle reaches `archived` — every other edge into that state
@@ -499,6 +658,25 @@ available to ingest.
    restarts and immediately changes what the matching engine considers a
    clean candidate.
 
+**Touch & validate:**
+
+- List: one row per master; kind-conditional fingerprint columns (bias hides
+  temp/exposure by design); sort headers; search.
+- Master detail: fingerprint values render real data or an explicit
+  unresolved state (a metadata-less master must never show plausible zeros
+  like "Gain 0 · 0 KB"); age/created date visible as a value, not only as an
+  aging warning; "Used by" and "Compatible" lists open and navigate.
+- Matching, unassigned master: ranked candidate sessions visible *before*
+  any assignment, each with target/filter/night/frame-count context,
+  confidence, and mismatch indicators (mismatches shown, not hidden).
+- Assign: advisory confirm (cancel fires nothing); confirming records the
+  assignment, updates usage counts, and answers back; un-assign reverses it.
+- Tolerances: change temperature/aging/offset requirements in Settings →
+  Calibration Matching and validate the candidate set changes immediately
+  and persists across restart.
+- Cross-surface: the same master's usage visible from the session/project
+  side (round-trip navigation).
+
 **Safety & trust notes:** matching never auto-applies a calibration
 assignment — every match is proposed with confidence and must be confirmed;
 hard-rule mismatches are surfaced, not hidden, so a user doesn't accidentally
@@ -563,6 +741,29 @@ optionally, a network connection for SIMBAD lookups.
 5. "Favourites"/"My Targets" is currently a browser-local (`localStorage`)
    preference only — it is not backed by the database yet, so it won't
    follow the user across machines or survive certain resets.
+
+**Touch & validate:**
+
+- Search & counts: search by designation and by alias (catalog and
+  user-added); the list count, the sidebar count, and any "My targets"
+  count must each be labeled so a user can tell catalog size from library
+  size at a glance.
+- Add target: local typeahead hit; SIMBAD on-demand hit; unresolvable name
+  (inline failure, no fabricated row); re-add produces no duplicate; after
+  add, the new target is findable and visibly indicated (selection,
+  highlight, or scroll-to) with a confirmation signal.
+- Favorites: star toggles with feedback; "My targets" filter shows exactly
+  the user's set; favorite state survives restart.
+- Identity: alias add/remove (catalog aliases protected); display label
+  set/clear propagates to the list; notes save and persist; type/casing of
+  values consistent between row and detail.
+- Planner columns: every stubbed value is visibly disclosed as approximate/
+  stub (tooltip or label) — a concrete-looking fabricated value fails the
+  run; sort on each planner column; group + secondary sorts; sparkline
+  legibility in **every** theme.
+- Detail actions: "+ New project here" (see Journey 14 for the contract);
+  any other CTA on the panel must be functional or absent — placeholders
+  are a coverage failure.
 
 **Safety & trust notes:** this journey is the one place in the product where
 the honesty of a stub matters as much as its function — the design intent is
@@ -629,6 +830,34 @@ to the user.
    text — routes through the translation catalog rather than leaking a raw
    key or an English-only backend string.
 
+**Touch & validate:**
+
+- Exhaustive control sweep: every pane, every control — each toggle, select,
+  number field, chip editor, table CRUD form, and dialog must (a) do
+  something observable, (b) persist, and (c) round-trip (navigate away and
+  back, restart where cheap). A control that does nothing is a journey
+  failure, not a cosmetic note.
+- Appearance: all themes incl. System-follows-OS apply live and survive
+  restart; density and font-size changes have a measurable effect on at
+  least the main list surfaces; no first-paint flash of a wrong toggle
+  state anywhere in Settings.
+- Restore defaults (each pane that has it): states its scope; resets only
+  settings visible in that pane; answers back.
+- Danger controls (Advanced): export produces a real file via a native
+  dialog with a confirmation; reset-preferences actually resets and
+  confirms; restart-first-run and restart-guided-flow are confirm-gated and
+  distinct.
+- Audit Log: search, date range (including a range that excludes all
+  events), pagination, export; every filesystem-mutating action from other
+  journeys is findable here with outcome and actor.
+- Log panel: severity chips act as documented, follow toggles, export
+  works, entity cross-links land on the entity selected, expand shrinks
+  (never overlays) the content area.
+- Shell: sidebar collapse persists and keeps per-item tooltips; palette
+  (Ctrl/⌘+K) opens styled, navigates, and every listed route exists; all
+  panes usable at 1100×720; no raw i18n keys or untranslated backend codes
+  anywhere in the sweep.
+
 **Safety & trust notes:** none of this journey involves filesystem mutation,
 but its correctness (i18n coverage, layout convention, focus management)
 underpins how trustworthy every other journey *feels* — a raw error code or a
@@ -663,6 +892,275 @@ the rest of the app is built on.
 
 ---
 
+## Journey 11 — Mistake recovery: undo a wrong classification or assignment
+
+**Goal:** recover from the user's own mistakes without data archaeology: a
+wrong bulk frame-type override, a mis-assigned calibration master, a mistaken
+destination-root pick, or a plan confirmed too early.
+
+**Preconditions:** an inbox item with several files of differing detected
+types; a calibration master assigned to a session.
+
+**Narrative flow:**
+
+1. The user bulk-assigns a frame type to a heterogeneous selection; the bulk
+   control warns that the selection spans differing detected types before
+   overwriting.
+2. Overridden files carry a "user override" provenance marker and a **Reset
+   to detected** action (per file and per selection); resetting restores the
+   scanner's classification and re-runs the needs-review gate.
+3. A confirmed-but-unapplied plan is discarded from the review overlay; the
+   item returns to its classified state, visible immediately in the queue.
+4. A calibration assignment is removed from where it was made; usage counts
+   decrement.
+5. All recovery acts on PlateVault's index only; files are never touched.
+
+**Touch & validate:**
+
+- Heterogeneous bulk override → warning appears, cancel leaves state
+  untouched, proceed overwrites all and marks provenance.
+- Reset-to-detected per file and per selection → detected values return,
+  needs-review gate recomputes, provenance marker clears.
+- Plan discard → item state round-trips (classified → planned → classified),
+  audit records the discard, disk untouched.
+- Master un-assign → usage count decrements, "Used by" list updates, the
+  session's calibration linkage clears.
+- Every recovery action answers back (signal at the control).
+
+**Safety & trust notes:** recovery is the other half of "reviewable
+mutation" — a review gate without an undo teaches users to fear the gate.
+
+**Scenario files:** *(to be authored)*
+`e2e-agentic-test/journeys/mistake-recovery/scenario.md`.
+
+---
+
+## Journey 12 — Failure & refusal handling: when the backend says no
+
+**Goal:** when an action fails or is refused — a plan apply partially fails,
+a lifecycle transition is refused, a generated plan is empty — the user sees
+*what* failed, *why*, and *what to do next*, without leaving the surface
+they're on.
+
+**Preconditions:** a project that cannot satisfy a lifecycle transition; a
+plan constructed to partially fail (e.g. one source file removed on disk
+after confirm).
+
+**Narrative flow:**
+
+1. A refused lifecycle transition surfaces its refusal reason inline next to
+   the control — the same reason the audit record stores; a transition that
+   can never succeed from the current state renders disabled-with-reason.
+2. An empty generated plan states why it is empty instead of only disabling
+   Approve.
+3. A partial apply failure lists failed items by name with per-item reasons,
+   offers retry-failed-only, and keeps succeeded items' state visible.
+4. A stale plan refuses to apply, names the changed file(s), and offers
+   regeneration.
+5. Every refusal/failure is afterwards findable in the Audit Log with
+   outcome `refused`/`failed` and the same reason on demand.
+
+**Touch & validate:**
+
+- Trigger one refusal per class: lifecycle transition, empty plan, partial
+  apply, stale plan — each must produce a visible, specific, in-context
+  explanation (generic "failed" copy fails the run).
+- Refusal reason parity: UI text ↔ audit record text.
+- Retry-failed-only re-attempts only the failed subset.
+- Buttons for impossible transitions are disabled-with-reason, never
+  clickable-and-silent.
+
+**Safety & trust notes:** the constitution requires auditing every attempted
+action *and outcome*; this journey requires the same honesty at the moment
+of failure, not only in the audit table after the fact.
+
+**Scenario files:** *(to be authored)*
+`e2e-agentic-test/journeys/failure-refusal-handling/scenario.md`.
+
+---
+
+## Journey 13 — Audit & activity investigation: "what happened to my files?"
+
+**Goal:** reconstruct what PlateVault did (or refused to do) after an
+unattended scan, an apply, or a forgotten session — using the Activity panel
+for "what is happening now" and the Audit Log for "what was done".
+
+**Preconditions:** at least one applied plan, one refused action, and
+ongoing background activity.
+
+**Narrative flow:**
+
+1. The status-bar **Log** toggle opens the Activity panel: live stream,
+   severity chips, follow mode; rows referencing an entity cross-link to
+   that entity's page with it selected.
+2. **Settings → Audit Log** holds the durable record: every attempted
+   mutating action with timestamp, event, entity, outcome, actor — plan
+   applications without exception.
+3. Filtering by entity/date narrows the trail; an audit row links back to
+   the entity and, for plan events, to the plan's item list.
+4. **Export** writes a file via a native save dialog and confirms where.
+5. An archived project's detail shows the same history scoped to that
+   project, with outcomes.
+
+**Touch & validate:**
+
+- Perform a plan apply, then find it in the Audit Log by entity and by date
+  — coverage of plan events is the core assertion of this journey.
+- Cross-link one Activity row per entity type (project, session, target,
+  plan, catalog) — each must land on an existing route with the entity
+  selected.
+- Severity chips: assert floor-vs-exact semantics match the documented
+  behavior; follow mode keeps the newest row visible; export produces a
+  readable file.
+- Audit search + date range (including an all-excluding range → explicit
+  empty state), pagination past one page.
+- Outcome and actor visible for every row, in both the settings pane and
+  the archived-project view.
+
+**Safety & trust notes:** for the meticulous librarian this product serves,
+an audit surface that *misses* events is worse than none — "empty log" must
+never be ambiguous between "nothing happened" and "nothing was recorded".
+
+**Scenario files:** *(to be authored)*
+`e2e-agentic-test/journeys/audit-investigation/scenario.md`.
+
+---
+
+## Journey 14 — Target-first project start
+
+**Goal:** start from "I want to shoot IC 10 next" in the Targets planner and
+end with a project correctly linked to that target, without retyping
+anything.
+
+**Preconditions:** seeded catalog; at least one confirmed session.
+
+**Narrative flow:**
+
+1. On **Targets**, the user finds the target (search, alias, planner
+   columns) and clicks **"+ New project here"** on its detail.
+2. The wizard opens with the association already made: name pre-filled with
+   an editable default, the target shown as a fact in the summary rail.
+3. The sources step surfaces sessions of that target first when any exist.
+4. After creation, the project's Target column and detail header show the
+   canonical target; the target's detail lists the new project.
+5. The reverse link stays live: from the project, the target opens the
+   Targets page with it selected.
+
+**Touch & validate:**
+
+- Launch the wizard from three entry points (target detail, Projects page
+  button, command palette) — the target association exists only for the
+  target-detail entry and survives to the created project.
+- Name pre-fill is editable and editing it does not break the association
+  (the link is by id, not by name parsing).
+- Sources step ordering: target's sessions first; selecting none still
+  allows creation.
+- Round-trip: project → target → project navigation lands selected both
+  ways; the target's Projects section updates without a reload.
+
+**Safety & trust notes:** the trust at stake is referential — a project that
+silently loses its target association corrupts the coverage story the
+Targets planner sells.
+
+**Scenario files:** *(to be authored)*
+`e2e-agentic-test/journeys/target-first-project/scenario.md`.
+
+---
+
+## Journey 15 — Equipment & observing-site setup
+
+**Goal:** register optical hardware (cameras, telescopes, optical trains,
+filters) and observing site(s) so calibration fingerprints, naming, and
+planner astronomy operate on real equipment data instead of raw FITS
+strings.
+
+**Preconditions:** none (equipment CRUD is independent of library content).
+
+**Narrative flow:**
+
+1. **Settings → Equipment**: register cameras and telescopes with aliases
+   matching the strings capture software writes into FITS headers; compose
+   optical trains (camera + telescope + focal length). Aliases are the join
+   key: a session whose `INSTRUME` matches a camera alias displays the
+   friendly name everywhere.
+2. Filters: adjust the seeded list to the actual filter wheel; categories
+   (broadband/narrowband/dual-band) feed per-band moon avoidance.
+3. **Settings → Target Planner**: add site(s) with coordinates, timezone,
+   horizon; mark default/active. The active site drives Tonight/Max-alt.
+4. Consequences visible where they matter: sessions and masters show
+   friendly equipment names; matching explains fingerprints in equipment
+   terms; the planner names the active site.
+
+**Touch & validate:**
+
+- CRUD every entity type (add, edit, remove) including validation: empty
+  name rejected, duplicate name/alias flagged, train requires its parts.
+- Alias join: ingest (or use) a session whose header matches a registered
+  alias → friendly name appears on Sessions/Calibration rows; removing the
+  equipment degrades the display back to the raw header string, never to
+  blank.
+- Site: add a second site, switch active, planner columns/labels follow;
+  coordinate/timezone validation; removing the active site forces an
+  explicit fallback choice.
+- Every form answers back on save/cancel.
+
+**Safety & trust notes:** equipment records are pure index data — no
+filesystem interaction; deleting equipment must never orphan sessions.
+
+**Scenario files:** *(to be authored)*
+`e2e-agentic-test/journeys/equipment-site-setup/scenario.md`.
+
+---
+
+## Journey 16 — Keyboard-first navigation & window management
+
+**Goal:** an efficiency-focused user drives PlateVault mostly without the
+mouse: jump to pages, search entities globally, act on the current
+selection, and manage panel/window real estate.
+
+**Preconditions:** any library state.
+
+**Narrative flow:**
+
+1. **Ctrl/⌘+K** opens the command palette anywhere: type-to-filter pages,
+   backend-searched targets/sessions/projects, and context actions. Enter
+   navigates; Escape closes; arrows move selection.
+2. List pages support keyboard row traversal (↑/↓ moves selection, the
+   detail panel follows); Escape closes the detail panel; sort headers are
+   keyboard-reachable and announced.
+3. Sidebar collapse, log-panel expand, and detail-panel orientation are
+   persistent layout choices; collapsed-sidebar icons keep tooltips.
+4. "Open view in new window" pops the current view into a separate OS
+   window — the intended home for the Activity log or a plan review during
+   long operations.
+5. Every overlay (palette, plan review, dialogs) closes on Escape and traps
+   focus while open.
+
+**Touch & validate:**
+
+- Palette: open/close/reopen from every page; every listed route exists in
+  the route tree (assert programmatically); entity search returns backend
+  results; executing each action class (navigate, create, open-window)
+  does what it says; styled overlay (not document-flow content).
+- Keyboard-only pass of one full list page: reach the search box, traverse
+  rows, open/close the detail, trigger the row's primary action, sort a
+  column — without a pointer.
+- Focus: visible focus ring on every interactive element traversed; focus
+  returns to the invoking control after an overlay closes.
+- New-window action: opens, renders the chosen view, and its lifetime is
+  independent of the main window's navigation.
+- Persistence: collapse/expand and panel states survive restart.
+
+**Safety & trust notes:** none filesystem-related; this journey carries the
+"expert workbench" brand promise.
+
+**Scenario files:**
+`e2e-agentic-test/043-ui-redesign-platevault/global-search-command-palette/scenario.md`,
+`.../a11y-keyboard-and-aria-sort/scenario.md`, plus *(to be authored)*
+`e2e-agentic-test/journeys/keyboard-first-navigation/scenario.md`.
+
+---
+
 ## Cross-journey index
 
 | # | Journey | Canonical scenario |
@@ -677,6 +1175,12 @@ the rest of the app is built on.
 | 8 | Calibration: ingest→masters→matching | `journeys/calibration-journey-ingest-to-match` |
 | 9 | Targets & planning (real vs. stub) | `044-planner-stubs/planner-columns-visibly-stubs` |
 | 10 | Settings/appearance/i18n | `018-settings-configuration-model/panes-and-persistence` |
+| 11 | Mistake recovery | *(to be authored)* `journeys/mistake-recovery` |
+| 12 | Failure & refusal handling | *(to be authored)* `journeys/failure-refusal-handling` |
+| 13 | Audit & activity investigation | *(to be authored)* `journeys/audit-investigation` |
+| 14 | Target-first project start | *(to be authored)* `journeys/target-first-project` |
+| 15 | Equipment & observing-site setup | *(to be authored)* `journeys/equipment-site-setup` |
+| 16 | Keyboard-first navigation & windows | *(to be authored)* `journeys/keyboard-first-navigation` |
 
 For execution order, PR-gating, and shared test-data continuity across all
 of the above, see `e2e-agentic-test/MASTER-PLAN.md`.
