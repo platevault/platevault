@@ -42,6 +42,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+app_core_cache = { path = "../cache" }
 tempfile = { workspace = true }
 rstest = { workspace = true }
 proptest = { workspace = true }

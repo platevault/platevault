@@ -28,6 +28,7 @@ members = [
   "crates/patterns",
   "crates/persistence/db",
   "crates/project/structure",
+  "crates/safe-filename",
   "crates/sessions",
   "crates/targeting",
   "crates/targeting/resolver",

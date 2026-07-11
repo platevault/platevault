@@ -23,19 +23,20 @@
 //!
 //! ## Migrating existing hand-rolled caches
 //!
-//! `crates/app/projects/src/project_health.rs`'s `DebounceTable` is a valid,
-//! working, hand-rolled equivalent of [`DebounceCache`] here. Spec 051 does
-//! **not** require migrating it — that is a pure refactor with no
-//! user-facing effect, tracked as a non-blocking follow-up (see
-//! `specs/051-tauri-shell-integration/research.md` §(d), "Consumers").
+//! `crates/app/projects/src/project_health.rs` previously hand-rolled its own
+//! `DebounceTable` (a `moka::sync::Cache` wrapper); it now uses
+//! [`DebounceCache`] here directly. Spec 051 did not require that migration —
+//! it was a pure refactor with no user-facing effect — but the duplication
+//! audit (`docs/development/duplication-and-abstraction-audit.md`, Phase 5)
+//! folded it in.
 //!
 //! ## What this crate provides
 //!
 //! - [`TtlCache`]: a generic, size- and TTL-bounded cache with a
 //!   single-flight get-or-insert (`get_or_insert_with`).
-//! - [`DebounceCache`]: a presence-only cache (mirrors
-//!   `project_health::DebounceTable`) for suppressing repeated signals within
-//!   a time window, generic over the debounce key.
+//! - [`DebounceCache`]: a presence-only cache (the generic form of
+//!   `project_health`'s former `DebounceTable`) for suppressing repeated
+//!   signals within a time window, generic over the debounce key.
 
 use std::hash::Hash;
 use std::time::Duration;
@@ -170,8 +171,8 @@ where
 }
 
 /// A presence-only cache for suppressing repeated signals within a time
-/// window — the generic form of
-/// `crates/app/projects/src/project_health.rs`'s `DebounceTable`.
+/// window — the generic form of the hand-rolled debounce table
+/// `crates/app/projects/src/project_health.rs` previously carried.
 ///
 /// Presence of a (non-expired) entry for a key means a signal for that key
 /// was already emitted within the debounce window and must be suppressed.
@@ -220,10 +221,10 @@ where
         false
     }
 
-    /// Force-expire the entry for `key` (test-only escape hatch for
-    /// simulating elapsed time without sleeping).
-    #[cfg(test)]
-    pub fn expire(&self, key: &K) {
+    /// Force-expire the entry for `key`, so the next `should_suppress` for it
+    /// starts a fresh window. Useful for resetting a debounce early, and for
+    /// tests that simulate elapsed time without sleeping.
+    pub fn invalidate(&self, key: &K) {
         self.last_emitted.invalidate(key);
     }
 }
@@ -330,7 +331,7 @@ mod tests {
         let debounce: DebounceCache<String> = DebounceCache::new(Duration::from_mins(1));
 
         assert!(!debounce.should_suppress(&"a".to_owned()));
-        debounce.expire(&"a".to_owned());
+        debounce.invalidate(&"a".to_owned());
         assert!(
             !debounce.should_suppress(&"a".to_owned()),
             "after expiry, signal is emitted again"
