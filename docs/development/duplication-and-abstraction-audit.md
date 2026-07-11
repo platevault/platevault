@@ -13,8 +13,17 @@ preserved as authored (present tense); this header records the outcome.
   vestigial `strsim` dep dropped, and `patterns::sanitize` extracted into a
   standalone `safe-filename` crate. **Item 4** (`metadata_*` publish packaging)
   is intentionally **deferred** as a packaging decision, not a code change.
-- **T1-e** (lifecycle-stub on the archive path) — remains an open **product
-  decision**, not yet filed. See the Tier 1 table and Phase 1 step 3 below.
+- **T1-e** (lifecycle-stub on the archive path) — investigated and resolved in
+  **#592**; it turned out **not** to be a product decision. The Tier 1 table and
+  Phase 1 step 3 below describe it as stubbed gates on a live path, but the gates
+  are in fact already enforced one layer up in `apply_transition` —
+  `transition_lifecycle` is an intentional un-gated write-primitive and the
+  archive-closure bypass is deliberate. The real residue (addressed in #592) was
+  stale/misleading `TODO` comments, a **dead** partial `build_edge_table`
+  (deleted; the authoritative `plan_requirement::TABLE` was already in use), and
+  a latent §II gap (the archive closure now guards edge legality). The "finish
+  the partial edge table vs. document as intentional" question below is answered:
+  the partial table was dead and is gone.
 
 Follow-on to the `db-boundary-zero` campaign (see
 `persistence-layer-hardening.md`). That campaign drained all production `sqlx`
