@@ -46,6 +46,16 @@ fn encode_aliases(aliases: &[String]) -> String {
     serde_json::to_string(aliases).unwrap_or_else(|_| "[]".to_owned())
 }
 
+/// Shared NotFound-check for every `update_*`/`delete_*` below: all four
+/// entity kinds (Camera/Telescope/OpticalTrain/Filter) key their mutation on
+/// `id` and treat "no row touched" as `DbError::NotFound`.
+fn ensure_row_affected(rows_affected: u64, entity: &str, id: &str) -> DbResult<()> {
+    if rows_affected == 0 {
+        return Err(DbError::NotFound(format!("{entity} {id} not found")));
+    }
+    Ok(())
+}
+
 // ── Camera ──────────────────────────────────────────────────────────────────
 
 /// List all cameras.
@@ -108,9 +118,7 @@ pub async fn update_camera(pool: &SqlitePool, req: &UpdateCamera) -> DbResult<Ca
         .execute(pool)
         .await?;
 
-    if result.rows_affected() == 0 {
-        return Err(DbError::NotFound(format!("camera {} not found", req.id)));
-    }
+    ensure_row_affected(result.rows_affected(), "camera", &req.id)?;
 
     // Fetch the full row to return auto_detected.
     let row: (i32,) = sqlx::query_as("SELECT auto_detected FROM cameras WHERE id = ?")
@@ -134,11 +142,7 @@ pub async fn update_camera(pool: &SqlitePool, req: &UpdateCamera) -> DbResult<Ca
 pub async fn delete_camera(pool: &SqlitePool, id: &str) -> DbResult<()> {
     let result = sqlx::query("DELETE FROM cameras WHERE id = ?").bind(id).execute(pool).await?;
 
-    if result.rows_affected() == 0 {
-        return Err(DbError::NotFound(format!("camera {id} not found")));
-    }
-
-    Ok(())
+    ensure_row_affected(result.rows_affected(), "camera", id)
 }
 
 /// Find a camera by alias. Searches the JSON aliases array using LIKE.
@@ -242,9 +246,7 @@ pub async fn update_telescope(pool: &SqlitePool, req: &UpdateTelescope) -> DbRes
     .execute(pool)
     .await?;
 
-    if result.rows_affected() == 0 {
-        return Err(DbError::NotFound(format!("telescope {} not found", req.id)));
-    }
+    ensure_row_affected(result.rows_affected(), "telescope", &req.id)?;
 
     let row: (i32,) = sqlx::query_as("SELECT auto_detected FROM telescopes WHERE id = ?")
         .bind(&req.id)
@@ -268,11 +270,7 @@ pub async fn update_telescope(pool: &SqlitePool, req: &UpdateTelescope) -> DbRes
 pub async fn delete_telescope(pool: &SqlitePool, id: &str) -> DbResult<()> {
     let result = sqlx::query("DELETE FROM telescopes WHERE id = ?").bind(id).execute(pool).await?;
 
-    if result.rows_affected() == 0 {
-        return Err(DbError::NotFound(format!("telescope {id} not found")));
-    }
-
-    Ok(())
+    ensure_row_affected(result.rows_affected(), "telescope", id)
 }
 
 /// Find a telescope by alias. Searches the JSON aliases array.
@@ -385,9 +383,7 @@ pub async fn update_optical_train(
     .execute(pool)
     .await?;
 
-    if result.rows_affected() == 0 {
-        return Err(DbError::NotFound(format!("optical train {} not found", req.id)));
-    }
+    ensure_row_affected(result.rows_affected(), "optical train", &req.id)?;
 
     Ok(OpticalTrain {
         id: req.id.clone(),
@@ -407,11 +403,7 @@ pub async fn delete_optical_train(pool: &SqlitePool, id: &str) -> DbResult<()> {
     let result =
         sqlx::query("DELETE FROM optical_trains WHERE id = ?").bind(id).execute(pool).await?;
 
-    if result.rows_affected() == 0 {
-        return Err(DbError::NotFound(format!("optical train {id} not found")));
-    }
-
-    Ok(())
+    ensure_row_affected(result.rows_affected(), "optical train", id)
 }
 
 // ── Filter ──────────────────────────────────────────────────────────────────
@@ -476,9 +468,7 @@ pub async fn update_filter(pool: &SqlitePool, req: &UpdateFilter) -> DbResult<Fi
         .execute(pool)
         .await?;
 
-    if result.rows_affected() == 0 {
-        return Err(DbError::NotFound(format!("filter {} not found", req.id)));
-    }
+    ensure_row_affected(result.rows_affected(), "filter", &req.id)?;
 
     let row: (i32,) = sqlx::query_as("SELECT auto_detected FROM filters WHERE id = ?")
         .bind(&req.id)
@@ -501,11 +491,7 @@ pub async fn update_filter(pool: &SqlitePool, req: &UpdateFilter) -> DbResult<Fi
 pub async fn delete_filter(pool: &SqlitePool, id: &str) -> DbResult<()> {
     let result = sqlx::query("DELETE FROM filters WHERE id = ?").bind(id).execute(pool).await?;
 
-    if result.rows_affected() == 0 {
-        return Err(DbError::NotFound(format!("filter {id} not found")));
-    }
-
-    Ok(())
+    ensure_row_affected(result.rows_affected(), "filter", id)
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -589,6 +575,26 @@ mod tests {
         let pool = setup_db().await;
         let result = delete_camera(&pool, "nonexistent").await;
         assert!(result.is_err());
+    }
+
+    /// `aliases` is a named graceful-degradation site (spec `n4_jsoncodec`,
+    /// duplication-and-abstraction-audit.md T2-d): a row with a corrupt
+    /// `aliases` cell (hand-edited DB) must still list, with an empty
+    /// alias list, not fail the whole query.
+    #[tokio::test]
+    async fn list_cameras_degrades_on_corrupt_aliases_cell() {
+        let pool = setup_db().await;
+        sqlx::query(
+            "INSERT INTO cameras (id, name, aliases, auto_detected, created_at) \
+             VALUES ('cam-corrupt', 'Corrupt Cam', 'not valid json', 0, '2026-01-01T00:00:00Z')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let cameras = list_cameras(&pool).await.unwrap();
+        let corrupt = cameras.iter().find(|c| c.id == "cam-corrupt").expect("row present");
+        assert!(corrupt.aliases.is_empty(), "corrupt aliases cell must degrade, not error");
     }
 
     // ── Telescope tests ─────────────────────────────────────────────────────
