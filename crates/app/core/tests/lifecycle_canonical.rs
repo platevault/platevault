@@ -9,7 +9,6 @@ mod support;
 
 use std::sync::{Arc, Mutex};
 
-use app_core::lifecycle_use_case::build_edge_table;
 use app_core::project_health::{
     check_project_ready_invariant, emit_block_transition, emit_unarchive_transition,
     BlockCondition, DebounceTable, DEBOUNCE_WINDOW,
@@ -84,7 +83,6 @@ fn make_project_transition(
 #[tokio::test]
 async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
     let (pool, bus) = setup().await;
-    let edge_table = build_edge_table();
     let project_id = create_project(&pool, &bus, "Canonical Test M31").await;
 
     // Step 1: add a source so the project can be ready.
@@ -118,7 +116,6 @@ async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
             ProjectState::Processing,
             TransitionActor::User,
         ),
-        &edge_table,
     )
     .await;
 
@@ -164,7 +161,6 @@ async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
             ProjectState::Ready,
             TransitionActor::User,
         ),
-        &edge_table,
     )
     .await;
 
@@ -184,7 +180,6 @@ async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
 async fn t046b_no_dual_write_to_legacy_project_table() {
     let (pool, bus) = setup().await;
     let project_id = create_project(&pool, &bus, "No Divergence NGC 7000").await;
-    let edge_table = build_edge_table();
 
     // Force the lifecycle to `ready` by direct repo call.
     repo::update_project_lifecycle(&pool, &project_id, "ready").await.unwrap();
@@ -203,7 +198,6 @@ async fn t046b_no_dual_write_to_legacy_project_table() {
             ProjectState::Processing,
             TransitionActor::User,
         ),
-        &edge_table,
     )
     .await;
 
@@ -388,7 +382,6 @@ async fn t048e_unblocking_clears_blocked_reason() {
     let (pool, bus) = setup().await;
     let project_id = create_project(&pool, &bus, "M101 Clear Reason").await;
     let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
-    let edge_table = build_edge_table();
 
     // Block first.
     let condition = BlockCondition::User { note: "manual block".to_owned() };
@@ -408,7 +401,6 @@ async fn t048e_unblocking_clears_blocked_reason() {
             ProjectState::Ready,
             TransitionActor::User,
         ),
-        &edge_table,
     )
     .await;
     assert!(resp.error.is_none());

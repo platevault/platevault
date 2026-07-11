@@ -860,13 +860,9 @@ async fn lifecycle_transition_apply() {
         TransitionActor::User,
     ));
 
-    let response = app_core::transition_use_case::apply_transition(
-        state.repo.as_ref(),
-        &state.bus,
-        request,
-        &state.edge_table,
-    )
-    .await;
+    let response =
+        app_core::transition_use_case::apply_transition(state.repo.as_ref(), &state.bus, request)
+            .await;
     // The entity doesn't exist so the transition will be refused, but the
     // command infrastructure should not panic.
     assert!(!response.contract_version.is_empty());

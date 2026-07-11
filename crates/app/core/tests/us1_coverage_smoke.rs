@@ -8,7 +8,6 @@
 
 mod support;
 
-use app_core::lifecycle_use_case::build_edge_table;
 use app_core::transition_use_case::apply_transition;
 use contracts_core::lifecycle::{
     ProjectState, ProjectTransitionRequest, TransitionActor, TransitionRequest, TransitionStatus,
@@ -71,8 +70,7 @@ async fn success_transition_writes_applied_audit_row() {
         TransitionActor::User,
     ));
 
-    let edge_table = build_edge_table();
-    let resp = apply_transition(&repo, &bus, request, &edge_table).await;
+    let resp = apply_transition(&repo, &bus, request).await;
 
     assert_eq!(
         resp.status,

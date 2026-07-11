@@ -15,7 +15,6 @@
 //! `domain_core::lifecycle::action_review_requirement` for the (now empty)
 //! action-bound review table.
 
-use app_core::lifecycle_use_case::build_edge_table;
 use app_core::transition_use_case::apply_transition;
 use audit::bus::EventBus;
 use contracts_core::lifecycle::{
@@ -89,7 +88,6 @@ async fn success_path_commits_both_sides() {
     insert_project(db.pool(), &project, &target, "ready").await;
 
     let project_uuid = Uuid::parse_str(&project).unwrap();
-    let table = build_edge_table();
 
     let resp = apply_transition(
         &repo,
@@ -100,7 +98,6 @@ async fn success_path_commits_both_sides() {
             ProjectState::Processing,
             TransitionActor::User,
         ),
-        &table,
     )
     .await;
 
@@ -123,7 +120,6 @@ async fn refused_no_mutation_disallowed_edge() {
     insert_project(db.pool(), &project, &target, "processing").await;
 
     let project_uuid = Uuid::parse_str(&project).unwrap();
-    let table = build_edge_table();
 
     // processing → ready is explicitly disallowed (research.md §2.1).
     let resp = apply_transition(
@@ -135,7 +131,6 @@ async fn refused_no_mutation_disallowed_edge() {
             ProjectState::Ready,
             TransitionActor::User,
         ),
-        &table,
     )
     .await;
 
@@ -181,7 +176,6 @@ async fn same_state_returns_noop_no_writes() {
     insert_project(db.pool(), &project, &target, "ready").await;
 
     let project_uuid = Uuid::parse_str(&project).unwrap();
-    let table = build_edge_table();
 
     let resp = apply_transition(
         &repo,
@@ -192,7 +186,6 @@ async fn same_state_returns_noop_no_writes() {
             ProjectState::Ready,
             TransitionActor::User,
         ),
-        &table,
     )
     .await;
 
@@ -215,7 +208,6 @@ async fn plan_required_refusal() {
     insert_project(db.pool(), &project, &target, "ready").await;
 
     let project_uuid = Uuid::parse_str(&project).unwrap();
-    let table = build_edge_table();
 
     // ready → prepared requires a FilesystemPlan per T044.
     let resp = apply_transition(
@@ -227,7 +219,6 @@ async fn plan_required_refusal() {
             ProjectState::Prepared,
             TransitionActor::User,
         ),
-        &table,
     )
     .await;
 

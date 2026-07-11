@@ -16,8 +16,6 @@
 //! required field is not yet `reviewed`. Review state is derived from
 //! field-level provenance — it is NOT a per-entity column.
 
-use std::collections::HashMap;
-
 use audit::bus::EventBus;
 use contracts_core::lifecycle::{
     TransitionActor, TransitionError, TransitionErrorCode, TransitionRequest, TransitionResponse,
@@ -36,9 +34,7 @@ use serde::Serialize;
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 
-use crate::lifecycle_use_case::{
-    transition_lifecycle, EdgeMeta, LifecycleError, TransitionCommand,
-};
+use crate::lifecycle_use_case::{transition_lifecycle, LifecycleError, TransitionCommand};
 
 /// Apply a lifecycle transition given a contract `TransitionRequest`.
 ///
@@ -51,15 +47,13 @@ use crate::lifecycle_use_case::{
 ///    provenance origin is not `reviewed` → `provenance.unreviewed`.
 /// 6. `requires_plan(...)` true → `plan.required` (plan creation deferred).
 /// 7. Hand off to [`transition_lifecycle`].
-pub async fn apply_transition<R, S>(
+pub async fn apply_transition<R>(
     repo: &R,
     bus: &EventBus,
     request: TransitionRequest,
-    edge_table: &HashMap<EntityType, Vec<([&'static str; 2], EdgeMeta)>, S>,
 ) -> TransitionResponse
 where
     R: LifecycleRepository + Sync,
-    S: std::hash::BuildHasher,
 {
     let parsed = match parse_request(request) {
         Ok(parsed) => parsed,
@@ -166,30 +160,28 @@ where
     }
 
     // 7. Hand off — record + publish.
-    dispatch_to_repository(repo, bus, command, edge_table, request_id, prior_state).await
+    dispatch_to_repository(repo, bus, command, request_id, prior_state).await
 }
 
 /// Final dispatch step of [`apply_transition`]. Extracted to keep
 /// `apply_transition` itself under clippy's `too_many_lines` limit and to
 /// keep the refusal-audit recovery (for CAS-loss and not-found errors) in
 /// a single locus.
-async fn dispatch_to_repository<R, S>(
+async fn dispatch_to_repository<R>(
     repo: &R,
     bus: &EventBus,
     command: TransitionCommand,
-    edge_table: &HashMap<EntityType, Vec<([&'static str; 2], EdgeMeta)>, S>,
     request_id: Uuid,
     prior_state: String,
 ) -> TransitionResponse
 where
     R: LifecycleRepository + Sync,
-    S: std::hash::BuildHasher,
 {
     // Clone for refusal-audit recovery in case `transition_lifecycle` itself
     // fails after our pre-checks (e.g. CAS lost a race, missing entity).
     // The clone is cheap (UUIDs + short strings).
     let command_for_refusal = command.clone();
-    match transition_lifecycle(repo, bus, command, edge_table).await {
+    match transition_lifecycle(repo, bus, command).await {
         Ok(None) => TransitionResponse::noop(request_id),
         Ok(Some(record)) => {
             let applied_at = record
@@ -696,14 +688,12 @@ mod tests {
     async fn rejects_disallowed_edge() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         // processing → ready is explicitly disallowed (research.md §2.1).
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Processing, ProjectState::Ready, TransitionActor::User),
-            &table,
         )
         .await;
 
@@ -717,13 +707,11 @@ mod tests {
     async fn rejects_system_on_non_blocked_edge() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Ready, ProjectState::Processing, TransitionActor::System),
-            &table,
         )
         .await;
 
@@ -737,14 +725,12 @@ mod tests {
     async fn allows_system_on_blocked_recovery() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         // blocked → ready does not require a plan; system actor is allowed.
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Blocked, ProjectState::Ready, TransitionActor::System),
-            &table,
         )
         .await;
 
@@ -761,13 +747,11 @@ mod tests {
     async fn flags_plan_required_for_ready_to_prepared() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Ready, ProjectState::Prepared, TransitionActor::User),
-            &table,
         )
         .await;
 
@@ -778,13 +762,11 @@ mod tests {
     async fn same_state_returns_noop() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Ready, ProjectState::Ready, TransitionActor::User),
-            &table,
         )
         .await;
 
@@ -796,7 +778,6 @@ mod tests {
     async fn allows_system_on_setup_incomplete_to_ready() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
@@ -806,7 +787,6 @@ mod tests {
                 ProjectState::Ready,
                 TransitionActor::System,
             ),
-            &table,
         )
         .await;
 
@@ -824,13 +804,11 @@ mod tests {
     async fn rejects_system_on_ready_to_processing() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Ready, ProjectState::Processing, TransitionActor::System),
-            &table,
         )
         .await;
 
@@ -845,13 +823,11 @@ mod tests {
     async fn flags_plan_required_for_completed_to_archived() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Completed, ProjectState::Archived, TransitionActor::User),
-            &table,
         )
         .await;
 
@@ -863,14 +839,12 @@ mod tests {
     async fn flags_plan_required_for_blocked_to_archived() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         // blocked → archived: system actor is permitted (touches blocked), but plan is required
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Blocked, ProjectState::Archived, TransitionActor::User),
-            &table,
         )
         .await;
 
@@ -882,13 +856,11 @@ mod tests {
     async fn flags_plan_required_for_archived_to_ready() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Archived, ProjectState::Ready, TransitionActor::User),
-            &table,
         )
         .await;
 
@@ -900,7 +872,6 @@ mod tests {
     async fn flags_plan_required_for_archived_to_processing() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
@@ -910,7 +881,6 @@ mod tests {
                 ProjectState::Processing,
                 TransitionActor::User,
             ),
-            &table,
         )
         .await;
 
@@ -922,13 +892,11 @@ mod tests {
     async fn rejects_processing_to_ready() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Processing, ProjectState::Ready, TransitionActor::User),
-            &table,
         )
         .await;
 
@@ -943,13 +911,11 @@ mod tests {
     async fn rejects_blocked_to_completed() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Blocked, ProjectState::Completed, TransitionActor::User),
-            &table,
         )
         .await;
 
@@ -964,13 +930,11 @@ mod tests {
     async fn rejects_archived_to_completed() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Archived, ProjectState::Completed, TransitionActor::User),
-            &table,
         )
         .await;
 
@@ -985,13 +949,11 @@ mod tests {
     async fn allows_ready_to_processing_user() {
         let repo = InMemoryLifecycleRepository;
         let bus = test_bus().await;
-        let table = crate::lifecycle_use_case::build_edge_table();
 
         let resp = apply_transition(
             &repo,
             &bus,
             project_request(ProjectState::Ready, ProjectState::Processing, TransitionActor::User),
-            &table,
         )
         .await;
 

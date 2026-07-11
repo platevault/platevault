@@ -10,7 +10,6 @@
 use std::sync::Arc;
 
 use app_core::ledger_use_case::list_assets_ledger;
-use app_core::lifecycle_use_case::{build_edge_table, EdgeMeta};
 use app_core::provenance_use_case::read_provenance;
 use app_core::transition_use_case::{apply_transition, preview_transition};
 use audit::bus::EventBus;
@@ -28,13 +27,12 @@ use uuid::Uuid;
 pub struct AppState {
     pub repo: Arc<SqliteLifecycleRepository>,
     pub bus: EventBus,
-    pub edge_table: std::collections::HashMap<EntityType, Vec<([&'static str; 2], EdgeMeta)>>,
 }
 
 impl AppState {
     #[must_use]
     pub fn new(repo: Arc<SqliteLifecycleRepository>, bus: EventBus) -> Self {
-        Self { repo, bus, edge_table: build_edge_table() }
+        Self { repo, bus }
     }
 }
 
@@ -113,7 +111,7 @@ pub async fn lifecycle_transition_apply(
     state: State<'_, AppState>,
     request: TransitionRequest,
 ) -> Result<TransitionResponse, String> {
-    Ok(apply_transition(state.repo.as_ref(), &state.bus, request, &state.edge_table).await)
+    Ok(apply_transition(state.repo.as_ref(), &state.bus, request).await)
 }
 
 /// `lifecycle.transition.preview` — read-only dry-run for UI button enabling.
