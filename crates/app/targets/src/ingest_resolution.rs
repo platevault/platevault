@@ -31,6 +31,7 @@
 use audit::event_bus::{TargetResolveBatchCompleted, TargetResolved};
 use audit::{EventBus, Source};
 use domain_core::ids::Timestamp;
+use persistence_db::repositories::q_targets_ingest as repo;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -77,16 +78,6 @@ pub enum AssociateOutcome {
     Enqueued,
 }
 
-/// A pending ingest-resolution row (the drain's work item). The image is
-/// already linked on the row via `image_id`; the drain only needs the row `id`
-/// (to update state/target), the `object_raw` (to resolve), and `attempts`.
-#[derive(Clone, Debug)]
-struct PendingRow {
-    id: String,
-    object_raw: String,
-    attempts: i64,
-}
-
 // ── enqueue / inline association (T025 + T026 entry point) ──────────────────────
 
 /// Insert a `pending` ingest-resolution row for `(image_id, object_raw)`.
@@ -103,29 +94,16 @@ pub async fn enqueue(
     object_raw: &str,
 ) -> Result<String, ContractError> {
     // Reuse an existing non-terminal row for the same (image, object) if present.
-    let existing: Option<(String,)> = sqlx::query_as(
-        "SELECT id FROM ingest_resolution WHERE image_id = ? AND object_raw = ? LIMIT 1",
-    )
-    .bind(image_id)
-    .bind(object_raw)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?;
-    if let Some((id,)) = existing {
+    if let Some(id) =
+        repo::find_ingest_resolution_id(pool, image_id, object_raw).await.map_err(db_err)?
+    {
         return Ok(id);
     }
 
     let id = Uuid::new_v4().to_string();
-    sqlx::query(
-        "INSERT INTO ingest_resolution (id, image_id, object_raw, state, target_id, attempts)
-         VALUES (?, ?, ?, 'pending', NULL, 0)",
-    )
-    .bind(&id)
-    .bind(image_id)
-    .bind(object_raw)
-    .execute(pool)
-    .await
-    .map_err(db_err)?;
+    repo::insert_ingest_resolution(pool, &id, image_id, object_raw, "pending", None)
+        .await
+        .map_err(db_err)?;
     Ok(id)
 }
 
@@ -177,32 +155,20 @@ async fn write_resolved_row(
     object_raw: &str,
     target_id: &str,
 ) -> Result<(), ContractError> {
-    let existing: Option<(String,)> = sqlx::query_as(
-        "SELECT id FROM ingest_resolution WHERE image_id = ? AND object_raw = ? LIMIT 1",
-    )
-    .bind(image_id)
-    .bind(object_raw)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?;
+    let existing =
+        repo::find_ingest_resolution_id(pool, image_id, object_raw).await.map_err(db_err)?;
 
-    if let Some((id,)) = existing {
-        sqlx::query("UPDATE ingest_resolution SET state = 'resolved', target_id = ? WHERE id = ?")
-            .bind(target_id)
-            .bind(&id)
-            .execute(pool)
-            .await
-            .map_err(db_err)?;
+    if let Some(id) = existing {
+        repo::mark_ingest_resolution_resolved(pool, &id, target_id).await.map_err(db_err)?;
     } else {
-        sqlx::query(
-            "INSERT INTO ingest_resolution (id, image_id, object_raw, state, target_id, attempts)
-             VALUES (?, ?, ?, 'resolved', ?, 0)",
+        repo::insert_ingest_resolution(
+            pool,
+            &Uuid::new_v4().to_string(),
+            image_id,
+            object_raw,
+            "resolved",
+            Some(target_id),
         )
-        .bind(Uuid::new_v4().to_string())
-        .bind(image_id)
-        .bind(object_raw)
-        .bind(target_id)
-        .execute(pool)
         .await
         .map_err(db_err)?;
     }
@@ -250,22 +216,7 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
     limit: usize,
 ) -> Result<DrainSummary, ContractError> {
     let limit_i = i64::try_from(limit.max(1)).unwrap_or(i64::MAX);
-    let rows: Vec<(String, String, i64)> = sqlx::query_as(
-        "SELECT id, object_raw, attempts
-         FROM ingest_resolution
-         WHERE state = 'pending'
-         ORDER BY rowid ASC
-         LIMIT ?",
-    )
-    .bind(limit_i)
-    .fetch_all(pool)
-    .await
-    .map_err(db_err)?;
-
-    let pending: Vec<PendingRow> = rows
-        .into_iter()
-        .map(|(id, object_raw, attempts)| PendingRow { id, object_raw, attempts })
-        .collect();
+    let pending = repo::list_pending_ingest_resolutions(pool, limit_i).await.map_err(db_err)?;
 
     let considered = pending.len();
     let mut num_resolved = 0usize;
@@ -352,13 +303,7 @@ async fn mark_resolved(
     row_id: &str,
     target_id: &str,
 ) -> Result<(), ContractError> {
-    sqlx::query("UPDATE ingest_resolution SET state = 'resolved', target_id = ? WHERE id = ?")
-        .bind(target_id)
-        .bind(row_id)
-        .execute(pool)
-        .await
-        .map_err(db_err)?;
-    Ok(())
+    repo::mark_ingest_resolution_resolved(pool, row_id, target_id).await.map_err(db_err)
 }
 
 async fn mark_unresolved(
@@ -366,13 +311,7 @@ async fn mark_unresolved(
     row_id: &str,
     attempts: i64,
 ) -> Result<(), ContractError> {
-    sqlx::query("UPDATE ingest_resolution SET state = 'unresolved', attempts = ? WHERE id = ?")
-        .bind(attempts + 1)
-        .bind(row_id)
-        .execute(pool)
-        .await
-        .map_err(db_err)?;
-    Ok(())
+    repo::mark_ingest_resolution_unresolved(pool, row_id, attempts).await.map_err(db_err)
 }
 
 async fn emit_resolved(bus: &EventBus, target: &CachedTarget, query: Option<&str>) {
