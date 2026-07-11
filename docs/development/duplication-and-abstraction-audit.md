@@ -1,6 +1,9 @@
 # Duplication & Abstraction Audit
 
-**Status (2026-07-11): AUDIT COMPLETE — plan ready, no code changed yet.**
+**Status (2026-07-11): AUDIT COMPLETE — implementation underway.** Phases 1–4
+are being implemented via the `orchestrate` run `run-dab` (worktree-isolated
+coder nodes n1–n8, each a PR off `main`). Phase 5 (crate candidates below) and
+T1-e (lifecycle-stub product decision) are held to apply separately.
 
 Follow-on to the `db-boundary-zero` campaign (see
 `persistence-layer-hardening.md`). That campaign drained all production `sqlx`
@@ -103,9 +106,25 @@ verification precondition before applying.
 - biome triage: **82 `a11y/*`** (PRODUCT.md mandates accessibility), 34 `noNonNullAssertion`, 32 `useExhaustiveDependencies`, 4 `noExplicitAny`, and **inspect the 5 `noTemplateCurlyInString` (likely real bugs)**.
 - *Downgraded to incremental (not campaigns):* the 86-site `localStorage` typed-adapter migration (shape-migration risk) and the 999-line `TargetDetailV2` split.
 
-### Reinvented-wheel / crate candidates
+### Reinvented-wheel / crate candidates (Phase 5 — apply separately)
 
-> _Pending — filled in from the dedicated reinvented-wheel sweep (Part A: hand-rolled where a crate/std wins; Part B: extractable into its own crate), under the project's "keep dependencies deliberate" constraint._
+**Verdict: mostly deliberate.** The codebase is disciplined about the
+dependency constraint — hashing (`sha2`/`hex`), XML (`quick-xml`), file-watching
+(`notify`), event bus (`tokio::broadcast`), path lexical-normalize
+(`path-clean`), CSV (`csv`), networking (`reqwest`) all already use mature
+crates. Few real wins.
+
+**Part A — reinvented wheel:**
+- **Clear win:** `project_health::DebounceTable` (`crates/app/projects/src/project_health.rs:78-123`) duplicates `app_core_cache::DebounceCache` almost field-for-field (both wrap `moka::sync::Cache`). Switch its 3 call sites to `app_core_cache::DebounceCache` and delete ~45 LOC + a duplicate test module — near-zero risk; `app_core_cache`'s own doc already flags this migration. **NOTE: `project_health.rs` is in node n3's scope — Phase 5 must sequence AFTER n3 merges to avoid collision.**
+- **Housekeeping:** `strsim = "0.11"` is declared in `crates/targeting/resolver/Cargo.toml` with a "fuzzy matching (R2)" comment but has **zero call sites** (resolver docs say matching is exact-normalized only, FR-008). Drop it after confirming (own small PR).
+- **Leave (deliberate/tested):** haversine angular-separation (`targeting/coords.rs`), FITS-quirk sexagesimal parsing (`metadata/core`), FITS header-card reader (`metadata/fits`, explicit "no cfitsio" rationale). **Marginal, skip under the constraint:** the ~17-site hand-rolled `as_str`/`FromStr` enum matches could use `strum` (already a dep, used in 2 crates) — a DRY nit, each site is compiler-exhaustive + tested, not worth a dependency-wiring sweep.
+
+**Part B — extractable into own crate:**
+- `crates/patterns/src/sanitize.rs` (373 LOC) — a domain-agnostic, security-conscious safe-filename sanitizer (NFC, C0/C1/bidi-override stripping, Windows reserved-name rejection, `unicode-security` confusables). Stronger than crates.io's `sanitize-filename` on the trojan-source/confusables axis. Strong standalone-crate candidate.
+- `crates/metadata/{core,fits,xisf}` — already structurally isolated (deps only `serde`/`thiserror`/`quick-xml`, no app-domain coupling); publish-ready as a lightweight FITS/XISF-header crate with no code changes. (Matches the pending "FITS/XISF publishable-crate split" note.)
+- `fs/executor/ops/path_gate.rs` `resolve_and_validate` (sandboxed path resolution) — generic + well-tested, but coupled to this app's `PlanItemFailure`; would need the error type genericized first (real refactor, not copy-paste).
+
+**How Phase 5 applies:** a small `strsim`-drop PR (standalone) + a DebounceTable→DebounceCache PR (**after n3 merges**); the crate extractions (`patterns::sanitize`, `metadata_*`) are packaging/publishing decisions, deferred as product calls, not code changes.
 
 ## Dropped by the adversarial pass (transparency)
 
