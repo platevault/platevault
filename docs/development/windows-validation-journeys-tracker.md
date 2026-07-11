@@ -82,6 +82,7 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | #560 | Remap Verify samples ≤5 file_record paths → vacuous "all found" → silent orphaning | J1 | **bug** (high) |
 | #562 | Data Sources card: consolidate per-source actions into a kebab (⋯) menu + declutter | J1 | enhancement |
 | #563 | Data Sources protection Override persists in card but source_protection_get disagrees (get/set inconsistency) | J1 | **bug** |
+| #564 | Catalogue sessions indistinguishable — target/filter/integration empty, NIGHT=creation date (grouping works, metadata doesn't populate); updates #307 | J3/J4 | **bug** |
 
 **Journey → Epic map:** J1 #518 · J2 #519 · J3 #520 · J4 #521 · J5 #522 · J6 #523
 · J7 #524 · J8 #525 · J9 #526 · J10 #527.
@@ -154,7 +155,7 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | Test | Status | Step → Expected / FAIL |
 |------|--------|------------------------|
 | T1 Nothing before a plan applies | ⬜ | Sessions empty for un-applied data. FAIL: session from raw scan |
-| T2 Session auto-appears after apply, real counts | ⬜ | appears automatically, counts match, no review step. FAIL: needs approve / wrong counts |
+| T2 Session auto-appears after apply, real counts | ⚠️ | **Session detection GROUPING validated** via SessionMatrix: M51 L 22-file folder → 3 sessions, counts **4/14/4** = exact canonical split (gain / S0+cross-camera merge / binning). BUT metadata empty → sessions indistinguishable (**#564**). No separate approve needed (auto after plan apply). |
 | T3 No review-state controls/pills | ⬜ | no Confirm/Re-open/Reject/Ignore, no pills. FAIL: any appears |
 | T4 Notes edit ≠ lifecycle transition | ⬜ | notes auto-save, no transition prompt. FAIL: triggers transition |
 | T5 Rescan doesn't duplicate/resurrect | ⬜ | no dup sessions / review state. FAIL: dup or review UI resurfaces |
