@@ -77,19 +77,18 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
 
 // ── Row mapping helpers ───────────────────────────────────────────────────────
 
-fn parse_plan_state(s: &str) -> PlanState {
-    match s {
-        "ready_for_review" => PlanState::ReadyForReview,
-        "approved" => PlanState::Approved,
-        "applying" => PlanState::Applying,
-        "paused" => PlanState::Paused,
-        "applied" => PlanState::Applied,
-        "partially_applied" => PlanState::PartiallyApplied,
-        "failed" => PlanState::Failed,
-        "cancelled" => PlanState::Cancelled,
-        "discarded" => PlanState::Discarded,
-        _ => PlanState::Draft,
-    }
+/// Parses a stored plan-state string via `PlanState`'s `serde` mapping
+/// (`#[serde(rename_all = "snake_case")]`) so an unrecognised/corrupt value
+/// ERRORS instead of silently coercing to `Draft` (audit T1-b).
+fn parse_plan_state(s: &str) -> Result<PlanState, ContractError> {
+    serde_json::from_value(serde_json::Value::String(s.to_owned())).map_err(|e| {
+        ContractError::new(
+            ErrorCode::InternalData,
+            format!("corrupt plan state {s:?}: {e}"),
+            ErrorSeverity::Fatal,
+            false,
+        )
+    })
 }
 
 fn parse_plan_origin(s: &str) -> PlanOrigin {
@@ -156,14 +155,14 @@ fn parse_item_state(s: &str) -> PlanItemState {
     }
 }
 
-fn row_to_summary(row: repo::PlanRow) -> PlanSummary {
-    PlanSummary {
+fn row_to_summary(row: repo::PlanRow) -> Result<PlanSummary, ContractError> {
+    Ok(PlanSummary {
         id: row.id,
         number: row.number,
         title: row.title,
         origin: parse_plan_origin(&row.origin),
         origin_path: row.origin_path,
-        state: parse_plan_state(&row.state),
+        state: parse_plan_state(&row.state)?,
         created_at: row.created_at,
         discarded_at: row.discarded_at,
         items_total: row.items_total,
@@ -176,7 +175,7 @@ fn row_to_summary(row: repo::PlanRow) -> PlanSummary {
         destructive_destination: parse_destructive_destination(&row.destructive_destination),
         plan_type: parse_plan_type(&row.plan_type),
         parent_plan_id: row.parent_plan_id,
-    }
+    })
 }
 
 fn item_row_to_detail(row: repo::PlanItemRow) -> PlanItemDetail {
@@ -253,7 +252,8 @@ pub async fn list_plans(
         .await
         .map_err(db_err)?;
 
-    Ok(PlanListResponse { plans: rows.into_iter().map(row_to_summary).collect() })
+    let plans = rows.into_iter().map(row_to_summary).collect::<Result<Vec<_>, _>>()?;
+    Ok(PlanListResponse { plans })
 }
 
 // ── get_plan ──────────────────────────────────────────────────────────────────
@@ -275,7 +275,7 @@ pub async fn get_plan(pool: &SqlitePool, plan_id: &str) -> Result<PlanDetail, Co
         title: row.title,
         origin: parse_plan_origin(&row.origin),
         origin_path: row.origin_path,
-        state: parse_plan_state(&row.state),
+        state: parse_plan_state(&row.state)?,
         plan_type: parse_plan_type(&row.plan_type),
         destructive_destination: parse_destructive_destination(&row.destructive_destination),
         parent_plan_id: row.parent_plan_id,
@@ -322,7 +322,7 @@ pub async fn approve_plan(
     let row = repo::get_plan(pool, plan_id, false).await.map_err(db_err)?;
 
     // State precondition: must be ready_for_review.
-    let state = parse_plan_state(&row.state);
+    let state = parse_plan_state(&row.state)?;
     if state != PlanState::ReadyForReview {
         return Err(ContractError::new(
             ErrorCode::PlanInvalidState,
@@ -465,7 +465,7 @@ pub async fn discard_plan(
     // Include discarded so the error is "not_found" only for truly missing plans.
     let row = repo::get_plan(pool, plan_id, true).await.map_err(db_err)?;
 
-    let state = parse_plan_state(&row.state);
+    let state = parse_plan_state(&row.state)?;
 
     // Guard: cannot discard while applying or paused.
     if matches!(state, PlanState::Applying | PlanState::Paused) {
@@ -537,7 +537,7 @@ pub async fn retry_plan(
         )
     })?;
 
-    let parent_state = parse_plan_state(&parent.state);
+    let parent_state = parse_plan_state(&parent.state)?;
 
     // Must be terminal.
     if !is_terminal(parent_state) {
@@ -894,6 +894,38 @@ mod tests {
         assert_eq!(detail.id, "p1");
         assert_eq!(detail.items.len(), 1);
         assert_eq!(detail.items[0].name, "file.fits");
+    }
+
+    // ── parse_plan_state (audit T1-b) ────────────────────────────────────────
+
+    #[test]
+    fn parse_plan_state_accepts_every_stored_snake_case_value() {
+        for (raw, expected) in [
+            ("draft", PlanState::Draft),
+            ("ready_for_review", PlanState::ReadyForReview),
+            ("approved", PlanState::Approved),
+            ("applying", PlanState::Applying),
+            ("paused", PlanState::Paused),
+            ("applied", PlanState::Applied),
+            ("partially_applied", PlanState::PartiallyApplied),
+            ("failed", PlanState::Failed),
+            ("cancelled", PlanState::Cancelled),
+            ("discarded", PlanState::Discarded),
+        ] {
+            assert_eq!(parse_plan_state(raw).unwrap(), expected, "for {raw:?}");
+        }
+    }
+
+    #[test]
+    fn parse_plan_state_errors_on_unknown_value_instead_of_defaulting() {
+        // Previously silently coerced to `PlanState::Draft` (T1-b bug). A
+        // `plans.state` CHECK constraint (migration) additionally blocks a
+        // corrupt value from ever being persisted via SQL, so the direct
+        // parser-level regression below is the reachable case; `parse_plan_state`
+        // is still the load-bearing guard against pre-constraint or
+        // out-of-band-corrupted rows.
+        let err = parse_plan_state("bogus_corrupt_state").unwrap_err();
+        assert_eq!(err.code, ErrorCode::InternalData);
     }
 
     // ── approve_plan ──────────────────────────────────────────────────────────
