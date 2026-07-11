@@ -169,6 +169,7 @@ dependencies = [
  "calibration_master_detect",
  "camino",
  "contracts_core",
+ "fs_pathsafe",
  "hex",
  "metadata_core",
  "metadata_fits",
@@ -1913,6 +1914,7 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "domain_core",
+ "fs_pathsafe",
  "path-clean",
  "serde",
  "serde_json",
@@ -1937,11 +1939,19 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "domain_core",
+ "fs_pathsafe",
  "notify",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "fs_pathsafe"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
 ]
 
 [[package]]

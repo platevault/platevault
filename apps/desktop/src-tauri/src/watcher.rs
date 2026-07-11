@@ -285,7 +285,11 @@ pub async fn attach_project_watcher(
     let root_utf8 = Utf8PathBuf::from_path_buf(project_root)
         .map_err(|_| format!("project path is not valid UTF-8: {}", project.path))?;
 
-    let (mut rx, guard) = start_artifact_watcher(std::slice::from_ref(&root_utf8), 256)
+    // Constitution §II: never follow symlinks/junctions unless explicitly
+    // enabled per root; project output folders have no per-root override
+    // surface yet, so they default to the safe gate (matches
+    // `start_watcher`'s inbox gating above).
+    let (mut rx, guard) = start_artifact_watcher(std::slice::from_ref(&root_utf8), 256, false)
         .map_err(|e| format!("failed to start artifact watcher: {e}"))?;
 
     let task_pool = pool.clone();
