@@ -11,7 +11,11 @@ export const queryKeys = {
     detail: (id: string) => ['projects', id] as const,
   },
   inventory: {
-    all: (filters?: object) => ['inventory', filters] as const,
+    // No filters → prefix-only key, so `invalidateQueries({ queryKey:
+    // inventory.all() })` fuzzy-matches every inventory query regardless of
+    // its filters (TanStack Query's partial-match compares own array indices,
+    // so a trailing `undefined` element would NOT match a filtered entry).
+    all: (filters?: object) => (filters ? (['inventory', filters] as const) : (['inventory'] as const)),
   },
   sessions: {
     all: () => ['sessions'] as const,
@@ -42,5 +46,8 @@ export const queryKeys = {
   },
   plans: {
     detail: (id: string) => ['plans', 'detail', id] as const,
+  },
+  roots: {
+    all: () => ['roots'] as const,
   },
 } as const;

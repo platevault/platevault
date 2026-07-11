@@ -17,7 +17,8 @@
  * status. The panel handles this gracefully.
  */
 
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
 import { Section, Pill, EmptyState } from '@/ui';
 import type { PillVariant } from '@/ui';
 import { calibrationMatchSuggestBatch } from './calibrationMatch';
@@ -61,42 +62,27 @@ interface Props {
 }
 
 export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props) {
-  const [results, setResults] = useState<BatchSessionResultDto[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [fetchError, setFetchError] = useState<string | undefined>(undefined);
+  // Batch key is the joined session-id list — matches the `matches(sid)` key
+  // shape while distinguishing one panel's session set from another's.
+  const { data, isFetching: loading, error } = useQuery({
+    queryKey: queryKeys.calibration.matches(sessionIds.join(',')),
+    queryFn: () =>
+      calibrationMatchSuggestBatch({
+        requestId: `batch-${Date.now()}`,
+        sessionIds,
+        calibrationTypes: CAL_TYPES,
+      }),
+    enabled: sessionIds.length > 0,
+  });
 
-  useEffect(() => {
-    if (sessionIds.length === 0) {
-      setResults([]);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setFetchError(undefined);
-
-    calibrationMatchSuggestBatch({
-      requestId: `batch-${Date.now()}`,
-      sessionIds,
-      calibrationTypes: CAL_TYPES,
-    })
-      .then((res) => {
-        if (cancelled) return;
-        setLoading(false);
-        if (res.status === 'error') {
-          setFetchError(res.errors?.[0]?.message ?? m.calibration_batch_suggest_failed());
-          return;
-        }
-        setResults(res.results ?? []);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setLoading(false);
-          setFetchError(errMessage(err));
-        }
-      });
-
-    return () => { cancelled = true; };
-  }, [sessionIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fetchError =
+    data?.status === 'error'
+      ? (data.errors?.[0]?.message ?? m.calibration_batch_suggest_failed())
+      : error
+        ? errMessage(error)
+        : undefined;
+  const results: BatchSessionResultDto[] =
+    data && data.status !== 'error' ? (data.results ?? []) : [];
 
   if (sessionIds.length === 0) {
     return null;
