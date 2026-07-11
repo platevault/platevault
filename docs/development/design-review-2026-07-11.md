@@ -144,3 +144,32 @@ New here (not found in issues): mock wizard steps 3/6; silent lifecycle refusals
 5. Settings: T6-2..T6-6.
 
 Impeccable follow-ups: `$impeccable polish` (picks up this snapshot's backlog), `$impeccable layout` (Targets header + detail-panel economy), `$impeccable clarify` (refusal/error copy), `$impeccable harden` (empty/error/disabled states).
+
+---
+
+# Addendum (2026-07-11, second pass)
+
+Follow-ups executed: PR #598 carries this report; 28 issues filed (#599–#631) + epic #632 + root-cause comments on #581/#587/#556; journeys doc extended with Touch & validate contracts and Journeys 11–16.
+
+## AI-slop signal review
+
+The theme layer is *not* slop — one accent, semantic tokens, no gradients, no card grids, no hero metrics. The slop signals live one level down, in the reflexes:
+
+1. **Pill inflation — the strongest tell.** Pills currently encode: workflow states, frame types, file formats, target types, catalog aliases, "FITS" source provenance, "Manual" equipment provenance, Protected/Unprotected, "Inherits global default", lifecycle states, Default/Active site tags, tool availability, aging warnings, and 7 filter chips per Targets row × 11,390 rows. When every fact wears the same rounded capsule, the capsule stops meaning anything — and the one pill that must stop a user cold ("Unprotected") has the same visual weight as "Manual". Fix with a taxonomy: pills for *state only* (color-coded, ≤1–2 per row); plain text for identity/category; small icon+tooltip for provenance; never pill a value that is the column's own subject ("Galaxy" 11,390 times).
+2. **Em-dash as the universal placeholder.** "—" currently means unresolved-metadata, not-yet-computed, not-applicable-by-design, and genuinely-empty — four semantics, one glyph. Generated UIs do this because binding `?? '—'` is free. Distinct affordances per meaning (unresolved chip / "stub" disclosure / structural omission / true empty).
+3. **Regenerate-rather-than-reuse duplicates.** Two plan overlays, two page-shell families (Settings vs list pages), `accent`≡`primary`, two empty-state systems, cloned panel-bar/modal-header CSS with comments admitting the clone. This is the classic parallel-implementation tell; the house rule (one parameterised component) already forbids it.
+4. **Uniform decoration instead of information-bearing variation.** "LOW" + dot rendered on every visible Targets row; source pills attached to em-dashes; full section chrome (uppercase header + rule) around single dropdowns (FONT SIZE, DISPLAY DENSITY). Decoration applied by template, not by signal.
+5. **Raw data leaks.** ISO timestamps with 7 decimal places, "(root)", raw UUIDs in a user-facing table, "Dark_flat"/"Darkflat" as sibling categories, SIMBAD OID as a first-class fact. The bind-whatever-the-API-returns tell.
+6. **Button-placement drift.** Selected-item actions live in the detail header on Sessions/Calibration/Projects but in the top bar on Archive; the page CTA is top-right primary on Projects, mid-bar neutral on Targets, and two simultaneous accent CTAs on Inbox; the wizard's forward action lives in the right rail while Cancel/Save-draft live top-right. Pick one home per role (page CTA: top-right primary; selection actions: detail header; wizard progression: bottom-right of the form column) and enforce it in the PageTopBar doc-comment that already states the rule.
+7. **Detector-level tells** (4 toast left-stripes, 3 layout-property transitions) — small, fix mechanically.
+
+Not slop, worth saying: the wizard's footprint card, the protection-acknowledgement gate, the calibration-matching explanation panel, and the per-state lifecycle guidance copy are all *earned* product furniture — keep them.
+
+## Viewport strategy (after the vertical-economy fix)
+
+Ground truth for this product's desk: PixInsight occupies the primary monitor during processing; PlateVault typically lives on a secondary display or shares a monitor — design for a 1200–1600px window as the common case, not 2867px full-screen.
+
+1. **Phase 0 — economy (prerequisite, already issue-tracked):** side-dockable detail panel, density token adopted by all tables, Targets header collapsed to one band, settings content max-width so 2560px doesn't render a 60%-dead pane.
+2. **Phase 1 — adaptive dock:** detail panel docks right when window ≥ ~1500px logical, bottom below; user-overridable per page, persisted, with a drag-resizable split. This alone makes the list+detail pattern work at every size the app actually runs at.
+3. **Phase 2 — pop-out windows for monitoring surfaces (highest multi-window value, lowest complexity):** Activity log and plan-apply progress as independent OS windows ("Open view in new window" already exists as a palette action). The user approves/monitors a long apply on one screen while browsing the library on another. Same candidate: a compact "Tonight" planner strip for capture nights (always-on-top, ~360×640).
+4. **Phase 3 — don't do generalized multi-window workspaces.** Per-project multi-window adds session-management complexity the audience doesn't need; the single main window + two pop-outs covers the real desk. Revisit only if Phase 2 telemetry shows people juggling both pop-outs constantly.
