@@ -72,7 +72,7 @@ still landing PRs and these rows will move again once those lanes report.
 | 030 ui-audit-revision | 🔴 Superseded | delivered by 031/032 |
 | 031 design-v3-implementation | ✅ Closed | superseded by 032 |
 | 032 design-v4-implementation | ✅ Implemented | |
-| 033 validation-bugfix-remediation | 🟡 Partial | 83/92; blocked on 017 cleanup generator |
+| 033 validation-bugfix-remediation | 🟡 Closeout-ready — 92/96 (4 honest partials, 0 open) | No longer blocked on 017 (017 shipped its remainder via #492). PR #561 (`a504a7fc`, lane nH1) closed the real-backend e2e gaps: T015/T024/T025/T031/T036a done via `crates/e2e-tests`/`app_core`/`app-tauri` real-backend tests (first real CI execution passed both ubuntu+windows legs, run 29143485185); T085 (doc resolution sweep) and T087 (dead-code adjudication: `@tanstack/react-table` removed, `angularSeparationFromMoonDeg` kept + documented test-only, and a real `[object Object]` error-display bug fixed in `PlanReviewOverlay.tsx`'s 3 catch blocks by switching to the canonical `errMessage()` helper) both closed [X]. Obsolete issue #1 closed. **4 remaining are honest partials** (marked `[~]`, not gaps): T006 (real-backend WebView harness — blocked on a pre-built `desktop_shell` binary not available headlessly in the WSL sandbox; superseded for automated evidence by spec 037's `crates/e2e-tests` Layer-2 harness), T049 (lifecycle real-backend round-trip — same T006 blocker, Rust unit tests are the authoritative signal), T083 (full automated suite headless — real-backend specs honestly `test.skip`, everything else green), T086 (gate suite green; the literal human-driven Windows-native Layer-4 walkthrough is deferred to the campaign's Windows-validation lane) |
 | 035 simbad-target-resolution | ✅ Implemented | validated end-to-end 2026-06-23 |
 | 036 retire-legacy-targets | ✅ Implemented | PR #255 |
 | 037 e2e-integration-testing | ✅ Effectively complete (35/40; 5 open are deliberate SUPERSEDED decisions, not gaps) | Layer-1 + CI Stage A done; Layer-2 tauri-driver journeys merged (`1419b1a0`/#403) — `search.global`/`sessions.list`/`calibration.masters` are real backends. `sessions.transition` was **deleted** by spec 041 FR-051 (not pending). PR #531 (`35f86be4`, lane nE) closed T038/T039 with evidence: `contracts/coverage-matrix.md` refreshed (StepSite gap closed via new `tests/e2e/setup_wizard_site_step.spec.ts`; 046 i18n + 047 moon-pill items re-verified already-closed), `docs/development/testing.md` Layer-2 section rewritten, the dead `test:e2e:real` script fixed (`apps/desktop/scripts/run-e2e-real.sh` now backs `apps/desktop/package.json`'s script), and an offline-coverage claim corrected — `crates/targeting/resolver/tests/simbad_live.rs` is a pre-existing, ungated suite that hits the real SIMBAD endpoint as part of the default `cargo test --workspace` (not re-gated here, flagged as a separate backlog item). T001–T003/T006–T008 remain unchecked by design (SUPERSEDED — offline `FakeResolver`/`FakeSpawner` test doubles replaced the originally-planned `wiremock`/`better-sqlite3` approach). Still-open follow-up (not regressions): full 6-step wizard happy path E2E, Data Sources management E2E |
@@ -103,7 +103,7 @@ FOUNDATION (all ✅ — nothing blocked here)
 INBOX CHAIN
   005 mixed-folder 🔴 ─▶ 041 inbox-plan-surface ✅ ─┬─▶ 039 cross-root-inbox ⚪
   038 wizard-scan ✅                                ├─▶ 025 plan-application 🟡 (rollback test + 10k-perf remain)
-  016 protection ✅ ─▶ 017 cleanup/archive 🟡 ──────┼─▶ 033 validation-bugfix 🟡 (needs 017 generator)
+  016 protection ✅ ─▶ 017 cleanup/archive 🟡 ──────┼─▶ 033 validation-bugfix 🟡 (closeout-ready, 92/96 via #561)
                                                     └───┘
 
 TARGETS CHAIN
@@ -159,7 +159,7 @@ lane does not touch `.github/workflows/**`, tags, or release PRs.
 
 ## Blocked / not-yet-actionable
 
-- **033 validation-bugfix** — dead cleanup-plan path depends on the **017** generator; do 017 first.
+- **033 validation-bugfix** — no longer blocked: 017's remainder shipped (#492) and #561 closed the real-backend e2e gaps; see the 033 row. No longer a blocked/not-yet-actionable item.
 - **037 e2e** — closed out via #531; see the 037 row. No longer a blocked/not-yet-actionable item.
 - **044 planner-astronomy** — Track B (astronomy-engine) complete minus 2 deferred tasks; see the 044 row.
 

@@ -196,3 +196,21 @@ mechanism itself.
   (#547). Any new raw `sqlx::` usage outside `crates/persistence/db` now
   fails CI immediately — no baseline drift budget remains. Not this lane's
   work; noted for downstream lanes touching persistence.
+- **Lane nH1 merged, spec 033 closeout-ready (2026-07-11).** #561
+  (`a504a7fc`) closed the real-backend e2e gaps (T015/T024/T025/T031/T036a
+  — first real CI execution passed both required legs, run 29143485185),
+  T085 (doc resolution sweep) and T087 (dead-code adjudication:
+  `@tanstack/react-table` removed, `angularSeparationFromMoonDeg` kept +
+  documented test-only, and a real `[object Object]` error-display bug
+  fixed in `PlanReviewOverlay.tsx` by switching 3 catch blocks to the
+  canonical `errMessage()` helper), and closed obsolete issue #1. 92/96
+  tasks done; the 4 remaining (T006/T049/T083/T086) are honest `[~]`
+  partials, not gaps — all blocked on the same real-backend-WebView-in-WSL
+  limitation, superseded for automated evidence by spec 037's Layer-2
+  harness; T086's literal human Windows walkthrough is the only piece
+  needing a live pass. SPEC_STATUS 033 row updated (92/96, no longer
+  blocked on 017).
+- **Lane nH2 spawned (2026-07-11).** Final code lane: 025/012/008/021
+  tails, a contract-test runner for spec 007, a paused-state minimal UI,
+  and adjudication of the `simbad_live.rs` env-gate question flagged by
+  lane nE (see the T078/037 entries above).
