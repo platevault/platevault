@@ -30,6 +30,10 @@ use audit::event_bus::{
     PlanApplyingCompleted, PlanDiscarded, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_DISCARDED,
 };
 use persistence_db::repositories::inbox as inbox_repo;
+use persistence_db::repositories::plans as plans_repo;
+use persistence_db::repositories::q_inbox::{
+    self, InsertCalibrationFingerprint, InsertCalibrationSession,
+};
 use sqlx::SqlitePool;
 use tokio::sync::broadcast;
 
@@ -187,13 +191,10 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
     }
 
     // Idempotency guard: skip if a session already references this inbox item.
-    let existing: Option<(String,)> =
-        sqlx::query_as("SELECT id FROM calibration_session WHERE source_inbox_item_id = ? LIMIT 1")
-            .bind(&item.id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| format!("check existing calibration_session: {e}"))?;
-    if existing.is_some() {
+    let exists = q_inbox::calibration_session_exists_for_inbox_item(pool, &item.id)
+        .await
+        .map_err(|e| format!("check existing calibration_session: {e}"))?;
+    if exists {
         return Ok(());
     }
 
@@ -256,31 +257,29 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
         None => "[]".to_owned(),
     };
 
-    sqlx::query(
-        "INSERT INTO calibration_session
-            (id, session_key, frame_ids, kind, root_id, created_at, source_inbox_item_id)
-         VALUES (?, ?, ?, ?, ?, datetime('now'), ?)",
+    q_inbox::insert_calibration_session(
+        pool,
+        &InsertCalibrationSession {
+            id: &session_id,
+            session_key: &session_key,
+            frame_ids_json: &frame_ids_json,
+            kind: cal_kind,
+            root_id: resolved_root_id.as_deref(),
+            source_inbox_item_id: &item.id,
+        },
     )
-    .bind(&session_id)
-    .bind(&session_key)
-    .bind(&frame_ids_json)
-    .bind(cal_kind)
-    .bind(&resolved_root_id)
-    .bind(&item.id)
-    .execute(pool)
     .await
     .map_err(|e| format!("insert calibration_session: {e}"))?;
 
-    sqlx::query(
-        "INSERT INTO calibration_fingerprint
-            (id, calibration_type, exposure_s, filter_name)
-         VALUES (?, ?, ?, ?)",
+    q_inbox::insert_calibration_fingerprint(
+        pool,
+        &InsertCalibrationFingerprint {
+            calibration_session_id: &session_id,
+            calibration_type: cal_kind,
+            exposure_s: item.master_exposure_s,
+            filter_name: item.master_filter.as_deref(),
+        },
     )
-    .bind(&session_id)
-    .bind(cal_kind)
-    .bind(item.master_exposure_s)
-    .bind(item.master_filter.as_deref())
-    .execute(pool)
     .await
     .map_err(|e| format!("insert calibration_fingerprint: {e}"))?;
 
@@ -305,26 +304,21 @@ async fn resolve_applied_frame_path(
     pool: &SqlitePool,
     plan_id: &str,
 ) -> Result<Option<(String, String)>, String> {
-    let row: Option<(Option<String>, String, Option<String>, String)> = sqlx::query_as(
-        "SELECT to_root_id, to_relative_path, from_root_id, from_relative_path
-         FROM plan_items
-         WHERE plan_id = ?
-           AND action IN ('move', 'catalogue')
-           AND item_state = 'succeeded'
-         ORDER BY item_index ASC
-         LIMIT 1",
-    )
-    .bind(plan_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| format!("query plan_items: {e}"))?;
-
-    let Some((to_root_id, to_rel, from_root_id, from_rel)) = row else {
+    // `list_plan_items` already orders by item_index ASC; find the first
+    // successful move/catalogue item (same ORDER BY + LIMIT 1 semantics as
+    // the original inline query).
+    let items = plans_repo::list_plan_items(pool, plan_id)
+        .await
+        .map_err(|e| format!("query plan_items: {e}"))?;
+    let Some(row) = items.into_iter().find(|it| {
+        matches!(it.action.as_str(), "move" | "catalogue") && it.item_state == "succeeded"
+    }) else {
         return Ok(None);
     };
-    Ok(match (to_root_id, from_root_id) {
-        (Some(r), _) if !to_rel.is_empty() => Some((r, to_rel)),
-        (_, Some(r)) => Some((r, from_rel)),
+
+    Ok(match (row.to_root_id, row.from_root_id) {
+        (Some(r), _) if !row.to_relative_path.is_empty() => Some((r, row.to_relative_path)),
+        (_, Some(r)) => Some((r, row.from_relative_path)),
         _ => None,
     })
 }
