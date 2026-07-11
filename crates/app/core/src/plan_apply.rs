@@ -303,7 +303,8 @@ async fn finalize_view_removal(pool: &SqlitePool, plan_id: &str, terminal: &str)
         if let Err(e) = views_repo::mark_view_removed(pool, &view_id).await {
             tracing::error!(%plan_id, %view_id, error=%e, "removal finalize: failed to mark view removed");
         }
-    } else if let Err(e) = app_core_projects::source_view_verify::sweep_view_staleness(pool, &view_id).await
+    } else if let Err(e) =
+        app_core_projects::source_view_verify::sweep_view_staleness(pool, &view_id).await
     {
         tracing::error!(%plan_id, %view_id, error=?e, "removal finalize: sweep failed after partial apply");
     }
@@ -325,7 +326,9 @@ async fn finalize_view_regeneration(pool: &SqlitePool, plan_id: &str) {
         return;
     };
 
-    if let Err(e) = app_core_projects::source_view_verify::sweep_view_staleness(pool, &view_id).await {
+    if let Err(e) =
+        app_core_projects::source_view_verify::sweep_view_staleness(pool, &view_id).await
+    {
         tracing::error!(%plan_id, %view_id, error=?e, "regeneration finalize: sweep failed");
     }
 }
