@@ -88,6 +88,8 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | #569 | Inbox mixed item can be Confirmed without seeing split preview/destinations (commit blind) | J2 | **bug** |
 | #573 | Targets page freezes app loading full 13073 catalog into table model (rendering virtualized, data load not) | J9 | **bug** (high) |
 | #574 | Targets sidebar shows full catalog count (13073) — show "my targets" count | J9 | enhancement |
+| #579 | Targets "Visible" rating shows "low" for every target regardless of altitude | J9 | **bug** |
+| #580 | Targets "Tonight" altitude graph too small — larger/wider + coloured line + markers | J9 | enhancement |
 
 **Journey → Epic map:** J1 #518 · J2 #519 · J3 #520 · J4 #521 · J5 #522 · J6 #523
 · J7 #524 · J8 #525 · J9 #526 · J10 #527.
@@ -253,9 +255,10 @@ placeholders, not fabricated values. Also probe observing-site lat/long range va
 | T3 SIMBAD resolve (success + failure) | ⬜ | success cached; failure inline "not found", never fabricated. FAIL: fabricated row / no failure msg |
 | T4 Detail identity/aliases/notes | ⬜ | user alias searchable, catalog aliases non-removable. FAIL: catalog alias removable / alias not searchable |
 | T5 Favourites localStorage-only (expected) | ⬜ | persists across relaunch. FAIL: doesn't persist |
-| T6a Astronomy cols disclosed placeholder | ⬜ | "set up site" prompt/placeholder, Sessions dash. FAIL: concrete value w/o disclosure (constitutional) |
-| T6b Site-setup prompt is only path (regression) | ⬜ | no functional site-creation on main. FAIL: working site flow (means #440 landed — report) |
-| T6c (after #440) real astronomy w/ site | ⬜ | six cols compute from ephemeris. FAIL: still placeholder-like |
+| T1 sort | ✅ | single-column sort works (Max alt ▼). Search/alias ✅ (M31==Andromeda). |
+| T6a Astronomy cols disclosed placeholder | ✅ | **site IS configured** ("Backyard" 52.1°N/5.1°E, Europe/Amsterdam) → concrete astronomy values are legit, NOT fabricated. No constitutional violation. |
+| T6b Site-setup prompt is only path (regression) | ✅→ | **#440 site-creation appears LANDED** (functional site present). |
+| T6c (after #440) real astronomy w/ site | ⚠️ | six cols compute from ephemeris BUT: **Visible always "low"** regardless of alt (**#579**); **Tonight graph** too small (**#580**); **Img time/Sessions empty** (downstream #564/#307). |
 
 ---
 
