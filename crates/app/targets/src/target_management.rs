@@ -47,6 +47,12 @@ fn db_err(e: &cache::CacheError) -> TargetOpError {
     TargetOpError { code: "internal.database".to_owned(), message: format!("{e}"), details: None }
 }
 
+/// Map a [`persistence_db::DbError`] from a `q_targets_mgmt` repository call to
+/// the `internal.database` op-error shape (mirrors [`db_err`] for `CacheError`).
+fn persist_err(e: &persistence_db::DbError) -> TargetOpError {
+    TargetOpError { code: "internal.database".to_owned(), message: format!("{e}"), details: None }
+}
+
 fn invalid_id(id: &str) -> TargetOpError {
     TargetOpError {
         code: "target.invalid_id".to_owned(),
@@ -80,27 +86,17 @@ async fn load_alias_dtos(
     pool: &SqlitePool,
     target_id_str: &str,
 ) -> Result<Vec<TargetAliasDto>, TargetOpError> {
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT id, alias, kind
-         FROM target_alias
-         WHERE target_id = ?
-         ORDER BY alias ASC",
-    )
-    .bind(target_id_str)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| TargetOpError {
-        code: "internal.database".to_owned(),
-        message: format!("{e}"),
-        details: None,
-    })?;
+    let rows =
+        persistence_db::repositories::q_targets_mgmt::list_target_aliases(pool, target_id_str)
+            .await
+            .map_err(|e| persist_err(&e))?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, alias, kind)| TargetAliasDto {
-            id,
-            alias,
-            kind: map_alias_kind(AliasKind::from_wire(&kind)),
+        .map(|r| TargetAliasDto {
+            id: r.id,
+            alias: r.alias,
+            kind: map_alias_kind(AliasKind::from_wire(&r.kind)),
         })
         .collect())
 }
@@ -188,16 +184,11 @@ pub async fn alias_add(
     let uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
 
     // Verify the target exists.
-    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
-        .bind(uuid.to_string())
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| TargetOpError {
-            code: "internal.database".to_owned(),
-            message: format!("{e}"),
-            details: None,
-        })?;
-    if exists.is_none() {
+    let exists =
+        persistence_db::repositories::q_targets_mgmt::target_exists(pool, &uuid.to_string())
+            .await
+            .map_err(|e| persist_err(&e))?;
+    if !exists {
         return Err(not_found(&req.target_id));
     }
 
@@ -242,17 +233,13 @@ pub async fn alias_remove(
 ) -> Result<TargetAliasRemoveResult, TargetOpError> {
     // First check whether the alias exists at all (to distinguish "not found"
     // from "not removable").
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT kind FROM target_alias WHERE id = ? AND target_id = ?")
-            .bind(&req.alias_id)
-            .bind(&req.target_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| TargetOpError {
-                code: "internal.database".to_owned(),
-                message: format!("{e}"),
-                details: None,
-            })?;
+    let row = persistence_db::repositories::q_targets_mgmt::get_alias_kind(
+        pool,
+        &req.alias_id,
+        &req.target_id,
+    )
+    .await
+    .map_err(|e| persist_err(&e))?;
 
     match row {
         None => Err(TargetOpError {
@@ -260,7 +247,7 @@ pub async fn alias_remove(
             message: format!("Alias '{}' not found on target '{}'.", req.alias_id, req.target_id),
             details: None,
         }),
-        Some((kind,)) if kind != "user" => Err(alias_not_removable()),
+        Some(kind) if kind != "user" => Err(alias_not_removable()),
         Some(_) => {
             let deleted =
                 cache::delete_user_alias(pool, &req.alias_id).await.map_err(|e| db_err(&e))?;
@@ -327,16 +314,10 @@ pub async fn sessions_list(
 ) -> Result<Vec<TargetSessionItem>, TargetOpError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
     // Verify the target exists.
-    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
-        .bind(&req.target_id)
-        .fetch_optional(pool)
+    let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
         .await
-        .map_err(|e| TargetOpError {
-            code: "internal.database".to_owned(),
-            message: format!("{e}"),
-            details: None,
-        })?;
-    if exists.is_none() {
+        .map_err(|e| persist_err(&e))?;
+    if !exists {
         return Err(not_found(&req.target_id));
     }
     let rows =
@@ -373,16 +354,10 @@ pub async fn projects_list(
     req: &TargetProjectsListRequest,
 ) -> Result<Vec<TargetProjectItem>, TargetOpError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
-    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
-        .bind(&req.target_id)
-        .fetch_optional(pool)
+    let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
         .await
-        .map_err(|e| TargetOpError {
-            code: "internal.database".to_owned(),
-            message: format!("{e}"),
-            details: None,
-        })?;
-    if exists.is_none() {
+        .map_err(|e| persist_err(&e))?;
+    if !exists {
         return Err(not_found(&req.target_id));
     }
     let rows =
@@ -413,16 +388,10 @@ pub async fn note_get(
     req: &TargetNoteGetRequest,
 ) -> Result<TargetNoteGetResult, TargetOpError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
-    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
-        .bind(&req.target_id)
-        .fetch_optional(pool)
+    let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
         .await
-        .map_err(|e| TargetOpError {
-            code: "internal.database".to_owned(),
-            message: format!("{e}"),
-            details: None,
-        })?;
-    if exists.is_none() {
+        .map_err(|e| persist_err(&e))?;
+    if !exists {
         return Err(not_found(&req.target_id));
     }
     let notes = persistence_db::repositories::targets::get_target_notes(pool, &req.target_id)
@@ -455,16 +424,10 @@ pub async fn note_update(
     req: &TargetNoteUpdateRequest,
 ) -> Result<TargetNoteUpdateResult, TargetOpError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
-    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
-        .bind(&req.target_id)
-        .fetch_optional(pool)
+    let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
         .await
-        .map_err(|e| TargetOpError {
-            code: "internal.database".to_owned(),
-            message: format!("{e}"),
-            details: None,
-        })?;
-    if exists.is_none() {
+        .map_err(|e| persist_err(&e))?;
+    if !exists {
         return Err(not_found(&req.target_id));
     }
     // Blank/whitespace → store NULL (clear).

@@ -62,20 +62,9 @@ async fn write_audit(
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
     let payload = serde_json::json!({ "query": query }).to_string();
 
-    let result = sqlx::query(
-        "INSERT INTO audit_log_entry \
-         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
-          outcome, severity, request_id, at, payload) \
-         VALUES (?, 'canonical_target', ?, NULL, NULL, ?, ?, 'applied', 'workflow', ?, ?, ?)",
+    let result = persistence_db::repositories::q_targets_mgmt::insert_resolution_audit(
+        pool, &audit_id, target_id, trigger, actor, request_id, &at, &payload,
     )
-    .bind(&audit_id)
-    .bind(target_id)
-    .bind(trigger)
-    .bind(actor)
-    .bind(request_id)
-    .bind(&at)
-    .bind(&payload)
-    .execute(pool)
     .await;
 
     if let Err(e) = result {
@@ -155,13 +144,9 @@ struct OnlineSettings {
 /// Read the singleton `resolver_settings` row (id = 1). The row is seeded by
 /// migration 0031, so this should always return a value; missing → defaults.
 async fn read_settings(pool: &SqlitePool) -> Result<OnlineSettings, ContractError> {
-    let row: Option<(i64, String, i64)> = sqlx::query_as(
-        "SELECT online_enabled, simbad_endpoint, request_timeout_secs
-         FROM resolver_settings WHERE id = 1",
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| db_internal_ctx(e, "read resolver_settings"))?;
+    let row = persistence_db::repositories::q_targets_mgmt::get_resolver_settings_online(pool)
+        .await
+        .map_err(|e| db_internal_ctx(e, "read resolver_settings"))?;
 
     Ok(row.map_or(
         OnlineSettings {
@@ -169,10 +154,10 @@ async fn read_settings(pool: &SqlitePool) -> Result<OnlineSettings, ContractErro
             endpoint: targeting_resolver::simbad::DEFAULT_TAP_ENDPOINT.to_owned(),
             request_timeout_secs: 10,
         },
-        |(online_enabled, endpoint, request_timeout_secs)| OnlineSettings {
-            online_enabled: online_enabled != 0,
-            endpoint,
-            request_timeout_secs,
+        |r| OnlineSettings {
+            online_enabled: r.online_enabled != 0,
+            endpoint: r.simbad_endpoint,
+            request_timeout_secs: r.request_timeout_secs,
         },
     ))
 }
