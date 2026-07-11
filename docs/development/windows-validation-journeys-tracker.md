@@ -90,6 +90,7 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | #574 | Targets sidebar shows full catalog count (13073) — show "my targets" count | J9 | enhancement |
 | #579 | Targets "Visible" rating shows "low" for every target regardless of altitude | J9 | **bug** |
 | #580 | Targets "Tonight" altitude graph too small — larger/wider + coloured line + markers | J9 | enhancement |
+| #581 | Command palette (Ctrl+K) unstyled, broken matching, no keyboard nav, clicks do nothing | J10 | **bug** (high) |
 
 **Journey → Epic map:** J1 #518 · J2 #519 · J3 #520 · J4 #521 · J5 #522 · J6 #523
 · J7 #524 · J8 #525 · J9 #526 · J10 #527.
@@ -270,14 +271,14 @@ placeholders, not fabricated values. Also probe observing-site lat/long range va
 | Test | Status | Step → Expected / FAIL |
 |------|--------|------------------------|
 | T1 Pane grouping, no global Save | ⬜ | 12 panes, no Save, every field auto-saves. FAIL: Save exists / needs it |
-| T2 Theme switch live + persists | ⬜ | 4 themes+System apply live, survive restart. FAIL: needs reload / resets |
+| T2 Theme switch live + persists | ✅ | 4 themes + System, applies **live** (no reload). Persist-across-restart not yet retested. |
 | T3 Font-size visual-only (expected) | ⬜ | Density affects app; font-size no-op outside pane. FAIL: crash/surprise |
 | T4 Ingestion settings persist (no consumer yet) | ⬜ | persist across restart. FAIL: don't persist |
 | T5 Planner altitude clamp 0–90 | ⬜ | out-of-range clamps; valid affects planner. FAIL: accepts out-of-range |
 | T6 Log panel is layout participant | ⬜ | expand shrinks content (no overlay); filtered export matches. FAIL: overlays / export unfiltered |
 | T7 1100×720 pinned-header convention | ⬜ | header pinned, only content scrolls, all pages. FAIL: header scrolls out |
 | T8 Translated errors, never raw code | ⬜ | human message, no `E_*`/keys. FAIL: raw code leaks |
-| T9 Command palette (Ctrl+K) + keyboard nav | ⬜ | live backend search, keyboard-only reaches result. FAIL: fake data / nav stuck |
+| T9 Command palette (Ctrl+K) + keyboard nav | ❌ | **#581** — opens but **unstyled**, matching broken ("M31" finds nothing, "M" finds many), **no arrow-key nav**, **clicks do nothing**. Feature non-functional. |
 | T10 Sidebar collapse persists | ⬜ | collapsed survives reload. FAIL: resets |
 
 ---
