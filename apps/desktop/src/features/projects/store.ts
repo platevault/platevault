@@ -11,6 +11,7 @@ import { queryKeys } from "@/data/queryKeys";
 import { queryClient as sharedQueryClient } from "@/data/queryClient";
 import { commands } from "@/bindings/index";
 import { unwrap } from "@/api/ipc";
+import { ipcArgs } from "@/lib/ipc-args";
 import { applyProjectLifecycleTransition } from "./lifecycleTransition";
 import type {
   ProjectLifecycleState,
@@ -46,13 +47,13 @@ async function getProject008(args: { id: string }): Promise<ProjectDetailDto> {
 
 async function createProject(req: ProjectCreateRequest): Promise<ProjectCreateResult> {
   return unwrap(
-    await commands.projectsCreate(req as Parameters<typeof commands.projectsCreate>[0]),
+    await commands.projectsCreate(ipcArgs<typeof commands.projectsCreate>(req)),
   );
 }
 
 async function updateProject(req: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
   return unwrap(
-    await commands.projectsUpdate(req as Parameters<typeof commands.projectsUpdate>[0]),
+    await commands.projectsUpdate(ipcArgs<typeof commands.projectsUpdate>(req)),
   );
 }
 

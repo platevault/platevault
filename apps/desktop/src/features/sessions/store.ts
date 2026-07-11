@@ -15,6 +15,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/data/queryKeys";
 import { commands } from "@/bindings/index";
 import { unwrap } from "@/api/ipc";
+import { ipcArgs } from "@/lib/ipc-args";
 import type {
   InventoryListResponse,
   InventoryListRequest,
@@ -28,7 +29,7 @@ export type { InventorySource, InventorySession } from "@/bindings/index";
 // (spec 037) onto the generated bindings. unwrap() turns the generated Result
 // into the throw-on-error contract the hooks below rely on.
 async function inventoryList(req: InventoryListRequest): Promise<InventoryListResponse> {
-  return unwrap(await commands.inventoryList(req as Parameters<typeof commands.inventoryList>[0]));
+  return unwrap(await commands.inventoryList(ipcArgs<typeof commands.inventoryList>(req)));
 }
 
 // Filters shape
@@ -71,7 +72,7 @@ export function useInventorySources(filters?: InventoryFilters): QueryState<Inve
 export function useInvalidateInventory() {
   const queryClient = useQueryClient();
   return useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all() });
   }, [queryClient]);
 }
 

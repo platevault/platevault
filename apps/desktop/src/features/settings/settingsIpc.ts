@@ -12,6 +12,7 @@
 
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+import { ipcArgs } from '@/lib/ipc-args';
 // `LibraryRoot` is a plain `_Serialize` re-export in `@/bindings/types` (the
 // facade every settings pane already imports it through), NOT the wider
 // `LibraryRoot_Serialize | LibraryRoot_Deserialize` union `@/bindings/index`
@@ -303,7 +304,7 @@ export async function sourceProtectionSet(
 ): Promise<SourceProtectionSetResponse> {
   return unwrap(
     await commands.sourceProtectionSet(
-      request as Parameters<typeof commands.sourceProtectionSet>[0],
+      ipcArgs<typeof commands.sourceProtectionSet>(request),
     ),
   );
 }
@@ -348,7 +349,7 @@ export async function patternPreview(
 ): Promise<PatternPreviewResponse> {
   return unwrap(
     await commands.patternPreview(
-      { pattern, sampleMetadata } as Parameters<typeof commands.patternPreview>[0],
+      ipcArgs<typeof commands.patternPreview>({ pattern, sampleMetadata }),
     ),
   );
 }
@@ -368,7 +369,7 @@ export async function patternPathPreview(
 ): Promise<PathPatternPreviewResponse> {
   return unwrap(
     await commands.patternPathPreview(
-      { pattern, sampleMetadata } as Parameters<typeof commands.patternPathPreview>[0],
+      ipcArgs<typeof commands.patternPathPreview>({ pattern, sampleMetadata }),
     ),
   );
 }
