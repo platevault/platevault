@@ -86,48 +86,26 @@ async fn search_targets(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>,
     // Include `match_via_alias` to score alias matches correctly.
     let like_pattern = format!("%{q}%");
 
-    // Returns (id, primary_designation, best_alias_normalized_match)
-    let rows: Vec<(String, String, Option<String>)> = sqlx::query_as(
-        // spec 036 reconciliation: query the gen-3 canonical_target / target_alias
-        // tables (the legacy spec-013 targets / target_aliases were retired).
-        "SELECT t.id, COALESCE(t.display_alias, t.primary_designation) AS label,
-                (SELECT ta.alias FROM target_alias ta
-                 WHERE ta.target_id = t.id
-                   AND ta.normalized LIKE ?
-                 LIMIT 1) AS alias_match
-         FROM canonical_target t
-         WHERE LOWER(t.primary_designation) LIKE ?
-            OR EXISTS (
-                SELECT 1 FROM target_alias ta2
-                WHERE ta2.target_id = t.id
-                  AND ta2.normalized LIKE ?
-            )
-         ORDER BY t.primary_designation ASC
-         LIMIT 10",
-    )
-    .bind(&like_pattern)
-    .bind(&like_pattern)
-    .bind(&like_pattern)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let rows = persistence_db::repositories::q_core::search_targets_by_like(pool, &like_pattern)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, designation, alias_match)| {
+        .map(|row| {
             // Score on both primary designation and alias; take the higher score.
-            let s_primary = score(&designation, q);
-            let s_alias = alias_match.as_deref().map_or(0.0, |a| score(a, q));
+            let s_primary = score(&row.label, q);
+            let s_alias = row.alias_match.as_deref().map_or(0.0, |a| score(a, q));
             let s = s_primary.max(s_alias);
             // All rows came from the SQL LIKE filter so there must be a match.
             // Use a minimum non-zero score for alias-only matches.
             let final_score = if s <= 0.0 { 0.6 } else { s };
             SearchResult {
-                id: id.clone(),
+                id: row.id.clone(),
                 kind: SearchResultKind::Target,
-                label: designation,
-                sublabel: alias_match,
-                route: format!("/targets/{id}"),
+                label: row.label,
+                sublabel: row.alias_match,
+                route: format!("/targets/{}", row.id),
                 score: final_score,
             }
         })
@@ -135,22 +113,18 @@ async fn search_targets(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>,
 }
 
 async fn recent_targets(pool: &SqlitePool) -> Result<Vec<SearchResult>, String> {
-    let rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT id, COALESCE(display_alias, primary_designation) FROM canonical_target \
-         ORDER BY resolved_at DESC LIMIT 5",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let rows = persistence_db::repositories::q_core::recent_targets(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, designation)| SearchResult {
-            id: id.clone(),
+        .map(|row| SearchResult {
+            id: row.id.clone(),
             kind: SearchResultKind::Target,
-            label: designation,
+            label: row.label,
             sublabel: Some("Recent target".to_owned()),
-            route: format!("/targets/{id}"),
+            route: format!("/targets/{}", row.id),
             score: 0.5,
         })
         .collect())
@@ -161,31 +135,23 @@ async fn recent_targets(pool: &SqlitePool) -> Result<Vec<SearchResult>, String> 
 async fn search_sessions(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>, String> {
     let like_pattern = format!("%{q}%");
 
-    let rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT id, session_key
-         FROM acquisition_session
-         WHERE LOWER(session_key) LIKE ?
-         ORDER BY created_at DESC
-         LIMIT 10",
-    )
-    .bind(&like_pattern)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let rows = persistence_db::repositories::q_core::search_sessions_by_like(pool, &like_pattern)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(rows
         .into_iter()
-        .filter_map(|(id, key)| {
-            let s = score(&key, q);
+        .filter_map(|row| {
+            let s = score(&row.label, q);
             if s <= 0.0 {
                 return None;
             }
             Some(SearchResult {
-                id: id.clone(),
+                id: row.id.clone(),
                 kind: SearchResultKind::Session,
-                label: key,
+                label: row.label,
                 sublabel: None,
-                route: format!("/sessions/{id}"),
+                route: format!("/sessions/{}", row.id),
                 score: s,
             })
         })
@@ -193,24 +159,18 @@ async fn search_sessions(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>
 }
 
 async fn recent_sessions(pool: &SqlitePool) -> Result<Vec<SearchResult>, String> {
-    let rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT id, session_key
-         FROM acquisition_session
-         ORDER BY created_at DESC
-         LIMIT 5",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let rows = persistence_db::repositories::q_core::recent_sessions(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, key)| SearchResult {
-            id: id.clone(),
+        .map(|row| SearchResult {
+            id: row.id.clone(),
             kind: SearchResultKind::Session,
-            label: key,
+            label: row.label,
             sublabel: Some("Recent session".to_owned()),
-            route: format!("/sessions/{id}"),
+            route: format!("/sessions/{}", row.id),
             score: 0.45,
         })
         .collect())
@@ -221,31 +181,23 @@ async fn recent_sessions(pool: &SqlitePool) -> Result<Vec<SearchResult>, String>
 async fn search_projects(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>, String> {
     let like_pattern = format!("%{q}%");
 
-    let rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT id, name, lifecycle
-         FROM projects
-         WHERE LOWER(name) LIKE ?
-         ORDER BY name ASC
-         LIMIT 10",
-    )
-    .bind(&like_pattern)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let rows = persistence_db::repositories::q_core::search_projects_by_like(pool, &like_pattern)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(rows
         .into_iter()
-        .filter_map(|(id, name, lifecycle)| {
-            let s = score(&name, q);
+        .filter_map(|row| {
+            let s = score(&row.name, q);
             if s <= 0.0 {
                 return None;
             }
             Some(SearchResult {
-                id: id.clone(),
+                id: row.id.clone(),
                 kind: SearchResultKind::Project,
-                label: name,
-                sublabel: Some(lifecycle),
-                route: format!("/projects/{id}"),
+                label: row.name,
+                sublabel: Some(row.lifecycle),
+                route: format!("/projects/{}", row.id),
                 score: s,
             })
         })
@@ -253,20 +205,18 @@ async fn search_projects(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>
 }
 
 async fn recent_projects(pool: &SqlitePool) -> Result<Vec<SearchResult>, String> {
-    let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT id, name FROM projects ORDER BY created_at DESC LIMIT 5")
-            .fetch_all(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+    let rows = persistence_db::repositories::q_core::recent_projects(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(rows
         .into_iter()
-        .map(|(id, name)| SearchResult {
-            id: id.clone(),
+        .map(|row| SearchResult {
+            id: row.id.clone(),
             kind: SearchResultKind::Project,
-            label: name,
+            label: row.label,
             sublabel: Some("Recent project".to_owned()),
-            route: format!("/projects/{id}"),
+            route: format!("/projects/{}", row.id),
             score: 0.4,
         })
         .collect())
