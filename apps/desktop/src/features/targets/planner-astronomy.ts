@@ -338,14 +338,27 @@ function moonUpWindowsFor(
 
 /**
  * Real (non-mock) instantaneous angular separation between a fixed J2000
- * target and the Moon, at a single instant.
+ * target and the Moon, at a single instant — **test-only reference
+ * implementation, no production callers** (spec 033 T087c dead-code audit,
+ * 2026-07-11).
  *
- * This is deliberately a single-scalar, single-instant helper — the full
- * Moon-geometry surface (illumination fraction, Moon-up windows intersected
- * with the dark window, per-filter-band moon-free time) is US5 (Phase 7,
- * T027/T028) and is NOT implemented here. This only replaces the mock
- * angular-distance placeholder used by the US1 "lunar distance" display
- * value with a real `AngleBetween` computation.
+ * Topocentric (parallax-corrected via `Equator(..., ofdate=false)` against
+ * the real observer), unlike the geocentric formula production actually uses
+ * (`astro/lunar-separation.ts`'s `targetUnitVector`/`angleBetweenDeg` against
+ * `GeoVector`, per this module's SC-013 note above — the ONE production
+ * implementation, deliberately not duplicated). This function predates that
+ * consolidation: it was the original US1 "lunar distance" placeholder
+ * replacement, later superseded by the SC-013 shared vector math.
+ *
+ * Kept (not deleted) because `planner-astronomy.test.ts`'s
+ * `angularSeparationFromMoonDeg` describe block uses it as an independent,
+ * externally-anchored (JPL Horizons astrometric RA/Dec) cross-check that the
+ * topocentric/geocentric gap stays within the documented tolerance
+ * (`SC-002`'s ±2° planning tolerance) — the accompanying "T027 per-sample
+ * separation formula" test right after it performs the equivalent
+ * external-ephemeris check against the actual production formula, so between
+ * the two, both the production formula AND the tolerance-of-approximation
+ * claim are independently verified.
  */
 export function angularSeparationFromMoonDeg(
   raDegJ2000: number,

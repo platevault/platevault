@@ -14,7 +14,7 @@
 //! (`fs_inventory::artifact_watcher::file_create_fires_event` for the raw fs
 //! event, `app_lifecycle::artifact::detect_emits_artifact_detected_and_artifact_classified`
 //! for the event-bus payloads) but no test exercising them wired together —
-//! real SQLite + real `EventBus` + real OS watcher + a file created strictly
+//! real `SQLite` + real `EventBus` + real OS watcher + a file created strictly
 //! after attach.
 
 use std::path::PathBuf;

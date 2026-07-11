@@ -2229,8 +2229,6 @@
   "plans_review_retry_btn": "Generate retry plan",
   "plans_review_retrying": "Generating retry plan…",
   "plans_review_retry_created_toast": "Retry plan created — review it before applying.",
-  "plans_review_retry_failed": "Could not generate a retry plan.",
-  "plans_review_retry_no_items": "Every item was applied; there is nothing left to retry.",
   "projects_cleanup_group_meta": [
     {
       "declarations": [

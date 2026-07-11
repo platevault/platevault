@@ -25,6 +25,7 @@ import { Btn, Pill, Banner, Table } from '@/ui';
 import { m } from '@/lib/i18n';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
+import { errMessage } from '@/lib/errors';
 import { queryKeys } from '@/data/queryKeys';
 import { formatBytes } from '@/lib/format';
 import { addToast } from '@/shared/toast';
@@ -135,7 +136,7 @@ export function PlanReviewOverlay({
       token = unwrap(await commands.plansApprove(planId)).approvalToken;
     } catch (e) {
       setApproving(false);
-      setApplyError(e instanceof Error ? e.message : String(e));
+      setApplyError(errMessage(e));
       return;
     }
     setApproving(false);
@@ -163,7 +164,7 @@ export function PlanReviewOverlay({
       setFinalState(null);
       onClose();
     } catch (e) {
-      setApplyError(e instanceof Error ? e.message : String(e));
+      setApplyError(errMessage(e));
     } finally {
       setDiscarding(false);
     }
@@ -184,7 +185,11 @@ export function PlanReviewOverlay({
       setFinalState(null);
       onRetryCreated?.(res.newPlanId);
     } catch (e) {
-      setApplyError(e instanceof Error ? e.message : String(e));
+      // `errMessage` resolves a `plans.retry` `ContractError` (e.g. the
+      // backend's `NoItemsToRetry`/`no.items.to.retry` code) through the
+      // exhaustive spec-046 catalog (`err_no_items_to_retry`) rather than a
+      // second, plan-review-specific translation of the same case.
+      setApplyError(errMessage(e));
     } finally {
       setRetrying(false);
     }
