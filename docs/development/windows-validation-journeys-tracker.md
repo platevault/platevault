@@ -67,6 +67,15 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | #514 | spec-040 comprehensive master-detection test matrix | J8 | test-coverage |
 | #515 | Confirm shows depth not org state | J1 | minor |
 | #516 | Observing Site name accepts empty | J1 | minor |
+| #548 | XISF masters never flagged is_master (FITS-only detection) | J8 | **bug** |
+| #549 | Mixed-placeholder count inconsistent (5 vs 20) + double-counts masters | J8 | **bug** (rel #513) |
+| #550 | Single-file items labelled type "mixed" | J8 | **bug** |
+| #551 | No-metadata files show complete vs batch "16 missing" gate | J8 | **bug** |
+| #552 | Mixed folder has no way to generate a split plan | J8 | **bug** |
+| #553 | Detail/metadata pane overflows below viewport | J8 | **bug** |
+| #554 | Detail pane needs tabular layout + warning relocation | J8 | enhancement |
+| #555 | Type pill too loud / overlaps table content | J8 | enhancement |
+| #556 | "Detection" column mislabelled (shows path) + too wide | J8 | enhancement |
 
 **Journey → Epic map:** J1 #518 · J2 #519 · J3 #520 · J4 #521 · J5 #522 · J6 #523
 · J7 #524 · J8 #525 · J9 #526 · J10 #527.
@@ -204,9 +213,11 @@ hardcoded mock masters).
 **Note:** master-detection deep-dive done this campaign — see backlog B21/B22 + pending
 spec-040 test issue. Detection is header-first (IMAGETYP), path/name fallback.
 
+**Status: in progress** (T1 done on real app 2026-07-11 via DetectionMatrix fixture retry; T2–T5 pending — T3–T5 need lights ingested+applied as sessions first).
+
 | Test | Status | Step → Expected / FAIL |
 |------|--------|------------------------|
-| T1 Masters ingest as individual items | ⬜ | each master its own item w/ fingerprint. FAIL: folder collapses to one item |
+| T1 Masters ingest as individual items | ⚠️ | PASS core: `Masters` → individual, correctly-typed masters (not one aggregate); header wins over name (`masterFlat…header_DARK`→DARK). Findings: **#548** XISF masters undetected, **#549** count 5-vs-20 + double-count, **#550** 1-file "mixed", **#551** no-metadata "complete", **#552** no split-plan action, **#553** pane overflow, **#554/#555/#556** detail-pane/pill/column UX |
 | T2 Confirm+apply, kind-conditional columns | ⬜ | one row/master, bias temp/gain dash by design, no master light. FAIL: master light appears / fabricated dashes |
 | T3 Matching: ranked candidates, real context | ⬜ | ranked sessions w/ target/filter/night/count, mismatch flagged. FAIL: opaque ids / mismatch hidden |
 | T4 Assignment advisory + confirmable | ⬜ | cancel = no backend/log; confirm records + usage++. FAIL: cancel records / confirm no usage |
@@ -268,6 +279,6 @@ Each epic carries labels `epic` + `journey-N`. Attached issues query:
 | J5 Project lifecycle | **#522** | not started |
 | J6 Cleanup | **#523** | not started |
 | J7 Archive/delete | **#524** | not started |
-| J8 Calibration masters | **#525** | not started |
+| J8 Calibration masters | **#525** | in progress (T1 done; #548–#556 filed) |
 | J9 Targets/planning | **#526** | not started |
 | J10 Settings/i18n | **#527** | not started |
