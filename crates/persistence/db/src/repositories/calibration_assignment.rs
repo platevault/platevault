@@ -8,6 +8,7 @@
 //! other repositories in this crate that do not require a sqlx offline cache.
 
 use domain_core::ids::Timestamp;
+use sqlx::types::Json;
 use sqlx::SqlitePool;
 
 use crate::{DbError, DbResult};
@@ -74,11 +75,9 @@ fn row_to_struct(
 /// Replaces any existing row for the same `(session_id, calibration_type)` pair.
 ///
 /// # Errors
-/// Returns [`DbError::Database`] on query failure.
-/// Returns [`DbError::Serialise`] if `mismatched_dimensions` cannot be serialised.
+/// Returns [`DbError::Database`] on query failure (including JSON encoding
+/// of `mismatched_dimensions`, encoded via `sqlx::types::Json`).
 pub async fn upsert(pool: &SqlitePool, params: UpsertParams<'_>) -> DbResult<()> {
-    let mismatch_json =
-        serde_json::to_string(params.mismatched_dimensions).map_err(DbError::Serialise)?;
     let at = params.assigned_at.map_or_else(Timestamp::now_iso, str::to_owned);
     let override_int = i64::from(params.was_override);
 
@@ -102,7 +101,7 @@ pub async fn upsert(pool: &SqlitePool, params: UpsertParams<'_>) -> DbResult<()>
     .bind(params.master_id)
     .bind(params.confidence)
     .bind(override_int)
-    .bind(&mismatch_json)
+    .bind(Json(params.mismatched_dimensions))
     .bind(&at)
     .execute(pool)
     .await
@@ -232,6 +231,8 @@ mod tests {
         assert_eq!(row.id, "assign-002");
         assert_eq!(row.master_id, "master-002");
         assert!(row.was_override);
+        // Round-trips through the `sqlx::types::Json` write-side codec.
+        assert_eq!(parse_mismatched_dimensions(&row.mismatched_dimensions), override_dims);
     }
 
     #[tokio::test]
@@ -269,6 +270,14 @@ mod tests {
     #[tokio::test]
     async fn parse_mismatched_dimensions_empty() {
         let dims = parse_mismatched_dimensions("[]");
+        assert!(dims.is_empty());
+    }
+
+    /// Graceful-degradation site (spec `n4_jsoncodec`): a corrupt
+    /// `mismatched_dimensions` cell must degrade to empty, not panic/propagate.
+    #[tokio::test]
+    async fn parse_mismatched_dimensions_corrupt_degrades_to_empty() {
+        let dims = parse_mismatched_dimensions("not valid json");
         assert!(dims.is_empty());
     }
 }

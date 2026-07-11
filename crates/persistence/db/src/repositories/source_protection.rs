@@ -6,6 +6,7 @@
 
 use domain_core::ids::Timestamp;
 use serde_json::Value;
+use sqlx::types::Json;
 use sqlx::SqlitePool;
 
 use crate::{DbError, DbResult};
@@ -13,6 +14,12 @@ use crate::{DbError, DbResult};
 // ── Row type ──────────────────────────────────────────────────────────────
 
 /// Raw DB row for `source_protection_state`.
+///
+/// `categories` stays raw `String` (not `sqlx::types::Json`, unlike the other
+/// columns in this file): `crates/app/core::protection::set_source_protection`
+/// reads this field directly with its own lenient `serde_json::from_str`
+/// fallback, so this row's shape is a cross-crate contract this file cannot
+/// unilaterally change.
 #[derive(Clone, Debug, sqlx::FromRow)]
 pub struct SourceProtectionRow {
     pub source_id: String,
@@ -59,10 +66,6 @@ fn parse_categories(json: Option<&str>) -> DbResult<Vec<String>> {
     }
 }
 
-fn encode_categories(cats: &[String]) -> DbResult<String> {
-    serde_json::to_string(cats).map_err(DbError::Serialise)
-}
-
 // ── CRUD ──────────────────────────────────────────────────────────────────
 
 /// Upsert a per-source protection override.
@@ -84,10 +87,7 @@ pub async fn upsert_source_protection(
 ) -> DbResult<()> {
     let now = Timestamp::now_iso();
     let bpd: Option<i64> = block_permanent_delete.map(i64::from);
-    let cats_json: Option<String> = match categories {
-        None => None,
-        Some(c) => Some(encode_categories(c)?),
-    };
+    let cats_json = categories.map(Json);
 
     sqlx::query(
         "INSERT INTO source_protection_state \
@@ -223,20 +223,14 @@ pub async fn get_protection_default(
     scope: &str,
     key: &str,
 ) -> DbResult<Option<serde_json::Value>> {
-    let row: Option<(String,)> =
+    let row: Option<(Json<Value>,)> =
         sqlx::query_as("SELECT value FROM protection_defaults WHERE scope = ? AND key = ?")
             .bind(scope)
             .bind(key)
             .fetch_optional(pool)
             .await?;
 
-    match row {
-        None => Ok(None),
-        Some((json,)) => {
-            let v = serde_json::from_str(&json).map_err(DbError::Serialise)?;
-            Ok(Some(v))
-        }
-    }
+    Ok(row.map(|(Json(v),)| v))
 }
 
 /// Upsert a (scope, key, value) protection default row.
@@ -251,7 +245,6 @@ pub async fn set_protection_default(
     key: &str,
     value: &serde_json::Value,
 ) -> DbResult<()> {
-    let json = serde_json::to_string(value).map_err(DbError::Serialise)?;
     let now = Timestamp::now_iso();
 
     sqlx::query(
@@ -260,7 +253,7 @@ pub async fn set_protection_default(
     )
     .bind(scope)
     .bind(key)
-    .bind(&json)
+    .bind(Json(value))
     .bind(&now)
     .execute(pool)
     .await?;

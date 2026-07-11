@@ -7,6 +7,7 @@
 //! current state to "what we knew when we approved this".
 
 use serde_json::Value;
+use sqlx::types::Json;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -42,9 +43,8 @@ pub fn should_snapshot(state: &str) -> bool {
 /// hydration.
 ///
 /// # Errors
-/// Returns [`DbError::Database`] on insert failure or
-/// [`DbError::Serialise`] when context serialisation fails (caller pre-
-/// serializes via `serde_json::to_string`).
+/// Returns [`DbError::Database`] on insert failure, including JSON encoding
+/// of `context` (encoded via `sqlx::types::Json`).
 pub async fn write_session_snapshot(
     pool: &SqlitePool,
     session_id: &str,
@@ -56,7 +56,6 @@ pub async fn write_session_snapshot(
     context: &Value,
 ) -> DbResult<String> {
     let id = Uuid::new_v4().to_string();
-    let context_json = serde_json::to_string(context)?;
     sqlx::query(
         "INSERT INTO session_snapshot \
          (id, session_id, session_kind, transition_from, transition_to, captured_at, audit_id, context_json) \
@@ -69,7 +68,7 @@ pub async fn write_session_snapshot(
     .bind(transition_to)
     .bind(captured_at)
     .bind(audit_id)
-    .bind(&context_json)
+    .bind(Json(context))
     .execute(pool)
     .await?;
     Ok(id)
