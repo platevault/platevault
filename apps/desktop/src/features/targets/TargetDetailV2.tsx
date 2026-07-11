@@ -35,6 +35,7 @@ import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
 import { altitudeFor, rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
+import { errorMessage } from './target-error-message';
 import { useActiveSite } from './observing-sites/site-store';
 import { usePlannerDateMs } from './planner-date-store';
 import { GuidanceCell } from './GuidanceCell';
@@ -103,26 +104,6 @@ function fmtDec(deg: number): string {
   const mm = Math.floor((abs - dd) * 60);
   const ss = ((abs - dd) * 60 - mm) * 60;
   return `${sign}${String(dd).padStart(2, '0')}°${String(mm).padStart(2, '0')}′${ss.toFixed(0).padStart(2, '0')}″`;
-}
-
-/** Map ContractError.code to a user-readable message. */
-function errorMessage(err: ContractError, fallback: string): string {
-  switch (err.code) {
-    case 'alias.blank':
-      return m.targets_detail_alias_blank();
-    case 'alias.not_found':
-      return m.targets_detail_alias_not_found();
-    case 'alias.not_removable':
-      return m.targets_detail_alias_not_removable();
-    case 'target.not_found':
-      return m.targets_detail_target_not_found();
-    case 'target.invalid_id':
-      return m.targets_detail_invalid_target_id();
-    case 'note.content_too_large':
-      return m.err_note_content_too_large();
-    default:
-      return fallback;
-  }
 }
 
 // ── Altitude curve helper ─────────────────────────────────────────────────────

@@ -2,7 +2,8 @@
  * Spec 023 target identity logic tests.
  *
  * Tests:
- * 1. Error code mapping — all 7 known TargetOpError codes produce human-readable strings.
+ * 1. Error code mapping — the real TargetDetailV2 `errorMessage` helper maps
+ *    every known `ContractError` code to its localized message.
  * 2. Date formatting helper.
  * 3. Targets NOT in primary nav (T007 / X-3 regression guard).
  * 4. Contract snapshot: ProjectLifecycle enum values match spec 009.
@@ -10,76 +11,34 @@
 
 import { describe, it, expect } from 'vitest';
 
-// ── Error code mapping (mirrors TargetDetailV2.tsx helper) ────────────────────
+import { m } from '@/lib/i18n';
+import type { ContractError } from '@/lib/errors';
+import { errorMessage } from './target-error-message';
 
-type TargetOpError = { code: string; message: string };
+// ── Error code mapping (exercises the REAL TargetDetailV2 helper) ─────────────
+//
+// This imports the production `errorMessage` (extracted to
+// `target-error-message.ts`) rather than a hand-copied mirror, so the test
+// cannot silently drift from the mapping the UI actually uses — as it did when
+// the target error envelope moved from the old `TargetOpError` (`alias.duplicate`,
+// `designation.*`, …) to `ContractError` (`alias.blank`, `alias.not_removable`, …).
 
-function errorMessage(err: TargetOpError, fallback: string): string {
-  switch (err.code) {
-    case 'alias.duplicate':
-      return 'This alias is already used by a different target.';
-    case 'alias.invalid':
-      return 'Alias must not be empty.';
-    case 'alias.is_primary':
-      return 'Cannot remove the primary name. Rename primary first.';
-    case 'alias.not_found':
-      return 'Alias not found on this target.';
-    case 'designation.not_in_aliases':
-      return 'New primary must already be an alias. Add it first.';
-    case 'designation.already_primary':
-      return 'This is already the primary name.';
-    case 'target.not_found':
-      return 'Target not found.';
-    default:
-      return fallback;
-  }
-}
+const ce = (code: string): ContractError => ({ code, message: '' }) as ContractError;
 
-describe('errorMessage', () => {
-  it('maps alias.duplicate', () => {
-    expect(errorMessage({ code: 'alias.duplicate', message: '' }, 'fallback')).toBe(
-      'This alias is already used by a different target.',
-    );
+describe('errorMessage (real TargetDetailV2 mapping)', () => {
+  it.each([
+    ['alias.blank', m.targets_detail_alias_blank()],
+    ['alias.not_found', m.targets_detail_alias_not_found()],
+    ['alias.not_removable', m.targets_detail_alias_not_removable()],
+    ['target.not_found', m.targets_detail_target_not_found()],
+    ['target.invalid_id', m.targets_detail_invalid_target_id()],
+    ['note.content_too_large', m.err_note_content_too_large()],
+  ])('maps %s to its localized message', (code, expected) => {
+    expect(errorMessage(ce(code), 'fallback')).toBe(expected);
   });
 
-  it('maps alias.invalid', () => {
-    expect(errorMessage({ code: 'alias.invalid', message: '' }, 'fallback')).toBe(
-      'Alias must not be empty.',
-    );
-  });
-
-  it('maps alias.is_primary', () => {
-    expect(errorMessage({ code: 'alias.is_primary', message: '' }, 'fallback')).toBe(
-      'Cannot remove the primary name. Rename primary first.',
-    );
-  });
-
-  it('maps alias.not_found', () => {
-    expect(errorMessage({ code: 'alias.not_found', message: '' }, 'fallback')).toBe(
-      'Alias not found on this target.',
-    );
-  });
-
-  it('maps designation.not_in_aliases', () => {
-    expect(
-      errorMessage({ code: 'designation.not_in_aliases', message: '' }, 'fallback'),
-    ).toBe('New primary must already be an alias. Add it first.');
-  });
-
-  it('maps designation.already_primary', () => {
-    expect(
-      errorMessage({ code: 'designation.already_primary', message: '' }, 'fallback'),
-    ).toBe('This is already the primary name.');
-  });
-
-  it('maps target.not_found', () => {
-    expect(errorMessage({ code: 'target.not_found', message: '' }, 'fallback')).toBe(
-      'Target not found.',
-    );
-  });
-
-  it('returns fallback for unknown code', () => {
-    expect(errorMessage({ code: 'some.unknown.code', message: '' }, 'fallback')).toBe('fallback');
+  it('returns the fallback for an unknown code', () => {
+    expect(errorMessage(ce('some.unknown.code'), 'fallback')).toBe('fallback');
   });
 });
 
