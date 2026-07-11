@@ -214,3 +214,58 @@ mechanism itself.
   tails, a contract-test runner for spec 007, a paused-state minimal UI,
   and adjudication of the `simbad_live.rs` env-gate question flagged by
   lane nE (see the T078/037 entries above).
+- **Lane nH2 merged, last code lane closed (2026-07-11).** #589
+  (`f8cea5eb`) closed the campaign's remaining backend/frontend tails: 007
+  contract-test gap fully closed (`packages/contracts/tests/conformance-harness.mjs`
+  extended with real AJV validation, 8→0 open); 025 21→7 open (added a
+  paused-state minimal UI with a `resumeStalled` state; the 7 remaining are
+  either #575/#577-tracked real gaps or pre-existing docs/perf deferrals);
+  012 8→2; 008 10→4; 021 re-verified (2 stay open with dev-tools evidence);
+  `crates/targeting/resolver/tests/simbad_live.rs` gated behind
+  `ALM_LIVE_SIMBAD=1` (opt-in, skips gracefully by default — the earlier
+  lane nE finding that this suite runs unconditionally against the real
+  SIMBAD endpoint is now resolved). 3 new real-gap issues filed: **#575**
+  (`plan.resume` doesn't re-validate the pause condition or restart
+  execution — spec 025 R-Pause-1 gap), **#577** (`move_op.rs` copy-then-
+  delete rollback path has zero test coverage — spec 025 T025), **#586**
+  (guided flow duplicates `CreateProjectDialog`'s validation logic instead
+  of reusing it — spec 008). SPEC_STATUS 025/012/008/021/007 rows updated;
+  the actionable frontier table rewritten for the post-campaign state.
+
+## Campaign end state (2026-07-11)
+
+**11 campaign PRs merged to `main`:** #487, #494, #492, #499, #517, #528,
+#531, #535, #545, #561, #589 — plus this bookkeeping lane's own #486
+(merged) and #498 (this PR, pending its closing review).
+
+**~55 issues closed with evidence** (spec-003 #106–#136: 31; spec-041
+#320–#339: 19; plus spec-related issues closed inline by feature lanes
+during PR work — see each lane's own report for its specific count). Every
+closure in this lane carried a file:line or commit-sha pointer, never a
+bare assertion.
+
+**4 new real-gap issues filed this campaign:** #489 (macOS
+`tauri-plugin-webdriver` upstream limitation), #575 (resume-executor gap),
+#577 (rollback coverage gap), #586 (guided-flow validation duplication).
+
+**Open watch items handed to the campaign owner:**
+
+- **(a) #575 resume-executor gap** — needs a product decision: release-
+  blocker vs known limitation. `resume_plan` currently does not re-spawn
+  the executor to continue `pending` items after a pause; the only
+  production path that hits this is pause/resume (R-Pause-1).
+- **(b) `tauri-plugin-webdriver` macOS upstream** (#489) — no fix owned by
+  this campaign; the `workflow_dispatch` re-test path (#528) is in place
+  so a future upstream release can be re-tried without code changes.
+- **(c) 049 T031 + 048 remainder** — parked on the external session's open
+  PRs #500/#503/#507 (per-frame inventory, not yet merged to `main`).
+- **(d) 044 T017** — optional FITS-observer prefill, pending a
+  session-observer IPC binding that doesn't exist yet.
+- **(e) spec-050 publishable-crate-extractions** — all extraction tasks
+  are unblocked but unstarted; a candidate amendment was offered to the
+  owner during this campaign (the `workflow/profiles` observing-night
+  blocker was found vestigial) — awaiting owner adjudication, not acted on
+  here.
+- **(f) Phases J (Windows validation) / K (hand-off)** — owned by the
+  external campaign session, not by any lane spawned in this run (see the
+  lane-ownership clarification above).

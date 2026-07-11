@@ -46,12 +46,12 @@ still landing PRs and these rows will move again once those lanes report.
 | 004 native-filesystem-controls | ✅ Implemented | 32/32 |
 | 005 inbox-mixed-folder-split | 🔴 Superseded by 041 | 0/51; reassigned to 041 single-type model — **not yet implemented** (PR #315 docs-only) |
 | 006 inventory-library-lifecycle | ✅ Implemented (closed 2026-07-03) | Core + 041/043/040 reconciliation landed; 12 open tasks all DEFERRED (Playwright-in-WSL, docs, additive-contract, spec-002-blocked enum snapshot). (Superseded a 2026-06-23 verify pass that found it NOT closeable due to a phantom `session.mixed_state` guard + 043 filter gaps; those were reconciled before this closeout.) |
-| 007 calibration-matching-rules | ✅ Implemented (closed 2026-07-03) | Engine + adapters + DTOs shipped; 11 open all DEFERRED — 8 contract-tests (JSON-Schema runner absent), T040 (spec-002 enum), T032/T033 polish. `require_same_offset` **exists** in Rust; only the 043 Settings toggle's persistence is stubbed |
-| 008 project-create-onboard-edit | 🟡 Partial | 28/38; ~6 real-open |
+| 007 calibration-matching-rules | ✅ Implemented (closed, 39/42) | Engine + adapters + DTOs shipped; `require_same_offset` **exists** in Rust (043 Settings toggle persistence: `9f0dc724`/#395). PR #589 (`f8cea5eb`, lane nH2) closed the previously-absent contract-test gap: extended `packages/contracts/tests/conformance-harness.mjs` (the generic AJV runner, already existed for spec 033 T063) with calibration.match.* fixtures — T002/T015/T020/T024/T029/T037/T041/T042 all `[x]`. 3 open remain, all DEFERRED: T032/T033 (quickstart doc, 1k-master perf check), T040 (blocked on spec 002's `CalibrationType` enum not yet finalized) |
+| 008 project-create-onboard-edit | 🟡 Closeout-ready — 34/38, 4 honest deferrals | PR #589 (`f8cea5eb`, lane nH2) re-adjudicated the prior open set, closing 6: only 4 remain, each RE-VERIFIED/RE-ADJUDICATED with evidence — US1-5 (optional sources field in `AddSourcePicker.tsx`), US2-1..US2-7 (checked `docs/design/`, stays deferred), X-3/X-4 (spec 010/011 coordination items, still deferred pending those specs) |
 | 009 project-lifecycle-model | ✅ Implemented | 21/21 |
 | 010 guided-first-project-flow | 🟡 Near-complete | 31/33 |
 | 011 processing-tool-launch | ✅ Implemented (closed 2026-07-03) | Launch pipeline + UI + cwd-guard + detach/pid shipped & tested; T021 hint + X-1/X-2 done in closeout; 2 open (T018 Playwright, T022 real-spawn) DEFERRED (WSL/sandbox-blocked). Unblocks 012 |
-| 012 processing-artifact-observation | 🟡 Partial | 26/36 (follows 011) |
+| 012 processing-artifact-observation | 🟡 Closeout-ready — 35/37, 2 honest deferrals | PR #589 (`f8cea5eb`, lane nH2) closed 6 of the prior open set. 2 remain: T026 (Playwright MCP scenario, RE-ADJUDICATED — prior rationale updated, stays deferred) and TX02 (docs/research write-up, DEFERRED) |
 | 013 target-lookup-from-fits-object | 🔴 Superseded by 035 | Fully subsumed by 035 — every FR/US covered by SIMBAD resolve-on-demand, or its one unique feature (fuzzy variant matching + confidence tiers) deliberately reversed (035 clarification Q4: exact-match only). 3 open tasks are obsolete stubs (spec-014 download pipeline / removed `catalog_equivalences`). Target-identity model retained in `crates/targeting/` |
 | 014 catalog-index-licensing | 🔴 Superseded by 035 | download-catalog mechanism abandoned; attribution model retained |
 | 015 token-pattern-builder | ✅ Implemented | Chip-based naming-pattern builder shipped: `crates/patterns/` (registry/resolver/validator/sanitize, ~64 tests) + contracts + Tauri `pattern_validate`/`resolve`/`preview` + live `PatternChipsEditor` in `NamingStructure.tsx` (validate + preview). Full SpecKit artifact set exists (~30 tasks, not "0/0"). Deferred downstream scope (per-source overrides, session-backed preview) handed to spec 018 |
@@ -60,11 +60,11 @@ still landing PRs and these rows will move again once those lanes report.
 | 018 settings-configuration-model | ✅ Reconciled + implemented (#348) | 42/46; spec reconciled to as-built scope/values architecture; backend + UI shipped & verified (live T034 walkthrough); 4 obsolete (contracts mirror, 014 key); open: FR-006↔043 density tension (cross-spec decision) |
 | 019 bottom-log-viewer | ✅ Implemented (closed 2026-07-03) | Panel + backend + forwarder shipped; closeout added T006/T011 jsdom tests + T029 docs index + fixed dotted `log.recent`→`log_recent` binding bug; 1 open (T028 Playwright quickstart) DEFERRED (needs Tauri runtime host) |
 | 020 router-url-state | ✅ Implemented | 22/23 |
-| 021 developer-contract-diagnostics | 🟡 Partial | 32/37 (behind `dev-tools` feature) |
+| 021 developer-contract-diagnostics | 🟡 Closeout-ready — 35/37, 2 honest open (behind `dev-tools` feature) | PR #589 (`f8cea5eb`, lane nH2) re-verified the prior open set with dev-tools evidence; 2 genuinely stay open: T015 (`ts_hash`/`rust_hash` mismatch computation) and T033 (manual `devMode` + Cmd+K quickstart pass, human-driven) |
 | 022 mantine-prototype-design-system | 🔴 Superseded by 027 | |
 | 023 target-identity-history-notes | ✅ **Closed** | US1–US4 shipped on gen-3 (migration 0048 + `target.sessions.list`/`target.projects.list`/`target.note.*`) + caveats (note-edit audit event, UUID project deep-link, 16 KB note cap) + `speckit-verify` passed. `target.primary.rename` dropped; FR-005/FR-007 deferred |
 | 024 project-manifests-and-notes | ✅ Implemented (closed 2026-06-23) | 32/37; 5 open all DEFERRED (FR-006/export/contract-tests); notes display-on-load fixed at close-out |
-| 025 filesystem-plan-application | 🟡 Partial (out-of-spec) | Real apply shipped via 041; overlap guard FR-017 done (`4b693ea7` / #408); progress UI absorbed into 017's `PlanReviewOverlay`; remaining = rollback integration test T025 + 10k-perf T045 |
+| 025 filesystem-plan-application | 🟡 Closeout-ready — 52/59, 7 honest open | Real apply shipped via 041; overlap guard FR-017 done (`4b693ea7`/#408); progress UI absorbed into 017's `PlanReviewOverlay`. PR #589 (`f8cea5eb`, lane nH2) added a paused-state minimal UI (`resumeStalled` state in `apps/desktop/src/features/plans/PlanReviewOverlay.tsx`/`usePlanApplyProgress.ts`) and closed most of the prior open set — 7 remain, all with concrete evidence, not silent gaps: **T012 blocked on a real production gap** (`resume_plan` doesn't re-spawn the executor to continue pending items — filed as issue **#575**, tracked as a release-blocker-vs-known-limitation decision); **T025 rollback-audit coverage genuinely untested** (needs a real cross-device `EXDEV` error, not producible in an ordinary tempdir — filed as issue **#577**); T030/T037/T049 are RECONCILED-DEFERRED (each needs either a real race condition or a real device-unavailable OS error, both non-deterministic/non-portable to test); T043 (docs cross-links) and T045 (10k-item perf benchmark) are scope-deferred |
 | 026 generated-source-view-removal | ✅ Implemented (closed) | 23/23. No longer vestigial — spec 049 restored a live generation path (WBPP-ready source views, `54b56d28`/#439), so remove/regenerate is exercised for real. PR #545 (`384398df`, lane nG) closed the remaining P3 scope: stale-detection sweep (`sweep_view_staleness`, reusing #535's verify classification) wired into `list_views` so the UI gets freshened state on every load; per-item audit events + a Settings-adjacent UI audit history (`apps/desktop/src/features/projects/ViewAuditHistory.tsx`); a `kind_diverged` data-reconciliation scan on `Database::migrate()`; and real per-item cross-platform apply for view removal/regeneration, backed by a real-executor e2e test (`crates/e2e-tests/tests/source_view_journeys.rs`) that **found and fixed 2 latent bugs never exercised by an actual filesystem apply before**: `remove_prepared_view` left the archive destination empty (every archive item failed `source.missing`); `regenerate_prepared_view` used the raw DB id as a filesystem path. PR survived a rebase over the concurrent external #544 sqlx-drain |
 | 027 frontend-implementation | ✅ Implemented | 99/99 |
 | 028 frontend-quality-hardening | 🟡 Placeholder | 9/15 |
@@ -133,20 +133,27 @@ INFRA / CROSS-CUTTING (mostly independent)
 
 ## Actionable frontier — what can be worked on now (unblocked)
 
+**Post-campaign refresh (2026-07-11):** the release-finish campaign closed
+out 017, 025, 012, 008, 021, 007's contract-test gap, 033, 037, and 026 (see
+their rows above). The frontier below reflects what's left after that.
+
 | Priority | Spec | Why ready | Size |
 |---|---|---|---|
-| 1 | **017 archive-plan-generator** (remainder) | Cleanup-plan review UI shipped (#413); backend + plan model (041) done; 016 closed | 🟡 Small–Medium (US2 T017–T021; `archive_plan_generate` has zero UI callers) |
-| 2 | **025 plan-application** (rollback integration test + 10k-perf) | Apply backend + overlap guard shipped via 041/#408; progress UI absorbed into 017's `PlanReviewOverlay` | 🟢 Small |
+| 1 | **025 T012** (resume-executor gap, issue #575) | Product decision pending: release-blocker vs known limitation — `resume_plan` doesn't re-spawn the executor for pending items | 🟡 Medium (real production fix, not just a test) |
 | 2 | **039 cross-root-inbox** | Greenfield; 041 base on main; needs plan/tasks | 🟡 Medium |
-| — | **037 ipc-wrapper-removal** | ✅ Complete — commands.ts deleted, SC-001/SC-005 guards in CI | done |
-| 3 | **012 artifact-observation** | 011 tool-launch now closed; 012's deps (`launch_id`, `completed_at`, accordion) satisfied | 🟡 Medium |
-| 3 | **008 project-create** | 006 inventory closed | 🟡 Medium |
-| 3 | **021 dev-diagnostics** | Independent, behind `dev-tools` flag | 🟡 Small |
+| 2 | **008 US1-5** (guided-flow duplication, issue #586) | `CreateProjectDialog` validation logic duplicated instead of reused by spec 010's guided flow | 🟢 Small |
 | 3 | **023 target-identity** | 035 done; needs `/speckit.tasks` to generate tasks | ⚪ Plan exists, 0 tasks |
+| 3 | **050 publishable-crate-extractions** | Plan-of-record (#429); all extraction tasks unblocked but unstarted | 🟡 Medium, multi-crate |
 | active | **043 ui-redesign** | Merged to `main`; remainder (target↔project linkage #54, Outputs/Cleanup backend model, pill-system, splitters) unblocked | 🟡 Small–Medium remainder |
 | active | **051 US8/US9** | Shell-integration foundation (US1–US7, US10-groundwork) merged; notifications + release-native-behavior plugins not yet registered | 🟡 Small–Medium |
+| parked | **049 T031** + **048 remainder** | Parked on external session's open PRs #500/#503/#507 (per-frame inventory not yet on `main`) | 🟡 Small once unblocked |
+| parked | **044 T017** | Optional FITS-observer prefill, pending a session-observer IPC binding | 🟢 Small |
+| watch | **#489 macOS Real-UI** | Upstream `tauri-plugin-webdriver` limitation; `workflow_dispatch` re-test path in place (#528), no fix owned here | — |
+| watch | **025 T025** (rollback-audit coverage, issue #577) | Genuinely untested — needs a real cross-device `EXDEV` error, not producible in an ordinary tempdir | 🟡 Small once a test seam exists |
 
-**Suggested parallel lanes:** one engineer on the **017 → 025 → 033** plan/cleanup chain; another on 043's remainder + 051's US8/US9. (018 settings shipped via #348.)
+**Suggested parallel lanes:** one engineer on 025's #575 (needs a design call
+first — see Open Watch Items below) + 039; another on 043's remainder +
+051's US8/US9; 050's crate extractions are a good next-campaign candidate.
 
 **Versioning note (2026-07-09):** the release baseline was reset to 0.x
 (`cbd91378`) ahead of the first release cut. This document and its frontier
