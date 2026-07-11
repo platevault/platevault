@@ -83,6 +83,11 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | #562 | Data Sources card: consolidate per-source actions into a kebab (⋯) menu + declutter | J1 | enhancement |
 | #563 | Data Sources protection Override persists in card but source_protection_get disagrees (get/set inconsistency) | J1 | **bug** |
 | #564 | Catalogue sessions indistinguishable — target/filter/integration empty, NIGHT=creation date (grouping works, metadata doesn't populate); updates #307 | J3/J4 | **bug** |
+| #567 | Session "Show in File Explorer" opens same top-level folder for every session (not the frame folder); rel #564 | J4 | **bug** |
+| #568 | Session detail panel needs significant UX revision (companion to #554) | J4 | enhancement |
+| #569 | Inbox mixed item can be Confirmed without seeing split preview/destinations (commit blind) | J2 | **bug** |
+| #573 | Targets page freezes app loading full 13073 catalog into table model (rendering virtualized, data load not) | J9 | **bug** (high) |
+| #574 | Targets sidebar shows full catalog count (13073) — show "my targets" count | J9 | enhancement |
 
 **Journey → Epic map:** J1 #518 · J2 #519 · J3 #520 · J4 #521 · J5 #522 · J6 #523
 · J7 #524 · J8 #525 · J9 #526 · J10 #527.
@@ -111,7 +116,7 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | T6 Data Sources: Remap (verify→apply, no file move) | ❌ | Flow + gating correct (Verify enables on folder-pick, Apply after Verify). BUT **Verify samples ≤5 `file_record` paths, not 1:1 (#560)** — vacuous "all found" on inbox-only roots (empty sample) → Apply enables → **silent orphaning**. Confirmed live remapping Lights→empty `newfolder`. Full native-picker apply run through the user. |
 | T7 Data Sources: Disable (reversible, has confirm) | ✅ | Disable opens "Disable this source?" **confirm** ("excluded from scans/ingest until re-enabled; history kept"); confirming sets active:false; Enable is immediate. **#558 CLOSED — my mis-diagnosis** (missed the confirm overlay, never completed it). Items kept, not orphaned, when disabled. |
 | T8 Data Sources: Delete (registration-only, dependents block) | ❌ | **No Delete/Remove action in UI (#559)**; backend `roots_delete` unreachable |
-| T9 "Show in File Explorer" reveal | ⬜ | not present on Data Sources rows (only Override/Rescan/Enable-Disable/Remap); reveal lives on other surfaces (native_reveal) — verify on inbox/sessions later |
+| T9 "Show in File Explorer" reveal | ⚠️ | exists on Sessions/Calibration/Projects/Archive with correct Windows-native label (`revealLabel()`); NOT on Data Sources rows (→ #562 kebab). Explorer opens BUT **every session reveals the same top-level folder** (`…\SessionMatrix`), not the frame folder — **#567** (rel #564). User-confirmed. |
 | — Inbox infinite render loop (cross-cut) | ❌ | **#557** "Maximum update depth exceeded" ~3.5/s, localized to `#/inbox` (6970 errs/52min); 0 on archive/data-sources |
 
 ---
@@ -243,7 +248,7 @@ placeholders, not fabricated values. Also probe observing-site lat/long range va
 
 | Test | Status | Step → Expected / FAIL |
 |------|--------|------------------------|
-| T1 Catalog list/search/sort | ⬜ | thousands virtualized, "M31"+"Andromeda" hit same row, single sort. FAIL: miss / stutter / multi-sort |
+| T1 Catalog list/search/sort | ❌ | rendering IS virtualized (~37 rows in DOM, 409k-px spacer) BUT **opening Targets FREEZES the whole app** loading the full 13073 catalog into the table model on the main thread (**#573**, high). Sidebar shows raw 13073 count → show "my targets" (**#574**). search/sort not yet exercised (app was unresponsive). |
 | T2 Add target (local, no duplicate) | ⬜ | exactly one row after re-add. FAIL: second row |
 | T3 SIMBAD resolve (success + failure) | ⬜ | success cached; failure inline "not found", never fabricated. FAIL: fabricated row / no failure msg |
 | T4 Detail identity/aliases/notes | ⬜ | user alias searchable, catalog aliases non-removable. FAIL: catalog alias removable / alias not searchable |
