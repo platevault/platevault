@@ -121,7 +121,7 @@ pub async fn insert_project(pool: &SqlitePool, data: &InsertProject<'_>) -> DbRe
 /// Connection-level variant of [`insert_project`]: takes `&mut SqliteConnection`
 /// (works against a plain connection or a `Transaction` deref) so composite
 /// `*_tx` functions (e.g. [`create_project_tx`]) can compose it with other
-/// writes in one transaction. See `with_transaction` in the crate root.
+/// writes in one transaction.
 ///
 /// # Errors
 ///
@@ -893,14 +893,9 @@ pub struct CreateProjectInput<'a> {
 /// failure rolls back everything; no half-built project is left behind (see
 /// `docs/development/duplication-and-abstraction-audit.md` T2-a).
 ///
-/// Composed via a direct `pool.begin()`/`tx.commit()` (matching every other
-/// multi-statement transaction in this crate, e.g. `plan_apply.rs`,
-/// [`replace_project_channels`]) rather than `crate::with_transaction`: that
-/// combinator's `for<'c> FnOnce(&'c mut SqliteConnection) -> TxFuture<'c, _>`
-/// closure is universally quantified over `'c`, so it cannot soundly capture
-/// `input`'s externally-borrowed `&str` fields (the borrow checker would
-/// require `input: 'static`). `with_transaction` stays available for callers
-/// whose transaction body doesn't need to capture caller-borrowed data.
+/// Composed via a direct `pool.begin()`/`tx.commit()`, matching every other
+/// multi-statement transaction in this crate (e.g. `plan_apply.rs`,
+/// [`replace_project_channels`]).
 ///
 /// # Errors
 ///

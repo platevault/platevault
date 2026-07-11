@@ -126,8 +126,9 @@ pub async fn insert_plan(pool: &SqlitePool, plan: &InsertPlan<'_>) -> DbResult<i
 
 /// Connection-level variant of [`insert_plan`]: takes `&mut SqliteConnection`
 /// (works against a plain connection or a `Transaction` deref) so composite
-/// `*_tx` functions elsewhere in this crate can compose it with other writes
-/// in one transaction. See `with_transaction` in the crate root.
+/// `*_tx` functions elsewhere in this crate (e.g.
+/// `repositories::projects::create_project_tx`) can compose it with other
+/// writes in one transaction.
 ///
 /// # Errors
 ///

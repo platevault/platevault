@@ -8,10 +8,7 @@
 //! to the `plans.origin` CHECK (spec 017 C5).
 //! Migration 0061 added `target_favourite` (spec 051 US2).
 
-use std::future::Future;
-use std::pin::Pin;
-
-use sqlx::sqlite::{SqliteConnection, SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 
 pub mod operation_state;
 /// Reference pattern for the centralized typed persistence layer (sea-query +
@@ -109,50 +106,9 @@ impl Database {
     }
 }
 
-/// Boxed, `Send` future returned by a [`with_transaction`] closure. A local
-/// alias rather than a `futures`-crate dependency — this is the only shape
-/// [`with_transaction`] needs.
-pub type TxFuture<'c, T> = Pin<Box<dyn Future<Output = DbResult<T>> + Send + 'c>>;
-
-/// Run `f` against one SQLite transaction: commits on `Ok`, rolls back on
-/// `Err` (via `sqlx::Transaction`'s `Drop` impl issuing `ROLLBACK`).
-///
-/// A boundary-safe way to obtain a `&mut SqliteConnection`; `sqlx::Transaction`
-/// itself never leaves `persistence_db` (`scripts/check-db-boundary.sh` seals
-/// `sqlx` to this crate). Suits a transaction body that only needs the
-/// connection itself (or owned/`Copy` captures) — the `for<'c> FnOnce(&'c mut
-/// SqliteConnection) -> TxFuture<'c, _>` bound is universally quantified over
-/// `'c`, so a closure capturing a caller-borrowed `&'a T` cannot satisfy it
-/// (the borrow checker would require `'a: 'static`). Composite `*_tx`
-/// repository functions whose transaction body needs borrowed input (e.g.
-/// `repositories::projects::create_project_tx`) instead open their own
-/// `pool.begin()`/`tx.commit()` directly — see
-/// `docs/development/duplication-and-abstraction-audit.md` T2-a.
-///
-/// # Errors
-///
-/// Returns [`DbError::Database`] if the transaction cannot be opened or
-/// committed, or propagates `f`'s own error (in which case the transaction is
-/// rolled back).
-pub async fn with_transaction<T, F>(pool: &SqlitePool, f: F) -> DbResult<T>
-where
-    F: for<'c> FnOnce(&'c mut SqliteConnection) -> TxFuture<'c, T>,
-{
-    let mut tx = pool.begin().await?;
-    match f(&mut tx).await {
-        Ok(value) => {
-            tx.commit().await?;
-            Ok(value)
-        }
-        // `tx` is dropped here without a `commit()` call, which sqlx rolls
-        // back automatically.
-        Err(err) => Err(err),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{with_transaction, DbError, DbResult, CRATE_NAME};
+    use super::CRATE_NAME;
 
     #[test]
     fn exposes_crate_name() {
@@ -406,67 +362,5 @@ mod tests {
             has_override_filter.is_err(),
             "override_filter column must have been dropped from inbox_classification_evidence by 0047"
         );
-    }
-
-    // ── with_transaction: commit / rollback semantics ──────────────────────
-
-    #[tokio::test]
-    async fn with_transaction_commits_on_ok() {
-        let db = super::Database::in_memory().await.expect("in-memory connect");
-        db.migrate().await.expect("migrations");
-        let pool = db.pool().clone();
-
-        with_transaction(&pool, move |conn| {
-            Box::pin(async move {
-                sqlx::query(
-                    "INSERT INTO plans (id, number, title, origin, state, plan_type, \
-                     destructive_destination, items_total, items_applied, items_failed, \
-                     items_skipped, items_cancelled, items_pending, total_bytes_required, \
-                     created_at) \
-                     VALUES ('p1', 1, 'test', 'cleanup', 'draft', 'cleanup', 'archive', \
-                     0, 0, 0, 0, 0, 0, 0, '2026-01-01T00:00:00Z')",
-                )
-                .execute(&mut *conn)
-                .await?;
-                Ok(())
-            })
-        })
-        .await
-        .expect("with_transaction should commit on Ok");
-
-        let count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM plans").fetch_one(&pool).await.unwrap();
-        assert_eq!(count, 1, "the committed row must be visible after with_transaction returns");
-    }
-
-    #[tokio::test]
-    async fn with_transaction_rolls_back_on_err() {
-        let db = super::Database::in_memory().await.expect("in-memory connect");
-        db.migrate().await.expect("migrations");
-        let pool = db.pool().clone();
-
-        let result: DbResult<()> = with_transaction(&pool, move |conn| {
-            Box::pin(async move {
-                sqlx::query(
-                    "INSERT INTO plans (id, number, title, origin, state, plan_type, \
-                     destructive_destination, items_total, items_applied, items_failed, \
-                     items_skipped, items_cancelled, items_pending, total_bytes_required, \
-                     created_at) \
-                     VALUES ('p1', 1, 'test', 'cleanup', 'draft', 'cleanup', 'archive', \
-                     0, 0, 0, 0, 0, 0, 0, '2026-01-01T00:00:00Z')",
-                )
-                .execute(&mut *conn)
-                .await?;
-                // Force a failure after the write above so the whole transaction
-                // must roll back, not just this statement.
-                Err(DbError::NotFound("forced mid-sequence failure".to_owned()))
-            })
-        })
-        .await;
-
-        assert!(result.is_err(), "with_transaction must propagate the closure's error");
-        let count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM plans").fetch_one(&pool).await.unwrap();
-        assert_eq!(count, 0, "the earlier write in the same transaction must have rolled back");
     }
 }
