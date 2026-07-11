@@ -392,6 +392,17 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     await waitFor(() =>
       expect(screen.queryByTestId('plan-review-paused-badge')).not.toBeInTheDocument(),
     );
+
+    // Regression: resume_plan doesn't re-spawn the executor (#575), so no
+    // further events ever arrive on this channel. The UI must not render as
+    // active progress (no "Applying X of Y…", no infinite-busy trap) and
+    // must keep an escape affordance available instead.
+    expect(await screen.findByTestId('plan-review-resume-stalled-badge')).toHaveTextContent(
+      /not restarted yet/i,
+    );
+    expect(screen.queryByText(/Applying \d+ of \d+/)).not.toBeInTheDocument();
+    expect(screen.getByText('Discard plan')).not.toBeDisabled();
+    expect(screen.getByTestId('plan-review-approve-apply')).not.toBeDisabled();
   });
 
   it('cannot approve a plan with zero items (FR-014)', async () => {

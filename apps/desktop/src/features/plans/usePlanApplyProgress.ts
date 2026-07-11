@@ -42,6 +42,17 @@ export interface PlanApplyProgress {
   /** Run id needed to call `plan.resume`; set once a pause or the initial
    * apply response reports one. */
   runId: string | null;
+  /**
+   * `true` immediately after a successful `plan.resume` call. The backend
+   * currently only flips the plan's DB state and does not re-spawn the
+   * executor (known limitation — see issue #575), so no further progress
+   * events will arrive on this run's channel. Rendered as a distinct,
+   * non-progressing state rather than as `running` so the UI never implies
+   * work is happening when it isn't. Cleared the instant a *real* event
+   * does arrive (any event proves the run is alive again), so a future fix
+   * to the backend continuation gap self-heals this without a UI change.
+   */
+  resumeStalled: boolean;
 }
 
 const IDLE: PlanApplyProgress = {
@@ -54,6 +65,7 @@ const IDLE: PlanApplyProgress = {
   paused: false,
   pauseReason: null,
   runId: null,
+  resumeStalled: false,
 };
 
 /** Extract a numeric `itemsTotal` from an event payload when present. */
@@ -88,7 +100,13 @@ export function usePlanApplyProgress() {
           approvalToken: args.approvalToken,
           onEvent: (event: OperationEvent) => {
             setProgress((prev) => {
-              const next: PlanApplyProgress = { ...prev, lastEventType: event.eventType };
+              // Any event proves the run is alive, so a post-resume "stalled"
+              // read is stale the moment a new event arrives.
+              const next: PlanApplyProgress = {
+                ...prev,
+                lastEventType: event.eventType,
+                resumeStalled: false,
+              };
               switch (event.eventType) {
                 case 'item_started': {
                   const total = readItemsTotal(event.payload);
@@ -141,18 +159,30 @@ export function usePlanApplyProgress() {
 
   /**
    * Resume a paused run (`plan.resume`, R-Pause-1). Calls the real backend
-   * command and clears the local `paused` flag on success — the plan's DB
-   * state moves `paused -> applying`. NOTE: as of this writing the backend
-   * does not yet re-spawn the executor to continue the run's remaining
-   * pending items (tracked separately); this affordance faithfully reflects
-   * whatever the backend does, it does not simulate completion.
+   * command; the plan's DB state moves `paused -> applying` on success.
+   *
+   * The backend does not yet re-spawn the executor to continue the run's
+   * remaining pending items (issue #575), so no `item_*`/`completed` events
+   * will follow. Landing on `running: true` here would render as an
+   * indefinite "Applying…" with every action disabled (`busy` gates the
+   * whole footer) — a real UI trap, since the run genuinely never
+   * progresses. Instead land on the distinct `resumeStalled` state:
+   * `running` stays `false` so the footer's Close/Discard remain usable,
+   * and the progress panel shows an honest "not yet restarted" message
+   * instead of implying live progress.
    */
   const resume = useCallback(
     async (planId: string): Promise<boolean> => {
       if (progress.runId === null) return false;
       try {
         unwrap(await commands.plansResume(planId, progress.runId));
-        setProgress((prev) => ({ ...prev, paused: false, pauseReason: null }));
+        setProgress((prev) => ({
+          ...prev,
+          running: false,
+          paused: false,
+          pauseReason: null,
+          resumeStalled: true,
+        }));
         return true;
       } catch {
         return false;

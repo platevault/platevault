@@ -330,7 +330,10 @@ export function PlanReviewOverlay({
           <PlanProtectionGate planId={plan.id} onAcknowledgedChange={setGateReady} />
 
           {/* Live apply progress (D17 — spec 025 progress UI, absorbed here). */}
-          {(progress.running || progress.terminal !== null || progress.paused) && (
+          {(progress.running ||
+            progress.terminal !== null ||
+            progress.paused ||
+            progress.resumeStalled) && (
             <div
               className="alm-plan-review__progress"
               role="status"
@@ -370,6 +373,11 @@ export function PlanReviewOverlay({
                     {resuming ? m.plans_review_resuming() : m.plans_review_resume_btn()}
                   </Btn>
                 </>
+              )}
+              {progress.resumeStalled && (
+                <Pill variant="warn" data-testid="plan-review-resume-stalled-badge">
+                  {m.plans_review_resume_stalled()}
+                </Pill>
               )}
             </div>
           )}
