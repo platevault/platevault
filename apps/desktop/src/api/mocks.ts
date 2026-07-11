@@ -78,6 +78,7 @@ import type {
   ProjectNoteGetResult,
   ProjectNoteUpdateResult,
   ManifestListResponse_Serialize,
+  PlanSummary_Serialize,
 } from '@/bindings/index';
 
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -792,6 +793,65 @@ export async function mockInvoke(
       } satisfies ProjectChannelsDismissDriftResult;
     }
     case 'plans_list': {
+      // Spec 026 T019 mock coverage: `ViewAuditHistory` is `plans.list`'s
+      // first real mock-mode consumer, and it always requests these two
+      // origins — synthesize the view-scoped removal/regeneration history
+      // for the T014/T016 mock stale view rather than growing the shared
+      // static fixture below (which several other Playwright specs already
+      // depend on for its exact plan count/rows).
+      const listArgs = _args as { originFilter?: string[] | null } | undefined;
+      if (
+        listArgs?.originFilter?.includes('prepared_view_removal') ||
+        listArgs?.originFilter?.includes('prepared_view_regeneration')
+      ) {
+        const historyPlans: PlanSummary_Serialize[] = [
+          {
+            id: 'mock-sv-plan-removal-1',
+            number: 901,
+            title: 'Remove source view mock-sv-view-stale',
+            origin: 'prepared_view_removal',
+            originPath: 'mock-sv-view-stale',
+            state: 'applied',
+            planType: 'source_view_removal',
+            destructiveDestination: 'archive',
+            itemsTotal: 1,
+            itemsApplied: 1,
+            itemsFailed: 0,
+            itemsSkipped: 0,
+            itemsCancelled: 0,
+            itemsPending: 0,
+            totalBytesRequired: 0,
+            createdAt: '2026-05-20T09:00:00Z',
+          },
+          {
+            id: 'mock-sv-plan-regen-1',
+            number: 902,
+            title: 'Regenerate source view mock-sv-view-stale',
+            origin: 'prepared_view_regeneration',
+            originPath: 'mock-sv-view-stale',
+            state: 'partially_applied',
+            planType: 'source_view_regeneration',
+            destructiveDestination: 'archive',
+            itemsTotal: 2,
+            itemsApplied: 1,
+            itemsFailed: 1,
+            itemsSkipped: 0,
+            itemsCancelled: 0,
+            itemsPending: 0,
+            totalBytesRequired: 0,
+            createdAt: '2026-05-20T10:00:00Z',
+          },
+        ];
+        return { plans: historyPlans };
+      }
+      // Pre-existing static fixture. NOTE: this branch returns the bare
+      // `FilesystemPlan[]` array, not `{ plans: [...] }` (the real
+      // `PlanListResponse_Serialize` shape) — a latent mismatch that
+      // predates T019 and has gone unnoticed because nothing previously
+      // consumed `plans.list` in mock mode. Left as-is (out of this lane's
+      // scope to fix retroactively for the fixture's other, untested
+      // fields) since the new origin-filtered branch above is what T019
+      // actually exercises.
       const { plans } = await import('@/data/fixtures/plans');
       return plans;
     }
@@ -1717,6 +1777,34 @@ export async function mockInvoke(
                   viewRelativePath: '/mock/source-views/broken/light_002.fits',
                   materialization: 'symlink',
                   lastObservedState: 'present',
+                },
+              ],
+            },
+            // Spec 026 T014/T015/T016 mock coverage: a view already flagged
+            // `stale` by a prior sweep, with one broken item pre-recorded —
+            // the badge + broken-reference detail must render straight from
+            // this list response, no Verify click required.
+            {
+              id: 'mock-sv-view-stale',
+              projectId: 'proj-002',
+              kind: 'symlink',
+              state: 'stale',
+              createdAt: '2026-05-19T20:00:00Z',
+              itemCount: 2,
+              items: [
+                {
+                  id: 'mock-sv-item-stale-ok',
+                  inventoryItemId: 'mock-sv-inv-stale-ok',
+                  viewRelativePath: '/mock/source-views/stale/light_003.fits',
+                  materialization: 'symlink',
+                  lastObservedState: 'present',
+                },
+                {
+                  id: 'mock-sv-item-stale-broken',
+                  inventoryItemId: 'mock-sv-inv-stale-broken',
+                  viewRelativePath: '/mock/source-views/stale/light_004.fits',
+                  materialization: 'symlink',
+                  lastObservedState: 'missing',
                 },
               ],
             },
