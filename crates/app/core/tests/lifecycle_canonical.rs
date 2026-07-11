@@ -380,12 +380,7 @@ async fn t048d_typed_blocked_reason_persisted_and_readable() {
 async fn t048e_unblocking_clears_blocked_reason() {
     let (pool, bus) = setup().await;
     let project_id = create_project(&pool, &bus, "M101 Clear Reason").await;
-<<<<<<< HEAD
-    let debounce = Arc::new(Mutex::new(DebounceTable::new(DEBOUNCE_WINDOW)));
-=======
     let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
-    let edge_table = build_edge_table();
->>>>>>> 3ecde1b5 (refactor: phase-5 crate sweep (dedup DebounceTable, drop strsim, extract safe-filename))
 
     // Block first.
     let condition = BlockCondition::User { note: "manual block".to_owned() };

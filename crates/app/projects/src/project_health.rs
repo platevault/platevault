@@ -351,6 +351,9 @@ pub async fn emit_unarchive_transition(
 /// Write a durable audit row for a system-driven (actor=system) lifecycle
 /// transition. Used by `check_project_ready_invariant`, `emit_block_transition`,
 /// and `emit_unarchive_transition` to satisfy FR-021 (Constitution §V).
+///
+/// Delegates the raw insert to `persistence_db` (db-boundary rule: no `sqlx` in
+/// the app layer).
 async fn write_auto_transition_audit(
     pool: &SqlitePool,
     project_id: &str,
@@ -358,32 +361,10 @@ async fn write_auto_transition_audit(
     to_state: &str,
     trigger: &str,
 ) -> persistence_db::DbResult<()> {
-    use time::format_description::well_known::Rfc3339;
-    use uuid::Uuid;
-
-    let audit_id = Uuid::new_v4().to_string();
-    let request_id = Uuid::new_v4().to_string();
-    let at = time::OffsetDateTime::now_utc()
-        .format(&Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
-
-    sqlx::query(
-        "INSERT INTO audit_log_entry \
-         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
-          outcome, severity, request_id, at, payload) \
-         VALUES (?, 'project', ?, ?, ?, ?, 'system', 'applied', 'workflow', ?, ?, NULL)",
+    persistence_db::repositories::audit::insert_project_auto_transition(
+        pool, project_id, from_state, to_state, trigger,
     )
-    .bind(&audit_id)
-    .bind(project_id)
-    .bind(from_state)
-    .bind(to_state)
-    .bind(trigger)
-    .bind(&request_id)
-    .bind(&at)
-    .execute(pool)
-    .await?;
-
-    Ok(())
+    .await
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
