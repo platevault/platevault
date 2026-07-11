@@ -31,6 +31,7 @@ import {
   canRegenerateView,
   canVerifyView,
   brokenItemStateLabel,
+  observedStateLabel,
 } from './source-views';
 import type {
   PreparedViewSummary,
@@ -39,6 +40,7 @@ import type {
 } from './source-views';
 import { errMessage } from '@/lib/errors';
 import { GenerateSourceViewDialog } from './GenerateSourceViewDialog';
+import { ViewAuditHistory } from './ViewAuditHistory';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -232,7 +234,11 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                 <span className="text-xs text-muted">{view.itemCount} {m.projects_source_views_items_unit()}</span>
               </div>
 
-              {/* FR-033 / T078: per-item inventory refs */}
+              {/* FR-033 / T078: per-item inventory refs. T016: each item shows
+                  its `lastObservedState` (T014/T015 sweep, refreshed on every
+                  list load) when it isn't `present` — this is the persisted
+                  broken-reference detail, distinct from the on-demand Verify
+                  report below. */}
               {view.items.length > 0 && (
                 <details className="text-xs text-muted alm-source-views__refs-details">
                   <summary className="alm-source-views__refs-summary">
@@ -249,10 +255,30 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                         className="alm-source-views__refs-item"
                       >
                         {item.viewRelativePath}
+                        {item.lastObservedState !== 'present' && (
+                          <>
+                            {' — '}
+                            <span data-testid={`source-view-item-observed-${item.id}`}>
+                              {observedStateLabel(item.lastObservedState)}
+                            </span>
+                          </>
+                        )}
                       </li>
                     ))}
                   </ul>
                 </details>
+              )}
+
+              {/* T016: persisted stale-item summary from the T014 sweep — no
+                  click required, unlike the on-demand Verify report below. */}
+              {(view.state === 'stale' || view.state === 'missing') && (
+                <Banner variant="warn" data-testid={`stale-summary-${view.id}`}>
+                  {m.projects_source_views_stale_items_summary({
+                    count: String(
+                      view.items.filter((item) => item.lastObservedState !== 'present').length,
+                    ),
+                  })}
+                </Banner>
               )}
 
               {/* kind_diverged resolution affordance (D-026-H2) */}
@@ -289,6 +315,10 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                   )}
                 </Banner>
               )}
+
+              {/* T019: audit-history surface — this view's removal/regeneration
+                  plans, reusing the shared plan review overlay for full detail. */}
+              <ViewAuditHistory viewId={view.id} onViewPlan={onPlanCreated} />
             </div>
 
             <div className="flex gap-2 shrink-0">
