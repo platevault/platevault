@@ -1,9 +1,20 @@
 # Duplication & Abstraction Audit
 
-**Status (2026-07-11): AUDIT COMPLETE — implementation underway.** Phases 1–4
-are being implemented via the `orchestrate` run `run-dab` (worktree-isolated
-coder nodes n1–n8, each a PR off `main`). Phase 5 (crate candidates below) and
-T1-e (lifecycle-stub product decision) are held to apply separately.
+**Status (2026-07-11): AUDIT COMPLETE — Phases 1–5 landed.** The plan below is
+preserved as authored (present tense); this header records the outcome.
+
+- **Phases 1–4** — implemented via the `orchestrate` run `run-dab`
+  (worktree-isolated coder nodes n1–n8). All eight nodes **merged to `main`**:
+  n1 pathsafe (#565), n2 dataintegrity (#571), n3 atomictx (#572),
+  n4 jsoncodec (#570), n5 settingstable (#566), n6 targeterror (#578),
+  n7 dedup (#576), n8 frontend (#588).
+- **Phase 5** (reinvented-wheel / crate sweep) — applied separately in **#590**:
+  `project_health::DebounceTable` → `app_core_cache::DebounceCache`, the
+  vestigial `strsim` dep dropped, and `patterns::sanitize` extracted into a
+  standalone `safe-filename` crate. **Item 4** (`metadata_*` publish packaging)
+  is intentionally **deferred** as a packaging decision, not a code change.
+- **T1-e** (lifecycle-stub on the archive path) — remains an open **product
+  decision**, not yet filed. See the Tier 1 table and Phase 1 step 3 below.
 
 Follow-on to the `db-boundary-zero` campaign (see
 `persistence-layer-hardening.md`). That campaign drained all production `sqlx`
