@@ -34,7 +34,7 @@ pub const LOG_BUFFER_SIZE: usize = 500;
 #[derive(Debug, thiserror::Error)]
 pub enum LogError {
     #[error("database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(#[from] persistence_db::DbError),
     #[error("serialisation error: {0}")]
     Serialise(#[from] serde_json::Error),
     #[error("{code}: {message}")]
@@ -190,25 +190,14 @@ pub async fn recent_entries(
 
     // Fetch the most recent N rows ordered by event_id descending, then
     // reverse for oldest-first output.
-    let rows: Vec<(i64, String, String, String)> =
-        sqlx::query_as::<_, (i64, String, String, String)>(
-            "SELECT event_id, topic, emitted_at, payload \
-         FROM events \
-         WHERE event_id > ? \
-         ORDER BY event_id DESC \
-         LIMIT ?",
-        )
-        .bind(since_id)
-        .bind(limit)
-        .fetch_all(pool)
-        .await?;
+    let rows = persistence_db::repositories::events::list_recent_since(pool, since_id, limit)
+        .await
+        .map_err(LogError::from)?;
 
     let mut entries: Vec<LogEntry> = rows
         .into_iter()
         .rev() // oldest-first
-        .map(|(eid, topic, emitted_at, payload_json)| {
-            project_event(eid, &topic, &emitted_at, &payload_json)
-        })
+        .map(|row| project_event(row.event_id, &row.topic, &row.emitted_at, &row.payload))
         .filter(|e| {
             // Apply level filter.
             if !level_passes(e.level, options.level_min) {
@@ -254,8 +243,8 @@ async fn retention_gap(
         return Ok((false, None));
     };
 
-    let oldest_retained: Option<i64> =
-        sqlx::query_scalar("SELECT MIN(event_id) FROM events").fetch_one(pool).await?;
+    let oldest_retained =
+        persistence_db::repositories::events::min_event_id(pool).await.map_err(LogError::from)?;
 
     match oldest_retained {
         Some(min_id) if min_id > cursor_id + 1 => Ok((true, Some(min_id - cursor_id - 1))),
@@ -305,54 +294,17 @@ pub async fn export_entries(
         });
     }
 
-    // Build query with optional time bounds.
-    let rows: Vec<(i64, String, String, String)> = match (&options.since, &options.until) {
-        (Some(s), Some(u)) => {
-            sqlx::query_as::<_, (i64, String, String, String)>(
-                "SELECT event_id, topic, emitted_at, payload \
-             FROM events WHERE emitted_at >= ? AND emitted_at < ? \
-             ORDER BY event_id ASC",
-            )
-            .bind(s)
-            .bind(u)
-            .fetch_all(pool)
-            .await?
-        }
-        (Some(s), None) => {
-            sqlx::query_as::<_, (i64, String, String, String)>(
-                "SELECT event_id, topic, emitted_at, payload \
-             FROM events WHERE emitted_at >= ? \
-             ORDER BY event_id ASC",
-            )
-            .bind(s)
-            .fetch_all(pool)
-            .await?
-        }
-        (None, Some(u)) => {
-            sqlx::query_as::<_, (i64, String, String, String)>(
-                "SELECT event_id, topic, emitted_at, payload \
-             FROM events WHERE emitted_at < ? \
-             ORDER BY event_id ASC",
-            )
-            .bind(u)
-            .fetch_all(pool)
-            .await?
-        }
-        (None, None) => {
-            sqlx::query_as::<_, (i64, String, String, String)>(
-                "SELECT event_id, topic, emitted_at, payload \
-             FROM events ORDER BY event_id ASC",
-            )
-            .fetch_all(pool)
-            .await?
-        }
-    };
+    let rows = persistence_db::repositories::events::list_by_emitted_at_range(
+        pool,
+        options.since.as_deref(),
+        options.until.as_deref(),
+    )
+    .await
+    .map_err(LogError::from)?;
 
     let entries: Vec<LogEntry> = rows
         .into_iter()
-        .map(|(eid, topic, emitted_at, payload_json)| {
-            project_event(eid, &topic, &emitted_at, &payload_json)
-        })
+        .map(|row| project_event(row.event_id, &row.topic, &row.emitted_at, &row.payload))
         .filter(|e| {
             if !level_passes(e.level, options.level_min) {
                 return false;

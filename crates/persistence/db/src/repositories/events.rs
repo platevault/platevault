@@ -149,6 +149,17 @@ pub async fn list_by_emitted_at_range(
     Ok(rows)
 }
 
+/// Largest assigned `event_id`, or `0` if the table is empty. Used to seed a
+/// live forwarder's cursor so only events emitted after subscribe are sent.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn max_event_id(pool: &SqlitePool) -> DbResult<i64> {
+    let (max_id,): (i64,) =
+        sqlx::query_as("SELECT COALESCE(MAX(event_id), 0) FROM events").fetch_one(pool).await?;
+    Ok(max_id)
+}
+
 /// Smallest retained `event_id`, or `None` if the table is empty. Used to
 /// detect a retention/eviction gap between a caller's cursor and the oldest
 /// row still on disk.
@@ -167,7 +178,7 @@ mod tests {
 
     use super::{
         insert_event, list_by_emitted_at_range, list_recent_since, list_since, list_since_by_topic,
-        min_event_id,
+        max_event_id, min_event_id,
     };
 
     async fn setup() -> SqlitePool {
@@ -255,6 +266,16 @@ mod tests {
         .await
         .expect("both bounds");
         assert_eq!(both.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn max_event_id_empty_is_zero() {
+        let pool = setup().await;
+        assert_eq!(max_event_id(&pool).await.expect("max_event_id"), 0);
+
+        let id1 = insert_event(&pool, "t.a", "system", "2026-01-01T00:00:00Z", "{}").await.unwrap();
+        insert_event(&pool, "t.b", "system", "2026-01-01T00:00:01Z", "{}").await.unwrap();
+        assert_eq!(max_event_id(&pool).await.expect("max_event_id"), id1 + 1);
     }
 
     #[tokio::test]
