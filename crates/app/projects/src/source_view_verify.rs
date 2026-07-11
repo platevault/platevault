@@ -28,17 +28,21 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
 }
 
 /// Resolved canonical-source state for one view item's `inventory_item_id`.
-struct SourceResolution {
+///
+/// `pub(crate)`: also reused by `prepared_views::regenerate_prepared_view`
+/// (T013) to resolve each item's real absolute source path for the `link`
+/// plan action, rather than duplicating this file_record→root-path lookup.
+pub(crate) struct SourceResolution {
     /// Absolute path of the canonical source, when the source root and
     /// `file_record` row both resolve.
-    abs_path: Option<camino::Utf8PathBuf>,
+    pub(crate) abs_path: Option<camino::Utf8PathBuf>,
     /// `true` when the `file_record` row is absent or its state is
     /// `missing`/`rejected` — the source itself is gone from the inventory's
     /// point of view (FR-019-style "moved/removed" signal).
-    source_gone: bool,
+    pub(crate) source_gone: bool,
 }
 
-async fn resolve_source(pool: &SqlitePool, inventory_item_id: &str) -> SourceResolution {
+pub(crate) async fn resolve_source(pool: &SqlitePool, inventory_item_id: &str) -> SourceResolution {
     use persistence_db::repositories::inventory;
 
     let Ok(Some(record)) = inventory::get_file_record_lookup(pool, inventory_item_id).await else {

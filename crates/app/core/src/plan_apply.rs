@@ -319,12 +319,30 @@ async fn finalize_view_removal(pool: &SqlitePool, plan_id: &str, terminal: &str)
 /// reflect the actual outcome (including any items a partial apply left
 /// broken) rather than a hand-maintained approximation.
 ///
+/// A successful regeneration is the one legitimate way out of the terminal
+/// `removed` state (A4) — but `sweep_view_staleness` intentionally skips
+/// `removed`/`kind_diverged` views (they have nothing meaningful to sweep in
+/// the general list-load path). So a `removed` view is first cleared to a
+/// neutral non-terminal state here, purely so the sweep actually runs and
+/// re-evaluates the freshly-recreated links, rather than leaving the view
+/// stuck `removed` forever after a successful regeneration.
+///
 /// Best-effort: failures are logged only, never fail the apply (§II).
 async fn finalize_view_regeneration(pool: &SqlitePool, plan_id: &str) {
+    use persistence_db::repositories::prepared_source_views as views_repo;
+
     let Some(view_id) = view_id_for_plan(pool, plan_id).await else {
         tracing::warn!(%plan_id, "regeneration finalize: no linked view id on plan items; skipped");
         return;
     };
+
+    if let Ok(view) = views_repo::get_view(pool, &view_id).await {
+        if view.state == "removed" {
+            if let Err(e) = views_repo::update_view_state(pool, &view_id, "stale").await {
+                tracing::error!(%plan_id, %view_id, error=%e, "regeneration finalize: failed to clear removed state pre-sweep");
+            }
+        }
+    }
 
     if let Err(e) =
         app_core_projects::source_view_verify::sweep_view_staleness(pool, &view_id).await
