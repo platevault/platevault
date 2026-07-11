@@ -67,7 +67,7 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | #514 | spec-040 comprehensive master-detection test matrix | J8 | test-coverage |
 | #515 | Confirm shows depth not org state | J1 | minor |
 | #516 | Observing Site name accepts empty | J1 | minor |
-| #548 | XISF masters never flagged is_master (FITS-only detection) | J8 | **bug** |
+| ~~#548~~ | ~~XISF masters never detected~~ — **CLOSED, fixture artifact** (real XISF detects fine; settled via SessionMatrix) | J8 | invalid |
 | #549 | Mixed-placeholder count inconsistent (5 vs 20) + double-counts masters | J8 | **bug** (rel #513) |
 | #550 | Single-file items labelled type "mixed" | J8 | **bug** |
 | #551 | No-metadata files show complete vs batch "16 missing" gate | J8 | **bug** |
@@ -80,6 +80,8 @@ One tracking issue per journey: **Epic: Journey N — <name>**. Each lists its t
 | ~~#558~~ | ~~Data Sources Disable no-op~~ — **CLOSED, mis-diagnosis** (Disable works via confirm) | J1 | invalid |
 | #559 | Data Sources has no Delete/Remove action (roots_delete unreachable) | J1 | **bug** |
 | #560 | Remap Verify samples ≤5 file_record paths → vacuous "all found" → silent orphaning | J1 | **bug** (high) |
+| #562 | Data Sources card: consolidate per-source actions into a kebab (⋯) menu + declutter | J1 | enhancement |
+| #563 | Data Sources protection Override persists in card but source_protection_get disagrees (get/set inconsistency) | J1 | **bug** |
 
 **Journey → Epic map:** J1 #518 · J2 #519 · J3 #520 · J4 #521 · J5 #522 · J6 #523
 · J7 #524 · J8 #525 · J9 #526 · J10 #527.
@@ -219,6 +221,7 @@ hardcoded mock masters).
 spec-040 test issue. Detection is header-first (IMAGETYP), path/name fallback.
 
 **Status: in progress** (T1 done on real app 2026-07-11 via DetectionMatrix fixture retry; T2–T5 pending — T3–T5 need lights ingested+applied as sessions first).
+**#548 (XISF masters) SETTLED as fixture artifact** — real XISF (valid `XISF0100` container) detects `isMaster:true` (Bias/Dark/Flat); the invalid `.xisf` were FITS-cards-in-.xisf. Reusable **SessionMatrix** dataset (`docs/development/fixtures/gen_session_matrix.py`, 102 fixtures, real XISF + full metadata) drives session-detection + calibration-matching. Session-detection run PAUSED mid-flow (catalogue plan staged for M51/2025-05-03/L 22-file folder → 0 move / 22 catalogue; apply not yet run).
 
 | Test | Status | Step → Expected / FAIL |
 |------|--------|------------------------|
