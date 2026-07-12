@@ -60,6 +60,7 @@ const {
   mockListTargetProjects,
   mockGetTargetNote,
   mockUpdateTargetNote,
+  mockAstroFormatBatch,
 } = vi.hoisted(() => ({
   mockGetTargetDetail: vi.fn(),
   mockAddTargetAlias: vi.fn(),
@@ -70,6 +71,7 @@ const {
   mockListTargetProjects: vi.fn(),
   mockGetTargetNote: vi.fn(),
   mockUpdateTargetNote: vi.fn(),
+  mockAstroFormatBatch: vi.fn(),
 }));
 
 /** Wrap a value in the generated `{ status: 'ok' }` Result envelope. */
@@ -86,6 +88,7 @@ vi.mock('@/bindings/index', () => ({
     targetProjectsList: mockListTargetProjects,
     targetNoteGet: mockGetTargetNote,
     targetNoteUpdate: mockUpdateTargetNote,
+    targetAstroFormatBatch: mockAstroFormatBatch,
   },
 }));
 
@@ -152,6 +155,9 @@ beforeEach(() => {
   mockListTargetProjects.mockResolvedValue(ok([]));
   mockGetTargetNote.mockResolvedValue(ok({ notes: null }));
   mockUpdateTargetNote.mockResolvedValue(ok({ notes: null }));
+  mockAstroFormatBatch.mockResolvedValue(
+    ok({ formatted: [{ id: TARGET_ID, raSexagesimal: '20:59:00', decSexagesimal: '+44:22:12' }] }),
+  );
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -30,7 +30,7 @@ import { unwrap } from '@/api/ipc';
 import type { TargetDetailV3 } from '@/bindings/aliases';
 import type { ContractError } from '@/lib/errors';
 import type { TargetListItem } from '@/bindings/index';
-import type { TargetSessionItem, TargetProjectItem } from '@/bindings';
+import type { TargetSessionItem, TargetProjectItem, TargetAstroFormat } from '@/bindings';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
@@ -83,27 +83,6 @@ function kindLabel(kind: string): string {
     default:
       return kind;
   }
-}
-
-/** Format decimal RA degrees (0–360) to sexagesimal h m s string. */
-function fmtRa(deg: number): string {
-  if (!Number.isFinite(deg)) return '—';
-  const h = deg / 15;
-  const hh = Math.floor(h);
-  const mm = Math.floor((h - hh) * 60);
-  const ss = ((h - hh) * 60 - mm) * 60;
-  return `${String(hh).padStart(2, '0')}h${String(mm).padStart(2, '0')}m${ss.toFixed(0).padStart(2, '0')}s`;
-}
-
-/** Format decimal Dec degrees to ±DD°MM′SS″ string. */
-function fmtDec(deg: number): string {
-  if (!Number.isFinite(deg)) return '—';
-  const sign = deg < 0 ? '−' : '+';
-  const abs = Math.abs(deg);
-  const dd = Math.floor(abs);
-  const mm = Math.floor((abs - dd) * 60);
-  const ss = ((abs - dd) * 60 - mm) * 60;
-  return `${sign}${String(dd).padStart(2, '0')}°${String(mm).padStart(2, '0')}′${ss.toFixed(0).padStart(2, '0')}″`;
 }
 
 // ── Altitude curve helper ─────────────────────────────────────────────────────
@@ -315,6 +294,11 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   const [notesSaved, setNotesSaved] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
 
+  // Sexagesimal RA/Dec (adopt target-match): backend-formatted, carry-safe
+  // rounding (replaces the hand-rolled fmtRa/fmtDec, which could round a
+  // seconds value up to an invalid ":60").
+  const [astroFormat, setAstroFormat] = useState<TargetAstroFormat | null>(null);
+
   const navigate = useNavigate();
 
   // US6/T015: real astronomy needs an active observing site; the graph/stats
@@ -381,6 +365,20 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
     setNotesSaved(false);
     setNotesError(null);
   }, [targetId]);
+
+  // Sexagesimal RA/Dec: one batched call (N=1 here) once the detail loads.
+  useEffect(() => {
+    if (loadState.status !== 'loaded') {
+      setAstroFormat(null);
+      return;
+    }
+    const { id, raDeg, decDeg } = loadState.data;
+    commands
+      .targetAstroFormatBatch({ targets: [{ id, raDeg, decDeg }] })
+      .then(unwrap)
+      .then(({ formatted }) => setAstroFormat(formatted[0] ?? null))
+      .catch(() => setAstroFormat(null));
+  }, [loadState]);
 
   // US4: save notes handler.
   const handleNotesSave = useCallback(async () => {
@@ -512,10 +510,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
     guidanceParams,
   );
 
-  const raDecStr =
-    detail.raDeg != null && detail.decDeg != null
-      ? `${fmtRa(detail.raDeg)} / ${fmtDec(detail.decDeg)}`
-      : null;
+  const raDecStr = astroFormat
+    ? `${astroFormat.raSexagesimal} / ${astroFormat.decSexagesimal}`
+    : null;
 
   // Identity facts split across two tabular columns (left-packed).
   const identityA: PropertyDef[] = [

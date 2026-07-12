@@ -7,6 +7,8 @@
 //! - [`coords`]: coordinate-based nearest-neighbour target resolution
 //!   (haversine separation + FOV-aware radius + ranking; spec 041 R-17/R-18),
 //!   now built on the `target-match` crate's coordinate primitives.
+//! - [`astro_format`]: sexagesimal RA/Dec display formatting (carry-safe
+//!   rounding via `target_match::Equatorial`).
 //!
 //! `Angle`, `Equatorial`, `Epoch`, and `separation` are re-exported from
 //! `target_match` so downstream crates get one coordinate-primitive dependency
@@ -23,6 +25,7 @@
 
 #![allow(clippy::doc_markdown)] // spec/domain terminology is not suited for backticks
 
+pub mod astro_format;
 pub mod coords;
 pub mod identity;
 pub mod normalize;

@@ -330,6 +330,21 @@ export const commands = {
 	 */
 	targetResolutionSettingsUpdate: (req: ResolverSettingsUpdateRequest) => typedError<ResolverSettingsResponse, ContractError_Serialize>(__TAURI_INVOKE("target_resolution_settings_update", { req })),
 	/**
+	 *  `target.astro_format.batch` — sexagesimal RA/Dec formatting for N targets
+	 *  in one call (never per-row round trips). Pure geometry (`targeting::astro_format`,
+	 *  backed by `target_match::Equatorial`'s carry-safe sexagesimal formatting) —
+	 *  no database access, so this never fails on a well-formed request.
+	 * 
+	 *  Targets whose RA/Dec is non-finite are omitted from `formatted` (never a
+	 *  fabricated string); callers key results by `id`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  This command does not fail; the `Result` shape matches the rest of the
+	 *  command surface for a consistent IPC error contract.
+	 */
+	targetAstroFormatBatch: (req: TargetAstroFormatBatchRequest) => typedError<TargetAstroFormatBatchResponse, ContractError_Serialize>(__TAURI_INVOKE("target_astro_format_batch", { req })),
+	/**
 	 *  `projects.list` — list all projects from the database.
 	 * 
 	 *  # Errors
@@ -7541,6 +7556,45 @@ export type TargetAliasRemoveRequest = {
 /**  Response for `target.alias.remove` (gen-3). */
 export type TargetAliasRemoveResult = {
 	removed: boolean,
+};
+
+/**
+ *  One target's sexagesimal-formatted RA/Dec.
+ * 
+ *  Absent from the response when its input RA/Dec was non-finite — never a
+ *  fabricated string (callers key on `id` to look up a result and fall back
+ *  to an explicit "unknown" display for ids with no match).
+ */
+export type TargetAstroFormat = {
+	id: string,
+	/**  `HH:MM:SS` (0 fractional-second digits, carry-safe rounding). */
+	raSexagesimal: string,
+	/**  `±DD:MM:SS` (0 fractional-second digits, carry-safe rounding). */
+	decSexagesimal: string,
+};
+
+/**
+ *  Request for `target.astro_format.batch`: sexagesimal RA/Dec formatting for
+ *  N targets in a single call, never per-row round trips.
+ */
+export type TargetAstroFormatBatchRequest = {
+	targets: TargetAstroFormatItem[],
+};
+
+/**  Response for `target.astro_format.batch`. */
+export type TargetAstroFormatBatchResponse = {
+	formatted: TargetAstroFormat[],
+};
+
+/**  One target's RA/Dec to format, for `target.astro_format.batch`. */
+export type TargetAstroFormatItem = {
+	/**
+	 *  Caller-supplied id echoed back on the matching [`TargetAstroFormat`]
+	 *  (opaque to this command — a `canonical_target.id` in practice).
+	 */
+	id: string,
+	raDeg: number | null,
+	decDeg: number | null,
 };
 
 /**  Closed catalogue identifier slug (spec 035 `CatalogId`). */

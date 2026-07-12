@@ -1436,6 +1436,7 @@ dependencies = [
  "specta",
  "specta-typescript",
  "sqlx",
+ "targeting",
  "targeting_resolver",
  "tauri",
  "tauri-build",

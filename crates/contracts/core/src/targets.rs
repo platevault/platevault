@@ -15,6 +15,12 @@
 //!
 //! Search/resolve/settings DTOs for `target.search`, `target.resolve`,
 //! `target.resolution.settings`.
+//!
+//! ## `target.astro_format.batch` (adopt target-match)
+//!
+//! [`TargetAstroFormatItem`], [`TargetAstroFormatBatchRequest`],
+//! [`TargetAstroFormat`], [`TargetAstroFormatBatchResponse`] — batched
+//! sexagesimal RA/Dec formatting for N targets in one IPC call.
 
 use crate::lifecycle::ProjectState;
 use crate::sessions::AcquisitionSession;
@@ -641,4 +647,47 @@ pub struct ResolverSettingsResponse {
     pub contract_version: String,
     pub request_id: String,
     pub settings: ResolverSettings,
+}
+
+// ── target.astro_format.batch (adopt target-match) ───────────────────────────
+
+/// One target's RA/Dec to format, for `target.astro_format.batch`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAstroFormatItem {
+    /// Caller-supplied id echoed back on the matching [`TargetAstroFormat`]
+    /// (opaque to this command — a `canonical_target.id` in practice).
+    pub id: String,
+    pub ra_deg: f64,
+    pub dec_deg: f64,
+}
+
+/// Request for `target.astro_format.batch`: sexagesimal RA/Dec formatting for
+/// N targets in a single call, never per-row round trips.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAstroFormatBatchRequest {
+    pub targets: Vec<TargetAstroFormatItem>,
+}
+
+/// One target's sexagesimal-formatted RA/Dec.
+///
+/// Absent from the response when its input RA/Dec was non-finite — never a
+/// fabricated string (callers key on `id` to look up a result and fall back
+/// to an explicit "unknown" display for ids with no match).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAstroFormat {
+    pub id: String,
+    /// `HH:MM:SS` (0 fractional-second digits, carry-safe rounding).
+    pub ra_sexagesimal: String,
+    /// `±DD:MM:SS` (0 fractional-second digits, carry-safe rounding).
+    pub dec_sexagesimal: String,
+}
+
+/// Response for `target.astro_format.batch`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAstroFormatBatchResponse {
+    pub formatted: Vec<TargetAstroFormat>,
 }
