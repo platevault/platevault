@@ -43,7 +43,7 @@
 //!   construction (exactly one `Arc<T>` slot) — no capacity/TTL knobs needed.
 
 use std::hash::Hash;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 
 use moka::sync::Cache;
@@ -334,12 +334,58 @@ where
     }
 }
 
+// ── protection_defaults: global protection-default settings snapshot ───────
+//
+// Relocated here (not `app_core`) so both `app_core` (`protection.rs` reads
+// it) and `app_core_settings` (the generic settings-bag write path also
+// changes these three keys) can invalidate it without a dependency cycle —
+// `app_core` depends on `app_core_settings`, so the cache can't live in
+// `app_core` if `app_core_settings` needs to invalidate it too.
+
+/// Snapshot of the three global protection-default settings (`protection_defaults`
+/// table, scope `"global"`): default level, block-permanent-delete flag, and
+/// protected categories. Plain data so this leaf crate doesn't need to depend
+/// on `app_core`'s `GlobalProtection` (which stays where it is; callers convert
+/// at the boundary).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProtectionDefaultsSnapshot {
+    pub level: String,
+    pub block_permanent_delete: bool,
+    pub categories: Vec<String>,
+}
+
+static PROTECTION_DEFAULTS: OnceLock<SnapshotCache<ProtectionDefaultsSnapshot>> = OnceLock::new();
+
+/// Return the process-global protection-defaults snapshot cache.
+pub fn protection_defaults() -> &'static SnapshotCache<ProtectionDefaultsSnapshot> {
+    PROTECTION_DEFAULTS.get_or_init(SnapshotCache::new)
+}
+
+/// Store a freshly loaded [`ProtectionDefaultsSnapshot`].
+pub fn store_protection_defaults(value: Arc<ProtectionDefaultsSnapshot>) {
+    protection_defaults().store(value);
+}
+
+/// Clear the protection-defaults snapshot so the next read reloads from the DB.
+///
+/// Call after `protection::set_global_protection_default` commits (`app_core`)
+/// and after the generic settings-bag write path commits a change to
+/// `defaultProtection` / `blockPermanentDelete` / `protectedCategories`
+/// (`app_core_settings::update_setting` / `restore_defaults`).
+pub fn invalidate_protection_defaults() {
+    protection_defaults().invalidate();
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
 
-    use super::{CacheConfig, DebounceCache, SnapshotCache, TtlCache};
+    use super::{
+        invalidate_protection_defaults, protection_defaults, store_protection_defaults,
+        CacheConfig, DebounceCache, ProtectionDefaultsSnapshot, SnapshotCache, TtlCache,
+    };
 
     #[test]
     fn ttl_cache_miss_then_hit() {
@@ -488,5 +534,25 @@ mod tests {
     fn snapshot_cache_default_is_empty() {
         let cache: SnapshotCache<u32> = SnapshotCache::default();
         assert_eq!(cache.load(), None);
+    }
+
+    #[test]
+    fn protection_defaults_store_load_invalidate_round_trips() {
+        // Reuses the process-global static, so scope this test to values it
+        // fully owns (invalidate at start and end) to stay independent of
+        // other tests' ordering.
+        invalidate_protection_defaults();
+        assert!(protection_defaults().load().is_none());
+
+        store_protection_defaults(Arc::new(ProtectionDefaultsSnapshot {
+            level: "protected".to_owned(),
+            block_permanent_delete: true,
+            categories: vec!["lights".to_owned()],
+        }));
+        let loaded = protection_defaults().load().expect("stored value must load");
+        assert_eq!(loaded.level, "protected");
+
+        invalidate_protection_defaults();
+        assert!(protection_defaults().load().is_none());
     }
 }
