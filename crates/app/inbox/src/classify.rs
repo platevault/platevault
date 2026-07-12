@@ -13,11 +13,10 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use app_core_targets::metadata_cache::cached_extract;
 use calibration_master_detect::{detect_master, DetectInput};
 use camino::Utf8Path;
-use metadata_core::{v1_normalization_table, EvidenceSource, FrameType, MetadataExtractor};
-use metadata_fits::FitsExtractor;
-use metadata_xisf::XisfExtractor;
+use metadata_core::{v1_normalization_table, EvidenceSource, FrameType};
 
 use super::grouping::{group_file, FrameMetadata, GroupingConfig};
 use super::signature::folder_signature;
@@ -135,8 +134,6 @@ pub async fn classify(
 
     // 6. Run metadata extraction + classification
     let norm_table = v1_normalization_table();
-    let fits_extractor = FitsExtractor;
-    let xisf_extractor = XisfExtractor;
 
     // spec 041 R-4 / T025: before wiping evidence, snapshot per-path override
     // values and detect which files have changed identity (size/mtime). After
@@ -176,14 +173,8 @@ pub async fn classify(
 
         let ext = abs_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
 
-        // Extract raw metadata
-        let raw_meta = if xisf_extractor.supports_extension(&ext) {
-            xisf_extractor.extract(abs_path).ok().flatten()
-        } else if fits_extractor.supports_extension(&ext) {
-            fits_extractor.extract(abs_path).ok().flatten()
-        } else {
-            None
-        };
+        // Extract raw metadata (F0 cached-extract: memoized by path/mtime/size).
+        let raw_meta = cached_extract(abs_path).ok();
 
         let image_typ_raw = raw_meta.as_ref().and_then(|m| m.image_typ.as_deref());
         let stack_count = raw_meta.as_ref().and_then(|m| m.stack_count);
@@ -901,8 +892,6 @@ async fn build_breakdown(
     // Load the active pattern once; if it is unset/invalid every preview is None.
     let active_pattern = super::confirm::load_active_pattern(pool).await.ok();
     let norm_table = v1_normalization_table();
-    let fits_extractor = FitsExtractor;
-    let xisf_extractor = XisfExtractor;
 
     let mut entries = Vec::new();
 
@@ -915,13 +904,7 @@ async fn build_breakdown(
         let destination_preview = active_pattern.as_ref().and_then(|pattern| {
             let first_rel = files.first()?;
             let abs_path = root_absolute_path.join(first_rel);
-            let bundle = super::confirm::build_metadata_bundle(
-                &abs_path,
-                kind,
-                &norm_table,
-                &fits_extractor,
-                &xisf_extractor,
-            );
+            let bundle = super::confirm::build_metadata_bundle(&abs_path, kind, &norm_table);
             patterns::resolve_v1(pattern, &bundle).ok().map(|r| r.relative_path)
         });
 
