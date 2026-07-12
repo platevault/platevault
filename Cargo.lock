@@ -243,6 +243,7 @@ name = "app_core_settings"
 version = "0.1.0"
 dependencies = [
  "app_core_cache",
+ "app_core_calibration",
  "app_core_errors",
  "audit",
  "contracts_core",
