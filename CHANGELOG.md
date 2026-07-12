@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.3.0](https://github.com/nightwatch-astro/alm/compare/v0.2.0...v0.3.0) (2026-07-12)
+
+
+### Features
+
+* detect and repair stale generated source-view links automatically ([#545](https://github.com/nightwatch-astro/alm/issues/545)) ([384398d](https://github.com/nightwatch-astro/alm/commit/384398df584a072aea4341bb9fd0c11a39b69463))
+* plan future imaging nights with real Moon geometry and dark-window awareness ([#499](https://github.com/nightwatch-astro/alm/issues/499)) ([1a0c464](https://github.com/nightwatch-astro/alm/commit/1a0c4644933ba7572eb19ba7a4d9d1242f2903a4))
+* show a destination path preview and retry-plan action in the plan review dialog ([#492](https://github.com/nightwatch-astro/alm/issues/492)) ([bbbd11f](https://github.com/nightwatch-astro/alm/commit/bbbd11ff81cb6d724d86104dfabf6b575d776fee))
+* show a paused state and resume option when a plan apply run stalls ([#589](https://github.com/nightwatch-astro/alm/issues/589)) ([f8cea5e](https://github.com/nightwatch-astro/alm/commit/f8cea5eb9088dcd23feb4be8641f622a9315eadc))
+* verify a generated source view before processing ([#535](https://github.com/nightwatch-astro/alm/issues/535)) ([de28d84](https://github.com/nightwatch-astro/alm/commit/de28d844a6a41def5d2ebb3e5e09d10e51fe3d41))
+
+
+### Bug Fixes
+
+* file watcher and move operations no longer follow symlinks or Windows junctions ([0068335](https://github.com/nightwatch-astro/alm/commit/006833599304636f8d9a97e9905db94c1e8a60c8))
+* plan review dialog showed garbled error messages on failed apply/discard/retry ([#561](https://github.com/nightwatch-astro/alm/issues/561)) ([a504a7f](https://github.com/nightwatch-astro/alm/commit/a504a7fce82a9455c7d8bd6d0607277d2741b90c))
+* project creation no longer leaves partial data behind on failure ([a852d77](https://github.com/nightwatch-astro/alm/commit/a852d776e16526eefc9720a00eeddf838b72201e))
+* settings edits no longer get silently reverted; add manual reconcile action ([#517](https://github.com/nightwatch-astro/alm/issues/517)) ([0463bbd](https://github.com/nightwatch-astro/alm/commit/0463bbd2aab9d6813614ff9a0c98debdf80bb8dd))
+* settings page now invalidates the shared inventory cache correctly ([#588](https://github.com/nightwatch-astro/alm/issues/588)) ([c17a630](https://github.com/nightwatch-astro/alm/commit/c17a630c9e4a97d32e2d38297dfb0cf4911415cd))
+* surface data-integrity and lifecycle errors instead of silently defaulting or mislabeling them ([064e5f5](https://github.com/nightwatch-astro/alm/commit/064e5f5016eff1574aafff21d697b177018d7383))
+* target management/favourites errors no longer fail client-side validation ([04072b6](https://github.com/nightwatch-astro/alm/commit/04072b61c4df35ec8e3b424190d3b509c04aef73))
+
+
+### Refactors
+
+* **calibration:** move raw sqlx out of app_core_calibration into persistence_db ([#537](https://github.com/nightwatch-astro/alm/issues/537)) ([b86a2ff](https://github.com/nightwatch-astro/alm/commit/b86a2ffebd342b20a602c33089a79db6f74eceb2))
+* consolidate debounce cache, drop unused strsim dep, split out safe-filename crate ([#590](https://github.com/nightwatch-astro/alm/issues/590)) ([7dad9ca](https://github.com/nightwatch-astro/alm/commit/7dad9cab33f6eec69f73aa92d21fc2fd3a94521a))
+* **db-boundary:** drain raw sqlx out of app/targets ingest ([#536](https://github.com/nightwatch-astro/alm/issues/536)) ([9bebde0](https://github.com/nightwatch-astro/alm/commit/9bebde02c4b276e34d1a8c4da116dc21f2201fcb))
+* dedup calibration matching, session key parsing, and target/audit repository queries ([3153058](https://github.com/nightwatch-astro/alm/commit/3153058e8b13784d8122385de4e834ac5558cbee))
+* drive settings apply/default logic from a shared descriptor table ([0999019](https://github.com/nightwatch-astro/alm/commit/099901979bde195e57d155f4b5c6b57abd7e5cca))
+* drop dead lifecycle edge-table plumbing; guard archive closure against illegal edges ([#592](https://github.com/nightwatch-astro/alm/issues/592)) ([38d637a](https://github.com/nightwatch-astro/alm/commit/38d637a44e1e53b2d02fd55133904c104c7faa97))
+* fold Add Target dialog into the shared Modal; test the real target error mapping ([#593](https://github.com/nightwatch-astro/alm/issues/593)) ([06c74eb](https://github.com/nightwatch-astro/alm/commit/06c74eba5d1105635115ad7caee4f13a44af9c2d))
+* move targeting-resolver database queries behind the persistence layer ([#538](https://github.com/nightwatch-astro/alm/issues/538)) ([6c061e1](https://github.com/nightwatch-astro/alm/commit/6c061e1d92b99010138cbad519e5519ba00f0443))
+* **persistence:** break audit&lt;-&gt;persistence_db cycle, move events SQL ([#534](https://github.com/nightwatch-astro/alm/issues/534)) ([b559384](https://github.com/nightwatch-astro/alm/commit/b559384d574acdfca57e7942c1015e7512dbc480))
+* **persistence:** drain raw sqlx out of frame_inventory/search/sessions ([#539](https://github.com/nightwatch-astro/alm/issues/539)) ([c9ab961](https://github.com/nightwatch-astro/alm/commit/c9ab961a0a07b2bd14fde8f3825ca5e6a92752f8))
+* **persistence:** move events-table queries out of log UI into events repo ([#541](https://github.com/nightwatch-astro/alm/issues/541)) ([c371f96](https://github.com/nightwatch-astro/alm/commit/c371f96085e95c33e54eb4ac6ea34c5937135b6f))
+* **targets:** drain raw sqlx out of app/targets into q_targets_mgmt ([#540](https://github.com/nightwatch-astro/alm/issues/540)) ([28e0a14](https://github.com/nightwatch-astro/alm/commit/28e0a1477e0fce4061fcf000b12337ce9082d015))
+
 ## [0.2.0](https://github.com/nightwatch-astro/alm/compare/v0.1.0...v0.2.0) (2026-07-09)
 
 
