@@ -40,6 +40,10 @@ use metadata_xisf::XisfExtractor;
 /// preserves both mtime-second and byte length is the same accepted risk any
 /// mtime-based cache carries.
 type CacheKey = (PathBuf, u64, u64);
+/// Memoized alongside `Ok` results: an extraction failure for a given
+/// `(path, mtime, size)` is deterministic (same bytes in, same parse
+/// failure out), so caching `Err` under the TTI is safe and avoids
+/// re-parsing an unreadable/malformed file on every lookup.
 type CacheValue = Result<RawFileMetadata, MetadataExtractError>;
 
 static METADATA_CACHE: std::sync::OnceLock<TtlCache<CacheKey, CacheValue>> =

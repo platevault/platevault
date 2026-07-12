@@ -247,6 +247,17 @@ where
 /// TTL/TTI — owning modules call `invalidate` at their write sites (see the
 /// in-memory caching layer plan's invalidation-point map).
 ///
+/// **Usage contract for read-through call sites:** callers MUST call
+/// [`invalidate`](Self::invalidate) only *after* the underlying DB write has
+/// committed, never before or concurrently with it. A [`store`](Self::store)
+/// that races a concurrent [`invalidate`](Self::invalidate) — i.e. a reader
+/// re-derives from the pre-commit state and calls `store` after the writer's
+/// `invalidate` has already run — repopulates the slot with a stale value.
+/// Because there is no TTL, that staleness is permanent until the next
+/// explicit invalidation. Sequencing invalidation strictly after commit is
+/// what closes this window; do not replicate a store-then-invalidate (or
+/// invalidate-before-commit) ordering in downstream read-through workers.
+///
 /// # Examples
 ///
 /// ```
@@ -292,6 +303,11 @@ where
     }
 
     /// Replace the cached value.
+    ///
+    /// Not itself hazardous, but see the type-level doc for the lost-update
+    /// window this creates when a `store` races a concurrent
+    /// [`invalidate`](Self::invalidate): callers must invalidate strictly
+    /// after their DB write commits, never before/concurrently with it.
     pub fn store(&self, value: Arc<T>) {
         if let Ok(mut guard) = self.slot.write() {
             *guard = Some(value);
