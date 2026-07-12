@@ -1226,12 +1226,17 @@ pub async fn list_inbox_file_metadata(
 /// Per-file pointing + optics, read for coordinate-based target resolution.
 ///
 /// Sourced from `inbox_file_metadata` (the T062 extended columns added in
-/// migration 0048; `rotator_angle_deg` added in migration 0049). All fields
-/// are nullable — best-effort extraction. The caller derives a sub-group
-/// pointing (e.g. the first file carrying RA/Dec) and a FOV-aware radius from
-/// `focal_length_mm`/`pixel_size_um`/`naxis1/2`, optionally rotated by
-/// `rotator_angle_deg` (`ROTATANG`/`ROTATOR`, the flat↔light match key — NOT
-/// `sky_rotation_deg`/`OBJCTROT`, which is informational only).
+/// migration 0048; `rotator_angle_deg`/`sky_rotation_deg` added in migration
+/// 0049). All fields are nullable — best-effort extraction. The caller
+/// derives a sub-group pointing (e.g. the first file carrying RA/Dec) and a
+/// FOV-aware radius from `focal_length_mm`/`pixel_size_um`/`naxis1/2`.
+///
+/// Two rotation fields, two different consumers — never conflate them:
+/// `rotator_angle_deg` (`ROTATANG`/`ROTATOR`) is the mechanical rotator
+/// angle, the flat↔light match key (R-18, used by `grouping`); it is NOT a
+/// sky-frame angle. `sky_rotation_deg` (`OBJCTROT`) is the true sky position
+/// angle (East of North) — the one FOV frame-rotation matching
+/// (`target_recommendations`) needs for `Constraint::frame_rotated`.
 #[derive(Clone, Debug, Default, sqlx::FromRow)]
 pub struct InboxPointingRow {
     pub relative_file_path: String,
@@ -1242,6 +1247,7 @@ pub struct InboxPointingRow {
     pub naxis1: Option<i64>,
     pub naxis2: Option<i64>,
     pub rotator_angle_deg: Option<f64>,
+    pub sky_rotation_deg: Option<f64>,
     /// Raw `OBJECT` header value — display hint only, NEVER a matching key (R-17).
     pub object: Option<String>,
 }
@@ -1260,7 +1266,7 @@ pub async fn list_inbox_pointing(
 ) -> DbResult<Vec<InboxPointingRow>> {
     Ok(sqlx::query_as::<_, InboxPointingRow>(
         "SELECT relative_file_path, ra_deg, dec_deg, focal_length_mm,
-                pixel_size_um, naxis1, naxis2, rotator_angle_deg, object
+                pixel_size_um, naxis1, naxis2, rotator_angle_deg, sky_rotation_deg, object
          FROM inbox_file_metadata
          WHERE inbox_item_id = ?
          ORDER BY relative_file_path",

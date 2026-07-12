@@ -8,9 +8,9 @@
 //!    (the T062 extended columns) and derives a single sub-group pointing,
 //! 2. builds a **rectangular frame membership** from the sub-group's optics
 //!    (focal length + pixel size + sensor dims, via `target_match::Field`),
-//!    rotated by `ROTATANG`/`ROTATOR` (`rotator_angle_deg`) when present,
-//!    falling back to an axis-aligned rectangle and then to a **configurable
-//!    fixed circular radius** when optics are absent (R-17 C5),
+//!    rotated by the sky position angle when known, falling back to an
+//!    axis-aligned rectangle and then to a **configurable fixed circular
+//!    radius** when optics are absent (R-17 C5),
 //! 3. ranks every catalog entry (`canonical_target`, via the resolver cache) by
 //!    great-circle separation, ascending, keeping only those on the frame (or,
 //!    in the fixed-radius fallback, within the radius).
@@ -20,16 +20,19 @@
 //! [`targeting::coords`] and `target_match`'s `Constraint`/`rank`; this module
 //! is orchestration only (DB load + map).
 //!
-//! # Frame membership: rotated rectangle when a rotator angle is known
+//! # Frame rotation angle: sky PA (`OBJCTROT`), never the mechanical rotator
 //!
-//! Membership uses `target_match::Constraint::frame_rotated` — a rectangle
-//! sized from the sub-group's optics and rotated by the mechanical rotator
-//! angle — instead of the wider circumscribed-circle radius used previously,
-//! so a target near the frame's corner but off-sensor (or off-sensor only
-//! because of camera rotation) is correctly excluded. Falls back to an
-//! axis-aligned `Constraint::frame` when `rotator_angle_deg` is absent/
-//! non-finite, and to the fixed circular radius when optics are absent
-//! entirely.
+//! `target_match::Constraint::frame_rotated` expects a **sky** position angle
+//! (East of North) — the frame's orientation on the sky, not the camera's
+//! mechanical orientation. `sky_rotation_deg` (`OBJCTROT`) is that sky PA;
+//! `rotator_angle_deg` (`ROTATANG`/`ROTATOR`) is the mechanical rotator
+//! angle — the flat↔light match key elsewhere in this codebase (R-18,
+//! `grouping`), NOT a sky-frame angle, and NOT usable here. Precedence:
+//! `sky_rotation_deg` → `rotator_angle_deg` → axis-aligned `Constraint::frame`
+//! → fixed circular radius. The `rotator_angle_deg` middle rung is a
+//! best-effort fallback (mechanical ≈ sky PA only when the optical train has
+//! no field-derotation offset baked in) — better than the un-rotated
+//! rectangle, but not as correct as the true sky PA.
 //!
 //! This operation is **read-only**: it recommends, it does not write the chosen
 //! target (that is reclassify, T068). Propagation to a linked project (T075)
@@ -121,9 +124,15 @@ pub async fn target_recommendations(
     let dec = pointing_row.dec_deg.unwrap_or_default();
     let pointing = coords::to_equatorial(Pointing::new(ra, dec));
 
-    // 4. Frame membership: a rectangle sized from the sub-group's optics —
-    //    rotated by the rotator angle when known, else axis-aligned — else the
-    //    configurable fixed circular fallback (R-17 C5).
+    // 4. Frame membership: a rectangle sized from the sub-group's optics,
+    //    rotated by the best available sky PA — sky_rotation_deg (OBJCTROT,
+    //    the true sky PA) preferred over rotator_angle_deg (ROTATANG, a
+    //    mechanical-angle approximation) — else axis-aligned, else the
+    //    configurable fixed circular fallback (R-17 C5). See the module docs.
+    let sky_pa_deg = pointing_row
+        .sky_rotation_deg
+        .filter(|v| v.is_finite())
+        .or_else(|| pointing_row.rotator_angle_deg.filter(|v| v.is_finite()));
     let constraint = coords::field_from_optics(
         pointing_row.focal_length_mm,
         pointing_row.pixel_size_um,
@@ -133,7 +142,7 @@ pub async fn target_recommendations(
     .map_or_else(
         || Constraint::circular(Angle::from_degrees(fixed_radius_deg)),
         |field| {
-            pointing_row.rotator_angle_deg.filter(|v| v.is_finite()).map_or_else(
+            sky_pa_deg.map_or_else(
                 || Constraint::frame(&field),
                 |pa_deg| Constraint::frame_rotated(&field, Angle::from_degrees(pa_deg)),
             )
@@ -254,8 +263,8 @@ mod tests {
     }
 
     /// Create a light item with one file carrying pointing + optics + OBJECT.
-    /// `naxis` sets both `naxis1`/`naxis2` (square sensor) and no rotator angle
-    /// is set; see [`seed_light_item_full`] for asymmetric/rotated frames.
+    /// `naxis` sets both `naxis1`/`naxis2` (square sensor) and no rotation
+    /// angle is set; see [`seed_light_item_full`] for asymmetric/rotated frames.
     #[allow(clippy::too_many_arguments)]
     async fn seed_light_item(
         db: &Database,
@@ -267,11 +276,14 @@ mod tests {
         naxis: Option<i64>,
         object: Option<&str>,
     ) {
-        seed_light_item_full(db, item_id, ra, dec, focal, pixel, naxis, naxis, None, object).await;
+        seed_light_item_full(db, item_id, ra, dec, focal, pixel, naxis, naxis, None, None, object)
+            .await;
     }
 
     /// [`seed_light_item`], generalized to independent `naxis1`/`naxis2` (an
-    /// elongated, non-square frame) and an optional rotator angle.
+    /// elongated, non-square frame) and the two rotation fields
+    /// (`rotator_angle_deg` = mechanical `ROTATANG`, `sky_rotation_deg` = the
+    /// true sky PA `OBJCTROT` — see the module docs on why they differ).
     #[allow(clippy::too_many_arguments)]
     async fn seed_light_item_full(
         db: &Database,
@@ -283,6 +295,7 @@ mod tests {
         naxis1: Option<i64>,
         naxis2: Option<i64>,
         rotator_angle_deg: Option<f64>,
+        sky_rotation_deg: Option<f64>,
         object: Option<&str>,
     ) {
         // Distinct per item_id: `inbox_items` is UNIQUE(root_id, relative_path),
@@ -319,7 +332,7 @@ mod tests {
         sqlx::query(
             "UPDATE inbox_file_metadata
              SET ra_deg = ?, dec_deg = ?, focal_length_mm = ?, pixel_size_um = ?,
-                 naxis1 = ?, naxis2 = ?, rotator_angle_deg = ?
+                 naxis1 = ?, naxis2 = ?, rotator_angle_deg = ?, sky_rotation_deg = ?
              WHERE inbox_item_id = ? AND relative_file_path = ?",
         )
         .bind(ra)
@@ -329,6 +342,7 @@ mod tests {
         .bind(naxis1)
         .bind(naxis2)
         .bind(rotator_angle_deg)
+        .bind(sky_rotation_deg)
         .bind(item_id)
         .bind(&relative_file_path)
         .execute(db.pool())
@@ -380,23 +394,25 @@ mod tests {
         assert_eq!(resp.object_hint.as_deref(), Some("Andromeda"));
     }
 
-    /// A target due East of the pointing sits inside an elongated (landscape)
-    /// un-rotated frame but falls off a 90°-rotated frame (rotation swaps which
-    /// axis is "wide") — proves `rotator_angle_deg` actually drives membership,
-    /// not just an axis-aligned rectangle regardless of camera rotation.
-    #[tokio::test]
-    async fn rotator_angle_changes_frame_membership() {
-        let db = test_db().await;
-        let (ra0, dec0): (f64, f64) = (10.684_708, 41.268_75); // M31 pointing
-                                                               // ~0.5° due East (same Dec), accounting for RA compression at this Dec.
+    /// M31 pointing + a target ~0.5° due East (same Dec, RA-compression
+    /// corrected) + an elongated landscape frame (naxis1=6248 ~1.68° wide,
+    /// naxis2=1200 ~0.32° tall at 800mm/3.76µm — half-width 0.84°, half-height
+    /// 0.16°). The East target sits inside the un-rotated rectangle (0.5 <
+    /// 0.84 width, ~0 < 0.16 height) but outside once the frame is rotated
+    /// 90° (axes swap: the East offset now falls along the narrow axis).
+    fn east_target_and_landscape_field() -> (f64, f64, f64) {
+        let (ra0, dec0): (f64, f64) = (10.684_708, 41.268_75);
         let east_ra = ra0 + 0.5 / dec0.to_radians().cos();
+        (ra0, dec0, east_ra)
+    }
+
+    /// `sky_rotation_deg` (`OBJCTROT`) alone drives rotated frame membership.
+    #[tokio::test]
+    async fn sky_rotation_deg_changes_frame_membership() {
+        let db = test_db().await;
+        let (ra0, dec0, east_ra) = east_target_and_landscape_field();
         seed_target(&db, "East Target", 1, east_ra, dec0).await;
 
-        // Elongated landscape frame: naxis1=6248 (width ~1.68°), naxis2=1200
-        // (height ~0.32°) at 800mm/3.76µm — half-width 0.84°, half-height 0.16°.
-        // The 0.5° East target is inside the un-rotated rectangle (0.5 < 0.84,
-        // ~0 North offset < 0.16) but outside once rotated 90° (axes swap: the
-        // East offset now falls along the narrow 0.16°-half axis).
         seed_light_item_full(
             &db,
             "item-unrotated",
@@ -406,6 +422,7 @@ mod tests {
             Some(3.76),
             Some(6248),
             Some(1200),
+            None,
             None,
             None,
         )
@@ -426,28 +443,103 @@ mod tests {
 
         seed_light_item_full(
             &db,
-            "item-rotated",
+            "item-sky-rotated",
             Some(ra0),
             Some(dec0),
             Some(800.0),
             Some(3.76),
             Some(6248),
             Some(1200),
-            Some(90.0),
+            None,       // no mechanical rotator angle
+            Some(90.0), // sky_rotation_deg (OBJCTROT) alone
             None,
         )
         .await;
         let rotated = target_recommendations(
             db.pool(),
-            &RecommendationTarget::InboxItem("item-rotated".to_owned()),
+            &RecommendationTarget::InboxItem("item-sky-rotated".to_owned()),
             DEFAULT_FIXED_RADIUS_DEG,
         )
         .await
         .unwrap();
         assert!(
             rotated.candidates.is_empty(),
-            "the same East target falls outside the 90°-rotated frame: {:?}",
+            "the same East target falls outside the sky_rotation_deg=90° frame: {:?}",
             rotated.candidates
+        );
+    }
+
+    /// When both rotation fields are present, `sky_rotation_deg` (the true sky
+    /// PA) wins over `rotator_angle_deg` (mechanical) — a deliberately
+    /// misleading `rotator_angle_deg=0` (which would keep the frame
+    /// un-rotated if it were used) must NOT override the real 90° sky PA.
+    #[tokio::test]
+    async fn sky_rotation_deg_takes_precedence_over_rotator_angle_deg() {
+        let db = test_db().await;
+        let (ra0, dec0, east_ra) = east_target_and_landscape_field();
+        seed_target(&db, "East Target", 1, east_ra, dec0).await;
+
+        seed_light_item_full(
+            &db,
+            "item-conflict",
+            Some(ra0),
+            Some(dec0),
+            Some(800.0),
+            Some(3.76),
+            Some(6248),
+            Some(1200),
+            Some(0.0),  // misleading mechanical angle — must be ignored
+            Some(90.0), // true sky PA — must govern
+            None,
+        )
+        .await;
+        let resp = target_recommendations(
+            db.pool(),
+            &RecommendationTarget::InboxItem("item-conflict".to_owned()),
+            DEFAULT_FIXED_RADIUS_DEG,
+        )
+        .await
+        .unwrap();
+        assert!(
+            resp.candidates.is_empty(),
+            "sky_rotation_deg=90 must govern over the misleading rotator_angle_deg=0: {:?}",
+            resp.candidates
+        );
+    }
+
+    /// `rotator_angle_deg` is used as a fallback when `sky_rotation_deg` is
+    /// absent — better than an un-rotated rectangle, per the module docs.
+    #[tokio::test]
+    async fn rotator_angle_deg_used_as_fallback_when_sky_rotation_absent() {
+        let db = test_db().await;
+        let (ra0, dec0, east_ra) = east_target_and_landscape_field();
+        seed_target(&db, "East Target", 1, east_ra, dec0).await;
+
+        seed_light_item_full(
+            &db,
+            "item-fallback",
+            Some(ra0),
+            Some(dec0),
+            Some(800.0),
+            Some(3.76),
+            Some(6248),
+            Some(1200),
+            Some(90.0), // mechanical angle, no sky PA available
+            None,
+            None,
+        )
+        .await;
+        let resp = target_recommendations(
+            db.pool(),
+            &RecommendationTarget::InboxItem("item-fallback".to_owned()),
+            DEFAULT_FIXED_RADIUS_DEG,
+        )
+        .await
+        .unwrap();
+        assert!(
+            resp.candidates.is_empty(),
+            "rotator_angle_deg=90 fallback still excludes the East target: {:?}",
+            resp.candidates
         );
     }
 
