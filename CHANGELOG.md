@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/nightwatch-astro/alm/compare/v0.3.0...v0.4.0) (2026-07-12)
+
+
+### Features
+
+* **cache:** in-memory caching layer (SnapshotCache foundation + domain read-through/invalidate) ([#637](https://github.com/nightwatch-astro/alm/issues/637)) ([53b3b31](https://github.com/nightwatch-astro/alm/commit/53b3b315d55e4bf3a945069ef5e8caec778988fc))
+* match targets by field of view and camera rotation ([#638](https://github.com/nightwatch-astro/alm/issues/638)) ([c25e751](https://github.com/nightwatch-astro/alm/commit/c25e751cc3b621bfb6ab62abd7d20dcbbe44bcae))
+
 ## [0.3.0](https://github.com/nightwatch-astro/alm/compare/v0.2.0...v0.3.0) (2026-07-12)
 
 
