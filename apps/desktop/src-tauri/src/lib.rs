@@ -112,7 +112,8 @@ use crate::commands::target_favourites::{
     target_favourites_add, target_favourites_list, target_favourites_remove,
 };
 use crate::commands::target_lookup::{
-    target_resolution_settings, target_resolution_settings_update, target_resolve, target_search,
+    target_astro_format_batch, target_resolution_settings, target_resolution_settings_update,
+    target_resolve, target_search,
 };
 use crate::commands::target_management as target_mgmt_cmds;
 use crate::commands::targets::{targets_get, targets_list};
@@ -219,6 +220,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // resolver settings (spec 035, US5)
         target_resolution_settings,
         target_resolution_settings_update,
+        // sexagesimal RA/Dec formatting (adopt target-match)
+        target_astro_format_batch,
         // projects (spec 008)
         projects_list,
         projects_get,
@@ -444,6 +447,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // resolver settings (spec 035, US5)
         target_resolution_settings,
         target_resolution_settings_update,
+        // sexagesimal RA/Dec formatting (adopt target-match)
+        target_astro_format_batch,
         // projects (spec 008)
         projects_list,
         projects_get,

@@ -184,7 +184,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "skymath",
  "sqlx",
+ "target-match",
  "targeting",
  "targeting_resolver",
  "tempfile",
@@ -1428,7 +1430,7 @@ dependencies = [
 
 [[package]]
 name = "desktop_shell"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "app_core",
  "audit",
@@ -1442,6 +1444,7 @@ dependencies = [
  "specta",
  "specta-typescript",
  "sqlx",
+ "targeting",
  "targeting_resolver",
  "tauri",
  "tauri-build",
@@ -3332,6 +3335,7 @@ name = "metadata_core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "skymath",
  "thiserror 2.0.18",
 ]
 
@@ -5539,6 +5543,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
+name = "skymath"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6315a9ee05a1b250fb7562b5a057342352ae7db06dc924ebfe3d0c90506db0d3"
+dependencies = [
+ "thiserror 2.0.18",
+ "time",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6131,9 +6145,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
+name = "target-match"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69f751172247ddff306ab714fbfc3cca07fe919c753b6388a620577d8f7c258c"
+dependencies = [
+ "skymath",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "targeting"
 version = "0.1.0"
 dependencies = [
+ "skymath",
+ "target-match",
  "unicode-normalization",
  "uuid",
 ]

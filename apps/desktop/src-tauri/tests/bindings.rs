@@ -143,6 +143,7 @@ fn exports_typescript_bindings() {
         "target_resolve",
         "target_resolution_settings",
         "target_resolution_settings_update",
+        "target_astro_format_batch",
         // projects
         "projects_list",
         "projects_get",

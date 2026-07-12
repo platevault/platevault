@@ -6,12 +6,14 @@
 //! - `target.resolve` — cache-first SIMBAD resolution (spec 035).
 //! - `target.search` — local typeahead search (spec 035).
 //! - `target.resolution.settings` / `target.resolution.settings.update` — resolver settings.
+//! - `target.astro_format.batch` — batched sexagesimal RA/Dec formatting (adopt target-match).
 //!
 //! Spec-013 commands `target.lookup` and `target.resolve.fits` have been
 //! removed by spec 036 (superseded by spec-035 `target.search`/`target.resolve`).
 
 use contracts_core::targets::{
     ResolverSettingsGetRequest, ResolverSettingsResponse, ResolverSettingsUpdateRequest,
+    TargetAstroFormat, TargetAstroFormatBatchRequest, TargetAstroFormatBatchResponse,
     TargetResolveSimbadRequest, TargetResolveSimbadResponse, TargetSearchRequest,
     TargetSearchResponse,
 };
@@ -129,4 +131,36 @@ pub async fn target_resolution_settings_update(
         req.settings.online_enabled
     );
     app_core::resolver_settings::update(state.repo.pool(), &req).await
+}
+
+// ── target.astro_format.batch (adopt target-match) ───────────────────────────
+
+/// `target.astro_format.batch` — sexagesimal RA/Dec formatting for N targets
+/// in one call (never per-row round trips). Pure geometry (`targeting::astro_format`,
+/// backed by `skymath::Equatorial`'s carry-safe sexagesimal formatting) —
+/// no database access, so this never fails on a well-formed request.
+///
+/// Targets whose RA/Dec is non-finite are omitted from `formatted` (never a
+/// fabricated string); callers key results by `id`.
+///
+/// # Errors
+///
+/// This command does not fail; the `Result` shape matches the rest of the
+/// command surface for a consistent IPC error contract.
+#[tauri::command]
+#[specta::specta]
+pub async fn target_astro_format_batch(
+    req: TargetAstroFormatBatchRequest,
+) -> Result<TargetAstroFormatBatchResponse, ContractError> {
+    tracing::debug!("target.astro_format.batch count={}", req.targets.len());
+    let formatted =
+        req.targets
+            .into_iter()
+            .filter_map(|t| {
+                targeting::astro_format::sexagesimal(t.ra_deg, t.dec_deg).map(|s| {
+                    TargetAstroFormat { id: t.id, ra_sexagesimal: s.ra, dec_sexagesimal: s.dec }
+                })
+            })
+            .collect();
+    Ok(TargetAstroFormatBatchResponse { formatted })
 }

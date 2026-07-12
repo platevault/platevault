@@ -22,12 +22,17 @@
 
 #![allow(clippy::doc_markdown)] // domain terminology (RA/Dec, FOV) is not backtick-suited
 
+use skymath::{Angle, Equatorial};
+use target_match::{Field, Optics, RadiusPolicy};
+
 /// A sky pointing in ICRS J2000 decimal degrees.
 ///
 /// `ra_deg` is right ascension in `[0, 360)`; `dec_deg` is declination in
 /// `[-90, 90]`. Inputs are not re-validated here (the caller extracts them from
 /// already-validated metadata); out-of-domain values still produce a finite
-/// separation via the haversine form.
+/// separation via the haversine form (RA is wrapped into `[0, 360)` and Dec is
+/// clamped into `[-90, 90]` before the underlying `skymath::Equatorial` is
+/// built, since that type rejects out-of-domain input outright).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Pointing {
     /// Right ascension, decimal degrees.
@@ -76,43 +81,85 @@ pub struct Candidate {
 
 /// Great-circle angular separation between two pointings, in decimal degrees.
 ///
-/// Uses the numerically-stable haversine form (robust for the small separations
-/// that dominate target matching, where the law-of-cosines form loses
-/// precision). The result is in `[0, 180]`.
+/// Delegates to `skymath::separation` (numerically-stable haversine form,
+/// robust for the small separations that dominate target matching, where the
+/// law-of-cosines form loses precision). The result is in `[0, 180]`.
+///
+/// A non-finite input on either pointing yields `NaN` (matching the previous
+/// permissive behaviour), rather than the domain-validation error
+/// `skymath::Equatorial::at_epoch` would otherwise raise.
 #[must_use]
 pub fn angular_separation_deg(a: Pointing, b: Pointing) -> f64 {
-    let ra1 = a.ra_deg.to_radians();
-    let dec1 = a.dec_deg.to_radians();
-    let ra2 = b.ra_deg.to_radians();
-    let dec2 = b.dec_deg.to_radians();
+    if !a.ra_deg.is_finite()
+        || !a.dec_deg.is_finite()
+        || !b.ra_deg.is_finite()
+        || !b.dec_deg.is_finite()
+    {
+        return f64::NAN;
+    }
+    skymath::separation(to_equatorial(a), to_equatorial(b)).degrees()
+}
 
-    let dra = ra2 - ra1;
-    let ddec = dec2 - dec1;
+/// Build a `skymath::Equatorial` from a [`Pointing`], wrapping RA into
+/// `[0, 360)` and clamping Dec into `[-90, 90]` so out-of-domain-but-finite
+/// inputs still produce a position rather than an error (see the [`Pointing`]
+/// docs).
+///
+/// # Panics
+/// Panics if `p.ra_deg` or `p.dec_deg` is non-finite (NaN/±inf) — callers with
+/// possibly-non-finite input (e.g. an unvalidated catalog row) MUST filter
+/// first; [`angular_separation_deg`] does this internally.
+#[must_use]
+pub fn to_equatorial(p: Pointing) -> Equatorial {
+    let ra = Angle::from_degrees(p.ra_deg).normalized_0_360();
+    let dec = Angle::from_degrees(p.dec_deg.clamp(-90.0, 90.0));
+    Equatorial::j2000(ra, dec).expect("ra normalized to [0, 360), dec clamped to [-90, 90]")
+}
 
-    let sin_ddec = (ddec / 2.0).sin();
-    let sin_dra = (dra / 2.0).sin();
+/// Build a `target_match::Field` from optics + sensor pixel counts
+/// (best-effort), for exact rectangular (optionally rotated) frame membership
+/// via `target_match::Constraint::frame`/`frame_rotated`.
+///
+/// Pixels are assumed square (`pixel_size_um` applies to both axes) and
+/// binning is fixed at `(1, 1)`: neither per-axis pixel size nor a binning
+/// factor is tracked by the caller's per-file metadata. Delegates to
+/// `target_match::Field::from_optics`, which uses the exact arcsec-per-radian
+/// constant (`206_264.806…`) rather than a rounded approximation.
+///
+/// Returns `None` when any input is missing or non-positive, or when
+/// `naxis1`/`naxis2` overflow `u32`. `focal_length_mm` and `pixel_size_um`
+/// must be `> 0`; `naxis1`/`naxis2` must be `> 0`.
+#[must_use]
+pub fn field_from_optics(
+    focal_length_mm: Option<f64>,
+    pixel_size_um: Option<f64>,
+    naxis1: Option<i64>,
+    naxis2: Option<i64>,
+) -> Option<Field> {
+    let focal = focal_length_mm.filter(|v| v.is_finite() && *v > 0.0)?;
+    let pixel = pixel_size_um.filter(|v| v.is_finite() && *v > 0.0)?;
+    let nx = naxis1.filter(|v| *v > 0).and_then(|v| u32::try_from(v).ok())?;
+    let ny = naxis2.filter(|v| *v > 0).and_then(|v| u32::try_from(v).ok())?;
 
-    // haversine: hav(θ) = sin²(Δδ/2) + cos δ1 · cos δ2 · sin²(Δα/2)
-    let h = sin_ddec.mul_add(sin_ddec, dec1.cos() * dec2.cos() * sin_dra * sin_dra);
-    // Clamp guards against tiny FP excursions above 1.0 before asin.
-    let central = 2.0 * h.sqrt().clamp(0.0, 1.0).asin();
-    central.to_degrees()
+    Field::from_optics(Optics {
+        focal_mm: focal,
+        pixel_um: (pixel, pixel),
+        binning: (1, 1),
+        pixels: (nx, ny),
+    })
+    .ok()
 }
 
 /// Compute a FOV-aware search radius (decimal degrees) from optics + sensor.
 ///
-/// The radius is **half the sensor diagonal field of view**, so any catalog
-/// target whose true position lies anywhere on the frame is inside the radius
-/// regardless of where in the frame it sits.
+/// The radius is **half the sensor diagonal field of view** (`target_match`'s
+/// [`RadiusPolicy::Circumscribed`]), so any catalog target whose true position
+/// lies anywhere on the frame is inside the radius regardless of where in the
+/// frame it sits. See [`field_from_optics`] for the underlying geometry.
 ///
-/// Geometry (small-angle pixel scale, exact frame angle):
-/// - pixel scale (arcsec/px) = `206.265 × pixel_size_um / focal_length_mm`
-/// - frame width/height (deg) = pixel-scale × `naxis` / 3600
-/// - radius (deg) = ½ · hypot(width, height)
-///
-/// Returns `None` when any input is missing or non-positive (so the caller can
-/// fall back to the configurable fixed radius, R-17 C5). `focal_length_mm` and
-/// `pixel_size_um` must be `> 0`; `naxis1`/`naxis2` must be `> 0`.
+/// Returns `None` when [`field_from_optics`] does (missing/non-positive input,
+/// or `naxis1`/`naxis2` overflowing `u32`), so the caller can fall back to the
+/// configurable fixed radius (R-17 C5).
 #[must_use]
 pub fn fov_radius_deg(
     focal_length_mm: Option<f64>,
@@ -120,20 +167,8 @@ pub fn fov_radius_deg(
     naxis1: Option<i64>,
     naxis2: Option<i64>,
 ) -> Option<f64> {
-    let focal = focal_length_mm.filter(|v| v.is_finite() && *v > 0.0)?;
-    let pixel = pixel_size_um.filter(|v| v.is_finite() && *v > 0.0)?;
-    let nx = naxis1.filter(|v| *v > 0)?;
-    let ny = naxis2.filter(|v| *v > 0)?;
-
-    // arcsec per pixel = 206.265 * pixel_size_um / focal_length_mm
-    let pixel_scale_arcsec = 206.265 * pixel / focal;
-    // frame extents in degrees
-    #[allow(clippy::cast_precision_loss)] // sensor dims are small enough to be exact in f64
-    let width_deg = pixel_scale_arcsec * (nx as f64) / 3600.0;
-    #[allow(clippy::cast_precision_loss)]
-    let height_deg = pixel_scale_arcsec * (ny as f64) / 3600.0;
-
-    Some(width_deg.hypot(height_deg) / 2.0)
+    field_from_optics(focal_length_mm, pixel_size_um, naxis1, naxis2)
+        .map(|f| f.radius(RadiusPolicy::Circumscribed).degrees())
 }
 
 /// Rank catalog targets by angular separation from `pointing`, keeping only
