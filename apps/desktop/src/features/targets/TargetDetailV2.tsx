@@ -367,11 +367,11 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   }, [targetId]);
 
   // Sexagesimal RA/Dec: one batched call (N=1 here) once the detail loads.
+  // No reset-to-null branch needed for the non-'loaded' states: `astroFormat`
+  // is only read below after the loading/error early-returns, so a stale
+  // value from a prior target is never displayed before this effect refetches.
   useEffect(() => {
-    if (loadState.status !== 'loaded') {
-      setAstroFormat(null);
-      return;
-    }
+    if (loadState.status !== 'loaded') return;
     const { id, raDeg, decDeg } = loadState.data;
     commands
       .targetAstroFormatBatch({ targets: [{ id, raDeg, decDeg }] })
