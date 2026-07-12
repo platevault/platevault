@@ -3346,8 +3346,8 @@ name = "metadata_xisf"
 version = "0.1.0"
 dependencies = [
  "metadata_core",
- "quick-xml",
  "thiserror 2.0.18",
+ "xisf-header",
 ]
 
 [[package]]
@@ -4271,7 +4271,7 @@ checksum = "092791278e026273c1b65bbdcfbba3a300f2994c896bd01ab01da613c29c46f1"
 dependencies = [
  "base64 0.22.1",
  "indexmap 2.14.0",
- "quick-xml",
+ "quick-xml 0.39.2",
  "serde",
  "time",
 ]
@@ -4491,6 +4491,15 @@ name = "quick-xml"
 version = "0.39.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "958f21e8e7ceb5a1aa7fa87fab28e7c75976e0bfe7e23ff069e0a260f894067d"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
 dependencies = [
  "memchr",
 ]
@@ -8480,6 +8489,17 @@ checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
 dependencies = [
  "libc",
  "rustix",
+]
+
+[[package]]
+name = "xisf-header"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "674af42f41782a63546ad77dc4e0c80e2abf6b65b7ca10d85b707c0da1fc886e"
+dependencies = [
+ "quick-xml 0.41.0",
+ "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
