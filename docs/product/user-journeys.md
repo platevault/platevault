@@ -217,6 +217,21 @@ root are set up; files exist under the inbox.
   Audit Log with outcome.
 - Frame-type vocabulary: the status-bar breakdown and type badges use
   normalized frame-type names (one spelling per type).
+- Per-file surfaces: the Files popover opens from the list row and the
+  FileInspector opens per file, showing the same per-file metadata the
+  needs-review gate computes over; the row's file count and the detail's
+  file count agree for the same item; if per-file metadata fails to load,
+  the detail shows an explicit error state and Confirm stays disabled.
+- Selection identity: the detail panel tracks the selected *item*, not its
+  list position — changing search or filters never silently swaps which
+  item the detail (and its Confirm/reclassify controls) targets.
+- Destination-root select (detail header): the choice arms the selected
+  item only — selecting another item returns the control to Auto; the
+  displayed value always equals the value a confirm would use; two roots
+  with the same folder name are distinguishable in the options.
+- Reveal: the selected item's source folder is revealable from the detail
+  ("Show in File Explorer"), or the surface documents its exemption from
+  the reveal contract explicitly.
 
 **Safety & trust notes:** confirming never moves a file — only a plan
 application does; a stale plan (source file changed on disk after confirm)
@@ -432,11 +447,17 @@ executable path is useful but not required to exercise creation.
   via Journey 14.
 - Detail: Sources table shows human names (never raw ids) with real
   filter/subs/integration per row; Channels palette values carry correct
-  units; lifecycle stepper advances through each state in order, and any
-  refused transition explains itself at the control; Edit sources add/remove
+  units; lifecycle stepper advances through each state in order, including
+  reverse transitions (Re-open on a completed project), and any refused
+  transition explains itself at the control; Edit sources add/remove
   including the last-source guard; locked-state (archived) edit refusal.
-- Manifests: generate, list grows append-only, reveal opens the manifest's
-  folder; Notes: autosave signal, byte counter, cap behavior.
+- Manifests: creation, a source change, and a lifecycle transition each
+  append a snapshot; the list grows append-only; reveal opens the
+  manifest's folder; Notes: autosave signal, byte counter, cap behavior.
+- Source views: the Generate dialog (profile choice, link-kind fallback
+  disclosure, allow-copy option) produces a reviewable plan — never a
+  direct filesystem mutation; Cancel leaves no plan behind; generated
+  views list with their status.
 - Tool launch: launch succeeds with a configured tool; containment refusal
   (working dir outside all roots) reported plainly; OS spawn failure
   reported plainly.
@@ -661,11 +682,17 @@ available to ingest.
 **Touch & validate:**
 
 - List: one row per master; kind-conditional fingerprint columns (bias hides
-  temp/exposure by design); sort headers; search.
+  temp/exposure by design); sort headers; search; group-by; the kind filter
+  appears once a second kind exists; a search with no matches reads as a
+  filter miss, not as an empty library.
 - Master detail: fingerprint values render real data or an explicit
   unresolved state (a metadata-less master must never show plausible zeros
   like "Gain 0 · 0 KB"); age/created date visible as a value, not only as an
   aging warning; "Used by" and "Compatible" lists open and navigate.
+- Master actions: "Use in project" and "Replace master" each perform their
+  documented action with an answer-back, or are absent — a rendered button
+  with no behavior fails the run; "Show in File Explorer" opens the
+  master's own folder.
 - Matching, unassigned master: ranked candidate sessions visible *before*
   any assignment, each with target/filter/night/frame-count context,
   confidence, and mismatch indicators (mismatches shown, not hidden).
@@ -764,6 +791,12 @@ optionally, a network connection for SIMBAD lookups.
 - Detail actions: "+ New project here" (see Journey 14 for the contract);
   any other CTA on the panel must be functional or absent — placeholders
   are a coverage failure.
+- Guidance popover: "Why this guidance" opens from both the row and the
+  detail, names the per-filter thresholds behind the recommendation, and
+  closes cleanly (Escape/outside click).
+- List freshness: identity edits made in the detail (alias add, display
+  label) are immediately reflected in the list — the new alias is
+  searchable and the label propagates without a reload.
 
 **Safety & trust notes:** this journey is the one place in the product where
 the honesty of a stub matters as much as its function — the design intent is
@@ -843,6 +876,18 @@ to the user.
   state anywhere in Settings.
 - Restore defaults (each pane that has it): states its scope; resets only
   settings visible in that pane; answers back.
+- Naming & Structure: the live preview resolves every token of the default
+  pattern from the sample metadata — a fallback warning on the default
+  configuration fails the run; chip edits (add token/separator/literal,
+  reset) update the preview live and persist.
+- Target Resolution: online toggle, endpoint, debounce, and timeout persist
+  and gate the resolver; catalogue toggles round-trip and demonstrably
+  change what Add target and the planner initialize from.
+- Processing Tools: path edits validate (a missing executable is flagged)
+  and preserve the tool's enabled/disabled state; Re-detect answers back
+  even when nothing new is found.
+- Cleanup: each per-type action choice (Keep/Archive/Trash) round-trips a
+  pane switch, and its warning banner reflects the persisted state.
 - Danger controls (Advanced): export produces a real file via a native
   dialog with a confirmation; reset-preferences actually resets and
   confirms; restart-first-run and restart-guided-flow are confirm-gated and
@@ -1010,8 +1055,16 @@ ongoing background activity.
   plan, catalog) — each must land on an existing route with the entity
   selected.
 - Severity chips: assert floor-vs-exact semantics match the documented
-  behavior; follow mode keeps the newest row visible; export produces a
-  readable file.
+  behavior; a severity filter with zero matching rows reads as a filter
+  miss, never as "no log entries"; follow mode keeps the newest row
+  visible; export produces a readable file.
+- Panel chrome: collapse control and Escape both close the panel; follow
+  pauses on scroll-up and resumes from the newest row when re-enabled; the
+  export dialog is titled for the Activity panel (not another surface);
+  periodic internal housekeeping events must not drown user-meaningful
+  rows in the default view.
+- Category/source filter narrows the stream alongside severity (once its
+  UI ships — its absence is a coverage failure of this journey).
 - Audit search + date range (including an all-excluding range → explicit
   empty state), pagination past one page.
 - Outcome and actor visible for every row, in both the settings pane and
@@ -1102,6 +1155,8 @@ strings.
 - Site: add a second site, switch active, planner columns/labels follow;
   coordinate/timezone validation; removing the active site forces an
   explicit fallback choice.
+- Moon avoidance: per-band table edits persist per cell, feed the planner's
+  per-band guidance, and Restore defaults states its scope.
 - Every form answers back on save/cancel.
 
 **Safety & trust notes:** equipment records are pure index data — no
@@ -1148,7 +1203,9 @@ selection, and manage panel/window real estate.
 - Focus: visible focus ring on every interactive element traversed; focus
   returns to the invoking control after an overlay closes.
 - New-window action: opens, renders the chosen view, and its lifetime is
-  independent of the main window's navigation.
+  independent of the main window's navigation; the intended close
+  affordance is explicit (OS titlebar at minimum) and closing it never
+  tears down the main window.
 - Persistence: collapse/expand and panel states survive restart.
 
 **Safety & trust notes:** none filesystem-related; this journey carries the
@@ -1158,6 +1215,50 @@ selection, and manage panel/window real estate.
 `e2e-agentic-test/043-ui-redesign-platevault/global-search-command-palette/scenario.md`,
 `.../a11y-keyboard-and-aria-sort/scenario.md`, plus *(to be authored)*
 `e2e-agentic-test/journeys/keyboard-first-navigation/scenario.md`.
+
+---
+
+## Journey 17 — Software update & install
+
+**Goal:** learn that a new PlateVault version exists, install it with a
+verified download, and restart into it — without the update machinery ever
+interrupting library work.
+
+**Preconditions:** a build with the updater enabled (spec 051); an update
+feed reachable (or deliberately unreachable, for the failure branch).
+
+**Narrative flow:**
+
+1. **Settings → Advanced** shows the running version and the update state
+   (up to date / update available / check failed). Checking is passive — no
+   library work is interrupted.
+2. When an update is available, an **Install** action appears. Installing
+   downloads the package and verifies its signature before anything is
+   staged; a failed signature or download is reported plainly and changes
+   nothing.
+3. A staged update asks for an explicit restart; declining leaves the app
+   fully usable on the current version until the user chooses otherwise.
+4. After restart, the new version is running and the update state returns
+   to "up to date".
+
+**Touch & validate:**
+
+- Up-to-date state: version visible; no Install control rendered.
+- Update-available state: Install appears; install → signature-verified
+  download → explicit restart prompt; declining the restart is honored.
+- Failure branches: unreachable feed and failed signature each produce a
+  specific, in-context message (generic "update failed" copy fails the
+  run) and leave the running install untouched.
+- No auto-install and no silent restart anywhere; the updater never
+  triggers during an in-flight plan apply.
+
+**Safety & trust notes:** update trust is signature-based (minisign); an
+unverifiable package must never be staged — for a product whose brand is
+"never touch files without review", the updater holds itself to the same
+standard.
+
+**Scenario files:** *(to be authored)*
+`e2e-agentic-test/journeys/software-update/scenario.md`.
 
 ---
 
@@ -1181,6 +1282,7 @@ selection, and manage panel/window real estate.
 | 14 | Target-first project start | *(to be authored)* `journeys/target-first-project` |
 | 15 | Equipment & observing-site setup | *(to be authored)* `journeys/equipment-site-setup` |
 | 16 | Keyboard-first navigation & windows | *(to be authored)* `journeys/keyboard-first-navigation` |
+| 17 | Software update & install | *(to be authored)* `journeys/software-update` |
 
 For execution order, PR-gating, and shared test-data continuity across all
 of the above, see `e2e-agentic-test/MASTER-PLAN.md`.
