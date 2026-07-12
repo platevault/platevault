@@ -61,9 +61,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use audit::EventBus;
-use metadata_core::{MetadataExtractor, RawFileMetadata};
-use metadata_fits::FitsExtractor;
-use metadata_xisf::XisfExtractor;
+use metadata_core::RawFileMetadata;
 use persistence_db::repositories::projects as repo_projects;
 use persistence_db::repositories::q_targets_ingest as repo;
 use persistence_db::repositories::{first_run, inventory};
@@ -506,14 +504,12 @@ pub async fn backfill_session_targets(pool: &SqlitePool) -> Result<usize, Contra
 
 /// Read FITS/XISF header metadata for a file, or `None` when unreadable /
 /// unsupported (treated as "not an ingestable light", never an error).
+///
+/// Served through [`crate::metadata_cache::cached_extract`] (in-memory caching
+/// layer F0), memoized by `(path, mtime, size)` — a burst of reads for the
+/// same file during a scan does not re-parse the header once per caller.
 fn read_metadata(abs_path: &Path) -> Option<RawFileMetadata> {
-    if let Ok(Some(m)) = FitsExtractor.extract(abs_path) {
-        return Some(m);
-    }
-    if let Ok(Some(m)) = XisfExtractor.extract(abs_path) {
-        return Some(m);
-    }
-    None
+    crate::metadata_cache::cached_extract(abs_path).ok()
 }
 
 /// True when the frame's `IMAGETYP` normalizes to a light frame. Calibration
