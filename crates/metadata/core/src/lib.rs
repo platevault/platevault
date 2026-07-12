@@ -313,17 +313,24 @@ pub struct RawFileMetadata {
 /// or when the parsed value is outside the RA domain (`[0, 360)`).
 ///
 /// Delegates the sexagesimal→decimal conversion to
-/// `target_match::Equatorial::parse` (a paired call with a `"0"` Dec
-/// sentinel, since that constructor validates RA and Dec together). FITS/XISF
-/// header values are frequently single-quoted; that quoting is stripped here
-/// before parsing, since `target_match` treats quote characters as part of
-/// the token (a FITS-specific tolerance, not a general coordinate concern).
+/// `skymath::Equatorial::parse_at_epoch` in [`skymath::ParseMode::Lenient`]
+/// (a paired call with a `"0"` Dec sentinel, since that constructor validates
+/// RA and Dec together; Lenient tolerates the missing-minutes/seconds and
+/// bare-decimal forms this parser has always accepted). FITS/XISF header
+/// values are frequently single-quoted; that quoting is stripped here before
+/// parsing, since `skymath` treats quote characters as part of the token (a
+/// FITS-specific tolerance, not a general coordinate concern).
 #[must_use]
 pub fn sexagesimal_ra_to_deg(raw: &str) -> Option<f64> {
     let cleaned = strip_fits_quotes(raw)?;
-    target_match::Equatorial::parse(cleaned, "0", target_match::Epoch::J2000)
-        .ok()
-        .map(|e| e.ra().degrees())
+    skymath::Equatorial::parse_at_epoch(
+        cleaned,
+        "0",
+        skymath::Epoch::J2000,
+        skymath::ParseMode::Lenient,
+    )
+    .ok()
+    .map(|e| e.ra().degrees())
 }
 
 /// Parse a sexagesimal declination string in `±D M S` form (e.g.
@@ -337,9 +344,14 @@ pub fn sexagesimal_ra_to_deg(raw: &str) -> Option<f64> {
 #[must_use]
 pub fn sexagesimal_dec_to_deg(raw: &str) -> Option<f64> {
     let cleaned = strip_fits_quotes(raw)?;
-    target_match::Equatorial::parse("0", cleaned, target_match::Epoch::J2000)
-        .ok()
-        .map(|e| e.dec().degrees())
+    skymath::Equatorial::parse_at_epoch(
+        "0",
+        cleaned,
+        skymath::Epoch::J2000,
+        skymath::ParseMode::Lenient,
+    )
+    .ok()
+    .map(|e| e.dec().degrees())
 }
 
 /// Strip surrounding whitespace and a single layer of FITS single-quoting

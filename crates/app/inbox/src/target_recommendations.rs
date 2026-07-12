@@ -8,8 +8,9 @@
 //!    (the T062 extended columns) and derives a single sub-group pointing,
 //! 2. builds a **rectangular frame membership** from the sub-group's optics
 //!    (focal length + pixel size + sensor dims, via `target_match::Field`),
-//!    falling back to a **configurable fixed circular radius** when optics are
-//!    absent (R-17 C5),
+//!    rotated by `ROTATANG`/`ROTATOR` (`rotator_angle_deg`) when present,
+//!    falling back to an axis-aligned rectangle and then to a **configurable
+//!    fixed circular radius** when optics are absent (R-17 C5),
 //! 3. ranks every catalog entry (`canonical_target`, via the resolver cache) by
 //!    great-circle separation, ascending, keeping only those on the frame (or,
 //!    in the fixed-radius fallback, within the radius).
@@ -19,18 +20,16 @@
 //! [`targeting::coords`] and `target_match`'s `Constraint`/`rank`; this module
 //! is orchestration only (DB load + map).
 //!
-//! # Frame membership is rectangular, not yet rotation-aware
+//! # Frame membership: rotated rectangle when a rotator angle is known
 //!
-//! Membership uses `target_match::Constraint::frame` — an axis-aligned
-//! rectangle sized from the sub-group's optics — instead of the wider
-//! circumscribed-circle radius used previously, so a target near the frame's
-//! corner but off-sensor is correctly excluded (a real precision gain over
-//! plain circular-radius matching). True camera-rotation-aware membership
-//! (`Constraint::frame_rotated`) needs `ROTATANG`
-//! (`inbox_file_metadata.rotator_angle_deg`, already persisted by migration
-//! 0049) added to `persistence_db::repositories::inbox::list_inbox_pointing`'s
-//! projection; that repository change is outside this module's crate — frame
-//! membership is computed un-rotated (position angle 0°) until it lands.
+//! Membership uses `target_match::Constraint::frame_rotated` — a rectangle
+//! sized from the sub-group's optics and rotated by the mechanical rotator
+//! angle — instead of the wider circumscribed-circle radius used previously,
+//! so a target near the frame's corner but off-sensor (or off-sensor only
+//! because of camera rotation) is correctly excluded. Falls back to an
+//! axis-aligned `Constraint::frame` when `rotator_angle_deg` is absent/
+//! non-finite, and to the fixed circular radius when optics are absent
+//! entirely.
 //!
 //! This operation is **read-only**: it recommends, it does not write the chosen
 //! target (that is reclassify, T068). Propagation to a linked project (T075)
@@ -122,8 +121,9 @@ pub async fn target_recommendations(
     let dec = pointing_row.dec_deg.unwrap_or_default();
     let pointing = coords::to_equatorial(Pointing::new(ra, dec));
 
-    // 4. Frame membership: an axis-aligned rectangle sized from the sub-group's
-    //    optics, else the configurable fixed circular fallback (R-17 C5).
+    // 4. Frame membership: a rectangle sized from the sub-group's optics —
+    //    rotated by the rotator angle when known, else axis-aligned — else the
+    //    configurable fixed circular fallback (R-17 C5).
     let constraint = coords::field_from_optics(
         pointing_row.focal_length_mm,
         pointing_row.pixel_size_um,
@@ -132,7 +132,12 @@ pub async fn target_recommendations(
     )
     .map_or_else(
         || Constraint::circular(Angle::from_degrees(fixed_radius_deg)),
-        |field| Constraint::frame(&field),
+        |field| {
+            pointing_row.rotator_angle_deg.filter(|v| v.is_finite()).map_or_else(
+                || Constraint::frame(&field),
+                |pa_deg| Constraint::frame_rotated(&field, Angle::from_degrees(pa_deg)),
+            )
+        },
     );
 
     // 5. Load the catalog and rank by frame membership (coordinate-only).
@@ -249,6 +254,8 @@ mod tests {
     }
 
     /// Create a light item with one file carrying pointing + optics + OBJECT.
+    /// `naxis` sets both `naxis1`/`naxis2` (square sensor) and no rotator angle
+    /// is set; see [`seed_light_item_full`] for asymmetric/rotated frames.
     #[allow(clippy::too_many_arguments)]
     async fn seed_light_item(
         db: &Database,
@@ -260,12 +267,35 @@ mod tests {
         naxis: Option<i64>,
         object: Option<&str>,
     ) {
+        seed_light_item_full(db, item_id, ra, dec, focal, pixel, naxis, naxis, None, object).await;
+    }
+
+    /// [`seed_light_item`], generalized to independent `naxis1`/`naxis2` (an
+    /// elongated, non-square frame) and an optional rotator angle.
+    #[allow(clippy::too_many_arguments)]
+    async fn seed_light_item_full(
+        db: &Database,
+        item_id: &str,
+        ra: Option<f64>,
+        dec: Option<f64>,
+        focal: Option<f64>,
+        pixel: Option<f64>,
+        naxis1: Option<i64>,
+        naxis2: Option<i64>,
+        rotator_angle_deg: Option<f64>,
+        object: Option<&str>,
+    ) {
+        // Distinct per item_id: `inbox_items` is UNIQUE(root_id, relative_path),
+        // and a caller may seed several items in one db (e.g. an un-rotated vs
+        // rotated pair to compare frame membership).
+        let relative_path = format!("lights-{item_id}");
+        let relative_file_path = format!("{relative_path}/light_001.fits");
         repo::insert_inbox_item(
             db.pool(),
             &InsertInboxItem {
                 id: item_id,
                 root_id: "root-1",
-                relative_path: "lights",
+                relative_path: &relative_path,
                 file_count: 1,
                 content_signature: Some("sig"),
                 lane: "fits",
@@ -277,7 +307,7 @@ mod tests {
             db.pool(),
             &UpsertFileMetadata {
                 inbox_item_id: item_id,
-                relative_file_path: "lights/light_001.fits",
+                relative_file_path: &relative_file_path,
                 object,
                 ..Default::default()
             },
@@ -289,17 +319,18 @@ mod tests {
         sqlx::query(
             "UPDATE inbox_file_metadata
              SET ra_deg = ?, dec_deg = ?, focal_length_mm = ?, pixel_size_um = ?,
-                 naxis1 = ?, naxis2 = ?
+                 naxis1 = ?, naxis2 = ?, rotator_angle_deg = ?
              WHERE inbox_item_id = ? AND relative_file_path = ?",
         )
         .bind(ra)
         .bind(dec)
         .bind(focal)
         .bind(pixel)
-        .bind(naxis)
-        .bind(naxis)
+        .bind(naxis1)
+        .bind(naxis2)
+        .bind(rotator_angle_deg)
         .bind(item_id)
-        .bind("lights/light_001.fits")
+        .bind(&relative_file_path)
         .execute(db.pool())
         .await
         .unwrap();
@@ -347,6 +378,77 @@ mod tests {
         let p = resp.pointing.unwrap();
         assert!((p.ra_deg - 10.684_708).abs() < 1e-9);
         assert_eq!(resp.object_hint.as_deref(), Some("Andromeda"));
+    }
+
+    /// A target due East of the pointing sits inside an elongated (landscape)
+    /// un-rotated frame but falls off a 90°-rotated frame (rotation swaps which
+    /// axis is "wide") — proves `rotator_angle_deg` actually drives membership,
+    /// not just an axis-aligned rectangle regardless of camera rotation.
+    #[tokio::test]
+    async fn rotator_angle_changes_frame_membership() {
+        let db = test_db().await;
+        let (ra0, dec0): (f64, f64) = (10.684_708, 41.268_75); // M31 pointing
+                                                               // ~0.5° due East (same Dec), accounting for RA compression at this Dec.
+        let east_ra = ra0 + 0.5 / dec0.to_radians().cos();
+        seed_target(&db, "East Target", 1, east_ra, dec0).await;
+
+        // Elongated landscape frame: naxis1=6248 (width ~1.68°), naxis2=1200
+        // (height ~0.32°) at 800mm/3.76µm — half-width 0.84°, half-height 0.16°.
+        // The 0.5° East target is inside the un-rotated rectangle (0.5 < 0.84,
+        // ~0 North offset < 0.16) but outside once rotated 90° (axes swap: the
+        // East offset now falls along the narrow 0.16°-half axis).
+        seed_light_item_full(
+            &db,
+            "item-unrotated",
+            Some(ra0),
+            Some(dec0),
+            Some(800.0),
+            Some(3.76),
+            Some(6248),
+            Some(1200),
+            None,
+            None,
+        )
+        .await;
+        let unrotated = target_recommendations(
+            db.pool(),
+            &RecommendationTarget::InboxItem("item-unrotated".to_owned()),
+            DEFAULT_FIXED_RADIUS_DEG,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            unrotated.candidates.len(),
+            1,
+            "East target is inside the un-rotated landscape frame: {:?}",
+            unrotated.candidates
+        );
+
+        seed_light_item_full(
+            &db,
+            "item-rotated",
+            Some(ra0),
+            Some(dec0),
+            Some(800.0),
+            Some(3.76),
+            Some(6248),
+            Some(1200),
+            Some(90.0),
+            None,
+        )
+        .await;
+        let rotated = target_recommendations(
+            db.pool(),
+            &RecommendationTarget::InboxItem("item-rotated".to_owned()),
+            DEFAULT_FIXED_RADIUS_DEG,
+        )
+        .await
+        .unwrap();
+        assert!(
+            rotated.candidates.is_empty(),
+            "the same East target falls outside the 90°-rotated frame: {:?}",
+            rotated.candidates
+        );
     }
 
     #[tokio::test]

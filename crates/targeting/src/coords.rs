@@ -22,7 +22,8 @@
 
 #![allow(clippy::doc_markdown)] // domain terminology (RA/Dec, FOV) is not backtick-suited
 
-use target_match::{Angle, Equatorial, Field, Optics, RadiusPolicy};
+use skymath::{Angle, Equatorial};
+use target_match::{Field, Optics, RadiusPolicy};
 
 /// A sky pointing in ICRS J2000 decimal degrees.
 ///
@@ -30,7 +31,7 @@ use target_match::{Angle, Equatorial, Field, Optics, RadiusPolicy};
 /// `[-90, 90]`. Inputs are not re-validated here (the caller extracts them from
 /// already-validated metadata); out-of-domain values still produce a finite
 /// separation via the haversine form (RA is wrapped into `[0, 360)` and Dec is
-/// clamped into `[-90, 90]` before the underlying `target_match::Equatorial` is
+/// clamped into `[-90, 90]` before the underlying `skymath::Equatorial` is
 /// built, since that type rejects out-of-domain input outright).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Pointing {
@@ -80,13 +81,13 @@ pub struct Candidate {
 
 /// Great-circle angular separation between two pointings, in decimal degrees.
 ///
-/// Delegates to `target_match::separation` (numerically-stable haversine form,
+/// Delegates to `skymath::separation` (numerically-stable haversine form,
 /// robust for the small separations that dominate target matching, where the
 /// law-of-cosines form loses precision). The result is in `[0, 180]`.
 ///
 /// A non-finite input on either pointing yields `NaN` (matching the previous
 /// permissive behaviour), rather than the domain-validation error
-/// `target_match::Equatorial::new` would otherwise raise.
+/// `skymath::Equatorial::at_epoch` would otherwise raise.
 #[must_use]
 pub fn angular_separation_deg(a: Pointing, b: Pointing) -> f64 {
     if !a.ra_deg.is_finite()
@@ -96,10 +97,10 @@ pub fn angular_separation_deg(a: Pointing, b: Pointing) -> f64 {
     {
         return f64::NAN;
     }
-    target_match::separation(to_equatorial(a), to_equatorial(b)).degrees()
+    skymath::separation(to_equatorial(a), to_equatorial(b)).degrees()
 }
 
-/// Build a `target_match::Equatorial` from a [`Pointing`], wrapping RA into
+/// Build a `skymath::Equatorial` from a [`Pointing`], wrapping RA into
 /// `[0, 360)` and clamping Dec into `[-90, 90]` so out-of-domain-but-finite
 /// inputs still produce a position rather than an error (see the [`Pointing`]
 /// docs).

@@ -1,12 +1,17 @@
 //! Sexagesimal RA/Dec display formatting.
 //!
-//! Thin wrapper over `target_match::Equatorial::ra_to_sexagesimal` /
-//! `dec_to_sexagesimal`, which round at the requested precision *before*
-//! decomposing into degrees/minutes/seconds — carry-safe, so a value like
-//! `59.6"` never rolls over to an invalid `"...:60"` field the way a naive
-//! `seconds.toFixed(0)` on the raw remainder can.
+//! Thin wrapper over `skymath::Equatorial::ra_sexagesimal`/`dec_sexagesimal`,
+//! which round at the requested precision *before* decomposing into
+//! degrees/minutes/seconds — carry-safe, so a value like `59.6"` never rolls
+//! over to an invalid `"...:60"` field the way a naive `seconds.toFixed(0)`
+//! on the raw remainder can.
+
+use skymath::{Separator, SexaStyle};
 
 use crate::coords::{self, Pointing};
+
+/// Colon-separated, 0 fractional-second-digit style (`HH:MM:SS` / `±DD:MM:SS`).
+const DISPLAY_STYLE: SexaStyle = SexaStyle { separator: Separator::Colons, seconds_places: 0 };
 
 /// A target's RA/Dec formatted as sexagesimal strings: `HH:MM:SS` for RA,
 /// `±DD:MM:SS` for Dec (0 fractional-second digits).
@@ -27,7 +32,10 @@ pub fn sexagesimal(ra_deg: f64, dec_deg: f64) -> Option<SexagesimalCoords> {
         return None;
     }
     let eq = coords::to_equatorial(Pointing::new(ra_deg, dec_deg));
-    Some(SexagesimalCoords { ra: eq.ra_to_sexagesimal(0), dec: eq.dec_to_sexagesimal(0) })
+    Some(SexagesimalCoords {
+        ra: eq.ra_sexagesimal(DISPLAY_STYLE),
+        dec: eq.dec_sexagesimal(DISPLAY_STYLE),
+    })
 }
 
 #[cfg(test)]
