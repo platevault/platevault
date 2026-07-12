@@ -456,12 +456,14 @@ pub async fn update_setting(
 
     // Cache invalidation fan-out (F0 in-memory caching layer): fires only
     // after the write above has committed, never before. `protection_defaults`
-    // (app_core::caches) is a documented consumer of this fan-out too, but
-    // app_core already depends on app_core_settings (crates/app/core/Cargo.toml),
-    // so wiring its invalidate call here would be a cyclic crate dependency
-    // (confirmed via `cargo check`) — raised as a design blocker, not wired.
+    // was relocated to the `app_core_cache` leaf (crates/app/cache/src/lib.rs:337-343)
+    // precisely so this crate can invalidate it without depending on `app_core`
+    // (which itself depends on `app_core_settings`).
     caches::invalidate_settings_bag();
     app_core_calibration::caches::invalidate_calibration_config();
+    if is_protection_default {
+        app_core_cache::invalidate_protection_defaults();
+    }
 
     // 6. Emit audit event. Global protection-default keys ALWAYS emit
     // `protection.default.changed` (T-004), overriding the noisy-key
@@ -555,6 +557,7 @@ pub async fn restore_defaults(
 
     let mut restored = Vec::new();
     let mut already_at_default = Vec::new();
+    let mut restored_protection_default = false;
 
     for key in &keys_to_restore {
         let default_val = default_value_for_key(key);
@@ -621,14 +624,19 @@ pub async fn restore_defaults(
         }
 
         restored.push(key.clone());
+        if is_protection_default {
+            restored_protection_default = true;
+        }
     }
 
     // Cache invalidation fan-out: one shot after the loop (not per-key) since
-    // both snapshots are single-slot whole-bag caches. See `update_setting`
-    // for the protection_defaults cyclic-dependency note.
+    // both snapshots are single-slot whole-bag caches.
     if !restored.is_empty() {
         caches::invalidate_settings_bag();
         app_core_calibration::caches::invalidate_calibration_config();
+        if restored_protection_default {
+            app_core_cache::invalidate_protection_defaults();
+        }
     }
 
     let status = if restored.is_empty() {
@@ -884,7 +892,7 @@ mod tests {
         // SETTINGS_BAG is a process-global single-slot cache (F0); each test
         // gets its own in-memory DB, so a stale cross-test snapshot would
         // silently serve another test's data. Mirrors the same caveat/fix in
-        // `app_core::caches`'s `protection_defaults_*` test.
+        // `app_core_cache`'s `protection_defaults_*` test (crates/app/cache/src/lib.rs).
         caches::invalidate_settings_bag();
         let db = Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
