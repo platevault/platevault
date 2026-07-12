@@ -160,12 +160,22 @@ pub async fn get(
 /// `target.list` — list all canonical targets (gen-3), ordered by
 /// `primary_designation`.
 ///
+/// Read-through against the whole-catalog snapshot ([`crate::caches::catalog`],
+/// in-memory caching layer F0): a cache hit skips the DB round-trip entirely; a
+/// miss loads from SQLite and populates the snapshot for subsequent readers
+/// (including `target_search::search`, which shares this same cache).
+///
 /// # Errors
 ///
 /// Returns [`ContractError`] with code `internal.database`.
 pub async fn list(pool: &SqlitePool) -> Result<Vec<TargetListItem>, ContractError> {
+    if let Some(cached) = crate::caches::catalog().load() {
+        return Ok((*cached).clone());
+    }
     let rows = cache::list_all(pool).await.map_err(db_err)?;
-    Ok(rows.into_iter().map(list_row_to_item).collect())
+    let items: Vec<TargetListItem> = rows.into_iter().map(list_row_to_item).collect();
+    crate::caches::store_catalog(std::sync::Arc::new(items.clone()));
+    Ok(items)
 }
 
 /// `target.alias.add` — add a user alias to a target (gen-3).
@@ -210,13 +220,18 @@ pub async fn alias_add(
             ErrorSeverity::Blocking,
             false,
         )),
-        Some((alias_id, alias_display)) => Ok(TargetAliasAddResult {
-            alias: TargetAliasDto {
-                id: alias_id,
-                alias: alias_display,
-                kind: ContractAliasKind::User,
-            },
-        }),
+        Some((alias_id, alias_display)) => {
+            // Invalidate after the write commits (never before) per the
+            // `SnapshotCache` usage contract (`app_core_cache::SnapshotCache`).
+            crate::caches::invalidate_catalog();
+            Ok(TargetAliasAddResult {
+                alias: TargetAliasDto {
+                    id: alias_id,
+                    alias: alias_display,
+                    kind: ContractAliasKind::User,
+                },
+            })
+        }
     }
 }
 
@@ -253,6 +268,11 @@ pub async fn alias_remove(
         Some(kind) if kind != "user" => Err(alias_not_removable()),
         Some(_) => {
             let deleted = cache::delete_user_alias(pool, &req.alias_id).await.map_err(db_err)?;
+            if deleted {
+                // Invalidate after the write commits (never before) per the
+                // `SnapshotCache` usage contract.
+                crate::caches::invalidate_catalog();
+            }
             Ok(TargetAliasRemoveResult { removed: deleted })
         }
     }
@@ -275,6 +295,9 @@ pub async fn display_alias_set(
     if !updated {
         return Err(not_found(&req.target_id));
     }
+    // Invalidate after the write commits (never before): `effective_label` in
+    // the catalog snapshot is derived from `display_alias`.
+    crate::caches::invalidate_catalog();
     // Re-fetch and return the updated detail.
     get(pool, &TargetGetRequest { target_id: req.target_id.clone() }).await
 }
@@ -294,6 +317,9 @@ pub async fn display_alias_clear(
     if !updated {
         return Err(not_found(&req.target_id));
     }
+    // Invalidate after the write commits (never before): `effective_label` in
+    // the catalog snapshot is derived from `display_alias`.
+    crate::caches::invalidate_catalog();
     get(pool, &TargetGetRequest { target_id: req.target_id.clone() }).await
 }
 
@@ -459,6 +485,68 @@ pub async fn note_update(
     Ok(TargetNoteUpdateResult { notes: stored.map(str::to_owned) })
 }
 
+/// Test-only serialization for the process-global `SnapshotCache` statics
+/// (in-memory caching layer F0 foundation).
+///
+/// `crate::caches::catalog`/`resolver_settings` are singleton `OnceLock`s
+/// shared by every test in this crate's test binary. Without serialization,
+/// parallel `#[tokio::test]` runs across `target_management`, `target_resolve`,
+/// `target_search`, and `resolver_settings` tests race on the same slot — a
+/// `store` from one test can land after another concurrently-running test's
+/// `invalidate`, reproducing the lost-update window the `SnapshotCache` type
+/// doc warns about, and leaking one test's DB content into another's
+/// assertions. [`locked_db`] builds a fresh in-memory DB while holding a
+/// process-wide lock (released when the returned [`LockedDb`] is dropped at
+/// the end of the test), so `setup()` in each of those four files can use
+/// this in place of a bare `Database` with no other test-body changes.
+/// [`locked_reset`] is the sync counterpart for `crate::caches`'s own
+/// round-trip unit tests, which manipulate these same statics directly and
+/// are not `async`.
+#[cfg(test)]
+pub(crate) mod cache_test_lock {
+    use persistence_db::Database;
+
+    static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    /// A `Database` that also holds the shared cache-test lock for its
+    /// lifetime. Derefs to `Database` so existing call sites (`db.pool()`,
+    /// `&db` passed where `&Database` is expected) are unchanged.
+    pub(crate) struct LockedDb {
+        db: Database,
+        _guard: tokio::sync::MutexGuard<'static, ()>,
+    }
+
+    impl std::ops::Deref for LockedDb {
+        type Target = Database;
+
+        fn deref(&self) -> &Database {
+            &self.db
+        }
+    }
+
+    /// Acquire the shared lock, reset both snapshot caches to a clean (miss)
+    /// state, and build a fresh in-memory, migrated DB.
+    pub(crate) async fn locked_db() -> LockedDb {
+        let guard = LOCK.lock().await;
+        crate::caches::invalidate_catalog();
+        crate::caches::invalidate_resolver_settings();
+        let db = Database::in_memory().await.expect("in-memory DB");
+        db.migrate().await.expect("migrations");
+        LockedDb { db, _guard: guard }
+    }
+
+    /// Acquire the shared lock and reset both snapshot caches, for non-async
+    /// `#[test]` functions. Blocks the current thread rather than `.await`ing
+    /// — safe here because these call sites have no Tokio runtime, unlike
+    /// [`locked_db`]'s async callers.
+    pub(crate) fn locked_reset() -> tokio::sync::MutexGuard<'static, ()> {
+        let guard = LOCK.blocking_lock();
+        crate::caches::invalidate_catalog();
+        crate::caches::invalidate_resolver_settings();
+        guard
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -470,10 +558,8 @@ mod tests {
         AliasKind as CacheKind, ResolvedAlias, ResolvedIdentity, TargetSource,
     };
 
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
+    async fn setup() -> cache_test_lock::LockedDb {
+        cache_test_lock::locked_db().await
     }
 
     fn make_bus(db: &Database) -> EventBus {

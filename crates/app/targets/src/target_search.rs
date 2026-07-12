@@ -1,10 +1,21 @@
 //! `target.search` use case for spec 035 (US1 — project-creation target search).
 //!
-//! As-you-type target search served PURELY from the local seed + cache index
-//! (`targeting_resolver::cache::search_by_normalized`). There is NO network in
-//! this path (FR-005): long-tail / SIMBAD enrichment is a separate
-//! `target.resolve` call. Results are ranked best-first (exact → prefix →
-//! substring) and de-duplicated to one canonical target per hit.
+//! As-you-type target search served PURELY from the local seed + cache index.
+//! There is NO network in this path (FR-005): long-tail / SIMBAD enrichment is
+//! a separate `target.resolve` call. Results are ranked best-first (exact →
+//! prefix → substring) and de-duplicated to one canonical target per hit.
+//!
+//! Candidate ranking runs in memory against the whole-catalog snapshot
+//! (`crate::target_management::list`, backed by `crate::caches::catalog` — the
+//! in-memory caching layer F0) instead of a per-keystroke SQLite `LIKE` scan
+//! (`targeting_resolver::cache::search_by_normalized`, still used by nothing
+//! in this module — kept as the source of truth for the ranking scheme this
+//! mirrors). The winning targets (bounded by `limit`) are still hydrated via
+//! [`targeting_resolver::cache::get_by_id`] — an indexed point lookup, the
+//! same cost `search_by_normalized` already paid per hit — because the
+//! catalog snapshot's `aliases: Vec<String>` carries no alias-kind tag, so
+//! `common_name`/`source`/catalogue-membership derivation still need the full
+//! `CachedTarget`.
 //!
 //! ## Constitution
 //!
@@ -12,13 +23,17 @@
 //! - §III Metadata/identity only — no image processing.
 //! - §V SQLite (seed + resolution cache) is the durable record queried here.
 
+use std::collections::HashMap;
+
 use sqlx::SqlitePool;
+use uuid::Uuid;
 
 use contracts_core::targets::{
-    TargetCatalogId, TargetSearchRequest, TargetSearchResponse, TargetSuggestion,
+    TargetCatalogId, TargetListItem, TargetSearchRequest, TargetSearchResponse, TargetSuggestion,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
-use targeting_resolver::cache::{search_by_normalized, CachedTarget, SearchHit};
+use targeting::normalize::normalize;
+use targeting_resolver::cache::{get_by_id, CachedTarget, SearchHit};
 use targeting_resolver::AliasKind;
 
 // ── Error mapping ───────────────────────────────────────────────────────────
@@ -101,6 +116,82 @@ fn hit_to_suggestion(hit: SearchHit) -> TargetSuggestion {
     }
 }
 
+// ── In-memory typeahead ranking (F0 W-TARGETS) ──────────────────────────────
+//
+// Mirrors `targeting_resolver::cache::search_by_normalized`'s ranking scheme
+// exactly (rank buckets, dedup-by-target, tie-break order) so switching the
+// candidate source from a SQLite `LIKE` scan to the in-memory catalog
+// snapshot does not change result ordering or content.
+
+/// Rank bucket: `0` = exact normalized match, `1` = prefix, `2` = substring.
+const RANK_EXACT: u8 = 0;
+const RANK_PREFIX: u8 = 1;
+const RANK_SUBSTRING: u8 = 2;
+
+/// The best matching alias seen so far for one target during in-memory dedup.
+struct Best {
+    alias: String,
+    normalized_len: usize,
+    rank: u8,
+}
+
+impl Best {
+    /// A lower rank wins; ties break on the shorter matched alias.
+    fn is_better_than(&self, other: &Self) -> bool {
+        (self.rank, self.normalized_len) < (other.rank, other.normalized_len)
+    }
+}
+
+/// Rank every alias of every catalog item against the normalized (non-empty)
+/// query `q`, keeping each target's single best-ranked alias, then return
+/// `(target_id, matched_alias, rank)` sorted best-first and truncated to
+/// `limit`.
+///
+/// The catalog snapshot's `aliases` list is sourced from the same
+/// `target_alias` rows `search_by_normalized`'s SQL scans (including the
+/// primary designation, which is always one of its own aliases), so matching
+/// over it reproduces the same candidate set.
+fn rank_catalog(items: &[TargetListItem], q: &str, limit: usize) -> Vec<(String, String, u8)> {
+    let mut best_by_target: HashMap<&str, Best> = HashMap::new();
+    for item in items {
+        for alias in &item.aliases {
+            let normalized = normalize(alias);
+            if !normalized.contains(q) {
+                continue;
+            }
+            let rank = if normalized == q {
+                RANK_EXACT
+            } else if normalized.starts_with(q) {
+                RANK_PREFIX
+            } else {
+                RANK_SUBSTRING
+            };
+            let candidate = Best { alias: alias.clone(), normalized_len: normalized.len(), rank };
+            match best_by_target.entry(item.id.as_str()) {
+                std::collections::hash_map::Entry::Occupied(mut e) => {
+                    if candidate.is_better_than(e.get()) {
+                        e.insert(candidate);
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(candidate);
+                }
+            }
+        }
+    }
+
+    let mut ranked: Vec<(&str, Best)> = best_by_target.into_iter().collect();
+    ranked.sort_by(|(_, a), (_, b)| {
+        (a.rank, a.normalized_len, a.alias.as_str()).cmp(&(
+            b.rank,
+            b.normalized_len,
+            b.alias.as_str(),
+        ))
+    });
+    ranked.truncate(limit);
+    ranked.into_iter().map(|(id, best)| (id.to_owned(), best.alias, best.rank)).collect()
+}
+
 // ── search ──────────────────────────────────────────────────────────────────
 
 /// `target.search` — ranked typeahead suggestions from local seed + cache.
@@ -121,7 +212,24 @@ pub async fn search(
 ) -> Result<TargetSearchResponse, ContractError> {
     let limit = if req.limit == 0 { 20 } else { req.limit as usize };
 
-    let hits = search_by_normalized(pool, &req.query, limit).await.map_err(|e| db_err(&e))?;
+    let q = normalize(&req.query);
+    let ranked: Vec<(String, String, u8)> = if q.is_empty() {
+        Vec::new()
+    } else {
+        let catalog = crate::target_management::list(pool).await?;
+        rank_catalog(&catalog, &q, limit)
+    };
+
+    // Hydrate each winning target's full row (needed for `common_name`/
+    // `source` and catalogue derivation, neither of which survives in the
+    // flat `aliases: Vec<String>` snapshot) — an indexed point lookup per hit.
+    let mut hits = Vec::with_capacity(ranked.len());
+    for (target_id, matched_alias, rank) in ranked {
+        let Ok(uuid) = Uuid::parse_str(&target_id) else { continue };
+        if let Some(target) = get_by_id(pool, uuid).await.map_err(|e| db_err(&e))? {
+            hits.push(SearchHit { target, matched_alias, rank });
+        }
+    }
 
     // Both filters AND together (T029): catalogue membership is derived from the
     // target's alias designations; the type filter checks the object type.
@@ -151,10 +259,12 @@ mod tests {
         AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as CacheSource,
     };
 
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
+    // Serialized against `target_management`/`target_resolve`/
+    // `resolver_settings` tests: `search` reads through the shared catalog
+    // `SnapshotCache` (F0), see `target_management::cache_test_lock` for the
+    // full rationale.
+    async fn setup() -> crate::target_management::cache_test_lock::LockedDb {
+        crate::target_management::cache_test_lock::locked_db().await
     }
 
     fn m31() -> ResolvedIdentity {

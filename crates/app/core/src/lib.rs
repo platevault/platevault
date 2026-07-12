@@ -57,6 +57,11 @@ pub use targets::{
 // and may reference the extracted domain crates as `crate::errors`,
 // `crate::lifecycle`, etc. via the re-exports above.
 pub mod archive_generator;
+/// Process-global in-memory cache statics for `app_core`-owned domain types
+/// (in-memory caching layer, F0 foundation): `library_root` path lookups and
+/// `source_protection_state`/defaults. See each accessor's doc comment for
+/// its owning write-site invalidation calls.
+pub mod caches;
 pub mod cleanup_generator;
 #[cfg(feature = "dev-tools")]
 pub mod dev_contracts;

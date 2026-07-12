@@ -246,8 +246,15 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
 
         match resolver.resolve(row.object_raw.trim()).await {
             Ok(identity) => {
-                let (id, _outcome) =
+                let (id, outcome) =
                     cache::upsert_resolved(pool, &identity).await.map_err(db_err)?;
+                // Invalidate after the write commits (never before); a
+                // `SkippedUserOverride` outcome means no row was actually
+                // written (sticky user-override lock kept precedence), so the
+                // catalog snapshot is not stale (mirrors `target_resolve::resolve`).
+                if outcome != cache::UpsertOutcome::SkippedUserOverride {
+                    crate::caches::invalidate_catalog();
+                }
                 let target_id = id.to_string();
                 mark_resolved(pool, &row.id, &target_id).await?;
                 if let Some(bus) = bus {

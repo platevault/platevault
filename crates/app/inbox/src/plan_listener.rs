@@ -283,6 +283,13 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
     .await
     .map_err(|e| format!("insert calibration_fingerprint: {e}"))?;
 
+    // F0 invalidate-after-commit contract (crates/app/cache/src/lib.rs): both
+    // inserts above have committed (sqlx pool auto-commits per statement; no
+    // explicit transaction wraps them), so the masters snapshot cache is safe
+    // to clear now — never before, to avoid a reader repopulating it with a
+    // stale pre-commit value.
+    app_core_calibration::caches::invalidate_calibration_masters();
+
     tracing::info!(
         inbox_item_id = %item.id,
         plan_id,

@@ -17,12 +17,10 @@
 
 use std::path::{Path, PathBuf};
 
+use app_core_targets::metadata_cache::cached_extract;
 use calibration_master_detect::{detect_master, DetectInput, MasterDetection};
 use camino::Utf8Path;
-use metadata_core::MetadataExtractor;
-use metadata_fits::FitsExtractor;
 use metadata_video::is_video_extension;
-use metadata_xisf::XisfExtractor;
 
 use super::signature::compute_content_signature;
 
@@ -183,14 +181,9 @@ fn is_xisf_extension(ext: &str) -> bool {
 /// Returns `Some(ScannedMasterFile)` when the file is identified as a master.
 /// Returns `None` when not a master or metadata is unreadable.
 fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<ScannedMasterFile> {
-    // Extract metadata — same extractors used by classify.rs.
-    let bundle = if XisfExtractor.supports_extension(ext) {
-        XisfExtractor.extract(abs_path).ok().flatten()?
-    } else if FitsExtractor.supports_extension(ext) {
-        FitsExtractor.extract(abs_path).ok().flatten()?
-    } else {
-        return None;
-    };
+    // Cached extract (F0): memoized by (path, mtime, size); unsupported
+    // extensions and unparseable files both surface as `Err` here.
+    let bundle = cached_extract(abs_path).ok()?;
 
     let image_typ_raw = bundle.image_typ.as_deref();
     let stack_count = bundle.stack_count;

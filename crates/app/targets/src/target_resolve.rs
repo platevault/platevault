@@ -210,8 +210,15 @@ pub async fn resolve<R: Resolver + ?Sized>(
         Ok(identity) => {
             // 3) Persist (source = resolved), dedup by oid, then read back the
             // canonical row (which may carry a sticky user-override identity).
-            let (id, _outcome) =
+            let (id, outcome) =
                 cache::upsert_resolved(pool, &identity).await.map_err(|e| db_err(&e))?;
+            // Invalidate after the write commits (never before): a
+            // `SkippedUserOverride` outcome means no row was actually written
+            // (the sticky user-override lock kept precedence), so the catalog
+            // snapshot is not stale and does not need invalidating.
+            if outcome != cache::UpsertOutcome::SkippedUserOverride {
+                crate::caches::invalidate_catalog();
+            }
             if let Some(target) = cache::get_by_id(pool, id).await.map_err(|e| db_err(&e))? {
                 // T039: durable audit record for the resolved outcome.
                 write_audit(
@@ -292,8 +299,14 @@ async fn apply_override(
         source: CacheSource::UserOverride,
     };
 
-    let (written_id, _outcome) =
+    let (written_id, outcome) =
         cache::upsert_resolved(pool, &identity).await.map_err(|e| db_err(&e))?;
+    // Invalidate after the write commits (never before); this override write
+    // always carries the new source/alias, so any outcome other than a no-op
+    // skip changes the catalog snapshot.
+    if outcome != cache::UpsertOutcome::SkippedUserOverride {
+        crate::caches::invalidate_catalog();
+    }
     if let Some(target) = cache::get_by_id(pool, written_id).await.map_err(|e| db_err(&e))? {
         // T039: durable audit record for the manual user-override (actor = user).
         write_audit(
@@ -321,10 +334,12 @@ mod tests {
         AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as Src,
     };
 
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
+    // Serialized against `target_management`/`target_search`/
+    // `resolver_settings` tests: `resolve`/`apply_override` invalidate the
+    // shared catalog `SnapshotCache` (F0), see
+    // `target_management::cache_test_lock` for the full rationale.
+    async fn setup() -> crate::target_management::cache_test_lock::LockedDb {
+        crate::target_management::cache_test_lock::locked_db().await
     }
 
     fn m31() -> ResolvedIdentity {

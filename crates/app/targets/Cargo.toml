@@ -8,6 +8,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+app_core_cache = { path = "../cache" }
 app_core_errors = { path = "../errors" }
 audit = { path = "../../audit" }
 contracts_core = { path = "../../contracts/core" }
@@ -26,6 +27,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+tempfile = { workspace = true }
 tokio.workspace = true
 # spec 035 (T020): the `FakeResolver` test double lives behind the resolver's
 # `test-fixture` feature; enable it for offline target.resolve use-case tests.
