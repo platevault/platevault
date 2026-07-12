@@ -14,3 +14,8 @@
 *.tsx text eol=lf
 *.js text eol=lf
 *.jsx text eol=lf
+
+# Biome validates its own config file's formatting as part of `biome
+# format .` (self-referential), so it needs the same LF treatment even
+# though it's JSON, not a source file the formatter otherwise touches.
+apps/desktop/biome.json text eol=lf
