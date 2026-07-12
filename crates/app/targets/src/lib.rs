@@ -11,9 +11,19 @@
 //! paths so the public surface is byte-identical.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
+/// Process-global in-memory cache statics for the target catalog snapshot and
+/// resolver settings (in-memory caching layer, F0 foundation). See each
+/// accessor's doc comment for its owning write-site invalidation calls.
+pub mod caches;
 pub mod frame_writer;
 pub mod ingest_resolution;
 pub mod ingest_sessions;
+/// Cached FITS/XISF header extraction (in-memory caching layer, F0/W-FITS).
+/// Lives here (not `app_core`) so both `app_core_inbox` and
+/// `app_core_targets::ingest_sessions` — the two current extractor call
+/// sites — can reach it without a cyclic crate dependency; see the module
+/// doc comment for the full reachability argument.
+pub mod metadata_cache;
 pub mod resolver_settings;
 pub mod target_dto;
 pub mod target_favourites;
