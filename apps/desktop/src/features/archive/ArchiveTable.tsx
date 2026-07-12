@@ -30,9 +30,16 @@ export interface ArchiveSort {
   dir: SortDir;
 }
 
-export const DEFAULT_ARCHIVE_SORT: ArchiveSort = { col: 'archived', dir: 'desc' };
+export const DEFAULT_ARCHIVE_SORT: ArchiveSort = {
+  col: 'archived',
+  dir: 'desc',
+};
 
-function compareEntries(a: ArchiveEntry, b: ArchiveEntry, sort: ArchiveSort): number {
+function compareEntries(
+  a: ArchiveEntry,
+  b: ArchiveEntry,
+  sort: ArchiveSort,
+): number {
   let cmp = 0;
   switch (sort.col) {
     case 'name':
@@ -57,12 +64,32 @@ function compareEntries(a: ArchiveEntry, b: ArchiveEntry, sort: ArchiveSort): nu
 // ── Column model ──────────────────────────────────────────────────────────────
 
 // `label` is a render-time thunk so headers re-read the active locale (spec 046 #8).
-const COLUMNS: Array<{ key: string; label: () => string; sort: ArchiveSortCol; className?: string }> = [
+const COLUMNS: Array<{
+  key: string;
+  label: () => string;
+  sort: ArchiveSortCol;
+  className?: string;
+}> = [
   { key: 'name', label: () => m.archive_col_name(), sort: 'name' },
   { key: 'type', label: () => m.archive_col_type(), sort: 'type' },
-  { key: 'reason', label: () => m.archive_prop_reason(), sort: 'reason', className: 'alm-cell--muted' },
-  { key: 'size', label: () => m.archive_prop_size(), sort: 'size', className: 'alm-cell--num' },
-  { key: 'archived', label: () => m.archive_prop_archived_at(), sort: 'archived', className: 'alm-cell--mono' },
+  {
+    key: 'reason',
+    label: () => m.archive_prop_reason(),
+    sort: 'reason',
+    className: 'alm-cell--muted',
+  },
+  {
+    key: 'size',
+    label: () => m.archive_prop_size(),
+    sort: 'size',
+    className: 'alm-cell--num',
+  },
+  {
+    key: 'archived',
+    label: () => m.archive_prop_archived_at(),
+    sort: 'archived',
+    className: 'alm-cell--mono',
+  },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -75,7 +102,13 @@ interface Props {
   onSort: (col: ArchiveSortCol) => void;
 }
 
-export function ArchiveTable({ entries, selected, onSelect, sort, onSort }: Props) {
+export function ArchiveTable({
+  entries,
+  selected,
+  onSelect,
+  sort,
+  onSort,
+}: Props) {
   const sorted = useMemo(
     () => [...entries].sort((a, b) => compareEntries(a, b, sort)),
     [entries, sort],
@@ -99,7 +132,8 @@ export function ArchiveTable({ entries, selected, onSelect, sort, onSort }: Prop
   const rows: TableRow[] = sorted.map((a) => ({
     _testid: `archive-row-${a.id}`,
     _rowClassName:
-      'alm-densetable__row' + (selected === a.id ? ' alm-densetable__row--selected' : ''),
+      'alm-densetable__row' +
+      (selected === a.id ? ' alm-densetable__row--selected' : ''),
     _onClick: () => onSelect(a.id),
     name: a.name,
     type: <Pill variant="ghost">{a.entityType}</Pill>,

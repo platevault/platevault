@@ -7,10 +7,7 @@ import type {
   ProjectOutput,
   ProjectArtifactGroup,
 } from '@/bindings/types';
-import type {
-  ProjectSummaryDto,
-  ProjectDetailDto,
-} from '@/bindings/index';
+import type { ProjectSummaryDto, ProjectDetailDto } from '@/bindings/index';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -23,7 +20,14 @@ function uuid(suffix: string): string {
 export interface ProjectFixture {
   id: number;
   name: string;
-  state: 'setup_incomplete' | 'ready' | 'prepared' | 'processing' | 'completed' | 'archived' | 'blocked';
+  state:
+    | 'setup_incomplete'
+    | 'ready'
+    | 'prepared'
+    | 'processing'
+    | 'completed'
+    | 'archived'
+    | 'blocked';
   profile: string;
   target: string;
   hours: number;
@@ -35,13 +39,91 @@ export interface ProjectFixture {
 }
 
 export const PROJECTS_DATA: ProjectFixture[] = [
-  { id: 1, name: 'IC 1396 · HOO', state: 'prepared', profile: 'PixInsight/WBPP', target: 'IC 1396', hours: 9.3, size: '6.9 GB', views: 1, outputs: 0, sources: 4 },
-  { id: 2, name: 'NGC 7000 · HOO', state: 'processing', profile: 'PixInsight/WBPP', target: 'NGC 7000', hours: 7.7, size: '8.4 GB', views: 2, outputs: 4, sources: 7 },
-  { id: 3, name: 'NGC 7000 · SHO mosaic', state: 'ready', profile: 'PixInsight/WBPP', target: 'NGC 7000', hours: 12.0, size: '10.2 GB', views: 0, outputs: 0, sources: 5 },
-  { id: 4, name: 'M31 · LRGB', state: 'completed', profile: 'PixInsight/WBPP', target: 'M31', hours: 11.8, size: '4.8 GB', views: 1, outputs: 2, sources: 3 },
-  { id: 5, name: 'Jupiter 2025-02-03', state: 'completed', profile: 'Planetary', target: 'Jupiter', hours: 0.5, size: '1.8 GB', views: 0, outputs: 3, sources: 2 },
-  { id: 6, name: 'untitled-attempt', state: 'blocked', profile: 'PixInsight/WBPP', target: '?', hours: 0, size: '0', views: 0, outputs: 0, sources: 0, blockedReason: 'Missing calibration masters for SII filter' },
-  { id: 7, name: 'M31 · 2022 (legacy)', state: 'archived', profile: 'PixInsight/WBPP', target: 'M31', hours: 8.4, size: '3.2 GB', views: 0, outputs: 1, sources: 2 },
+  {
+    id: 1,
+    name: 'IC 1396 · HOO',
+    state: 'prepared',
+    profile: 'PixInsight/WBPP',
+    target: 'IC 1396',
+    hours: 9.3,
+    size: '6.9 GB',
+    views: 1,
+    outputs: 0,
+    sources: 4,
+  },
+  {
+    id: 2,
+    name: 'NGC 7000 · HOO',
+    state: 'processing',
+    profile: 'PixInsight/WBPP',
+    target: 'NGC 7000',
+    hours: 7.7,
+    size: '8.4 GB',
+    views: 2,
+    outputs: 4,
+    sources: 7,
+  },
+  {
+    id: 3,
+    name: 'NGC 7000 · SHO mosaic',
+    state: 'ready',
+    profile: 'PixInsight/WBPP',
+    target: 'NGC 7000',
+    hours: 12.0,
+    size: '10.2 GB',
+    views: 0,
+    outputs: 0,
+    sources: 5,
+  },
+  {
+    id: 4,
+    name: 'M31 · LRGB',
+    state: 'completed',
+    profile: 'PixInsight/WBPP',
+    target: 'M31',
+    hours: 11.8,
+    size: '4.8 GB',
+    views: 1,
+    outputs: 2,
+    sources: 3,
+  },
+  {
+    id: 5,
+    name: 'Jupiter 2025-02-03',
+    state: 'completed',
+    profile: 'Planetary',
+    target: 'Jupiter',
+    hours: 0.5,
+    size: '1.8 GB',
+    views: 0,
+    outputs: 3,
+    sources: 2,
+  },
+  {
+    id: 6,
+    name: 'untitled-attempt',
+    state: 'blocked',
+    profile: 'PixInsight/WBPP',
+    target: '?',
+    hours: 0,
+    size: '0',
+    views: 0,
+    outputs: 0,
+    sources: 0,
+    blockedReason: 'Missing calibration masters for SII filter',
+  },
+  {
+    id: 7,
+    name: 'M31 · 2022 (legacy)',
+    state: 'archived',
+    profile: 'PixInsight/WBPP',
+    target: 'M31',
+    hours: 8.4,
+    size: '3.2 GB',
+    views: 0,
+    outputs: 1,
+    sources: 2,
+  },
 ];
 
 // ─── Project List ───────────────────────────────────────────────────────────
@@ -96,7 +178,12 @@ export const projects: ProjectFixtureRecord[] = [
       dark_flats: [],
     },
     source_view_ids: [uuid('440601'), uuid('440602')],
-    output_ids: [uuid('440701'), uuid('440702b'), uuid('440703b'), uuid('440704b')],
+    output_ids: [
+      uuid('440701'),
+      uuid('440702b'),
+      uuid('440703b'),
+      uuid('440704b'),
+    ],
     processing_directory: 'processing/',
     output_directory: 'outputs/',
     updatedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
@@ -112,7 +199,13 @@ export const projects: ProjectFixtureRecord[] = [
     integration_hours: 12.0,
     target_ids: [uuid('440201')],
     source_map: {
-      lights: [uuid('440010'), uuid('440011'), uuid('440012'), uuid('440013'), uuid('440014')],
+      lights: [
+        uuid('440010'),
+        uuid('440011'),
+        uuid('440012'),
+        uuid('440013'),
+        uuid('440014'),
+      ],
       darks: [uuid('440401')],
       flats: [uuid('440403'), uuid('440404'), uuid('440405')],
       bias: [uuid('440407')],
@@ -254,40 +347,223 @@ export const targetNames: Record<string, string> = {
 // ─── Project Detail — NGC 7000 HOO (processing) ────────────────────────────
 
 const ngc7000Sources: ProjectSource[] = [
-  { role: 'light', name: 'NGC 7000 · Ha · 2024-11-30', frames: 54, hours: '4.5h', selection: 'selected' },
-  { role: 'light', name: 'NGC 7000 · OIII · 2024-11-30', frames: 38, hours: '3.2h', selection: 'selected' },
-  { role: 'light', name: 'NGC 7000 · Ha · 2024-12-15', frames: 30, hours: '2.5h', selection: 'candidate', warning: 'newer, review' },
-  { role: 'dark', name: 'MasterDark_300s_-10C_g100', frames: 1, hours: '—', selection: 'selected' },
-  { role: 'flat', name: 'MasterFlat_Ha_2024-11', frames: 1, hours: '—', selection: 'selected' },
-  { role: 'flat', name: 'MasterFlat_OIII_2024-11', frames: 1, hours: '—', selection: 'selected' },
-  { role: 'bias', name: 'MasterBias_g100', frames: 1, hours: '—', selection: 'candidate', warning: 'age > 90d' },
+  {
+    role: 'light',
+    name: 'NGC 7000 · Ha · 2024-11-30',
+    frames: 54,
+    hours: '4.5h',
+    selection: 'selected',
+  },
+  {
+    role: 'light',
+    name: 'NGC 7000 · OIII · 2024-11-30',
+    frames: 38,
+    hours: '3.2h',
+    selection: 'selected',
+  },
+  {
+    role: 'light',
+    name: 'NGC 7000 · Ha · 2024-12-15',
+    frames: 30,
+    hours: '2.5h',
+    selection: 'candidate',
+    warning: 'newer, review',
+  },
+  {
+    role: 'dark',
+    name: 'MasterDark_300s_-10C_g100',
+    frames: 1,
+    hours: '—',
+    selection: 'selected',
+  },
+  {
+    role: 'flat',
+    name: 'MasterFlat_Ha_2024-11',
+    frames: 1,
+    hours: '—',
+    selection: 'selected',
+  },
+  {
+    role: 'flat',
+    name: 'MasterFlat_OIII_2024-11',
+    frames: 1,
+    hours: '—',
+    selection: 'selected',
+  },
+  {
+    role: 'bias',
+    name: 'MasterBias_g100',
+    frames: 1,
+    hours: '—',
+    selection: 'candidate',
+    warning: 'age > 90d',
+  },
 ];
 
 const ngc7000Views: ProjectSourceView[] = [
-  { name: 'wbpp_input', strategy: 'junction', link_count: 92, plan_ref: 'plan #18' },
-  { name: 'wbpp_input_p2', strategy: 'symlink', link_count: 92, plan_ref: 'plan #21' },
+  {
+    name: 'wbpp_input',
+    strategy: 'junction',
+    link_count: 92,
+    plan_ref: 'plan #18',
+  },
+  {
+    name: 'wbpp_input_p2',
+    strategy: 'symlink',
+    link_count: 92,
+    plan_ref: 'plan #21',
+  },
 ];
 
 const ngc7000Outputs: ProjectOutput[] = [
-  { id: uuid('440701'), filename: 'NGC7000_final_v3.tif', kind: 'final image', size_bytes: 536_870_912, date: '2025-02-14', verification: 'accepted', protected: true },
-  { id: uuid('440702b'), filename: 'NGC7000_final_v2.tif', kind: 'final image', size_bytes: 522_190_848, date: '2025-01-30', verification: 'superseded', protected: false },
-  { id: uuid('440703b'), filename: 'NGC7000_review_starless.tif', kind: 'preview', size_bytes: 503_316_480, date: '2025-02-13', verification: 'unreviewed', protected: false },
-  { id: uuid('440704b'), filename: 'NGC7000_drizzle3x.xisf', kind: 'drizzle result', size_bytes: 4_939_212_390, date: '2025-02-12', verification: 'unreviewed', protected: false },
+  {
+    id: uuid('440701'),
+    filename: 'NGC7000_final_v3.tif',
+    kind: 'final image',
+    size_bytes: 536_870_912,
+    date: '2025-02-14',
+    verification: 'accepted',
+    protected: true,
+  },
+  {
+    id: uuid('440702b'),
+    filename: 'NGC7000_final_v2.tif',
+    kind: 'final image',
+    size_bytes: 522_190_848,
+    date: '2025-01-30',
+    verification: 'superseded',
+    protected: false,
+  },
+  {
+    id: uuid('440703b'),
+    filename: 'NGC7000_review_starless.tif',
+    kind: 'preview',
+    size_bytes: 503_316_480,
+    date: '2025-02-13',
+    verification: 'unreviewed',
+    protected: false,
+  },
+  {
+    id: uuid('440704b'),
+    filename: 'NGC7000_drizzle3x.xisf',
+    kind: 'drizzle result',
+    size_bytes: 4_939_212_390,
+    date: '2025-02-12',
+    verification: 'unreviewed',
+    protected: false,
+  },
 ];
 
 const ngc7000Artifacts: ProjectArtifactGroup[] = [
-  { type: 'Registered frames', count: 92, total_size_bytes: 12_238_274_560, cleanup_eligibility: 'eligible', confidence: 'high', tool: 'PixInsight', protected: false },
-  { type: 'Calibrated frames', count: 92, total_size_bytes: 12_238_274_560, cleanup_eligibility: 'eligible', confidence: 'high', tool: 'PixInsight', protected: false },
-  { type: 'Debayered frames', count: 0, total_size_bytes: 0, cleanup_eligibility: 'none', confidence: 'unknown', tool: '—', protected: false },
-  { type: 'Local normalized', count: 92, total_size_bytes: 8_804_682_138, cleanup_eligibility: 'eligible', confidence: 'high', tool: 'PixInsight', protected: false },
-  { type: 'Drizzle data', count: 14, total_size_bytes: 922_746_880, cleanup_eligibility: 'eligible', confidence: 'high', tool: 'PixInsight', protected: false },
-  { type: 'Integration cache', count: 6, total_size_bytes: 440_401_920, cleanup_eligibility: 'eligible', confidence: 'high', tool: 'PixInsight', protected: false },
-  { type: 'Temporary files', count: 4, total_size_bytes: 268_435_456, cleanup_eligibility: 'eligible', confidence: 'medium', tool: '?', protected: false },
-  { type: 'Logs', count: 8, total_size_bytes: 4_404_019, cleanup_eligibility: 'archive', confidence: 'high', tool: 'PixInsight', protected: false },
-  { type: 'Process icons', count: 6, total_size_bytes: 12_288, cleanup_eligibility: 'keep', confidence: 'high', tool: 'PixInsight', protected: true },
-  { type: 'Tool project files (.pxi)', count: 1, total_size_bytes: 8_192, cleanup_eligibility: 'keep', confidence: 'confirmed', tool: 'PixInsight', protected: true },
-  { type: 'Manual notes (.md)', count: 2, total_size_bytes: 4_096, cleanup_eligibility: 'keep', confidence: 'high', tool: '—', protected: true },
-  { type: 'Unknown', count: 3, total_size_bytes: 1_258_291, cleanup_eligibility: 'none', confidence: 'low', tool: '?', protected: false, warning: 'needs classification' },
+  {
+    type: 'Registered frames',
+    count: 92,
+    total_size_bytes: 12_238_274_560,
+    cleanup_eligibility: 'eligible',
+    confidence: 'high',
+    tool: 'PixInsight',
+    protected: false,
+  },
+  {
+    type: 'Calibrated frames',
+    count: 92,
+    total_size_bytes: 12_238_274_560,
+    cleanup_eligibility: 'eligible',
+    confidence: 'high',
+    tool: 'PixInsight',
+    protected: false,
+  },
+  {
+    type: 'Debayered frames',
+    count: 0,
+    total_size_bytes: 0,
+    cleanup_eligibility: 'none',
+    confidence: 'unknown',
+    tool: '—',
+    protected: false,
+  },
+  {
+    type: 'Local normalized',
+    count: 92,
+    total_size_bytes: 8_804_682_138,
+    cleanup_eligibility: 'eligible',
+    confidence: 'high',
+    tool: 'PixInsight',
+    protected: false,
+  },
+  {
+    type: 'Drizzle data',
+    count: 14,
+    total_size_bytes: 922_746_880,
+    cleanup_eligibility: 'eligible',
+    confidence: 'high',
+    tool: 'PixInsight',
+    protected: false,
+  },
+  {
+    type: 'Integration cache',
+    count: 6,
+    total_size_bytes: 440_401_920,
+    cleanup_eligibility: 'eligible',
+    confidence: 'high',
+    tool: 'PixInsight',
+    protected: false,
+  },
+  {
+    type: 'Temporary files',
+    count: 4,
+    total_size_bytes: 268_435_456,
+    cleanup_eligibility: 'eligible',
+    confidence: 'medium',
+    tool: '?',
+    protected: false,
+  },
+  {
+    type: 'Logs',
+    count: 8,
+    total_size_bytes: 4_404_019,
+    cleanup_eligibility: 'archive',
+    confidence: 'high',
+    tool: 'PixInsight',
+    protected: false,
+  },
+  {
+    type: 'Process icons',
+    count: 6,
+    total_size_bytes: 12_288,
+    cleanup_eligibility: 'keep',
+    confidence: 'high',
+    tool: 'PixInsight',
+    protected: true,
+  },
+  {
+    type: 'Tool project files (.pxi)',
+    count: 1,
+    total_size_bytes: 8_192,
+    cleanup_eligibility: 'keep',
+    confidence: 'confirmed',
+    tool: 'PixInsight',
+    protected: true,
+  },
+  {
+    type: 'Manual notes (.md)',
+    count: 2,
+    total_size_bytes: 4_096,
+    cleanup_eligibility: 'keep',
+    confidence: 'high',
+    tool: '—',
+    protected: true,
+  },
+  {
+    type: 'Unknown',
+    count: 3,
+    total_size_bytes: 1_258_291,
+    cleanup_eligibility: 'none',
+    confidence: 'low',
+    tool: '?',
+    protected: false,
+    warning: 'needs classification',
+  },
 ];
 
 // NOTE: this legacy design-V3 detail record (snake_case fields, `projects[0]`
@@ -433,8 +709,20 @@ export const mockProjectDetail008: ProjectDetailDto = {
   channels: [
     // subFrames/totalIntegrationS mirror the sources above (54 * 120s, 38 * 120s) —
     // server-aggregated fields (P7), no longer derived client-side.
-    { label: 'Ha', source: 'inferred', addedAt: '2026-05-01T10:05:00Z', subFrames: 54, totalIntegrationS: 6480 },
-    { label: 'OIII', source: 'inferred', addedAt: '2026-05-01T10:06:00Z', subFrames: 38, totalIntegrationS: 4560 },
+    {
+      label: 'Ha',
+      source: 'inferred',
+      addedAt: '2026-05-01T10:05:00Z',
+      subFrames: 54,
+      totalIntegrationS: 6480,
+    },
+    {
+      label: 'OIII',
+      source: 'inferred',
+      addedAt: '2026-05-01T10:06:00Z',
+      subFrames: 38,
+      totalIntegrationS: 4560,
+    },
   ],
   createdAt: '2026-05-01T10:00:00Z',
   updatedAt: '2026-05-20T22:15:00Z',

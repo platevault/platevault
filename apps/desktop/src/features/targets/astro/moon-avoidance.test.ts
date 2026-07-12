@@ -90,7 +90,9 @@ describe('deriveRecommendation', () => {
   });
 
   it('broadband-ok when any broadband band is viable', () => {
-    expect(deriveRecommendation(bandViability(180, 14.77))).toBe('broadband-ok');
+    expect(deriveRecommendation(bandViability(180, 14.77))).toBe(
+      'broadband-ok',
+    );
   });
 
   it('narrowband-only when only narrowband bands are viable', () => {

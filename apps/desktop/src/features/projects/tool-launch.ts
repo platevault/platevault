@@ -29,7 +29,9 @@ async function toolProfileList(): Promise<ToolProfileListResponse> {
   return unwrap(await commands.toolsList());
 }
 
-async function toolLaunch(request: ToolLaunchRequest): Promise<ToolLaunchResponse> {
+async function toolLaunch(
+  request: ToolLaunchRequest,
+): Promise<ToolLaunchResponse> {
   return unwrap(await commands.toolsLaunch(request));
 }
 
@@ -64,7 +66,9 @@ export function toolLaunchDisabledReason(
   return null;
 }
 
-export function toolLaunchDisabledTooltip(reason: LaunchDisabledReason): string {
+export function toolLaunchDisabledTooltip(
+  reason: LaunchDisabledReason,
+): string {
   switch (reason) {
     case 'not_configured':
       return m.projects_toollaunch_not_configured();
@@ -93,7 +97,9 @@ function cwdAnchoredHintStorageKey(toolId: string): string {
 /** True when the one-time cwd-anchored hint has already been shown for `toolId`. */
 export function hasSeenCwdAnchoredHint(toolId: string): boolean {
   try {
-    return window.localStorage.getItem(cwdAnchoredHintStorageKey(toolId)) === '1';
+    return (
+      window.localStorage.getItem(cwdAnchoredHintStorageKey(toolId)) === '1'
+    );
   } catch {
     // localStorage unavailable — fail safe by treating the hint as already seen
     // so we never throw or spam the user in an environment without storage.
@@ -179,7 +185,10 @@ export function useToolLaunch(
         }
 
         if (resp.status === 'success') {
-          addToast({ message: m.projects_tool_launched({ tool: toolName }), variant: 'success' });
+          addToast({
+            message: m.projects_tool_launched({ tool: toolName }),
+            variant: 'success',
+          });
           if (
             supportsOpenFolder === false &&
             toolId &&
@@ -199,9 +208,12 @@ export function useToolLaunch(
         // status === 'error'
         const code = resp.error?.code ?? 'launch.failed';
         const isNotConfigured =
-          code === 'tool.not_configured' || code === 'tool.executable.not_found';
+          code === 'tool.not_configured' ||
+          code === 'tool.executable.not_found';
         addToast({
-          message: resp.error?.message ?? m.projects_tool_launch_failed({ tool: toolName, error: '' }),
+          message:
+            resp.error?.message ??
+            m.projects_tool_launch_failed({ tool: toolName, error: '' }),
           variant: 'error',
           action: isNotConfigured
             ? {
@@ -215,7 +227,10 @@ export function useToolLaunch(
         });
       } catch (e: unknown) {
         addToast({
-          message: m.projects_tool_launch_failed({ tool: toolName, error: String(e) }),
+          message: m.projects_tool_launch_failed({
+            tool: toolName,
+            error: String(e),
+          }),
           variant: 'error',
         });
       } finally {

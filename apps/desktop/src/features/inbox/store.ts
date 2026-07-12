@@ -10,9 +10,9 @@
  * file only migrates the store layer to TanStack Query.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/data/queryKeys";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import { ipcArgs } from '@/lib/ipc-args';
@@ -70,14 +70,14 @@ export function useInboxClassification(
     ? `${rootAbsolutePath}|${inboxItemId}|force`
     : `${rootAbsolutePath}|${inboxItemId}`;
   const { data, isFetching, error } = useQuery<InboxClassifyResponse>({
-    queryKey: [queryKeys.inbox.list('all')[0], "classify", key],
+    queryKey: [queryKeys.inbox.list('all')[0], 'classify', key],
     queryFn: async () => {
-      const [rootPath, itemId, forceStr] = key.split("|");
+      const [rootPath, itemId, forceStr] = key.split('|');
       return unwrap(
         await commands.inboxClassify({
           inboxItemId: itemId,
           rootAbsolutePath: rootPath,
-          forceRescan: forceStr === "force",
+          forceRescan: forceStr === 'force',
         }),
       );
     },
@@ -119,7 +119,7 @@ export function useInboxPlanBreakdowns(
     queries: targets.map((t) => {
       const key = `${t.rootAbsolutePath}|${t.inboxItemId}`;
       return {
-        queryKey: [queryKeys.inbox.list("all")[0], "classify", key],
+        queryKey: [queryKeys.inbox.list('all')[0], 'classify', key],
         queryFn: async () =>
           unwrap(
             await commands.inboxClassify({
@@ -139,13 +139,16 @@ export function useInboxPlanBreakdowns(
   // changes OR when a classification result lands/changes. Computed as named
   // values so the dep array stays a list of simple expressions (the React
   // Compiler lint rule forbids inline `.map().join()` in the deps).
-  const targetSignature = targets.map((t) => t.inboxItemId).join("|");
-  const resultsSignature = results.map((r) => (r.data ? "1" : "0")).join("");
+  const targetSignature = targets.map((t) => t.inboxItemId).join('|');
+  const resultsSignature = results.map((r) => (r.data ? '1' : '0')).join('');
 
   // Build a stable map keyed by item id. `useQueries` returns results in the
   // same order as `targets`, so we can zip them together.
   return useMemo(() => {
-    const map: Record<string, ReadonlyArray<{ kind: string; count: number }>> = {};
+    const map: Record<
+      string,
+      ReadonlyArray<{ kind: string; count: number }>
+    > = {};
     targets.forEach((t, i) => {
       const data = results[i]?.data;
       if (data?.breakdown && data.breakdown.length > 0) {
@@ -165,9 +168,20 @@ export function useInboxPlanBreakdowns(
 /** Load and cache an inbox scan for a root folder. */
 export function useInboxScan(rootId: string, rootAbsolutePath: string) {
   const { data, isFetching, error } = useQuery<InboxScanFolderResponse>({
-    queryKey: [queryKeys.inbox.list('all')[0], "scan", rootId, rootAbsolutePath],
+    queryKey: [
+      queryKeys.inbox.list('all')[0],
+      'scan',
+      rootId,
+      rootAbsolutePath,
+    ],
     queryFn: async () =>
-      unwrap(await commands.inboxScanFolder({ rootId, rootAbsolutePath, followSymlinks: false })),
+      unwrap(
+        await commands.inboxScanFolder({
+          rootId,
+          rootAbsolutePath,
+          followSymlinks: false,
+        }),
+      ),
     enabled: !!rootId && !!rootAbsolutePath,
   });
   return { data, loading: isFetching, error: error ?? undefined };
@@ -264,7 +278,13 @@ export function useInboxConfirm() {
       /** Caller-selected destination root (spec 041 US8/FR-029). */
       rootId?: string | null;
     }) => {
-      setState({ loading: true, result: null, error: null, errorCode: null, errorDetails: null });
+      setState({
+        loading: true,
+        result: null,
+        error: null,
+        errorCode: null,
+        errorDetails: null,
+      });
       try {
         const result = unwrap(
           await commands.inboxConfirm({
@@ -275,11 +295,19 @@ export function useInboxConfirm() {
             rootId: args.rootId ?? null,
           }),
         );
-        setState({ loading: false, result, error: null, errorCode: null, errorDetails: null });
+        setState({
+          loading: false,
+          result,
+          error: null,
+          errorCode: null,
+          errorDetails: null,
+        });
         // Invalidate the inbox list so it refreshes after confirmation.
         // Use queryKeys.inbox.list(rootId) prefix — ['inbox'] covers both the
         // aggregate list and any future per-root keys without going broader.
-        void queryClient.invalidateQueries({ queryKey: queryKeys.inbox.list('all') });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inbox.list('all'),
+        });
         return result;
       } catch (e) {
         const norm = normalizeConfirmError(e);
@@ -315,18 +343,29 @@ export function useInboxReclassify(inboxItemId: string) {
   });
 
   const reclassify = useCallback(
-    async (overrides: Array<{ filePath: string; frameType?: string | null; filter?: string | null; exposureS?: number | null; binning?: string | null }>) => {
+    async (
+      overrides: Array<{
+        filePath: string;
+        frameType?: string | null;
+        filter?: string | null;
+        exposureS?: number | null;
+        binning?: string | null;
+      }>,
+    ) => {
       setState({ loading: true, result: null, error: null });
       try {
         const result = unwrap(
           await commands.inboxReclassify(
-            ipcArgs<typeof commands.inboxReclassify>({ inboxItemId, overrides }),
+            ipcArgs<typeof commands.inboxReclassify>({
+              inboxItemId,
+              overrides,
+            }),
           ),
         );
         setState({ loading: false, result, error: null });
         // Invalidate all classification cache entries so the UI refreshes.
         void queryClient.invalidateQueries({
-          queryKey: [queryKeys.inbox.list('all')[0], "classify"],
+          queryKey: [queryKeys.inbox.list('all')[0], 'classify'],
         });
         // The per-file metadata DTO is override-derived too
         // (`frame_type_effective`, `missing_path_attributes`,
@@ -364,11 +403,15 @@ export interface InboxItemMetadataState {
  * skip fetching (e.g. when no item is selected); the query stays disabled and
  * returns an empty list. Re-fetches whenever `itemId` changes.
  */
-export function useInboxItemMetadata(itemId: string | null): InboxItemMetadataState {
+export function useInboxItemMetadata(
+  itemId: string | null,
+): InboxItemMetadataState {
   const { data, isFetching, error } = useQuery<InboxFileMetadata[]>({
     queryKey: queryKeys.inbox.metadata(itemId ?? '__none__'),
     queryFn: async () => {
-      const resp = unwrap(await commands.inboxItemMetadata({ inboxItemId: itemId as string }));
+      const resp = unwrap(
+        await commands.inboxItemMetadata({ inboxItemId: itemId as string }),
+      );
       return resp.files;
     },
     enabled: itemId != null,
@@ -422,7 +465,10 @@ export function useInboxRescan(
   roots: Array<{ rootId: string; rootAbsolutePath: string }>,
   onComplete: () => void,
 ) {
-  const [state, setState] = useState<RescanState>({ loading: false, error: null });
+  const [state, setState] = useState<RescanState>({
+    loading: false,
+    error: null,
+  });
 
   const rescan = useCallback(async () => {
     if (roots.length === 0) {
@@ -467,7 +513,11 @@ interface PlanState {
  * Pass an empty string to skip the fetch (no item selected / no plan).
  */
 export function useInboxPlan(inboxItemId: string) {
-  const [state, setState] = useState<PlanState>({ plan: null, loading: false, error: null });
+  const [state, setState] = useState<PlanState>({
+    plan: null,
+    loading: false,
+    error: null,
+  });
 
   const fetchPlan = useCallback(async () => {
     if (!inboxItemId) {
@@ -482,7 +532,10 @@ export function useInboxPlan(inboxItemId: string) {
       const msg = String(e);
       // 'no_plan' is expected when the item was just confirmed and listener
       // hasn't fired yet, or when the item is not in plan_open state.
-      if (msg.includes('inbox.item.no_plan') || msg.includes('inbox.item.not_found')) {
+      if (
+        msg.includes('inbox.item.no_plan') ||
+        msg.includes('inbox.item.not_found')
+      ) {
         setState({ plan: null, loading: false, error: null });
       } else {
         setState({ plan: null, loading: false, error: msg });
@@ -500,7 +553,10 @@ interface PlanApplyState {
 
 /** Apply the open plan for a single inbox item. */
 export function useInboxPlanApply() {
-  const [state, setState] = useState<PlanApplyState>({ loading: false, error: null });
+  const [state, setState] = useState<PlanApplyState>({
+    loading: false,
+    error: null,
+  });
 
   const apply = useCallback(
     async (inboxItemId: string): Promise<PlanApplyResponse | null> => {
@@ -522,26 +578,33 @@ export function useInboxPlanApply() {
 
 /** Apply all plans currently in `plan_open` state. */
 export function useInboxPlanApplyAll() {
-  const [state, setState] = useState<PlanApplyState>({ loading: false, error: null });
+  const [state, setState] = useState<PlanApplyState>({
+    loading: false,
+    error: null,
+  });
 
-  const applyAll = useCallback(async (): Promise<InboxApplyAllResponse | null> => {
-    setState({ loading: true, error: null });
-    try {
-      const result = unwrap(await commands.inboxPlanApplyAll());
-      setState({ loading: false, error: null });
-      return result;
-    } catch (e: unknown) {
-      setState({ loading: false, error: String(e) });
-      return null;
-    }
-  }, []);
+  const applyAll =
+    useCallback(async (): Promise<InboxApplyAllResponse | null> => {
+      setState({ loading: true, error: null });
+      try {
+        const result = unwrap(await commands.inboxPlanApplyAll());
+        setState({ loading: false, error: null });
+        return result;
+      } catch (e: unknown) {
+        setState({ loading: false, error: String(e) });
+        return null;
+      }
+    }, []);
 
   return { ...state, applyAll };
 }
 
 /** Cancel the open plan for a single inbox item, resetting it to `classified`. */
 export function useInboxPlanCancel() {
-  const [state, setState] = useState<PlanApplyState>({ loading: false, error: null });
+  const [state, setState] = useState<PlanApplyState>({
+    loading: false,
+    error: null,
+  });
 
   const cancel = useCallback(
     async (inboxItemId: string): Promise<InboxPlanCancelResponse | null> => {
@@ -594,7 +657,8 @@ export function useOpenInboxPlans() {
         if (!cancelled) setState({ data: resp, loading: false, error: null });
       })
       .catch((e: unknown) => {
-        if (!cancelled) setState({ data: null, loading: false, error: String(e) });
+        if (!cancelled)
+          setState({ data: null, loading: false, error: String(e) });
       });
     return () => {
       cancelled = true;
@@ -611,13 +675,18 @@ export function useOpenInboxPlans() {
  * group / plan-level). Mirrors `useInboxPlanApplyAll`.
  */
 export function useApplySelectedInboxPlans() {
-  const [state, setState] = useState<PlanApplyState>({ loading: false, error: null });
+  const [state, setState] = useState<PlanApplyState>({
+    loading: false,
+    error: null,
+  });
 
   const applySelected = useCallback(
     async (inboxItemIds: string[]): Promise<InboxApplyAllResponse | null> => {
       setState({ loading: true, error: null });
       try {
-        const result = unwrap(await commands.inboxPlanApplySelected({ inboxItemIds }));
+        const result = unwrap(
+          await commands.inboxPlanApplySelected({ inboxItemIds }),
+        );
         setState({ loading: false, error: null });
         return result;
       } catch (e: unknown) {
@@ -662,7 +731,8 @@ export function useInboxStats() {
         if (!cancelled) setState({ data: resp, loading: false, error: null });
       })
       .catch((e: unknown) => {
-        if (!cancelled) setState({ data: null, loading: false, error: String(e) });
+        if (!cancelled)
+          setState({ data: null, loading: false, error: String(e) });
       });
     return () => {
       cancelled = true;

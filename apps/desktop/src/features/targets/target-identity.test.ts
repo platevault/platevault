@@ -23,7 +23,8 @@ import { errorMessage } from './target-error-message';
 // the target error envelope moved from the old `TargetOpError` (`alias.duplicate`,
 // `designation.*`, …) to `ContractError` (`alias.blank`, `alias.not_removable`, …).
 
-const ce = (code: string): ContractError => ({ code, message: '' }) as ContractError;
+const ce = (code: string): ContractError =>
+  ({ code, message: '' }) as ContractError;
 
 describe('errorMessage (real TargetDetailV2 mapping)', () => {
   it.each([
@@ -142,7 +143,9 @@ describe('X-2 ProjectLifecycle enum snapshot', () => {
   ] as const;
 
   it('spec 023 contract lifecycle enum matches spec 009 canonical enum', () => {
-    expect([...SPEC_023_PROJECT_LIFECYCLE].sort()).toEqual([...SPEC_009_CANONICAL].sort());
+    expect([...SPEC_023_PROJECT_LIFECYCLE].sort()).toEqual(
+      [...SPEC_009_CANONICAL].sort(),
+    );
   });
 
   it('no enum value contains whitespace', () => {

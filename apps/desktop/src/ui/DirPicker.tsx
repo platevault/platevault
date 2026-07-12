@@ -5,7 +5,8 @@ import { Btn } from './Btn';
 import { useDirectoryPicker, type LastPathKind } from '@/shared/native/picker';
 import { m } from '@/lib/i18n';
 
-export interface DirPickerProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
+export interface DirPickerProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
   value?: string;
   onChange: (path: string) => void;
   label?: string;
@@ -14,7 +15,10 @@ export interface DirPickerProps extends Omit<HTMLAttributes<HTMLDivElement>, 'on
 }
 
 export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
-  function DirPicker({ value, onChange, label, lastPathKind, className, ...rest }, ref) {
+  function DirPicker(
+    { value, onChange, label, lastPathKind, className, ...rest },
+    ref,
+  ) {
     const { pick, loading, error } = useDirectoryPicker();
 
     const handleChoose = async () => {
@@ -45,6 +49,6 @@ export const DirPicker = forwardRef<HTMLDivElement, DirPickerProps>(
         )}
       </div>
     );
-  }
+  },
 );
 DirPicker.displayName = 'DirPicker';

@@ -105,7 +105,9 @@ describe('logStore ring buffer', () => {
 
   it('notifies listeners on append', () => {
     let callCount = 0;
-    const unsub = subscribeLog(() => { callCount++; });
+    const unsub = subscribeLog(() => {
+      callCount++;
+    });
 
     appendLog([makeEntry(1)]);
     expect(callCount).toBe(1);

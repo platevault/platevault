@@ -20,7 +20,13 @@
  * enough to switch the component into its windowed path.
  */
 
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  cleanup,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { InboxList } from '../InboxList';
 import { FilterToolbar } from '@/components';
@@ -39,7 +45,10 @@ function Harness({ items }: { items: InboxListItem[] }) {
     <>
       <FilterToolbar
         grouping={{
-          dimensions: GROUPING_DIMENSIONS.map((d) => ({ value: d.id, label: d.label() })),
+          dimensions: GROUPING_DIMENSIONS.map((d) => ({
+            value: d.id,
+            label: d.label(),
+          })),
           dims,
           setSlot,
         }}
@@ -57,7 +66,9 @@ function Harness({ items }: { items: InboxListItem[] }) {
 
 // ── Fixtures ────────────────────────────────────────────────────────────────────
 
-function makeItem(over: Partial<InboxListItem> & { inboxItemId: string }): InboxListItem {
+function makeItem(
+  over: Partial<InboxListItem> & { inboxItemId: string },
+): InboxListItem {
   return {
     relativePath: over.inboxItemId,
     fileCount: 1,
@@ -88,8 +99,14 @@ let gbcrSpy: ReturnType<typeof vi.spyOn> | undefined;
 
 function rect(height: number): DOMRect {
   return {
-    x: 0, y: 0, top: 0, left: 0, right: 300, bottom: height,
-    width: 300, height,
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 300,
+    bottom: height,
+    width: 300,
+    height,
     toJSON: () => ({}),
   };
 }
@@ -127,7 +144,13 @@ describe('InboxList — virtualization', () => {
     );
 
     render(
-      <InboxList items={items} selectedIdx={null} onSelect={vi.fn()} filterType="all" onFilterTypeChange={vi.fn()} />,
+      <InboxList
+        items={items}
+        selectedIdx={null}
+        onSelect={vi.fn()}
+        filterType="all"
+        onFilterTypeChange={vi.fn()}
+      />,
     );
 
     // Once the viewport is measured, only a small window of rows is mounted.
@@ -146,25 +169,37 @@ describe('InboxList — virtualization', () => {
     // Two frame-type groups, 250 items each. Sorted by label → "dark" first.
     const items: InboxListItem[] = [
       ...Array.from({ length: 250 }, (_, i) =>
-        makeItem({ inboxItemId: `d${String(i).padStart(3, '0')}`, groupFrameType: 'dark' }),
+        makeItem({
+          inboxItemId: `d${String(i).padStart(3, '0')}`,
+          groupFrameType: 'dark',
+        }),
       ),
       ...Array.from({ length: 250 }, (_, i) =>
-        makeItem({ inboxItemId: `l${String(i).padStart(3, '0')}`, groupFrameType: 'light' }),
+        makeItem({
+          inboxItemId: `l${String(i).padStart(3, '0')}`,
+          groupFrameType: 'light',
+        }),
       ),
     ];
 
     render(<Harness items={items} />);
 
-    fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'frameType' } });
+    fireEvent.change(screen.getByLabelText('Group by'), {
+      target: { value: 'frameType' },
+    });
 
     // First group ("dark") header is in the window; rendering is windowed so far
     // fewer than 500 item rows are mounted. The far-away "light" header is below
     // the window, so it is NOT mounted yet.
     await waitFor(() => {
-      expect(screen.getByTestId('inbox-group-frameType-dark')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('inbox-group-frameType-dark'),
+      ).toBeInTheDocument();
     });
     expect(screen.getAllByTestId(/^inbox-item-/).length).toBeLessThan(150);
-    expect(screen.queryByTestId('inbox-group-frameType-light')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('inbox-group-frameType-light'),
+    ).not.toBeInTheDocument();
 
     const heightExpanded = sizerHeight();
 
@@ -173,7 +208,9 @@ describe('InboxList — virtualization', () => {
     fireEvent.click(screen.getByTestId('inbox-group-frameType-dark'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('inbox-group-frameType-light')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('inbox-group-frameType-light'),
+      ).toBeInTheDocument();
     });
     expect(sizerHeight()).toBeLessThan(heightExpanded);
   });

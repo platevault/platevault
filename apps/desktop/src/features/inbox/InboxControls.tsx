@@ -43,20 +43,58 @@ function basename(p: string | null | undefined): string | null {
  * NONE_KEY → "(none)" label.
  */
 export const GROUPING_DIMENSIONS: readonly Dimension[] = [
-  { id: 'target',     label: () => m.inbox_dim_target(),      accessor: (i) => i.groupTarget },
-  { id: 'frameType',  label: () => m.inbox_frame_type_label(), accessor: (i) => i.groupFrameType },
-  { id: 'date',       label: () => m.archive_prop_date(),     accessor: (i) => i.groupDate },
-  { id: 'filter',     label: () => m.common_filter(),         accessor: (i) => i.groupFilter },
-  { id: 'exposure',   label: () => m.inbox_dim_exposure(),    accessor: (i) => i.groupExposure },
-  { id: 'instrument', label: () => m.inbox_dim_instrument(),  accessor: (i) => i.groupInstrument },
-  { id: 'source',     label: () => m.inbox_dim_source(),      accessor: (i) => basename(i.rootAbsolutePath) },
-  { id: 'format',     label: () => m.inbox_dim_format(),      accessor: (i) => i.format },
-  { id: 'orgState',   label: () => m.inbox_dim_org_state(),   accessor: (i) => i.organizationState },
+  {
+    id: 'target',
+    label: () => m.inbox_dim_target(),
+    accessor: (i) => i.groupTarget,
+  },
+  {
+    id: 'frameType',
+    label: () => m.inbox_frame_type_label(),
+    accessor: (i) => i.groupFrameType,
+  },
+  {
+    id: 'date',
+    label: () => m.archive_prop_date(),
+    accessor: (i) => i.groupDate,
+  },
+  {
+    id: 'filter',
+    label: () => m.common_filter(),
+    accessor: (i) => i.groupFilter,
+  },
+  {
+    id: 'exposure',
+    label: () => m.inbox_dim_exposure(),
+    accessor: (i) => i.groupExposure,
+  },
+  {
+    id: 'instrument',
+    label: () => m.inbox_dim_instrument(),
+    accessor: (i) => i.groupInstrument,
+  },
+  {
+    id: 'source',
+    label: () => m.inbox_dim_source(),
+    accessor: (i) => basename(i.rootAbsolutePath),
+  },
+  {
+    id: 'format',
+    label: () => m.inbox_dim_format(),
+    accessor: (i) => i.format,
+  },
+  {
+    id: 'orgState',
+    label: () => m.inbox_dim_org_state(),
+    accessor: (i) => i.organizationState,
+  },
 ];
 
 /** Accessor map keyed by dimension id, consumed by `groupByDimensions`. */
-export const ACCESSORS: Record<string, DimensionAccessor<InboxListItem>> =
-  Object.fromEntries(GROUPING_DIMENSIONS.map((d) => [d.id, d.accessor]));
+export const ACCESSORS: Record<
+  string,
+  DimensionAccessor<InboxListItem>
+> = Object.fromEntries(GROUPING_DIMENSIONS.map((d) => [d.id, d.accessor]));
 
 /**
  * Resolve a dimension's label in the active locale by id (spec 046 #8b). Reads
@@ -109,16 +147,24 @@ export function InboxControls({ dims, setSlot }: InboxControlsProps) {
               value={value}
               disabled={disabled}
               onChange={(e) => setSlot(slot, e.target.value)}
-              aria-label={slot === 0 ? m.inbox_group_by_aria() : m.inbox_group_by_level_aria({ level: slot + 1 })}
+              aria-label={
+                slot === 0
+                  ? m.inbox_group_by_aria()
+                  : m.inbox_group_by_level_aria({ level: slot + 1 })
+              }
             >
               <option value="">
-                {slot === 0 ? m.inbox_controls_group_none() : m.inbox_controls_then_none()}
+                {slot === 0
+                  ? m.inbox_controls_group_none()
+                  : m.inbox_controls_then_none()}
               </option>
               {GROUPING_DIMENSIONS.filter(
                 (d) => d.id === value || !usedEarlier.has(d.id),
               ).map((d) => (
                 <option key={d.id} value={d.id}>
-                  {slot === 0 ? m.inbox_groupby_chip_primary({ label: d.label() }) : m.inbox_groupby_chip_secondary({ label: d.label() })}
+                  {slot === 0
+                    ? m.inbox_groupby_chip_primary({ label: d.label() })
+                    : m.inbox_groupby_chip_secondary({ label: d.label() })}
                 </option>
               ))}
             </select>

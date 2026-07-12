@@ -34,7 +34,9 @@ export interface ResolverSettingsControlProps {
   compact?: boolean;
 }
 
-export function ResolverSettingsControl({ compact = false }: ResolverSettingsControlProps) {
+export function ResolverSettingsControl({
+  compact = false,
+}: ResolverSettingsControlProps) {
   const endpointId = useId();
   const debounceId = useId();
   const timeoutId = useId();
@@ -119,8 +121,11 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
       {!compact && (
         <>
           <SettingsRow
-
-            label={<label htmlFor={endpointId}>{m.settings_resolver_endpoint_label()}</label>}
+            label={
+              <label htmlFor={endpointId}>
+                {m.settings_resolver_endpoint_label()}
+              </label>
+            }
             info={m.settings_resolver_tapurl_info()}
           >
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={endpointId} (cross-column association the rule can't trace) */}
@@ -130,14 +135,21 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
               type="text"
               value={settings.simbadEndpoint}
               disabled={!loaded || !settings.onlineEnabled}
-              onChange={(e) => setSettings((s) => ({ ...s, simbadEndpoint: e.target.value }))}
-              onBlur={(e) => void persist({ simbadEndpoint: e.target.value.trim() })}
+              onChange={(e) =>
+                setSettings((s) => ({ ...s, simbadEndpoint: e.target.value }))
+              }
+              onBlur={(e) =>
+                void persist({ simbadEndpoint: e.target.value.trim() })
+              }
             />
           </SettingsRow>
 
           <SettingsRow
-
-            label={<label htmlFor={debounceId}>{m.settings_resolver_debounce_label()}</label>}
+            label={
+              <label htmlFor={debounceId}>
+                {m.settings_resolver_debounce_label()}
+              </label>
+            }
             info={m.settings_resolver_debounce_info()}
           >
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={debounceId} (cross-column association the rule can't trace) */}
@@ -150,15 +162,23 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
               value={settings.debounceMs}
               disabled={!loaded}
               onChange={(e) =>
-                setSettings((s) => ({ ...s, debounceMs: Number(e.target.value) }))
+                setSettings((s) => ({
+                  ...s,
+                  debounceMs: Number(e.target.value),
+                }))
               }
-              onBlur={(e) => void persist({ debounceMs: Number(e.target.value) })}
+              onBlur={(e) =>
+                void persist({ debounceMs: Number(e.target.value) })
+              }
             />
           </SettingsRow>
 
           <SettingsRow
-
-            label={<label htmlFor={timeoutId}>{m.settings_resolver_timeout_label()}</label>}
+            label={
+              <label htmlFor={timeoutId}>
+                {m.settings_resolver_timeout_label()}
+              </label>
+            }
             info={m.settings_resolver_timeout_info()}
           >
             {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the SettingsRow label via htmlFor={timeoutId} (cross-column association the rule can't trace) */}
@@ -171,9 +191,14 @@ export function ResolverSettingsControl({ compact = false }: ResolverSettingsCon
               value={settings.requestTimeoutSecs}
               disabled={!loaded || !settings.onlineEnabled}
               onChange={(e) =>
-                setSettings((s) => ({ ...s, requestTimeoutSecs: Number(e.target.value) }))
+                setSettings((s) => ({
+                  ...s,
+                  requestTimeoutSecs: Number(e.target.value),
+                }))
               }
-              onBlur={(e) => void persist({ requestTimeoutSecs: Number(e.target.value) })}
+              onBlur={(e) =>
+                void persist({ requestTimeoutSecs: Number(e.target.value) })
+              }
             />
           </SettingsRow>
         </>

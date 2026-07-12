@@ -17,7 +17,13 @@
  * it) so the remount/reset interaction actually reproduces the bug.
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@tanstack/react-router', () => ({
@@ -47,9 +53,17 @@ vi.mock('@/bindings/index', async (importOriginal) => {
 // Stub every step EXCEPT StepName — the real StepName is what remounts and
 // fires the spurious reset()-driven onChange that caused the original bug.
 vi.mock('./StepSources', () => ({
-  StepSources: ({ onChange }: { onChange: (d: { selectedSessionIds: string[] }) => void }) => (
+  StepSources: ({
+    onChange,
+  }: {
+    onChange: (d: { selectedSessionIds: string[] }) => void;
+  }) => (
     <div data-testid="step-sources">
-      <button onClick={() => onChange({ selectedSessionIds: ['sess-001', 'sess-002'] })}>
+      <button
+        onClick={() =>
+          onChange({ selectedSessionIds: ['sess-001', 'sess-002'] })
+        }
+      >
         Select sessions
       </button>
     </div>
@@ -76,14 +90,29 @@ vi.mock('@/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/ui')>();
   return {
     ...actual,
-    WizardShell: ({ children, summary }: { children: React.ReactNode; summary?: React.ReactNode }) => (
+    WizardShell: ({
+      children,
+      summary,
+    }: {
+      children: React.ReactNode;
+      summary?: React.ReactNode;
+    }) => (
       <div data-testid="wizard-shell">
         <div data-testid="wizard-summary">{summary}</div>
         <div data-testid="wizard-content">{children}</div>
       </div>
     ),
-    Btn: ({ children, onClick, disabled, 'data-testid': testid }: React.ButtonHTMLAttributes<HTMLButtonElement> & { 'data-testid'?: string }) => (
-      <button onClick={onClick} disabled={disabled} data-testid={testid}>{children}</button>
+    Btn: ({
+      children,
+      onClick,
+      disabled,
+      'data-testid': testid,
+    }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+      'data-testid'?: string;
+    }) => (
+      <button onClick={onClick} disabled={disabled} data-testid={testid}>
+        {children}
+      </button>
     ),
   };
 });
@@ -109,7 +138,10 @@ const EXISTING_PROJECT = {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.removeItem('alm-project-wizard-draft');
-  mockListProjects.mockResolvedValue({ status: 'ok', data: [EXISTING_PROJECT] });
+  mockListProjects.mockResolvedValue({
+    status: 'ok',
+    data: [EXISTING_PROJECT],
+  });
 });
 
 async function advanceToReview(nameValue: string) {
@@ -117,18 +149,30 @@ async function advanceToReview(nameValue: string) {
   fireEvent.change(nameInput, { target: { value: nameValue } });
 
   fireEvent.click(screen.getByText(/Next: sources/i));
-  await waitFor(() => expect(screen.getByTestId('step-sources')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-sources')).toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByText('Select sessions'));
-  await waitFor(() => expect(screen.getByTestId('step-sources')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-sources')).toBeInTheDocument(),
+  );
 
   fireEvent.click(screen.getByText(/Next: calibration/i));
-  await waitFor(() => expect(screen.getByTestId('step-calibration')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-calibration')).toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByText(/Next: source views/i));
-  await waitFor(() => expect(screen.getByTestId('step-views')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-views')).toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByText(/Next: naming/i));
-  await waitFor(() => expect(screen.getByTestId('step-layout')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-layout')).toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByText(/Next: review/i));
-  await waitFor(() => expect(screen.getByTestId('step-review')).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByTestId('step-review')).toBeInTheDocument(),
+  );
 }
 
 describe('WizardPage duplicate-name banner persistence (backlog defect)', () => {

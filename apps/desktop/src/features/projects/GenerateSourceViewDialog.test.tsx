@@ -51,37 +51,47 @@ describe('GenerateSourceViewDialog', () => {
       },
     });
 
-    render(
-      <GenerateSourceViewDialog projectId="p1" open onClose={() => {}} />,
-    );
+    render(<GenerateSourceViewDialog projectId="p1" open onClose={() => {}} />);
 
     expect(mockGetSettings).toHaveBeenCalledWith({ scope: 'sourceViews' });
     await waitFor(() => {
-      expect(screen.getByTestId('generate-view-link-kinds')).toHaveTextContent('hardlink');
-      expect(screen.getByTestId('generate-view-link-kinds')).toHaveTextContent('symlink');
+      expect(screen.getByTestId('generate-view-link-kinds')).toHaveTextContent(
+        'hardlink',
+      );
+      expect(screen.getByTestId('generate-view-link-kinds')).toHaveTextContent(
+        'symlink',
+      );
     });
   });
 
   it('renders without the link-kind line when the settings fetch fails', async () => {
     mockGetSettings.mockRejectedValue(new Error('boom'));
 
-    render(
-      <GenerateSourceViewDialog projectId="p1" open onClose={() => {}} />,
-    );
+    render(<GenerateSourceViewDialog projectId="p1" open onClose={() => {}} />);
 
     await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
-    expect(screen.queryByTestId('generate-view-link-kinds')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('generate-view-link-kinds'),
+    ).not.toBeInTheDocument();
   });
 
   it('does not fetch settings when the dialog is closed', () => {
     render(
-      <GenerateSourceViewDialog projectId="p1" open={false} onClose={() => {}} />,
+      <GenerateSourceViewDialog
+        projectId="p1"
+        open={false}
+        onClose={() => {}}
+      />,
     );
     expect(mockGetSettings).not.toHaveBeenCalled();
   });
 
   it('shows a link-materialization toast when generation used no copy fallback', async () => {
-    mockGenerate.mockResolvedValue({ planId: 'plan-1', warnings: [], usedCopyFallback: false });
+    mockGenerate.mockResolvedValue({
+      planId: 'plan-1',
+      warnings: [],
+      usedCopyFallback: false,
+    });
 
     render(<GenerateSourceViewDialog projectId="p1" open onClose={() => {}} />);
     fireEvent.click(screen.getByTestId('generate-source-view-submit'));
@@ -101,14 +111,20 @@ describe('GenerateSourceViewDialog', () => {
   });
 
   it('shows a copy-fallback toast when generation materialized via copy', async () => {
-    mockGenerate.mockResolvedValue({ planId: 'plan-1', warnings: [], usedCopyFallback: true });
+    mockGenerate.mockResolvedValue({
+      planId: 'plan-1',
+      warnings: [],
+      usedCopyFallback: true,
+    });
 
     render(<GenerateSourceViewDialog projectId="p1" open onClose={() => {}} />);
     fireEvent.click(screen.getByTestId('generate-source-view-submit'));
 
     await waitFor(() => {
       expect(addToast).toHaveBeenCalledWith(
-        expect.objectContaining({ message: expect.stringContaining('copy fallback') }),
+        expect.objectContaining({
+          message: expect.stringContaining('copy fallback'),
+        }),
       );
     });
   });

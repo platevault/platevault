@@ -5,7 +5,12 @@
 import { useState } from 'react';
 import { clsx } from 'clsx';
 import { usePreference } from '@/data/preferences';
-import { useThemeChoice, resolveTheme, THEMES, applyDensity } from '@/data/theme';
+import {
+  useThemeChoice,
+  resolveTheme,
+  THEMES,
+  applyDensity,
+} from '@/data/theme';
 import type { Density } from '@/bindings/types';
 import { m } from '@/lib/i18n';
 
@@ -15,7 +20,11 @@ type FontSize = 'small' | 'default' | 'large';
 // THEMES carry static brand names (not translatable) — wrap them as thunks so
 // every CHOICES entry exposes the same `() => string` label shape.
 const CHOICES = [
-  { id: 'system' as const, label: () => m.settings_general_theme_system(), mode: 'auto' as const },
+  {
+    id: 'system' as const,
+    label: () => m.settings_general_theme_system(),
+    mode: 'auto' as const,
+  },
   ...THEMES.map((t) => ({ ...t, label: () => t.label })),
 ];
 
@@ -28,7 +37,9 @@ export function General() {
   return (
     <>
       <div className="alm-settings__group">
-        <div className="alm-settings__group-title">{m.settings_general_theme()}</div>
+        <div className="alm-settings__group-title">
+          {m.settings_general_theme()}
+        </div>
         <div className="alm-theme-swatches">
           {CHOICES.map((t) => {
             const isActive = choice === t.id;
@@ -38,11 +49,17 @@ export function General() {
               <button
                 key={t.id}
                 type="button"
-                className={clsx('alm-theme-swatch', isActive && 'alm-theme-swatch--active')}
+                className={clsx(
+                  'alm-theme-swatch',
+                  isActive && 'alm-theme-swatch--active',
+                )}
                 onClick={() => setChoice(t.id)}
                 aria-pressed={isActive}
               >
-                <span className="alm-theme-swatch__prev" data-theme={previewTheme}>
+                <span
+                  className="alm-theme-swatch__prev"
+                  data-theme={previewTheme}
+                >
                   <i className="alm-theme-swatch__bg" />
                   <i className="alm-theme-swatch__surface" />
                   <i className="alm-theme-swatch__accent" />
@@ -64,27 +81,41 @@ export function General() {
       </div>
 
       <div className="alm-settings__group">
-        <div className="alm-settings__group-title">{m.settings_general_fontsize_title()}</div>
+        <div className="alm-settings__group-title">
+          {m.settings_general_fontsize_title()}
+        </div>
         <div className="alm-settings__row">
-          <div className="alm-settings__row-label">{m.settings_general_fontsize_title()}</div>
+          <div className="alm-settings__row-label">
+            {m.settings_general_fontsize_title()}
+          </div>
           <div className="alm-settings__row-content">
             <select
               className="alm-select"
               value={fontSize}
               onChange={(e) => setFontSize(e.target.value as FontSize)}
             >
-              <option value="small">{m.settings_general_fontsize_small()}</option>
-              <option value="default">{m.settings_general_fontsize_default()}</option>
-              <option value="large">{m.settings_general_fontsize_large()}</option>
+              <option value="small">
+                {m.settings_general_fontsize_small()}
+              </option>
+              <option value="default">
+                {m.settings_general_fontsize_default()}
+              </option>
+              <option value="large">
+                {m.settings_general_fontsize_large()}
+              </option>
             </select>
           </div>
         </div>
       </div>
 
       <div className="alm-settings__group">
-        <div className="alm-settings__group-title">{m.settings_general_density_title()}</div>
+        <div className="alm-settings__group-title">
+          {m.settings_general_density_title()}
+        </div>
         <div className="alm-settings__row">
-          <div className="alm-settings__row-label">{m.settings_general_density_label()}</div>
+          <div className="alm-settings__row-label">
+            {m.settings_general_density_label()}
+          </div>
           <div className="alm-settings__row-content">
             <select
               className="alm-select"
@@ -95,9 +126,15 @@ export function General() {
                 applyDensity(d);
               }}
             >
-              <option value="compact">{m.settings_general_density_compact()}</option>
-              <option value="comfortable">{m.settings_general_density_comfortable()}</option>
-              <option value="spacious">{m.settings_general_density_spacious()}</option>
+              <option value="compact">
+                {m.settings_general_density_compact()}
+              </option>
+              <option value="comfortable">
+                {m.settings_general_density_comfortable()}
+              </option>
+              <option value="spacious">
+                {m.settings_general_density_spacious()}
+              </option>
             </select>
           </div>
         </div>

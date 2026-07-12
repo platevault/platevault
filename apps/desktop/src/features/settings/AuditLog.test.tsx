@@ -65,8 +65,14 @@ const ENTRIES = [
 beforeEach(() => {
   mockList.mockReset();
   mockExport.mockReset();
-  mockList.mockResolvedValue({ status: 'ok', data: { entries: ENTRIES, total: ENTRIES.length } });
-  mockExport.mockResolvedValue({ status: 'ok', data: ENTRIES.map((e) => JSON.stringify(e)).join('\n') });
+  mockList.mockResolvedValue({
+    status: 'ok',
+    data: { entries: ENTRIES, total: ENTRIES.length },
+  });
+  mockExport.mockResolvedValue({
+    status: 'ok',
+    data: ENTRIES.map((e) => JSON.stringify(e)).join('\n'),
+  });
 });
 
 describe('AuditLog', () => {
@@ -105,7 +111,9 @@ describe('AuditLog', () => {
     render(<AuditLog />);
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-05-01' } });
+    fireEvent.change(screen.getByLabelText('From'), {
+      target: { value: '2026-05-01' },
+    });
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
         { from: new Date('2026-05-01').toISOString() },
@@ -113,12 +121,16 @@ describe('AuditLog', () => {
       ),
     );
 
-    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-05-10' } });
+    fireEvent.change(screen.getByLabelText('To'), {
+      target: { value: '2026-05-10' },
+    });
     await waitFor(() =>
       expect(mockList).toHaveBeenLastCalledWith(
         {
           from: new Date('2026-05-01').toISOString(),
-          to: new Date(new Date('2026-05-10').getTime() + 86400000).toISOString(),
+          to: new Date(
+            new Date('2026-05-10').getTime() + 86400000,
+          ).toISOString(),
         },
         { limit: 8, offset: 0 },
       ),
@@ -126,7 +138,10 @@ describe('AuditLog', () => {
   });
 
   it('advances pagination.offset on Next', async () => {
-    mockList.mockResolvedValue({ status: 'ok', data: { entries: ENTRIES, total: 20 } });
+    mockList.mockResolvedValue({
+      status: 'ok',
+      data: { entries: ENTRIES, total: 20 },
+    });
     render(<AuditLog />);
     // Wait for the initial load to RESOLVE, not merely for auditList to have been
     // called: the Next button is disabled until `total` is set (totalPages > 1),
@@ -140,18 +155,27 @@ describe('AuditLog', () => {
 
     fireEvent.click(nextBtn);
 
-    await waitFor(() => expect(mockList).toHaveBeenLastCalledWith(null, { limit: 8, offset: 8 }));
+    await waitFor(() =>
+      expect(mockList).toHaveBeenLastCalledWith(null, { limit: 8, offset: 8 }),
+    );
   });
 
   it('shows the load-error banner when auditList fails', async () => {
     mockList.mockResolvedValue({
       status: 'error',
-      error: { code: 'internal.database', message: 'db down', severity: 'fatal', retryable: true },
+      error: {
+        code: 'internal.database',
+        message: 'db down',
+        severity: 'fatal',
+        retryable: true,
+      },
     });
     render(<AuditLog />);
 
     await waitFor(() =>
-      expect(screen.getByText(/Could not load audit events/)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/Could not load audit events/),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -170,9 +194,14 @@ describe('AuditLog', () => {
             toState: null,
             actor: 'user',
             outcome: 'refused',
-            detail: 'edge (project, ready -> prepared) requires an approved FilesystemPlan',
+            detail:
+              'edge (project, ready -> prepared) requires an approved FilesystemPlan',
             detailCode: 'plan.required',
-            detailParams: { entityType: 'project', fromState: 'ready', toState: 'prepared' },
+            detailParams: {
+              entityType: 'project',
+              fromState: 'ready',
+              toState: 'prepared',
+            },
           },
           {
             id: 'audit-102',
@@ -184,7 +213,8 @@ describe('AuditLog', () => {
             toState: null,
             actor: 'user',
             outcome: 'refused',
-            detail: 'edge (project, prepared -> processing) requires reviewed provenance on 2 field(s)',
+            detail:
+              'edge (project, prepared -> processing) requires reviewed provenance on 2 field(s)',
             detailCode: 'provenance.unreviewed',
             detailParams: { count: '2' },
           },
@@ -226,15 +256,21 @@ describe('AuditLog', () => {
     render(<AuditLog />);
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
-    expect(screen.getByTitle(
-      'Transition ready → prepared for project requires an approved filesystem plan',
-    )).toBeInTheDocument();
-    expect(screen.getByTitle(
-      '2 fields require review before this transition',
-    )).toBeInTheDocument();
-    expect(screen.getByTitle('Target resolved from query “M 31”')).toBeInTheDocument();
+    expect(
+      screen.getByTitle(
+        'Transition ready → prepared for project requires an approved filesystem plan',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTitle('2 fields require review before this transition'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTitle('Target resolved from query “M 31”'),
+    ).toBeInTheDocument();
     // Fallback: no usable template → stored English detail, byte-identical.
-    expect(screen.getByTitle('some legacy free-form refusal reason')).toBeInTheDocument();
+    expect(
+      screen.getByTitle('some legacy free-form refusal reason'),
+    ).toBeInTheDocument();
   });
 
   it('exports via auditExport with the current filters and triggers a download', async () => {

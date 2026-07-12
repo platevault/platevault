@@ -33,7 +33,9 @@ const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeCheckResponse(overrides: Partial<PlanProtectionCheckResponse> = {}) {
+function makeCheckResponse(
+  overrides: Partial<PlanProtectionCheckResponse> = {},
+) {
   return ok<PlanProtectionCheckResponse>({
     planId: 'plan-1',
     hasProtectedItems: false,
@@ -60,10 +62,15 @@ describe('PlanProtectionGate', () => {
 
   it('shows no-protected-items message when plan is clean', async () => {
     mockCheck.mockResolvedValue(
-      makeCheckResponse({ hasProtectedItems: false, nonBlockingSummary: { normalCount: 3, unprotectedCount: 0 } }),
+      makeCheckResponse({
+        hasProtectedItems: false,
+        nonBlockingSummary: { normalCount: 3, unprotectedCount: 0 },
+      }),
     );
     const onChange = vi.fn();
-    render(<PlanProtectionGate planId="plan-1" onAcknowledgedChange={onChange} />);
+    render(
+      <PlanProtectionGate planId="plan-1" onAcknowledgedChange={onChange} />,
+    );
 
     await waitFor(() => {
       expect(screen.getByText(/No protected items/i)).toBeTruthy();
@@ -125,7 +132,9 @@ describe('PlanProtectionGate', () => {
         nonBlockingSummary: { normalCount: 0, unprotectedCount: 0 },
       }),
     );
-    render(<PlanProtectionGate planId="plan-1" onAcknowledgedChange={onChange} />);
+    render(
+      <PlanProtectionGate planId="plan-1" onAcknowledgedChange={onChange} />,
+    );
 
     await waitFor(() => screen.getByRole('button', { name: /Acknowledge/i }));
     fireEvent.click(screen.getByRole('button', { name: /Acknowledge/i }));
@@ -135,7 +144,13 @@ describe('PlanProtectionGate', () => {
       expect(screen.getByText('All acknowledged')).toBeTruthy();
     });
     // protectionPlanAcknowledged was called with correct args.
-    expect(mockAck).toHaveBeenCalledWith('plan-1', 'item-xyz', null, 'protected', 'Protected.');
+    expect(mockAck).toHaveBeenCalledWith(
+      'plan-1',
+      'item-xyz',
+      null,
+      'protected',
+      'Protected.',
+    );
     // onAcknowledgedChange called with true (all 1 items done).
     expect(onChange).toHaveBeenCalledWith(true);
   });

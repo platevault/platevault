@@ -20,7 +20,9 @@ vi.mock('@/bindings/index', () => ({
       status: 'ok',
       data: { usedBySessionIds: [], compatibleSessions: [] },
     }),
-    sessionsList: vi.fn().mockResolvedValue({ status: 'ok', data: { sources: [] } }),
+    sessionsList: vi
+      .fn()
+      .mockResolvedValue({ status: 'ok', data: { sources: [] } }),
   },
 }));
 
@@ -28,7 +30,13 @@ function makeMaster(): CalibrationMaster {
   return {
     id: 'm-1',
     kind: 'dark',
-    fingerprint: { camera: 'ASI2600MM', exposureS: 300, tempC: -10, gain: 100, binning: '1x1' },
+    fingerprint: {
+      camera: 'ASI2600MM',
+      exposureS: 300,
+      tempC: -10,
+      gain: 100,
+      binning: '1x1',
+    },
     sourceSessionId: 'cal-ses-001',
     createdAt: '2026-01-01T00:00:00Z',
     ageDays: 30,
@@ -45,13 +53,32 @@ afterEach(() => {
 
 describe('MasterDetail — Reveal label', () => {
   it('renders the Linux-generic label under jsdom (no platform)', () => {
-    render(<MasterDetail master={makeMaster()} prefillSuggestion={false} agingThresholdDays={90} />);
-    expect(screen.getByRole('button', { name: 'Show in file manager' })).toBeInTheDocument();
+    render(
+      <MasterDetail
+        master={makeMaster()}
+        prefillSuggestion={false}
+        agingThresholdDays={90}
+      />,
+    );
+    expect(
+      screen.getByRole('button', { name: 'Show in file manager' }),
+    ).toBeInTheDocument();
   });
 
   it('renders the Windows label when the platform reports Win32', () => {
-    Object.defineProperty(window.navigator, 'platform', { value: 'Win32', configurable: true });
-    render(<MasterDetail master={makeMaster()} prefillSuggestion={false} agingThresholdDays={90} />);
-    expect(screen.getByRole('button', { name: 'Show in File Explorer' })).toBeInTheDocument();
+    Object.defineProperty(window.navigator, 'platform', {
+      value: 'Win32',
+      configurable: true,
+    });
+    render(
+      <MasterDetail
+        master={makeMaster()}
+        prefillSuggestion={false}
+        agingThresholdDays={90}
+      />,
+    );
+    expect(
+      screen.getByRole('button', { name: 'Show in File Explorer' }),
+    ).toBeInTheDocument();
   });
 });

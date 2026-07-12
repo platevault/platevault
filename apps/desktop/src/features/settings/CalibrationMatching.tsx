@@ -42,13 +42,21 @@ const DEFAULTS = {
 
 export function CalibrationMatching(_props: CalibrationMatchingProps) {
   // ── Hard-required field toggles ────────────────────────────────────────────
-  const [requireCamera, setRequireCamera] = useState(DEFAULTS.requireSameCamera);
-  const [requireBinning, setRequireBinning] = useState(DEFAULTS.requireSameBinning);
+  const [requireCamera, setRequireCamera] = useState(
+    DEFAULTS.requireSameCamera,
+  );
+  const [requireBinning, setRequireBinning] = useState(
+    DEFAULTS.requireSameBinning,
+  );
   const [requireGain, setRequireGain] = useState(DEFAULTS.requireSameGain);
-  const [requireOffset, setRequireOffset] = useState(DEFAULTS.requireSameOffset);
+  const [requireOffset, setRequireOffset] = useState(
+    DEFAULTS.requireSameOffset,
+  );
 
   // ── Soft-tolerance inputs ──────────────────────────────────────────────────
-  const [tempTolerance, setTempTolerance] = useState<number>(DEFAULTS.temperatureToleranceC);
+  const [tempTolerance, setTempTolerance] = useState<number>(
+    DEFAULTS.temperatureToleranceC,
+  );
   const [agingLimit, setAgingLimit] = useState<number>(DEFAULTS.agingLimitDays);
 
   // Guards against the initial calibrationTolerancesGet() fetch resolving
@@ -155,16 +163,18 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
   return (
     <SettingsSection
       title={m.settings_calmatch_title()}
-      action={
-        <RestoreDefaultsBtn onRestore={handleRestoreCalibration} />
-      }
+      action={<RestoreDefaultsBtn onRestore={handleRestoreCalibration} />}
     >
       <table className="alm-table alm-calmatch__table">
         <thead>
           <tr>
             <th>{m.settings_calmatch_field()}</th>
-            <th className="alm-calmatch__col-required">{m.settings_calmatch_required()}</th>
-            <th className="alm-calmatch__col-tolerance">{m.settings_calmatch_tolerance()}</th>
+            <th className="alm-calmatch__col-required">
+              {m.settings_calmatch_required()}
+            </th>
+            <th className="alm-calmatch__col-tolerance">
+              {m.settings_calmatch_tolerance()}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -222,7 +232,9 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
                   onChange={handleTempChange}
                   aria-label={m.settings_calmatch_sensor_temp_aria()}
                 />
-                <span className="alm-calmatch__unit">{m.settings_calmatch_unit_c()}</span>
+                <span className="alm-calmatch__unit">
+                  {m.settings_calmatch_unit_c()}
+                </span>
               </span>
             </td>
           </tr>
@@ -244,16 +256,16 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
                   onChange={handleAgingChange}
                   aria-label={m.settings_calmatch_dark_bias_age_aria()}
                 />
-                <span className="alm-calmatch__unit">{m.settings_calmatch_unit_d()}</span>
+                <span className="alm-calmatch__unit">
+                  {m.settings_calmatch_unit_d()}
+                </span>
               </span>
             </td>
           </tr>
         </tbody>
       </table>
 
-      <p className="alm-calmatch__help">
-        {m.settings_calmatch_help()}
-      </p>
+      <p className="alm-calmatch__help">{m.settings_calmatch_help()}</p>
     </SettingsSection>
   );
 }

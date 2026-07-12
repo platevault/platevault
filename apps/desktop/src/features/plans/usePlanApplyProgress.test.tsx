@@ -16,7 +16,9 @@ import { usePlanApplyProgress } from './usePlanApplyProgress';
 // setup removes it so `isTauriRuntime()` is false. Shim only that one method,
 // scoped to this file and torn down after each test.
 type TauriWindow = Window & {
-  __TAURI_INTERNALS__?: { transformCallback: (cb: (msg: unknown) => void) => number };
+  __TAURI_INTERNALS__?: {
+    transformCallback: (cb: (msg: unknown) => void) => number;
+  };
 };
 
 beforeEach(() => {
@@ -31,8 +33,18 @@ afterEach(() => {
   delete (window as TauriWindow).__TAURI_INTERNALS__;
 });
 
-function mk(sequence: number, eventType: OperationEvent['eventType'], payload: unknown): OperationEvent {
-  return { contractVersion: '1.0.0', operationId: 'run-1', eventType, sequence, payload };
+function mk(
+  sequence: number,
+  eventType: OperationEvent['eventType'],
+  payload: unknown,
+): OperationEvent {
+  return {
+    contractVersion: '1.0.0',
+    operationId: 'run-1',
+    eventType,
+    sequence,
+    payload,
+  };
 }
 
 describe('usePlanApplyProgress', () => {
@@ -41,22 +53,43 @@ describe('usePlanApplyProgress', () => {
       if (cmd !== 'plans_apply_real') return Promise.resolve(null);
       const channel = (args as { onEvent?: Channel<OperationEvent> }).onEvent;
       // Drive the lifecycle: 3-item plan, 2 applied + 1 failed, then completed.
-      channel?.onmessage?.(mk(0, 'item_started', { runId: 'run-1', itemsTotal: 3 }));
-      channel?.onmessage?.(mk(1, 'item_applied', { runId: 'run-1', itemId: 'a' }));
-      channel?.onmessage?.(mk(2, 'item_applied', { runId: 'run-1', itemId: 'b' }));
-      channel?.onmessage?.(mk(3, 'item_failed', { runId: 'run-1', itemId: 'c' }));
-      channel?.onmessage?.(mk(4, 'completed', { runId: 'run-1', terminalState: 'completed' }));
-      return Promise.resolve({ planId: 'plan-1', runId: 'run-1', newState: 'applied' });
+      channel?.onmessage?.(
+        mk(0, 'item_started', { runId: 'run-1', itemsTotal: 3 }),
+      );
+      channel?.onmessage?.(
+        mk(1, 'item_applied', { runId: 'run-1', itemId: 'a' }),
+      );
+      channel?.onmessage?.(
+        mk(2, 'item_applied', { runId: 'run-1', itemId: 'b' }),
+      );
+      channel?.onmessage?.(
+        mk(3, 'item_failed', { runId: 'run-1', itemId: 'c' }),
+      );
+      channel?.onmessage?.(
+        mk(4, 'completed', { runId: 'run-1', terminalState: 'completed' }),
+      );
+      return Promise.resolve({
+        planId: 'plan-1',
+        runId: 'run-1',
+        newState: 'applied',
+      });
     });
 
     const { result } = renderHook(() => usePlanApplyProgress());
 
     let response: Awaited<ReturnType<typeof result.current.run>> = null;
     await act(async () => {
-      response = await result.current.run({ id: 'plan-1', approvalToken: 'tok' });
+      response = await result.current.run({
+        id: 'plan-1',
+        approvalToken: 'tok',
+      });
     });
 
-    expect(response).toEqual({ planId: 'plan-1', runId: 'run-1', newState: 'applied' });
+    expect(response).toEqual({
+      planId: 'plan-1',
+      runId: 'run-1',
+      newState: 'applied',
+    });
 
     await waitFor(() => {
       expect(result.current.progress.terminal).toBe('completed');
@@ -76,7 +109,11 @@ describe('usePlanApplyProgress', () => {
 
     const { result } = renderHook(() => usePlanApplyProgress());
 
-    let response: Awaited<ReturnType<typeof result.current.run>> = { planId: '', runId: '', newState: '' };
+    let response: Awaited<ReturnType<typeof result.current.run>> = {
+      planId: '',
+      runId: '',
+      newState: '',
+    };
     await act(async () => {
       response = await result.current.run({ id: 'plan-2' });
     });

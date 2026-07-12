@@ -114,8 +114,12 @@ describe('computeNightObservability — SC-002 rise/set plausibility', () => {
   });
 
   it('computing rise/set does not throw for either circumpolar or never-rising targets', () => {
-    expect(() => computeNightObservability(0, 85, AMSTERDAM, WINTER_NIGHT_MS)).not.toThrow();
-    expect(() => computeNightObservability(0, -80, AMSTERDAM, WINTER_NIGHT_MS)).not.toThrow();
+    expect(() =>
+      computeNightObservability(0, 85, AMSTERDAM, WINTER_NIGHT_MS),
+    ).not.toThrow();
+    expect(() =>
+      computeNightObservability(0, -80, AMSTERDAM, WINTER_NIGHT_MS),
+    ).not.toThrow();
   });
 });
 
@@ -176,13 +180,21 @@ describe('computeNightObservability — US5 Moon time-series (T027/T031/T032)', 
     const high = computeNightObservability(180, 0, raised, WINTER_NIGHT_MS);
     const sumMs = (windows: typeof low.moonUpWindows) =>
       windows.reduce((acc, w) => acc + (w.endMs - w.startMs), 0);
-    expect(sumMs(high.moonUpWindows)).toBeLessThanOrEqual(sumMs(low.moonUpWindows));
+    expect(sumMs(high.moonUpWindows)).toBeLessThanOrEqual(
+      sumMs(low.moonUpWindows),
+    );
   });
 });
 
 describe('computeNightObservability — includeMoonGeometry=false fast path (CI perf FIX)', () => {
   it('skips the Moon time-series (empty samples/windows, zeroed reference state)', () => {
-    const night = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS, false);
+    const night = computeNightObservability(
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+      false,
+    );
     expect(night.moonSamples).toEqual([]);
     expect(night.moonUpWindows).toEqual([]);
     expect(night.moonIllumination).toBe(0);
@@ -190,8 +202,20 @@ describe('computeNightObservability — includeMoonGeometry=false fast path (CI 
   });
 
   it('still computes the target-only fields identically to the full call (samples/transit/rise/set/darkWindow)', () => {
-    const full = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS, true);
-    const fast = computeNightObservability(180, 0, AMSTERDAM, WINTER_NIGHT_MS, false);
+    const full = computeNightObservability(
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+      true,
+    );
+    const fast = computeNightObservability(
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+      false,
+    );
     expect(fast.samples).toEqual(full.samples);
     expect(fast.transit).toEqual(full.transit);
     expect(fast.rise).toEqual(full.rise);
@@ -231,7 +255,12 @@ describe('target↔Moon separation vs an independent ephemeris (SC-009, reviewer
   const MOON_ASTROMETRIC_DEC_DEG = -27.26402;
 
   /** Plane spherical-trig separation (law of cosines) — independent of astronomy-engine. */
-  function refSeparationDeg(ra1: number, dec1: number, ra2: number, dec2: number): number {
+  function refSeparationDeg(
+    ra1: number,
+    dec1: number,
+    ra2: number,
+    dec2: number,
+  ): number {
     const d2r = Math.PI / 180;
     const cosSep =
       Math.sin(dec1 * d2r) * Math.sin(dec2 * d2r) +
@@ -244,8 +273,18 @@ describe('target↔Moon separation vs an independent ephemeris (SC-009, reviewer
     // Moon's ~0.5° own angular size, so sub-degree agreement is meaningful).
     const M42_RA = 83.8221;
     const M42_DEC = -5.3911;
-    const expected = refSeparationDeg(M42_RA, M42_DEC, MOON_ASTROMETRIC_RA_DEG, MOON_ASTROMETRIC_DEC_DEG);
-    const actual = angularSeparationFromMoonDeg(M42_RA, M42_DEC, AMSTERDAM, REFERENCE_INSTANT_MS);
+    const expected = refSeparationDeg(
+      M42_RA,
+      M42_DEC,
+      MOON_ASTROMETRIC_RA_DEG,
+      MOON_ASTROMETRIC_DEC_DEG,
+    );
+    const actual = angularSeparationFromMoonDeg(
+      M42_RA,
+      M42_DEC,
+      AMSTERDAM,
+      REFERENCE_INSTANT_MS,
+    );
     // `angularSeparationFromMoonDeg` computes topocentric (parallax-corrected
     // for the Moon's ~57' horizontal parallax) rather than geocentric, so a
     // sub-degree gap vs. the geocentric Horizons reference is expected (the
@@ -255,7 +294,7 @@ describe('target↔Moon separation vs an independent ephemeris (SC-009, reviewer
     expect(Math.abs(actual - expected)).toBeLessThan(0.5);
   });
 
-  it("the T027 per-sample separation formula (targetUnitVector × GeoVector, geocentric) matches Horizons to 0.1°", () => {
+  it('the T027 per-sample separation formula (targetUnitVector × GeoVector, geocentric) matches Horizons to 0.1°', () => {
     // This exercises the EXACT frame/formula `computeNightObservability`'s
     // `moonSamples[].separationDeg` uses (no topocentric parallax, unlike
     // `angularSeparationFromMoonDeg` above) — see the module doc's SC-013
@@ -263,9 +302,18 @@ describe('target↔Moon separation vs an independent ephemeris (SC-009, reviewer
     // `GeoVector(Body.Moon, date, true)`.
     const M31_RA = 10.6847;
     const M31_DEC = 41.269;
-    const expected = refSeparationDeg(M31_RA, M31_DEC, MOON_ASTROMETRIC_RA_DEG, MOON_ASTROMETRIC_DEC_DEG);
+    const expected = refSeparationDeg(
+      M31_RA,
+      M31_DEC,
+      MOON_ASTROMETRIC_RA_DEG,
+      MOON_ASTROMETRIC_DEC_DEG,
+    );
     const targetVec = targetUnitVector(M31_RA, M31_DEC);
-    const moonGeoVec = GeoVector(Body.Moon, new Date(REFERENCE_INSTANT_MS), true);
+    const moonGeoVec = GeoVector(
+      Body.Moon,
+      new Date(REFERENCE_INSTANT_MS),
+      true,
+    );
     const actual = angleBetweenDeg(targetVec, moonGeoVec);
     expect(Math.abs(actual - expected)).toBeLessThan(0.1);
   });
@@ -287,7 +335,11 @@ describe('computeNightObservability — US4 twilight + horizon (T031/T032/T033)'
 
   it('a high-latitude summer night has no dark window (SC-008, no fabrication)', () => {
     // Tromsø-like site (69.6N) at midsummer: astronomical twilight never reached.
-    const highLat: ObserverSite = { ...AMSTERDAM, latitudeDeg: 69.6, longitudeDeg: 18.9 };
+    const highLat: ObserverSite = {
+      ...AMSTERDAM,
+      latitudeDeg: 69.6,
+      longitudeDeg: 18.9,
+    };
     const summer = Date.UTC(2026, 5, 21, 12, 0, 0);
     const night = computeNightObservability(180, 0, highLat, summer);
     expect(night.darkWindow).toBeNull();
@@ -296,7 +348,12 @@ describe('computeNightObservability — US4 twilight + horizon (T031/T032/T033)'
 
 describe('angularSeparationFromMoonDeg', () => {
   it('returns a value in [0, 180] degrees', () => {
-    const deg = angularSeparationFromMoonDeg(180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+    const deg = angularSeparationFromMoonDeg(
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+    );
     expect(deg).toBeGreaterThanOrEqual(0);
     expect(deg).toBeLessThanOrEqual(180);
   });

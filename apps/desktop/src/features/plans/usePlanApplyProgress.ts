@@ -92,7 +92,10 @@ export function usePlanApplyProgress() {
   const reset = useCallback(() => setProgress(IDLE), []);
 
   const run = useCallback(
-    async (args: { id: string; approvalToken?: string }): Promise<PlanApplyResponse | null> => {
+    async (args: {
+      id: string;
+      approvalToken?: string;
+    }): Promise<PlanApplyResponse | null> => {
       setProgress({ ...IDLE, running: true });
       try {
         const response = await applyPlan({
@@ -126,7 +129,10 @@ export function usePlanApplyProgress() {
                   // full, or a stale source file. The run has halted; it
                   // stays `running` (busy) until cancelled or resumed.
                   next.paused = true;
-                  next.pauseReason = readStringField(event.payload, 'pauseReason');
+                  next.pauseReason = readStringField(
+                    event.payload,
+                    'pauseReason',
+                  );
                   const runId = readStringField(event.payload, 'runId');
                   if (runId != null) next.runId = runId;
                   break;
@@ -147,10 +153,16 @@ export function usePlanApplyProgress() {
           },
         });
         // Ensure the running flag clears even if no terminal event arrived.
-        setProgress((prev) => (prev.running ? { ...prev, running: false } : prev));
+        setProgress((prev) =>
+          prev.running ? { ...prev, running: false } : prev,
+        );
         return response;
       } catch {
-        setProgress((prev) => ({ ...prev, running: false, terminal: 'failed' }));
+        setProgress((prev) => ({
+          ...prev,
+          running: false,
+          terminal: 'failed',
+        }));
         return null;
       }
     },

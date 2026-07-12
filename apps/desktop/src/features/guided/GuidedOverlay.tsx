@@ -78,7 +78,10 @@ export function GuidedOverlay({ guidedState, onDismiss }: GuidedOverlayProps) {
 
   // `stepIndex` — derived from the current step id position in STEP_ORDER.
   const stepIndex = currentStep
-    ? Math.max(0, STEP_ORDER.indexOf(currentStep as (typeof STEP_ORDER)[number]))
+    ? Math.max(
+        0,
+        STEP_ORDER.indexOf(currentStep as (typeof STEP_ORDER)[number]),
+      )
     : 0;
 
   // onEvent: handle tour events in react-joyride 3.1 (replaces v2 `callback`).

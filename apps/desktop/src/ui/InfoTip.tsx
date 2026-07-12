@@ -17,7 +17,11 @@ export interface InfoTipProps {
  * The visible tooltip is CSS-only (`::after` reads `data-tip`); the same text
  * is mirrored into `aria-label` so screen readers get it without a hover.
  */
-export function InfoTip({ tip, label = m.infotip_more_information(), className }: InfoTipProps) {
+export function InfoTip({
+  tip,
+  label = m.infotip_more_information(),
+  className,
+}: InfoTipProps) {
   const text = typeof tip === 'string' ? tip : undefined;
   const cls = ['alm-info-tip', className].filter(Boolean).join(' ');
   return (

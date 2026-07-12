@@ -7,7 +7,8 @@ export interface SegControlOption {
   label: string;
 }
 
-export interface SegControlProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
+export interface SegControlProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
   options: ReadonlyArray<SegControlOption>;
   value: string;
   onChange: (value: string) => void;
@@ -17,18 +18,26 @@ export interface SegControlProps extends Omit<HTMLAttributes<HTMLDivElement>, 'o
 }
 
 export const SegControl = forwardRef<HTMLDivElement, SegControlProps>(
-  function SegControl({ options, value, onChange, danger, dangerValue, className, ...rest }, ref) {
+  function SegControl(
+    { options, value, onChange, danger, dangerValue, className, ...rest },
+    ref,
+  ) {
     const cls = ['alm-seg', className].filter(Boolean).join(' ');
     return (
       <div ref={ref} className={cls} {...rest}>
-        {options.map(o => (
+        {options.map((o) => (
           <button
             key={o.value}
             className={[
               'alm-seg__btn',
               value === o.value && 'alm-seg__btn--active',
-              danger && dangerValue != null && o.value === dangerValue && 'alm-seg__btn--danger',
-            ].filter(Boolean).join(' ')}
+              danger &&
+                dangerValue != null &&
+                o.value === dangerValue &&
+                'alm-seg__btn--danger',
+            ]
+              .filter(Boolean)
+              .join(' ')}
             onClick={() => onChange(o.value)}
           >
             {o.label}
@@ -36,6 +45,6 @@ export const SegControl = forwardRef<HTMLDivElement, SegControlProps>(
         ))}
       </div>
     );
-  }
+  },
 );
 SegControl.displayName = 'SegControl';

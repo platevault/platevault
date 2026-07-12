@@ -11,5 +11,9 @@ export interface DetailPaneProps {
 }
 
 export function DetailPane({ children, fill }: DetailPaneProps) {
-  return <div className={`alm-detail${fill ? ' alm-detail--fill' : ''}`}>{children}</div>;
+  return (
+    <div className={`alm-detail${fill ? ' alm-detail--fill' : ''}`}>
+      {children}
+    </div>
+  );
 }

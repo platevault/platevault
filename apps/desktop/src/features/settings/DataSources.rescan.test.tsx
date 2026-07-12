@@ -27,7 +27,9 @@ import { queryClient } from '@/data/queryClient';
 import type { LibraryRoot } from '@/bindings/types';
 
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -93,7 +95,10 @@ beforeEach(() => {
 describe('DataSources — Rescan', () => {
   it('calls the real inbox.scan_folder command and reloads roots on completion', async () => {
     mockRootsList
-      .mockResolvedValueOnce({ status: 'ok', data: [makeRoot({ lastScanned: null })] })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: [makeRoot({ lastScanned: null })],
+      })
       .mockResolvedValueOnce({
         status: 'ok',
         data: [makeRoot({ lastScanned: '2026-07-03T12:00:00Z' })],
@@ -137,13 +142,17 @@ describe('DataSources — Rescan', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Rescan$/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Rescanning/i })).toBeDisabled();
+      expect(
+        screen.getByRole('button', { name: /Rescanning/i }),
+      ).toBeDisabled();
     });
 
     resolveScan?.({ status: 'ok', data: { items: [] } });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^Rescan$/i })).not.toBeDisabled();
+      expect(
+        screen.getByRole('button', { name: /^Rescan$/i }),
+      ).not.toBeDisabled();
     });
   });
 

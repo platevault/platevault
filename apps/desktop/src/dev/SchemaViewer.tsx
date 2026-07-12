@@ -77,9 +77,7 @@ export function SchemaViewer({
         <div className="alm-dev-schema__header">
           <div>
             <span className="alm-dev-schema__name">{contractName}</span>
-            <span className="alm-dev-schema__version">
-              v{contractVersion}
-            </span>
+            <span className="alm-dev-schema__version">v{contractVersion}</span>
           </div>
           <div className="alm-dev-schema__actions">
             <button
@@ -118,14 +116,9 @@ export function SchemaViewer({
               </p>
             </div>
           ) : content === null ? (
-            <div className="alm-dev-schema__loading">
-              Loading schema…
-            </div>
+            <div className="alm-dev-schema__loading">Loading schema…</div>
           ) : (
-            <pre
-              data-testid="schema-content"
-              className="alm-dev-schema__pre"
-            >
+            <pre data-testid="schema-content" className="alm-dev-schema__pre">
               {content}
             </pre>
           )}

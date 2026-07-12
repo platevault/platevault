@@ -14,7 +14,13 @@
  * 9. Byte counter reflects current content size.
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -46,7 +52,9 @@ import { MAX_NOTE_BYTES } from './manifests';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function renderNotes(
-  props: Partial<React.ComponentProps<typeof ProjectNotesSection>> & { projectId?: string } = {},
+  props: Partial<React.ComponentProps<typeof ProjectNotesSection>> & {
+    projectId?: string;
+  } = {},
 ) {
   return render(
     <ProjectNotesSection
@@ -63,14 +71,22 @@ describe('ProjectNotesSection', () => {
   beforeEach(() => {
     mockSaveNote.mockReset();
     mockGetProjectNote.mockReset();
-    mockGetProjectNote.mockResolvedValue({ projectId: 'proj-test', content: null });
+    mockGetProjectNote.mockResolvedValue({
+      projectId: 'proj-test',
+      content: null,
+    });
   });
 
   it('10. self-fetches the persisted note when no initialContent is provided (SC-002)', async () => {
-    mockGetProjectNote.mockResolvedValue({ projectId: 'proj-test', content: 'Persisted on reload' });
+    mockGetProjectNote.mockResolvedValue({
+      projectId: 'proj-test',
+      content: 'Persisted on reload',
+    });
     renderNotes({}); // no initialContent — drawer mounts the section without a prop
     await waitFor(() =>
-      expect(screen.getByTestId('notes-body')).toHaveTextContent('Persisted on reload'),
+      expect(screen.getByTestId('notes-body')).toHaveTextContent(
+        'Persisted on reload',
+      ),
     );
     expect(mockGetProjectNote).toHaveBeenCalledWith({ projectId: 'proj-test' });
   });
@@ -82,7 +98,9 @@ describe('ProjectNotesSection', () => {
 
   it('2. renders existing notes body', () => {
     renderNotes({ initialContent: 'My telescope setup' });
-    expect(screen.getByTestId('notes-body')).toHaveTextContent('My telescope setup');
+    expect(screen.getByTestId('notes-body')).toHaveTextContent(
+      'My telescope setup',
+    );
   });
 
   it('3. shows Edit button when not read-only', () => {
@@ -92,7 +110,9 @@ describe('ProjectNotesSection', () => {
 
   it('4. hides Edit button when readOnly=true', () => {
     renderNotes({ initialContent: 'Archived notes', readOnly: true });
-    expect(screen.queryByRole('button', { name: /edit/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /edit/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('5. opens textarea on Edit click', async () => {
@@ -139,7 +159,9 @@ describe('ProjectNotesSection', () => {
     });
     const textarea = screen.getByTestId('notes-textarea');
     // Set content to 1 byte over the limit.
-    fireEvent.change(textarea, { target: { value: 'x'.repeat(MAX_NOTE_BYTES + 1) } });
+    fireEvent.change(textarea, {
+      target: { value: 'x'.repeat(MAX_NOTE_BYTES + 1) },
+    });
     // Save button should be disabled (overLimit guard).
     const saveBtn = screen.getByRole('button', { name: /save/i });
     expect(saveBtn).toBeDisabled();

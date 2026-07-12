@@ -11,11 +11,23 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { Toggle, SegControl, Pill, Banner } from '@/ui';
 import { getSettings } from './settingsIpc';
-import { CLEANUP_TYPES, CLEANUP_STAGE_ORDER, type CleanupTypeFixture } from '@/data/fixtures/settings';
+import {
+  CLEANUP_TYPES,
+  CLEANUP_STAGE_ORDER,
+  type CleanupTypeFixture,
+} from '@/data/fixtures/settings';
 import { m } from '@/lib/i18n';
-import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
+import {
+  SettingsSection,
+  SettingsRow,
+  RestoreDefaultsBtn,
+} from './SettingsKit';
 
-const CLEANUP_KEYS = ['blockPermanentDelete', 'defaultProtection', 'protectedCategories'];
+const CLEANUP_KEYS = [
+  'blockPermanentDelete',
+  'defaultProtection',
+  'protectedCategories',
+];
 
 type CleanupAction = CleanupTypeFixture['action'];
 type DefaultProtection = 'protected' | 'normal' | 'unprotected';
@@ -30,7 +42,9 @@ function defaultActions(): Record<number, CleanupAction> {
 }
 
 /** Parse the `cleanupTypeOverrides` backend value into the row-id-keyed shape. */
-function parseCleanupTypeOverrides(value: unknown): Record<number, CleanupAction> {
+function parseCleanupTypeOverrides(
+  value: unknown,
+): Record<number, CleanupAction> {
   const init = defaultActions();
   if (value && typeof value === 'object') {
     const overrides = value as Record<string, string>;
@@ -45,7 +59,9 @@ function parseCleanupTypeOverrides(value: unknown): Record<number, CleanupAction
 }
 
 /** Serialize the row-id-keyed actions map into the backend's string-keyed shape. */
-function serializeCleanupTypeOverrides(actions: Record<number, CleanupAction>): Record<string, string> {
+function serializeCleanupTypeOverrides(
+  actions: Record<number, CleanupAction>,
+): Record<string, string> {
   const serialisable: Record<string, string> = {};
   for (const [id, action] of Object.entries(actions)) {
     serialisable[id] = action;
@@ -60,9 +76,11 @@ interface CleanupProps {
 export function Cleanup({ save }: CleanupProps) {
   // ── spec 018 owned state ─────────────────────────────────────────────────
   const [blockPermanentDelete, setBlockPermanentDelete] = useState(true);
-  const [defaultProtection, setDefaultProtection] = useState<DefaultProtection>('protected');
+  const [defaultProtection, setDefaultProtection] =
+    useState<DefaultProtection>('protected');
   // ── spec 051 US3: per-type action overrides, now database-backed ─────────
-  const [actions, setActions] = useState<Record<number, CleanupAction>>(defaultActions);
+  const [actions, setActions] =
+    useState<Record<number, CleanupAction>>(defaultActions);
 
   const applyValues = (vals: Record<string, unknown>) => {
     if (typeof vals?.blockPermanentDelete === 'boolean') {
@@ -97,7 +115,7 @@ export function Cleanup({ save }: CleanupProps) {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Per-type action table — database-backed (spec 051 US3, T023) ─────────
@@ -105,7 +123,9 @@ export function Cleanup({ save }: CleanupProps) {
     editedRef.current = true;
     setActions((prev) => {
       const next = { ...prev, [id]: action as CleanupAction };
-      save('cleanup', { cleanupTypeOverrides: serializeCleanupTypeOverrides(next) });
+      save('cleanup', {
+        cleanupTypeOverrides: serializeCleanupTypeOverrides(next),
+      });
       return next;
     });
   };
@@ -157,9 +177,15 @@ export function Cleanup({ save }: CleanupProps) {
               save('cleanup', { defaultProtection: v });
             }}
           >
-            <option value="protected">{m.settings_cleanup_protection_protected()}</option>
-            <option value="normal">{m.settings_cleanup_protection_normal()}</option>
-            <option value="unprotected">{m.settings_cleanup_protection_unprotected()}</option>
+            <option value="protected">
+              {m.settings_cleanup_protection_protected()}
+            </option>
+            <option value="normal">
+              {m.settings_cleanup_protection_normal()}
+            </option>
+            <option value="unprotected">
+              {m.settings_cleanup_protection_unprotected()}
+            </option>
           </select>
         </SettingsRow>
       </SettingsSection>
@@ -176,7 +202,9 @@ export function Cleanup({ save }: CleanupProps) {
           <thead>
             <tr>
               <th>{m.settings_cleanup_col_datatype()}</th>
-              <th className="alm-cleanup__action-col">{m.settings_cleanup_col_action()}</th>
+              <th className="alm-cleanup__action-col">
+                {m.settings_cleanup_col_action()}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -185,34 +213,47 @@ export function Cleanup({ save }: CleanupProps) {
                 <tr className="alm-cleanup__group-row">
                   <td colSpan={2}>{stage}</td>
                 </tr>
-                {CLEANUP_TYPES.filter((row) => row.stage === stage).map((row) => {
-                  const current = actions[row.id] ?? row.action;
-                  return (
-                    <tr key={row.id}>
-                      <td>
-                        <span className="alm-cleanup__type-cell">
-                          {row.type}
-                          {row.warnOnChange && (
-                            <Pill variant="neutral">{m.settings_cleanup_protection_protected()}</Pill>
-                          )}
-                        </span>
-                      </td>
-                      <td>
-                        <SegControl
-                          options={[
-                            { value: 'Keep', label: m.settings_cleanup_action_keep() },
-                            { value: 'Archive', label: m.settings_cleanup_action_archive() },
-                            { value: 'Delete', label: m.settings_cleanup_action_delete() },
-                          ]}
-                          value={current}
-                          onChange={(v) => handleTableChange(row.id, v)}
-                          danger
-                          dangerValue="Delete"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
+                {CLEANUP_TYPES.filter((row) => row.stage === stage).map(
+                  (row) => {
+                    const current = actions[row.id] ?? row.action;
+                    return (
+                      <tr key={row.id}>
+                        <td>
+                          <span className="alm-cleanup__type-cell">
+                            {row.type}
+                            {row.warnOnChange && (
+                              <Pill variant="neutral">
+                                {m.settings_cleanup_protection_protected()}
+                              </Pill>
+                            )}
+                          </span>
+                        </td>
+                        <td>
+                          <SegControl
+                            options={[
+                              {
+                                value: 'Keep',
+                                label: m.settings_cleanup_action_keep(),
+                              },
+                              {
+                                value: 'Archive',
+                                label: m.settings_cleanup_action_archive(),
+                              },
+                              {
+                                value: 'Delete',
+                                label: m.settings_cleanup_action_delete(),
+                              },
+                            ]}
+                            value={current}
+                            onChange={(v) => handleTableChange(row.id, v)}
+                            danger
+                            dangerValue="Delete"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  },
+                )}
               </Fragment>
             ))}
           </tbody>

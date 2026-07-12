@@ -17,7 +17,17 @@
  */
 
 import { useState } from 'react';
-import { Section, Pill, Banner, Table, EmptyState, KV, Lock, RadioGroup, Btn } from '@/ui';
+import {
+  Section,
+  Pill,
+  Banner,
+  Table,
+  EmptyState,
+  KV,
+  Lock,
+  RadioGroup,
+  Btn,
+} from '@/ui';
 import type { PillVariant } from '@/ui';
 import { m } from '@/lib/i18n';
 import { formatBytes } from '@/lib/format';
@@ -57,7 +67,10 @@ export interface OutputsSectionProps {
   defaultOpen?: boolean;
 }
 
-export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSectionProps) {
+export function OutputsSection({
+  outputs = [],
+  defaultOpen = true,
+}: OutputsSectionProps) {
   const columns = [
     { key: 'name', label: m.projects_col_output() },
     { key: 'format', label: m.projects_col_format() },
@@ -66,7 +79,9 @@ export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSect
 
   const rows = outputs.map((o) => ({
     name: <span className="alm-project-detail__output-name">{o.name}</span>,
-    format: <span className="alm-project-detail__output-format">{o.format}</span>,
+    format: (
+      <span className="alm-project-detail__output-format">{o.format}</span>
+    ),
     verified: (
       <Pill variant={verifiedPillVariant(o.verified)}>
         {o.verified ? m.projects_verified() : m.projects_unverified()}
@@ -75,12 +90,15 @@ export function OutputsSection({ outputs = [], defaultOpen = true }: OutputsSect
   }));
 
   return (
-    <Section title={m.projects_outputs_title()} count={outputs.length || undefined} defaultOpen={defaultOpen} data-testid="project-outputs">
+    <Section
+      title={m.projects_outputs_title()}
+      count={outputs.length || undefined}
+      defaultOpen={defaultOpen}
+      data-testid="project-outputs"
+    >
       {outputs.length === 0 ? (
         // STUB: no accepted-output backend model yet — teaching empty state.
-        <EmptyState
-          title={m.projects_outputs_empty_title()}
-        />
+        <EmptyState title={m.projects_outputs_empty_title()} />
       ) : (
         <div className="alm-project-detail__outputs">
           <Table columns={columns} rows={rows} />
@@ -171,10 +189,14 @@ export interface CleanupSectionProps {
   defaultOpen?: boolean;
 }
 
-export function CleanupSection({ projectId, defaultOpen = true }: CleanupSectionProps) {
+export function CleanupSection({
+  projectId,
+  defaultOpen = true,
+}: CleanupSectionProps) {
   const scan = useCleanupScan();
   const generate = useGenerateCleanupPlan();
-  const [destination, setDestination] = useState<DestructiveDestinationChoice>('archive');
+  const [destination, setDestination] =
+    useState<DestructiveDestinationChoice>('archive');
   const [reviewPlanId, setReviewPlanId] = useState<string | null>(null);
 
   const result = scan.data;
@@ -187,7 +209,9 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
       {
         onSuccess: (res) => {
           addToast({
-            message: m.projects_cleanup_plan_created_toast({ count: res.itemCount }),
+            message: m.projects_cleanup_plan_created_toast({
+              count: res.itemCount,
+            }),
             variant: 'info',
           });
           setReviewPlanId(res.planId);
@@ -208,7 +232,9 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
         <div className="alm-project-detail__cleanup-preview">
           <span className="alm-project-detail__cleanup-note">
             {result
-              ? m.projects_cleanup_candidate_count({ count: result.candidates.length })
+              ? m.projects_cleanup_candidate_count({
+                  count: result.candidates.length,
+                })
               : m.projects_cleanup_scan_prompt()}
           </span>
         </div>
@@ -227,7 +253,10 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
             : m.projects_cleanup_scan_btn()}
         </Btn>
         {hasCandidates && (
-          <span className="alm-cleanup-scan__reclaimable" data-testid="cleanup-reclaimable">
+          <span
+            className="alm-cleanup-scan__reclaimable"
+            data-testid="cleanup-reclaimable"
+          >
             {m.projects_cleanup_reclaimable({
               size: formatBytes(result?.totalReclaimableBytes ?? 0),
             })}
@@ -254,7 +283,9 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
           data-testid={`cleanup-group-${group.dataType}`}
         >
           <div className="alm-cleanup-scan__group-head">
-            <span className="alm-cleanup-scan__group-title">{dataTypeLabel(group.dataType)}</span>
+            <span className="alm-cleanup-scan__group-title">
+              {dataTypeLabel(group.dataType)}
+            </span>
             <span className="alm-cleanup-scan__group-meta">
               {m.projects_cleanup_group_meta({
                 count: group.candidates.length,
@@ -264,7 +295,9 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
           </div>
           <Table
             columns={candidateColumns()}
-            rows={group.candidates.map((candidate, index) => candidateRow(candidate, index))}
+            rows={group.candidates.map((candidate, index) =>
+              candidateRow(candidate, index),
+            )}
           />
         </div>
       ))}
@@ -291,7 +324,9 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
                 },
               ]}
               value={destination}
-              onChange={(v) => setDestination(v as DestructiveDestinationChoice)}
+              onChange={(v) =>
+                setDestination(v as DestructiveDestinationChoice)
+              }
             />
           </div>
           <Btn
@@ -306,13 +341,18 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
               : m.projects_cleanup_generate_btn()}
           </Btn>
           {generate.isError && (
-            <Banner variant="danger">{m.projects_cleanup_generate_failed()}</Banner>
+            <Banner variant="danger">
+              {m.projects_cleanup_generate_failed()}
+            </Banner>
           )}
         </div>
       )}
 
       {/* Protected categories — always shown LOCKED (never proposed for cleanup). */}
-      <div className="alm-project-detail__cleanup-protected" data-testid="cleanup-protected">
+      <div
+        className="alm-project-detail__cleanup-protected"
+        data-testid="cleanup-protected"
+      >
         <div className="alm-project-detail__cleanup-protected-head">
           {m.projects_cleanup_protected_label()}
         </div>
@@ -321,7 +361,13 @@ export function CleanupSection({ projectId, defaultOpen = true }: CleanupSection
             <KV
               key={cat}
               label={cat}
-              value={<Lock reason={m.projects_cleanup_category_protected_reason({ category: cat })} />}
+              value={
+                <Lock
+                  reason={m.projects_cleanup_category_protected_reason({
+                    category: cat,
+                  })}
+                />
+              }
             />
           ))}
         </div>

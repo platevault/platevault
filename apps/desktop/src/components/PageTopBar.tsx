@@ -34,13 +34,20 @@ export interface PageTopBarProps {
   actions?: ReactNode;
 }
 
-export function PageTopBar({ title, summary, filters, actions }: PageTopBarProps) {
+export function PageTopBar({
+  title,
+  summary,
+  filters,
+  actions,
+}: PageTopBarProps) {
   return (
     <div className="alm-page__bar alm-topbar">
       {(title != null || summary != null) && (
         <div className="alm-topbar__lead">
           {title != null && <div className="alm-topbar__title">{title}</div>}
-          {summary != null && <div className="alm-topbar__summary">{summary}</div>}
+          {summary != null && (
+            <div className="alm-topbar__summary">{summary}</div>
+          )}
         </div>
       )}
       {filters != null && <div className="alm-topbar__filters">{filters}</div>}

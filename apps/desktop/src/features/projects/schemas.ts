@@ -35,7 +35,10 @@ export const MAX_NOTES_LEN = 4096;
  * only offer PixInsight / Siril, so the schema constrains to those two while
  * remaining assignable to `ProjectTool`.
  */
-export const PROJECT_TOOL_VALUES = ['PixInsight', 'Siril'] as const satisfies readonly ProjectTool[];
+export const PROJECT_TOOL_VALUES = [
+  'PixInsight',
+  'Siril',
+] as const satisfies readonly ProjectTool[];
 
 export const projectToolSchema = z.enum(PROJECT_TOOL_VALUES);
 
@@ -57,14 +60,20 @@ export const createProjectFormSchema = z.object({
     .string()
     .trim()
     .min(1, m.projects_schema_name_required())
-    .max(MAX_NAME_LEN, m.projects_schema_name_too_long({ max: String(MAX_NAME_LEN) })),
+    .max(
+      MAX_NAME_LEN,
+      m.projects_schema_name_too_long({ max: String(MAX_NAME_LEN) }),
+    ),
   tool: projectToolSchema.refine((v) => Boolean(v), {
     message: m.projects_schema_tool_required(),
   }),
   path: z.string().trim().min(1, m.projects_schema_path_required()),
   notes: z
     .string()
-    .max(MAX_NOTES_LEN, m.projects_schema_notes_too_long({ max: String(MAX_NOTES_LEN) })),
+    .max(
+      MAX_NOTES_LEN,
+      m.projects_schema_notes_too_long({ max: String(MAX_NOTES_LEN) }),
+    ),
 });
 
 export type CreateProjectFormValues = z.infer<typeof createProjectFormSchema>;
@@ -83,9 +92,17 @@ export const editProjectFormSchema = z.object({
     .string()
     .trim()
     .min(1, m.projects_schema_edit_name_required())
-    .max(MAX_NAME_LEN, m.projects_schema_name_too_long({ max: String(MAX_NAME_LEN) })),
+    .max(
+      MAX_NAME_LEN,
+      m.projects_schema_name_too_long({ max: String(MAX_NAME_LEN) }),
+    ),
   tool: projectToolSchema,
-  notes: z.string().max(MAX_NOTES_LEN, m.projects_schema_notes_too_long({ max: String(MAX_NOTES_LEN) })),
+  notes: z
+    .string()
+    .max(
+      MAX_NOTES_LEN,
+      m.projects_schema_notes_too_long({ max: String(MAX_NOTES_LEN) }),
+    ),
 });
 
 export type EditProjectFormValues = z.infer<typeof editProjectFormSchema>;

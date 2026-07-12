@@ -14,7 +14,8 @@ describe('useStaleSelectionCleanup', () => {
   it('clears exactly once when selected is set but missing, across re-renders', () => {
     const clear = vi.fn();
     const { rerender } = renderHook(
-      ({ s, f }: { s: number | undefined; f: boolean }) => useStaleSelectionCleanup(s, f, clear),
+      ({ s, f }: { s: number | undefined; f: boolean }) =>
+        useStaleSelectionCleanup(s, f, clear),
       { initialProps: { s: 999, f: false } },
     );
     rerender({ s: 999, f: false });
@@ -37,7 +38,8 @@ describe('useStaleSelectionCleanup', () => {
   it('clears again for a different stale id after the param resets', () => {
     const clear = vi.fn();
     const { rerender } = renderHook(
-      ({ s, f }: { s: number | undefined; f: boolean }) => useStaleSelectionCleanup(s, f, clear),
+      ({ s, f }: { s: number | undefined; f: boolean }) =>
+        useStaleSelectionCleanup(s, f, clear),
       { initialProps: { s: 1 as number | undefined, f: false } },
     );
     rerender({ s: undefined, f: false }); // selection cleared -> guard resets

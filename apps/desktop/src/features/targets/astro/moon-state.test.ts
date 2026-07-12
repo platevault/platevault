@@ -24,8 +24,18 @@ const FIXTURES: Fixture[] = [
   { iso: '2024-01-25T17:54:00Z', phase: 'full', illumPct: 100, waxing: false },
   { iso: '2024-08-04T11:13:00Z', phase: 'new', illumPct: 0, waxing: true },
   { iso: '2016-12-29T06:53:00Z', phase: 'new', illumPct: 0, waxing: true },
-  { iso: '2015-06-24T11:03:00Z', phase: 'first-quarter', illumPct: 50, waxing: true },
-  { iso: '2015-07-08T20:24:00Z', phase: 'last-quarter', illumPct: 50, waxing: false },
+  {
+    iso: '2015-06-24T11:03:00Z',
+    phase: 'first-quarter',
+    illumPct: 50,
+    waxing: true,
+  },
+  {
+    iso: '2015-07-08T20:24:00Z',
+    phase: 'last-quarter',
+    illumPct: 50,
+    waxing: false,
+  },
 ];
 
 describe('moonStateAt — almanac fixtures (SC-001, ±3pp)', () => {
@@ -35,11 +45,14 @@ describe('moonStateAt — almanac fixtures (SC-001, ±3pp)', () => {
       expect(s.phaseName).toBe(f.phase);
       expect(s.illuminationFrac * 100).toBeCloseTo(f.illumPct, 0);
       // Within ±3 percentage points explicitly.
-      expect(Math.abs(s.illuminationFrac * 100 - f.illumPct)).toBeLessThanOrEqual(3);
+      expect(
+        Math.abs(s.illuminationFrac * 100 - f.illumPct),
+      ).toBeLessThanOrEqual(3);
       // At the exact new/full instants the elongation sits within ~0.01° of the
       // 0/180/360 boundary, so the waxing/waning flag straddles; only assert
       // direction at the quarters (unambiguous).
-      if (f.phase !== 'new' && f.phase !== 'full') expect(s.waxing).toBe(f.waxing);
+      if (f.phase !== 'new' && f.phase !== 'full')
+        expect(s.waxing).toBe(f.waxing);
     });
   }
 
@@ -56,7 +69,9 @@ describe('moonStateAt — almanac fixtures (SC-001, ±3pp)', () => {
     expect(s.illuminationFrac).toBeGreaterThanOrEqual(0);
     expect(s.illuminationFrac).toBeLessThanOrEqual(1);
     expect(s.moonAgeFromFullDays).toBeGreaterThanOrEqual(0);
-    expect(s.moonAgeFromFullDays).toBeLessThanOrEqual(SYNODIC_MONTH_DAYS / 2 + 0.01);
+    expect(s.moonAgeFromFullDays).toBeLessThanOrEqual(
+      SYNODIC_MONTH_DAYS / 2 + 0.01,
+    );
   });
 });
 
@@ -89,7 +104,10 @@ describe('moonAgeFromFullDays', () => {
 
 describe('computeObservingNight', () => {
   it('attaches the night identity to the Moon state', () => {
-    const anchor = { nightKey: '2024-01-26', midnight: new Date('2024-01-25T17:54:00Z') };
+    const anchor = {
+      nightKey: '2024-01-26',
+      midnight: new Date('2024-01-25T17:54:00Z'),
+    };
     const on = computeObservingNight(anchor);
     expect(on.nightKey).toBe('2024-01-26');
     expect(on.midnight).toBe(anchor.midnight);

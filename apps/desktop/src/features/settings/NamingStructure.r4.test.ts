@@ -31,46 +31,51 @@
  *   - scripts/check-tokens.sh (check 4)
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from 'vitest';
 
 // Import NamingStructure.tsx as raw source text (Vite ?raw query).
 // This avoids Node.js fs imports (incompatible with the browser tsconfig)
 // while giving us the actual source string to assert against.
-import namingStructureSource from "./NamingStructure.tsx?raw";
+import namingStructureSource from './NamingStructure.tsx?raw';
 
-describe("R-4 regression · bare --alm-radius token (spec 028)", () => {
-  describe("NamingStructure.tsx token refs are valid", () => {
-    it("R-4.1 · NamingStructure.tsx does not use bare var(--alm-radius)", () => {
+describe('R-4 regression · bare --alm-radius token (spec 028)', () => {
+  describe('NamingStructure.tsx token refs are valid', () => {
+    it('R-4.1 · NamingStructure.tsx does not use bare var(--alm-radius)', () => {
       // Match var(--alm-radius) NOT followed by a dash + suffix.
       // Valid: var(--alm-radius-md), var(--alm-radius-sm), var(--alm-radius-lg)
       // Invalid: var(--alm-radius)
       const bareRadiusPattern = /var\(--alm-radius\)/g;
       const hits = namingStructureSource.match(bareRadiusPattern);
 
-      expect(hits, [
-        "NamingStructure.tsx uses bare var(--alm-radius) which is undefined.",
-        "Replace with var(--alm-radius-md), var(--alm-radius-sm), or var(--alm-radius-lg).",
-        "See R-4 regression in docs/development/test-strategy-033.md.",
-      ].join(" ")).toBeNull();
+      expect(
+        hits,
+        [
+          'NamingStructure.tsx uses bare var(--alm-radius) which is undefined.',
+          'Replace with var(--alm-radius-md), var(--alm-radius-sm), or var(--alm-radius-lg).',
+          'See R-4 regression in docs/development/test-strategy-033.md.',
+        ].join(' '),
+      ).toBeNull();
     });
 
-    it("R-4.2 · All --alm-radius refs in NamingStructure.tsx have a valid suffix", () => {
+    it('R-4.2 · All --alm-radius refs in NamingStructure.tsx have a valid suffix', () => {
       // Find all --alm-radius references (with or without suffix).
-      const allRefs = [...namingStructureSource.matchAll(/--alm-radius(-[a-z]+)?/g)];
+      const allRefs = [
+        ...namingStructureSource.matchAll(/--alm-radius(-[a-z]+)?/g),
+      ];
 
       // Every reference must have one of the valid suffixes.
-      const validSuffixes = new Set(["-sm", "-md", "-lg"]);
+      const validSuffixes = new Set(['-sm', '-md', '-lg']);
       const invalidRefs = allRefs.filter(
         (m) => m[1] === undefined || !validSuffixes.has(m[1]),
       );
 
       expect(
         invalidRefs.map((m) => m[0]),
-        "All --alm-radius references must have a valid suffix (-sm/-md/-lg)",
+        'All --alm-radius references must have a valid suffix (-sm/-md/-lg)',
       ).toEqual([]);
     });
 
-    it("R-4.3 · NamingStructure.tsx is non-empty (raw import sanity check)", () => {
+    it('R-4.3 · NamingStructure.tsx is non-empty (raw import sanity check)', () => {
       // Guards against a broken ?raw import returning an empty string,
       // which would make R-4.1/R-4.2 trivially pass even if broken.
       expect(namingStructureSource.length).toBeGreaterThan(100);
@@ -79,12 +84,12 @@ describe("R-4 regression · bare --alm-radius token (spec 028)", () => {
       // in components.css classes so it no longer appears in the TSX source.
       // The check-tokens.sh guard (check 4) continues to enforce no bare
       // --alm-radius refs across all TSX/TS files.)
-      expect(namingStructureSource).toContain("NamingStructure");
+      expect(namingStructureSource).toContain('NamingStructure');
     });
   });
 
-  describe("Token guard is wired into the lint pipeline", () => {
-    it("R-4.4 · check-tokens.sh gate description is documented (guard exists)", () => {
+  describe('Token guard is wired into the lint pipeline', () => {
+    it('R-4.4 · check-tokens.sh gate description is documented (guard exists)', () => {
       // This test confirms awareness of the external lint gate. The actual
       // execution of check-tokens.sh is covered by `just lint` and the CI
       // "Desktop lint" step. If someone removes check 4 from the script,
@@ -94,13 +99,13 @@ describe("R-4 regression · bare --alm-radius token (spec 028)", () => {
       // The guard: scripts/check-tokens.sh check 4 searches for var(--alm-radius)
       // in TSX/TS source files and exits non-zero if found.
       const guardDescription = [
-        "check-tokens.sh check 4 catches bare var(--alm-radius) in TSX/TS files",
-        "wired into just lint via: pnpm --filter @astro-plan/desktop lint",
-        "which runs: eslint src/ && bash ../../scripts/check-tokens.sh",
-      ].join("; ");
+        'check-tokens.sh check 4 catches bare var(--alm-radius) in TSX/TS files',
+        'wired into just lint via: pnpm --filter @astro-plan/desktop lint',
+        'which runs: eslint src/ && bash ../../scripts/check-tokens.sh',
+      ].join('; ');
 
       // Trivially true — this test documents the contract, not executes it.
-      expect(guardDescription).toContain("check-tokens.sh");
+      expect(guardDescription).toContain('check-tokens.sh');
     });
   });
 });

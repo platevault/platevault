@@ -57,9 +57,15 @@ export function deriveRowMoonPlanning(
 ): RowMoonPlanning {
   if (!night) return { ...UNKNOWN_ROW_PLANNING };
 
-  const separation = lunarSeparationDeg(coords.raDeg, coords.decDeg, night.moonVec);
+  const separation = lunarSeparationDeg(
+    coords.raDeg,
+    coords.decDeg,
+    night.moonVec,
+  );
   const viability =
-    separation === null ? null : bandViability(separation, night.moonAgeFromFullDays, params);
+    separation === null
+      ? null
+      : bandViability(separation, night.moonAgeFromFullDays, params);
   const recommendation = deriveRecommendation(viability);
 
   const opposition = nextOpposition(coords.raDeg, night.midnight);
@@ -68,7 +74,9 @@ export function deriveRowMoonPlanning(
     lunarSeparationDeg: separation,
     bandViability: viability,
     recommendation,
-    nextOppositionDate: opposition ? opposition.date.toISOString().slice(0, 10) : null,
+    nextOppositionDate: opposition
+      ? opposition.date.toISOString().slice(0, 10)
+      : null,
     daysToOpposition: opposition ? opposition.daysUntil : null,
   };
 }

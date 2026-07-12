@@ -15,7 +15,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 function makeWrapper() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
@@ -211,7 +213,9 @@ describe('T039-4: useInboxRescan (FR-005)', () => {
       await result.current.rescan();
     });
 
-    expect((commands.inboxScanFolder as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+    expect(
+      (commands.inboxScanFolder as ReturnType<typeof vi.fn>).mock.calls.length,
+    ).toBe(2);
     expect(onComplete).toHaveBeenCalledOnce();
   });
 

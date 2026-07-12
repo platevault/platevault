@@ -29,8 +29,11 @@ const accessors = {
 
 // ── Test data ─────────────────────────────────────────────────────────────────
 
-const makeItem = (id: string, target: string | null, frameType: string | null): Item =>
-  ({ id, target, frameType });
+const makeItem = (
+  id: string,
+  target: string | null,
+  frameType: string | null,
+): Item => ({ id, target, frameType });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -69,7 +72,7 @@ describe('groupByDimensions', () => {
     expect(result).toHaveLength(2);
 
     const m31 = result.find((n) => n.label === 'M31');
-    const ngc  = result.find((n) => n.label === 'NGC 1234');
+    const ngc = result.find((n) => n.label === 'NGC 1234');
 
     expect(m31).toBeDefined();
     expect(m31!.count).toBe(2);
@@ -95,7 +98,7 @@ describe('groupByDimensions', () => {
 
     const m31 = result.find((n) => n.label === 'M31')!;
     expect(m31.count).toBe(3);
-    expect(m31.items).toHaveLength(0);    // inner node — no items
+    expect(m31.items).toHaveLength(0); // inner node — no items
     expect(m31.children).toHaveLength(2); // light + dark
 
     const m31Light = m31.children.find((c) => c.label === 'light')!;
@@ -116,7 +119,7 @@ describe('groupByDimensions', () => {
   it('(4) items missing a dimension land in NONE_KEY group sorted last', () => {
     const items = [
       makeItem('a', 'M31', 'light'),
-      makeItem('b', null, 'dark'),   // missing target
+      makeItem('b', null, 'dark'), // missing target
       makeItem('c', 'NGC 1234', 'light'),
     ];
     const result = groupByDimensions(items, ['target'], accessors);
@@ -146,10 +149,10 @@ describe('groupByDimensions', () => {
   it('(5) groups are sorted by label in numeric-aware ascending order', () => {
     const items = [
       makeItem('a', 'NGC 2359', 'light'),
-      makeItem('b', 'NGC 10',   'light'),
-      makeItem('c', 'M110',     'light'),
-      makeItem('d', 'M31',      'light'),
-      makeItem('e', 'M3',       'light'),
+      makeItem('b', 'NGC 10', 'light'),
+      makeItem('c', 'M110', 'light'),
+      makeItem('d', 'M31', 'light'),
+      makeItem('e', 'M3', 'light'),
     ];
     const result = groupByDimensions(items, ['target'], accessors);
 
@@ -161,7 +164,7 @@ describe('groupByDimensions', () => {
 
   it('(5) NONE_KEY group is always last even when alphabetically first', () => {
     const items = [
-      makeItem('a', null, 'light'),   // would sort as '(none)' = before 'Z...'
+      makeItem('a', null, 'light'), // would sort as '(none)' = before 'Z...'
       makeItem('b', 'Ztarget', 'dark'),
     ];
     const result = groupByDimensions(items, ['target'], accessors);
@@ -219,7 +222,11 @@ describe('groupByDimensions — count aggregation across nested levels', () => {
       { id: 'd', target: 'M31', frameType: 'dark', filter: null },
       { id: 'e', target: 'NGC 1', frameType: 'flat', filter: 'L' },
     ];
-    const result = groupByDimensions(items, ['target', 'frameType', 'filter'], triAccessors);
+    const result = groupByDimensions(
+      items,
+      ['target', 'frameType', 'filter'],
+      triAccessors,
+    );
 
     const m31 = result.find((n) => n.label === 'M31')!;
     expect(m31.count).toBe(4); // a,b,c,d
@@ -249,8 +256,8 @@ describe('groupByDimensions — count aggregation across nested levels', () => {
   it('NONE bucket aggregates at an intermediate level too', () => {
     const items = [
       makeItem('a', 'M31', 'light'),
-      makeItem('b', null, 'light'),   // missing target → NONE at level 1
-      makeItem('c', null, 'dark'),    // missing target → NONE at level 1
+      makeItem('b', null, 'light'), // missing target → NONE at level 1
+      makeItem('c', null, 'dark'), // missing target → NONE at level 1
     ];
     const result = groupByDimensions(items, ['target', 'frameType'], accessors);
 

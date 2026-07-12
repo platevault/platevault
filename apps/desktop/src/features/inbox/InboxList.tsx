@@ -51,7 +51,10 @@ export const DEFAULT_INBOX_SORT: InboxSort = { col: 'detection', dir: 'asc' };
  * pre-materialization rows may carry neither.
  */
 function isNeedsReview(item: InboxListItem): boolean {
-  return item.groupKey === '__needs_review__' || (item.missingMandatory?.length ?? 0) > 0;
+  return (
+    item.groupKey === '__needs_review__' ||
+    (item.missingMandatory?.length ?? 0) > 0
+  );
 }
 
 /**
@@ -63,15 +66,21 @@ function isNeedsReview(item: InboxListItem): boolean {
  * `classified` at this point and would misleadingly read as fully resolved).
  */
 function classificationLabel(item: InboxListItem): string {
-  if (item.isMaster) return item.masterFrameType ?? m.inbox_state_master_fallback();
+  if (item.isMaster)
+    return item.masterFrameType ?? m.inbox_state_master_fallback();
   if (item.groupFrameType) return item.groupFrameType;
   if (isNeedsReview(item)) return m.inbox_state_needs_review();
   switch (item.state) {
-    case 'pending_classification': return m.inbox_state_pending();
-    case 'classified':             return m.inbox_state_classified();
-    case 'plan_open':              return m.inbox_state_plan_open();
-    case 'resolved':               return m.inbox_state_resolved();
-    default:                       return item.state;
+    case 'pending_classification':
+      return m.inbox_state_pending();
+    case 'classified':
+      return m.inbox_state_classified();
+    case 'plan_open':
+      return m.inbox_state_plan_open();
+    case 'resolved':
+      return m.inbox_state_resolved();
+    default:
+      return item.state;
   }
 }
 
@@ -79,11 +88,16 @@ function classificationLabel(item: InboxListItem): string {
 function classificationMod(item: InboxListItem): string {
   if (isNeedsReview(item)) return 'needs_review';
   switch (item.state) {
-    case 'pending_classification': return 'pending';
-    case 'classified':             return 'classified';
-    case 'plan_open':              return 'plan_open';
-    case 'resolved':               return 'resolved';
-    default:                       return 'classified';
+    case 'pending_classification':
+      return 'pending';
+    case 'classified':
+      return 'classified';
+    case 'plan_open':
+      return 'plan_open';
+    case 'resolved':
+      return 'resolved';
+    default:
+      return 'classified';
   }
 }
 
@@ -102,7 +116,11 @@ function itemKind(item: InboxListItem): string {
 }
 
 /** Sort comparator for inbox items. */
-function compareItems(a: InboxListItem, b: InboxListItem, sort: InboxSort): number {
+function compareItems(
+  a: InboxListItem,
+  b: InboxListItem,
+  sort: InboxSort,
+): number {
   let cmp = 0;
   switch (sort.col) {
     case 'detection':
@@ -182,7 +200,11 @@ export function flattenVisibleTree(
   originalIndexById: ReadonlyMap<string, number>,
 ): VisualRow[] {
   const rows: VisualRow[] = [];
-  const walk = (ns: readonly GroupNode<InboxListItem>[], depth: number, pathPrefix: string) => {
+  const walk = (
+    ns: readonly GroupNode<InboxListItem>[],
+    depth: number,
+    pathPrefix: string,
+  ) => {
     for (const node of ns) {
       const path = `${pathPrefix}/${node.dimension}:${node.key}`;
       const isCollapsed = collapsed.has(path);
@@ -269,7 +291,11 @@ export function InboxList({
   }, [grouped, tree, collapsed, originalIndexById, filtered]);
 
   // ── Sortable column headers (SessionsTable convention) ──────────────────────
-  const makeSortHeader = (col: InboxSortCol, label: string, ariaLabel: string) => (
+  const makeSortHeader = (
+    col: InboxSortCol,
+    label: string,
+    ariaLabel: string,
+  ) => (
     <SortHeader
       label={label}
       active={sort.col === col}
@@ -285,25 +311,41 @@ export function InboxList({
   const COLUMNS: TableColumn[] = [
     {
       key: 'detection',
-      label: makeSortHeader('detection', m.inbox_col_detection(), m.inbox_sort_detection_aria()),
+      label: makeSortHeader(
+        'detection',
+        m.inbox_col_detection(),
+        m.inbox_sort_detection_aria(),
+      ),
       ariaSort: thSort('detection'),
     },
     {
       key: 'type',
-      label: makeSortHeader('type', m.inbox_col_type(), m.inbox_sort_type_aria()),
+      label: makeSortHeader(
+        'type',
+        m.inbox_col_type(),
+        m.inbox_sort_type_aria(),
+      ),
       ariaSort: thSort('type'),
       style: { width: '7.5rem' },
     },
     {
       key: 'count',
-      label: makeSortHeader('count', m.inbox_col_files(), m.inbox_sort_files_aria()),
+      label: makeSortHeader(
+        'count',
+        m.inbox_col_files(),
+        m.inbox_sort_files_aria(),
+      ),
       ariaSort: thSort('count'),
       className: 'num',
       style: { width: '5rem' },
     },
     {
       key: 'format',
-      label: makeSortHeader('format', m.inbox_dim_format(), m.inbox_sort_format_aria()),
+      label: makeSortHeader(
+        'format',
+        m.inbox_dim_format(),
+        m.inbox_sort_format_aria(),
+      ),
       ariaSort: thSort('format'),
       className: 'alm-inbox-cell--right',
       style: { width: '7rem' },
@@ -331,11 +373,18 @@ export function InboxList({
                 // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
                 style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
               >
-                <span className="alm-inbox-list__group-caret" aria-hidden="true">
+                <span
+                  className="alm-inbox-list__group-caret"
+                  aria-hidden="true"
+                >
                   {isCollapsed ? '▸' : '▾'}
                 </span>
-                <span className="alm-inbox-list__group-label">{node.label}</span>
-                <span className="alm-inbox-list__group-count">{node.count}</span>
+                <span className="alm-inbox-list__group-label">
+                  {node.label}
+                </span>
+                <span className="alm-inbox-list__group-count">
+                  {node.count}
+                </span>
               </button>
             ),
             type: '',
@@ -375,7 +424,9 @@ export function InboxList({
           ),
           count: m.inbox_list_file_count({ count: item.fileCount }),
           format: item.isMaster
-            ? m.inbox_master_row_label({ type: item.masterFrameType ?? m.inbox_state_master_fallback() })
+            ? m.inbox_master_row_label({
+                type: item.masterFrameType ?? m.inbox_state_master_fallback(),
+              })
             : formatTag(item),
         };
       }),

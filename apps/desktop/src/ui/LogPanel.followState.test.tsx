@@ -22,9 +22,15 @@ const mockUpdateSettings = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/bindings/index', () => ({
   commands: {
     settingsGet: (...args: unknown[]) =>
-      Promise.resolve(mockGetSettings(...args)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockGetSettings(...args)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
     settingsUpdate: (...args: unknown[]) =>
-      Promise.resolve(mockUpdateSettings(...args)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockUpdateSettings(...args)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
   },
 }));
 
@@ -118,7 +124,9 @@ describe('LogPanel follow state (T010)', () => {
       </LogPanelProvider>,
     );
 
-    await waitFor(() => expect(getByTestId('follow-state').textContent).toBe('off'));
+    await waitFor(() =>
+      expect(getByTestId('follow-state').textContent).toBe('off'),
+    );
     fireEvent.click(getByRole('button', { name: 'toggle' }));
     expect(getByTestId('follow-state').textContent).toBe('on');
   });

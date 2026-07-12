@@ -48,8 +48,11 @@ export function useHotkeys(
   deps: React.DependencyList,
   options: UseHotkeysOptions = {},
 ): void {
-  const { target = typeof window !== 'undefined' ? window : null, enabled = true, ignoreFormFields = true } =
-    options;
+  const {
+    target = typeof window !== 'undefined' ? window : null,
+    enabled = true,
+    ignoreFormFields = true,
+  } = options;
 
   useEffect(() => {
     if (!enabled || !target) return;

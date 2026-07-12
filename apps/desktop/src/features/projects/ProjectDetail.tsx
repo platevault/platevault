@@ -54,7 +54,10 @@ import { EditProjectPane } from './edit/EditProjectPane';
 import { addToast } from '@/shared/toast';
 import { BlockedBanner } from './BlockedBanner';
 import type { BlockedReason, RecoveryEdge } from './BlockedBanner';
-import { lifecycleFooterActions, isPlanRequiredError } from './lifecycle-actions';
+import {
+  lifecycleFooterActions,
+  isPlanRequiredError,
+} from './lifecycle-actions';
 import { useGenerateArchivePlan } from '@/features/archive/store';
 import { PlanReviewOverlay } from '@/features/plans/PlanReviewOverlay';
 // spec 011: tool launch CTA
@@ -157,7 +160,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   // transition is plan-gated; this is the UI entry point that actually
   // creates the reviewable plan the toast below points the user to.
   const generateArchivePlan = useGenerateArchivePlan();
-  const [archiveReviewPlanId, setArchiveReviewPlanId] = useState<string | null>(null);
+  const [archiveReviewPlanId, setArchiveReviewPlanId] = useState<string | null>(
+    null,
+  );
 
   // spec 012 T008: attach the project's filesystem artifact watcher for as
   // long as this drawer is open; detaches on close/project switch.
@@ -172,7 +177,11 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const toolId = projectToolStr ? toolIdFromProjectTool(projectToolStr) : '';
   const { profiles } = useToolProfiles();
   const toolProfile = profiles.find((p) => p.id === toolId);
-  const { state: launchState, launch: launchTool, dismissPriorWarning } = useToolLaunch(
+  const {
+    state: launchState,
+    launch: launchTool,
+    dismissPriorWarning,
+  } = useToolLaunch(
     projectId,
     toolId,
     projectToolStr || 'tool',
@@ -201,7 +210,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const toolLabel =
     typeof project.tool === 'string' ? project.tool : m.projects_tool_unknown();
   const lifecycle =
-    typeof project.lifecycle === 'string' ? project.lifecycle : 'setup_incomplete';
+    typeof project.lifecycle === 'string'
+      ? project.lifecycle
+      : 'setup_incomplete';
 
   const handleReinfer = async () => {
     if (channelWorking) return;
@@ -209,7 +220,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     try {
       await callReinferChannels({ requestId: crypto.randomUUID(), projectId });
     } catch {
-      addToast({ message: m.projects_toast_reinfer_failed(), variant: 'error' });
+      addToast({
+        message: m.projects_toast_reinfer_failed(),
+        variant: 'error',
+      });
     } finally {
       setChannelWorking(false);
     }
@@ -219,9 +233,15 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     if (channelWorking) return;
     setChannelWorking(true);
     try {
-      await callDismissChannelDrift({ requestId: crypto.randomUUID(), projectId });
+      await callDismissChannelDrift({
+        requestId: crypto.randomUUID(),
+        projectId,
+      });
     } catch {
-      addToast({ message: m.projects_toast_dismiss_failed(), variant: 'error' });
+      addToast({
+        message: m.projects_toast_dismiss_failed(),
+        variant: 'error',
+      });
     } finally {
       setChannelWorking(false);
     }
@@ -249,8 +269,16 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         actionLabel,
       );
       if (resp.status === 'success') {
-        addToast({ message: m.projects_toast_transitioned({ state: resp.newState ?? nextState }), variant: 'success' });
-      } else if (resp.status === 'error' && isPlanRequiredError(resp.error?.code)) {
+        addToast({
+          message: m.projects_toast_transitioned({
+            state: resp.newState ?? nextState,
+          }),
+          variant: 'success',
+        });
+      } else if (
+        resp.status === 'error' &&
+        isPlanRequiredError(resp.error?.code)
+      ) {
         addToast({
           message: m.projects_toast_plan_required(),
           variant: 'info',
@@ -265,7 +293,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         });
       }
     } catch {
-      addToast({ message: m.projects_toast_transition_failed(), variant: 'error' });
+      addToast({
+        message: m.projects_toast_transition_failed(),
+        variant: 'error',
+      });
     } finally {
       setTransitionWorking(false);
     }
@@ -281,12 +312,17 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     try {
       const res = await generateArchivePlan.mutateAsync(projectId);
       addToast({
-        message: m.projects_archive_plan_created_toast({ count: res.itemCount }),
+        message: m.projects_archive_plan_created_toast({
+          count: res.itemCount,
+        }),
         variant: 'info',
       });
       setArchiveReviewPlanId(res.planId);
     } catch {
-      addToast({ message: m.projects_archive_generate_failed(), variant: 'error' });
+      addToast({
+        message: m.projects_archive_generate_failed(),
+        variant: 'error',
+      });
     }
   };
 
@@ -294,7 +330,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
    * (C5 — applying an origin=archive plan is the one legitimate path to
    * `archived`); refresh the detail query so the UI reflects it. */
   const handleArchivePlanApplied = () => {
-    void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+    void sharedQueryClient.invalidateQueries({
+      queryKey: queryKeys.projects.detail(projectId),
+    });
   };
 
   /** Handle blocked resolve — dispatches the recovery edge from BlockedBanner. */
@@ -303,7 +341,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   };
 
   // Derive contextual footer actions for the current lifecycle state.
-  const footerActions = lifecycleFooterActions(lifecycle as ProjectLifecycleState);
+  const footerActions = lifecycleFooterActions(
+    lifecycle as ProjectLifecycleState,
+  );
 
   // Derive typed blocked reason from project DTO (FR-020 / spec 033 US5 T053).
   const blockedReason: BlockedReason | undefined = (() => {
@@ -311,20 +351,31 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     const kind = project.blockedReasonKind;
     const note = project.blockedReasonNote ?? undefined;
     if (kind === 'source_missing') {
-      const inventoryId = note?.replace(/^Source missing:\s*/i, '') ?? 'unknown';
+      const inventoryId =
+        note?.replace(/^Source missing:\s*/i, '') ?? 'unknown';
       return { kind: 'source_missing', inventoryId } satisfies BlockedReason;
     }
     if (kind === 'tool_unconfigured') {
-      const tool = note?.replace(/^Tool path not configured:\s*/i, '') ?? 'unknown';
+      const tool =
+        note?.replace(/^Tool path not configured:\s*/i, '') ?? 'unknown';
       return { kind: 'tool_unconfigured', tool } satisfies BlockedReason;
     }
     if (kind === 'calibration_unmatched') {
-      return { kind: 'calibration_unmatched', calibrationSetId: note ?? 'unknown' } satisfies BlockedReason;
+      return {
+        kind: 'calibration_unmatched',
+        calibrationSetId: note ?? 'unknown',
+      } satisfies BlockedReason;
     }
     if (kind === 'prepared_source_stale') {
-      return { kind: 'prepared_source_stale', preparedId: note ?? 'unknown' } satisfies BlockedReason;
+      return {
+        kind: 'prepared_source_stale',
+        preparedId: note ?? 'unknown',
+      } satisfies BlockedReason;
     }
-    return { kind: 'user', note: note ?? m.projects_blocked_note_fallback() } satisfies BlockedReason;
+    return {
+      kind: 'user',
+      note: note ?? m.projects_blocked_note_fallback(),
+    } satisfies BlockedReason;
   })();
 
   // ── Derived channel palette data (server totals + client `inSync`) ────────
@@ -340,11 +391,23 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   // ── Sources table ────────────────────────────────────────────────────────
 
   const sourceColumns = [
-    { key: 'role',   label: m.projects_col_role(),   className: 'alm-project-detail__role-cell' },
+    {
+      key: 'role',
+      label: m.projects_col_role(),
+      className: 'alm-project-detail__role-cell',
+    },
     { key: 'source', label: m.projects_col_source() },
     { key: 'filter', label: m.common_filter() },
-    { key: 'subs',   label: m.projects_col_subs(),  className: 'alm-project-detail__num-cell' },
-    { key: 'integ',  label: m.projects_col_integ(), className: 'alm-project-detail__integ-cell' },
+    {
+      key: 'subs',
+      label: m.projects_col_subs(),
+      className: 'alm-project-detail__num-cell',
+    },
+    {
+      key: 'integ',
+      label: m.projects_col_integ(),
+      className: 'alm-project-detail__integ-cell',
+    },
   ];
 
   const sourceRows = project.sources.map((src) => ({
@@ -369,7 +432,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       </span>
     ),
     integ: (
-      <span className="alm-project-detail__integ-cell alm-project-detail__dash">—</span>
+      <span className="alm-project-detail__integ-cell alm-project-detail__dash">
+        —
+      </span>
     ),
   }));
 
@@ -405,61 +470,67 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           flex row is relaxed to auto-height + wrap only within this scope. */}
       <div className="alm-project-detail__action-bar">
         <TopActionBar
-        title=""
-        right={
-          /* Per-project actions live ONLY here (the detail action bar):
+          title=""
+          right={
+            /* Per-project actions live ONLY here (the detail action bar):
              Reveal · Open in {tool} · lifecycle transitions.
              The transition buttons carry the data-testid="transition-btn-*"
              hooks (previously on a separate bottom footer that has been
              removed to de-duplicate the per-project actions). */
-          <div
-            className="alm-project-detail__bar-actions"
-            data-testid="lifecycle-actions"
-          >
-            {/* Reveal — platform-native label (shared revealLabel()) */}
-            <Btn size="sm" variant="ghost" data-testid="action-reveal">
-              {revealLabel()}
-            </Btn>
-
-            {/* Open in processing tool */}
-            {toolId && (
-              <Btn
-                size="sm"
-                variant="ghost"
-                disabled={launchDisabledReason !== null || launchState.working}
-                title={
-                  launchDisabledReason
-                    ? toolLaunchDisabledTooltip(launchDisabledReason)
-                    : m.projects_open_in_tool_title({ tool: projectToolStr })
-                }
-                onClick={() => void launchTool()}
-                data-testid="tool-launch-btn"
-                data-guide-anchor="project.open-in-tool"
-              >
-                {launchState.working ? m.projects_launching() : m.projects_open_in({ tool: projectToolStr })}
+            <div
+              className="alm-project-detail__bar-actions"
+              data-testid="lifecycle-actions"
+            >
+              {/* Reveal — platform-native label (shared revealLabel()) */}
+              <Btn size="sm" variant="ghost" data-testid="action-reveal">
+                {revealLabel()}
               </Btn>
-            )}
 
-            {/* Lifecycle transitions — single source of truth for these actions. */}
-            {footerActions.map((action) => (
-              <Btn
-                key={action.nextState}
-                size="sm"
-                variant={action.variant}
-                disabled={transitionWorking}
-                onClick={() => void handleTransition(action.nextState, action.label)}
-                data-testid={`transition-btn-${action.nextState}`}
-              >
-                {action.label}
-              </Btn>
-            ))}
-          </div>
-        }
-      >
-        <span className="alm-project-detail__bar-tool">{toolLabel}</span>
-        {project.path && (
-          <span className="alm-project-detail__bar-path">{project.path}</span>
-        )}
+              {/* Open in processing tool */}
+              {toolId && (
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  disabled={
+                    launchDisabledReason !== null || launchState.working
+                  }
+                  title={
+                    launchDisabledReason
+                      ? toolLaunchDisabledTooltip(launchDisabledReason)
+                      : m.projects_open_in_tool_title({ tool: projectToolStr })
+                  }
+                  onClick={() => void launchTool()}
+                  data-testid="tool-launch-btn"
+                  data-guide-anchor="project.open-in-tool"
+                >
+                  {launchState.working
+                    ? m.projects_launching()
+                    : m.projects_open_in({ tool: projectToolStr })}
+                </Btn>
+              )}
+
+              {/* Lifecycle transitions — single source of truth for these actions. */}
+              {footerActions.map((action) => (
+                <Btn
+                  key={action.nextState}
+                  size="sm"
+                  variant={action.variant}
+                  disabled={transitionWorking}
+                  onClick={() =>
+                    void handleTransition(action.nextState, action.label)
+                  }
+                  data-testid={`transition-btn-${action.nextState}`}
+                >
+                  {action.label}
+                </Btn>
+              ))}
+            </div>
+          }
+        >
+          <span className="alm-project-detail__bar-tool">{toolLabel}</span>
+          {project.path && (
+            <span className="alm-project-detail__bar-path">{project.path}</span>
+          )}
         </TopActionBar>
       </div>
 
@@ -477,10 +548,20 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         <Banner variant="warn" role="status" aria-live="polite">
           <span>{m.projects_detail_channel_drift()}</span>
           <div className="alm-project-detail__drift-actions">
-            <Btn size="sm" variant="primary" onClick={handleReinfer} disabled={channelWorking}>
+            <Btn
+              size="sm"
+              variant="primary"
+              onClick={handleReinfer}
+              disabled={channelWorking}
+            >
               {m.projects_detail_reinfer_btn()}
             </Btn>
-            <Btn size="sm" variant="ghost" onClick={handleDismissDrift} disabled={channelWorking}>
+            <Btn
+              size="sm"
+              variant="ghost"
+              onClick={handleDismissDrift}
+              disabled={channelWorking}
+            >
               {m.projects_detail_dismiss_btn()}
             </Btn>
           </div>
@@ -491,13 +572,19 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       <MetricLine
         metrics={[
           {
-            value: derivedChannels.reduce((s, c) => s + c.totalIntegS, 0) > 0
-              ? fmtIntegS(derivedChannels.reduce((s, c) => s + c.totalIntegS, 0))
-              : '—',
+            value:
+              derivedChannels.reduce((s, c) => s + c.totalIntegS, 0) > 0
+                ? fmtIntegS(
+                    derivedChannels.reduce((s, c) => s + c.totalIntegS, 0),
+                  )
+                : '—',
             label: m.projects_metric_integration(),
           },
           { value: project.sources.length, label: m.projects_metric_sources() },
-          { value: project.channels?.length ?? 0, label: m.projects_metric_channels() },
+          {
+            value: project.channels?.length ?? 0,
+            label: m.projects_metric_channels(),
+          },
           { value: toolLabel, label: m.projects_metric_tool() },
         ]}
       />
@@ -517,7 +604,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
           className="alm-project-detail__target-info"
           data-testid="project-canonical-target"
         >
-          <span className="alm-project-detail__target-label">{m.projects_create_target_label()}</span>
+          <span className="alm-project-detail__target-label">
+            {m.projects_create_target_label()}
+          </span>
           <span className="alm-project-detail__target-name">
             {project.canonicalTarget.primaryDesignation}
           </span>
@@ -549,24 +638,47 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
          */}
         {derivedChannels.length > 0 && (
           <Section
-            title={paletteLabel ? m.projects_channels_palette_title({ channels: m.projects_edit_channels_label(), palette: paletteLabel }) : m.projects_edit_channels_label()}
-            right={allInSync ? <Pill variant="ghost">{m.projects_channels_in_sync()}</Pill> : undefined}
+            title={
+              paletteLabel
+                ? m.projects_channels_palette_title({
+                    channels: m.projects_edit_channels_label(),
+                    palette: paletteLabel,
+                  })
+                : m.projects_edit_channels_label()
+            }
+            right={
+              allInSync ? (
+                <Pill variant="ghost">{m.projects_channels_in_sync()}</Pill>
+              ) : undefined
+            }
           >
             <div className="alm-project-detail__channels-section">
               {derivedChannels.map((ch) => (
                 <div key={ch.label} className="alm-project-detail__channel-row">
-                  <span className="alm-project-detail__ch-letter">{ch.label[0]}</span>
-                  <span className="alm-project-detail__ch-filter">{ch.filter}</span>
+                  <span className="alm-project-detail__ch-letter">
+                    {ch.label[0]}
+                  </span>
+                  <span className="alm-project-detail__ch-filter">
+                    {ch.filter}
+                  </span>
                   <div className="alm-project-detail__ch-coverage">
-                    <CoverageBar label="" value={ch.totalFrames} max={maxFrames} />
+                    <CoverageBar
+                      label=""
+                      value={ch.totalFrames}
+                      max={maxFrames}
+                    />
                   </div>
-                  <span className="alm-project-detail__ch-subs">{fmtFrames(ch.totalFrames)}</span>
+                  <span className="alm-project-detail__ch-subs">
+                    {fmtFrames(ch.totalFrames)}
+                  </span>
                   <span className="alm-project-detail__ch-integ">
                     {ch.totalIntegS > 0 ? fmtIntegS(ch.totalIntegS) : '—'}
                   </span>
                   <div className="alm-project-detail__ch-status">
                     <Pill variant={ch.inSync ? 'ghost' : 'warn'}>
-                      {ch.inSync ? m.projects_channels_in_sync() : m.common_pending()}
+                      {ch.inSync
+                        ? m.projects_channels_in_sync()
+                        : m.common_pending()}
                     </Pill>
                   </div>
                 </div>
@@ -592,7 +704,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         >
           <span className="alm-project-detail__tool-hint">
             {m.projects_tool_not_configured()}{' '}
-            <a href="#/settings?pane=tools" className="alm-project-detail__tool-link">
+            <a
+              href="#/settings?pane=tools"
+              className="alm-project-detail__tool-link"
+            >
               {m.projects_tool_configure_link()}
             </a>
           </span>
@@ -604,7 +719,9 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={m.projects_tool_already_running_aria({ tool: projectToolStr })}
+          aria-label={m.projects_tool_already_running_aria({
+            tool: projectToolStr,
+          })}
           className="alm-project-detail__modal-overlay"
           data-testid="relaunch-modal"
         >
@@ -613,7 +730,12 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
               {m.projects_relaunch_body({ tool: projectToolStr })}
             </p>
             <div className="alm-project-detail__modal-actions">
-              <Btn size="sm" variant="ghost" onClick={dismissPriorWarning} data-testid="relaunch-cancel">
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={dismissPriorWarning}
+                data-testid="relaunch-cancel"
+              >
                 {m.common_cancel()}
               </Btn>
               <Btn
@@ -632,7 +754,10 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
       {/* ── Edit pane overlay ───────────────────────────────────────────── */}
       {editOpen && (
         <div className="alm-project-detail__edit-overlay">
-          <EditProjectPane project={project} onClose={() => setEditOpen(false)} />
+          <EditProjectPane
+            project={project}
+            onClose={() => setEditOpen(false)}
+          />
         </div>
       )}
 

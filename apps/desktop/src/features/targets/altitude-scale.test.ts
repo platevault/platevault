@@ -3,7 +3,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { altitudeScale, hourScale, ALT_DOMAIN, HOUR_DOMAIN } from './altitude-scale';
+import {
+  altitudeScale,
+  hourScale,
+  ALT_DOMAIN,
+  HOUR_DOMAIN,
+} from './altitude-scale';
 
 describe('altitudeScale', () => {
   it('maps the domain endpoints to the given pixel range', () => {

@@ -15,10 +15,22 @@
  *    ContractError to its catalog message on failure.
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockUpdateProject, mockReinferChannels, mockDismissDrift, mockAddSource, mockRemoveSource } = vi.hoisted(() => ({
+const {
+  mockUpdateProject,
+  mockReinferChannels,
+  mockDismissDrift,
+  mockAddSource,
+  mockRemoveSource,
+} = vi.hoisted(() => ({
   mockUpdateProject: vi.fn(),
   mockReinferChannels: vi.fn(),
   mockDismissDrift: vi.fn(),
@@ -35,8 +47,17 @@ vi.mock('@/features/projects/store', () => ({
   callRemoveProjectSource: mockRemoveSource,
   useProjects: () => ({ data: [], loading: false }),
   useProjectDetail: () => ({ data: undefined, loading: false }),
-  projectListStore: { subscribe: vi.fn(), getSnapshot: vi.fn(), fetch: vi.fn(), invalidate: vi.fn() },
-  projectDetailStore: { get: vi.fn(), invalidate: vi.fn(), invalidateAll: vi.fn() },
+  projectListStore: {
+    subscribe: vi.fn(),
+    getSnapshot: vi.fn(),
+    fetch: vi.fn(),
+    invalidate: vi.fn(),
+  },
+  projectDetailStore: {
+    get: vi.fn(),
+    invalidate: vi.fn(),
+    invalidateAll: vi.fn(),
+  },
 }));
 
 vi.mock('@/shared/toast', () => ({
@@ -57,7 +78,10 @@ vi.mock('@/features/projects/SessionSourcePicker', () => ({
     onChange: (ids: string[]) => void;
   }) => (
     <div data-testid="session-source-picker">
-      <button type="button" onClick={() => onChange([...selectedSessionIds, 'sess-candidate'])}>
+      <button
+        type="button"
+        onClick={() => onChange([...selectedSessionIds, 'sess-candidate'])}
+      >
         Select sess-candidate
       </button>
     </div>
@@ -69,7 +93,9 @@ vi.stubEnv('VITE_USE_MOCKS', 'true');
 import { EditProjectPane } from './EditProjectPane';
 import type { ProjectDetailDto, ProjectSourceDto } from '@/bindings/index';
 
-function makeSource(overrides: Partial<ProjectSourceDto> = {}): ProjectSourceDto {
+function makeSource(
+  overrides: Partial<ProjectSourceDto> = {},
+): ProjectSourceDto {
   return {
     inventoryId: 'sess-001',
     name: 'M31 / Ha / 2026-06-01',
@@ -85,7 +111,9 @@ function makeSource(overrides: Partial<ProjectSourceDto> = {}): ProjectSourceDto
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function makeProject(overrides: Partial<ProjectDetailDto> = {}): ProjectDetailDto {
+function makeProject(
+  overrides: Partial<ProjectDetailDto> = {},
+): ProjectDetailDto {
   return {
     id: 'proj-001',
     name: 'NGC 7000 NB',
@@ -95,8 +123,20 @@ function makeProject(overrides: Partial<ProjectDetailDto> = {}): ProjectDetailDt
     channelDrift: { hasNewSources: false, suggestedAction: 'dismiss' },
     sources: [],
     channels: [
-      { label: 'Ha', source: 'inferred', addedAt: '2026-06-01T00:00:00Z', subFrames: 0, totalIntegrationS: 0 },
-      { label: 'OIII', source: 'inferred', addedAt: '2026-06-01T00:00:00Z', subFrames: 0, totalIntegrationS: 0 },
+      {
+        label: 'Ha',
+        source: 'inferred',
+        addedAt: '2026-06-01T00:00:00Z',
+        subFrames: 0,
+        totalIntegrationS: 0,
+      },
+      {
+        label: 'OIII',
+        source: 'inferred',
+        addedAt: '2026-06-01T00:00:00Z',
+        subFrames: 0,
+        totalIntegrationS: 0,
+      },
     ],
     createdAt: '2026-06-01T00:00:00Z',
     updatedAt: '2026-06-01T00:00:00Z',
@@ -113,9 +153,23 @@ describe('EditProjectPane', () => {
     mockDismissDrift.mockReset();
     mockAddSource.mockReset();
     mockRemoveSource.mockReset();
-    mockUpdateProject.mockResolvedValue({ projectId: 'proj-001', fieldsUpdated: ['name'], auditId: 'a', updatedAt: new Date().toISOString() });
-    mockReinferChannels.mockResolvedValue({ projectId: 'proj-001', channels: [], auditId: 'a', updatedAt: new Date().toISOString() });
-    mockDismissDrift.mockResolvedValue({ projectId: 'proj-001', auditId: 'a', dismissedAt: new Date().toISOString() });
+    mockUpdateProject.mockResolvedValue({
+      projectId: 'proj-001',
+      fieldsUpdated: ['name'],
+      auditId: 'a',
+      updatedAt: new Date().toISOString(),
+    });
+    mockReinferChannels.mockResolvedValue({
+      projectId: 'proj-001',
+      channels: [],
+      auditId: 'a',
+      updatedAt: new Date().toISOString(),
+    });
+    mockDismissDrift.mockResolvedValue({
+      projectId: 'proj-001',
+      auditId: 'a',
+      dismissedAt: new Date().toISOString(),
+    });
     mockAddSource.mockResolvedValue({
       projectId: 'proj-001',
       sourceAdded: makeSource({ inventoryId: 'sess-candidate' }),
@@ -144,25 +198,38 @@ describe('EditProjectPane', () => {
 
   it('disables tool select when lifecycle is tool-locked', () => {
     render(
-      <EditProjectPane project={makeProject({ lifecycle: 'prepared' })} onClose={vi.fn()} />,
+      <EditProjectPane
+        project={makeProject({ lifecycle: 'prepared' })}
+        onClose={vi.fn()}
+      />,
     );
-    const toolSelect = screen.getByRole('combobox', { name: /processing tool/i });
+    const toolSelect = screen.getByRole('combobox', {
+      name: /processing tool/i,
+    });
     expect(toolSelect).toBeDisabled();
   });
 
   it('shows lock notice for tool-locked lifecycle', () => {
     render(
-      <EditProjectPane project={makeProject({ lifecycle: 'processing' })} onClose={vi.fn()} />,
+      <EditProjectPane
+        project={makeProject({ lifecycle: 'processing' })}
+        onClose={vi.fn()}
+      />,
     );
     expect(screen.getByText(/tool is locked/i)).toBeInTheDocument();
   });
 
   it('disables all fields when archived', () => {
     render(
-      <EditProjectPane project={makeProject({ lifecycle: 'archived' })} onClose={vi.fn()} />,
+      <EditProjectPane
+        project={makeProject({ lifecycle: 'archived' })}
+        onClose={vi.fn()}
+      />,
     );
     expect(screen.getByLabelText(/project name/i)).toBeDisabled();
-    expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /save/i }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(/archived.*read-only/i)).toBeInTheDocument();
   });
 
@@ -185,24 +252,34 @@ describe('EditProjectPane', () => {
   it('shows drift banner when hasNewSources is true', () => {
     render(
       <EditProjectPane
-        project={makeProject({ channelDrift: { hasNewSources: true, suggestedAction: 're_infer' } })}
+        project={makeProject({
+          channelDrift: { hasNewSources: true, suggestedAction: 're_infer' },
+        })}
         onClose={vi.fn()}
       />,
     );
     expect(screen.getByText(/new sources.*added/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /re-infer channels/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /dismiss/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /re-infer channels/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /dismiss/i }),
+    ).toBeInTheDocument();
   });
 
   it('calls useReinferChannels when Re-infer is clicked', async () => {
     render(
       <EditProjectPane
-        project={makeProject({ channelDrift: { hasNewSources: true, suggestedAction: 're_infer' } })}
+        project={makeProject({
+          channelDrift: { hasNewSources: true, suggestedAction: 're_infer' },
+        })}
         onClose={vi.fn()}
       />,
     );
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /re-infer channels/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /re-infer channels/i }),
+      );
     });
     await waitFor(() => {
       expect(mockReinferChannels).toHaveBeenCalledWith(
@@ -214,7 +291,9 @@ describe('EditProjectPane', () => {
   it('calls useDismissChannelDrift when Dismiss is clicked', async () => {
     render(
       <EditProjectPane
-        project={makeProject({ channelDrift: { hasNewSources: true, suggestedAction: 're_infer' } })}
+        project={makeProject({
+          channelDrift: { hasNewSources: true, suggestedAction: 're_infer' },
+        })}
         onClose={vi.fn()}
       />,
     );
@@ -254,23 +333,34 @@ describe('EditProjectPane sources (WP-008-C)', () => {
   it('lists current sources with a Remove affordance', () => {
     render(
       <EditProjectPane
-        project={makeProject({ sources: [makeSource({ inventoryId: 'sess-001', name: 'M31 / Ha' })] })}
+        project={makeProject({
+          sources: [makeSource({ inventoryId: 'sess-001', name: 'M31 / Ha' })],
+        })}
         onClose={vi.fn()}
       />,
     );
     expect(screen.getByText('M31 / Ha')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^remove$/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^remove$/i }),
+    ).toBeInTheDocument();
   });
 
   it('shows an empty hint when no sources are linked', () => {
-    render(<EditProjectPane project={makeProject({ sources: [] })} onClose={vi.fn()} />);
+    render(
+      <EditProjectPane
+        project={makeProject({ sources: [] })}
+        onClose={vi.fn()}
+      />,
+    );
     expect(screen.getByText(/no sources linked yet/i)).toBeInTheDocument();
   });
 
   it('removes a source when Remove is clicked', async () => {
     render(
       <EditProjectPane
-        project={makeProject({ sources: [makeSource({ inventoryId: 'sess-001' })] })}
+        project={makeProject({
+          sources: [makeSource({ inventoryId: 'sess-001' })],
+        })}
         onClose={vi.fn()}
       />,
     );
@@ -297,7 +387,9 @@ describe('EditProjectPane sources (WP-008-C)', () => {
     });
     render(
       <EditProjectPane
-        project={makeProject({ sources: [makeSource({ inventoryId: 'sess-001' })] })}
+        project={makeProject({
+          sources: [makeSource({ inventoryId: 'sess-001' })],
+        })}
         onClose={vi.fn()}
       />,
     );
@@ -305,7 +397,9 @@ describe('EditProjectPane sources (WP-008-C)', () => {
       fireEvent.click(screen.getByRole('button', { name: /^remove$/i }));
     });
     await waitFor(() => {
-      expect(screen.getByText(/can't remove the last confirmed source/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/can't remove the last confirmed source/i),
+      ).toBeInTheDocument();
     });
 
     await act(async () => {
@@ -313,7 +407,10 @@ describe('EditProjectPane sources (WP-008-C)', () => {
     });
     await waitFor(() => {
       expect(mockRemoveSource).toHaveBeenLastCalledWith(
-        expect.objectContaining({ projectSourceId: 'sess-001', confirmLastSource: true }),
+        expect.objectContaining({
+          projectSourceId: 'sess-001',
+          confirmLastSource: true,
+        }),
       );
     });
   });
@@ -327,7 +424,9 @@ describe('EditProjectPane sources (WP-008-C)', () => {
     });
     render(
       <EditProjectPane
-        project={makeProject({ sources: [makeSource({ inventoryId: 'sess-001' })] })}
+        project={makeProject({
+          sources: [makeSource({ inventoryId: 'sess-001' })],
+        })}
         onClose={vi.fn()}
       />,
     );
@@ -342,19 +441,29 @@ describe('EditProjectPane sources (WP-008-C)', () => {
   });
 
   it('reveals the shared session picker and adds the selected sessions', async () => {
-    render(<EditProjectPane project={makeProject({ sources: [] })} onClose={vi.fn()} />);
+    render(
+      <EditProjectPane
+        project={makeProject({ sources: [] })}
+        onClose={vi.fn()}
+      />,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /add sources/i }));
     expect(screen.getByTestId('session-source-picker')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /select sess-candidate/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /select sess-candidate/i }),
+    );
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /add 1 selected/i }));
     });
     await waitFor(() => {
       expect(mockAddSource).toHaveBeenCalledWith(
-        expect.objectContaining({ projectId: 'proj-001', inventorySessionId: 'sess-candidate' }),
+        expect.objectContaining({
+          projectId: 'proj-001',
+          inventorySessionId: 'sess-candidate',
+        }),
       );
     });
   });
@@ -366,10 +475,17 @@ describe('EditProjectPane sources (WP-008-C)', () => {
       severity: 'blocking',
       retryable: false,
     });
-    render(<EditProjectPane project={makeProject({ sources: [] })} onClose={vi.fn()} />);
+    render(
+      <EditProjectPane
+        project={makeProject({ sources: [] })}
+        onClose={vi.fn()}
+      />,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /add sources/i }));
-    fireEvent.click(screen.getByRole('button', { name: /select sess-candidate/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /select sess-candidate/i }),
+    );
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /add 1 selected/i }));
@@ -383,11 +499,16 @@ describe('EditProjectPane sources (WP-008-C)', () => {
   it('hides the add-sources toggle and disables Remove when the project is archived', () => {
     render(
       <EditProjectPane
-        project={makeProject({ lifecycle: 'archived', sources: [makeSource({ inventoryId: 'sess-001' })] })}
+        project={makeProject({
+          lifecycle: 'archived',
+          sources: [makeSource({ inventoryId: 'sess-001' })],
+        })}
         onClose={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('button', { name: /add sources/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /add sources/i }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^remove$/i })).toBeDisabled();
   });
 });

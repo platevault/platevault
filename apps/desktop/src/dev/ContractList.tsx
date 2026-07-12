@@ -15,9 +15,7 @@ interface ContractListProps {
 export function ContractList({ contracts, onViewSchema }: ContractListProps) {
   if (contracts.length === 0) {
     return (
-      <p className="alm-dev-contracts-list__empty">
-        No contracts loaded.
-      </p>
+      <p className="alm-dev-contracts-list__empty">No contracts loaded.</p>
     );
   }
 
@@ -56,9 +54,7 @@ export function ContractList({ contracts, onViewSchema }: ContractListProps) {
               {c.name}
             </td>
             <td className="alm-dev-contracts-list__td">{c.version}</td>
-            <td className="alm-dev-contracts-list__td-muted">
-              {c.direction}
-            </td>
+            <td className="alm-dev-contracts-list__td-muted">{c.direction}</td>
             <td className="alm-dev-contracts-list__td-center">
               {c.replaySafe ? (
                 <span

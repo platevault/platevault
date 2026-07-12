@@ -34,7 +34,9 @@ import type { LibraryRoot } from '@/bindings/types';
 // the tests below spy on the singleton, so the provider must supply that SAME
 // instance, not a fresh `new QueryClient()`.
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }
 
 const {
@@ -84,7 +86,10 @@ beforeEach(() => {
       inheritsDefault: true,
     },
   });
-  mockOverridableKeys.mockResolvedValue({ status: 'ok', data: ['hashOnScan', 'followSymlinks'] });
+  mockOverridableKeys.mockResolvedValue({
+    status: 'ok',
+    data: ['hashOnScan', 'followSymlinks'],
+  });
 });
 
 describe('DataSources — Reconcile', () => {
@@ -92,7 +97,14 @@ describe('DataSources — Reconcile', () => {
     mockRootsList.mockResolvedValue({ status: 'ok', data: [makeRoot()] });
     mockReconcileRun.mockResolvedValue({
       status: 'ok',
-      data: { scanned: 3, present: 2, newlyMissing: 1, recovered: 0, sizeBackfilled: 0, progressPct: 100 },
+      data: {
+        scanned: 3,
+        present: 2,
+        newlyMissing: 1,
+        recovered: 0,
+        sizeBackfilled: 0,
+        progressPct: 100,
+      },
     });
 
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
@@ -103,7 +115,10 @@ describe('DataSources — Reconcile', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Reconcile$/i }));
 
     await waitFor(() => {
-      expect(mockReconcileRun).toHaveBeenCalledWith({ rootId: 'root-1', reason: 'on_demand' });
+      expect(mockReconcileRun).toHaveBeenCalledWith({
+        rootId: 'root-1',
+        reason: 'on_demand',
+      });
     });
     // Both readers of frame counts need invalidating: `SessionSourcePicker`
     // (backed by `sessions.all()`) and the Sessions/Inventory page's own
@@ -134,28 +149,49 @@ describe('DataSources — Reconcile', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Reconcile$/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Reconciling/i })).toBeDisabled();
+      expect(
+        screen.getByRole('button', { name: /Reconciling/i }),
+      ).toBeDisabled();
     });
 
     resolveReconcile?.({
       status: 'ok',
-      data: { scanned: 0, present: 0, newlyMissing: 0, recovered: 0, sizeBackfilled: 0, progressPct: 100 },
+      data: {
+        scanned: 0,
+        present: 0,
+        newlyMissing: 0,
+        recovered: 0,
+        sizeBackfilled: 0,
+        progressPct: 100,
+      },
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^Reconcile$/i })).not.toBeDisabled();
+      expect(
+        screen.getByRole('button', { name: /^Reconcile$/i }),
+      ).not.toBeDisabled();
     });
   });
 
   it('does not show a Reconcile button for project/inbox roots (no file_record rows to diff)', async () => {
     mockRootsList.mockResolvedValue({
       status: 'ok',
-      data: [makeRoot({ id: 'root-2', path: '/astro/projects', category: 'project' })],
+      data: [
+        makeRoot({
+          id: 'root-2',
+          path: '/astro/projects',
+          category: 'project',
+        }),
+      ],
     });
 
     render(<DataSources save={vi.fn()} />, { wrapper });
-    await waitFor(() => screen.getByText('/astro/projects', { selector: 'code' }));
+    await waitFor(() =>
+      screen.getByText('/astro/projects', { selector: 'code' }),
+    );
 
-    expect(screen.queryByRole('button', { name: /^Reconcile$/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^Reconcile$/i }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -32,7 +32,9 @@ beforeEach(() => {
 
 describe('T073: recording proxy auto-capture', () => {
   it('wrap with devMode=true captures calls into ring buffer', async () => {
-    const baseDispatch: DispatchFn = vi.fn().mockResolvedValue({ status: 'ok' });
+    const baseDispatch: DispatchFn = vi
+      .fn()
+      .mockResolvedValue({ status: 'ok' });
     const recording = wrap(baseDispatch, true, []);
 
     await recording('test.operation', { foo: 'bar' });
@@ -44,7 +46,9 @@ describe('T073: recording proxy auto-capture', () => {
   });
 
   it('wrap with devMode=false is a no-op (zero overhead)', async () => {
-    const baseDispatch: DispatchFn = vi.fn().mockResolvedValue({ status: 'ok' });
+    const baseDispatch: DispatchFn = vi
+      .fn()
+      .mockResolvedValue({ status: 'ok' });
     const passthrough = wrap(baseDispatch, false, []);
 
     await passthrough('test.noop', {});
@@ -56,7 +60,9 @@ describe('T073: recording proxy auto-capture', () => {
   });
 
   it('captures multiple calls in order (newest first)', async () => {
-    const baseDispatch: DispatchFn = vi.fn().mockResolvedValue({ status: 'ok' });
+    const baseDispatch: DispatchFn = vi
+      .fn()
+      .mockResolvedValue({ status: 'ok' });
     const recording = wrap(baseDispatch, true, []);
 
     await recording('op.first', {});
@@ -84,14 +90,12 @@ describe('T073: recording proxy auto-capture', () => {
     // is rejected by the Rust side with path.write.denied.
     const relativePath = '123-dev-export.json';
     const isAbsolute =
-      relativePath.startsWith('/') ||
-      /^[A-Za-z]:[/\\]/.test(relativePath);
+      relativePath.startsWith('/') || /^[A-Za-z]:[/\\]/.test(relativePath);
     expect(isAbsolute).toBe(false); // confirms relative path would fail
 
     const absolutePath = '/tmp/123-dev-export.json';
     const absoluteIsAbsolute =
-      absolutePath.startsWith('/') ||
-      /^[A-Za-z]:[/\\]/.test(absolutePath);
+      absolutePath.startsWith('/') || /^[A-Za-z]:[/\\]/.test(absolutePath);
     expect(absoluteIsAbsolute).toBe(true); // confirms absolute path is valid
   });
 });

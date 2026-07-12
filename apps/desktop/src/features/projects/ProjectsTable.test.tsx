@@ -46,7 +46,9 @@ const mockProjects: ProjectSummaryDto[] = [
   },
 ];
 
-function renderTable(overrides: Partial<React.ComponentProps<typeof ProjectsTable>> = {}) {
+function renderTable(
+  overrides: Partial<React.ComponentProps<typeof ProjectsTable>> = {},
+) {
   return render(
     <ProjectsTable
       projects={mockProjects}
@@ -99,7 +101,9 @@ describe('ProjectsTable', () => {
     // Source count.
     expect(screen.getByText('3')).toBeInTheDocument();
     // Updated date formatted as "yyyy-MM-dd HH:mm" (local).
-    expect(screen.getAllByText(/2026-06-1[09] \d{2}:\d{2}/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/2026-06-1[09] \d{2}:\d{2}/).length,
+    ).toBeGreaterThan(0);
   });
 
   it('(#105) state column uses ProjectStatusTag: dot+text, not a filled pill', () => {
@@ -117,7 +121,9 @@ describe('ProjectsTable', () => {
 
   it('marks the selected row with the selected CSS class', () => {
     const { container } = renderTable({ selectedId: 'proj-001' });
-    const selected = container.querySelectorAll('.alm-projects-table__row--selected');
+    const selected = container.querySelectorAll(
+      '.alm-projects-table__row--selected',
+    );
     expect(selected).toHaveLength(1);
     expect(selected[0]).toHaveTextContent('NGC 7000 Narrowband');
   });

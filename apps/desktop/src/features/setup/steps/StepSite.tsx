@@ -9,7 +9,10 @@
 // never blocks Finish (FR-025 does not require a site to complete setup).
 
 import { m } from '@/lib/i18n';
-import { localTimezone, ianaTimezones } from '@/features/targets/observing-sites/iana-timezones';
+import {
+  localTimezone,
+  ianaTimezones,
+} from '@/features/targets/observing-sites/iana-timezones';
 import type { Twilight } from '@/features/targets/observing-sites/observer-site';
 
 export interface SiteStepState {
@@ -39,7 +42,11 @@ export interface StepSiteProps {
 
 /** True when enough fields are filled in to create a site from this step (name/lat/lon; matches T016's "required" fields plus timezone, which always has a value). */
 export function siteStepHasSite(state: SiteStepState): boolean {
-  return state.name.trim() !== '' && state.latitudeDegText.trim() !== '' && state.longitudeDegText.trim() !== '';
+  return (
+    state.name.trim() !== '' &&
+    state.latitudeDegText.trim() !== '' &&
+    state.longitudeDegText.trim() !== ''
+  );
 }
 
 /** Validate the (optional) site step; `null` when the step is empty (skipped) or valid. */
@@ -101,7 +108,9 @@ export function StepSite({ state, onChange }: StepSiteProps) {
             className="alm-input"
             aria-label={m.settings_observing_sites_field_latitude()}
             value={state.latitudeDegText}
-            onChange={(e) => onChange({ ...state, latitudeDegText: e.target.value })}
+            onChange={(e) =>
+              onChange({ ...state, latitudeDegText: e.target.value })
+            }
           />
         </div>
         <div className="alm-stack-1">
@@ -115,7 +124,9 @@ export function StepSite({ state, onChange }: StepSiteProps) {
             className="alm-input"
             aria-label={m.settings_observing_sites_field_longitude()}
             value={state.longitudeDegText}
-            onChange={(e) => onChange({ ...state, longitudeDegText: e.target.value })}
+            onChange={(e) =>
+              onChange({ ...state, longitudeDegText: e.target.value })
+            }
           />
         </div>
         <div className="alm-stack-1">
@@ -129,7 +140,9 @@ export function StepSite({ state, onChange }: StepSiteProps) {
             className="alm-input"
             aria-label={m.settings_observing_sites_field_elevation()}
             value={state.elevationMText}
-            onChange={(e) => onChange({ ...state, elevationMText: e.target.value })}
+            onChange={(e) =>
+              onChange({ ...state, elevationMText: e.target.value })
+            }
           />
         </div>
         <div className="alm-stack-1">

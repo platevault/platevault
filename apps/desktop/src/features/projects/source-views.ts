@@ -116,7 +116,11 @@ export interface SourceViewGenerateResponse {
 // ── Spec 049 US4: verify before processing ─────────────────────────────────────
 
 /** Why a single item failed verification (spec 049 US4). */
-export type BrokenItemState = 'missing' | 'moved' | 'unresolved_link' | 'changed_kind';
+export type BrokenItemState =
+  | 'missing'
+  | 'moved'
+  | 'unresolved_link'
+  | 'changed_kind';
 
 /** One broken/missing/stale item reported by `sourceview.verify`. */
 export interface BrokenItem {
@@ -143,7 +147,9 @@ export interface SourceViewVerifyResponse {
 export async function listPreparedViews(
   projectId: string,
 ): Promise<PreparedViewListResponse> {
-  return unwrap(await commands.preparedviewList(projectId)) as PreparedViewListResponse;
+  return unwrap(
+    await commands.preparedviewList(projectId),
+  ) as PreparedViewListResponse;
 }
 
 /**
@@ -155,7 +161,9 @@ export async function listPreparedViews(
 export async function removePreparedView(
   viewId: string,
 ): Promise<PreparedViewRemoveResponse> {
-  return unwrap(await commands.preparedviewRemove(viewId)) as PreparedViewRemoveResponse;
+  return unwrap(
+    await commands.preparedviewRemove(viewId),
+  ) as PreparedViewRemoveResponse;
 }
 
 /**
@@ -167,7 +175,9 @@ export async function removePreparedView(
 export async function regeneratePreparedView(
   viewId: string,
 ): Promise<PreparedViewRegenerateResponse> {
-  return unwrap(await commands.preparedviewRegenerate(viewId)) as PreparedViewRegenerateResponse;
+  return unwrap(
+    await commands.preparedviewRegenerate(viewId),
+  ) as PreparedViewRegenerateResponse;
 }
 
 /**
@@ -180,7 +190,9 @@ export async function regeneratePreparedView(
 export async function generateSourceView(
   req: SourceViewGenerateRequest,
 ): Promise<SourceViewGenerateResponse> {
-  return unwrap(await commands.sourceviewGenerate(req)) as SourceViewGenerateResponse;
+  return unwrap(
+    await commands.sourceviewGenerate(req),
+  ) as SourceViewGenerateResponse;
 }
 
 /**
@@ -190,8 +202,12 @@ export async function generateSourceView(
  * Never mutates the filesystem and never auto-repairs (FR-014/FR-015);
  * repair is via `regeneratePreparedView`.
  */
-export async function verifySourceView(viewId: string): Promise<SourceViewVerifyResponse> {
-  return unwrap(await commands.sourceviewVerify(viewId)) as SourceViewVerifyResponse;
+export async function verifySourceView(
+  viewId: string,
+): Promise<SourceViewVerifyResponse> {
+  return unwrap(
+    await commands.sourceviewVerify(viewId),
+  ) as SourceViewVerifyResponse;
 }
 
 // ── Spec 049 T041: per-project destination override ────────────────────────────

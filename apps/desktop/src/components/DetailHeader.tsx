@@ -8,11 +8,20 @@ export interface DetailHeaderProps {
   children?: ReactNode;
 }
 
-export function DetailHeader({ title, titleExtra, subtitle, actions, children }: DetailHeaderProps) {
+export function DetailHeader({
+  title,
+  titleExtra,
+  subtitle,
+  actions,
+  children,
+}: DetailHeaderProps) {
   return (
     <div className="alm-detail__header">
       <div className="alm-detail__header-content">
-        <div className="alm-detail__title">{title}{titleExtra}</div>
+        <div className="alm-detail__title">
+          {title}
+          {titleExtra}
+        </div>
         {subtitle && <div className="alm-detail__subtitle">{subtitle}</div>}
         {children}
       </div>

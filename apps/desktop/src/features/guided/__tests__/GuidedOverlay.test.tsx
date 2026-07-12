@@ -51,7 +51,9 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 const now = new Date().toISOString();
 
-function makeState(overrides: Partial<GuidedFlowStateDto> = {}): GuidedFlowStateDto {
+function makeState(
+  overrides: Partial<GuidedFlowStateDto> = {},
+): GuidedFlowStateDto {
   return {
     currentStep: 'inbox.confirm_first',
     completedSteps: [],
@@ -82,7 +84,9 @@ describe('GuidedOverlay (react-joyride 3.1 render layer)', () => {
   it('renders Joyride with run=true when state is active', async () => {
     const { GuidedOverlay } = await import('../GuidedOverlay');
     const state = makeState({ currentStep: 'inbox.confirm_first' });
-    const { getByTestId } = render(<GuidedOverlay guidedState={state} onDismiss={() => {}} />);
+    const { getByTestId } = render(
+      <GuidedOverlay guidedState={state} onDismiss={() => {}} />,
+    );
 
     const mock = getByTestId('joyride-mock');
     expect(mock.getAttribute('data-run')).toBe('true');
@@ -103,7 +107,9 @@ describe('GuidedOverlay (react-joyride 3.1 render layer)', () => {
   it('passes stepIndex=0 for inbox.confirm_first', async () => {
     const { GuidedOverlay } = await import('../GuidedOverlay');
     const state = makeState({ currentStep: 'inbox.confirm_first' });
-    const { getByTestId } = render(<GuidedOverlay guidedState={state} onDismiss={() => {}} />);
+    const { getByTestId } = render(
+      <GuidedOverlay guidedState={state} onDismiss={() => {}} />,
+    );
 
     expect(getByTestId('joyride-mock').getAttribute('data-step')).toBe('0');
   });
@@ -111,7 +117,9 @@ describe('GuidedOverlay (react-joyride 3.1 render layer)', () => {
   it('passes stepIndex=1 for project.create_first', async () => {
     const { GuidedOverlay } = await import('../GuidedOverlay');
     const state = makeState({ currentStep: 'project.create_first' });
-    const { getByTestId } = render(<GuidedOverlay guidedState={state} onDismiss={() => {}} />);
+    const { getByTestId } = render(
+      <GuidedOverlay guidedState={state} onDismiss={() => {}} />,
+    );
 
     expect(getByTestId('joyride-mock').getAttribute('data-step')).toBe('1');
   });
@@ -119,7 +127,9 @@ describe('GuidedOverlay (react-joyride 3.1 render layer)', () => {
   it('passes stepIndex=2 for tool.open_first', async () => {
     const { GuidedOverlay } = await import('../GuidedOverlay');
     const state = makeState({ currentStep: 'tool.open_first' });
-    const { getByTestId } = render(<GuidedOverlay guidedState={state} onDismiss={() => {}} />);
+    const { getByTestId } = render(
+      <GuidedOverlay guidedState={state} onDismiss={() => {}} />,
+    );
 
     expect(getByTestId('joyride-mock').getAttribute('data-step')).toBe('2');
   });
@@ -127,13 +137,17 @@ describe('GuidedOverlay (react-joyride 3.1 render layer)', () => {
   it('renders nothing when state is dismissed', async () => {
     const { GuidedOverlay } = await import('../GuidedOverlay');
     const state = makeState({ dismissed: true, currentStep: null });
-    const { container } = render(<GuidedOverlay guidedState={state} onDismiss={() => {}} />);
+    const { container } = render(
+      <GuidedOverlay guidedState={state} onDismiss={() => {}} />,
+    );
     expect(container.firstChild).toBeNull();
   });
 
   it('renders nothing when guidedState is null', async () => {
     const { GuidedOverlay } = await import('../GuidedOverlay');
-    const { container } = render(<GuidedOverlay guidedState={null} onDismiss={() => {}} />);
+    const { container } = render(
+      <GuidedOverlay guidedState={null} onDismiss={() => {}} />,
+    );
     expect(container.firstChild).toBeNull();
   });
 
@@ -141,9 +155,15 @@ describe('GuidedOverlay (react-joyride 3.1 render layer)', () => {
     const { GuidedOverlay } = await import('../GuidedOverlay');
     const state = makeState({
       currentStep: null,
-      completedSteps: ['inbox.confirm_first', 'project.create_first', 'tool.open_first'],
+      completedSteps: [
+        'inbox.confirm_first',
+        'project.create_first',
+        'tool.open_first',
+      ],
     });
-    const { container } = render(<GuidedOverlay guidedState={state} onDismiss={() => {}} />);
+    const { container } = render(
+      <GuidedOverlay guidedState={state} onDismiss={() => {}} />,
+    );
     expect(container.firstChild).toBeNull();
   });
 

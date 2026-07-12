@@ -35,7 +35,13 @@ vi.mock('@tauri-apps/api/event', () => ({
 const mockCompleteGuidedStep = vi.fn().mockResolvedValue({
   completed: true,
   nextStep: null,
-  state: { currentStep: null, completedSteps: [], dismissed: false, dismissedAt: null, updatedAt: '' },
+  state: {
+    currentStep: null,
+    completedSteps: [],
+    dismissed: false,
+    dismissedAt: null,
+    updatedAt: '',
+  },
 });
 
 vi.mock('../store', () => ({
@@ -74,10 +80,17 @@ describe('guidedEventBridge', () => {
     const { startGuidedEventBridge } = await import('../eventBridge');
     await startGuidedEventBridge();
 
-    emitEvent('inventory.confirmed', { source: 'user', inboxItemId: 'item-1', planId: 'plan-1', at: '2026-01-01T00:00:00Z' });
+    emitEvent('inventory.confirmed', {
+      source: 'user',
+      inboxItemId: 'item-1',
+      planId: 'plan-1',
+      at: '2026-01-01T00:00:00Z',
+    });
 
     await vi.waitFor(() => {
-      expect(mockCompleteGuidedStep).toHaveBeenCalledWith('inbox.confirm_first');
+      expect(mockCompleteGuidedStep).toHaveBeenCalledWith(
+        'inbox.confirm_first',
+      );
     });
   });
 
@@ -85,10 +98,16 @@ describe('guidedEventBridge', () => {
     const { startGuidedEventBridge } = await import('../eventBridge');
     await startGuidedEventBridge();
 
-    emitEvent('project.created', { source: 'user', projectId: 'proj-1', at: '2026-01-01T00:00:00Z' });
+    emitEvent('project.created', {
+      source: 'user',
+      projectId: 'proj-1',
+      at: '2026-01-01T00:00:00Z',
+    });
 
     await vi.waitFor(() => {
-      expect(mockCompleteGuidedStep).toHaveBeenCalledWith('project.create_first');
+      expect(mockCompleteGuidedStep).toHaveBeenCalledWith(
+        'project.create_first',
+      );
     });
   });
 
@@ -96,7 +115,12 @@ describe('guidedEventBridge', () => {
     const { startGuidedEventBridge } = await import('../eventBridge');
     await startGuidedEventBridge();
 
-    emitEvent('tool.opened', { source: 'user', toolId: 'pixinsight', projectId: 'proj-1', at: '2026-01-01T00:00:00Z' });
+    emitEvent('tool.opened', {
+      source: 'user',
+      toolId: 'pixinsight',
+      projectId: 'proj-1',
+      at: '2026-01-01T00:00:00Z',
+    });
 
     await vi.waitFor(() => {
       expect(mockCompleteGuidedStep).toHaveBeenCalledWith('tool.open_first');
@@ -107,7 +131,12 @@ describe('guidedEventBridge', () => {
     const { startGuidedEventBridge } = await import('../eventBridge');
     await startGuidedEventBridge();
 
-    emitEvent('inventory.confirmed', { source: 'restore', inboxItemId: 'item-1', planId: 'plan-1', at: '2026-01-01T00:00:00Z' });
+    emitEvent('inventory.confirmed', {
+      source: 'restore',
+      inboxItemId: 'item-1',
+      planId: 'plan-1',
+      at: '2026-01-01T00:00:00Z',
+    });
 
     // Give any async work a moment.
     await new Promise((r) => setTimeout(r, 10));
@@ -119,7 +148,11 @@ describe('guidedEventBridge', () => {
     const { startGuidedEventBridge } = await import('../eventBridge');
     await startGuidedEventBridge();
 
-    emitEvent('project.created', { source: 'restore', projectId: 'proj-1', at: '2026-01-01T00:00:00Z' });
+    emitEvent('project.created', {
+      source: 'restore',
+      projectId: 'proj-1',
+      at: '2026-01-01T00:00:00Z',
+    });
 
     await new Promise((r) => setTimeout(r, 10));
 
@@ -131,7 +164,12 @@ describe('guidedEventBridge', () => {
     await startGuidedEventBridge();
     await startGuidedEventBridge(); // second call should be no-op
 
-    emitEvent('inventory.confirmed', { source: 'user', inboxItemId: 'item-2', planId: 'plan-2', at: '2026-01-01T00:00:00Z' });
+    emitEvent('inventory.confirmed', {
+      source: 'user',
+      inboxItemId: 'item-2',
+      planId: 'plan-2',
+      at: '2026-01-01T00:00:00Z',
+    });
 
     await vi.waitFor(() => {
       expect(mockCompleteGuidedStep).toHaveBeenCalledTimes(1);

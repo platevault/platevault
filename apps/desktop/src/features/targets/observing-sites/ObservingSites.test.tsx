@@ -16,7 +16,14 @@
  *      losing the edit.
  */
 
-import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockSettingsUpdate } = vi.hoisted(() => ({
@@ -75,22 +82,33 @@ beforeEach(() => {
 describe('ObservingSites', () => {
   it('shows the empty state with no sites', () => {
     render(<ObservingSites />);
-    expect(screen.getByText(m.settings_observing_sites_empty())).toBeInTheDocument();
+    expect(
+      screen.getByText(m.settings_observing_sites_empty()),
+    ).toBeInTheDocument();
   });
 
   it('adding the first site persists it as default AND active', async () => {
     render(<ObservingSites />);
 
     fireEvent.click(screen.getByText(m.settings_observing_sites_add()));
-    fireEvent.change(screen.getByLabelText(m.settings_observing_sites_field_name()), {
-      target: { value: 'Backyard' },
-    });
-    fireEvent.change(screen.getByLabelText(m.settings_observing_sites_field_latitude()), {
-      target: { value: '52.37' },
-    });
-    fireEvent.change(screen.getByLabelText(m.settings_observing_sites_field_longitude()), {
-      target: { value: '4.9' },
-    });
+    fireEvent.change(
+      screen.getByLabelText(m.settings_observing_sites_field_name()),
+      {
+        target: { value: 'Backyard' },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_observing_sites_field_latitude()),
+      {
+        target: { value: '52.37' },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_observing_sites_field_longitude()),
+      {
+        target: { value: '4.9' },
+      },
+    );
 
     await act(async () => {
       fireEvent.click(screen.getByText(m.common_save()));
@@ -98,7 +116,10 @@ describe('ObservingSites', () => {
     });
 
     expect(mockSettingsUpdate).toHaveBeenCalledTimes(1);
-    const [scope, values] = mockSettingsUpdate.mock.calls[0] as [string, Record<string, unknown>];
+    const [scope, values] = mockSettingsUpdate.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
     expect(scope).toBe('observing');
     const sites = values['observingSites'] as ObserverSite[];
     expect(sites).toHaveLength(1);
@@ -106,28 +127,45 @@ describe('ObservingSites', () => {
     expect(values['observingDefaultSiteId']).toBe(sites[0].id);
     expect(values['observingActiveSiteId']).toBe(sites[0].id);
 
-    await waitFor(() => expect(screen.getByText('Backyard')).toBeInTheDocument());
-    expect(screen.getByText(m.settings_observing_sites_default_badge())).toBeInTheDocument();
-    expect(screen.getByText(m.settings_observing_sites_active_badge())).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText('Backyard')).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(m.settings_observing_sites_default_badge()),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(m.settings_observing_sites_active_badge()),
+    ).toBeInTheDocument();
   });
 
   it('rejects an out-of-range latitude', () => {
     render(<ObservingSites />);
 
     fireEvent.click(screen.getByText(m.settings_observing_sites_add()));
-    fireEvent.change(screen.getByLabelText(m.settings_observing_sites_field_name()), {
-      target: { value: 'Bad site' },
-    });
-    fireEvent.change(screen.getByLabelText(m.settings_observing_sites_field_latitude()), {
-      target: { value: '120' },
-    });
-    fireEvent.change(screen.getByLabelText(m.settings_observing_sites_field_longitude()), {
-      target: { value: '0' },
-    });
+    fireEvent.change(
+      screen.getByLabelText(m.settings_observing_sites_field_name()),
+      {
+        target: { value: 'Bad site' },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_observing_sites_field_latitude()),
+      {
+        target: { value: '120' },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_observing_sites_field_longitude()),
+      {
+        target: { value: '0' },
+      },
+    );
 
     fireEvent.click(screen.getByText(m.common_save()));
 
-    expect(screen.getByText(m.settings_observing_sites_error_latitude())).toBeInTheDocument();
+    expect(
+      screen.getByText(m.settings_observing_sites_error_latitude()),
+    ).toBeInTheDocument();
     expect(mockSettingsUpdate).not.toHaveBeenCalled();
   });
 
@@ -141,7 +179,9 @@ describe('ObservingSites', () => {
     render(<ObservingSites />);
     fireEvent.click(screen.getByText(m.common_edit()));
 
-    const nameInput = screen.getByLabelText(m.settings_observing_sites_field_name());
+    const nameInput = screen.getByLabelText(
+      m.settings_observing_sites_field_name(),
+    );
     fireEvent.change(nameInput, { target: { value: 'Backyard (renamed)' } });
 
     await act(async () => {
@@ -149,7 +189,10 @@ describe('ObservingSites', () => {
       await Promise.resolve();
     });
 
-    const [, values] = mockSettingsUpdate.mock.calls[0] as [string, Record<string, unknown>];
+    const [, values] = mockSettingsUpdate.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
     const sites = values['observingSites'] as ObserverSite[];
     expect(sites).toHaveLength(1);
     expect(sites[0].id).toBe(HOME.id);
@@ -168,11 +211,18 @@ describe('ObservingSites', () => {
 
     render(<ObservingSites />);
 
-    const darkSkyRow = screen.getByText(DARK_SKY.name).closest('tr') as HTMLElement;
-    fireEvent.click(within(darkSkyRow).getByText(m.settings_observing_sites_set_active()));
+    const darkSkyRow = screen
+      .getByText(DARK_SKY.name)
+      .closest('tr') as HTMLElement;
+    fireEvent.click(
+      within(darkSkyRow).getByText(m.settings_observing_sites_set_active()),
+    );
 
     await waitFor(() => expect(mockSettingsUpdate).toHaveBeenCalledTimes(1));
-    const [, values] = mockSettingsUpdate.mock.calls[0] as [string, Record<string, unknown>];
+    const [, values] = mockSettingsUpdate.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
     expect(values['observingActiveSiteId']).toBe(DARK_SKY.id);
     expect(values['observingDefaultSiteId']).toBe(HOME.id);
   });
@@ -186,7 +236,9 @@ describe('ObservingSites', () => {
 
     render(<ObservingSites />);
 
-    const darkSkyRow = screen.getByText(DARK_SKY.name).closest('tr') as HTMLElement;
+    const darkSkyRow = screen
+      .getByText(DARK_SKY.name)
+      .closest('tr') as HTMLElement;
     fireEvent.click(within(darkSkyRow).getByText(m.common_remove()));
 
     const dialog = await screen.findByRole('dialog');
@@ -195,7 +247,10 @@ describe('ObservingSites', () => {
       await Promise.resolve();
     });
 
-    const [, values] = mockSettingsUpdate.mock.calls[0] as [string, Record<string, unknown>];
+    const [, values] = mockSettingsUpdate.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
     const sites = values['observingSites'] as ObserverSite[];
     expect(sites).toHaveLength(1);
     expect(sites[0].id).toBe(HOME.id);
@@ -219,32 +274,51 @@ describe('ObservingSites', () => {
       await Promise.resolve();
     });
 
-    const [, values] = mockSettingsUpdate.mock.calls[0] as [string, Record<string, unknown>];
+    const [, values] = mockSettingsUpdate.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
     expect(values['observingSites']).toEqual([]);
     expect(values['observingActiveSiteId']).toBeNull();
     expect(values['observingDefaultSiteId']).toBeNull();
 
     await waitFor(() =>
-      expect(screen.getByText(m.settings_observing_sites_empty())).toBeInTheDocument(),
+      expect(
+        screen.getByText(m.settings_observing_sites_empty()),
+      ).toBeInTheDocument(),
     );
   });
 
   it('shows a save error when the backend rejects the update', async () => {
     mockSettingsUpdate.mockResolvedValue(
-      err({ code: 'internal.database', message: 'db down', severity: 'blocking', retryable: true }),
+      err({
+        code: 'internal.database',
+        message: 'db down',
+        severity: 'blocking',
+        retryable: true,
+      }),
     );
 
     render(<ObservingSites />);
     fireEvent.click(screen.getByText(m.settings_observing_sites_add()));
-    fireEvent.change(screen.getByLabelText(m.settings_observing_sites_field_name()), {
-      target: { value: 'Backyard' },
-    });
-    fireEvent.change(screen.getByLabelText(m.settings_observing_sites_field_latitude()), {
-      target: { value: '52.37' },
-    });
-    fireEvent.change(screen.getByLabelText(m.settings_observing_sites_field_longitude()), {
-      target: { value: '4.9' },
-    });
+    fireEvent.change(
+      screen.getByLabelText(m.settings_observing_sites_field_name()),
+      {
+        target: { value: 'Backyard' },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_observing_sites_field_latitude()),
+      {
+        target: { value: '52.37' },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText(m.settings_observing_sites_field_longitude()),
+      {
+        target: { value: '4.9' },
+      },
+    );
 
     await act(async () => {
       fireEvent.click(screen.getByText(m.common_save()));
@@ -253,7 +327,9 @@ describe('ObservingSites', () => {
 
     expect(
       screen.getByText(
-        m.settings_observing_sites_save_error({ error: m.err_internal_database() }),
+        m.settings_observing_sites_save_error({
+          error: m.err_internal_database(),
+        }),
       ),
     ).toBeInTheDocument();
   });

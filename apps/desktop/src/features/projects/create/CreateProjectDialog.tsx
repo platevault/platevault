@@ -48,8 +48,16 @@ import {
 
 // Render-time factory so option labels re-read the active locale (spec 046 #8).
 const toolOptions = (): RadioOption[] => [
-  { value: 'PixInsight', label: m.setup_tools_pixinsight_name(), desc: m.projects_create_tool_pixinsight_desc() },
-  { value: 'Siril', label: m.setup_tools_siril_name(), desc: m.projects_create_tool_siril_desc() },
+  {
+    value: 'PixInsight',
+    label: m.setup_tools_pixinsight_name(),
+    desc: m.projects_create_tool_pixinsight_desc(),
+  },
+  {
+    value: 'Siril',
+    label: m.setup_tools_siril_name(),
+    desc: m.projects_create_tool_siril_desc(),
+  },
 ];
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -62,7 +70,11 @@ export interface CreateProjectDialogProps {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectDialogProps) {
+export function CreateProjectDialog({
+  open,
+  onClose,
+  onSuccess,
+}: CreateProjectDialogProps) {
   const formId = useId();
 
   // spec 035 US1: selected canonical target (optional). The current
@@ -102,7 +114,10 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
   async function onValid(values: CreateProjectFormValues) {
     const trimmedName = values.name.trim();
     if (await findDuplicateProjectName(trimmedName)) {
-      setError('name', { type: 'duplicate', message: m.projects_create_name_duplicate() });
+      setError('name', {
+        type: 'duplicate',
+        message: m.projects_create_name_duplicate(),
+      });
       return;
     }
 
@@ -136,11 +151,23 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
       ariaLabel={m.projects_create_btn()}
       footer={
         <>
-          <Btn type="button" variant="ghost" onClick={closeAndReset} disabled={isSubmitting}>
+          <Btn
+            type="button"
+            variant="ghost"
+            onClick={closeAndReset}
+            disabled={isSubmitting}
+          >
             {m.common_cancel()}
           </Btn>
-          <Btn type="submit" form={formId} variant="primary" disabled={isSubmitting}>
-            {isSubmitting ? m.projects_create_creating() : m.projects_create_btn()}
+          <Btn
+            type="submit"
+            form={formId}
+            variant="primary"
+            disabled={isSubmitting}
+          >
+            {isSubmitting
+              ? m.projects_create_creating()
+              : m.projects_create_btn()}
           </Btn>
         </>
       }
@@ -155,7 +182,9 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
       >
         {/* Name */}
         <div>
-          <label className="alm-field-label" htmlFor="cp-name">{m.projects_name_label()}</label>
+          <label className="alm-field-label" htmlFor="cp-name">
+            {m.projects_name_label()}
+          </label>
           <input
             id="cp-name"
             className="alm-input"
@@ -179,13 +208,19 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
         <div>
           {target ? (
             <>
-              <span className="alm-field-label">{m.projects_create_target_label()}</span>
+              <span className="alm-field-label">
+                {m.projects_create_target_label()}
+              </span>
               <div className="alm-create-project__target-row">
                 <Pill variant="accent">{target.primaryDesignation}</Pill>
                 {target.commonName && (
                   <span className="alm-field-hint">{target.commonName}</span>
                 )}
-                <Btn type="button" variant="ghost" onClick={() => setTarget(null)}>
+                <Btn
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setTarget(null)}
+                >
                   {m.common_change()}
                 </Btn>
               </div>
@@ -215,7 +250,9 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
             )}
           />
           {errors.tool && (
-            <span role="alert" className="alm-field-error">{errors.tool.message}</span>
+            <span role="alert" className="alm-field-error">
+              {errors.tool.message}
+            </span>
           )}
         </div>
 
@@ -223,7 +260,10 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
         <div>
           <label className="alm-field-label" htmlFor="cp-path">
             {m.projects_create_path_label()}
-            <span className="alm-field-hint"> {m.projects_create_path_hint()}</span>
+            <span className="alm-field-hint">
+              {' '}
+              {m.projects_create_path_hint()}
+            </span>
           </label>
           <input
             id="cp-path"
@@ -243,7 +283,9 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
         {/* Notes */}
         <div>
-          <label className="alm-field-label" htmlFor="cp-notes">{m.projects_create_notes_label()}</label>
+          <label className="alm-field-label" htmlFor="cp-notes">
+            {m.projects_create_notes_label()}
+          </label>
           <textarea
             id="cp-notes"
             className="alm-input"
@@ -256,7 +298,9 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
 
         {/* Server error */}
         {serverError && (
-          <span role="alert" className="alm-field-error">{serverError}</span>
+          <span role="alert" className="alm-field-error">
+            {serverError}
+          </span>
         )}
       </form>
     </Modal>

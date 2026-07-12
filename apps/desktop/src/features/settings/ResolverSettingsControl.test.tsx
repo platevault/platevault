@@ -8,7 +8,13 @@
  *   3. compact mode hides the endpoint / debounce / timeout fields.
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockGet, mockUpdate } = vi.hoisted(() => ({
@@ -54,7 +60,9 @@ describe('ResolverSettingsControl', () => {
     // The toggle's aria-label now sits on the <input> itself (a11y: the
     // accessible name belongs on the interactive control), so getByLabelText
     // returns the checkbox directly.
-    const checkbox = screen.getByLabelText('Enable online SIMBAD resolution') as HTMLInputElement;
+    const checkbox = screen.getByLabelText(
+      'Enable online SIMBAD resolution',
+    ) as HTMLInputElement;
     expect(checkbox).toBeChecked();
   });
 
@@ -69,14 +77,18 @@ describe('ResolverSettingsControl', () => {
     });
 
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ settings: expect.objectContaining({ onlineEnabled: false }) }),
+      expect.objectContaining({
+        settings: expect.objectContaining({ onlineEnabled: false }),
+      }),
     );
   });
 
   it('hides endpoint/debounce/timeout fields in compact mode', async () => {
     render(<ResolverSettingsControl compact />);
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
-    expect(screen.getByLabelText('Enable online SIMBAD resolution')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Enable online SIMBAD resolution'),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText('SIMBAD endpoint')).toBeNull();
     expect(screen.queryByLabelText('Typeahead debounce (ms)')).toBeNull();
     expect(screen.queryByLabelText('Request timeout (s)')).toBeNull();
@@ -86,7 +98,9 @@ describe('ResolverSettingsControl', () => {
     render(<ResolverSettingsControl />);
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
     expect(screen.getByLabelText('SIMBAD endpoint')).toBeInTheDocument();
-    expect(screen.getByLabelText('Typeahead debounce (ms)')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Typeahead debounce (ms)'),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('Request timeout (s)')).toBeInTheDocument();
   });
 });

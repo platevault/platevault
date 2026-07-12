@@ -22,15 +22,24 @@ const { mockSettingsGet, mockSettingsUpdate } = vi.hoisted(() => ({
 vi.mock('@/bindings/index', () => ({
   commands: {
     settingsGet: (...a: unknown[]) =>
-      Promise.resolve(mockSettingsGet(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockSettingsGet(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
     settingsUpdate: (...a: unknown[]) =>
-      Promise.resolve(mockSettingsUpdate(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockSettingsUpdate(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
   },
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSettingsGet.mockResolvedValue({ scope: 'advanced', values: { devMode: false } });
+  mockSettingsGet.mockResolvedValue({
+    scope: 'advanced',
+    values: { devMode: false },
+  });
   mockSettingsUpdate.mockResolvedValue(undefined);
 });
 
@@ -45,7 +54,10 @@ describe('DevSettingsPage (T032)', () => {
   });
 
   it('renders the toggle as checked when devMode is already on', async () => {
-    mockSettingsGet.mockResolvedValue({ scope: 'advanced', values: { devMode: true } });
+    mockSettingsGet.mockResolvedValue({
+      scope: 'advanced',
+      values: { devMode: true },
+    });
     render(<DevSettingsPage />);
     const toggle = await screen.findByTestId('dev-mode-toggle');
     await waitFor(() => expect(toggle.querySelector('input')).toBeChecked());
@@ -57,12 +69,17 @@ describe('DevSettingsPage (T032)', () => {
     const input = toggle.querySelector('input')!;
     fireEvent.click(input);
     await waitFor(() => {
-      expect(mockSettingsUpdate).toHaveBeenCalledWith('advanced', { devMode: true });
+      expect(mockSettingsUpdate).toHaveBeenCalledWith('advanced', {
+        devMode: true,
+      });
     });
   });
 
   it('shows a restart hint once devMode is on', async () => {
-    mockSettingsGet.mockResolvedValue({ scope: 'advanced', values: { devMode: true } });
+    mockSettingsGet.mockResolvedValue({
+      scope: 'advanced',
+      values: { devMode: true },
+    });
     render(<DevSettingsPage />);
     await waitFor(() => {
       expect(screen.getByText(/restart/i)).toBeTruthy();

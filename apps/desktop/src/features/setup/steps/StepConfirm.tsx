@@ -2,7 +2,12 @@ import type { ReactNode } from 'react';
 import { Pill } from '@/ui/Pill';
 import { m } from '@/lib/i18n';
 import type { SourcesState } from '../sources-store';
-import { SOURCE_KIND_LABELS, getMissingRequiredKinds, getSourcesByKind, ALL_SOURCE_KINDS } from '../sources-store';
+import {
+  SOURCE_KIND_LABELS,
+  getMissingRequiredKinds,
+  getSourcesByKind,
+  ALL_SOURCE_KINDS,
+} from '../sources-store';
 import type { CatalogSettings } from './StepCatalogs';
 import type { ToolsState } from './StepTools';
 
@@ -24,9 +29,7 @@ const TOOL_LABELS: Record<keyof ToolsState, () => string> = {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="alm-setup-confirm__section">
-      <div className="alm-setup-confirm__section-title">
-        {title}
-      </div>
+      <div className="alm-setup-confirm__section-title">{title}</div>
       {children}
     </div>
   );
@@ -49,9 +52,9 @@ export function StepConfirm({
   const missingKinds = getMissingRequiredKinds(sources);
   const totalFolders = sources.length;
 
-  const enabledTools = (Object.keys(TOOL_LABELS) as Array<keyof ToolsState>).filter(
-    (key) => tools[key].enabled,
-  );
+  const enabledTools = (
+    Object.keys(TOOL_LABELS) as Array<keyof ToolsState>
+  ).filter((key) => tools[key].enabled);
 
   const kindsWithFolders = ALL_SOURCE_KINDS.filter(
     (kind) => getSourcesByKind(sources, kind).length > 0,
@@ -59,25 +62,19 @@ export function StepConfirm({
 
   return (
     <div className="alm-setup-confirm">
-      <Section title={m.setup_confirm_source_folders_title({ count: totalFolders })}>
+      <Section
+        title={m.setup_confirm_source_folders_title({ count: totalFolders })}
+      >
         {kindsWithFolders.length > 0 ? (
           <div className="alm-setup-confirm__kind-list">
             {kindsWithFolders.map((kind) => (
-              <div
-                key={kind}
-                className="alm-setup-confirm__kind-group"
-              >
+              <div key={kind} className="alm-setup-confirm__kind-group">
                 <div className="alm-setup-confirm__kind-label">
                   {SOURCE_KIND_LABELS[kind]()}
                 </div>
                 {getSourcesByKind(sources, kind).map((entry, j) => (
-                  <div
-                    key={j}
-                    className="alm-setup-confirm__row"
-                  >
-                    <span
-                      className="alm-mono alm-setup-confirm__path"
-                    >
+                  <div key={j} className="alm-setup-confirm__row">
+                    <span className="alm-mono alm-setup-confirm__path">
                       {entry.path}
                     </span>
                     <span className="alm-setup-confirm__scan-depth">
@@ -97,15 +94,18 @@ export function StepConfirm({
         )}
       </Section>
 
-      <Section title={m.setup_confirm_tools_enabled_title({ count: enabledTools.length })}>
+      <Section
+        title={m.setup_confirm_tools_enabled_title({
+          count: enabledTools.length,
+        })}
+      >
         {enabledTools.length > 0 ? (
           <div className="alm-setup-confirm__tool-list">
             {enabledTools.map((key) => (
-              <div
-                key={key}
-                className="alm-setup-confirm__row"
-              >
-                <span className="alm-setup-confirm__tool-name">{TOOL_LABELS[key]()}</span>
+              <div key={key} className="alm-setup-confirm__row">
+                <span className="alm-setup-confirm__tool-name">
+                  {TOOL_LABELS[key]()}
+                </span>
                 {tools[key].path ? (
                   <span className="alm-setup-confirm__tool-path-wrap">
                     <span className="alm-mono alm-setup-confirm__tool-path">
@@ -133,13 +133,16 @@ export function StepConfirm({
           <li>{m.setup_confirm_next_sessions()}</li>
         </ul>
         <div className="alm-setup-confirm__note">
-          <strong>{m.setup_confirm_safe_bold()}</strong> {m.setup_confirm_safe_body()}
+          <strong>{m.setup_confirm_safe_bold()}</strong>{' '}
+          {m.setup_confirm_safe_body()}
         </div>
       </Section>
 
       {missingKinds.length > 0 && (
         <div className="alm-step-confirm__blocked" role="alert">
-          {m.setup_confirm_blocked({ kinds: missingKinds.map((k) => SOURCE_KIND_LABELS[k]()).join(', ') })}
+          {m.setup_confirm_blocked({
+            kinds: missingKinds.map((k) => SOURCE_KIND_LABELS[k]()).join(', '),
+          })}
         </div>
       )}
 

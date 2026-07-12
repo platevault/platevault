@@ -27,7 +27,8 @@ export const MOCK_LOG_ENTRIES: LogEntry[] = [
     time: '2026-04-18T22:14:59Z',
     level: 'error',
     source: 'inventory',
-    message: 'Failed to read: /raw/2026-04-17/frame_0043.fit — permission denied',
+    message:
+      'Failed to read: /raw/2026-04-17/frame_0043.fit — permission denied',
   },
   {
     id: 'aud:4',

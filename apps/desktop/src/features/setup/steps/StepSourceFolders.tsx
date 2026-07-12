@@ -4,7 +4,12 @@ import { Pill } from '@/ui/Pill';
 import { m } from '@/lib/i18n';
 import { useDirectoryPicker } from '@/shared/native';
 import type { LastPathKind } from '@/shared/native';
-import type { SourceEntry, SourceKind, ScanDepth, OrganizationState } from '../sources-store';
+import type {
+  SourceEntry,
+  SourceKind,
+  ScanDepth,
+  OrganizationState,
+} from '../sources-store';
 import {
   ALL_SOURCE_KINDS,
   SOURCE_KIND_LABELS,
@@ -52,9 +57,7 @@ export function StepSourceFolders({
 
   return (
     <div className="alm-step-sources">
-      <p className="alm-step-sources__intro">
-        {m.setup_sources_intro()}
-      </p>
+      <p className="alm-step-sources__intro">{m.setup_sources_intro()}</p>
 
       <div className="alm-step-sources__groups">
         {ALL_SOURCE_KINDS.map((kind) => {
@@ -124,7 +127,9 @@ function SourceGroup({
             variant={isMet ? 'ok' : 'warn'}
             data-testid={`requirement-status-${kind}`}
           >
-            {isMet ? `${m.setup_sources_required()} ✓` : m.setup_sources_required()}
+            {isMet
+              ? `${m.setup_sources_required()} ✓`
+              : m.setup_sources_required()}
           </Pill>
         ) : (
           <span className="alm-step-sources__group-header-optional">
@@ -146,7 +151,9 @@ function SourceGroup({
               isLast={i === rows.length - 1}
               onRemove={() => onRemove(index)}
               onScanDepthChange={(depth) => onScanDepthChange(index, depth)}
-              onOrganizationStateChange={(state) => onOrganizationStateChange(index, state)}
+              onOrganizationStateChange={(state) =>
+                onOrganizationStateChange(index, state)
+              }
             />
           ))}
         </div>
@@ -185,12 +192,16 @@ function SourceRow({
           <select
             className="alm-step-sources__org-select"
             value={entry.organizationState}
-            onChange={(e) => onOrganizationStateChange(e.target.value as OrganizationState)}
+            onChange={(e) =>
+              onOrganizationStateChange(e.target.value as OrganizationState)
+            }
             aria-label={m.setup_sources_org_state_aria()}
             title={m.setup_sources_org_state_title()}
           >
             <option value="organized">{m.setup_sources_org_organized()}</option>
-            <option value="unorganized">{m.setup_sources_org_unorganized()}</option>
+            <option value="unorganized">
+              {m.setup_sources_org_unorganized()}
+            </option>
           </select>
         )}
         <select
@@ -207,11 +218,7 @@ function SourceRow({
         </Btn>
       </div>
 
-      {error && (
-        <div className="alm-step-sources__row-error">
-          {error}
-        </div>
-      )}
+      {error && <div className="alm-step-sources__row-error">{error}</div>}
     </div>
   );
 }
@@ -244,7 +251,9 @@ function AddFolderButton({
         variant="primary"
         onClick={handleChoose}
         disabled={loading}
-        aria-label={m.setup_sources_add_folder_aria({ kind: SOURCE_KIND_LABELS[kind]() })}
+        aria-label={m.setup_sources_add_folder_aria({
+          kind: SOURCE_KIND_LABELS[kind](),
+        })}
       >
         {loading ? m.setup_choosing() : m.setup_add_folder()}
       </Btn>
@@ -258,7 +267,9 @@ function AddFolderButton({
         <span data-testid={`e2e-add-by-path-${kind}`}>
           <input
             data-testid={`e2e-path-input-${kind}`}
-            aria-label={m.setup_sources_e2e_path_aria({ kind: SOURCE_KIND_LABELS[kind]() })}
+            aria-label={m.setup_sources_e2e_path_aria({
+              kind: SOURCE_KIND_LABELS[kind](),
+            })}
             value={e2ePath}
             onChange={(ev) => setE2ePath(ev.target.value)}
           />
@@ -278,9 +289,7 @@ function AddFolderButton({
         </span>
       ) : null}
       {error && (
-        <span className="alm-step-sources__picker-error">
-          {error.message}
-        </span>
+        <span className="alm-step-sources__picker-error">{error.message}</span>
       )}
     </>
   );

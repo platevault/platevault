@@ -48,7 +48,11 @@ function PerTypeChip({ row }: { row: InboxStatsPerType }) {
     <span
       className="alm-inbox-stats__per-type"
       data-testid={`inbox-stats-type-${row.frameType}`}
-      title={m.inbox_stats_per_type_title({ folderCount: row.folderCount, masterCount: row.masterCount, imageCount: row.imageCount })}
+      title={m.inbox_stats_per_type_title({
+        folderCount: row.folderCount,
+        masterCount: row.masterCount,
+        imageCount: row.imageCount,
+      })}
     >
       <span className="alm-inbox-stats__type">{row.frameType}</span>
       <span className="alm-inbox-stats__num">{count}</span>

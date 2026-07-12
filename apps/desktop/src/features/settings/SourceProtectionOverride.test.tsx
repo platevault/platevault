@@ -55,7 +55,10 @@ describe('SourceProtectionOverride', () => {
   });
 
   it('shows Protected pill and Inherits global default badge when inheriting', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ inheritsDefault: true, level: 'protected' }) });
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeGetResponse({ inheritsDefault: true, level: 'protected' }),
+    });
     render(<SourceProtectionOverride sourceId="src-1" />);
 
     await waitFor(() => {
@@ -65,7 +68,10 @@ describe('SourceProtectionOverride', () => {
   });
 
   it('shows override pill without inherits badge when override is set', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ inheritsDefault: false, level: 'normal' }) });
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeGetResponse({ inheritsDefault: false, level: 'normal' }),
+    });
     render(<SourceProtectionOverride sourceId="src-1" />);
 
     await waitFor(() => {
@@ -91,13 +97,18 @@ describe('SourceProtectionOverride', () => {
     await waitFor(() => screen.getByRole('button', { name: /Override/i }));
     fireEvent.click(screen.getByRole('button', { name: /Override/i }));
 
-    expect(screen.getByRole('combobox', { name: /Protection level override/i })).toBeTruthy();
+    expect(
+      screen.getByRole('combobox', { name: /Protection level override/i }),
+    ).toBeTruthy();
     expect(screen.getByRole('button', { name: /Save override/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Cancel/i })).toBeTruthy();
   });
 
   it('saves override and updates level display', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ level: 'protected', inheritsDefault: true }) });
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeGetResponse({ level: 'protected', inheritsDefault: true }),
+    });
     mockSet.mockResolvedValue({
       status: 'ok',
       data: {
@@ -119,7 +130,9 @@ describe('SourceProtectionOverride', () => {
     fireEvent.click(screen.getByRole('button', { name: /Override/i }));
 
     // Change the select to "normal".
-    const select = screen.getByRole('combobox', { name: /Protection level override/i });
+    const select = screen.getByRole('combobox', {
+      name: /Protection level override/i,
+    });
     fireEvent.change(select, { target: { value: 'normal' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Save override/i }));
@@ -127,7 +140,10 @@ describe('SourceProtectionOverride', () => {
     await waitFor(() => {
       expect(screen.getByText('Normal')).toBeTruthy();
     });
-    expect(mockSet).toHaveBeenCalledWith({ sourceId: 'src-1', level: 'normal' });
+    expect(mockSet).toHaveBeenCalledWith({
+      sourceId: 'src-1',
+      level: 'normal',
+    });
     expect(onSaved).toHaveBeenCalledWith('normal');
     // After save, should not be in edit mode anymore.
     expect(screen.queryByRole('button', { name: /Save override/i })).toBeNull();
@@ -143,22 +159,32 @@ describe('SourceProtectionOverride', () => {
   });
 
   it('shows level hint text for protected level', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ level: 'protected', inheritsDefault: false }) });
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeGetResponse({ level: 'protected', inheritsDefault: false }),
+    });
     render(<SourceProtectionOverride sourceId="src-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Cleanup plans require explicit approval/i)).toBeTruthy();
+      expect(
+        screen.getByText(/Cleanup plans require explicit approval/i),
+      ).toBeTruthy();
     });
   });
 
   it('can cancel edit without saving', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeGetResponse({ level: 'protected', inheritsDefault: true }) });
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeGetResponse({ level: 'protected', inheritsDefault: true }),
+    });
     render(<SourceProtectionOverride sourceId="src-1" />);
 
     await waitFor(() => screen.getByRole('button', { name: /Override/i }));
     fireEvent.click(screen.getByRole('button', { name: /Override/i }));
 
-    const select = screen.getByRole('combobox', { name: /Protection level override/i });
+    const select = screen.getByRole('combobox', {
+      name: /Protection level override/i,
+    });
     fireEvent.change(select, { target: { value: 'unprotected' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));

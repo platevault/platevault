@@ -35,7 +35,9 @@ function renderPanel() {
 function getTrigger() {
   const triggers = screen.getAllByRole('button');
   const trigger = triggers.find((b) =>
-    ['Expand log panel', 'Collapse log panel'].includes(b.getAttribute('aria-label') ?? ''),
+    ['Expand log panel', 'Collapse log panel'].includes(
+      b.getAttribute('aria-label') ?? '',
+    ),
   );
   if (!trigger) throw new Error('log panel trigger not found');
   return trigger;
@@ -88,7 +90,9 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
 
     // Collapsed initially — panel content is not mounted, trigger reports
     // aria-expanded=false and the "Expand" label.
-    expect(screen.getByRole('log', { name: 'Operation log' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('log', { name: 'Operation log' }),
+    ).toBeInTheDocument();
     expect(getTrigger()).toHaveAttribute('aria-expanded', 'false');
     expect(getTrigger()).toHaveAttribute('aria-label', 'Expand log panel');
     expect(screen.queryByText('All good')).not.toBeInTheDocument();
@@ -186,6 +190,8 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
     // present and matchMedia is consulted and reports reduced motion.
     const list = document.querySelector('.alm-logpanel__events');
     expect(list).not.toBeNull();
-    expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
+    expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(
+      true,
+    );
   });
 });

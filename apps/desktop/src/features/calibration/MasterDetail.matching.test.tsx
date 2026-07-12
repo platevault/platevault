@@ -30,11 +30,19 @@ vi.mock('@/bindings/index', () => ({
   },
 }));
 
-function makeMaster(overrides: Partial<CalibrationMaster> = {}): CalibrationMaster {
+function makeMaster(
+  overrides: Partial<CalibrationMaster> = {},
+): CalibrationMaster {
   return {
     id: MASTER_ID,
     kind: 'dark',
-    fingerprint: { camera: 'ASI2600MM', exposureS: 300, tempC: -10, gain: 100, binning: '1x1' },
+    fingerprint: {
+      camera: 'ASI2600MM',
+      exposureS: 300,
+      tempC: -10,
+      gain: 100,
+      binning: '1x1',
+    },
     sourceSessionId: 'cal-ses-001',
     createdAt: '2026-01-01T00:00:00Z',
     ageDays: 30,
@@ -68,7 +76,10 @@ beforeEach(() => {
     status: 'ok',
     data: { usedBySessionIds: [SESSION_ID], compatibleSessions: [] },
   } as never);
-  vi.mocked(commands.sessionsList).mockResolvedValue({ status: 'ok', data: [] } as never);
+  vi.mocked(commands.sessionsList).mockResolvedValue({
+    status: 'ok',
+    data: [],
+  } as never);
   vi.mocked(commands.calibrationMatchSuggest).mockResolvedValue({
     status: 'ok',
     data: suggestResponse,
@@ -92,26 +103,44 @@ afterEach(() => {
 
 describe('MasterDetail — matching hero (dead-feature fix)', () => {
   it('mounts MatchCandidatesPanel and calls calibration.match.suggest for the matching-context session', async () => {
-    render(<MasterDetail master={makeMaster()} prefillSuggestion={false} agingThresholdDays={90} />);
+    render(
+      <MasterDetail
+        master={makeMaster()}
+        prefillSuggestion={false}
+        agingThresholdDays={90}
+      />,
+    );
 
     await waitFor(() => {
       expect(commands.calibrationMatchSuggest).toHaveBeenCalledWith(
         expect.objectContaining({ sessionId: SESSION_ID }),
       );
     });
-    expect(await screen.findByTestId('suggest-status-pill')).toBeInTheDocument();
+    expect(
+      await screen.findByTestId('suggest-status-pill'),
+    ).toBeInTheDocument();
     expect(screen.getByTestId(`assign-btn-${MASTER_ID}`)).toBeInTheDocument();
   });
 
   it('confirming assign calls calibration.match.assign with the matching sessionId/masterId', async () => {
-    render(<MasterDetail master={makeMaster()} prefillSuggestion={false} agingThresholdDays={90} />);
+    render(
+      <MasterDetail
+        master={makeMaster()}
+        prefillSuggestion={false}
+        agingThresholdDays={90}
+      />,
+    );
 
     fireEvent.click(await screen.findByTestId(`assign-btn-${MASTER_ID}`));
     fireEvent.click(screen.getByTestId('assign-confirm-btn'));
 
     await waitFor(() => {
       expect(commands.calibrationMatchAssign).toHaveBeenCalledWith(
-        expect.objectContaining({ sessionId: SESSION_ID, masterId: MASTER_ID, override: false }),
+        expect.objectContaining({
+          sessionId: SESSION_ID,
+          masterId: MASTER_ID,
+          override: false,
+        }),
       );
     });
     // A successful assign refreshes the suggest query (1 initial mount fetch +
@@ -131,7 +160,9 @@ describe('MasterDetail — matching hero (dead-feature fix)', () => {
       />,
     );
 
-    expect(await screen.findByText('Not assigned to a session')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Not assigned to a session'),
+    ).toBeInTheDocument();
     expect(commands.calibrationMatchSuggest).not.toHaveBeenCalled();
   });
 });

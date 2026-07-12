@@ -53,7 +53,14 @@ export interface SortHeaderProps {
   title?: string;
 }
 
-export function SortHeader({ label, active, dir, onClick, ariaLabel, title }: SortHeaderProps) {
+export function SortHeader({
+  label,
+  active,
+  dir,
+  onClick,
+  ariaLabel,
+  title,
+}: SortHeaderProps) {
   return (
     <button
       type="button"

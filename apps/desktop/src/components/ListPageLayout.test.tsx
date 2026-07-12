@@ -72,7 +72,9 @@ describe('ListPageLayout', () => {
         <div>main</div>
       </ListPageLayout>,
     );
-    const region = screen.getByRole('complementary', { name: 'Project details' });
+    const region = screen.getByRole('complementary', {
+      name: 'Project details',
+    });
     expect(region).toBeInTheDocument();
     const close = screen.getByRole('button', { name: 'Close details' });
     fireEvent.click(close);
@@ -95,13 +97,21 @@ describe('ListPageLayout', () => {
       </ListPageLayout>,
     );
     // Both regions are present.
-    expect(screen.getByRole('complementary', { name: 'Project details' })).toBeInTheDocument();
-    expect(screen.getByRole('complementary', { name: 'Selected item details' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('complementary', { name: 'Project details' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('complementary', { name: 'Selected item details' }),
+    ).toBeInTheDocument();
     // Body carries the dual modifier class.
-    expect(container.querySelector('.alm-listpage__body--dual')).toBeInTheDocument();
+    expect(
+      container.querySelector('.alm-listpage__body--dual'),
+    ).toBeInTheDocument();
     // Side panel and bottom strip use their own classes (not the old detail classes).
     expect(container.querySelector('.alm-listpage__side')).toBeInTheDocument();
-    expect(container.querySelector('.alm-listpage__bottom')).toBeInTheDocument();
+    expect(
+      container.querySelector('.alm-listpage__bottom'),
+    ).toBeInTheDocument();
     expect(screen.getByText('side content')).toBeInTheDocument();
     expect(screen.getByText('bottom content')).toBeInTheDocument();
   });
@@ -117,7 +127,9 @@ describe('ListPageLayout', () => {
       </ListPageLayout>,
     );
     expect(container.querySelector('.alm-listpage__side')).toBeNull();
-    expect(container.querySelector('.alm-listpage__bottom')).toBeInTheDocument();
+    expect(
+      container.querySelector('.alm-listpage__bottom'),
+    ).toBeInTheDocument();
   });
 
   it('(#104) dual: does not render bottom strip when bottomDetail is null', () => {
@@ -154,7 +166,9 @@ describe('ListPageLayout', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Close details' }));
     expect(onCloseSide).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Close session details' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close session details' }),
+    );
     expect(onCloseBottom).toHaveBeenCalledTimes(1);
   });
 
@@ -170,6 +184,8 @@ describe('ListPageLayout', () => {
     expect(container.querySelector('.alm-listpage__side')).toBeNull();
     expect(container.querySelector('.alm-listpage__bottom')).toBeNull();
     // Original detail class still present.
-    expect(container.querySelector('.alm-listpage__detail')).toBeInTheDocument();
+    expect(
+      container.querySelector('.alm-listpage__detail'),
+    ).toBeInTheDocument();
   });
 });

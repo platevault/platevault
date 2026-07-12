@@ -96,9 +96,10 @@ function redactValue(value: unknown, extra: Set<string>): unknown {
 
 // ── Payload size check ────────────────────────────────────────────────────────
 
-function serializeAndCheck(
-  value: unknown,
-): { value: unknown; truncated: boolean } {
+function serializeAndCheck(value: unknown): {
+  value: unknown;
+  truncated: boolean;
+} {
   let json: string;
   try {
     json = JSON.stringify(value);
@@ -156,7 +157,10 @@ export function resetRecorder(): void {
 /**
  * Tauri dispatch function signature (matches `invoke` from api/commands.ts).
  */
-export type DispatchFn = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+export type DispatchFn = (
+  cmd: string,
+  args?: Record<string, unknown>,
+) => Promise<unknown>;
 
 /**
  * Wrap a Tauri dispatch function so every call is recorded into the ring buffer.
@@ -235,7 +239,8 @@ export function wrap(
       payloadTruncated: reqTruncated || resTruncated,
     });
 
-    if (error) throw Object.assign(new Error(error.message), { code: error.code });
+    if (error)
+      throw Object.assign(new Error(error.message), { code: error.code });
     return response;
   };
 }

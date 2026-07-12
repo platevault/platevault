@@ -48,32 +48,35 @@ export function ProcessingTools() {
       });
   }, []);
 
-  const saveToolPath = useCallback(
-    async (toolId: string, path: string) => {
-      setSaving((s) => ({ ...s, [toolId]: true }));
-      try {
-        const updated = await toolUpdate({ id: toolId, path: path || null, enabled: true });
-        setTools((prev) => prev.map((t) => (t.id === toolId ? updated : t)));
-        // Validate existence after save
-        if (path) {
-          setValidating((v) => ({ ...v, [toolId]: true }));
-          try {
-            const v = await toolValidatePath(path);
-            setTools((prev) =>
-              prev.map((t) =>
-                t.id === toolId ? { ...t, available: v.valid, configured: !!path } : t,
-              ),
-            );
-          } finally {
-            setValidating((v) => ({ ...v, [toolId]: false }));
-          }
+  const saveToolPath = useCallback(async (toolId: string, path: string) => {
+    setSaving((s) => ({ ...s, [toolId]: true }));
+    try {
+      const updated = await toolUpdate({
+        id: toolId,
+        path: path || null,
+        enabled: true,
+      });
+      setTools((prev) => prev.map((t) => (t.id === toolId ? updated : t)));
+      // Validate existence after save
+      if (path) {
+        setValidating((v) => ({ ...v, [toolId]: true }));
+        try {
+          const v = await toolValidatePath(path);
+          setTools((prev) =>
+            prev.map((t) =>
+              t.id === toolId
+                ? { ...t, available: v.valid, configured: !!path }
+                : t,
+            ),
+          );
+        } finally {
+          setValidating((v) => ({ ...v, [toolId]: false }));
         }
-      } finally {
-        setSaving((s) => ({ ...s, [toolId]: false }));
       }
-    },
-    [],
-  );
+    } finally {
+      setSaving((s) => ({ ...s, [toolId]: false }));
+    }
+  }, []);
 
   const handleToggle = useCallback(
     async (toolId: string, enabled: boolean) => {
@@ -122,7 +125,9 @@ export function ProcessingTools() {
   if (loadError) {
     return (
       <SettingsSection title={m.settings_tools_title()}>
-        <p className="alm-proc-tools__error">{m.settings_tools_load_error({ error: loadError })}</p>
+        <p className="alm-proc-tools__error">
+          {m.settings_tools_load_error({ error: loadError })}
+        </p>
       </SettingsSection>
     );
   }
@@ -142,9 +147,7 @@ export function ProcessingTools() {
   return (
     <SettingsSection title={m.settings_tools_title()} action={reDetectBtn}>
       {tools.length === 0 && !loadError && (
-        <p className="alm-proc-tools__loading">
-          {m.common_loading()}
-        </p>
+        <p className="alm-proc-tools__loading">{m.common_loading()}</p>
       )}
 
       {tools.map((tool) => {
@@ -179,7 +182,10 @@ export function ProcessingTools() {
                 placeholder={m.settings_tools_path_placeholder()}
                 aria-label={m.settings_tools_path_aria({ name: tool.name })}
                 onChange={(e) =>
-                  setPathDraft((prev) => ({ ...prev, [tool.id]: e.target.value }))
+                  setPathDraft((prev) => ({
+                    ...prev,
+                    [tool.id]: e.target.value,
+                  }))
                 }
                 onBlur={(e) => {
                   const val = e.target.value.trim();
@@ -196,7 +202,9 @@ export function ProcessingTools() {
               />
               {(saving[tool.id] || validating[tool.id]) && (
                 <span className="alm-proc-tools__status">
-                  {saving[tool.id] ? m.common_saving() : m.settings_tools_checking()}
+                  {saving[tool.id]
+                    ? m.common_saving()
+                    : m.settings_tools_checking()}
                 </span>
               )}
               <Toggle

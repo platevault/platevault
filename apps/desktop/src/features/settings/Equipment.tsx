@@ -146,7 +146,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
     aliasesText: string;
     focalLengthMmText: string;
   } | null>(null);
-  const [telescopeFormError, setTelescopeFormError] = useState<string | null>(null);
+  const [telescopeFormError, setTelescopeFormError] = useState<string | null>(
+    null,
+  );
   const [telescopeSaving, setTelescopeSaving] = useState(false);
 
   // ── Optical trains ───────────────────────────────────────────────────────────
@@ -188,7 +190,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
     equipmentCamerasList()
       .then(setCameras)
       .catch((err: unknown) =>
-        setCamerasError(m.settings_equipment_load_error({ error: errMessage(err) })),
+        setCamerasError(
+          m.settings_equipment_load_error({ error: errMessage(err) }),
+        ),
       )
       .finally(() => setCamerasLoading(false));
   }, []);
@@ -199,7 +203,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
     equipmentTelescopesList()
       .then(setTelescopes)
       .catch((err: unknown) =>
-        setTelescopesError(m.settings_equipment_load_error({ error: errMessage(err) })),
+        setTelescopesError(
+          m.settings_equipment_load_error({ error: errMessage(err) }),
+        ),
       )
       .finally(() => setTelescopesLoading(false));
   }, []);
@@ -210,7 +216,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
     equipmentTrainsList()
       .then(setTrains)
       .catch((err: unknown) =>
-        setTrainsError(m.settings_equipment_load_error({ error: errMessage(err) })),
+        setTrainsError(
+          m.settings_equipment_load_error({ error: errMessage(err) }),
+        ),
       )
       .finally(() => setTrainsLoading(false));
   }, []);
@@ -221,7 +229,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
     equipmentFiltersList()
       .then(setFilters)
       .catch((err: unknown) =>
-        setFiltersError(m.settings_equipment_load_error({ error: errMessage(err) })),
+        setFiltersError(
+          m.settings_equipment_load_error({ error: errMessage(err) }),
+        ),
       )
       .finally(() => setFiltersLoading(false));
   }, []);
@@ -254,7 +264,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
       setCameraForm(null);
       loadCameras();
     } catch (err: unknown) {
-      setCameraFormError(m.settings_equipment_save_error({ error: errMessage(err) }));
+      setCameraFormError(
+        m.settings_equipment_save_error({ error: errMessage(err) }),
+      );
     } finally {
       setCameraSaving(false);
     }
@@ -285,14 +297,21 @@ export function Equipment({ save: _save }: EquipmentProps) {
       const aliases = parseAliases(telescopeForm.aliasesText);
       const focalLengthMm = parseFocalLength(telescopeForm.focalLengthMmText);
       if (telescopeForm.id) {
-        await equipmentTelescopeUpdate({ id: telescopeForm.id, name, aliases, focalLengthMm });
+        await equipmentTelescopeUpdate({
+          id: telescopeForm.id,
+          name,
+          aliases,
+          focalLengthMm,
+        });
       } else {
         await equipmentTelescopeCreate({ name, aliases, focalLengthMm });
       }
       setTelescopeForm(null);
       loadTelescopes();
     } catch (err: unknown) {
-      setTelescopeFormError(m.settings_equipment_save_error({ error: errMessage(err) }));
+      setTelescopeFormError(
+        m.settings_equipment_save_error({ error: errMessage(err) }),
+      );
     } finally {
       setTelescopeSaving(false);
     }
@@ -305,7 +324,11 @@ export function Equipment({ save: _save }: EquipmentProps) {
       return;
     }
     setDeleteError(null);
-    setDeleteTarget({ kind: 'telescope', id: telescope.id, name: telescope.name });
+    setDeleteTarget({
+      kind: 'telescope',
+      id: telescope.id,
+      name: telescope.name,
+    });
   };
 
   // ── Optical train handlers ───────────────────────────────────────────────────
@@ -336,12 +359,19 @@ export function Equipment({ save: _save }: EquipmentProps) {
           focalLengthMm,
         });
       } else {
-        await equipmentTrainCreate({ name, telescopeId, cameraId, focalLengthMm });
+        await equipmentTrainCreate({
+          name,
+          telescopeId,
+          cameraId,
+          focalLengthMm,
+        });
       }
       setTrainForm(null);
       loadTrains();
     } catch (err: unknown) {
-      setTrainFormError(m.settings_equipment_save_error({ error: errMessage(err) }));
+      setTrainFormError(
+        m.settings_equipment_save_error({ error: errMessage(err) }),
+      );
     } finally {
       setTrainSaving(false);
     }
@@ -365,14 +395,20 @@ export function Equipment({ save: _save }: EquipmentProps) {
     setFilterFormError(null);
     try {
       if (filterForm.id) {
-        await equipmentFilterUpdate({ id: filterForm.id, name, category: filterForm.category });
+        await equipmentFilterUpdate({
+          id: filterForm.id,
+          name,
+          category: filterForm.category,
+        });
       } else {
         await equipmentFilterCreate({ name, category: filterForm.category });
       }
       setFilterForm(null);
       loadFilters();
     } catch (err: unknown) {
-      setFilterFormError(m.settings_equipment_save_error({ error: errMessage(err) }));
+      setFilterFormError(
+        m.settings_equipment_save_error({ error: errMessage(err) }),
+      );
     } finally {
       setFilterSaving(false);
     }
@@ -410,7 +446,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
       }
       setDeleteTarget(null);
     } catch (err: unknown) {
-      setDeleteError(m.settings_equipment_delete_error({ error: errMessage(err) }));
+      setDeleteError(
+        m.settings_equipment_delete_error({ error: errMessage(err) }),
+      );
     } finally {
       setDeleteBusy(false);
     }
@@ -419,9 +457,13 @@ export function Equipment({ save: _save }: EquipmentProps) {
   // ── Row lookups for the optical trains table ─────────────────────────────────
 
   const cameraName = (id: string | null) =>
-    id ? (cameras.find((c) => c.id === id)?.name ?? id) : m.settings_equipment_field_none();
+    id
+      ? (cameras.find((c) => c.id === id)?.name ?? id)
+      : m.settings_equipment_field_none();
   const telescopeName = (id: string | null) =>
-    id ? (telescopes.find((t) => t.id === id)?.name ?? id) : m.settings_equipment_field_none();
+    id
+      ? (telescopes.find((t) => t.id === id)?.name ?? id)
+      : m.settings_equipment_field_none();
 
   return (
     <>
@@ -432,15 +474,25 @@ export function Equipment({ save: _save }: EquipmentProps) {
           <Btn
             size="sm"
             onClick={() =>
-              setTrainForm({ id: null, name: '', telescopeId: '', cameraId: '', focalLengthMmText: '' })
+              setTrainForm({
+                id: null,
+                name: '',
+                telescopeId: '',
+                cameraId: '',
+                focalLengthMmText: '',
+              })
             }
           >
             {m.settings_equipment_trains_add()}
           </Btn>
         }
       >
-        {trainsError && <p className="alm-equipment__load-error">{trainsError}</p>}
-        {trainsLoading && <p className="alm-equipment__empty">{m.common_loading()}</p>}
+        {trainsError && (
+          <p className="alm-equipment__load-error">{trainsError}</p>
+        )}
+        {trainsLoading && (
+          <p className="alm-equipment__empty">{m.common_loading()}</p>
+        )}
 
         {!trainsLoading && (
           <Table
@@ -448,7 +500,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
               { key: 'name', label: m.settings_equipment_col_name() },
               { key: 'camera', label: m.settings_equipment_col_camera() },
               { key: 'telescope', label: m.settings_equipment_col_telescope() },
-              { key: 'focalLength', label: m.settings_equipment_col_focal_length() },
+              {
+                key: 'focalLength',
+                label: m.settings_equipment_col_focal_length(),
+              },
               { key: 'actions', label: '', style: { width: 140 } },
             ]}
             rows={trains.map(
@@ -458,7 +513,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 telescope: telescopeName(t.telescopeId),
                 focalLength: (
                   <code className="alm-mono">
-                    {m.settings_equipment_focal_length_value({ mm: t.focalLengthMm })}
+                    {m.settings_equipment_focal_length_value({
+                      mm: t.focalLengthMm,
+                    })}
                   </code>
                 ),
                 actions: (
@@ -478,7 +535,11 @@ export function Equipment({ save: _save }: EquipmentProps) {
                     >
                       {m.common_edit()}
                     </Btn>
-                    <Btn size="sm" variant="ghost" onClick={() => requestDeleteTrain(t)}>
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => requestDeleteTrain(t)}
+                    >
                       {m.common_remove()}
                     </Btn>
                   </span>
@@ -488,7 +549,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
           />
         )}
         {!trainsLoading && trains.length === 0 && !trainsError && (
-          <p className="alm-equipment__empty">{m.settings_equipment_trains_empty()}</p>
+          <p className="alm-equipment__empty">
+            {m.settings_equipment_trains_empty()}
+          </p>
         )}
 
         {trainForm && (
@@ -508,18 +571,25 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 className="alm-input"
                 aria-label={m.settings_equipment_col_name()}
                 value={trainForm.name}
-                onChange={(e) => setTrainForm({ ...trainForm, name: e.target.value })}
+                onChange={(e) =>
+                  setTrainForm({ ...trainForm, name: e.target.value })
+                }
               />
             </div>
             <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-train-camera">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-train-camera"
+              >
                 {m.settings_equipment_field_camera()}
               </label>
               <select
                 id="equipment-train-camera"
                 className="alm-select"
                 value={trainForm.cameraId}
-                onChange={(e) => setTrainForm({ ...trainForm, cameraId: e.target.value })}
+                onChange={(e) =>
+                  setTrainForm({ ...trainForm, cameraId: e.target.value })
+                }
               >
                 <option value="">{m.settings_equipment_field_none()}</option>
                 {cameras.map((c) => (
@@ -530,14 +600,19 @@ export function Equipment({ save: _save }: EquipmentProps) {
               </select>
             </div>
             <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-train-telescope">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-train-telescope"
+              >
                 {m.settings_equipment_field_telescope()}
               </label>
               <select
                 id="equipment-train-telescope"
                 className="alm-select"
                 value={trainForm.telescopeId}
-                onChange={(e) => setTrainForm({ ...trainForm, telescopeId: e.target.value })}
+                onChange={(e) =>
+                  setTrainForm({ ...trainForm, telescopeId: e.target.value })
+                }
               >
                 <option value="">{m.settings_equipment_field_none()}</option>
                 {telescopes.map((t) => (
@@ -548,7 +623,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
               </select>
             </div>
             <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-train-focal-length">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-train-focal-length"
+              >
                 {m.settings_equipment_field_focal_length()}
               </label>
               <input
@@ -558,7 +636,12 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 className="alm-input"
                 aria-label={m.settings_equipment_field_focal_length()}
                 value={trainForm.focalLengthMmText}
-                onChange={(e) => setTrainForm({ ...trainForm, focalLengthMmText: e.target.value })}
+                onChange={(e) =>
+                  setTrainForm({
+                    ...trainForm,
+                    focalLengthMmText: e.target.value,
+                  })
+                }
               />
             </div>
           </SettingsFormShell>
@@ -569,13 +652,22 @@ export function Equipment({ save: _save }: EquipmentProps) {
       <SettingsSection
         title={m.settings_equipment_cameras_title()}
         action={
-          <Btn size="sm" onClick={() => setCameraForm({ id: null, name: '', aliasesText: '' })}>
+          <Btn
+            size="sm"
+            onClick={() =>
+              setCameraForm({ id: null, name: '', aliasesText: '' })
+            }
+          >
             {m.settings_equipment_cameras_add()}
           </Btn>
         }
       >
-        {camerasError && <p className="alm-equipment__load-error">{camerasError}</p>}
-        {camerasLoading && <p className="alm-equipment__empty">{m.common_loading()}</p>}
+        {camerasError && (
+          <p className="alm-equipment__load-error">{camerasError}</p>
+        )}
+        {camerasLoading && (
+          <p className="alm-equipment__empty">{m.common_loading()}</p>
+        )}
 
         {!camerasLoading && (
           <Table
@@ -596,7 +688,11 @@ export function Equipment({ save: _save }: EquipmentProps) {
                       size="sm"
                       variant="ghost"
                       onClick={() =>
-                        setCameraForm({ id: c.id, name: c.name, aliasesText: c.aliases.join(', ') })
+                        setCameraForm({
+                          id: c.id,
+                          name: c.name,
+                          aliasesText: c.aliases.join(', '),
+                        })
                       }
                     >
                       {m.common_edit()}
@@ -619,7 +715,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
           />
         )}
         {!camerasLoading && cameras.length === 0 && !camerasError && (
-          <p className="alm-equipment__empty">{m.settings_equipment_cameras_empty()}</p>
+          <p className="alm-equipment__empty">
+            {m.settings_equipment_cameras_empty()}
+          </p>
         )}
 
         {cameraForm && (
@@ -630,7 +728,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
             onSave={handleCameraSubmit}
           >
             <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-camera-name">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-camera-name"
+              >
                 {m.settings_equipment_col_name()}
               </label>
               <input
@@ -639,13 +740,21 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 className="alm-input"
                 aria-label={m.settings_equipment_col_name()}
                 value={cameraForm.name}
-                onChange={(e) => setCameraForm({ ...cameraForm, name: e.target.value })}
+                onChange={(e) =>
+                  setCameraForm({ ...cameraForm, name: e.target.value })
+                }
               />
             </div>
             <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-camera-aliases">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-camera-aliases"
+              >
                 {m.common_aliases()}
-                <span className="alm-field-hint"> ({m.settings_equipment_field_aliases_hint()})</span>
+                <span className="alm-field-hint">
+                  {' '}
+                  ({m.settings_equipment_field_aliases_hint()})
+                </span>
               </label>
               <input
                 id="equipment-camera-aliases"
@@ -653,7 +762,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 className="alm-input"
                 aria-label={m.common_aliases()}
                 value={cameraForm.aliasesText}
-                onChange={(e) => setCameraForm({ ...cameraForm, aliasesText: e.target.value })}
+                onChange={(e) =>
+                  setCameraForm({ ...cameraForm, aliasesText: e.target.value })
+                }
               />
             </div>
           </SettingsFormShell>
@@ -667,22 +778,34 @@ export function Equipment({ save: _save }: EquipmentProps) {
           <Btn
             size="sm"
             onClick={() =>
-              setTelescopeForm({ id: null, name: '', aliasesText: '', focalLengthMmText: '' })
+              setTelescopeForm({
+                id: null,
+                name: '',
+                aliasesText: '',
+                focalLengthMmText: '',
+              })
             }
           >
             {m.settings_equipment_telescopes_add()}
           </Btn>
         }
       >
-        {telescopesError && <p className="alm-equipment__load-error">{telescopesError}</p>}
-        {telescopesLoading && <p className="alm-equipment__empty">{m.common_loading()}</p>}
+        {telescopesError && (
+          <p className="alm-equipment__load-error">{telescopesError}</p>
+        )}
+        {telescopesLoading && (
+          <p className="alm-equipment__empty">{m.common_loading()}</p>
+        )}
 
         {!telescopesLoading && (
           <Table
             columns={[
               { key: 'name', label: m.settings_equipment_col_name() },
               { key: 'aliases', label: m.settings_equipment_col_aliases() },
-              { key: 'focalLength', label: m.settings_equipment_col_focal_length() },
+              {
+                key: 'focalLength',
+                label: m.settings_equipment_col_focal_length(),
+              },
               { key: 'source', label: m.settings_equipment_col_source() },
               { key: 'actions', label: '', style: { width: 140 } },
             ]}
@@ -693,7 +816,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 focalLength: (
                   <code className="alm-mono">
                     {t.focalLengthMm != null
-                      ? m.settings_equipment_focal_length_value({ mm: t.focalLengthMm })
+                      ? m.settings_equipment_focal_length_value({
+                          mm: t.focalLengthMm,
+                        })
                       : '—'}
                   </code>
                 ),
@@ -708,7 +833,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
                           id: t.id,
                           name: t.name,
                           aliasesText: t.aliases.join(', '),
-                          focalLengthMmText: t.focalLengthMm != null ? String(t.focalLengthMm) : '',
+                          focalLengthMmText:
+                            t.focalLengthMm != null
+                              ? String(t.focalLengthMm)
+                              : '',
                         })
                       }
                     >
@@ -730,7 +858,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
           />
         )}
         {!telescopesLoading && telescopes.length === 0 && !telescopesError && (
-          <p className="alm-equipment__empty">{m.settings_equipment_telescopes_empty()}</p>
+          <p className="alm-equipment__empty">
+            {m.settings_equipment_telescopes_empty()}
+          </p>
         )}
 
         {telescopeForm && (
@@ -741,7 +871,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
             onSave={handleTelescopeSubmit}
           >
             <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-telescope-name">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-telescope-name"
+              >
                 {m.settings_equipment_col_name()}
               </label>
               <input
@@ -750,13 +883,21 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 className="alm-input"
                 aria-label={m.settings_equipment_col_name()}
                 value={telescopeForm.name}
-                onChange={(e) => setTelescopeForm({ ...telescopeForm, name: e.target.value })}
+                onChange={(e) =>
+                  setTelescopeForm({ ...telescopeForm, name: e.target.value })
+                }
               />
             </div>
             <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-telescope-aliases">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-telescope-aliases"
+              >
                 {m.common_aliases()}
-                <span className="alm-field-hint"> ({m.settings_equipment_field_aliases_hint()})</span>
+                <span className="alm-field-hint">
+                  {' '}
+                  ({m.settings_equipment_field_aliases_hint()})
+                </span>
               </label>
               <input
                 id="equipment-telescope-aliases"
@@ -764,11 +905,19 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 className="alm-input"
                 aria-label={m.common_aliases()}
                 value={telescopeForm.aliasesText}
-                onChange={(e) => setTelescopeForm({ ...telescopeForm, aliasesText: e.target.value })}
+                onChange={(e) =>
+                  setTelescopeForm({
+                    ...telescopeForm,
+                    aliasesText: e.target.value,
+                  })
+                }
               />
             </div>
             <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-telescope-focal-length">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-telescope-focal-length"
+              >
                 {m.settings_equipment_field_focal_length()}
               </label>
               <input
@@ -779,7 +928,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 aria-label={m.settings_equipment_field_focal_length()}
                 value={telescopeForm.focalLengthMmText}
                 onChange={(e) =>
-                  setTelescopeForm({ ...telescopeForm, focalLengthMmText: e.target.value })
+                  setTelescopeForm({
+                    ...telescopeForm,
+                    focalLengthMmText: e.target.value,
+                  })
                 }
               />
             </div>
@@ -793,14 +945,20 @@ export function Equipment({ save: _save }: EquipmentProps) {
         action={
           <Btn
             size="sm"
-            onClick={() => setFilterForm({ id: null, name: '', category: 'narrowband' })}
+            onClick={() =>
+              setFilterForm({ id: null, name: '', category: 'narrowband' })
+            }
           >
             {m.settings_equipment_filters_add()}
           </Btn>
         }
       >
-        {filtersError && <p className="alm-equipment__load-error">{filtersError}</p>}
-        {filtersLoading && <p className="alm-equipment__empty">{m.common_loading()}</p>}
+        {filtersError && (
+          <p className="alm-equipment__load-error">{filtersError}</p>
+        )}
+        {filtersLoading && (
+          <p className="alm-equipment__empty">{m.common_loading()}</p>
+        )}
 
         {!filtersLoading && (
           <Table
@@ -820,11 +978,21 @@ export function Equipment({ save: _save }: EquipmentProps) {
                     <Btn
                       size="sm"
                       variant="ghost"
-                      onClick={() => setFilterForm({ id: f.id, name: f.name, category: f.category })}
+                      onClick={() =>
+                        setFilterForm({
+                          id: f.id,
+                          name: f.name,
+                          category: f.category,
+                        })
+                      }
                     >
                       {m.common_edit()}
                     </Btn>
-                    <Btn size="sm" variant="ghost" onClick={() => requestDeleteFilter(f)}>
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => requestDeleteFilter(f)}
+                    >
                       {m.common_remove()}
                     </Btn>
                   </span>
@@ -834,7 +1002,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
           />
         )}
         {!filtersLoading && filters.length === 0 && !filtersError && (
-          <p className="alm-equipment__empty">{m.settings_equipment_filters_empty()}</p>
+          <p className="alm-equipment__empty">
+            {m.settings_equipment_filters_empty()}
+          </p>
         )}
 
         {filterForm && (
@@ -845,7 +1015,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
             onSave={handleFilterSubmit}
           >
             <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-filter-name">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-filter-name"
+              >
                 {m.settings_equipment_col_name()}
               </label>
               <input
@@ -854,11 +1027,16 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 className="alm-input"
                 aria-label={m.settings_equipment_col_name()}
                 value={filterForm.name}
-                onChange={(e) => setFilterForm({ ...filterForm, name: e.target.value })}
+                onChange={(e) =>
+                  setFilterForm({ ...filterForm, name: e.target.value })
+                }
               />
             </div>
             <div className="alm-stack-1">
-              <label className="alm-field-label" htmlFor="equipment-filter-category">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-filter-category"
+              >
                 {m.settings_equipment_field_category()}
               </label>
               <select
@@ -866,7 +1044,10 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 className="alm-select"
                 value={filterForm.category}
                 onChange={(e) =>
-                  setFilterForm({ ...filterForm, category: e.target.value as FilterCategory })
+                  setFilterForm({
+                    ...filterForm,
+                    category: e.target.value as FilterCategory,
+                  })
                 }
               >
                 {FILTER_CATEGORIES.map((cat) => (
@@ -888,7 +1069,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
           setDeleteError(null);
         }}
         onConfirm={() => void handleConfirmDelete()}
-        title={m.settings_equipment_delete_confirm_title({ name: deleteTarget?.name ?? '' })}
+        title={m.settings_equipment_delete_confirm_title({
+          name: deleteTarget?.name ?? '',
+        })}
         description={m.settings_equipment_delete_confirm_desc()}
         confirmLabel={deleteBusy ? m.common_removing() : m.common_remove()}
         confirmVariant="danger"

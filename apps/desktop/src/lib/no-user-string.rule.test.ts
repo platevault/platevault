@@ -58,7 +58,9 @@ describe('alm/no-user-string', () => {
         return <span>Not user facing, really</span>;
       }
     `);
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
   });
 
   // Regression lock for spec 046 SC-001: the gate MUST catch user-facing strings
@@ -76,7 +78,9 @@ describe('alm/no-user-string', () => {
       export { NAV, DIALOG };
     `);
     // label, heading, subtitle, confirmLabel, cancelLabel, tooltip = 6
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(6);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      6,
+    );
   });
 
   it('does NOT flag machine-ish object keys (name/id/value/path/route/variant)', () => {
@@ -86,7 +90,9 @@ describe('alm/no-user-string', () => {
       ];
       export { CFG };
     `);
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
   });
 
   it('flags both branches of a user-facing attribute ternary', () => {
@@ -130,7 +136,9 @@ describe('alm/no-user-string', () => {
       const COLS = [{ label: \`Sort by \${col}\` }];
       export { COLS };
     `);
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(1);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      1,
+    );
   });
 
   it('flags template literals rendered as a JSX child (ternary expression)', () => {
@@ -152,7 +160,9 @@ describe('alm/no-user-string', () => {
       }
     `);
     // className \`wrap-\${id}\` is an attribute (machine); cls assignment is a var.
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
   });
 
   it('alm/no-js-plural flags lone-suffix pluralization ternaries', () => {
@@ -160,16 +170,38 @@ describe('alm/no-user-string', () => {
     const run = (code: string) =>
       linter.verify(code, {
         plugins: { alm: plugin },
-        languageOptions: { parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } },
+        languageOptions: {
+          parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
+        },
         rules: { 'alm/no-js-plural': 'error' },
       });
     // inline JSX-suffix + suffix-param forms → flagged
-    expect(run("const a = n !== 1 ? 's' : '';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
-    expect(run("f({ suffix: n === 1 ? '' : 's' });").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
-    expect(run("const a = n === 1 ? '' : 'es';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    expect(
+      run("const a = n !== 1 ? 's' : '';").filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(1);
+    expect(
+      run("f({ suffix: n === 1 ? '' : 's' });").filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(1);
+    expect(
+      run("const a = n === 1 ? '' : 'es';").filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(1);
     // full-word ternaries and non-plural ternaries → NOT flagged
-    expect(run("const a = ok ? 'Save' : 'Cancel';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
-    expect(run("const a = n === 1 ? 'item' : 'items';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
+    expect(
+      run("const a = ok ? 'Save' : 'Cancel';").filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(0);
+    expect(
+      run("const a = n === 1 ? 'item' : 'items';").filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(0);
   });
 
   it('alm/no-js-plural flags suffix template-literal ternaries and short-circuit suffixes', () => {
@@ -177,15 +209,29 @@ describe('alm/no-user-string', () => {
     const run = (code: string) =>
       linter.verify(code, {
         plugins: { alm: plugin },
-        languageOptions: { parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } },
+        languageOptions: {
+          parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
+        },
         rules: { 'alm/no-js-plural': 'error' },
       });
     // template-literal suffix/empty branches (no interpolation) → flagged
-    expect(run('const a = n === 1 ? `` : `s`;').filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    expect(
+      run('const a = n === 1 ? `` : `s`;').filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(1);
     // short-circuit suffix → flagged
-    expect(run("const a = `${n}${n !== 1 && 's'}`;").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(1);
+    expect(
+      run("const a = `${n}${n !== 1 && 's'}`;").filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(1);
     // non-suffix logical-AND → NOT flagged
-    expect(run("const a = ok && 'Save';").filter((m) => m.ruleId === 'alm/no-js-plural')).toHaveLength(0);
+    expect(
+      run("const a = ok && 'Save';").filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
+    ).toHaveLength(0);
   });
 
   it('alm/no-js-plural flags a ternary picking between paired m.*_plural()/m.*_singular() catalog calls', () => {
@@ -193,22 +239,28 @@ describe('alm/no-user-string', () => {
     const run = (code: string) =>
       linter.verify(code, {
         plugins: { alm: plugin },
-        languageOptions: { parserOptions: { ecmaVersion: 'latest', sourceType: 'module' } },
+        languageOptions: {
+          parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
+        },
         rules: { 'alm/no-js-plural': 'error' },
       });
-    const out = run("const a = n !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular();");
+    const out = run(
+      'const a = n !== 1 ? m.inbox_list_file_plural() : m.inbox_list_file_singular();',
+    );
     const hits = out.filter((m) => m.ruleId === 'alm/no-js-plural');
     expect(hits).toHaveLength(1);
     expect(hits[0].messageId).toBe('jsPluralPairedCall');
     // reversed branch order → still flagged
     expect(
-      run("const b = n === 1 ? m.inbox_list_file_singular() : m.inbox_list_file_plural();").filter(
-        (m) => m.ruleId === 'alm/no-js-plural',
-      ),
+      run(
+        'const b = n === 1 ? m.inbox_list_file_singular() : m.inbox_list_file_plural();',
+      ).filter((m) => m.ruleId === 'alm/no-js-plural'),
     ).toHaveLength(1);
     // ternary between two unrelated catalog calls → NOT flagged
     expect(
-      run("const c = ok ? m.common_save() : m.common_cancel();").filter((m) => m.ruleId === 'alm/no-js-plural'),
+      run('const c = ok ? m.common_save() : m.common_cancel();').filter(
+        (m) => m.ruleId === 'alm/no-js-plural',
+      ),
     ).toHaveLength(0);
   });
 
@@ -220,7 +272,9 @@ describe('alm/no-user-string', () => {
     `);
     // aria-label \`\${a}-\${b}\` has no letters in its static chunks → not flagged;
     // className/key are not user-facing attrs anyway.
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
   });
 
   // ── Enhancements (spec 046 #4: variable-assigned blind spot + attr/key gaps) ──
@@ -258,7 +312,9 @@ describe('alm/no-user-string', () => {
       const CARD = { description: 'On-demand resolution.', body: 'A longer note.' };
       export { META, CARD };
     `);
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(4);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      4,
+    );
   });
 
   it('flags a user string assigned to a variable and then rendered', () => {
@@ -282,7 +338,9 @@ describe('alm/no-user-string', () => {
       }
     `);
     // 'pending'/'no_match' are lowercase/snake tokens; '{target}_{filter}' has braces.
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
   });
 
   it('does NOT flag a prose variable used only in a machine context', () => {
@@ -293,7 +351,9 @@ describe('alm/no-user-string', () => {
       }
     `);
     // 'Active row' is prose, but className is not a rendered/user position.
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
   });
 
   // ── State-setter sink + toast template literals (spec 046: prose template
@@ -337,7 +397,9 @@ describe('alm/no-user-string', () => {
         return <span title={status}>{handle.name}</span>;
       }
     `);
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
   });
 
   it('does NOT flag a useState setter argument that is never rendered', () => {
@@ -348,7 +410,9 @@ describe('alm/no-user-string', () => {
         return <div onClick={handle} />;
       }
     `);
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
   });
 
   it('does NOT flag a machine path/id template literal passed to a useState setter', () => {
@@ -359,7 +423,9 @@ describe('alm/no-user-string', () => {
         return <div title={path} />;
       }
     `);
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
   });
 
   it('flags a prose template literal passed directly to a toast call', () => {
@@ -390,6 +456,8 @@ describe('alm/no-user-string', () => {
         return toast(\`#\${a}-\${b}\`);
       }
     `);
-    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(0);
+    expect(out.filter((m) => m.ruleId === 'alm/no-user-string')).toHaveLength(
+      0,
+    );
   });
 });

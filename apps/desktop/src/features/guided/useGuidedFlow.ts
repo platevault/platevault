@@ -34,7 +34,9 @@ export interface GuidedFlowHook {
  *   so the hook knows to activate the flow.  Pass `false`/`undefined` to
  *   skip (e.g. when still in first-run setup).
  */
-export function useGuidedFlow(setupCompleted: boolean | undefined): GuidedFlowHook {
+export function useGuidedFlow(
+  setupCompleted: boolean | undefined,
+): GuidedFlowHook {
   const queryClient = useQueryClient();
   const guidedKey = queryKeys.guided.state();
 
@@ -73,8 +75,13 @@ export function useGuidedFlow(setupCompleted: boolean | undefined): GuidedFlowHo
     onSuccess: () => {
       queryClient.setQueryData<GuidedFlowStateDto | null>(guidedKey, (prev) =>
         prev
-          ? { ...prev, dismissed: true, dismissedAt: new Date().toISOString(), currentStep: null }
-          : prev ?? null,
+          ? {
+              ...prev,
+              dismissed: true,
+              dismissedAt: new Date().toISOString(),
+              currentStep: null,
+            }
+          : (prev ?? null),
       );
     },
   });

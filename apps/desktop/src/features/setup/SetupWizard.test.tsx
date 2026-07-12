@@ -9,7 +9,13 @@
  * optional and never blocks advancement). The Scan step (step 6) has its own
  * StepScan.test.tsx.
  */
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -17,7 +23,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // the `mockPickDirectory` fn is accessible from within the hoisted mock factory.
 // ---------------------------------------------------------------------------
 const { mockPickDirectory } = vi.hoisted(() => {
-  const mockPickDirectory = vi.fn<() => Promise<{ path: string | null; cancelled: boolean }>>();
+  const mockPickDirectory =
+    vi.fn<() => Promise<{ path: string | null; cancelled: boolean }>>();
   return { mockPickDirectory };
 });
 
@@ -58,7 +65,8 @@ vi.mock('@tanstack/react-router', () => ({
 // StepCatalogs' ResolverSettingsControl reads resolver settings from the
 // settings feature's settingsIpc glue module (spec 037); mock those two there.
 vi.mock('@/features/settings/settingsIpc', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/features/settings/settingsIpc')>();
+  const actual =
+    await importOriginal<typeof import('@/features/settings/settingsIpc')>();
   return {
     ...actual,
     getResolverSettings: vi.fn().mockResolvedValue({
@@ -71,9 +79,11 @@ vi.mock('@/features/settings/settingsIpc', async (importOriginal) => {
         requestTimeoutSecs: 10,
       },
     }),
-    updateResolverSettings: vi.fn().mockImplementation((settings) =>
-      Promise.resolve({ contractVersion: '1.0', requestId: 'r', settings }),
-    ),
+    updateResolverSettings: vi
+      .fn()
+      .mockImplementation((settings) =>
+        Promise.resolve({ contractVersion: '1.0', requestId: 'r', settings }),
+      ),
   };
 });
 
@@ -103,8 +113,13 @@ const {
       executablePath: null,
     },
   }),
-  mockFirstrunComplete: vi.fn().mockResolvedValue({ status: 'ok', data: { success: true } }),
-  mockRootsRegisterBatch: vi.fn().mockResolvedValue({ status: 'ok', data: { status: 'success', items: [] } }),
+  mockFirstrunComplete: vi
+    .fn()
+    .mockResolvedValue({ status: 'ok', data: { success: true } }),
+  mockRootsRegisterBatch: vi.fn().mockResolvedValue({
+    status: 'ok',
+    data: { status: 'success', items: [] },
+  }),
   mockSettingsGet: vi.fn().mockResolvedValue({
     status: 'ok',
     data: { values: { defaultProtection: 'protected' } },
@@ -112,7 +127,10 @@ const {
   mockSettingsUpdate: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
   // StepScan calls these — stub with empty responses so render doesn't throw
   // if the Scan step is reached during tests that navigate that far.
-  mockInboxScanFolder: vi.fn().mockResolvedValue({ status: 'ok', data: { rootId: 'root-mock', items: [] } }),
+  mockInboxScanFolder: vi.fn().mockResolvedValue({
+    status: 'ok',
+    data: { rootId: 'root-mock', items: [] },
+  }),
   // Never actually invoked in these gating tests (scan responses carry no
   // items), but the module surface must still expose it.
   mockInboxClassify: vi.fn(),
@@ -167,9 +185,7 @@ function _clickContinue() {
 /** Return the primary continue button. */
 function getContinueButton(): HTMLElement {
   const allButtons = screen.getAllByRole('button');
-  const match = allButtons.find(
-    (b) => b.textContent?.includes('Continue to'),
-  );
+  const match = allButtons.find((b) => b.textContent?.includes('Continue to'));
   if (!match) throw new Error('Continue button not found');
   return match;
 }
@@ -194,7 +210,9 @@ async function addFolder(path: string, kind = 'light_frames') {
   mockPickDirectory.mockResolvedValueOnce({ path, cancelled: false });
 
   const label = KIND_LABEL[kind] ?? kind;
-  const addBtn = screen.getByRole('button', { name: new RegExp(`add ${label} folder`, 'i') });
+  const addBtn = screen.getByRole('button', {
+    name: new RegExp(`add ${label} folder`, 'i'),
+  });
 
   await act(async () => {
     fireEvent.click(addBtn);
@@ -280,7 +298,9 @@ describe('SetupWizard 5-step flow', () => {
     // The inbox group card is still present (it's a supported optional kind).
     expect(screen.getByTestId('source-group-inbox')).toBeInTheDocument();
     // But it must NOT carry a data-requirement-met attribute (it's optional).
-    expect(screen.getByTestId('source-group-inbox')).not.toHaveAttribute('data-requirement-met');
+    expect(screen.getByTestId('source-group-inbox')).not.toHaveAttribute(
+      'data-requirement-met',
+    );
   });
 
   it('renders one persistent group card per source kind, even when empty', () => {
@@ -295,29 +315,49 @@ describe('SetupWizard 5-step flow', () => {
     renderWizard();
 
     // Required groups start unmet; optional groups carry no requirement flag.
-    expect(screen.getByTestId('source-group-light_frames')).toHaveAttribute('data-requirement-met', 'false');
-    expect(screen.getByTestId('source-group-project')).toHaveAttribute('data-requirement-met', 'false');
+    expect(screen.getByTestId('source-group-light_frames')).toHaveAttribute(
+      'data-requirement-met',
+      'false',
+    );
+    expect(screen.getByTestId('source-group-project')).toHaveAttribute(
+      'data-requirement-met',
+      'false',
+    );
     // calibration and inbox are optional (spec 039: inbox removed from required kinds).
-    expect(screen.getByTestId('source-group-calibration')).not.toHaveAttribute('data-requirement-met');
-    expect(screen.getByTestId('source-group-inbox')).not.toHaveAttribute('data-requirement-met');
+    expect(screen.getByTestId('source-group-calibration')).not.toHaveAttribute(
+      'data-requirement-met',
+    );
+    expect(screen.getByTestId('source-group-inbox')).not.toHaveAttribute(
+      'data-requirement-met',
+    );
 
     // Adding to the light_frames group flips its card to met.
     await addFolder('/astro/lights', 'light_frames');
     await waitFor(() => {
-      expect(screen.getByTestId('source-group-light_frames')).toHaveAttribute('data-requirement-met', 'true');
+      expect(screen.getByTestId('source-group-light_frames')).toHaveAttribute(
+        'data-requirement-met',
+        'true',
+      );
     });
     // Project still unmet.
-    expect(screen.getByTestId('source-group-project')).toHaveAttribute('data-requirement-met', 'false');
+    expect(screen.getByTestId('source-group-project')).toHaveAttribute(
+      'data-requirement-met',
+      'false',
+    );
   });
 
   it('lists added folders inside their own kind group card', async () => {
     renderWizard();
 
     await addFolder('/astro/lights', 'light_frames');
-    await waitFor(() => expect(screen.getByText('/astro/lights')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('/astro/lights')).toBeInTheDocument(),
+    );
 
     await addFolder('/astro/cals', 'calibration');
-    await waitFor(() => expect(screen.getByText('/astro/cals')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('/astro/cals')).toBeInTheDocument(),
+    );
 
     const lightGroup = screen.getByTestId('source-group-light_frames');
     const calGroup = screen.getByTestId('source-group-calibration');
@@ -346,7 +386,9 @@ describe('SetupWizard 5-step flow', () => {
     renderWizard();
 
     // We should be on the Processing Tools step (heading)
-    expect(screen.getByRole('heading', { name: /processing tools/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /processing tools/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/step 2 of 6/i)).toBeInTheDocument();
 
     // Continue should be enabled (tools step has no requirements)
@@ -355,7 +397,9 @@ describe('SetupWizard 5-step flow', () => {
 
     // Click Continue — should advance to Catalogs step
     fireEvent.click(continueBtn);
-    expect(screen.getByRole('heading', { name: /configuration/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /configuration/i }),
+    ).toBeInTheDocument();
   });
 
   it('allows Step 3 (Catalogs) to advance without changes', async () => {
@@ -379,7 +423,9 @@ describe('SetupWizard 5-step flow', () => {
     renderWizard();
 
     // We should be on the Catalogs step (heading)
-    expect(screen.getByRole('heading', { name: /configuration/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /configuration/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/step 3 of 6/i)).toBeInTheDocument();
 
     // Continue should be enabled
@@ -401,13 +447,21 @@ describe('SetupWizard 5-step flow', () => {
         pixinsight: { enabled: false, path: null },
         siril: { enabled: false, path: null },
       },
-      site: { name: '', latitudeDegText: '', longitudeDegText: '', elevationMText: '', timezone: 'UTC' },
+      site: {
+        name: '',
+        latitudeDegText: '',
+        longitudeDegText: '',
+        elevationMText: '',
+        timezone: 'UTC',
+      },
     };
     window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
 
     renderWizard();
 
-    expect(screen.getByRole('heading', { name: /where do you observe from/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /where do you observe from/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/step 4 of 6/i)).toBeInTheDocument();
 
     // Never required — Continue is enabled with every field blank.
@@ -430,7 +484,13 @@ describe('SetupWizard 5-step flow', () => {
         pixinsight: { enabled: false, path: null },
         siril: { enabled: false, path: null },
       },
-      site: { name: 'Backyard', latitudeDegText: '120', longitudeDegText: '4.9', elevationMText: '', timezone: 'UTC' },
+      site: {
+        name: 'Backyard',
+        latitudeDegText: '120',
+        longitudeDegText: '4.9',
+        elevationMText: '',
+        timezone: 'UTC',
+      },
     };
     window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
 
@@ -484,16 +544,29 @@ describe('SetupWizard 5-step flow', () => {
       await new Promise((r) => setTimeout(r, 0));
     });
 
-    await waitFor(() => expect(mockSettingsUpdate).toHaveBeenCalledWith(
-      'observing',
-      expect.objectContaining({
-        observingSites: [
-          expect.objectContaining({ name: 'Backyard', latitudeDeg: 52.37, longitudeDeg: 4.9, elevationM: 2 }),
-        ],
-      }),
-    ));
-    const call = mockSettingsUpdate.mock.calls.find(([scope]) => scope === 'observing');
-    const values = call?.[1] as { observingSites: Array<{ id: string }>; observingDefaultSiteId: string; observingActiveSiteId: string };
+    await waitFor(() =>
+      expect(mockSettingsUpdate).toHaveBeenCalledWith(
+        'observing',
+        expect.objectContaining({
+          observingSites: [
+            expect.objectContaining({
+              name: 'Backyard',
+              latitudeDeg: 52.37,
+              longitudeDeg: 4.9,
+              elevationM: 2,
+            }),
+          ],
+        }),
+      ),
+    );
+    const call = mockSettingsUpdate.mock.calls.find(
+      ([scope]) => scope === 'observing',
+    );
+    const values = call?.[1] as {
+      observingSites: Array<{ id: string }>;
+      observingDefaultSiteId: string;
+      observingActiveSiteId: string;
+    };
     const siteId = values.observingSites[0].id;
     expect(values.observingDefaultSiteId).toBe(siteId);
     expect(values.observingActiveSiteId).toBe(siteId);
@@ -514,7 +587,13 @@ describe('SetupWizard 5-step flow', () => {
         pixinsight: { enabled: false, path: null },
         siril: { enabled: false, path: null },
       },
-      site: { name: '', latitudeDegText: '', longitudeDegText: '', elevationMText: '', timezone: 'UTC' },
+      site: {
+        name: '',
+        latitudeDegText: '',
+        longitudeDegText: '',
+        elevationMText: '',
+        timezone: 'UTC',
+      },
     };
     window.localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(seeded));
 
@@ -535,7 +614,10 @@ describe('SetupWizard 5-step flow', () => {
     });
 
     await waitFor(() => expect(mockFirstrunComplete).toHaveBeenCalledTimes(1));
-    expect(mockSettingsUpdate).not.toHaveBeenCalledWith('observing', expect.anything());
+    expect(mockSettingsUpdate).not.toHaveBeenCalledWith(
+      'observing',
+      expect.anything(),
+    );
   });
 
   it('shows Confirm step (Step 5) with Start scan button', async () => {
@@ -567,7 +649,9 @@ describe('SetupWizard 5-step flow', () => {
     // "Start scan" button should be present and enabled (not "Complete setup")
     const startScanBtn = screen.getByRole('button', { name: /start scan/i });
     expect(startScanBtn).not.toBeDisabled();
-    expect(screen.queryByRole('button', { name: /complete setup/i })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /complete setup/i }),
+    ).toBeNull();
   });
 
   it('blocks Start scan on Confirm step when required folders are missing', async () => {
@@ -637,7 +721,10 @@ describe('SetupWizard 5-step flow', () => {
       ],
       catalogSettings: { selectedCatalogIds: [] },
       tools: {
-        pixinsight: { enabled: true, path: '/Applications/PixInsight/PixInsight.app' },
+        pixinsight: {
+          enabled: true,
+          path: '/Applications/PixInsight/PixInsight.app',
+        },
         siril: { enabled: false, path: null },
       },
     };

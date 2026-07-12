@@ -31,9 +31,13 @@ describe('SourceViews settings pane (spec 049 T030)', () => {
     render(<SourceViews save={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('source-views-intra-drive-select')).toHaveValue('hardlink');
+      expect(screen.getByTestId('source-views-intra-drive-select')).toHaveValue(
+        'hardlink',
+      );
     });
-    expect(screen.getByTestId('source-views-cross-drive-select')).toHaveValue('symlink');
+    expect(screen.getByTestId('source-views-cross-drive-select')).toHaveValue(
+      'symlink',
+    );
   });
 
   it('loads persisted values and reflects them, not the in-code default', async () => {
@@ -46,33 +50,45 @@ describe('SourceViews settings pane (spec 049 T030)', () => {
     render(<SourceViews save={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('source-views-intra-drive-select')).toHaveValue('symlink');
+      expect(screen.getByTestId('source-views-intra-drive-select')).toHaveValue(
+        'symlink',
+      );
     });
-    expect(screen.getByTestId('source-views-cross-drive-select')).toHaveValue('junction');
+    expect(screen.getByTestId('source-views-cross-drive-select')).toHaveValue(
+      'junction',
+    );
   });
 
   it('changing the intra-drive select calls save with the new value', async () => {
     const save = vi.fn();
     render(<SourceViews save={save} />);
     await waitFor(() => {
-      expect(screen.getByTestId('source-views-intra-drive-select')).toHaveValue('hardlink');
+      expect(screen.getByTestId('source-views-intra-drive-select')).toHaveValue(
+        'hardlink',
+      );
     });
 
     fireEvent.change(screen.getByTestId('source-views-intra-drive-select'), {
       target: { value: 'symlink' },
     });
 
-    expect(save).toHaveBeenCalledWith('sourceViews', { sourceViewLinkKindIntraDrive: 'symlink' });
+    expect(save).toHaveBeenCalledWith('sourceViews', {
+      sourceViewLinkKindIntraDrive: 'symlink',
+    });
   });
 
   it('never offers hardlink as a cross-drive option (FR-004a)', async () => {
     render(<SourceViews save={vi.fn()} />);
     await waitFor(() => {
-      expect(screen.getByTestId('source-views-cross-drive-select')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('source-views-cross-drive-select'),
+      ).toBeInTheDocument();
     });
 
     const options = Array.from(
-      screen.getByTestId('source-views-cross-drive-select').querySelectorAll('option'),
+      screen
+        .getByTestId('source-views-cross-drive-select')
+        .querySelectorAll('option'),
     ).map((o) => o.getAttribute('value'));
     expect(options).not.toContain('hardlink');
     expect(options).toEqual(['symlink', 'junction']);

@@ -19,12 +19,7 @@ import { InboxControls } from '../InboxControls';
 // InboxPage (spec 043 #73/#31). InboxControls is now a thin shim that renders
 // the grouping selects standalone for these option assertions.
 function renderControls(dims: string[] = []) {
-  return render(
-    <InboxControls
-      dims={dims}
-      setSlot={vi.fn()}
-    />,
-  );
+  return render(<InboxControls dims={dims} setSlot={vi.fn()} />);
 }
 
 // ── T074a test 1: Show ignored items in Cmd+K ────────────────────────────────
@@ -51,14 +46,22 @@ describe('T074a: InboxList group-by options are user-meaningful', () => {
     renderControls();
     // The configurable grouping control offers user-meaningful dimensions,
     // not the legacy "lane" label.
-    expect(screen.getByRole('option', { name: /group: target/i })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /group: frame type/i })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /group: lane/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('option', { name: /group: target/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('option', { name: /group: frame type/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('option', { name: /group: lane/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders "Group: Date" option', () => {
     renderControls();
-    expect(screen.getByRole('option', { name: /group: date/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('option', { name: /group: date/i }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -67,7 +70,10 @@ describe('T074a: InboxList group-by options are user-meaningful', () => {
 describe('T074a: SourceViewsSection per-item inventory refs', () => {
   it('renders inventory ref paths when items are present', async () => {
     vi.mock('@/features/projects/source-views', async (importOriginal) => {
-      const actual = await importOriginal<typeof import('@/features/projects/source-views')>();
+      const actual =
+        await importOriginal<
+          typeof import('@/features/projects/source-views')
+        >();
       return {
         ...actual,
         listPreparedViews: vi.fn().mockResolvedValue({
@@ -101,11 +107,11 @@ describe('T074a: SourceViewsSection per-item inventory refs', () => {
       };
     });
 
-    const { SourceViewsSection } = await import('@/features/projects/SourceViewsSection');
-
-    const { findByText } = render(
-      <SourceViewsSection projectId="proj-1" />,
+    const { SourceViewsSection } = await import(
+      '@/features/projects/SourceViewsSection'
     );
+
+    const { findByText } = render(<SourceViewsSection projectId="proj-1" />);
 
     // The summary line "2 inventory refs" should appear
     await findByText(/2 inventory refs/i);

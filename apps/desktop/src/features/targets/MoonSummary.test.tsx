@@ -42,9 +42,13 @@ describe('MoonSummary', () => {
     const { rerender } = render(
       <MoonSummary night={computeObservingNight(before)} />,
     );
-    const firstPhase = screen.getByTestId('moon-summary').querySelector('.alm-moon-summary__phase')?.textContent;
+    const firstPhase = screen
+      .getByTestId('moon-summary')
+      .querySelector('.alm-moon-summary__phase')?.textContent;
     rerender(<MoonSummary night={computeObservingNight(after)} />);
-    const secondPhase = screen.getByTestId('moon-summary').querySelector('.alm-moon-summary__phase')?.textContent;
+    const secondPhase = screen
+      .getByTestId('moon-summary')
+      .querySelector('.alm-moon-summary__phase')?.textContent;
     expect(firstPhase).toBe(secondPhase);
   });
 });

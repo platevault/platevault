@@ -20,7 +20,7 @@ vi.mock('@/bindings/index', () => ({
 
 vi.mock('@/api/ipc', () => ({
   invoke: vi.fn(),
-  unwrap: <T,>(r: { status: string; data?: T; error?: unknown }) => {
+  unwrap: <T>(r: { status: string; data?: T; error?: unknown }) => {
     if (r.status === 'error') throw r.error;
     return r.data as T;
   },
@@ -36,16 +36,23 @@ interface RevealArg {
   entityId: string | null;
 }
 
-const firstCallArg = (): RevealArg => mockNativeReveal.mock.calls[0][0] as RevealArg;
+const firstCallArg = (): RevealArg =>
+  mockNativeReveal.mock.calls[0][0] as RevealArg;
 
 describe('revealInventoryPath (spec 006 FR-007)', () => {
   beforeEach(() => {
     mockNativeReveal.mockReset();
-    mockNativeReveal.mockResolvedValue({ status: 'ok', data: { revealed: true, selection: 'file' } });
+    mockNativeReveal.mockResolvedValue({
+      status: 'ok',
+      data: { revealed: true, selection: 'file' },
+    });
   });
 
   it('invokes native reveal with the given path and an inventory_row audit tag', async () => {
-    await revealInventoryPath({ path: '/mnt/lib/NGC7000', sessionId: 'ses-42' });
+    await revealInventoryPath({
+      path: '/mnt/lib/NGC7000',
+      sessionId: 'ses-42',
+    });
 
     expect(mockNativeReveal).toHaveBeenCalledTimes(1);
     const arg = firstCallArg();
@@ -63,7 +70,10 @@ describe('revealInventoryPath (spec 006 FR-007)', () => {
   });
 
   it('propagates a native reveal error (rejects) for the caller to toast', async () => {
-    mockNativeReveal.mockResolvedValue({ status: 'error', error: { code: 'path.not_exists' } });
+    mockNativeReveal.mockResolvedValue({
+      status: 'error',
+      error: { code: 'path.not_exists' },
+    });
     await expect(revealInventoryPath({ path: '/gone' })).rejects.toBeDefined();
   });
 });

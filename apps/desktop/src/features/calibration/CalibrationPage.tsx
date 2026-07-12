@@ -27,12 +27,12 @@ import type { FilterOption } from '@/components';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { useGrouping } from '@/lib/use-grouping';
 import { MasterDetail } from './MasterDetail';
-import {
-  MastersTable,
-  DEFAULT_MASTER_SORT,
-} from './MastersTable';
+import { MastersTable, DEFAULT_MASTER_SORT } from './MastersTable';
 import type { MasterSort, MasterSortCol } from './MastersTable';
-import { useCalibrationMasters, useCalibrationSettings } from './useCalibration';
+import {
+  useCalibrationMasters,
+  useCalibrationSettings,
+} from './useCalibration';
 
 // ── Toolbar vocab ─────────────────────────────────────────────────────────────
 
@@ -75,7 +75,11 @@ export function CalibrationPage() {
   // useStatusSummary, not per-route counts.
 
   const clearSelection = useCallback(
-    () => navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+    () =>
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
     [navigate],
   );
   useStaleSelectionCleanup(selected, master !== null, clearSelection);
@@ -86,7 +90,9 @@ export function CalibrationPage() {
   // Sorting is header-driven: clicking a column toggles direction or switches column.
   const handleSort = useCallback((col: MasterSortCol) => {
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' },
     );
   }, []);
 

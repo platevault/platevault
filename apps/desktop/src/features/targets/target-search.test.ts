@@ -50,8 +50,15 @@ describe('normalizeDesig', () => {
 
 describe('matchesSearch — designation + label (#103b)', () => {
   // effectiveLabel is the bare designation; aliases carry the proper names.
-  const m31 = item('M 31', 'Andromeda Galaxy', 'galaxy', ['M 31', 'NGC 224', 'Andromeda Galaxy']);
-  const ngc7000 = item('NGC 7000', 'North America Nebula', 'emission_nebula', ['NGC 7000', 'North America Nebula']);
+  const m31 = item('M 31', 'Andromeda Galaxy', 'galaxy', [
+    'M 31',
+    'NGC 224',
+    'Andromeda Galaxy',
+  ]);
+  const ngc7000 = item('NGC 7000', 'North America Nebula', 'emission_nebula', [
+    'NGC 7000',
+    'North America Nebula',
+  ]);
 
   // Compact (no-space) form matches spaced designation
   it('"M31" matches target with primaryDesignation "M 31"', () => {
@@ -106,7 +113,11 @@ describe('matchesSearch — designation + label (#103b)', () => {
 describe('matchesSearch — alias array (#29)', () => {
   // Key scenario: effectiveLabel is the bare designation ("M 31"), but the
   // aliases array carries "Andromeda Galaxy". The search must still resolve.
-  const m31DesigLabel = item('M 31', 'M 31', 'galaxy', ['M 31', 'NGC 224', 'Andromeda Galaxy']);
+  const m31DesigLabel = item('M 31', 'M 31', 'galaxy', [
+    'M 31',
+    'NGC 224',
+    'Andromeda Galaxy',
+  ]);
 
   it('"Andromeda" resolves to M31 via aliases when effectiveLabel is bare designation', () => {
     expect(matchesSearch(m31DesigLabel, 'Andromeda')).toBe(true);

@@ -54,13 +54,19 @@ export interface SourceViewsSectionProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = true }: SourceViewsSectionProps) {
+export function SourceViewsSection({
+  projectId,
+  onPlanCreated,
+  defaultOpen = true,
+}: SourceViewsSectionProps) {
   const [views, setViews] = useState<PreparedViewSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyViewId, setBusyViewId] = useState<string | null>(null);
   const [generateOpen, setGenerateOpen] = useState(false);
-  const [verifyResults, setVerifyResults] = useState<Record<string, SourceViewVerifyResponse>>({});
+  const [verifyResults, setVerifyResults] = useState<
+    Record<string, SourceViewVerifyResponse>
+  >({});
 
   function handleGenerated(planId: string) {
     onPlanCreated?.(planId);
@@ -70,7 +76,12 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
   }
 
   const generateButton = (
-    <Btn size="sm" variant="primary" onClick={() => setGenerateOpen(true)} data-testid="generate-source-view-btn">
+    <Btn
+      size="sm"
+      variant="primary"
+      onClick={() => setGenerateOpen(true)}
+      data-testid="generate-source-view-btn"
+    >
       {m.projects_source_views_generate_btn()}
     </Btn>
   );
@@ -109,13 +120,16 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
       addToast({
         variant: 'info',
         message: m.projects_source_views_removal_toast(),
-        action: { label: m.projects_source_views_view_plan_btn(), onClick: () => onPlanCreated?.(planId) },
+        action: {
+          label: m.projects_source_views_view_plan_btn(),
+          onClick: () => onPlanCreated?.(planId),
+        },
       });
       onPlanCreated?.(planId);
     } catch (err: unknown) {
       const code =
         typeof err === 'object' && err !== null && 'code' in err
-          ? String((err).code)
+          ? String(err.code)
           : 'internal';
       addToast({
         variant: 'warn',
@@ -133,18 +147,23 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
       const planId = resp.planId;
       const warning =
         resp.unresolvedItemCount > 0
-          ? m.projects_source_views_regen_unresolved({ count: String(resp.unresolvedItemCount) })
+          ? m.projects_source_views_regen_unresolved({
+              count: String(resp.unresolvedItemCount),
+            })
           : '';
       addToast({
         variant: 'info',
         message: m.projects_source_views_regen_toast({ warning }),
-        action: { label: m.projects_source_views_view_plan_btn(), onClick: () => onPlanCreated?.(planId) },
+        action: {
+          label: m.projects_source_views_view_plan_btn(),
+          onClick: () => onPlanCreated?.(planId),
+        },
       });
       onPlanCreated?.(planId);
     } catch (err: unknown) {
       const code =
         typeof err === 'object' && err !== null && 'code' in err
-          ? String((err).code)
+          ? String(err.code)
           : 'internal';
       addToast({
         variant: 'warn',
@@ -163,7 +182,7 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
     } catch (err: unknown) {
       const code =
         typeof err === 'object' && err !== null && 'code' in err
-          ? String((err).code)
+          ? String(err.code)
           : 'internal';
       addToast({
         variant: 'warn',
@@ -187,7 +206,11 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
 
   if (loading) {
     return (
-      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
+      <Section
+        title={m.projects_source_views_title()}
+        defaultOpen={defaultOpen}
+        right={generateButton}
+      >
         <p className="text-muted text-sm">{m.common_loading()}</p>
         {dialog}
       </Section>
@@ -196,8 +219,14 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
 
   if (error) {
     return (
-      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
-        <Banner variant="danger">{m.projects_source_views_load_error({ error })}</Banner>
+      <Section
+        title={m.projects_source_views_title()}
+        defaultOpen={defaultOpen}
+        right={generateButton}
+      >
+        <Banner variant="danger">
+          {m.projects_source_views_load_error({ error })}
+        </Banner>
         {dialog}
       </Section>
     );
@@ -205,7 +234,11 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
 
   if (views.length === 0) {
     return (
-      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
+      <Section
+        title={m.projects_source_views_title()}
+        defaultOpen={defaultOpen}
+        right={generateButton}
+      >
         <p className="text-muted text-sm">{m.projects_source_views_empty()}</p>
         {dialog}
       </Section>
@@ -213,7 +246,11 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
   }
 
   return (
-    <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
+    <Section
+      title={m.projects_source_views_title()}
+      defaultOpen={defaultOpen}
+      right={generateButton}
+    >
       {dialog}
       <ul className="flex flex-col gap-3">
         {views.map((view) => (
@@ -224,14 +261,19 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
           >
             <div className="flex flex-col gap-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-xs text-muted truncate" title={view.id}>
+                <span
+                  className="font-mono text-xs text-muted truncate"
+                  title={view.id}
+                >
                   {view.id.slice(0, 8)}…
                 </span>
                 <Pill variant={viewStateVariant(view.state)}>
                   {viewStateLabel(view.state)}
                 </Pill>
                 <span className="text-xs text-muted">{view.kind}</span>
-                <span className="text-xs text-muted">{view.itemCount} {m.projects_source_views_items_unit()}</span>
+                <span className="text-xs text-muted">
+                  {view.itemCount} {m.projects_source_views_items_unit()}
+                </span>
               </div>
 
               {/* FR-033 / T078: per-item inventory refs. T016: each item shows
@@ -242,7 +284,9 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
               {view.items.length > 0 && (
                 <details className="text-xs text-muted alm-source-views__refs-details">
                   <summary className="alm-source-views__refs-summary">
-                    {m.projects_source_views_inventory_ref_count({ count: view.items.length })}
+                    {m.projects_source_views_inventory_ref_count({
+                      count: view.items.length,
+                    })}
                   </summary>
                   <ul
                     className="alm-source-views__refs-list"
@@ -251,14 +295,18 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                     {view.items.map((item: PreparedViewItemDetail) => (
                       <li
                         key={item.id}
-                        title={m.projects_source_view_item_title({ id: item.inventoryItemId })}
+                        title={m.projects_source_view_item_title({
+                          id: item.inventoryItemId,
+                        })}
                         className="alm-source-views__refs-item"
                       >
                         {item.viewRelativePath}
                         {item.lastObservedState !== 'present' && (
                           <>
                             {' — '}
-                            <span data-testid={`source-view-item-observed-${item.id}`}>
+                            <span
+                              data-testid={`source-view-item-observed-${item.id}`}
+                            >
                               {observedStateLabel(item.lastObservedState)}
                             </span>
                           </>
@@ -275,7 +323,9 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                 <Banner variant="warn" data-testid={`stale-summary-${view.id}`}>
                   {m.projects_source_views_stale_items_summary({
                     count: String(
-                      view.items.filter((item) => item.lastObservedState !== 'present').length,
+                      view.items.filter(
+                        (item) => item.lastObservedState !== 'present',
+                      ).length,
                     ),
                   })}
                 </Banner>
@@ -301,15 +351,23 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                     <div className="flex flex-col gap-1">
                       <span>
                         {m.projects_source_views_verify_broken_summary({
-                          count: String(verifyResults[view.id].brokenItems?.length ?? 0),
+                          count: String(
+                            verifyResults[view.id].brokenItems?.length ?? 0,
+                          ),
                         })}
                       </span>
                       <ul className="alm-source-views__refs-list">
-                        {(verifyResults[view.id].brokenItems ?? []).map((item) => (
-                          <li key={item.inventoryItemId} className="alm-source-views__refs-item">
-                            {item.viewRelativePath} — {brokenItemStateLabel(item.state)}
-                          </li>
-                        ))}
+                        {(verifyResults[view.id].brokenItems ?? []).map(
+                          (item) => (
+                            <li
+                              key={item.inventoryItemId}
+                              className="alm-source-views__refs-item"
+                            >
+                              {item.viewRelativePath} —{' '}
+                              {brokenItemStateLabel(item.state)}
+                            </li>
+                          ),
+                        )}
                       </ul>
                     </div>
                   )}
@@ -344,7 +402,9 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                   onClick={() => handleRemove(view.id)}
                   data-testid={`remove-view-${view.id}`}
                 >
-                  {busyViewId === view.id ? m.common_working() : m.common_remove()}
+                  {busyViewId === view.id
+                    ? m.common_working()
+                    : m.common_remove()}
                 </Btn>
               )}
 
@@ -356,7 +416,9 @@ export function SourceViewsSection({ projectId, onPlanCreated, defaultOpen = tru
                   onClick={() => handleRegenerate(view.id)}
                   data-testid={`regenerate-view-${view.id}`}
                 >
-                  {busyViewId === view.id ? m.common_working() : m.common_regenerate()}
+                  {busyViewId === view.id
+                    ? m.common_working()
+                    : m.common_regenerate()}
                 </Btn>
               )}
             </div>

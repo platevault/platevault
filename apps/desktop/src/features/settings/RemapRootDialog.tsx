@@ -30,9 +30,15 @@ export interface RemapRootDialogProps {
   onApplied: () => void;
 }
 
-export function RemapRootDialog({ root, onClose, onApplied }: RemapRootDialogProps) {
+export function RemapRootDialog({
+  root,
+  onClose,
+  onApplied,
+}: RemapRootDialogProps) {
   const [newPath, setNewPath] = useState('');
-  const [verification, setVerification] = useState<RemapVerification | null>(null);
+  const [verification, setVerification] = useState<RemapVerification | null>(
+    null,
+  );
   const [verifying, setVerifying] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +125,9 @@ export function RemapRootDialog({ root, onClose, onApplied }: RemapRootDialogPro
             onClick={() => void handleApply()}
             disabled={!verification || verifying || applying}
           >
-            {applying ? m.common_applying() : m.settings_datasources_remap_apply_btn()}
+            {applying
+              ? m.common_applying()
+              : m.settings_datasources_remap_apply_btn()}
           </Btn>
         </>
       }
@@ -156,7 +164,10 @@ export function RemapRootDialog({ root, onClose, onApplied }: RemapRootDialogPro
           </Banner>
           <ul className="alm-remap-dialog__samples">
             {verification.samples.map((sample) => (
-              <li key={sample.relativePath} className="alm-remap-dialog__sample-row">
+              <li
+                key={sample.relativePath}
+                className="alm-remap-dialog__sample-row"
+              >
                 <code className="alm-mono">{sample.relativePath}</code>
                 <Pill variant={sample.found ? 'ok' : 'warn'}>
                   {sample.found

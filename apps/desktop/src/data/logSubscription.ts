@@ -13,7 +13,12 @@
  * the subscription is a no-op and the mock invoker seeds the initial entries.
  */
 
-import { appendLog, getLogSnapshot, markTruncated, type LogEntry } from './logStore';
+import {
+  appendLog,
+  getLogSnapshot,
+  markTruncated,
+  type LogEntry,
+} from './logStore';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 

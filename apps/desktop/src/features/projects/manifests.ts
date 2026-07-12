@@ -17,7 +17,11 @@ import type {
   ProjectNoteUpdateRequest,
   ProjectNoteUpdateResult,
 } from '@/bindings/index';
-import type { ManifestListRequest, ManifestListResponse, ManifestGetResponse } from '@/bindings/aliases';
+import type {
+  ManifestListRequest,
+  ManifestListResponse,
+  ManifestGetResponse,
+} from '@/bindings/aliases';
 
 // ── IPC helpers ───────────────────────────────────────────────────────────────
 // Migrated off the hand-written @/api/commands wrappers (spec 037) onto the
@@ -25,17 +29,23 @@ import type { ManifestListRequest, ManifestListResponse, ManifestGetResponse } f
 // throw-on-error contract ManifestsAccordion / ProjectNotesSection rely on.
 
 /** `project.manifest.list` — list manifest snapshots for a project (spec 024). */
-export async function listManifests(request: ManifestListRequest): Promise<ManifestListResponse> {
+export async function listManifests(
+  request: ManifestListRequest,
+): Promise<ManifestListResponse> {
   return unwrap(await commands.manifestList(request));
 }
 
 /** `project.manifest.get` — fetch one manifest with its full structured body (spec 024). */
-export async function getManifest(request: ManifestGetRequest): Promise<ManifestGetResponse> {
+export async function getManifest(
+  request: ManifestGetRequest,
+): Promise<ManifestGetResponse> {
   return unwrap(await commands.manifestGet(request));
 }
 
 /** `project.note.get` — fetch current notes body for a project (spec 024). */
-export async function getProjectNote(req: ProjectNoteGetRequest): Promise<ProjectNoteGetResult> {
+export async function getProjectNote(
+  req: ProjectNoteGetRequest,
+): Promise<ProjectNoteGetResult> {
   return unwrap(await commands.noteGet(req));
 }
 
@@ -47,7 +57,9 @@ export async function updateProjectNote(
 }
 
 /** `project.manifest.reveal_in_os` — open the manifest file in the OS file manager (spec 024). */
-export async function revealManifestInOs(request: ManifestRevealRequest): Promise<void> {
+export async function revealManifestInOs(
+  request: ManifestRevealRequest,
+): Promise<void> {
   unwrap(await commands.manifestRevealInOs(request));
 }
 
@@ -125,7 +137,8 @@ export async function saveNote(
     });
     return { updatedAt: result.updatedAt };
   } catch (err: unknown) {
-    const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
+    const code =
+      typeof err === 'string' ? err : ((err as Error)?.message ?? 'unknown');
     return { error: code };
   }
 }

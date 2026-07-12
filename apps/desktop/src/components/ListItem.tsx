@@ -8,7 +8,13 @@ export interface ListItemProps {
   meta?: ReactNode;
 }
 
-export function ListItem({ selected, onClick, title, pills, meta }: ListItemProps) {
+export function ListItem({
+  selected,
+  onClick,
+  title,
+  pills,
+  meta,
+}: ListItemProps) {
   return (
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- interactivity is conditional; role becomes button and a keydown handler is attached only when onClick is provided
     <div
@@ -20,7 +26,7 @@ export function ListItem({ selected, onClick, title, pills, meta }: ListItemProp
       aria-pressed={onClick ? Boolean(selected) : undefined}
       onKeyDown={
         onClick
-          ? e => {
+          ? (e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 onClick();

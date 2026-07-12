@@ -25,7 +25,9 @@ import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/binding
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-function makeMaster(overrides: Partial<CalibrationMaster> & { id: string }): CalibrationMaster {
+function makeMaster(
+  overrides: Partial<CalibrationMaster> & { id: string },
+): CalibrationMaster {
   const { id, kind, ageDays, fingerprint, ...rest } = overrides;
   return {
     id,
@@ -55,7 +57,13 @@ const masters: CalibrationMaster[] = [
     id: 'flat-1',
     kind: 'flat',
     ageDays: 10,
-    fingerprint: { camera: 'ASI2600MM', exposureS: 3, gain: 100, binning: '1x1', filter: 'Ha' },
+    fingerprint: {
+      camera: 'ASI2600MM',
+      exposureS: 3,
+      gain: 100,
+      binning: '1x1',
+      filter: 'Ha',
+    },
   }),
   makeMaster({ id: 'bias-1', kind: 'bias', ageDays: 20 }),
 ];
@@ -89,7 +97,9 @@ describe('MastersTable (spec 043 §4)', () => {
   });
 
   it('4. Masters render FLAT by default (no spanning group-header rows)', () => {
-    const { container } = render(<MastersTable {...baseProps} masters={masters} />);
+    const { container } = render(
+      <MastersTable {...baseProps} masters={masters} />,
+    );
     // No group-header rows when ungrouped…
     expect(container.querySelectorAll('.alm-listgroup')).toHaveLength(0);
     // …but every master still renders as a row.
@@ -104,9 +114,15 @@ describe('MastersTable (spec 043 §4)', () => {
     );
     // One shared group-header row per present kind, each collapsible via testid.
     expect(container.querySelectorAll('.alm-listgroup')).toHaveLength(3);
-    expect(screen.getByTestId('calibration-group-kind-dark')).toBeInTheDocument();
-    expect(screen.getByTestId('calibration-group-kind-flat')).toBeInTheDocument();
-    expect(screen.getByTestId('calibration-group-kind-bias')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('calibration-group-kind-dark'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId('calibration-group-kind-flat'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId('calibration-group-kind-bias'),
+    ).toBeInTheDocument();
   });
 
   it('5. Aging pill renders for age_days > agingThresholdDays (default 90)', () => {
@@ -125,25 +141,41 @@ describe('MastersTable (spec 043 §4)', () => {
 
   it('6. Clicking a master row calls onSelect with its string id', () => {
     const onSelect = vi.fn();
-    render(<MastersTable {...baseProps} masters={masters} onSelect={onSelect} />);
+    render(
+      <MastersTable {...baseProps} masters={masters} onSelect={onSelect} />,
+    );
     // Rows show a readable master label ("Master Dark · …"); take the first and
     // walk up to the clickable table row.
-    const label = screen.getAllByText((text) => text.startsWith('Master Dark'))[0];
+    const label = screen.getAllByText((text) =>
+      text.startsWith('Master Dark'),
+    )[0];
     const row = label.closest('tr') ?? label;
     fireEvent.click(row);
     expect(onSelect).toHaveBeenCalledWith('dark-1');
   });
 
   it('7. dark_flat kind is never shown, flat or grouped (FR-001)', () => {
-    const darkFlatMaster = makeMaster({ id: 'df-1', kind: 'dark_flat', ageDays: 5 });
+    const darkFlatMaster = makeMaster({
+      id: 'df-1',
+      kind: 'dark_flat',
+      ageDays: 5,
+    });
     const { rerender } = render(
       <MastersTable {...baseProps} masters={[...masters, darkFlatMaster]} />,
     );
     // Filtered out at the data level → no row for it in the flat default view.
     expect(screen.queryByTestId('master-usage-df-1')).not.toBeInTheDocument();
     // …and still absent when grouped by kind (no dark_flat group).
-    rerender(<MastersTable {...baseProps} masters={[...masters, darkFlatMaster]} dims={['kind']} />);
-    expect(screen.queryByTestId('calibration-group-kind-dark_flat')).not.toBeInTheDocument();
+    rerender(
+      <MastersTable
+        {...baseProps}
+        masters={[...masters, darkFlatMaster]}
+        dims={['kind']}
+      />,
+    );
+    expect(
+      screen.queryByTestId('calibration-group-kind-dark_flat'),
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId('master-usage-df-1')).not.toBeInTheDocument();
   });
 
@@ -157,8 +189,12 @@ describe('MastersTable (spec 043 §4)', () => {
     });
     const unused = makeMaster({ id: 'dark-unused', kind: 'dark', ageDays: 10 });
     render(<MastersTable {...baseProps} masters={[used, unused]} />);
-    expect(screen.getByTestId('master-usage-dark-used')).toHaveTextContent('3 sessions · 1 project');
-    expect(screen.getByTestId('master-usage-dark-unused')).toHaveTextContent('unused');
+    expect(screen.getByTestId('master-usage-dark-used')).toHaveTextContent(
+      '3 sessions · 1 project',
+    );
+    expect(screen.getByTestId('master-usage-dark-unused')).toHaveTextContent(
+      'unused',
+    );
   });
 
   it('9. clicking a sortable column header fires onSort', () => {
@@ -172,7 +208,11 @@ describe('MastersTable (spec 043 §4)', () => {
     // Second consumer of the shared aria-sort plumbing (SessionsTable is the
     // first) — proves every SortHeader table gets it from the shared layer.
     const { container } = render(
-      <MastersTable {...baseProps} masters={masters} sort={{ col: 'camera', dir: 'asc' }} />,
+      <MastersTable
+        {...baseProps}
+        masters={masters}
+        sort={{ col: 'camera', dir: 'asc' }}
+      />,
     );
     const marked = container.querySelectorAll('th[aria-sort]');
     expect(marked.length).toBe(1);
@@ -184,7 +224,9 @@ describe('MastersTable (spec 043 §4)', () => {
     const nullFp = makeMaster({ id: 'null-fp', kind: 'dark', ageDays: 5 });
     // Simulate backend rows with no fingerprint populated.
     (nullFp as { fingerprint: unknown }).fingerprint = null;
-    expect(() => render(<MastersTable {...baseProps} masters={[nullFp]} />)).not.toThrow();
+    expect(() =>
+      render(<MastersTable {...baseProps} masters={[nullFp]} />),
+    ).not.toThrow();
     expect(screen.getByTestId('master-usage-null-fp')).toBeInTheDocument();
     const allText = document.body.textContent ?? '';
     expect(allText).not.toContain('undefined');

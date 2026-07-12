@@ -67,15 +67,21 @@ describe('ViewAuditHistory', () => {
   });
 
   it('fetches prepared_view_removal/regeneration plans and filters to this view on expand', async () => {
-    mockPlansList.mockResolvedValueOnce(ok({ plans: [removalPlan, regenPlanOtherView] }));
+    mockPlansList.mockResolvedValueOnce(
+      ok({ plans: [removalPlan, regenPlanOtherView] }),
+    );
 
     render(<ViewAuditHistory viewId="view-1" />);
     fireEvent.click(screen.getByText('History'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('view-history-row-plan-remove-1')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('view-history-row-plan-remove-1'),
+      ).toBeInTheDocument();
     });
-    expect(screen.queryByTestId('view-history-row-plan-regen-other')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('view-history-row-plan-regen-other'),
+    ).not.toBeInTheDocument();
     expect(mockPlansList).toHaveBeenCalledWith(
       null,
       ['prepared_view_removal', 'prepared_view_regeneration'],
@@ -91,7 +97,9 @@ describe('ViewAuditHistory', () => {
     fireEvent.click(screen.getByText('History'));
 
     await waitFor(() => {
-      expect(screen.getByText(/no removal or regeneration plans yet/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/no removal or regeneration plans yet/i),
+      ).toBeInTheDocument();
     });
   });
 
@@ -103,7 +111,9 @@ describe('ViewAuditHistory', () => {
     fireEvent.click(screen.getByText('History'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('view-history-open-plan-remove-1')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('view-history-open-plan-remove-1'),
+      ).toBeInTheDocument();
     });
     fireEvent.click(screen.getByTestId('view-history-open-plan-remove-1'));
     expect(onViewPlan).toHaveBeenCalledWith('plan-remove-1');

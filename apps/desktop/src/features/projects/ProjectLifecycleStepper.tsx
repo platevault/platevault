@@ -53,7 +53,8 @@ export function ProjectLifecycleStepper({
   createdAt,
   updatedAt,
 }: ProjectLifecycleStepperProps) {
-  const currentIdx = projectStateIndex[state as keyof typeof projectStateIndex] ?? -1;
+  const currentIdx =
+    projectStateIndex[state as keyof typeof projectStateIndex] ?? -1;
   const isBlocked = state === 'blocked';
 
   return (
@@ -80,7 +81,10 @@ export function ProjectLifecycleStepper({
           );
         })}
         {isBlocked && (
-          <li className="alm-stepper__chip alm-stepper__chip--blocked" aria-current="step">
+          <li
+            className="alm-stepper__chip alm-stepper__chip--blocked"
+            aria-current="step"
+          >
             {m.projects_stepper_blocked_chip()}
           </li>
         )}
@@ -91,10 +95,12 @@ export function ProjectLifecycleStepper({
       <Section title={m.projects_stepper_history_title()} defaultOpen={false}>
         <div className="alm-stepper__history">
           <div className="alm-stepper__history-row">
-            {m.projects_stepper_created()} {new Date(createdAt).toLocaleDateString()}
+            {m.projects_stepper_created()}{' '}
+            {new Date(createdAt).toLocaleDateString()}
           </div>
           <div className="alm-stepper__history-row">
-            {m.projects_stepper_updated()} {new Date(updatedAt).toLocaleDateString()}
+            {m.projects_stepper_updated()}{' '}
+            {new Date(updatedAt).toLocaleDateString()}
           </div>
         </div>
       </Section>

@@ -23,7 +23,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Toggle } from '@/ui';
 import { m } from '@/lib/i18n';
-import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
+import {
+  SettingsSection,
+  SettingsRow,
+  RestoreDefaultsBtn,
+} from './SettingsKit';
 import {
   ingestionSettingsGet,
   ingestionSettingsUpdate,
@@ -152,7 +156,9 @@ export function Ingestion(_props: IngestionProps) {
             }}
           >
             <option value="lazy">{m.settings_ingestion_hashing_lazy()}</option>
-            <option value="eager">{m.settings_ingestion_hashing_eager()}</option>
+            <option value="eager">
+              {m.settings_ingestion_hashing_eager()}
+            </option>
             <option value="off">{m.settings_ingestion_hashing_off()}</option>
           </select>
         </SettingsRow>

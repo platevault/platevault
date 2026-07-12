@@ -89,7 +89,9 @@ function normalize(v: Vec3): Vec3 {
  * @param at - The evaluation instant (the observing-night midnight).
  * @returns Phase name, waxing flag, illumination, Moon age, and unit vector.
  */
-export function moonStateAt(at: Date): Omit<ObservingNight, 'nightKey' | 'midnight'> {
+export function moonStateAt(
+  at: Date,
+): Omit<ObservingNight, 'nightKey' | 'midnight'> {
   const elongationDeg = MoonPhase(at); // 0 = new, 180 = full
   const illum = Illumination(Body.Moon, at);
   const geo = GeoVector(Body.Moon, at, true); // EQJ, aberration-corrected
@@ -106,7 +108,9 @@ export function moonStateAt(at: Date): Omit<ObservingNight, 'nightKey' | 'midnig
  * Compose an {@link ObservingNight} from a night anchor: evaluates the Moon
  * state at the anchor's midnight instant and attaches the night identity.
  */
-export function computeObservingNight(anchor: ObservingNightAnchor): ObservingNight {
+export function computeObservingNight(
+  anchor: ObservingNightAnchor,
+): ObservingNight {
   return {
     nightKey: anchor.nightKey,
     midnight: anchor.midnight,

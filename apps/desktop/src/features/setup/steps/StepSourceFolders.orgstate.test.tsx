@@ -15,7 +15,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // StepSourceFolders uses useDirectoryPicker — stub it so no Tauri bridge is needed.
 vi.mock('@/shared/native', () => ({
-  useDirectoryPicker: () => ({ pick: vi.fn(), loading: false, error: null, clearError: vi.fn() }),
+  useDirectoryPicker: () => ({
+    pick: vi.fn(),
+    loading: false,
+    error: null,
+    clearError: vi.fn(),
+  }),
   pickDirectory: vi.fn(),
 }));
 
@@ -29,8 +34,16 @@ import { addSource, flushToDB } from '../sources-store';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
-function makeEntry(kind: SourceEntry['kind'], organizationState: SourceEntry['organizationState'] = 'organized'): SourceEntry {
-  return { path: `/astro/${kind}`, kind, scanDepth: 'recursive', organizationState };
+function makeEntry(
+  kind: SourceEntry['kind'],
+  organizationState: SourceEntry['organizationState'] = 'organized',
+): SourceEntry {
+  return {
+    path: `/astro/${kind}`,
+    kind,
+    scanDepth: 'recursive',
+    organizationState,
+  };
 }
 
 // ── Tests: org-state selector visibility ─────────────────────────────────
@@ -52,7 +65,9 @@ describe('StepSourceFolders — organization state selector', () => {
       />,
     );
 
-    const selects = screen.getAllByRole('combobox', { name: /organization state/i });
+    const selects = screen.getAllByRole('combobox', {
+      name: /organization state/i,
+    });
     expect(selects.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -70,7 +85,9 @@ describe('StepSourceFolders — organization state selector', () => {
       />,
     );
 
-    const selects = screen.getAllByRole('combobox', { name: /organization state/i });
+    const selects = screen.getAllByRole('combobox', {
+      name: /organization state/i,
+    });
     expect(selects.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -88,7 +105,9 @@ describe('StepSourceFolders — organization state selector', () => {
       />,
     );
 
-    const selects = screen.getAllByRole('combobox', { name: /organization state/i });
+    const selects = screen.getAllByRole('combobox', {
+      name: /organization state/i,
+    });
     expect(selects.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -107,7 +126,9 @@ describe('StepSourceFolders — organization state selector', () => {
     );
 
     // The org-state selector must be absent for inbox rows.
-    expect(screen.queryByRole('combobox', { name: /organization state/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('combobox', { name: /organization state/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('shows both org-state and scan-depth selectors for non-inbox, only scan-depth for inbox', () => {
@@ -128,11 +149,15 @@ describe('StepSourceFolders — organization state selector', () => {
     );
 
     // One org-state selector for light_frames row, none for inbox row.
-    const orgSelects = screen.getAllByRole('combobox', { name: /organization state/i });
+    const orgSelects = screen.getAllByRole('combobox', {
+      name: /organization state/i,
+    });
     expect(orgSelects).toHaveLength(1);
 
     // Both rows have a scan-depth selector.
-    const depthSelects = screen.getAllByRole('combobox', { name: /scan depth/i });
+    const depthSelects = screen.getAllByRole('combobox', {
+      name: /scan depth/i,
+    });
     expect(depthSelects).toHaveLength(2);
   });
 });
@@ -156,7 +181,9 @@ describe('StepSourceFolders — onOrganizationStateChange callback', () => {
       />,
     );
 
-    const select = screen.getByRole('combobox', { name: /organization state/i });
+    const select = screen.getByRole('combobox', {
+      name: /organization state/i,
+    });
     fireEvent.change(select, { target: { value: 'unorganized' } });
 
     expect(onOrganizationStateChange).toHaveBeenCalledWith(0, 'unorganized');
@@ -178,7 +205,9 @@ describe('StepSourceFolders — onOrganizationStateChange callback', () => {
       />,
     );
 
-    const select = screen.getByRole('combobox', { name: /organization state/i });
+    const select = screen.getByRole('combobox', {
+      name: /organization state/i,
+    });
     fireEvent.change(select, { target: { value: 'organized' } });
 
     expect(onOrganizationStateChange).toHaveBeenCalledWith(0, 'organized');
@@ -203,11 +232,20 @@ vi.stubEnv('VITE_USE_MOCKS', 'false');
 describe('flushToDB — organizationState in register payload', () => {
   beforeEach(() => {
     mockRootsRegisterBatch.mockReset();
-    mockRootsRegisterBatch.mockResolvedValue({ status: 'ok', data: { status: 'success', items: [] } });
+    mockRootsRegisterBatch.mockResolvedValue({
+      status: 'ok',
+      data: { status: 'success', items: [] },
+    });
   });
 
   it('sends the user-chosen organizationState for non-inbox sources', async () => {
-    const sources = addSource([], 'light_frames', '/astro/lights', 'recursive', 'unorganized');
+    const sources = addSource(
+      [],
+      'light_frames',
+      '/astro/lights',
+      'recursive',
+      'unorganized',
+    );
     await flushToDB(sources);
 
     expect(mockRootsRegisterBatch).toHaveBeenCalledWith(

@@ -32,7 +32,9 @@ const DEV_PAGES: Array<{ label: string; route: string }> = [
 ];
 
 /** Mirror of the CommandPalette visibility logic. */
-function visiblePages(devMode: boolean): Array<{ label: string; route: string }> {
+function visiblePages(
+  devMode: boolean,
+): Array<{ label: string; route: string }> {
   return devMode ? [...PAGES, ...DEV_PAGES] : PAGES;
 }
 

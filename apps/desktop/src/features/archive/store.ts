@@ -33,15 +33,21 @@ async function listArchiveAudit(entityId: string): Promise<AuditEntry[]> {
   return res.entries;
 }
 
-async function sendToTrash(planId: string): Promise<ArchiveSendToTrashResponse> {
+async function sendToTrash(
+  planId: string,
+): Promise<ArchiveSendToTrashResponse> {
   return unwrap(await commands.archiveSendToTrash(planId));
 }
 
-async function permanentlyDelete(planId: string): Promise<ArchivePermanentlyDeleteResponse> {
+async function permanentlyDelete(
+  planId: string,
+): Promise<ArchivePermanentlyDeleteResponse> {
   return unwrap(await commands.archivePermanentlyDelete(planId, 'DELETE'));
 }
 
-async function generateArchivePlan(projectId: string): Promise<GenerateArchivePlanResult> {
+async function generateArchivePlan(
+  projectId: string,
+): Promise<GenerateArchivePlanResult> {
   return unwrap(await commands.archivePlanGenerate(projectId, null));
 }
 
@@ -67,7 +73,9 @@ export function useArchiveList(): QueryState<ArchiveEntry[]> {
 }
 
 /** Subscribe to the audit history for one archived project. */
-export function useArchiveAudit(entityId: string | undefined): QueryState<AuditEntry[]> {
+export function useArchiveAudit(
+  entityId: string | undefined,
+): QueryState<AuditEntry[]> {
   const { data, isFetching, error } = useQuery({
     queryKey: queryKeys.archive.audit(entityId ?? ''),
     queryFn: () => listArchiveAudit(entityId as string),
@@ -86,7 +94,9 @@ export function useSendToTrash() {
   return useMutation<ArchiveSendToTrashResponse, Error, string>({
     mutationFn: sendToTrash,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.archive.list() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.archive.list(),
+      });
     },
   });
 }
@@ -97,7 +107,9 @@ export function usePermanentlyDelete() {
   return useMutation<ArchivePermanentlyDeleteResponse, Error, string>({
     mutationFn: permanentlyDelete,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.archive.list() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.archive.list(),
+      });
     },
   });
 }

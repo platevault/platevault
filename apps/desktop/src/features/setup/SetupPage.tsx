@@ -28,7 +28,9 @@ export function SetupPage() {
         setChecking(false);
       }
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [setupCompleted, navigate]);
 
   if (setupCompleted || checking) {

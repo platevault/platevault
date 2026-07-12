@@ -45,7 +45,12 @@ describe('Inventory fixture data', () => {
   });
 
   it('every source has a valid kind enum value', () => {
-    const validKinds = ['local_disk', 'external_disk', 'removable', 'network_share'];
+    const validKinds = [
+      'local_disk',
+      'external_disk',
+      'removable',
+      'network_share',
+    ];
     for (const src of INVENTORY_SOURCES) {
       expect(validKinds).toContain(src.kind);
     }

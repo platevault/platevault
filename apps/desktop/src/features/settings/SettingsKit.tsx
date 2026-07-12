@@ -21,7 +21,11 @@ export interface SettingsSectionProps {
   children: ReactNode;
 }
 
-export function SettingsSection({ title, action, children }: SettingsSectionProps) {
+export function SettingsSection({
+  title,
+  action,
+  children,
+}: SettingsSectionProps) {
   return (
     <div className="alm-settings__group">
       {action ? (
@@ -78,7 +82,13 @@ export interface SettingsFormShellProps {
  * keep the `.alm-equipment__form*` markup as one generic settings-form frame
  * rather than a per-feature copy.
  */
-export function SettingsFormShell({ error, saving, onCancel, onSave, children }: SettingsFormShellProps) {
+export function SettingsFormShell({
+  error,
+  saving,
+  onCancel,
+  onSave,
+  children,
+}: SettingsFormShellProps) {
   return (
     <div className="alm-equipment__form">
       <div className="alm-equipment__form-grid">{children}</div>
@@ -126,7 +136,12 @@ type RestoreState = 'idle' | 'restoring' | 'done';
  * then re-fetches the scope so controls reflect the restored values. Panes
  * backed by a different store pass `onRestore` to run their own reset instead.
  */
-export function RestoreDefaultsBtn({ keys, onRestored, scope, onRestore }: RestoreDefaultsBtnProps) {
+export function RestoreDefaultsBtn({
+  keys,
+  onRestored,
+  scope,
+  onRestore,
+}: RestoreDefaultsBtnProps) {
   const [state, setState] = useState<RestoreState>('idle');
 
   const handleClick = async () => {
@@ -156,7 +171,12 @@ export function RestoreDefaultsBtn({ keys, onRestored, scope, onRestore }: Resto
         : m.settings_action_restore_defaults();
 
   return (
-    <Btn size="sm" variant="ghost" disabled={state === 'restoring'} onClick={() => void handleClick()}>
+    <Btn
+      size="sm"
+      variant="ghost"
+      disabled={state === 'restoring'}
+      onClick={() => void handleClick()}
+    >
       {label}
     </Btn>
   );

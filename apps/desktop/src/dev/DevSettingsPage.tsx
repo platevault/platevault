@@ -66,8 +66,12 @@ export function DevSettingsPage() {
       {/* Reuses the dev/ContractsPage body/title/error/loading classes (shared
           component / no cloned CSS — see dev.css "DEV CONTRACTS PAGE"). */}
       <div className="alm-page__scroll alm-dev-contracts-page__body">
-        <h1 className="alm-dev-contracts-page__title">{m.dev_settings_title()}</h1>
-        <p className="alm-dev-contracts-page__export-result">{m.dev_settings_intro()}</p>
+        <h1 className="alm-dev-contracts-page__title">
+          {m.dev_settings_title()}
+        </h1>
+        <p className="alm-dev-contracts-page__export-result">
+          {m.dev_settings_intro()}
+        </p>
 
         {error && (
           <div role="alert" className="alm-dev-contracts-page__error">
@@ -81,7 +85,9 @@ export function DevSettingsPage() {
             info={m.dev_settings_toggle_info()}
           >
             {devMode === null ? (
-              <span className="alm-dev-contracts-page__loading">{m.common_loading()}</span>
+              <span className="alm-dev-contracts-page__loading">
+                {m.common_loading()}
+              </span>
             ) : (
               <Toggle
                 aria-label={m.dev_settings_toggle_label()}
@@ -98,7 +104,11 @@ export function DevSettingsPage() {
           )}
         </SettingsSection>
 
-        {saving && <p className="alm-dev-contracts-page__export-result">{m.dev_settings_saving()}</p>}
+        {saving && (
+          <p className="alm-dev-contracts-page__export-result">
+            {m.dev_settings_saving()}
+          </p>
+        )}
       </div>
     </PageShell>
   );

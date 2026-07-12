@@ -31,23 +31,35 @@ import { m } from '@/lib/i18n';
 
 function statusVariant(status: string): PillVariant {
   switch (status) {
-    case 'match': return 'ok';
-    case 'ambiguous': return 'warn';
-    case 'no_match': return 'neutral';
-    case 'observer_location_missing': return 'neutral';
-    case 'session.mixed_state': return 'warn';
-    default: return 'neutral';
+    case 'match':
+      return 'ok';
+    case 'ambiguous':
+      return 'warn';
+    case 'no_match':
+      return 'neutral';
+    case 'observer_location_missing':
+      return 'neutral';
+    case 'session.mixed_state':
+      return 'warn';
+    default:
+      return 'neutral';
   }
 }
 
 function statusLabel(status: string): string {
   switch (status) {
-    case 'match': return m.projects_calib_status_match();
-    case 'ambiguous': return m.projects_calib_status_ambiguous();
-    case 'no_match': return m.projects_calib_status_no_match();
-    case 'observer_location_missing': return m.projects_calib_status_needs_location();
-    case 'session.mixed_state': return m.projects_calib_status_mixed_session();
-    default: return status;
+    case 'match':
+      return m.projects_calib_status_match();
+    case 'ambiguous':
+      return m.projects_calib_status_ambiguous();
+    case 'no_match':
+      return m.projects_calib_status_no_match();
+    case 'observer_location_missing':
+      return m.projects_calib_status_needs_location();
+    case 'session.mixed_state':
+      return m.projects_calib_status_mixed_session();
+    default:
+      return status;
   }
 }
 
@@ -61,10 +73,17 @@ interface Props {
   defaultOpen?: boolean;
 }
 
-export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props) {
+export function CalibrationMatchPanel({
+  sessionIds,
+  defaultOpen = true,
+}: Props) {
   // Batch key is the joined session-id list — matches the `matches(sid)` key
   // shape while distinguishing one panel's session set from another's.
-  const { data, isFetching: loading, error } = useQuery({
+  const {
+    data,
+    isFetching: loading,
+    error,
+  } = useQuery({
     queryKey: queryKeys.calibration.matches(sessionIds.join(',')),
     queryFn: () =>
       calibrationMatchSuggestBatch({
@@ -90,7 +109,10 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
 
   if (loading) {
     return (
-      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
+      <Section
+        title={m.projects_calib_readiness_title()}
+        defaultOpen={defaultOpen}
+      >
         <div
           className="alm-calib-match-panel__loading"
           data-testid="cal-panel-loading"
@@ -103,7 +125,10 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
 
   if (fetchError) {
     return (
-      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
+      <Section
+        title={m.projects_calib_readiness_title()}
+        defaultOpen={defaultOpen}
+      >
         <div
           className="alm-calib-match-panel__error"
           data-testid="cal-panel-error"
@@ -116,7 +141,10 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
 
   if (results.length === 0) {
     return (
-      <Section title={m.projects_calib_readiness_title()} defaultOpen={defaultOpen}>
+      <Section
+        title={m.projects_calib_readiness_title()}
+        defaultOpen={defaultOpen}
+      >
         <EmptyState
           title={m.projects_calib_no_data_title()}
           desc={m.projects_calib_no_data_title()}
@@ -135,7 +163,12 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
   }
 
   return (
-    <Section title={m.projects_calib_readiness_title()} count={sessionIds.length} defaultOpen={defaultOpen} data-testid="cal-panel">
+    <Section
+      title={m.projects_calib_readiness_title()}
+      count={sessionIds.length}
+      defaultOpen={defaultOpen}
+      data-testid="cal-panel"
+    >
       <div className="alm-calib-match-panel__list">
         {[...bySession.entries()].map(([sid, typeResults]) => (
           <div
@@ -155,7 +188,15 @@ export function CalibrationMatchPanel({ sessionIds, defaultOpen = true }: Props)
                     className="alm-calib-match-panel__type-item"
                     data-testid={`cal-type-${r.calibrationType}-${sid}`}
                   >
-                    <Pill variant={r.calibrationType === 'dark' ? 'info' : r.calibrationType === 'flat' ? 'accent' : 'neutral'}>
+                    <Pill
+                      variant={
+                        r.calibrationType === 'dark'
+                          ? 'info'
+                          : r.calibrationType === 'flat'
+                            ? 'accent'
+                            : 'neutral'
+                      }
+                    >
                       {r.calibrationType}
                     </Pill>
                     <Pill variant={statusVariant(r.status)}>

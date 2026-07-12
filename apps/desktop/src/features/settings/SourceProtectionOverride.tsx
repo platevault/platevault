@@ -30,7 +30,10 @@ const LEVEL_LABEL: Record<ProtectionLevel, () => string> = {
   unprotected: m.settings_cleanup_protection_unprotected,
 };
 
-const LEVEL_VARIANT: Record<ProtectionLevel, 'ok' | 'info' | 'warn' | 'danger' | 'neutral'> = {
+const LEVEL_VARIANT: Record<
+  ProtectionLevel,
+  'ok' | 'info' | 'warn' | 'danger' | 'neutral'
+> = {
   protected: 'ok',
   normal: 'info',
   unprotected: 'warn',
@@ -49,12 +52,16 @@ function levelHint(level: ProtectionLevel, inherits: boolean): string {
   }
 }
 
-export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtectionOverrideProps) {
+export function SourceProtectionOverride({
+  sourceId,
+  onSaved,
+}: SourceProtectionOverrideProps) {
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [level, setLevel] = useState<ProtectionLevel>('protected');
   const [inheritsDefault, setInheritsDefault] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [pendingLevel, setPendingLevel] = useState<ProtectionLevel>('protected');
+  const [pendingLevel, setPendingLevel] =
+    useState<ProtectionLevel>('protected');
   const [errorMsg, setErrorMsg] = useState('');
 
   const load = useCallback(() => {
@@ -102,9 +109,7 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
 
   if (loadState === 'loading' || loadState === 'idle') {
     return (
-      <span className="alm-source-protect__status">
-        {m.common_loading()}
-      </span>
+      <span className="alm-source-protect__status">{m.common_loading()}</span>
     );
   }
 
@@ -122,7 +127,9 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
         <div className="alm-source-protect__view-row">
           <Pill variant={LEVEL_VARIANT[level]}>{LEVEL_LABEL[level]()}</Pill>
           {inheritsDefault && (
-            <Pill variant="neutral">{m.settings_source_protect_inherits()}</Pill>
+            <Pill variant="neutral">
+              {m.settings_source_protect_inherits()}
+            </Pill>
           )}
           <Btn size="sm" variant="ghost" onClick={() => setEditing(true)}>
             {m.common_override()}
@@ -134,7 +141,7 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
       ) : (
         <div className="alm-source-protect__edit-col">
           <div className="alm-source-protect__edit-row">
-            { }
+            {}
             <label
               htmlFor={`protection-level-${sourceId}`}
               className="alm-source-protect__label"
@@ -145,21 +152,27 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
               id={`protection-level-${sourceId}`}
               className="alm-select alm-source-protect__select"
               value={pendingLevel}
-              onChange={(e) => setPendingLevel(e.target.value as ProtectionLevel)}
+              onChange={(e) =>
+                setPendingLevel(e.target.value as ProtectionLevel)
+              }
               aria-label={m.settings_source_protect_level_aria()}
             >
-              <option value="protected">{m.settings_cleanup_protection_protected()}</option>
-              <option value="normal">{m.settings_cleanup_protection_normal()}</option>
-              <option value="unprotected">{m.settings_cleanup_protection_unprotected()}</option>
+              <option value="protected">
+                {m.settings_cleanup_protection_protected()}
+              </option>
+              <option value="normal">
+                {m.settings_cleanup_protection_normal()}
+              </option>
+              <option value="unprotected">
+                {m.settings_cleanup_protection_unprotected()}
+              </option>
             </select>
             <div className="alm-source-protect__hint">
               {levelHint(pendingLevel, false)}
             </div>
           </div>
           {errorMsg && (
-            <div className="alm-source-protect__error">
-              {errorMsg}
-            </div>
+            <div className="alm-source-protect__error">{errorMsg}</div>
           )}
           <div className="alm-source-protect__actions">
             <Btn
@@ -167,7 +180,9 @@ export function SourceProtectionOverride({ sourceId, onSaved }: SourceProtection
               onClick={handleSave}
               disabled={loadState === 'saving'}
             >
-              {loadState === 'saving' ? m.common_saving() : m.settings_source_protect_save_btn()}
+              {loadState === 'saving'
+                ? m.common_saving()
+                : m.settings_source_protect_save_btn()}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={handleCancel}>
               {m.common_cancel()}

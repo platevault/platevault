@@ -28,9 +28,15 @@ const { mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
 vi.mock('@/bindings/index', () => ({
   commands: {
     targetSearch: (req: unknown) =>
-      Promise.resolve(mockSearchTargets(req)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockSearchTargets(req)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
     targetResolve: (req: unknown) =>
-      Promise.resolve(mockResolveTarget(req)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockResolveTarget(req)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
   },
 }));
 
@@ -46,12 +52,26 @@ import type { TargetSuggestion, ResolvedTarget } from '@/bindings/aliases';
 
 /** Build an `unresolved` resolve response (the offline / disabled default). */
 function unresolved(reason = 'offline') {
-  return { contractVersion: '1.0', requestId: 'r', status: 'unresolved', target: null, unresolvedReason: reason, error: null };
+  return {
+    contractVersion: '1.0',
+    requestId: 'r',
+    status: 'unresolved',
+    target: null,
+    unresolvedReason: reason,
+    error: null,
+  };
 }
 
 /** Build a `resolved` response wrapping a `ResolvedTarget`. */
 function resolved(target: ResolvedTarget) {
-  return { contractVersion: '1.0', requestId: 'r', status: 'resolved', target, unresolvedReason: null, error: null };
+  return {
+    contractVersion: '1.0',
+    requestId: 'r',
+    status: 'resolved',
+    target,
+    unresolvedReason: null,
+    error: null,
+  };
 }
 
 const M31: TargetSuggestion = {
@@ -144,7 +164,11 @@ describe('TargetSearch', () => {
 
     expect(mockSearchTargets).toHaveBeenCalledTimes(1);
     expect(mockSearchTargets).toHaveBeenCalledWith(
-      expect.objectContaining({ query: 'andr', limit: 20, contractVersion: '1.0' }),
+      expect.objectContaining({
+        query: 'andr',
+        limit: 20,
+        contractVersion: '1.0',
+      }),
     );
   });
 
@@ -333,7 +357,10 @@ describe('TargetSearch', () => {
 
     // First query's resolve is *slow* (deferred); second query's is fast.
     let releaseStaleResolve: (() => void) | null = null;
-    const staleResolved = resolved({ ...SIMBAD_LBN, primaryDesignation: 'STALE OBJ' });
+    const staleResolved = resolved({
+      ...SIMBAD_LBN,
+      primaryDesignation: 'STALE OBJ',
+    });
     mockResolveTarget
       .mockImplementationOnce(
         () =>
@@ -387,8 +414,12 @@ describe('TargetSearch', () => {
     });
     render(<TargetSearch onSelect={vi.fn()} showFilters />);
 
-    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'galaxy' } });
-    fireEvent.change(screen.getByLabelText('Catalogue'), { target: { value: 'messier' } });
+    fireEvent.change(screen.getByLabelText('Type'), {
+      target: { value: 'galaxy' },
+    });
+    fireEvent.change(screen.getByLabelText('Catalogue'), {
+      target: { value: 'messier' },
+    });
 
     await typeAndFlush(getInput(), 'm31');
 
@@ -431,7 +462,9 @@ describe('TargetSearch', () => {
     expect(screen.queryByRole('button', { name: /set "m31" to/i })).toBeNull();
 
     rerender(<TargetSearch onSelect={vi.fn()} enableOverride />);
-    expect(screen.getByRole('button', { name: /set "m31" to M 31/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /set "m31" to M 31/i }),
+    ).toBeInTheDocument();
   });
 
   it('override calls target.resolve with the override targetId and reports user-override', async () => {
@@ -456,10 +489,18 @@ describe('TargetSearch', () => {
       }),
     );
 
-    render(<TargetSearch onSelect={vi.fn()} enableOverride onOverride={onOverride} />);
+    render(
+      <TargetSearch
+        onSelect={vi.fn()}
+        enableOverride
+        onOverride={onOverride}
+      />,
+    );
     await typeAndFlush(screen.getByRole('combobox'), 'andromeda');
 
-    const overrideBtn = screen.getByRole('button', { name: /set "andromeda" to M 31/i });
+    const overrideBtn = screen.getByRole('button', {
+      name: /set "andromeda" to M 31/i,
+    });
     // The override button fires its action on click (pointerDown is suppressed
     // so it never triggers the row's select-on-press).
     await act(async () => {

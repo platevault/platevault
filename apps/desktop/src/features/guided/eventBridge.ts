@@ -53,7 +53,10 @@ function handleDomainEvent(topic: string, payload: unknown): void {
 
   // Best-effort: do not let an error in completeGuidedStep crash the bridge.
   completeGuidedStep(stepId).catch((err: unknown) => {
-    console.warn(`[guidedEventBridge] completeGuidedStep(${stepId}) failed:`, err);
+    console.warn(
+      `[guidedEventBridge] completeGuidedStep(${stepId}) failed:`,
+      err,
+    );
   });
 }
 

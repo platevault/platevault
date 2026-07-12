@@ -26,6 +26,6 @@ export const CoverageBar = forwardRef<HTMLDivElement, CoverageBarProps>(
         <span className="alm-coverage__value">{value}h</span>
       </div>
     );
-  }
+  },
 );
 CoverageBar.displayName = 'CoverageBar';

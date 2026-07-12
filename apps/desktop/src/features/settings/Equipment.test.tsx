@@ -16,14 +16,16 @@
  *      reject it too, but with a generic `internal.database` error).
  */
 
-import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type {
-  Camera,
-  Telescope,
-  OpticalTrain,
-  Filter,
-} from './settingsIpc';
+import type { Camera, Telescope, OpticalTrain, Filter } from './settingsIpc';
 
 const {
   mockCamerasList,
@@ -148,7 +150,9 @@ describe('Equipment', () => {
 
     // "ASI2600MM Pro" and "FSQ-106EDX4" each render twice: once in their own
     // section's table, and once resolved by id in the optical trains table.
-    await waitFor(() => expect(screen.getAllByText('ASI2600MM Pro').length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.getAllByText('ASI2600MM Pro').length).toBeGreaterThan(0),
+    );
     expect(screen.getAllByText('FSQ-106EDX4').length).toBeGreaterThan(0);
     expect(screen.getByText('Main imaging train')).toBeInTheDocument();
     expect(screen.getByText('Ha')).toBeInTheDocument();
@@ -156,8 +160,12 @@ describe('Equipment', () => {
 
   it('creates a camera via the add form', async () => {
     mockCamerasList.mockResolvedValueOnce(ok([]));
-    mockCamerasCreate.mockResolvedValue(ok({ ...CAMERA, name: 'ASI533MC Pro', aliases: [] }));
-    mockCamerasList.mockResolvedValueOnce(ok([{ ...CAMERA, name: 'ASI533MC Pro', aliases: [] }]));
+    mockCamerasCreate.mockResolvedValue(
+      ok({ ...CAMERA, name: 'ASI533MC Pro', aliases: [] }),
+    );
+    mockCamerasList.mockResolvedValueOnce(
+      ok([{ ...CAMERA, name: 'ASI533MC Pro', aliases: [] }]),
+    );
 
     render(<Equipment save={vi.fn()} />);
     await waitFor(() => expect(mockCamerasList).toHaveBeenCalledTimes(1));
@@ -172,20 +180,33 @@ describe('Equipment', () => {
       await Promise.resolve();
     });
 
-    expect(mockCamerasCreate).toHaveBeenCalledWith({ name: 'ASI533MC Pro', aliases: [] });
-    await waitFor(() => expect(screen.getByText('ASI533MC Pro')).toBeInTheDocument());
+    expect(mockCamerasCreate).toHaveBeenCalledWith({
+      name: 'ASI533MC Pro',
+      aliases: [],
+    });
+    await waitFor(() =>
+      expect(screen.getByText('ASI533MC Pro')).toBeInTheDocument(),
+    );
   });
 
   it('edits a telescope via the edit action', async () => {
     mockTelescopesList.mockResolvedValueOnce(ok([TELESCOPE]));
-    mockTelescopesUpdate.mockResolvedValue(ok({ ...TELESCOPE, focalLengthMm: 600 }));
-    mockTelescopesList.mockResolvedValueOnce(ok([{ ...TELESCOPE, focalLengthMm: 600 }]));
+    mockTelescopesUpdate.mockResolvedValue(
+      ok({ ...TELESCOPE, focalLengthMm: 600 }),
+    );
+    mockTelescopesList.mockResolvedValueOnce(
+      ok([{ ...TELESCOPE, focalLengthMm: 600 }]),
+    );
 
     render(<Equipment save={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText('FSQ-106EDX4')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('FSQ-106EDX4')).toBeInTheDocument(),
+    );
 
     fireEvent.click(screen.getByText(m.common_edit()));
-    const focalInput = screen.getByLabelText(m.settings_equipment_field_focal_length());
+    const focalInput = screen.getByLabelText(
+      m.settings_equipment_field_focal_length(),
+    );
     fireEvent.change(focalInput, { target: { value: '600' } });
 
     await act(async () => {
@@ -218,12 +239,19 @@ describe('Equipment', () => {
     });
 
     expect(mockFiltersDelete).toHaveBeenCalledWith('filt-1');
-    await waitFor(() => expect(screen.queryByText('Ha')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText('Ha')).not.toBeInTheDocument(),
+    );
   });
 
   it('shows a load error when a list command fails', async () => {
     mockCamerasList.mockResolvedValue(
-      err({ code: 'internal.database', message: 'db down', severity: 'blocking', retryable: true }),
+      err({
+        code: 'internal.database',
+        message: 'db down',
+        severity: 'blocking',
+        retryable: true,
+      }),
     );
 
     render(<Equipment save={vi.fn()} />);
@@ -277,7 +305,9 @@ describe('Equipment', () => {
     mockTrainsList.mockReturnValue(new Promise(() => {}));
 
     render(<Equipment save={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('ASI2600MM Pro')).toBeInTheDocument(),
+    );
 
     const removeBtn = screen.getByText(m.common_remove()).closest('button');
     expect(removeBtn).toBeDisabled();
@@ -291,7 +321,9 @@ describe('Equipment', () => {
     mockTrainsList.mockResolvedValue(ok([TRAIN]));
 
     render(<Equipment save={vi.fn()} />);
-    await waitFor(() => expect(screen.getAllByText('FSQ-106EDX4').length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.getAllByText('FSQ-106EDX4').length).toBeGreaterThan(0),
+    );
 
     // Two "Remove" buttons render: one for the train row, one for the
     // telescope row. The telescope row's is last in document order (Optical
@@ -300,6 +332,8 @@ describe('Equipment', () => {
     fireEvent.click(removeButtons[removeButtons.length - 1]);
 
     expect(mockTelescopesDelete).not.toHaveBeenCalled();
-    expect(screen.getByText(m.settings_equipment_delete_in_use())).toBeInTheDocument();
+    expect(
+      screen.getByText(m.settings_equipment_delete_in_use()),
+    ).toBeInTheDocument();
   });
 });

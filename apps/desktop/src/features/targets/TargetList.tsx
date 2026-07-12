@@ -47,11 +47,15 @@ export function TargetList({ targets, selected, onSelect }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(
-    () => (search.trim() ? targets.filter((t) => matchesSearch(t, search.trim())) : targets),
+    () =>
+      search.trim()
+        ? targets.filter((t) => matchesSearch(t, search.trim()))
+        : targets,
     [targets, search],
   );
 
-  const rowEstimate = density === 'Dense' ? ROW_ESTIMATE_DENSE : ROW_ESTIMATE_RICH;
+  const rowEstimate =
+    density === 'Dense' ? ROW_ESTIMATE_DENSE : ROW_ESTIMATE_RICH;
 
   const virtualizer = useVirtualizer({
     count: filtered.length,
@@ -88,13 +92,15 @@ export function TargetList({ targets, selected, onSelect }: Props) {
       <div
         className="alm-virtual-inner"
         // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
-        style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          position: 'relative',
+        }}
       >
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const t = filtered[virtualRow.index];
           const isSelected = selected === t.id;
-          const showAltDesig =
-            t.effectiveLabel !== t.primaryDesignation;
+          const showAltDesig = t.effectiveLabel !== t.primaryDesignation;
 
           return (
             <div
@@ -124,9 +130,13 @@ export function TargetList({ targets, selected, onSelect }: Props) {
               {density === 'Dense' ? (
                 /* ── Dense: single-line ─────────────────────────────── */
                 <div className="alm-target-row">
-                  <span className="alm-target-row__label">{t.effectiveLabel}</span>
+                  <span className="alm-target-row__label">
+                    {t.effectiveLabel}
+                  </span>
                   {showAltDesig && (
-                    <span className="alm-target-row__desig">({t.primaryDesignation})</span>
+                    <span className="alm-target-row__desig">
+                      ({t.primaryDesignation})
+                    </span>
                   )}
                   <span className="alm-target-row__spacer" />
                   <Pill variant="ghost">{formatType(t.objectType)}</Pill>
@@ -135,14 +145,20 @@ export function TargetList({ targets, selected, onSelect }: Props) {
                 /* ── Rich: two-line ──────────────────────────────────── */
                 <div className="alm-target-row alm-target-row--rich">
                   <div className="alm-target-row__line1">
-                    <span className="alm-target-row__label">{t.effectiveLabel}</span>
+                    <span className="alm-target-row__label">
+                      {t.effectiveLabel}
+                    </span>
                     {showAltDesig && (
-                      <span className="alm-target-row__desig">{t.primaryDesignation}</span>
+                      <span className="alm-target-row__desig">
+                        {t.primaryDesignation}
+                      </span>
                     )}
                     <span className="alm-target-row__spacer" />
                   </div>
                   <div className="alm-target-row__line2">
-                    <span className="alm-target-row__type-label">{formatType(t.objectType)}</span>
+                    <span className="alm-target-row__type-label">
+                      {formatType(t.objectType)}
+                    </span>
                     {/* CON · COORDS · MAG · best-season · sessions omitted:
                         not present on TargetListItem (detail endpoint only) */}
                   </div>

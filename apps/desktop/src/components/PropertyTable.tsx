@@ -55,7 +55,10 @@ function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
           if (v !== null) onChange?.(v);
         }}
       >
-        <Select.Trigger className="alm-select alm-select--sm" aria-label={prop.label}>
+        <Select.Trigger
+          className="alm-select alm-select--sm"
+          aria-label={prop.label}
+        >
           <Select.Value />
           <Select.Icon className="alm-select__icon" />
         </Select.Trigger>
@@ -63,7 +66,11 @@ function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
           <Select.Positioner>
             <Select.Popup className="alm-select__popup">
               {options.map((opt) => (
-                <Select.Item key={opt.value} value={opt.value} className="alm-select__item">
+                <Select.Item
+                  key={opt.value}
+                  value={opt.value}
+                  className="alm-select__item"
+                >
                   <Select.ItemText>{opt.label}</Select.ItemText>
                 </Select.Item>
               ))}
@@ -82,7 +89,9 @@ function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
         onCheckedChange={(checked) => onChange?.(String(checked))}
         aria-label={prop.label}
       >
-        <Checkbox.Indicator className="alm-checkbox__indicator">&#x2713;</Checkbox.Indicator>
+        <Checkbox.Indicator className="alm-checkbox__indicator">
+          &#x2713;
+        </Checkbox.Indicator>
       </Checkbox.Root>
     );
   }
@@ -105,22 +114,38 @@ export function PropertyTable({
   showConfirm = false,
 }: PropertyTableProps) {
   return (
-    <div className="alm-property-table" role="table" aria-label={m.cmp_property_table_aria()}>
+    <div
+      className="alm-property-table"
+      role="table"
+      aria-label={m.cmp_property_table_aria()}
+    >
       {/* Header row */}
       <div className="alm-property-table__header" role="row">
-        <span className="alm-property-table__cell alm-property-table__cell--label" role="columnheader">
+        <span
+          className="alm-property-table__cell alm-property-table__cell--label"
+          role="columnheader"
+        >
           {m.cmp_property_table_col_property()}
         </span>
-        <span className="alm-property-table__cell alm-property-table__cell--value" role="columnheader">
+        <span
+          className="alm-property-table__cell alm-property-table__cell--value"
+          role="columnheader"
+        >
           {m.cmp_property_table_col_value()}
         </span>
         {showSource && (
-          <span className="alm-property-table__cell alm-property-table__cell--source" role="columnheader">
+          <span
+            className="alm-property-table__cell alm-property-table__cell--source"
+            role="columnheader"
+          >
             {m.projects_wizard_col_source()}
           </span>
         )}
         {showConfirm && (
-          <span className="alm-property-table__cell alm-property-table__cell--confirm" role="columnheader">
+          <span
+            className="alm-property-table__cell alm-property-table__cell--confirm"
+            role="columnheader"
+          >
             {m.cmp_property_table_col_confirmed()}
           </span>
         )}
@@ -132,11 +157,17 @@ export function PropertyTable({
 
         return (
           <div key={prop.key} className="alm-property-table__row" role="row">
-            <span className="alm-property-table__cell alm-property-table__cell--label" role="rowheader">
+            <span
+              className="alm-property-table__cell alm-property-table__cell--label"
+              role="rowheader"
+            >
               {prop.label}
             </span>
 
-            <span className="alm-property-table__cell alm-property-table__cell--value" role="cell">
+            <span
+              className="alm-property-table__cell alm-property-table__cell--value"
+              role="cell"
+            >
               {isEditing ? (
                 <PropertyValueEditor prop={prop} />
               ) : (
@@ -145,7 +176,10 @@ export function PropertyTable({
             </span>
 
             {showSource && (
-              <span className="alm-property-table__cell alm-property-table__cell--source" role="cell">
+              <span
+                className="alm-property-table__cell alm-property-table__cell--source"
+                role="cell"
+              >
                 {prop.source && (
                   <span
                     className={clsx(
@@ -160,7 +194,10 @@ export function PropertyTable({
             )}
 
             {showConfirm && (
-              <span className="alm-property-table__cell alm-property-table__cell--confirm" role="cell">
+              <span
+                className="alm-property-table__cell alm-property-table__cell--confirm"
+                role="cell"
+              >
                 {prop.onConfirmToggle !== undefined && (
                   <Checkbox.Root
                     className="alm-checkbox"

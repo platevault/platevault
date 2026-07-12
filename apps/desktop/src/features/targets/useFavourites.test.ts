@@ -18,16 +18,18 @@ const mockTargetFavouritesRemove = vi.fn<MockIpc>();
 
 vi.mock('@/bindings/index', () => ({
   commands: {
-    targetFavouritesList: (...args: unknown[]) => mockTargetFavouritesList(...args),
-    targetFavouritesAdd: (...args: unknown[]) => mockTargetFavouritesAdd(...args),
-    targetFavouritesRemove: (...args: unknown[]) => mockTargetFavouritesRemove(...args),
+    targetFavouritesList: (...args: unknown[]) =>
+      mockTargetFavouritesList(...args),
+    targetFavouritesAdd: (...args: unknown[]) =>
+      mockTargetFavouritesAdd(...args),
+    targetFavouritesRemove: (...args: unknown[]) =>
+      mockTargetFavouritesRemove(...args),
   },
 }));
 
 // Imported after the mock so the module under test picks up the mocked bindings.
-const { useFavourites, getFavouriteIds, __resetFavouritesCacheForTests } = await import(
-  './useFavourites'
-);
+const { useFavourites, getFavouriteIds, __resetFavouritesCacheForTests } =
+  await import('./useFavourites');
 
 function okList(targetIds: string[]) {
   return Promise.resolve({ status: 'ok', data: { targetIds } });
@@ -87,7 +89,11 @@ describe('useFavourites', () => {
     // Optimistic update is synchronous.
     expect(result.current.isFavourite('id-x')).toBe(true);
 
-    await waitFor(() => expect(mockTargetFavouritesAdd).toHaveBeenCalledWith({ targetId: 'id-x' }));
+    await waitFor(() =>
+      expect(mockTargetFavouritesAdd).toHaveBeenCalledWith({
+        targetId: 'id-x',
+      }),
+    );
     expect(result.current.isFavourite('id-x')).toBe(true);
   });
 
@@ -102,13 +108,18 @@ describe('useFavourites', () => {
 
     expect(result.current.isFavourite('id-y')).toBe(false);
     await waitFor(() =>
-      expect(mockTargetFavouritesRemove).toHaveBeenCalledWith({ targetId: 'id-y' }),
+      expect(mockTargetFavouritesRemove).toHaveBeenCalledWith({
+        targetId: 'id-y',
+      }),
     );
   });
 
   it('reverts the optimistic add when the backend call fails', async () => {
     mockTargetFavouritesAdd.mockReturnValue(
-      Promise.resolve({ status: 'error', error: { code: 'internal.database', message: 'boom' } }),
+      Promise.resolve({
+        status: 'error',
+        error: { code: 'internal.database', message: 'boom' },
+      }),
     );
     const { result } = renderHook(() => useFavourites());
     await waitFor(() => expect(mockTargetFavouritesList).toHaveBeenCalled());
@@ -126,7 +137,11 @@ describe('useFavourites', () => {
     const a = renderHook(() => useFavourites());
     const b = renderHook(() => useFavourites());
 
-    await waitFor(() => expect(a.result.current.isFavourite('id-shared')).toBe(true));
-    await waitFor(() => expect(b.result.current.isFavourite('id-shared')).toBe(true));
+    await waitFor(() =>
+      expect(a.result.current.isFavourite('id-shared')).toBe(true),
+    );
+    await waitFor(() =>
+      expect(b.result.current.isFavourite('id-shared')).toBe(true),
+    );
   });
 });

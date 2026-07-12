@@ -32,7 +32,9 @@ const SOURCES: AttributionSource[] = [
 export function Attribution() {
   return (
     <div className="alm-settings__group">
-      <div className="alm-settings__group-title">{m.settings_attribution_title()}</div>
+      <div className="alm-settings__group-title">
+        {m.settings_attribution_title()}
+      </div>
       <p className="alm-settings__group-note">
         {m.settings_attribution_note()}
       </p>

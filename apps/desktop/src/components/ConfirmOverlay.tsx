@@ -33,7 +33,12 @@ export function ConfirmOverlay({
   children,
 }: ConfirmOverlayProps) {
   return (
-    <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onClose();
+      }}
+    >
       <Dialog.Portal>
         <Dialog.Backdrop className="alm-confirm-overlay__backdrop" />
         <Dialog.Popup className="alm-confirm-overlay" aria-label={title}>
@@ -51,9 +56,7 @@ export function ConfirmOverlay({
 
           {/* Scrollable body */}
           {children && (
-            <div className="alm-confirm-overlay__body">
-              {children}
-            </div>
+            <div className="alm-confirm-overlay__body">{children}</div>
           )}
 
           {/* Footer */}

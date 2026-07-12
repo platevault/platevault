@@ -24,12 +24,21 @@ vi.mock('@/bindings/index', () => ({
   commands: {
     settingsGet: vi.fn().mockResolvedValue({
       status: 'ok',
-      data: { scope: 'advanced', values: { logLevel: 'info', rememberFollowLogs: false } },
+      data: {
+        scope: 'advanced',
+        values: { logLevel: 'info', rememberFollowLogs: false },
+      },
     }),
     settingsUpdate: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     logExport: vi.fn().mockResolvedValue({
       status: 'ok',
-      data: { contractVersion: '2.0.0', requestId: 'r', filePath: '/tmp/x.json', count: 0, status: 'success' },
+      data: {
+        contractVersion: '2.0.0',
+        requestId: 'r',
+        filePath: '/tmp/x.json',
+        count: 0,
+        status: 'success',
+      },
     }),
   },
 }));
@@ -66,16 +75,18 @@ describe('LogPanel cross-link behavior (T017)', () => {
   });
 
   it('navigates to entity path when row has entityType + entityId', async () => {
-    appendLog([{
-      id: 'aud:10',
-      contractVersion: '1',
-      time: '2026-01-01T00:00:00Z',
-      level: 'info',
-      source: 'plan',
-      message: 'Plan approved',
-      entityType: 'plan',
-      entityId: 'plan-abc',
-    }]);
+    appendLog([
+      {
+        id: 'aud:10',
+        contractVersion: '1',
+        time: '2026-01-01T00:00:00Z',
+        level: 'info',
+        source: 'plan',
+        message: 'Plan approved',
+        entityType: 'plan',
+        entityId: 'plan-abc',
+      },
+    ]);
 
     renderPanel();
     expandPanel();
@@ -91,15 +102,17 @@ describe('LogPanel cross-link behavior (T017)', () => {
   });
 
   it('navigates to audit timeline when row has requestId but no entity', async () => {
-    appendLog([{
-      id: 'aud:11',
-      contractVersion: '1',
-      time: '2026-01-01T00:00:00Z',
-      level: 'info',
-      source: 'workflow',
-      message: 'Workflow completed',
-      requestId: 'req-xyz',
-    }]);
+    appendLog([
+      {
+        id: 'aud:11',
+        contractVersion: '1',
+        time: '2026-01-01T00:00:00Z',
+        level: 'info',
+        source: 'workflow',
+        message: 'Workflow completed',
+        requestId: 'req-xyz',
+      },
+    ]);
 
     renderPanel();
     expandPanel();
@@ -108,21 +121,27 @@ describe('LogPanel cross-link behavior (T017)', () => {
       expect(screen.getByText('Workflow completed')).toBeInTheDocument();
     });
 
-    const row = screen.getByRole('button', { name: /Workflow completed.*navigate/ });
+    const row = screen.getByRole('button', {
+      name: /Workflow completed.*navigate/,
+    });
     fireEvent.click(row);
 
-    expect(mockNavigate).toHaveBeenCalledWith({ to: '/audit?requestId=req-xyz' });
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/audit?requestId=req-xyz',
+    });
   });
 
   it('plain row without entity or requestId is not a button', async () => {
-    appendLog([{
-      id: 'aud:12',
-      contractVersion: '1',
-      time: '2026-01-01T00:00:00Z',
-      level: 'debug',
-      source: 'audit',
-      message: 'Cache hit',
-    }]);
+    appendLog([
+      {
+        id: 'aud:12',
+        contractVersion: '1',
+        time: '2026-01-01T00:00:00Z',
+        level: 'debug',
+        source: 'audit',
+        message: 'Cache hit',
+      },
+    ]);
 
     renderPanel();
     expandPanel();
@@ -132,20 +151,24 @@ describe('LogPanel cross-link behavior (T017)', () => {
     });
 
     // Should not have the navigate aria-label.
-    expect(screen.queryByRole('button', { name: /Cache hit.*navigate/ })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /Cache hit.*navigate/ }),
+    ).toBeNull();
   });
 
   it('navigates to project path for project entities', async () => {
-    appendLog([{
-      id: 'aud:13',
-      contractVersion: '1',
-      time: '2026-01-01T00:00:00Z',
-      level: 'info',
-      source: 'project',
-      message: 'Project created',
-      entityType: 'project',
-      entityId: 'proj-123',
-    }]);
+    appendLog([
+      {
+        id: 'aud:13',
+        contractVersion: '1',
+        time: '2026-01-01T00:00:00Z',
+        level: 'info',
+        source: 'project',
+        message: 'Project created',
+        entityType: 'project',
+        entityId: 'proj-123',
+      },
+    ]);
 
     renderPanel();
     expandPanel();
@@ -154,7 +177,9 @@ describe('LogPanel cross-link behavior (T017)', () => {
       expect(screen.getByText('Project created')).toBeInTheDocument();
     });
 
-    const row = screen.getByRole('button', { name: /Project created.*navigate/ });
+    const row = screen.getByRole('button', {
+      name: /Project created.*navigate/,
+    });
     fireEvent.click(row);
 
     expect(mockNavigate).toHaveBeenCalledWith({ to: '/projects/proj-123' });

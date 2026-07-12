@@ -22,7 +22,10 @@ const { mockDevSchemaGet } = vi.hoisted(() => ({ mockDevSchemaGet: vi.fn() }));
 vi.mock('@/bindings/index', () => ({
   commands: {
     devSchemaGet: (...a: unknown[]) =>
-      Promise.resolve(mockDevSchemaGet(...a)).then((data) => ({ status: 'ok', data })),
+      Promise.resolve(mockDevSchemaGet(...a)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
   },
 }));
 
@@ -58,7 +61,9 @@ describe('SchemaViewer (T024)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('schema-content')).toBeTruthy();
     });
-    expect(screen.getByTestId('schema-content').textContent).toContain('dev.contracts.list');
+    expect(screen.getByTestId('schema-content').textContent).toContain(
+      'dev.contracts.list',
+    );
   });
 
   it('renders schema.missing error state when found=false', async () => {
@@ -76,7 +81,9 @@ describe('SchemaViewer (T024)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('schema-missing')).toBeTruthy();
     });
-    expect(screen.getByTestId('schema-missing').textContent).toContain('schema.missing');
+    expect(screen.getByTestId('schema-missing').textContent).toContain(
+      'schema.missing',
+    );
   });
 
   it('renders schema.missing when devSchemaGet rejects', async () => {
@@ -110,7 +117,9 @@ describe('SchemaViewer (T024)', () => {
 
     await waitFor(() => screen.getByTestId('schema-content'));
 
-    expect(mockDevSchemaGet).toHaveBeenCalledWith({ schemaPath: '/exact/path/to/schema.json' });
+    expect(mockDevSchemaGet).toHaveBeenCalledWith({
+      schemaPath: '/exact/path/to/schema.json',
+    });
   });
 
   it('renders the copy button when content is loaded', async () => {

@@ -109,6 +109,8 @@ describe('ProjectDetail — canonical target rail (spec 035)', () => {
   it('3. omits the target card when no canonical target is associated', () => {
     setupStore({ canonicalTarget: null });
     render(<ProjectDetailContent projectId="proj-m31" />);
-    expect(screen.queryByTestId('project-canonical-target')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('project-canonical-target'),
+    ).not.toBeInTheDocument();
   });
 });

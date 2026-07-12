@@ -43,7 +43,7 @@ function raDegFromVec(v: Vec3): number {
 
 /** Signed circular difference `a − b` normalised to (−180°, 180°]. */
 function circularDiffDeg(a: number, b: number): number {
-  return (((a - b + 540) % 360) + 360) % 360 - 180;
+  return ((((a - b + 540) % 360) + 360) % 360) - 180;
 }
 
 // ── Memoized Sun-RA table (SC-007) ──────────────────────────────────────────
@@ -104,13 +104,15 @@ export function nextOpposition(
 ): OppositionResult | null {
   if (raDeg == null || !Number.isFinite(raDeg)) return null;
 
-  const targetOppositionRaDeg = ((raDeg - 180) % 360 + 360) % 360;
+  const targetOppositionRaDeg = (((raDeg - 180) % 360) + 360) % 360;
   const table = sunRaTable(from);
 
   let bestDay = 0;
   let bestAbsDiff = Infinity;
   for (let day = 0; day < table.length; day++) {
-    const absDiff = Math.abs(circularDiffDeg(table[day], targetOppositionRaDeg));
+    const absDiff = Math.abs(
+      circularDiffDeg(table[day], targetOppositionRaDeg),
+    );
     if (absDiff < bestAbsDiff) {
       bestAbsDiff = absDiff;
       bestDay = day;
@@ -157,5 +159,8 @@ export function oppositionRelative(daysUntil: number): OppositionRelative {
   if (daysUntil < DAYS_MONTHS_BOUNDARY) {
     return { unit: 'days', count: Math.round(daysUntil) };
   }
-  return { unit: 'months', count: Math.max(1, Math.round(daysUntil / DAYS_PER_MONTH)) };
+  return {
+    unit: 'months',
+    count: Math.max(1, Math.round(daysUntil / DAYS_PER_MONTH)),
+  };
 }

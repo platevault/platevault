@@ -29,12 +29,21 @@ vi.mock('@/bindings/index', () => ({
     settingsGet: vi.fn().mockResolvedValue({
       status: 'ok',
       // Follow-tail on by default so the follow-tail effect is active.
-      data: { scope: 'advanced', values: { logLevel: 'info', rememberFollowLogs: true } },
+      data: {
+        scope: 'advanced',
+        values: { logLevel: 'info', rememberFollowLogs: true },
+      },
     }),
     settingsUpdate: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
     logExport: vi.fn().mockResolvedValue({
       status: 'ok',
-      data: { contractVersion: '2.0.0', requestId: 'r', filePath: '/tmp/x.json', count: 0, status: 'success' },
+      data: {
+        contractVersion: '2.0.0',
+        requestId: 'r',
+        filePath: '/tmp/x.json',
+        count: 0,
+        status: 'success',
+      },
     }),
   },
 }));
@@ -54,7 +63,9 @@ function renderPanel() {
 function getTrigger() {
   const triggers = screen.getAllByRole('button');
   const trigger = triggers.find((b) =>
-    ['Expand log panel', 'Collapse log panel'].includes(b.getAttribute('aria-label') ?? ''),
+    ['Expand log panel', 'Collapse log panel'].includes(
+      b.getAttribute('aria-label') ?? '',
+    ),
   );
   if (!trigger) throw new Error('log panel trigger not found');
   return trigger;
@@ -90,11 +101,25 @@ function seedEntries() {
 /** Sets jsdom scroll metrics on the given element (jsdom leaves them at 0). */
 function setScrollMetrics(
   el: HTMLElement,
-  { scrollTop, scrollHeight = 500, clientHeight = 200 }: { scrollTop: number; scrollHeight?: number; clientHeight?: number },
+  {
+    scrollTop,
+    scrollHeight = 500,
+    clientHeight = 200,
+  }: { scrollTop: number; scrollHeight?: number; clientHeight?: number },
 ) {
-  Object.defineProperty(el, 'scrollTop', { value: scrollTop, writable: true, configurable: true });
-  Object.defineProperty(el, 'scrollHeight', { value: scrollHeight, configurable: true });
-  Object.defineProperty(el, 'clientHeight', { value: clientHeight, configurable: true });
+  Object.defineProperty(el, 'scrollTop', {
+    value: scrollTop,
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(el, 'scrollHeight', {
+    value: scrollHeight,
+    configurable: true,
+  });
+  Object.defineProperty(el, 'clientHeight', {
+    value: clientHeight,
+    configurable: true,
+  });
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -128,11 +153,16 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
 
     // Follow-tail starts on (persisted via rememberFollowLogs: true).
     await waitFor(() => {
-      expect(getFollowButton()).toHaveAttribute('aria-label', 'Follow tail on (click to pause)');
+      expect(getFollowButton()).toHaveAttribute(
+        'aria-label',
+        'Follow tail on (click to pause)',
+      );
     });
     expect(getFollowButton().title).toBeFalsy();
 
-    const list = document.querySelector<HTMLUListElement>('.alm-logpanel__events');
+    const list = document.querySelector<HTMLUListElement>(
+      '.alm-logpanel__events',
+    );
     expect(list).not.toBeNull();
     if (!list) throw new Error('scroll list not found');
 
@@ -142,7 +172,9 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
     fireEvent.scroll(list);
 
     await waitFor(() => {
-      expect(getFollowButton().title).toBe('Paused (scroll to bottom to resume)');
+      expect(getFollowButton().title).toBe(
+        'Paused (scroll to bottom to resume)',
+      );
     });
     // Follow-tail preference itself remains "on"; only the temporary
     // scroll-pause indicator changes the button label to the paused variant.
@@ -167,10 +199,15 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
       expect(screen.getByText('Second entry')).toBeInTheDocument();
     });
     await waitFor(() => {
-      expect(getFollowButton()).toHaveAttribute('aria-label', 'Follow tail on (click to pause)');
+      expect(getFollowButton()).toHaveAttribute(
+        'aria-label',
+        'Follow tail on (click to pause)',
+      );
     });
 
-    const list = document.querySelector<HTMLUListElement>('.alm-logpanel__events');
+    const list = document.querySelector<HTMLUListElement>(
+      '.alm-logpanel__events',
+    );
     if (!list) throw new Error('scroll list not found');
 
     // handleScroll pauses only when scrollTop > 20; 10 stays "at top".

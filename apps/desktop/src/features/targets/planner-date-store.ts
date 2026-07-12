@@ -82,7 +82,9 @@ export function usePlannerDateMs(): number {
 
 /** React hook: whether the current date is a user override (vs the default "tonight"). */
 export function useIsPlannerDateOverridden(): boolean {
-  return useSyncExternalStore(subscribe, snapshotOverride, snapshotOverride) !== null;
+  return (
+    useSyncExternalStore(subscribe, snapshotOverride, snapshotOverride) !== null
+  );
 }
 
 /** Test-only: reset to "tonight" (avoid cross-test leakage). */

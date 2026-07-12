@@ -4,7 +4,10 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { RadioGroup } from '@base-ui-components/react/radio-group';
 import { Radio } from '@base-ui-components/react/radio';
-import { wizardNameSchema, type WizardNameValues } from '@/features/projects/schemas';
+import {
+  wizardNameSchema,
+  type WizardNameValues,
+} from '@/features/projects/schemas';
 
 export type StepNameData = WizardNameValues;
 
@@ -28,9 +31,21 @@ export interface StepNameProps {
 
 // `label`/`description` are render-time thunks so they re-read the active locale (spec 046 #8).
 const PROFILES = [
-  { id: 'pixinsight' as const, label: () => m.projects_wizard_profile_pixinsight(), description: () => m.projects_wizard_profile_pixinsight_desc() },
-  { id: 'siril' as const, label: () => m.projects_wizard_profile_siril(), description: () => m.projects_wizard_profile_siril_desc() },
-  { id: 'planetary' as const, label: () => m.projects_wizard_profile_planetary(), description: () => m.projects_wizard_profile_planetary_desc() },
+  {
+    id: 'pixinsight' as const,
+    label: () => m.projects_wizard_profile_pixinsight(),
+    description: () => m.projects_wizard_profile_pixinsight_desc(),
+  },
+  {
+    id: 'siril' as const,
+    label: () => m.projects_wizard_profile_siril(),
+    description: () => m.projects_wizard_profile_siril_desc(),
+  },
+  {
+    id: 'planetary' as const,
+    label: () => m.projects_wizard_profile_planetary(),
+    description: () => m.projects_wizard_profile_planetary_desc(),
+  },
 ];
 
 /**
@@ -60,7 +75,7 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
     const sub = watch((value) => {
       onChange({
         name: value.name ?? '',
-        workflowProfile: (value.workflowProfile ?? 'pixinsight'),
+        workflowProfile: value.workflowProfile ?? 'pixinsight',
       });
     });
     return () => sub.unsubscribe();
@@ -76,11 +91,8 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
     <div className="alm-wizard-name">
       {/* Project name */}
       <div className="alm-wizard-name__field-group">
-        { }
-        <label
-          htmlFor="project-name"
-          className="alm-wizard-name__label"
-        >
+        {}
+        <label htmlFor="project-name" className="alm-wizard-name__label">
           {m.projects_name_label()}
         </label>
         <input
@@ -88,7 +100,11 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
           type="text"
           placeholder={m.projects_wizard_step_name_placeholder()}
           aria-invalid={Boolean(errors.name) || serverError?.field === 'name'}
-          aria-describedby={errors.name || serverError?.field === 'name' ? 'project-name-error' : undefined}
+          aria-describedby={
+            errors.name || serverError?.field === 'name'
+              ? 'project-name-error'
+              : undefined
+          }
           {...register('name')}
           className="alm-wizard-name__input"
         />

@@ -7,7 +7,12 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { wrap, getCallSnapshot, resetRecorder, type DispatchFn } from './recorder';
+import {
+  wrap,
+  getCallSnapshot,
+  resetRecorder,
+  type DispatchFn,
+} from './recorder';
 
 beforeEach(() => {
   resetRecorder();

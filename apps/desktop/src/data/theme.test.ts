@@ -89,7 +89,9 @@ describe('applyTheme — native window theme sync (spec 051 US6)', () => {
 
   it('degrades silently when native setTheme rejects (FR-020, US6 AS2)', async () => {
     isTauriMock.mockReturnValue(true);
-    setThemeMock.mockRejectedValue(new Error('unsupported on this desktop environment'));
+    setThemeMock.mockRejectedValue(
+      new Error('unsupported on this desktop environment'),
+    );
     setStoredChoice('warm-clay');
 
     const { applyTheme } = await import('./theme');
@@ -108,6 +110,8 @@ describe('applyTheme — native window theme sync (spec 051 US6)', () => {
     applyTheme();
     await waitForCall(setThemeMock);
 
-    expect(document.documentElement.getAttribute('data-theme')).toBe('observatory-dark');
+    expect(document.documentElement.getAttribute('data-theme')).toBe(
+      'observatory-dark',
+    );
   });
 });

@@ -116,18 +116,26 @@ export interface PlanPanelProps {
    * single mislabelled type. Absent (no breakdown for the id) the panel falls
    * back to the per-action keyword/hint aggregation.
    */
-  breakdownByItemId?: Record<string, ReadonlyArray<{ kind: string; count: number }>>;
+  breakdownByItemId?: Record<
+    string,
+    ReadonlyArray<{ kind: string; count: number }>
+  >;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function actionLabel(kind: string): string {
   switch (kind) {
-    case 'move': return m.inbox_action_move();
-    case 'catalogue': return m.inbox_action_catalogue();
-    case 'archive': return m.inbox_action_archive();
-    case 'trash': return m.inbox_action_trash();
-    default: return kind;
+    case 'move':
+      return m.inbox_action_move();
+    case 'catalogue':
+      return m.inbox_action_catalogue();
+    case 'archive':
+      return m.inbox_action_archive();
+    case 'trash':
+      return m.inbox_action_trash();
+    default:
+      return kind;
   }
 }
 
@@ -168,16 +176,23 @@ const FRAME_TYPE_KEYWORDS: Array<[token: string, singular: string]> = [
 function normalizeFrameTypeHint(raw: string): string {
   const v = raw.trim().toLowerCase();
   switch (v) {
-    case 'lights':    return 'light';
-    case 'darks':     return 'dark';
-    case 'flats':     return 'flat';
-    case 'biases':    return 'bias';
+    case 'lights':
+      return 'light';
+    case 'darks':
+      return 'dark';
+    case 'flats':
+      return 'flat';
+    case 'biases':
+      return 'bias';
     case 'dark_flat':
     case 'darkflat':
     case 'dark_flats':
-    case 'darkflats': return 'dark flat';
-    case 'masters':   return 'master';
-    default:          return v;
+    case 'darkflats':
+      return 'dark flat';
+    case 'masters':
+      return 'master';
+    default:
+      return v;
   }
 }
 
@@ -226,7 +241,10 @@ function frameTypeLabel(
   destination: string,
   itemFrameType?: string,
 ): string {
-  const segments = [...pathSegments(destination), ...pathSegments(action.fromPath)];
+  const segments = [
+    ...pathSegments(destination),
+    ...pathSegments(action.fromPath),
+  ];
   for (const [token, singular] of FRAME_TYPE_KEYWORDS) {
     if (segments.includes(token)) return singular;
   }
@@ -469,7 +487,8 @@ export function PlanPanel({
   }, [selectableIds]);
 
   const hasDestructive = useMemo(
-    () => plans.some((p) => p.actions.some((a) => a.requiresDestructiveConfirm)),
+    () =>
+      plans.some((p) => p.actions.some((a) => a.requiresDestructiveConfirm)),
     [plans],
   );
 
@@ -536,9 +555,7 @@ export function PlanPanel({
           >
             <span className="alm-plan-panel__root-option-inner">
               <code className="alm-plan-panel__root-option-path">{c.path}</code>
-              <span className="alm-plan-panel__root-option-kind">
-                {c.kind}
-              </span>
+              <span className="alm-plan-panel__root-option-kind">{c.kind}</span>
             </span>
           </Btn>
         ))}
@@ -569,10 +586,8 @@ export function PlanPanel({
       {/* ── Pinned header: counts + select-all + apply controls ── */}
       <div className="alm-plan-panel__bar" data-testid="plan-panel-bar">
         <div className="alm-plan-panel__bar-left">
-          { }
-          <label
-            className="alm-plan-panel__select-all"
-          >
+          {}
+          <label className="alm-plan-panel__select-all">
             <input
               type="checkbox"
               checked={allSelectableSelected}
@@ -581,18 +596,19 @@ export function PlanPanel({
               aria-label={m.inbox_select_all_plans_aria()}
               data-testid="plan-select-all"
             />
-            <span className="alm-plan-panel__select-all-label">{m.common_select_all()}</span>
+            <span className="alm-plan-panel__select-all-label">
+              {m.common_select_all()}
+            </span>
           </label>
           <span
             className="alm-plan-panel__count-summary"
             data-testid="plan-total-count"
           >
-            {m.plan_count_label({ count: plans.length })} · {m.action_count_label({ count: totalActions })}
+            {m.plan_count_label({ count: plans.length })} ·{' '}
+            {m.action_count_label({ count: totalActions })}
           </span>
         </div>
-        <div
-          className="alm-plan-panel__bar-actions"
-        >
+        <div className="alm-plan-panel__bar-actions">
           <Btn
             variant="primary"
             onClick={() => onApplySelected(selectedArray)}
@@ -600,7 +616,9 @@ export function PlanPanel({
             data-testid="plan-apply-selected"
             aria-label={m.inbox_apply_selected_plans_aria()}
           >
-            {busy ? m.common_applying() : m.inbox_apply_selected_plans({ count: selectedArray.length })}
+            {busy
+              ? m.common_applying()
+              : m.inbox_apply_selected_plans({ count: selectedArray.length })}
           </Btn>
           <Btn
             variant="accent"
@@ -648,7 +666,11 @@ export function PlanPanel({
                 );
           const breakdownDest =
             breakdownEntries.length > 0
-              ? breakdownDestination(plan.actions, plan.itemName, absoluteByFromPath)
+              ? breakdownDestination(
+                  plan.actions,
+                  plan.itemName,
+                  absoluteByFromPath,
+                )
               : null;
           // A plan is "catalogued in place" when no file moves — every action is a
           // catalogue (destination equals source). We surface that explicitly
@@ -677,7 +699,9 @@ export function PlanPanel({
                     checked={checked}
                     disabled={plan.stale}
                     onChange={() => toggleGroup(plan.inboxItemId, plan.stale)}
-                    aria-label={m.inbox_select_plan_aria({ name: plan.itemName })}
+                    aria-label={m.inbox_select_plan_aria({
+                      name: plan.itemName,
+                    })}
                     data-testid={`plan-group-check-${plan.inboxItemId}`}
                   />
                   <Btn
@@ -733,11 +757,20 @@ export function PlanPanel({
                     // already embeds the number — render it as one node. An
                     // UNKNOWN frame type (e.g. the `actionLabel(...)` fallback)
                     // keeps the existing count + `pluralLabel` rendering.
-                    const knownLabel = frameTypeCountLabel(entry.frameType, entry.count);
+                    const knownLabel = frameTypeCountLabel(
+                      entry.frameType,
+                      entry.count,
+                    );
                     return (
-                      <span key={entry.key} className="alm-plan-panel__summary-type">
+                      <span
+                        key={entry.key}
+                        className="alm-plan-panel__summary-type"
+                      >
                         {i > 0 && (
-                          <span className="alm-plan-panel__summary-sep" aria-hidden="true">
+                          <span
+                            className="alm-plan-panel__summary-sep"
+                            aria-hidden="true"
+                          >
                             ·{' '}
                           </span>
                         )}
@@ -765,7 +798,9 @@ export function PlanPanel({
                 <span className="alm-plan-panel__group-dest">
                   {allInPlace ? (
                     <>
-                      <span className="alm-plan-panel__inplace">{m.inbox_inplace_label()}</span>
+                      <span className="alm-plan-panel__inplace">
+                        {m.inbox_inplace_label()}
+                      </span>
                       <code
                         className="alm-plan-panel__summary-dest"
                         title={breakdownDest?.full ?? plan.itemName}
@@ -775,14 +810,23 @@ export function PlanPanel({
                     </>
                   ) : (
                     <>
-                      <span className="alm-plan-panel__summary-arrow" aria-hidden="true">
+                      <span
+                        className="alm-plan-panel__summary-arrow"
+                        aria-hidden="true"
+                      >
                         →
                       </span>
                       <code
                         className="alm-plan-panel__summary-dest"
-                        title={breakdownDest?.full ?? summaryLines[0]?.destinationFull ?? ''}
+                        title={
+                          breakdownDest?.full ??
+                          summaryLines[0]?.destinationFull ??
+                          ''
+                        }
                       >
-                        {breakdownDest?.short ?? summaryLines[0]?.destinationShort ?? '—'}
+                        {breakdownDest?.short ??
+                          summaryLines[0]?.destinationShort ??
+                          '—'}
                       </code>
                     </>
                   )}
@@ -793,8 +837,13 @@ export function PlanPanel({
                   className="alm-plan-panel__group-count"
                   title={
                     moveCount > 0
-                      ? m.inbox_plan_file_count_tooltip_mixed({ moved: moveCount, inPlace: plan.actions.length - moveCount })
-                      : m.inbox_plan_file_count_tooltip_inplace({ count: plan.actions.length })
+                      ? m.inbox_plan_file_count_tooltip_mixed({
+                          moved: moveCount,
+                          inPlace: plan.actions.length - moveCount,
+                        })
+                      : m.inbox_plan_file_count_tooltip_inplace({
+                          count: plan.actions.length,
+                        })
                   }
                 >
                   {m.inbox_list_file_count({ count: plan.actions.length })}
@@ -820,7 +869,9 @@ export function PlanPanel({
                       onClick={() => onApplyOne(plan.planId)}
                       disabled={busy || plan.stale}
                       data-testid={`plan-apply-one-${plan.inboxItemId}`}
-                      aria-label={m.inbox_apply_plan_live_aria({ name: plan.itemName })}
+                      aria-label={m.inbox_apply_plan_live_aria({
+                        name: plan.itemName,
+                      })}
                     >
                       {m.inbox_apply_action()}
                     </Btn>
@@ -831,7 +882,9 @@ export function PlanPanel({
                     onClick={() => onCancel(plan.inboxItemId)}
                     disabled={busy}
                     data-testid={`plan-cancel-${plan.inboxItemId}`}
-                    aria-label={m.inbox_discard_plan_aria({ name: plan.itemName })}
+                    aria-label={m.inbox_discard_plan_aria({
+                      name: plan.itemName,
+                    })}
                   >
                     {m.inbox_discard()}
                   </Btn>
@@ -872,7 +925,9 @@ export function PlanPanel({
                     }
                     const failedText =
                       progress.failed > 0
-                        ? m.inbox_progress_failed_suffix({ failed: progress.failed })
+                        ? m.inbox_progress_failed_suffix({
+                            failed: progress.failed,
+                          })
                         : '';
                     return m.inbox_progress_running({
                       applied: progress.applied,
@@ -884,7 +939,10 @@ export function PlanPanel({
               )}
 
               {plan.stale && (
-                <Banner variant="danger" className="alm-plan-panel__stale-banner">
+                <Banner
+                  variant="danger"
+                  className="alm-plan-panel__stale-banner"
+                >
                   {m.inbox_stale_plan_warning()}
                 </Banner>
               )}
@@ -930,7 +988,9 @@ export function PlanPanel({
                         </span>
                         <span className="alm-plan-panel__file-dest">
                           {inPlace ? (
-                            <span className="alm-plan-panel__inplace">{m.inbox_inplace_label()}</span>
+                            <span className="alm-plan-panel__inplace">
+                              {m.inbox_inplace_label()}
+                            </span>
                           ) : (
                             <>
                               <span
@@ -963,16 +1023,12 @@ export function PlanPanel({
 
       {/* ── Destructive destination control (relocated from ActionSidebar) ── */}
       {hasDestructive && (
-        <div
-          className="alm-plan-panel__destructive"
-        >
+        <div className="alm-plan-panel__destructive">
           <div className="alm-plan-panel__destructive-title">
             {m.inbox_where_source_files_go()}
           </div>
-          <div
-            className="alm-plan-panel__dest-options"
-          >
-            { }
+          <div className="alm-plan-panel__dest-options">
+            {}
             <label className="alm-plan-panel__dest-label">
               <input
                 type="radio"
@@ -990,7 +1046,7 @@ export function PlanPanel({
                 </span>
               </span>
             </label>
-            { }
+            {}
             <label className="alm-plan-panel__dest-label">
               <input
                 type="radio"

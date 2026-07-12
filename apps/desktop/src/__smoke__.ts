@@ -90,7 +90,12 @@ import { SetupWizard } from '@/features/setup/SetupWizard';
 
 // ─── Data Layer ──────────────────────────────────────────────────────────────
 
-import { usePreference, usePreferences, getPreferences, setPreference } from '@/data/preferences';
+import {
+  usePreference,
+  usePreferences,
+  getPreferences,
+  setPreference,
+} from '@/data/preferences';
 import { queryKeys } from '@/data/queryKeys';
 
 // ─── API Types ───────────────────────────────────────────────────────────────

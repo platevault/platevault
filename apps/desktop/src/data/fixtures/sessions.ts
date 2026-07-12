@@ -2,9 +2,27 @@
 // Types mirror @/bindings/types — inline definitions used until that module is created
 // Updated to match design V3 mock data
 
-type SessionState = 'discovered' | 'candidate' | 'needs_review' | 'confirmed' | 'rejected' | 'ignored';
-type ConfidenceLevel = 'unknown' | 'low' | 'medium' | 'high' | 'confirmed' | 'rejected';
-type ProvenanceOrigin = 'reviewed' | 'inferred' | 'observed' | 'generated' | 'planned' | 'applied';
+type SessionState =
+  | 'discovered'
+  | 'candidate'
+  | 'needs_review'
+  | 'confirmed'
+  | 'rejected'
+  | 'ignored';
+type ConfidenceLevel =
+  | 'unknown'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'confirmed'
+  | 'rejected';
+type ProvenanceOrigin =
+  | 'reviewed'
+  | 'inferred'
+  | 'observed'
+  | 'generated'
+  | 'planned'
+  | 'applied';
 
 interface MetaValue {
   value: unknown;
@@ -82,21 +100,127 @@ export interface SessionFixture {
   frames: number;
   integration: string;
   size: string;
-  state: 'confirmed' | 'needs_review' | 'discovered' | 'candidate' | 'rejected' | 'ignored';
+  state:
+    | 'confirmed'
+    | 'needs_review'
+    | 'discovered'
+    | 'candidate'
+    | 'rejected'
+    | 'ignored';
   projects: string[];
 }
 
 export const SESSIONS_DATA: SessionFixture[] = [
-  { id: 1, target: 'NGC 7000', filter: 'SII', date: '2026-04-18', frames: 14, integration: '2h 20m', size: '936 MB', state: 'confirmed', projects: ['NGC 7000 · HOO'] },
-  { id: 2, target: 'NGC 7000', filter: 'OIII', date: '2026-04-15', frames: 22, integration: '2h 30m', size: '1.4 GB', state: 'confirmed', projects: ['NGC 7000 · HOO'] },
-  { id: 3, target: 'IC 1396', filter: 'SII', date: '2026-04-14', frames: 18, integration: '1h 48m', size: '1.1 GB', state: 'discovered', projects: [] },
-  { id: 4, target: 'NGC 7000', filter: 'Ha', date: '2026-04-12', frames: 54, integration: '4h 30m', size: '3.2 GB', state: 'confirmed', projects: ['NGC 7000 · HOO', 'NGC 7000 · SHO mosaic'] },
-  { id: 5, target: 'M31', filter: 'R', date: '2026-03-30', frames: 40, integration: '1h 7m 30s', size: '2.4 GB', state: 'confirmed', projects: ['M31 · LRGB'] },
-  { id: 6, target: 'M31', filter: 'L', date: '2026-03-28', frames: 120, integration: '6h 30m', size: '7.2 GB', state: 'needs_review', projects: [] },
-  { id: 7, target: 'M31', filter: 'B', date: '2026-03-10', frames: 35, integration: '0h 58m 30s', size: '2.1 GB', state: 'ignored', projects: [] },
-  { id: 8, target: 'M42', filter: 'OIII', date: '2026-02-11', frames: 28, integration: '1h 20m', size: '1.7 GB', state: 'rejected', projects: [] },
-  { id: 9, target: 'M42', filter: 'Ha', date: '2026-02-10', frames: 45, integration: '3h 45m', size: '2.8 GB', state: 'needs_review', projects: [] },
-  { id: 10, target: 'NGC 2244', filter: 'Ha', date: '2026-01-20', frames: 62, integration: '5h 10m', size: '3.6 GB', state: 'confirmed', projects: ['NGC 2244 · HOO'] },
+  {
+    id: 1,
+    target: 'NGC 7000',
+    filter: 'SII',
+    date: '2026-04-18',
+    frames: 14,
+    integration: '2h 20m',
+    size: '936 MB',
+    state: 'confirmed',
+    projects: ['NGC 7000 · HOO'],
+  },
+  {
+    id: 2,
+    target: 'NGC 7000',
+    filter: 'OIII',
+    date: '2026-04-15',
+    frames: 22,
+    integration: '2h 30m',
+    size: '1.4 GB',
+    state: 'confirmed',
+    projects: ['NGC 7000 · HOO'],
+  },
+  {
+    id: 3,
+    target: 'IC 1396',
+    filter: 'SII',
+    date: '2026-04-14',
+    frames: 18,
+    integration: '1h 48m',
+    size: '1.1 GB',
+    state: 'discovered',
+    projects: [],
+  },
+  {
+    id: 4,
+    target: 'NGC 7000',
+    filter: 'Ha',
+    date: '2026-04-12',
+    frames: 54,
+    integration: '4h 30m',
+    size: '3.2 GB',
+    state: 'confirmed',
+    projects: ['NGC 7000 · HOO', 'NGC 7000 · SHO mosaic'],
+  },
+  {
+    id: 5,
+    target: 'M31',
+    filter: 'R',
+    date: '2026-03-30',
+    frames: 40,
+    integration: '1h 7m 30s',
+    size: '2.4 GB',
+    state: 'confirmed',
+    projects: ['M31 · LRGB'],
+  },
+  {
+    id: 6,
+    target: 'M31',
+    filter: 'L',
+    date: '2026-03-28',
+    frames: 120,
+    integration: '6h 30m',
+    size: '7.2 GB',
+    state: 'needs_review',
+    projects: [],
+  },
+  {
+    id: 7,
+    target: 'M31',
+    filter: 'B',
+    date: '2026-03-10',
+    frames: 35,
+    integration: '0h 58m 30s',
+    size: '2.1 GB',
+    state: 'ignored',
+    projects: [],
+  },
+  {
+    id: 8,
+    target: 'M42',
+    filter: 'OIII',
+    date: '2026-02-11',
+    frames: 28,
+    integration: '1h 20m',
+    size: '1.7 GB',
+    state: 'rejected',
+    projects: [],
+  },
+  {
+    id: 9,
+    target: 'M42',
+    filter: 'Ha',
+    date: '2026-02-10',
+    frames: 45,
+    integration: '3h 45m',
+    size: '2.8 GB',
+    state: 'needs_review',
+    projects: [],
+  },
+  {
+    id: 10,
+    target: 'NGC 2244',
+    filter: 'Ha',
+    date: '2026-01-20',
+    frames: 62,
+    integration: '5h 10m',
+    size: '3.6 GB',
+    state: 'confirmed',
+    projects: ['NGC 2244 · HOO'],
+  },
 ];
 
 // ─── Optical train IDs ───────────────────────────────────────────────────────
@@ -135,9 +259,24 @@ export const sessions: AcquisitionSession[] = [
     total_integration_seconds: 8400,
     total_size_bytes: 981_467_136,
     metadata: {
-      target: { value: 'NGC 7000', raw: 'NGC7000', origin: 'reviewed', confidence: 'confirmed' },
-      filter: { value: 'SII', raw: 'SII 6.5nm', origin: 'observed', confidence: 'high' },
-      exposure_s: { value: 600, raw: '600', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'NGC 7000',
+        raw: 'NGC7000',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      filter: {
+        value: 'SII',
+        raw: 'SII 6.5nm',
+        origin: 'observed',
+        confidence: 'high',
+      },
+      exposure_s: {
+        value: 600,
+        raw: '600',
+        origin: 'observed',
+        confidence: 'high',
+      },
     },
     target_ids: [TARGET_NGC7000],
     project_ids: [PROJECT_NGC7000_NB],
@@ -159,9 +298,24 @@ export const sessions: AcquisitionSession[] = [
     total_integration_seconds: 9000,
     total_size_bytes: 1_503_238_554,
     metadata: {
-      target: { value: 'NGC 7000', raw: 'NGC7000', origin: 'reviewed', confidence: 'confirmed' },
-      filter: { value: 'OIII', raw: 'OIII 6.5nm', origin: 'reviewed', confidence: 'confirmed' },
-      exposure_s: { value: 600, raw: '600', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'NGC 7000',
+        raw: 'NGC7000',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      filter: {
+        value: 'OIII',
+        raw: 'OIII 6.5nm',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      exposure_s: {
+        value: 600,
+        raw: '600',
+        origin: 'observed',
+        confidence: 'high',
+      },
     },
     target_ids: [TARGET_NGC7000],
     project_ids: [PROJECT_NGC7000_NB],
@@ -183,9 +337,25 @@ export const sessions: AcquisitionSession[] = [
     total_integration_seconds: 6480,
     total_size_bytes: 1_181_116_006,
     metadata: {
-      target: { value: 'IC 1396', raw: 'IC1396', origin: 'inferred', confidence: 'low', evidence_ref: 'fits.object' },
-      filter: { value: 'SII', raw: 'SII 6.5nm', origin: 'observed', confidence: 'high' },
-      exposure_s: { value: 360, raw: '360', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'IC 1396',
+        raw: 'IC1396',
+        origin: 'inferred',
+        confidence: 'low',
+        evidence_ref: 'fits.object',
+      },
+      filter: {
+        value: 'SII',
+        raw: 'SII 6.5nm',
+        origin: 'observed',
+        confidence: 'high',
+      },
+      exposure_s: {
+        value: 360,
+        raw: '360',
+        origin: 'observed',
+        confidence: 'high',
+      },
     },
     target_ids: [TARGET_IC1396],
     project_ids: [],
@@ -207,9 +377,24 @@ export const sessions: AcquisitionSession[] = [
     total_integration_seconds: 16200,
     total_size_bytes: 3_435_973_837,
     metadata: {
-      target: { value: 'NGC 7000', raw: 'NGC7000', origin: 'reviewed', confidence: 'confirmed' },
-      filter: { value: 'Ha', raw: 'Ha 7nm', origin: 'reviewed', confidence: 'confirmed' },
-      exposure_s: { value: 300, raw: '300', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'NGC 7000',
+        raw: 'NGC7000',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      filter: {
+        value: 'Ha',
+        raw: 'Ha 7nm',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      exposure_s: {
+        value: 300,
+        raw: '300',
+        origin: 'observed',
+        confidence: 'high',
+      },
     },
     target_ids: [TARGET_NGC7000],
     project_ids: [PROJECT_NGC7000_NB, '550e8400-e29b-41d4-a716-446655440303'],
@@ -231,9 +416,24 @@ export const sessions: AcquisitionSession[] = [
     total_integration_seconds: 4050,
     total_size_bytes: 2_576_980_378,
     metadata: {
-      target: { value: 'M31', raw: 'M31', origin: 'reviewed', confidence: 'confirmed' },
-      filter: { value: 'R', raw: 'Red', origin: 'reviewed', confidence: 'confirmed' },
-      exposure_s: { value: 101, raw: '101', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'M31',
+        raw: 'M31',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      filter: {
+        value: 'R',
+        raw: 'Red',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      exposure_s: {
+        value: 101,
+        raw: '101',
+        origin: 'observed',
+        confidence: 'high',
+      },
     },
     target_ids: [TARGET_M31],
     project_ids: [PROJECT_M31_LRGB],
@@ -257,9 +457,25 @@ export const sessions: AcquisitionSession[] = [
     total_integration_seconds: 23400,
     total_size_bytes: 7_730_941_133,
     metadata: {
-      target: { value: 'M31', raw: 'M31', origin: 'observed', confidence: 'high' },
-      filter: { value: 'L', raw: 'Luminance', origin: 'inferred', confidence: 'medium', evidence_ref: 'fits.filter' },
-      exposure_s: { value: 195, raw: '195', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'M31',
+        raw: 'M31',
+        origin: 'observed',
+        confidence: 'high',
+      },
+      filter: {
+        value: 'L',
+        raw: 'Luminance',
+        origin: 'inferred',
+        confidence: 'medium',
+        evidence_ref: 'fits.filter',
+      },
+      exposure_s: {
+        value: 195,
+        raw: '195',
+        origin: 'observed',
+        confidence: 'high',
+      },
     },
     target_ids: [TARGET_M31],
     project_ids: [],
@@ -281,9 +497,25 @@ export const sessions: AcquisitionSession[] = [
     total_integration_seconds: 13500,
     total_size_bytes: 3_006_477_107,
     metadata: {
-      target: { value: 'M42', raw: 'Orion Nebula', origin: 'inferred', confidence: 'medium', evidence_ref: 'fits.object' },
-      filter: { value: 'Ha', raw: 'Ha', origin: 'observed', confidence: 'high' },
-      exposure_s: { value: 300, raw: '300', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'M42',
+        raw: 'Orion Nebula',
+        origin: 'inferred',
+        confidence: 'medium',
+        evidence_ref: 'fits.object',
+      },
+      filter: {
+        value: 'Ha',
+        raw: 'Ha',
+        origin: 'observed',
+        confidence: 'high',
+      },
+      exposure_s: {
+        value: 300,
+        raw: '300',
+        origin: 'observed',
+        confidence: 'high',
+      },
     },
     target_ids: [TARGET_M42],
     project_ids: [],
@@ -307,9 +539,24 @@ export const sessions: AcquisitionSession[] = [
     total_integration_seconds: 3510,
     total_size_bytes: 2_254_857_830,
     metadata: {
-      target: { value: 'M31', raw: 'M31', origin: 'observed', confidence: 'medium' },
-      filter: { value: 'B', raw: 'Blue', origin: 'inferred', confidence: 'low' },
-      exposure_s: { value: 100, raw: '100', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'M31',
+        raw: 'M31',
+        origin: 'observed',
+        confidence: 'medium',
+      },
+      filter: {
+        value: 'B',
+        raw: 'Blue',
+        origin: 'inferred',
+        confidence: 'low',
+      },
+      exposure_s: {
+        value: 100,
+        raw: '100',
+        origin: 'observed',
+        confidence: 'high',
+      },
     },
     target_ids: [TARGET_M31],
     project_ids: [],
@@ -333,9 +580,24 @@ export const sessions: AcquisitionSession[] = [
     total_integration_seconds: 4800,
     total_size_bytes: 1_825_361_101,
     metadata: {
-      target: { value: 'M42', raw: 'M42', origin: 'observed', confidence: 'high' },
-      filter: { value: 'OIII', raw: 'OIII', origin: 'observed', confidence: 'high' },
-      exposure_s: { value: 171, raw: '171', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'M42',
+        raw: 'M42',
+        origin: 'observed',
+        confidence: 'high',
+      },
+      filter: {
+        value: 'OIII',
+        raw: 'OIII',
+        origin: 'observed',
+        confidence: 'high',
+      },
+      exposure_s: {
+        value: 171,
+        raw: '171',
+        origin: 'observed',
+        confidence: 'high',
+      },
     },
     target_ids: [TARGET_M42],
     project_ids: [],
@@ -359,9 +621,24 @@ export const sessions: AcquisitionSession[] = [
     total_integration_seconds: 18600,
     total_size_bytes: 3_865_470_566,
     metadata: {
-      target: { value: 'NGC 2244', raw: 'NGC2244', origin: 'reviewed', confidence: 'confirmed' },
-      filter: { value: 'Ha', raw: 'Ha 7nm', origin: 'reviewed', confidence: 'confirmed' },
-      exposure_s: { value: 300, raw: '300', origin: 'observed', confidence: 'high' },
+      target: {
+        value: 'NGC 2244',
+        raw: 'NGC2244',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      filter: {
+        value: 'Ha',
+        raw: 'Ha 7nm',
+        origin: 'reviewed',
+        confidence: 'confirmed',
+      },
+      exposure_s: {
+        value: 300,
+        raw: '300',
+        origin: 'observed',
+        confidence: 'high',
+      },
     },
     target_ids: [TARGET_NGC2244],
     project_ids: [],

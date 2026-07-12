@@ -15,7 +15,8 @@ export function Lifecycle({ state }: LifecycleProps) {
   // `state` is an arbitrary string; `projectStateIndex` is now keyed by the
   // exhaustive `ProjectState` union, so coerce at the lookup and fall back to
   // -1 (off-track) for any unknown value.
-  const currentIdx = projectStateIndex[state as keyof typeof projectStateIndex] ?? -1;
+  const currentIdx =
+    projectStateIndex[state as keyof typeof projectStateIndex] ?? -1;
   const isBlocked = state === 'blocked';
 
   return (
@@ -50,7 +51,9 @@ export function Lifecycle({ state }: LifecycleProps) {
               )}
               <div className={dotClass} />
               {i < PROJECT_LIFECYCLE.length - 1 && (
-                <div className={`alm-lifecycle__line${isDone ? ' alm-lifecycle__line--done' : ''}`} />
+                <div
+                  className={`alm-lifecycle__line${isDone ? ' alm-lifecycle__line--done' : ''}`}
+                />
               )}
             </div>
             <span className={labelClass}>{step}</span>

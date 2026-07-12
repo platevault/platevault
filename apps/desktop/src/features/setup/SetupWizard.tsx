@@ -22,7 +22,12 @@ import {
   siteStepError,
 } from './steps';
 import type { CatalogSettings, ToolsState, SiteStepState } from './steps';
-import type { SourcesState, SourceKind, ScanDepth, OrganizationState } from './sources-store';
+import type {
+  SourcesState,
+  SourceKind,
+  ScanDepth,
+  OrganizationState,
+} from './sources-store';
 import type { FlushResult } from './sources-store';
 import {
   loadSources,
@@ -38,7 +43,10 @@ import { saveSites } from '@/features/targets/observing-sites/site-store';
 import type { ObserverSite } from '@/features/targets/observing-sites/observer-site';
 
 function newSiteId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID();
   }
   return `site-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -98,16 +106,19 @@ function loadWizardState(): WizardState {
       const parsed = JSON.parse(raw);
       // If persisted state had the wizard already at the scan step, reset to
       // confirm so the scan always starts fresh (avoids stale scan guard).
-      const currentStep = parsed.currentStep === SCAN_STEP
-        ? SCAN_STEP - 1
-        : (parsed.currentStep ?? 0);
+      const currentStep =
+        parsed.currentStep === SCAN_STEP
+          ? SCAN_STEP - 1
+          : (parsed.currentStep ?? 0);
       return {
         currentStep,
         sources: Array.isArray(parsed.sources) ? parsed.sources : loadSources(),
         // Migrate/guard: older persisted state used `{ downloadAll }` (no
         // `selectedCatalogIds`); coerce any shape lacking the array to the default so
         // consumers reading `selectedCatalogIds.length` never hit `undefined`.
-        catalogSettings: Array.isArray(parsed.catalogSettings?.selectedCatalogIds)
+        catalogSettings: Array.isArray(
+          parsed.catalogSettings?.selectedCatalogIds,
+        )
           ? parsed.catalogSettings
           : DEFAULT_CATALOG_SETTINGS,
         tools: parsed.tools ?? DEFAULT_TOOLS_STATE,
@@ -170,9 +181,12 @@ export function SetupWizard() {
     setState((prev) => ({ ...prev, currentStep: step }));
   }, []);
 
-  const handleCatalogSettingsChange = useCallback((catalogSettings: CatalogSettings) => {
-    setState((prev) => ({ ...prev, catalogSettings }));
-  }, []);
+  const handleCatalogSettingsChange = useCallback(
+    (catalogSettings: CatalogSettings) => {
+      setState((prev) => ({ ...prev, catalogSettings }));
+    },
+    [],
+  );
 
   const handleToolsChange = useCallback((tools: ToolsState) => {
     setState((prev) => ({ ...prev, tools }));
@@ -193,7 +207,9 @@ export function SetupWizard() {
         const conflictKind = dedup.crossKindConflict;
         setErrors((prev) => ({
           ...prev,
-          [state.sources.length]: m.setup_sources_error_registered_under({ kind: conflictKind }),
+          [state.sources.length]: m.setup_sources_error_registered_under({
+            kind: conflictKind,
+          }),
         }));
         return;
       }
@@ -233,36 +249,34 @@ export function SetupWizard() {
     [state.sources],
   );
 
-  const handleRemoveSource = useCallback(
-    (index: number) => {
-      setState((prev) => ({
-        ...prev,
-        sources: removeSource(prev.sources, prev.sources[index]?.kind ?? 'light_frames', index),
-      }));
-      // Clear error for removed index and reindex remaining errors
-      setErrors((prev) => {
-        const newErrors: Record<number, string> = {};
-        for (const [key, value] of Object.entries(prev)) {
-          const idx = Number(key);
-          if (idx < index) newErrors[idx] = value;
-          else if (idx > index) newErrors[idx - 1] = value;
-        }
-        return newErrors;
-      });
-    },
-    [],
-  );
+  const handleRemoveSource = useCallback((index: number) => {
+    setState((prev) => ({
+      ...prev,
+      sources: removeSource(
+        prev.sources,
+        prev.sources[index]?.kind ?? 'light_frames',
+        index,
+      ),
+    }));
+    // Clear error for removed index and reindex remaining errors
+    setErrors((prev) => {
+      const newErrors: Record<number, string> = {};
+      for (const [key, value] of Object.entries(prev)) {
+        const idx = Number(key);
+        if (idx < index) newErrors[idx] = value;
+        else if (idx > index) newErrors[idx - 1] = value;
+      }
+      return newErrors;
+    });
+  }, []);
 
-  const handleKindChange = useCallback(
-    (index: number, kind: SourceKind) => {
-      setState((prev) => {
-        const next = [...prev.sources];
-        next[index] = { ...next[index], kind };
-        return { ...prev, sources: next };
-      });
-    },
-    [],
-  );
+  const handleKindChange = useCallback((index: number, kind: SourceKind) => {
+    setState((prev) => {
+      const next = [...prev.sources];
+      next[index] = { ...next[index], kind };
+      return { ...prev, sources: next };
+    });
+  }, []);
 
   const handleScanDepthChange = useCallback(
     (index: number, depth: ScanDepth) => {
@@ -301,7 +315,10 @@ export function SetupWizard() {
       const result = await flushToDB(state.sources);
 
       if (!result.allSucceeded) {
-        console.warn('Some source registrations failed:', result.results.filter((r) => !r.success));
+        console.warn(
+          'Some source registrations failed:',
+          result.results.filter((r) => !r.success),
+        );
       }
 
       setFlushResult(result);
@@ -325,13 +342,31 @@ export function SetupWizard() {
       if (!isMockMode) {
         // Persist processing-tool config from the wizard so Settings →
         // Processing Tools reflects whatever the user set in Step 2.
-        const toolEntries: Array<{ id: string; enabled: boolean; path: string | null }> = [
-          { id: 'pixinsight', enabled: state.tools.pixinsight.enabled, path: state.tools.pixinsight.path },
-          { id: 'siril', enabled: state.tools.siril.enabled, path: state.tools.siril.path },
+        const toolEntries: Array<{
+          id: string;
+          enabled: boolean;
+          path: string | null;
+        }> = [
+          {
+            id: 'pixinsight',
+            enabled: state.tools.pixinsight.enabled,
+            path: state.tools.pixinsight.path,
+          },
+          {
+            id: 'siril',
+            enabled: state.tools.siril.enabled,
+            path: state.tools.siril.path,
+          },
         ];
         await Promise.all(
           toolEntries.map(async (t) =>
-            unwrap(await commands.toolsUpdate({ id: t.id, enabled: t.enabled, path: t.path })),
+            unwrap(
+              await commands.toolsUpdate({
+                id: t.id,
+                enabled: t.enabled,
+                path: t.path,
+              }),
+            ),
           ),
         );
 
@@ -346,9 +381,10 @@ export function SetupWizard() {
             name: state.site.name.trim(),
             latitudeDeg: Number(state.site.latitudeDegText.trim()),
             longitudeDeg: Number(state.site.longitudeDegText.trim()),
-            elevationM: state.site.elevationMText.trim() === ''
-              ? null
-              : Number(state.site.elevationMText.trim()),
+            elevationM:
+              state.site.elevationMText.trim() === ''
+                ? null
+                : Number(state.site.elevationMText.trim()),
             timezone: state.site.timezone,
             twilight: SITE_STEP_DEFAULT_TWILIGHT,
             minHorizonAltDeg: SITE_STEP_DEFAULT_MIN_HORIZON_ALT_DEG,
@@ -429,7 +465,9 @@ export function SetupWizard() {
         <Btn
           data-testid="finish-button"
           variant="primary"
-          onClick={() => { void handleFinish(); }}
+          onClick={() => {
+            void handleFinish();
+          }}
           disabled={!scanComplete || isFinishing}
         >
           {isFinishing ? m.setup_wizard_finishing() : m.setup_wizard_finish()}
@@ -441,16 +479,22 @@ export function SetupWizard() {
           onClick={() => goTo(step + 1)}
           disabled={!canProceed}
         >
-          {m.setup_wizard_continue_to({ label: STEPS[step + 1].label().toLowerCase() })}
+          {m.setup_wizard_continue_to({
+            label: STEPS[step + 1].label().toLowerCase(),
+          })}
         </Btn>
       ) : (
         // Step 3 (Confirm): register + enter Scan
         <Btn
           variant="primary"
-          onClick={() => { void handleEnterScan(); }}
+          onClick={() => {
+            void handleEnterScan();
+          }}
           disabled={isSubmitting || !canProceed}
         >
-          {isSubmitting ? m.setup_wizard_registering() : m.setup_wizard_start_scan()}
+          {isSubmitting
+            ? m.setup_wizard_registering()
+            : m.setup_wizard_start_scan()}
         </Btn>
       )}
     </>
@@ -459,68 +503,63 @@ export function SetupWizard() {
   return (
     // Layout fix (mirrors the project wizard): flex column + minHeight:0 so the
     // WizardShell fills the main content area instead of overflowing/mis-placing.
-    <div
-      className="alm-page alm-setup-wizard"
-    >
-      <WizardShell steps={wizardSteps} currentStep={step} footer={footer} className="alm-setup-wizard__shell">
+    <div className="alm-page alm-setup-wizard">
+      <WizardShell
+        steps={wizardSteps}
+        currentStep={step}
+        footer={footer}
+        className="alm-setup-wizard__shell"
+      >
         {/* Step label + heading */}
         <div className="alm-setup-wizard__step-label">
           {m.setup_wizard_step_label({ step: step + 1, total: STEPS.length })}
         </div>
-        <h1 className="alm-setup-wizard__heading">
-          {stepMeta.heading()}
-        </h1>
+        <h1 className="alm-setup-wizard__heading">{stepMeta.heading()}</h1>
         {stepMeta.description && (
           <p className="alm-setup-wizard__description">
             {stepMeta.description()}
           </p>
         )}
 
-          {/* Step body */}
-          {step === 0 && (
-            <StepSourceFolders
-              entries={state.sources}
-              errors={errors}
-              onAdd={handleAddSource}
-              onRemove={handleRemoveSource}
-              onKindChange={handleKindChange}
-              onScanDepthChange={handleScanDepthChange}
-              onOrganizationStateChange={handleOrganizationStateChange}
-            />
-          )}
-          {step === 1 && (
-            <StepTools
-              tools={state.tools}
-              onToolsChange={handleToolsChange}
-            />
-          )}
-          {step === 2 && (
-            <StepCatalogs
-              settings={state.catalogSettings}
-              onSettingsChange={handleCatalogSettingsChange}
-            />
-          )}
-          {step === 3 && (
-            <StepSite
-              state={state.site}
-              onChange={handleSiteChange}
-            />
-          )}
-          {step === 4 && (
-            <StepConfirm
-              sources={state.sources}
-              catalogSettings={state.catalogSettings}
-              tools={state.tools}
-              isSubmitting={isSubmitting}
-            />
-          )}
-          {step === SCAN_STEP && flushResult && (
-            <StepScan
-              sources={state.sources}
-              flushResult={flushResult}
-              onAllDoneChange={setScanComplete}
-            />
-          )}
+        {/* Step body */}
+        {step === 0 && (
+          <StepSourceFolders
+            entries={state.sources}
+            errors={errors}
+            onAdd={handleAddSource}
+            onRemove={handleRemoveSource}
+            onKindChange={handleKindChange}
+            onScanDepthChange={handleScanDepthChange}
+            onOrganizationStateChange={handleOrganizationStateChange}
+          />
+        )}
+        {step === 1 && (
+          <StepTools tools={state.tools} onToolsChange={handleToolsChange} />
+        )}
+        {step === 2 && (
+          <StepCatalogs
+            settings={state.catalogSettings}
+            onSettingsChange={handleCatalogSettingsChange}
+          />
+        )}
+        {step === 3 && (
+          <StepSite state={state.site} onChange={handleSiteChange} />
+        )}
+        {step === 4 && (
+          <StepConfirm
+            sources={state.sources}
+            catalogSettings={state.catalogSettings}
+            tools={state.tools}
+            isSubmitting={isSubmitting}
+          />
+        )}
+        {step === SCAN_STEP && flushResult && (
+          <StepScan
+            sources={state.sources}
+            flushResult={flushResult}
+            onAllDoneChange={setScanComplete}
+          />
+        )}
       </WizardShell>
     </div>
   );

@@ -90,22 +90,81 @@ export function SessionDetail({
 
   // Session facts as a clean tabular PropertyTable, spread across two columns.
   const factProps: PropertyDef[] = [
-    { key: 'target', label: m.projects_create_target_label(), value: session.target ?? null, source: prov?.target ? 'inferred' : 'fits' },
-    { key: 'filter', label: m.common_filter(), value: session.filter ?? null, source: prov?.filter ? 'inferred' : 'fits' },
-    { key: 'frames', label: m.projects_wizard_col_frames(), value: session.frames },
-    { key: 'exposure', label: m.calibration_fp_exposure(), value: session.exposure ?? null, source: 'fits' },
+    {
+      key: 'target',
+      label: m.projects_create_target_label(),
+      value: session.target ?? null,
+      source: prov?.target ? 'inferred' : 'fits',
+    },
+    {
+      key: 'filter',
+      label: m.common_filter(),
+      value: session.filter ?? null,
+      source: prov?.filter ? 'inferred' : 'fits',
+    },
+    {
+      key: 'frames',
+      label: m.projects_wizard_col_frames(),
+      value: session.frames,
+    },
+    {
+      key: 'exposure',
+      label: m.calibration_fp_exposure(),
+      value: session.exposure ?? null,
+      source: 'fits',
+    },
     ...(integrationLabel != null
-      ? [{ key: 'integration', label: m.sessions_col_total_integration(), value: integrationLabel } as PropertyDef]
+      ? [
+          {
+            key: 'integration',
+            label: m.sessions_col_total_integration(),
+            value: integrationLabel,
+          } as PropertyDef,
+        ]
       : []),
-    { key: 'night', label: m.sessions_col_night(), value: session.capturedOn ?? null, source: 'fits' },
-    { key: 'camera', label: m.settings_calmatch_camera(), value: session.camera ?? null, source: 'fits' },
-    { key: 'gain', label: m.settings_calmatch_gain(), value: session.gain ?? null, source: 'fits' },
-    { key: 'binning', label: m.settings_calmatch_binning(), value: session.binning ?? null, source: 'fits' },
+    {
+      key: 'night',
+      label: m.sessions_col_night(),
+      value: session.capturedOn ?? null,
+      source: 'fits',
+    },
+    {
+      key: 'camera',
+      label: m.settings_calmatch_camera(),
+      value: session.camera ?? null,
+      source: 'fits',
+    },
+    {
+      key: 'gain',
+      label: m.settings_calmatch_gain(),
+      value: session.gain ?? null,
+      source: 'fits',
+    },
+    {
+      key: 'binning',
+      label: m.settings_calmatch_binning(),
+      value: session.binning ?? null,
+      source: 'fits',
+    },
     ...(session.setTemp
-      ? [{ key: 'temp', label: m.settings_calmatch_sensor_temp(), value: session.setTemp, source: 'fits' } as PropertyDef]
+      ? [
+          {
+            key: 'temp',
+            label: m.settings_calmatch_sensor_temp(),
+            value: session.setTemp,
+            source: 'fits',
+          } as PropertyDef,
+        ]
       : []),
     ...(prov?.confirmedBy
-      ? [{ key: 'confirmedby', label: m.sessions_col_confirmed_by(), value: prov.confirmedBy, source: 'user' } as PropertyDef]
+      ? [
+          {
+            key: 'confirmedby',
+            label: m.sessions_col_confirmed_by(),
+            value: prov.confirmedBy,
+            source: 'user',
+          } as PropertyDef,
+        ]
       : []),
   ];
 
@@ -145,7 +204,9 @@ export function SessionDetail({
           <PropertyTable mode="view" showSource properties={colB} />
         </div>
         <div className="alm-session-detail2__linked">
-          <div className="alm-session-detail2__head">{m.sessions_linked_projects_heading()}</div>
+          <div className="alm-session-detail2__head">
+            {m.sessions_linked_projects_heading()}
+          </div>
           {isLinked ? (
             <div className="alm-session-detail2__linked-list">
               {session.linked?.projects?.map((p) => (
@@ -160,7 +221,9 @@ export function SessionDetail({
               ))}
             </div>
           ) : (
-            <span className="alm-session-detail2__muted">{m.common_none()}</span>
+            <span className="alm-session-detail2__muted">
+              {m.common_none()}
+            </span>
           )}
         </div>
       </div>

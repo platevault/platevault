@@ -27,7 +27,9 @@ describe('unwrap (FR-003)', () => {
     expect(unwrap({ status: 'ok', data: 42 })).toBe(42);
   });
   it('throws the error on error', () => {
-    expect(() => unwrap({ status: 'error', error: new Error('boom') })).toThrow('boom');
+    expect(() => unwrap({ status: 'error', error: new Error('boom') })).toThrow(
+      'boom',
+    );
   });
 });
 
@@ -95,7 +97,9 @@ describe('unwrap validates ContractError envelope (T118)', () => {
   };
 
   it('passes through a valid ContractError (throws the original)', () => {
-    expect(() => unwrap({ status: 'error', error: validContractError })).toThrow();
+    expect(() =>
+      unwrap({ status: 'error', error: validContractError }),
+    ).toThrow();
     // The original error object is thrown (not wrapped), so catching it works.
     try {
       unwrap({ status: 'error', error: validContractError });
@@ -112,13 +116,15 @@ describe('unwrap validates ContractError envelope (T118)', () => {
   });
 
   it('passes through string errors unchanged (non-ContractError path)', () => {
-    expect(() => unwrap({ status: 'error', error: 'plain string error' })).toThrow(
-      'plain string error',
-    );
+    expect(() =>
+      unwrap({ status: 'error', error: 'plain string error' }),
+    ).toThrow('plain string error');
   });
 
   it('passes through Error instances unchanged', () => {
     const err = new Error('native error');
-    expect(() => unwrap({ status: 'error', error: err })).toThrow('native error');
+    expect(() => unwrap({ status: 'error', error: err })).toThrow(
+      'native error',
+    );
   });
 });

@@ -11,7 +11,9 @@ import type { ArtifactSummary } from '@/bindings/index';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-function makeArtifact(overrides: Partial<ArtifactSummary> & { id: string }): ArtifactSummary {
+function makeArtifact(
+  overrides: Partial<ArtifactSummary> & { id: string },
+): ArtifactSummary {
   return {
     projectId: 'proj-1',
     path: `output/${overrides.id}.xisf`,
@@ -41,8 +43,12 @@ describe('groupArtifactsByLaunch', () => {
     const groups = groupArtifactsByLaunch(arts);
 
     expect(groups).toHaveLength(2);
-    expect(groups.find((g) => g.toolLaunchId === 'launch-1')?.artifacts).toHaveLength(2);
-    expect(groups.find((g) => g.toolLaunchId === 'launch-2')?.artifacts).toHaveLength(1);
+    expect(
+      groups.find((g) => g.toolLaunchId === 'launch-1')?.artifacts,
+    ).toHaveLength(2);
+    expect(
+      groups.find((g) => g.toolLaunchId === 'launch-2')?.artifacts,
+    ).toHaveLength(1);
   });
 
   it('places unattributed artifacts in a null bucket at end', () => {
@@ -74,8 +80,16 @@ describe('groupArtifactsByLaunch', () => {
 
   it('sorts artifacts within a group by detectedAt ascending', () => {
     const arts = [
-      makeArtifact({ id: 'later', toolLaunchId: 'l1', detectedAt: '2026-06-01T12:00:00Z' }),
-      makeArtifact({ id: 'earlier', toolLaunchId: 'l1', detectedAt: '2026-06-01T10:00:00Z' }),
+      makeArtifact({
+        id: 'later',
+        toolLaunchId: 'l1',
+        detectedAt: '2026-06-01T12:00:00Z',
+      }),
+      makeArtifact({
+        id: 'earlier',
+        toolLaunchId: 'l1',
+        detectedAt: '2026-06-01T10:00:00Z',
+      }),
     ];
 
     const groups = groupArtifactsByLaunch(arts);
