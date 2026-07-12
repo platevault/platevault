@@ -1430,7 +1430,7 @@ dependencies = [
 
 [[package]]
 name = "desktop_shell"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "app_core",
  "audit",
@@ -5544,9 +5544,9 @@ checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "skymath"
-version = "0.1.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6315a9ee05a1b250fb7562b5a057342352ae7db06dc924ebfe3d0c90506db0d3"
+checksum = "98d582775f713520fed98cc8fd1ecaac9ca87f11447b557c0ab3892bf9af9cbe"
 dependencies = [
  "thiserror 2.0.18",
  "time",
@@ -6146,9 +6146,9 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "target-match"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69f751172247ddff306ab714fbfc3cca07fe919c753b6388a620577d8f7c258c"
+checksum = "5e2e3f70f5c67c7a6fc75a2b0afd4bf22c27228d0e08a76af481a25b8b2e2ec9"
 dependencies = [
  "skymath",
  "thiserror 2.0.18",

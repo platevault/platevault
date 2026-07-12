@@ -29,9 +29,9 @@ hex.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
 sha2.workspace = true
-skymath = "0.1"
+skymath = "0.3"
 sqlx.workspace = true
-target-match = "0.2"
+target-match = "0.3"
 time = { workspace = true }
 tokio.workspace = true
 tracing = { workspace = true }
