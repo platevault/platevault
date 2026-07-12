@@ -57,6 +57,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use crate::caches;
 use crate::errors::bus_err;
 use crate::path_set::PlanPathSet;
 use dashmap::DashMap;
@@ -922,9 +923,27 @@ pub async fn apply_plan(
             // back to `registered_sources` when `library_root` has no row.
             // Without this, inbox `move` plans resolve to bare relative paths
             // and every apply fails with `source.missing`.
+            //
+            // Read-through `caches::library_root` (F0) wraps only the
+            // `registered_sources` fallback, not the legacy `library_root`
+            // table lookup: `invalidate_library_root` is only called from
+            // `first_run.rs`'s writers of `registered_sources` (register /
+            // remap / delete), so caching the legacy-table branch too would
+            // go stale on writes this module never sees.
             let resolved = match inventory_repo::get_library_root_path(pool, rid).await {
                 Ok(Some(path)) => Some(path),
-                _ => first_run_repo::get_source_path(pool, rid).await.ok().flatten(),
+                _ => {
+                    if let Some(cached) = caches::library_root().get(rid) {
+                        Some(cached)
+                    } else {
+                        let loaded =
+                            first_run_repo::get_source_path(pool, rid).await.ok().flatten();
+                        if let Some(path) = &loaded {
+                            caches::library_root().insert(rid.clone(), path.clone());
+                        }
+                        loaded
+                    }
+                }
             };
             if let Some(path) = resolved {
                 root_map.insert(rid.clone(), Utf8PathBuf::from(path));

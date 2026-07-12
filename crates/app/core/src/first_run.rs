@@ -27,6 +27,8 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity, JsonAn
 use persistence_db::repositories::first_run as repo;
 use sqlx::SqlitePool;
 
+use crate::caches;
+
 /// Maximum number of previously-recorded relative paths sampled by
 /// `remap_root` to preview whether they resolve under a candidate new path.
 const REMAP_SAMPLE_LIMIT: i64 = 5;
@@ -147,7 +149,12 @@ pub async fn register_source(
 ) -> Result<RegisterSourceResponse, ContractError> {
     validate_path(&req.path).map_err(|e| *e)?;
     check_duplicate(pool, &req.path, req.kind).await?;
-    repo::register_source(pool, req).await.map_err(db_to_contract)
+    let resp = repo::register_source(pool, req).await.map_err(db_to_contract)?;
+    // Invalidate after commit (F0 contract): a freshly registered id can't
+    // already be cached, but this keeps the write site authoritative if a
+    // removed root's id is ever reused.
+    caches::invalidate_library_root(&resp.source_id);
+    Ok(resp)
 }
 
 /// Change a source's organization state after registration (spec 041, T030).
@@ -277,6 +284,13 @@ pub async fn register_source_batch(
 
     // Sort items by original index for deterministic output.
     items.sort_by_key(|item| item.index);
+
+    // Invalidate after commit (F0 contract) for every newly registered root.
+    for item in items.iter().filter(|i| i.status == ItemStatus::Success) {
+        if let Some(source_id) = &item.source_id {
+            caches::invalidate_library_root(source_id);
+        }
+    }
 
     let success_count = items.iter().filter(|i| i.status == ItemStatus::Success).count();
     let failure_count = items.iter().filter(|i| i.status == ItemStatus::Failure).count();
@@ -478,6 +492,8 @@ pub async fn apply_root_remap(
     validate_path(new_path).map_err(|e| *e)?;
 
     repo::set_source_path(pool, root_id, new_path).await.map_err(db_to_contract)?;
+    // Invalidate after commit (F0 contract) so the next read reloads the new path.
+    caches::invalidate_library_root(root_id);
 
     // Publish audit event (best-effort; do not fail the operation if the bus drops).
     let _ = bus
@@ -569,6 +585,9 @@ pub async fn delete_source(
     }
 
     repo::remove_source(pool, root_id).await.map_err(db_to_contract)?;
+    // Invalidate after commit: the root row (and its path) no longer exists,
+    // so a still-cached path would otherwise resurface for a deleted root.
+    caches::invalidate_library_root(root_id);
 
     let kind_str: &'static str = kind.into();
     let _ = bus

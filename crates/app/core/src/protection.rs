@@ -25,6 +25,9 @@ use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::settings as settings_repo;
 use persistence_db::repositories::source_protection as prot_repo;
 use sqlx::SqlitePool;
+use std::sync::Arc;
+
+use crate::caches;
 
 // ── Error helpers ─────────────────────────────────────────────────────────
 //
@@ -45,6 +48,12 @@ pub(crate) async fn load_global_protection(
     pool: &SqlitePool,
 ) -> Result<GlobalProtection, ContractError> {
     use serde_json::Value;
+
+    // Read-through `caches::protection_defaults` (F0): on a hit, skip the
+    // three-row DB read below entirely.
+    if let Some(cached) = caches::protection_defaults().load() {
+        return Ok((*cached).clone());
+    }
 
     // Prefer protection_defaults table (migration 0035).
     let pd_level = prot_repo::get_protection_default(pool, "global", "defaultProtection")
@@ -83,9 +92,12 @@ pub(crate) async fn load_global_protection(
         _ => vec!["lights".to_owned(), "masters".to_owned(), "finals".to_owned()],
     };
 
-    Ok(GlobalProtection { level, block_permanent_delete, categories })
+    let global = GlobalProtection { level, block_permanent_delete, categories };
+    caches::store_protection_defaults(Arc::new(global.clone()));
+    Ok(global)
 }
 
+#[derive(Clone)]
 pub(crate) struct GlobalProtection {
     pub(crate) level: String,
     pub(crate) block_permanent_delete: bool,
@@ -120,6 +132,10 @@ pub async fn get_source_protection(
             })
         }
         Some(source_id) => {
+            if let Some(cached) = caches::source_protection_state().get(source_id) {
+                return Ok(cached);
+            }
+
             let resolved = prot_repo::resolve_protection(
                 pool,
                 source_id,
@@ -131,13 +147,15 @@ pub async fn get_source_protection(
             .await
             .map_err(db_err)?;
 
-            Ok(SourceProtectionGetResponse {
+            let response = SourceProtectionGetResponse {
                 source_id: Some(source_id.clone()),
                 level: ProtectionLevel::parse_level(&resolved.level),
                 block_permanent_delete: resolved.block_permanent_delete,
                 categories: resolved.categories,
                 inherits_default: resolved.inherits_default,
-            })
+            };
+            caches::source_protection_state().insert(source_id.clone(), response.clone());
+            Ok(response)
         }
     }
 }
@@ -187,6 +205,8 @@ pub async fn set_source_protection(
     )
     .await
     .map_err(db_err)?;
+    // Invalidate after commit (F0 contract) so the next get re-resolves.
+    caches::invalidate_source_protection_state(&req.source_id);
 
     // Emit audit event (T016).
     let at = Timestamp::now_iso();
@@ -236,7 +256,11 @@ pub async fn seed_source_protection(
     let level = if source_kind == "inbox" { "normal" } else { "protected" };
     prot_repo::upsert_source_protection(pool, source_id, level, None, None, "system")
         .await
-        .map_err(db_err)
+        .map_err(db_err)?;
+    // Invalidate after commit (F0 contract): a source is only ever seeded
+    // once, but this keeps re-seed (e.g. re-registration) safe.
+    caches::invalidate_source_protection_state(source_id);
+    Ok(())
 }
 
 // ── US3: plan.protection.check ────────────────────────────────────────────
@@ -423,6 +447,9 @@ pub async fn set_global_protection_default(
         value: contracts_core::JsonAny::from(value),
     };
     crate::settings::update_setting(pool, bus, &req).await?;
+    // Invalidate after commit (F0 contract): all three keys share the single
+    // protection_defaults snapshot, so any of them changing must drop it.
+    caches::invalidate_protection_defaults();
     Ok(())
 }
 
