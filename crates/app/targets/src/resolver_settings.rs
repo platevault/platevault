@@ -65,17 +65,27 @@ fn validate_endpoint(endpoint: &str) -> Result<(), ContractError> {
 }
 
 /// Read the singleton `resolver_settings` row.
+///
+/// Read-through against the settings snapshot ([`crate::caches::resolver_settings`],
+/// in-memory caching layer F0): a cache hit skips the DB round-trip; a miss
+/// loads from SQLite and populates the snapshot.
 async fn read_row(pool: &SqlitePool) -> Result<ResolverSettings, ContractError> {
+    if let Some(cached) = crate::caches::resolver_settings().load() {
+        return Ok((*cached).clone());
+    }
+
     let row = persistence_db::repositories::q_targets_mgmt::get_resolver_settings(pool)
         .await
         .map_err(db_err)?;
 
-    Ok(row.map_or_else(defaults, |r| ResolverSettings {
+    let settings = row.map_or_else(defaults, |r| ResolverSettings {
         online_enabled: r.online_enabled != 0,
         simbad_endpoint: r.simbad_endpoint,
         debounce_ms: u32::try_from(r.debounce_ms.max(0)).unwrap_or(300),
         request_timeout_secs: u32::try_from(r.request_timeout_secs.max(0)).unwrap_or(10),
-    }))
+    });
+    crate::caches::store_resolver_settings(std::sync::Arc::new(settings.clone()));
+    Ok(settings)
 }
 
 /// `target.resolution.settings` (get) — return the current resolver settings.
@@ -128,6 +138,10 @@ pub async fn update(
     .await
     .map_err(db_err)?;
 
+    // Invalidate after the write commits (never before) per the
+    // `SnapshotCache` usage contract.
+    crate::caches::invalidate_resolver_settings();
+
     // Read back so the response reflects exactly what was stored (clamps applied).
     let settings = read_row(pool).await?;
     Ok(ResolverSettingsResponse {
@@ -140,12 +154,13 @@ pub async fn update(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
 
-    async fn setup() -> Database {
-        let db = Database::in_memory().await.expect("in-memory DB");
-        db.migrate().await.expect("migrations");
-        db
+    // Serialized against `target_management`/`target_resolve`/
+    // `target_search` tests: `get`/`update` read/invalidate the shared
+    // resolver-settings `SnapshotCache` (F0), see
+    // `target_management::cache_test_lock` for the full rationale.
+    async fn setup() -> crate::target_management::cache_test_lock::LockedDb {
+        crate::target_management::cache_test_lock::locked_db().await
     }
 
     fn get_req() -> ResolverSettingsGetRequest {
