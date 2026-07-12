@@ -311,6 +311,76 @@ pub async fn search_by_normalized(
     Ok(hits)
 }
 
+/// Rank bucket for a fuzzy (token-set similarity) match — only produced by
+/// [`search_fuzzy`], never by [`search_by_normalized`].
+pub const RANK_FUZZY: u8 = 3;
+
+/// Opt-in fuzzy typeahead: the same exact/prefix/substring ranking as
+/// [`search_by_normalized`], topped up — when short of `limit` — with
+/// token-set-similarity matches at or above `min_score` (clamped to
+/// `0.0..=1.0`), scored via the published `simbad-resolver` crate's
+/// [`simbad_resolver::normalize::token_set_similarity`] and tagged
+/// [`RANK_FUZZY`].
+///
+/// Disabled unless called explicitly: [`search_by_normalized`] itself is
+/// unaffected by this function's existence (matches prior product intent —
+/// fuzzy matching stays opt-in, default off).
+///
+/// Scores every not-yet-matched cached target from the existing gen-3
+/// [`list_all`] batch listing (two queries total, no N+1); only the up-to
+/// `limit - hits.len()` winners are re-hydrated via [`get_by_id`]. Ties break
+/// on the shorter matched alias, then the target's primary designation, for a
+/// deterministic order.
+///
+/// # Errors
+///
+/// Returns [`CacheError::Database`] on query failure, or a parse error on a
+/// corrupt stored value.
+pub async fn search_fuzzy(
+    pool: &SqlitePool,
+    query: &str,
+    limit: usize,
+    min_score: f32,
+) -> CacheResult<Vec<SearchHit>> {
+    let mut hits = search_by_normalized(pool, query, limit).await?;
+    if limit == 0 || hits.len() >= limit || query.trim().is_empty() {
+        return Ok(hits);
+    }
+
+    let min_score = min_score.clamp(0.0, 1.0);
+    let already: std::collections::HashSet<Uuid> = hits.iter().map(|h| h.target.id).collect();
+
+    let rows = list_all(pool).await?;
+    let mut scored: Vec<(f32, usize, TargetListRow, String)> = Vec::new();
+    for row in rows {
+        if already.contains(&row.id) {
+            continue;
+        }
+        let mut best: Option<(f32, String, usize)> = None;
+        for alias in &row.aliases {
+            let score = simbad_resolver::normalize::token_set_similarity(query, alias);
+            if score >= min_score && best.as_ref().is_none_or(|(prev, _, _)| score > *prev) {
+                best = Some((score, alias.clone(), alias.len()));
+            }
+        }
+        if let Some((score, matched_alias, alias_len)) = best {
+            scored.push((score, alias_len, row, matched_alias));
+        }
+    }
+    scored.sort_by(|a, b| {
+        b.0.total_cmp(&a.0)
+            .then(a.1.cmp(&b.1))
+            .then_with(|| a.2.primary_designation.cmp(&b.2.primary_designation))
+    });
+
+    for (_, _, row, matched_alias) in scored.into_iter().take(limit - hits.len()) {
+        if let Some(target) = get_by_id(pool, row.id).await? {
+            hits.push(SearchHit { target, matched_alias, rank: RANK_FUZZY });
+        }
+    }
+    Ok(hits)
+}
+
 // ── Writes ──────────────────────────────────────────────────────────────────
 
 /// Outcome of an [`upsert_resolved`] call.
@@ -935,6 +1005,56 @@ mod tests {
         let rows = list_all(db.pool()).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert!(rows[0].aliases.is_empty(), "aliases must be empty when no alias rows exist");
+    }
+
+    // ── search_fuzzy (opt-in, default off) ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn search_fuzzy_finds_reordered_tokens_exact_search_misses() {
+        let db = setup().await;
+        seeded(&db).await; // M31 "Andromeda Galaxy", M101 "Pinwheel Galaxy"
+
+        // Exact/prefix/substring search for "galaxy andromeda" (reordered
+        // tokens) misses both common names entirely.
+        let exact = search_by_normalized(db.pool(), "galaxy andromeda", 20).await.unwrap();
+        assert!(exact.is_empty(), "exact/prefix/substring must not match reordered tokens");
+
+        // Fuzzy search (token-set similarity) finds M31 via its reordered
+        // common name.
+        let fuzzy = search_fuzzy(db.pool(), "galaxy andromeda", 20, 0.5).await.unwrap();
+        assert!(
+            fuzzy.iter().any(|h| h.target.primary_designation == "M 31" && h.rank == RANK_FUZZY),
+            "fuzzy search must find M 31 via token-set similarity, got {fuzzy:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn search_fuzzy_never_downgrades_an_exact_hit() {
+        let db = setup().await;
+        seeded(&db).await;
+        let hits = search_fuzzy(db.pool(), "M 31", 20, 0.5).await.unwrap();
+        assert_eq!(hits[0].target.primary_designation, "M 31");
+        assert_eq!(hits[0].rank, RANK_EXACT, "an exact hit must stay rank 0, not be re-ranked");
+    }
+
+    #[tokio::test]
+    async fn search_fuzzy_below_min_score_returns_no_fuzzy_tier() {
+        let db = setup().await;
+        seeded(&db).await;
+        // "xyz" shares no tokens with any seeded alias — score 0.0 < any
+        // positive threshold, so no fuzzy hits are added.
+        let hits = search_fuzzy(db.pool(), "xyz", 20, 0.1).await.unwrap();
+        assert!(hits.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_fuzzy_is_opt_in_plain_search_unaffected() {
+        let db = setup().await;
+        seeded(&db).await;
+        // Calling search_fuzzy elsewhere in the suite must not change
+        // search_by_normalized's own behaviour (no shared mutable state).
+        let plain = search_by_normalized(db.pool(), "galaxy andromeda", 20).await.unwrap();
+        assert!(plain.is_empty(), "search_by_normalized must stay exact/prefix/substring only");
     }
 
     #[tokio::test]
