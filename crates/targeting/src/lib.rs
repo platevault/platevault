@@ -5,7 +5,13 @@
 //! - [`normalize`]: query normalization pipeline (casefold, NFKC, prefix expansion).
 //! - [`identity`]: deterministic UUIDv5 generation for `canonical_target.id`.
 //! - [`coords`]: coordinate-based nearest-neighbour target resolution
-//!   (haversine separation + FOV-aware radius + ranking; spec 041 R-17/R-18).
+//!   (haversine separation + FOV-aware radius + ranking; spec 041 R-17/R-18),
+//!   now built on the `target-match` crate's coordinate primitives.
+//!
+//! `Angle`, `Equatorial`, `Epoch`, and `separation` are re-exported from
+//! `target_match` so downstream crates get one coordinate-primitive dependency
+//! (via `targeting`) rather than each pulling `target-match` directly for basic
+//! RA/Dec/angle types.
 //!
 //! The on-demand SIMBAD resolver, the SQLite resolution cache, and the
 //! bundled-seed loader (spec 035) live in the sibling `targeting_resolver`
@@ -20,6 +26,8 @@
 pub mod coords;
 pub mod identity;
 pub mod normalize;
+
+pub use target_match::{separation, Angle, Epoch, Equatorial};
 
 pub const CRATE_NAME: &str = "targeting";
 

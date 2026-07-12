@@ -3325,6 +3325,7 @@ name = "metadata_core"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "target-match",
  "thiserror 2.0.18",
 ]
 
@@ -6124,9 +6125,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
+name = "target-match"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05219dd320ebd25f9a1e09aa481a44946239b1491fe81486747e388f5d097398"
+dependencies = [
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "targeting"
 version = "0.1.0"
 dependencies = [
+ "target-match",
  "unicode-normalization",
  "uuid",
 ]

@@ -309,55 +309,44 @@ pub struct RawFileMetadata {
 /// `"18 10 38"` or `"5 34 57.984"`) into decimal **degrees**.
 ///
 /// RA is expressed in hours; the result is multiplied by 15 (360° / 24h).
-/// Separators may be spaces or colons. Returns `None` for unparseable input.
+/// Separators may be spaces or colons. Returns `None` for unparseable input,
+/// or when the parsed value is outside the RA domain (`[0, 360)`).
+///
+/// Delegates the sexagesimal→decimal conversion to
+/// `target_match::Equatorial::parse` (a paired call with a `"0"` Dec
+/// sentinel, since that constructor validates RA and Dec together). FITS/XISF
+/// header values are frequently single-quoted; that quoting is stripped here
+/// before parsing, since `target_match` treats quote characters as part of
+/// the token (a FITS-specific tolerance, not a general coordinate concern).
 #[must_use]
 pub fn sexagesimal_ra_to_deg(raw: &str) -> Option<f64> {
-    let hours = sexagesimal_to_units(raw)?;
-    Some(hours * 15.0)
+    let cleaned = strip_fits_quotes(raw)?;
+    target_match::Equatorial::parse(cleaned, "0", target_match::Epoch::J2000)
+        .ok()
+        .map(|e| e.ra().degrees())
 }
 
 /// Parse a sexagesimal declination string in `±D M S` form (e.g.
 /// `"-15 01 11"` or `"+0 00 00.00"`) into decimal **degrees**.
 ///
 /// A leading `-` on the degrees field applies to the whole value.
-/// Separators may be spaces or colons. Returns `None` for unparseable input.
+/// Separators may be spaces or colons. Returns `None` for unparseable input,
+/// or when the parsed value is outside the Dec domain (`[-90, 90]`).
+///
+/// See [`sexagesimal_ra_to_deg`] for the shared parsing/quoting approach.
 #[must_use]
 pub fn sexagesimal_dec_to_deg(raw: &str) -> Option<f64> {
-    sexagesimal_to_units(raw)
+    let cleaned = strip_fits_quotes(raw)?;
+    target_match::Equatorial::parse("0", cleaned, target_match::Epoch::J2000)
+        .ok()
+        .map(|e| e.dec().degrees())
 }
 
-/// Shared sexagesimal parser: `D M S` (or `H M S`) → fractional units, sign
-/// taken from the first field. Minutes/seconds are optional.
-fn sexagesimal_to_units(raw: &str) -> Option<f64> {
+/// Strip surrounding whitespace and a single layer of FITS single-quoting
+/// (`'...'`) from a header value string. Returns `None` for empty input.
+fn strip_fits_quotes(raw: &str) -> Option<&str> {
     let trimmed = raw.trim().trim_matches('\'').trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    // Normalise colon separators to spaces, then split on whitespace.
-    let normalised = trimmed.replace(':', " ");
-    let mut parts = normalised.split_whitespace();
-
-    let deg_str = parts.next()?;
-    let negative = deg_str.starts_with('-');
-    let deg: f64 = deg_str.parse().ok()?;
-    let deg_abs = deg.abs();
-
-    let min: f64 = match parts.next() {
-        Some(s) => s.parse().ok()?,
-        None => 0.0,
-    };
-    let sec: f64 = match parts.next() {
-        Some(s) => s.parse().ok()?,
-        None => 0.0,
-    };
-
-    if min < 0.0 || sec < 0.0 {
-        return None;
-    }
-
-    let magnitude = deg_abs + min / 60.0 + sec / 3600.0;
-    Some(if negative { -magnitude } else { magnitude })
+    (!trimmed.is_empty()).then_some(trimmed)
 }
 
 /// Parse a decimal value from a FITS/XISF value string, tolerating a trailing
