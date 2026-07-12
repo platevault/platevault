@@ -10,9 +10,18 @@ path = "src/lib.rs"
 # spec 042 (T250): the SIMBAD on-demand resolver, the SQLite resolution cache,
 # and the bundled-seed loader were split out of the (now pure) `targeting`
 # crate into this crate so the heavy async/network/db dependency surface
-# (sqlx + reqwest + tokio + async-trait) no longer infects pure catalog
-# consumers. Public function/type names are unchanged — only the crate boundary
-# moved (`targeting::resolver::X` → `targeting_resolver::X`).
+# (sqlx + async-trait) no longer infects pure catalog consumers. Public
+# function/type names are unchanged — only the crate boundary moved
+# (`targeting::resolver::X` → `targeting_resolver::X`).
+#
+# Adopted the published `simbad-resolver` crate (nightwatch-astro org, same
+# author) as the TAP/Sesame network client + Caldwell map + normalize/fuzzy
+# helpers: `simbad.rs` is now a thin adapter over its `TapResolver`, dropping
+# this crate's own `reqwest`/`csv`/`percent-encoding` dependencies. Identity
+# storage is UNCHANGED — `canonical_target`/`target_alias` stay in SQLite,
+# FK-joined by `projects`/`acquisition_session`/`target_favourites` outside
+# this crate (constitution §V; spec-051 keeps the resolver's own SQLite cache,
+# not the upstream crate's redb store).
 
 [dependencies]
 # Pure catalog primitives (normalization + UUIDv5 identity) live in the base
@@ -25,26 +34,24 @@ sqlx.workspace = true
 thiserror.workspace = true
 tracing = { workspace = true }
 uuid = { version = "1", features = ["serde", "v4", "v5"] }
-# spec 035 (SIMBAD resolver): async HTTP client for SIMBAD TAP/Sesame.
-# reqwest 0.13 uses default-features = false + ["json", "rustls"] (no openssl);
-# the `rustls-tls` feature was renamed to `rustls` in 0.13. tokio provides the
-# async runtime for the client.
-reqwest = { workspace = true }
-tokio = { workspace = true }
 # spec 035 (SIMBAD resolver): async trait seam for the `Resolver` trait,
 # mirroring the retired `download::CatalogFetcher` pattern.
 async-trait.workspace = true
 # spec 035 (resolution cache): RFC-3339 `resolved_at` timestamps, matching the
 # `persistence_db` repositories' time convention.
 time.workspace = true
-# spec 042 (T200): percent-encode the ADQL URL query (reqwest is built with
-# `default-features = false`, so the high-level query builder is unavailable).
-percent-encoding.workspace = true
-# spec 042 (T204): RFC-4180 TSV tokenization of SIMBAD `basic` rows.
-csv.workspace = true
 # db-boundary-zero: production dependency (not dev-only) so cache.rs's raw
 # sqlx sites can move into `persistence_db::repositories::q_resolver`.
 persistence_db = { path = "../../persistence/db" }
+# Published SIMBAD TAP client + Caldwell map + normalize/fuzzy helpers (see
+# crate doc above). Same author/org as this workspace's own CI app.
+simbad-resolver = "0.1.3"
+
+[dev-dependencies]
+# `#[tokio::test]` only — no production `tokio` usage in this crate (the
+# `simbad-resolver` dependency brings its own async runtime requirement for
+# `TapResolver`).
+tokio = { workspace = true }
 
 [features]
 # Enables the seeded in-memory test fixture (FakeResolver) for use in
