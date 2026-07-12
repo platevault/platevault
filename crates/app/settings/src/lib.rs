@@ -300,6 +300,11 @@ pub async fn get_settings(
     pool: &SqlitePool,
     bus: &EventBus,
 ) -> Result<SettingsGetResponse, ContractError> {
+    // Read-through: on hit, skip the DB entirely (F0 in-memory caching layer).
+    if let Some(cached) = caches::settings_bag().load() {
+        return Ok(SettingsGetResponse { settings: (*cached).clone() });
+    }
+
     let all_raw = repo::get_all_raw(pool).await.map_err(db_err)?;
     let mut settings = SettingsState::default();
 
@@ -332,6 +337,7 @@ pub async fn get_settings(
         apply_value_to_state(&key, value, &mut settings);
     }
 
+    caches::store_settings_bag(std::sync::Arc::new(settings.clone()));
     Ok(SettingsGetResponse { settings })
 }
 
@@ -448,6 +454,17 @@ pub async fn update_setting(
         repo::set_raw(pool, key, new_value).await.map_err(db_err)?;
     }
 
+    // Cache invalidation fan-out (F0 in-memory caching layer): fires only
+    // after the write above has committed, never before. `protection_defaults`
+    // was relocated to the `app_core_cache` leaf (crates/app/cache/src/lib.rs:337-343)
+    // precisely so this crate can invalidate it without depending on `app_core`
+    // (which itself depends on `app_core_settings`).
+    caches::invalidate_settings_bag();
+    app_core_calibration::caches::invalidate_calibration_config();
+    if is_protection_default {
+        app_core_cache::invalidate_protection_defaults();
+    }
+
     // 6. Emit audit event. Global protection-default keys ALWAYS emit
     // `protection.default.changed` (T-004), overriding the noisy-key
     // no-audit policy — `protectedCategories` is `noisy` for the generic
@@ -540,6 +557,7 @@ pub async fn restore_defaults(
 
     let mut restored = Vec::new();
     let mut already_at_default = Vec::new();
+    let mut restored_protection_default = false;
 
     for key in &keys_to_restore {
         let default_val = default_value_for_key(key);
@@ -606,6 +624,19 @@ pub async fn restore_defaults(
         }
 
         restored.push(key.clone());
+        if is_protection_default {
+            restored_protection_default = true;
+        }
+    }
+
+    // Cache invalidation fan-out: one shot after the loop (not per-key) since
+    // both snapshots are single-slot whole-bag caches.
+    if !restored.is_empty() {
+        caches::invalidate_settings_bag();
+        app_core_calibration::caches::invalidate_calibration_config();
+        if restored_protection_default {
+            app_core_cache::invalidate_protection_defaults();
+        }
     }
 
     let status = if restored.is_empty() {
@@ -649,6 +680,13 @@ pub async fn set_source_override(
     validate_value(key, value)?;
 
     repo::set_source_override(pool, &req.source_id, key, value).await.map_err(db_err)?;
+
+    // `get_settings`'s bag is global-only (no source_id), so a per-source
+    // override never actually changes it; invalidating anyway is a cheap,
+    // safe no-op that keeps this write site consistent with the other two.
+    // Unlike `update_setting`/`restore_defaults`, no calibration/protection
+    // global key is ever written on this path, so no further fan-out applies.
+    caches::invalidate_settings_bag();
 
     Ok(SetSourceOverrideResponse { source_id: req.source_id.clone(), key: key.clone() })
 }
@@ -851,6 +889,11 @@ mod tests {
     }
 
     async fn setup() -> (Database, EventBus) {
+        // SETTINGS_BAG is a process-global single-slot cache (F0); each test
+        // gets its own in-memory DB, so a stale cross-test snapshot would
+        // silently serve another test's data. Mirrors the same caveat/fix in
+        // `app_core_cache`'s `protection_defaults_*` test (crates/app/cache/src/lib.rs).
+        caches::invalidate_settings_bag();
         let db = Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         let bus = EventBus::with_pool(db.pool().clone());
