@@ -173,3 +173,115 @@ Ground truth for this product's desk: PixInsight occupies the primary monitor du
 2. **Phase 1 — adaptive dock:** detail panel docks right when window ≥ ~1500px logical, bottom below; user-overridable per page, persisted, with a drag-resizable split. This alone makes the list+detail pattern work at every size the app actually runs at.
 3. **Phase 2 — pop-out windows for monitoring surfaces (highest multi-window value, lowest complexity):** Activity log and plan-apply progress as independent OS windows ("Open view in new window" already exists as a palette action). The user approves/monitors a long apply on one screen while browsing the library on another. Same candidate: a compact "Tonight" planner strip for capture nights (always-on-top, ~360×640).
 4. **Phase 3 — don't do generalized multi-window workspaces.** Per-project multi-window adds session-management complexity the audience doesn't need; the single main window + two pop-outs covers the real desk. Revisit only if Phase 2 telemetry shows people juggling both pop-outs constantly.
+
+---
+
+# Second addendum (2026-07-12): untouched-controls discovery sweeps
+
+Three serial interactive sweeps drove the live Windows build
+(`redesign-ui-platevault` @ `8097d9c6`) over the Tauri MCP bridge, covering
+every interactive control the journey campaign had not touched. Result:
+**32 new issues (#639–#670**, label `spec-030`, epic #632), 17 existing
+issues re-confirmed with fresh evidence, and one existing issue refuted.
+
+## Sweep A — Settings (all 12 panes)
+
+Issues: #639 (Calibration Matching pane persists nothing — payload/contract
+type mismatch, P1), #640 (ConfirmOverlay confirm dialogs unstyled app-wide,
+P1), #641 (Cleanup per-type overrides write but can never be read back,
+P1), #645 (Default Catalogues toggles dead, P1), #646 (per-source override
+widget invalid values for 2/3 keys; write-only), #647 (durable audit log
+misses EventBus-only action classes), #655 (naming preview casing mismatch
+→ `frame_type` renders "unknown" on the default pattern), #656 (path edit
+silently re-enables a disabled tool), #657 (protection override
+irreversible — no inherit-clear command), #659 (equipment duplicate
+names/aliases accepted silently), #661 (train-form error text = bare field
+label), #662 (no manual path entry anywhere — DirPicker native-picker-only).
+
+**#558 refuted** on this build: Disable → confirm → `sources_set_active` →
+card/backend agree, Enable restores. Recommend closing #558.
+
+## Sweep B — Inbox / Sessions / Calibration
+
+Issues: #642 (MasterDetail "Use in project" / "Replace master" / Reveal
+have no onClick at all, P1), #643 (per-file metadata intermittently never
+loads — Confirm gate silently enabled on items the backend would refuse,
+P1), #644 (positional selection: detail swaps identity when search
+changes), #648 (destination-root pick leaks across items and shows "Auto"
+while a stale root stays armed), #649 (Format column sorts by hidden format
+tag), #650 (Sessions linked-project chip drops the project id), #651
+(Sessions reveal opens the source root, not the session folder), #652
+(session count: chrome 3 vs table 4), #653 (list/detail file-count
+disagreement), #654 (indistinguishable "Session — date" rows).
+
+## Sweep C — Targets / Projects / palette / log panel
+
+Issues: #658 (target detail mutations never refresh the list — user
+aliases unsearchable, labels don't propagate), #660 (project Edit pane
+hijacks the whole window; no dialog semantics, no Escape), #663 (project
+Sources render raw session UUIDs), #664 (raw code
+`match.observer_location_missing` leaks — backend prefix vs frontend bare
+switch), #665 (manifests never generated: only the workflow-run subscriber
+is wired), #666 (log category/source filter has state but no UI), #667
+(Activity export dialog titled "Export Audit Log"), #668 (activity log
+drowned by periodic internal events), #669 (filtered-empty vs truly-empty
+states indistinguishable — Calibration search + log panel), #670
+(cosmetics batch: stepper enum literals, "1 targets" plural, source-view
+dialog styling, mixed path separators, duplicated empty-state copy).
+
+## Fresh evidence for existing issues (comments pending)
+
+Posting comments on pre-existing issues was denied by session permission
+policy, so the evidence is recorded here:
+
+- **#556** — "(root)" in ~100+ root-level Detection cells (InboxList.tsx:362).
+- **#557** — still live: ~1,458 console lines/10 min and 3,122 errors/90 min
+  idle on Inbox; user-facing consequence tracked in #643.
+- **#581** — palette still completely unstyled (zero `.alm-palette` rules);
+  functionality intact incl. "Open view in new window".
+- **#587** — nuance: density persists and sets `--alm-row-height`, but only
+  the Targets table rows + wizard steps consume it; font-size is fully dead
+  (component-local state).
+- **#601 / #602** — confirmed live (console.log no-ops; static DB info panel).
+- **#603** — 0-item archive plan offered for "Approve & apply" with no
+  explanation; no toast after Discard.
+- **#604** — new members: Rescan, override Set, Re-detect, Restart guided
+  flow, silent audit-export download.
+- **#612** — re-confirmed via "+ New project here": wizard opens with no
+  target fact.
+- **#617** — palette still lists dead routes `/review` `/plans` `/audit`;
+  not-found fallback silently bounces to index (router.tsx:298).
+- **#620** — new members: SessionDetail FITS pills on em-dash values;
+  MasterDetail fake zeros ("Gain 0 / 0s / 0 KB").
+- **#623 / #624** — confirmed; reset-key lists enumerated in the sweep.
+- **#625** — status bar shows "Dark_flat 1 · Darkflat 6" simultaneously
+  (bucketKey lowercases only; inboxStatsFromItems.ts:29).
+- **#626** — per-kind: project rows land unselected; plan rows land on
+  Sessions via `/plans/<id>` → not-found; target rows have no link at all.
+- **#628** — extended: disabled inputs indistinguishable (endpoint/timeout);
+  "Apply remap" and "Apply selected (0)" disabled-but-primary.
+- **#631** — new members: raw 7-digit-fraction ISO timestamps on source
+  cards; MastersTable missing the grouped-by hint footer; History dates via
+  `toLocaleDateString()`.
+
+## Journey coverage updates
+
+`docs/product/user-journeys.md` extended with sweep-derived Touch &
+validate items on Journeys 2, 5, 8, 9, 10, 13, 15, 16, plus a new
+**Journey 17 — Software update & install** (spec 051). Notable new
+contracts: a metadata-load failure must disable Confirm (J2);
+identity-based (never positional) selection (J2); every manifest reason
+appends a snapshot (J5); source views produce reviewable plans (J5);
+rendered-but-handlerless buttons fail the run (J8); list freshness after
+identity edits (J9); filtered-empty must read differently from truly-empty
+(J8/J13).
+
+## Driving-mechanics updates (supersede part of the 2026-07-11 handover)
+
+- WSL runs in **mirrored** networking mode now: the bridge host is
+  `127.0.0.1:9223`. `172.20.10.1` is the LAN router today, not the Windows
+  host.
+- Synthetic hotkey `KeyboardEvent`s must be dispatched on `document.body` —
+  tinykeys crashes on `window`/`document` targets.
+- Never `WM_CLOSE` unfiltered top-level HWNDs of the app process: WebView2
+  hosts enumerate as top-level and closing one kills the renderer.
