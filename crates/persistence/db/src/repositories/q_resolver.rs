@@ -48,14 +48,6 @@ pub struct AliasRow {
     pub kind: String,
 }
 
-/// A `target_alias` row matched during typeahead search.
-#[derive(Debug, Clone, sqlx::FromRow)]
-pub struct AliasSearchRow {
-    pub target_id: String,
-    pub alias: String,
-    pub normalized: String,
-}
-
 /// Flat row for the gen-3 `target.list` surface (no aliases — see
 /// [`list_all_target_aliases`] for the batched alias pass).
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -158,33 +150,6 @@ pub async fn select_aliases_for_target(
          ORDER BY alias ASC",
     )
     .bind(target_id)
-    .fetch_all(pool)
-    .await?;
-    Ok(rows)
-}
-
-/// Fetch candidate `(target_id, alias, normalized)` rows for typeahead search:
-/// `normalized LIKE pattern ESCAPE '\'`, ordered by length then alphabetically,
-/// capped at `fetch_cap`. Ranking/dedup across matched aliases is decided by
-/// the caller (`targeting_resolver::cache::search_by_normalized`).
-///
-/// # Errors
-///
-/// Returns [`crate::DbError::Database`] on query failure.
-pub async fn search_aliases_by_pattern(
-    pool: &SqlitePool,
-    pattern: &str,
-    fetch_cap: i64,
-) -> DbResult<Vec<AliasSearchRow>> {
-    let rows = sqlx::query_as::<_, AliasSearchRow>(
-        "SELECT target_id, alias, normalized
-         FROM target_alias
-         WHERE normalized LIKE ? ESCAPE '\\'
-         ORDER BY LENGTH(normalized) ASC, normalized ASC
-         LIMIT ?",
-    )
-    .bind(pattern)
-    .bind(fetch_cap)
     .fetch_all(pool)
     .await?;
     Ok(rows)
@@ -380,7 +345,8 @@ pub async fn find_existing_by_id_conn(
 /// Update an existing `canonical_target` row in place (keeps `id`, preserving
 /// FK targets). `display_alias` is intentionally NOT touched — it is
 /// user-owned and must never be overwritten by a re-resolution or seed load
-/// (FR-012).
+/// (FR-012). `constellation`/`magnitude` are the spec-052 P1 enrichment
+/// (`NULL`-tolerant — never fabricated when the caller passes `None`).
 ///
 /// # Errors
 ///
@@ -396,6 +362,8 @@ pub async fn update_canonical_target_conn(
     dec_deg: f64,
     source: &str,
     resolved_at: &str,
+    constellation: Option<&str>,
+    magnitude: Option<f64>,
 ) -> DbResult<()> {
     sqlx::query(
         "UPDATE canonical_target SET
@@ -405,7 +373,9 @@ pub async fn update_canonical_target_conn(
              ra_deg              = ?,
              dec_deg             = ?,
              source              = ?,
-             resolved_at         = ?
+             resolved_at         = ?,
+             constellation       = ?,
+             magnitude           = ?
          WHERE id = ?",
     )
     .bind(simbad_oid)
@@ -415,13 +385,17 @@ pub async fn update_canonical_target_conn(
     .bind(dec_deg)
     .bind(source)
     .bind(resolved_at)
+    .bind(constellation)
+    .bind(magnitude)
     .bind(id)
     .execute(&mut *conn)
     .await?;
     Ok(())
 }
 
-/// Insert a brand-new `canonical_target` row.
+/// Insert a brand-new `canonical_target` row. `constellation`/`magnitude` are
+/// the spec-052 P1 enrichment (`NULL`-tolerant — never fabricated when the
+/// caller passes `None`).
 ///
 /// # Errors
 ///
@@ -437,11 +411,13 @@ pub async fn insert_canonical_target_conn(
     dec_deg: f64,
     source: &str,
     resolved_at: &str,
+    constellation: Option<&str>,
+    magnitude: Option<f64>,
 ) -> DbResult<()> {
     sqlx::query(
         "INSERT INTO canonical_target
-             (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+             (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at, constellation, magnitude)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(id)
     .bind(simbad_oid)
@@ -451,6 +427,8 @@ pub async fn insert_canonical_target_conn(
     .bind(dec_deg)
     .bind(source)
     .bind(resolved_at)
+    .bind(constellation)
+    .bind(magnitude)
     .execute(&mut *conn)
     .await?;
     Ok(())

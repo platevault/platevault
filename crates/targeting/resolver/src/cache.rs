@@ -13,8 +13,16 @@
 //! repository's flat rows and this crate's domain types. Identities are
 //! written to `canonical_target` / `target_alias` (migration 0031).
 //!
-//! Typeahead prefix/substring search over `target_alias.normalized` is NOT
-//! implemented here — that is T010 (US1).
+//! Typeahead/search moved to the `simbad-resolver` facade's redb cache (spec
+//! 052 P1 D1) — this module is now the durable read/write surface for
+//! already-adopted (in-use) targets only.
+//!
+//! Writes here are the in-use "promote from cache" commit points (FR-004):
+//! favourite, session-link (ingest), manual override, and project-create.
+//! Every write enriches `magnitude` (from `ResolvedIdentity.v_mag`) and
+//! `constellation` (IAU constellation-from-coordinates via skymath 0.3) —
+//! spec 052 P1 D8 — never fabricated: both stay `NULL` when the source lacks
+//! them or the coordinates are out of range.
 
 use domain_core::ids::Timestamp;
 use persistence_db::repositories::q_resolver;
@@ -23,6 +31,18 @@ use uuid::Uuid;
 
 use crate::{AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource};
 use targeting::identity::target_id_from_designation;
+
+/// IAU constellation abbreviation (e.g. `"And"`) for `(ra_deg, dec_deg)`, or
+/// `None` when the coordinates are out of the valid ICRS J2000 range (never
+/// fabricated — spec 052 P1 D8, INV-4).
+fn constellation_abbreviation(ra_deg: f64, dec_deg: f64) -> Option<String> {
+    let eq = skymath::Equatorial::j2000(
+        skymath::Angle::from_degrees(ra_deg),
+        skymath::Angle::from_degrees(dec_deg),
+    )
+    .ok()?;
+    Some(skymath::constellation(eq).abbreviation().to_owned())
+}
 
 // ── Error ───────────────────────────────────────────────────────────────────────
 
@@ -190,196 +210,15 @@ pub async fn get_by_normalized(
     }
 }
 
-// ── Typeahead search (T010, US1) ────────────────────────────────────────────
-
-/// A single typeahead search hit: the matched canonical target plus the alias
-/// that matched and its rank bucket. Ranked best-first by [`search_by_normalized`].
-#[derive(Clone, Debug, PartialEq)]
-pub struct SearchHit {
-    /// The matched canonical target (with all its aliases loaded).
-    pub target: CachedTarget,
-    /// The display form of the alias that matched the query.
-    pub matched_alias: String,
-    /// Rank bucket: `0` = exact normalized, `1` = prefix, `2` = substring.
-    pub rank: u8,
-}
-
-const RANK_EXACT: u8 = 0;
-const RANK_PREFIX: u8 = 1;
-const RANK_SUBSTRING: u8 = 2;
-
-/// The best matching alias seen so far for one target during search dedup.
-struct Best {
-    alias: String,
-    normalized_len: usize,
-    rank: u8,
-}
-
-impl Best {
-    /// A lower rank wins; ties break on the shorter matched alias.
-    fn is_better_than(&self, other: &Self) -> bool {
-        (self.rank, self.normalized_len) < (other.rank, other.normalized_len)
-    }
-}
-
-/// Typeahead search over `target_alias.normalized` (the indexed column),
-/// returning distinct canonical targets ranked best-first.
-///
-/// The incoming `query` is normalized via [`targeting::normalize::normalize`] so it
-/// matches the stored `normalized` values. Matching is:
-/// - exact normalized (`normalized = q`) → rank 0,
-/// - prefix (`normalized LIKE 'q%'`) → rank 1,
-/// - substring (`normalized LIKE '%q%'`) → rank 2.
-///
-/// Results are de-duplicated so one canonical target appears once even if
-/// several of its aliases match (its best-ranked alias wins; ties break on the
-/// shortest matched alias then designation). The list is capped at `limit`.
-///
-/// An empty/blank query returns an empty list. This is the local seed+cache
-/// surface only — no network (constitution / FR-005).
-///
-/// # Errors
-///
-/// Returns [`CacheError::Database`] on query failure, or a parse error on a
-/// corrupt stored value.
-pub async fn search_by_normalized(
-    pool: &SqlitePool,
-    query: &str,
-    limit: usize,
-) -> CacheResult<Vec<SearchHit>> {
-    let q = targeting::normalize::normalize(query);
-    if q.is_empty() || limit == 0 {
-        return Ok(Vec::new());
-    }
-
-    // Substring match covers prefix and exact; rank/dedup is decided in Rust.
-    // Escape LIKE metacharacters in the user query so they match literally.
-    let escaped = q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
-    let pattern = format!("%{escaped}%");
-
-    // Fetch candidate (target_id, alias, normalized) rows. We over-fetch a
-    // bounded multiple of `limit` so dedup across aliases still fills the page;
-    // ordering by normalized length favours tighter matches before the cap.
-    let fetch_cap = i64::try_from((limit.saturating_mul(8)).clamp(limit, 2000)).unwrap_or(2000);
-    let rows = q_resolver::search_aliases_by_pattern(pool, &pattern, fetch_cap).await?;
-
-    // Pick the best (lowest rank, then shortest alias) hit per target_id.
-    let mut best_by_target: std::collections::HashMap<String, Best> =
-        std::collections::HashMap::new();
-    for row in rows {
-        let (target_id, alias, normalized) = (row.target_id, row.alias, row.normalized);
-        let rank = if normalized == q {
-            RANK_EXACT
-        } else if normalized.starts_with(&q) {
-            RANK_PREFIX
-        } else {
-            RANK_SUBSTRING
-        };
-        let candidate = Best { alias, normalized_len: normalized.len(), rank };
-        match best_by_target.entry(target_id) {
-            std::collections::hash_map::Entry::Occupied(mut e) => {
-                if candidate.is_better_than(e.get()) {
-                    e.insert(candidate);
-                }
-            }
-            std::collections::hash_map::Entry::Vacant(e) => {
-                e.insert(candidate);
-            }
-        }
-    }
-
-    // Sort target ids by (rank, alias length, alias) for a stable best-first order.
-    let mut ranked: Vec<(String, Best)> = best_by_target.into_iter().collect();
-    ranked.sort_by(|(_, a), (_, b)| {
-        (a.rank, a.normalized_len, a.alias.as_str()).cmp(&(
-            b.rank,
-            b.normalized_len,
-            b.alias.as_str(),
-        ))
-    });
-    ranked.truncate(limit);
-
-    // Hydrate each winning target (load its full row + aliases).
-    let mut hits = Vec::with_capacity(ranked.len());
-    for (target_id, best) in ranked {
-        let uuid = Uuid::parse_str(&target_id)
-            .map_err(|e| CacheError::InvalidUuid(target_id.clone(), e))?;
-        if let Some(target) = get_by_id(pool, uuid).await? {
-            hits.push(SearchHit { target, matched_alias: best.alias, rank: best.rank });
-        }
-    }
-    Ok(hits)
-}
-
-/// Rank bucket for a fuzzy (token-set similarity) match — only produced by
-/// [`search_fuzzy`], never by [`search_by_normalized`].
-pub const RANK_FUZZY: u8 = 3;
-
-/// Opt-in fuzzy typeahead: the same exact/prefix/substring ranking as
-/// [`search_by_normalized`], topped up — when short of `limit` — with
-/// token-set-similarity matches at or above `min_score` (clamped to
-/// `0.0..=1.0`), scored via the published `simbad-resolver` crate's
-/// [`simbad_resolver::normalize::token_set_similarity`] and tagged
-/// [`RANK_FUZZY`].
-///
-/// Disabled unless called explicitly: [`search_by_normalized`] itself is
-/// unaffected by this function's existence (matches prior product intent —
-/// fuzzy matching stays opt-in, default off).
-///
-/// Scores every not-yet-matched cached target from the existing gen-3
-/// [`list_all`] batch listing (two queries total, no N+1); only the up-to
-/// `limit - hits.len()` winners are re-hydrated via [`get_by_id`]. Ties break
-/// on the shorter matched alias, then the target's primary designation, for a
-/// deterministic order.
-///
-/// # Errors
-///
-/// Returns [`CacheError::Database`] on query failure, or a parse error on a
-/// corrupt stored value.
-pub async fn search_fuzzy(
-    pool: &SqlitePool,
-    query: &str,
-    limit: usize,
-    min_score: f32,
-) -> CacheResult<Vec<SearchHit>> {
-    let mut hits = search_by_normalized(pool, query, limit).await?;
-    if limit == 0 || hits.len() >= limit || query.trim().is_empty() {
-        return Ok(hits);
-    }
-
-    let min_score = min_score.clamp(0.0, 1.0);
-    let already: std::collections::HashSet<Uuid> = hits.iter().map(|h| h.target.id).collect();
-
-    let rows = list_all(pool).await?;
-    let mut scored: Vec<(f32, usize, TargetListRow, String)> = Vec::new();
-    for row in rows {
-        if already.contains(&row.id) {
-            continue;
-        }
-        let mut best: Option<(f32, String, usize)> = None;
-        for alias in &row.aliases {
-            let score = simbad_resolver::normalize::token_set_similarity(query, alias);
-            if score >= min_score && best.as_ref().is_none_or(|(prev, _, _)| score > *prev) {
-                best = Some((score, alias.clone(), alias.len()));
-            }
-        }
-        if let Some((score, matched_alias, alias_len)) = best {
-            scored.push((score, alias_len, row, matched_alias));
-        }
-    }
-    scored.sort_by(|a, b| {
-        b.0.total_cmp(&a.0)
-            .then(a.1.cmp(&b.1))
-            .then_with(|| a.2.primary_designation.cmp(&b.2.primary_designation))
-    });
-
-    for (_, _, row, matched_alias) in scored.into_iter().take(limit - hits.len()) {
-        if let Some(target) = get_by_id(pool, row.id).await? {
-            hits.push(SearchHit { target, matched_alias, rank: RANK_FUZZY });
-        }
-    }
-    Ok(hits)
-}
+// ── Typeahead search ─────────────────────────────────────────────────────────
+//
+// Spec 052 P1 (D1): the hand-rolled SQLite `search_by_normalized`/
+// `search_fuzzy` typeahead were replaced by the `simbad-resolver` facade's own
+// `SimbadResolver::search()` over the shared redb cache (see
+// `crate::simbad::SimbadResolver::search`); pure search/typeahead no longer
+// touches SQLite at all (FR-004/SC-002 — browsing never writes
+// `canonical_target`). `targeting_resolver::cache` keeps only the durable
+// read/write surface for already-adopted (in-use) targets.
 
 // ── Writes ──────────────────────────────────────────────────────────────────
 
@@ -504,6 +343,11 @@ pub async fn upsert_resolved_conn(
     let derived = derived_id(&identity.primary_designation).to_string();
     let existing = find_existing(&mut *conn, identity, &derived).await?;
     let resolved_at = Timestamp::now_iso();
+    // Enrichment (spec 052 P1 T014, D8): computed once per write, never
+    // fabricated (constellation stays None on an out-of-range coordinate;
+    // magnitude stays None when the source has no V photometry).
+    let constellation = constellation_abbreviation(identity.ra_deg, identity.dec_deg);
+    let magnitude = identity.v_mag;
 
     match existing {
         Some(row) if !identity.source.may_overwrite(row.source) => {
@@ -526,6 +370,8 @@ pub async fn upsert_resolved_conn(
                 identity.dec_deg,
                 identity.source.as_wire(),
                 &resolved_at,
+                constellation.as_deref(),
+                magnitude,
             )
             .await?;
             write_aliases(&mut *conn, &row.id, &identity.aliases).await?;
@@ -544,6 +390,8 @@ pub async fn upsert_resolved_conn(
                 identity.dec_deg,
                 identity.source.as_wire(),
                 &resolved_at,
+                constellation.as_deref(),
+                magnitude,
             )
             .await?;
             write_aliases(&mut *conn, &derived, &identity.aliases).await?;
@@ -723,6 +571,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: None,
             aliases: vec![
                 ResolvedAlias::new("M 31", AliasKind::Designation),
                 ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -863,7 +712,7 @@ mod tests {
         assert_eq!(got.aliases.len(), 1);
     }
 
-    // ── T010: typeahead search ─────────────────────────────────────────────────
+    // ── list_all fixtures (typeahead search moved to the redb facade, D1) ──────
 
     fn m101() -> ResolvedIdentity {
         ResolvedIdentity {
@@ -873,6 +722,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: 210.802_42,
             dec_deg: 54.348_95,
+            v_mag: None,
             aliases: vec![
                 ResolvedAlias::new("M 101", AliasKind::Designation),
                 ResolvedAlias::new("NGC 5457", AliasKind::Designation),
@@ -885,83 +735,6 @@ mod tests {
     async fn seeded(db: &Database) {
         upsert_resolved(db.pool(), &m31(TargetSource::Resolved)).await.unwrap();
         upsert_resolved(db.pool(), &m101()).await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn search_blank_query_is_empty() {
-        let db = setup().await;
-        seeded(&db).await;
-        assert!(search_by_normalized(db.pool(), "   ", 20).await.unwrap().is_empty());
-        assert!(search_by_normalized(db.pool(), "M31", 0).await.unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn search_exact_then_prefix_then_substring_ranking() {
-        let db = setup().await;
-        // "NGC 5457" (exact for M101), "NGC 224" (M31). Query "ngc 5457" is
-        // exact for one alias and substring for none of M31.
-        seeded(&db).await;
-        let hits = search_by_normalized(db.pool(), "NGC 5457", 20).await.unwrap();
-        assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].rank, RANK_EXACT);
-        assert_eq!(hits[0].target.primary_designation, "M 101");
-        assert_eq!(hits[0].matched_alias, "NGC 5457");
-    }
-
-    #[tokio::test]
-    async fn search_prefix_matches_both_ngc() {
-        let db = setup().await;
-        seeded(&db).await;
-        // "ngc" is a prefix of "NGC 224" and "NGC 5457" → both targets, rank 1.
-        let hits = search_by_normalized(db.pool(), "NGC", 20).await.unwrap();
-        assert_eq!(hits.len(), 2);
-        assert!(hits.iter().all(|h| h.rank == RANK_PREFIX));
-    }
-
-    #[tokio::test]
-    async fn search_substring_matches_common_name() {
-        let db = setup().await;
-        seeded(&db).await;
-        // "galaxy" appears inside both common names as a substring (rank 2).
-        let hits = search_by_normalized(db.pool(), "galaxy", 20).await.unwrap();
-        assert_eq!(hits.len(), 2);
-        assert!(hits.iter().all(|h| h.rank == RANK_SUBSTRING));
-    }
-
-    #[tokio::test]
-    async fn search_dedupes_one_hit_per_target() {
-        let db = setup().await;
-        // A target whose two aliases BOTH match the query must appear once.
-        // "Andromeda" and "Andromeda Galaxy" both contain "andromeda".
-        let mut t = m31(TargetSource::Resolved);
-        t.aliases = vec![
-            ResolvedAlias::new("Andromeda", AliasKind::CommonName),
-            ResolvedAlias::new("Andromeda Galaxy", AliasKind::CommonName),
-        ];
-        upsert_resolved(db.pool(), &t).await.unwrap();
-
-        let hits = search_by_normalized(db.pool(), "andromeda", 20).await.unwrap();
-        assert_eq!(hits.len(), 1, "one canonical target despite two matching aliases");
-        // The best (exact) alias wins as matched_alias.
-        assert_eq!(hits[0].rank, RANK_EXACT);
-        assert_eq!(hits[0].matched_alias, "Andromeda");
-    }
-
-    #[tokio::test]
-    async fn search_respects_limit() {
-        let db = setup().await;
-        seeded(&db).await;
-        let hits = search_by_normalized(db.pool(), "galaxy", 1).await.unwrap();
-        assert_eq!(hits.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn search_like_wildcards_are_literal() {
-        let db = setup().await;
-        seeded(&db).await;
-        // "%" must not act as a wildcard — no alias literally contains it.
-        let hits = search_by_normalized(db.pool(), "%", 20).await.unwrap();
-        assert!(hits.is_empty());
     }
 
     // ── list_all alias population ─────────────────────────────────────────────
@@ -1005,56 +778,6 @@ mod tests {
         let rows = list_all(db.pool()).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert!(rows[0].aliases.is_empty(), "aliases must be empty when no alias rows exist");
-    }
-
-    // ── search_fuzzy (opt-in, default off) ─────────────────────────────────────
-
-    #[tokio::test]
-    async fn search_fuzzy_finds_reordered_tokens_exact_search_misses() {
-        let db = setup().await;
-        seeded(&db).await; // M31 "Andromeda Galaxy", M101 "Pinwheel Galaxy"
-
-        // Exact/prefix/substring search for "galaxy andromeda" (reordered
-        // tokens) misses both common names entirely.
-        let exact = search_by_normalized(db.pool(), "galaxy andromeda", 20).await.unwrap();
-        assert!(exact.is_empty(), "exact/prefix/substring must not match reordered tokens");
-
-        // Fuzzy search (token-set similarity) finds M31 via its reordered
-        // common name.
-        let fuzzy = search_fuzzy(db.pool(), "galaxy andromeda", 20, 0.5).await.unwrap();
-        assert!(
-            fuzzy.iter().any(|h| h.target.primary_designation == "M 31" && h.rank == RANK_FUZZY),
-            "fuzzy search must find M 31 via token-set similarity, got {fuzzy:?}"
-        );
-    }
-
-    #[tokio::test]
-    async fn search_fuzzy_never_downgrades_an_exact_hit() {
-        let db = setup().await;
-        seeded(&db).await;
-        let hits = search_fuzzy(db.pool(), "M 31", 20, 0.5).await.unwrap();
-        assert_eq!(hits[0].target.primary_designation, "M 31");
-        assert_eq!(hits[0].rank, RANK_EXACT, "an exact hit must stay rank 0, not be re-ranked");
-    }
-
-    #[tokio::test]
-    async fn search_fuzzy_below_min_score_returns_no_fuzzy_tier() {
-        let db = setup().await;
-        seeded(&db).await;
-        // "xyz" shares no tokens with any seeded alias — score 0.0 < any
-        // positive threshold, so no fuzzy hits are added.
-        let hits = search_fuzzy(db.pool(), "xyz", 20, 0.1).await.unwrap();
-        assert!(hits.is_empty());
-    }
-
-    #[tokio::test]
-    async fn search_fuzzy_is_opt_in_plain_search_unaffected() {
-        let db = setup().await;
-        seeded(&db).await;
-        // Calling search_fuzzy elsewhere in the suite must not change
-        // search_by_normalized's own behaviour (no shared mutable state).
-        let plain = search_by_normalized(db.pool(), "galaxy andromeda", 20).await.unwrap();
-        assert!(plain.is_empty(), "search_by_normalized must stay exact/prefix/substring only");
     }
 
     #[tokio::test]

@@ -16,12 +16,16 @@ path = "src/lib.rs"
 #
 # Adopted the published `simbad-resolver` crate (nightwatch-astro org, same
 # author) as the TAP/Sesame network client + Caldwell map + normalize/fuzzy
-# helpers: `simbad.rs` is now a thin adapter over its `TapResolver`, dropping
-# this crate's own `reqwest`/`csv`/`percent-encoding` dependencies. Identity
-# storage is UNCHANGED — `canonical_target`/`target_alias` stay in SQLite,
-# FK-joined by `projects`/`acquisition_session`/`target_favourites` outside
-# this crate (constitution §V; spec-051 keeps the resolver's own SQLite cache,
-# not the upstream crate's redb store).
+# helpers.
+#
+# spec 052 P1: `simbad.rs` now wraps the crate's own `SimbadResolver` FACADE
+# (cache-first resolve + `CacheBackend::File` redb, one global
+# `<app_data>/simbad-cache.redb`, no TTL) instead of a direct `TapResolver`
+# call — the redb cache is the reproducible typeahead/search projection.
+# `canonical_target`/`target_alias` in SQLite remain the durable record
+# (constitution §V), but are now written ONLY at an in-use commit (add to
+# project / link to session / favourite / Inbox-confirm), superseding
+# spec-035 FR-006 (persist-on-resolve). See data-model.md / research.md D1-D4.
 
 [dependencies]
 # Pure catalog primitives (normalization + UUIDv5 identity) live in the base
@@ -43,9 +47,13 @@ time.workspace = true
 # db-boundary-zero: production dependency (not dev-only) so cache.rs's raw
 # sqlx sites can move into `persistence_db::repositories::q_resolver`.
 persistence_db = { path = "../../persistence/db" }
-# Published SIMBAD TAP client + Caldwell map + normalize/fuzzy helpers (see
-# crate doc above). Same author/org as this workspace's own CI app.
-simbad-resolver = "0.1.3"
+# Published SIMBAD TAP client + Caldwell map + normalize/fuzzy helpers + the
+# cache-first facade (see crate doc above). Same author/org as this
+# workspace's own CI app.
+simbad-resolver = "0.2.0"
+# IAU constellation-from-coordinates, for `canonical_target.constellation`
+# enrichment at the in-use write (spec 052 P1 D8).
+skymath = "0.3"
 
 [dev-dependencies]
 # `#[tokio::test]` only — no production `tokio` usage in this crate (the

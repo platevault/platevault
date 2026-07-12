@@ -5542,9 +5542,9 @@ dependencies = [
 
 [[package]]
 name = "simbad-resolver"
-version = "0.1.3"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15d946b8d40323153db60e0bca59b39989908638e8ad13167d570b5b9cdb909e"
+checksum = "ff6f68107e874c3528e6ff97f9a5de628cadce88405dcc8fc797097b1bd78037"
 dependencies = [
  "async-trait",
  "redb",
@@ -6231,6 +6231,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simbad-resolver",
+ "skymath 0.3.0",
  "sqlx",
  "targeting",
  "thiserror 2.0.18",

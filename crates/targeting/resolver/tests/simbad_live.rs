@@ -23,7 +23,7 @@
 //!   NGC 7293 (Helix Nebula) — verifies canonical identity, plausible ICRS
 //!   coordinates, object type, and cross-ID alias set.
 
-use targeting_resolver::simbad::{SimbadConfig, SimbadResolver};
+use targeting_resolver::simbad::{ResolveCache, SimbadConfig, SimbadResolver};
 use targeting_resolver::{AliasKind, ObjectType, ResolveError, ResolvedIdentity, Resolver};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -44,7 +44,8 @@ async fn resolve_or_skip(query: &str, test: &str) -> Option<ResolvedIdentity> {
         );
         return None;
     }
-    let resolver = SimbadResolver::new(&SimbadConfig::default())
+    let cache = ResolveCache::in_memory().expect("in-memory resolve cache");
+    let resolver = SimbadResolver::new(&SimbadConfig::default(), &cache, true)
         .expect("SimbadResolver should build from default config");
     match resolver.resolve(query).await {
         Ok(identity) => Some(identity),
