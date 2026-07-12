@@ -90,7 +90,9 @@ describe('T047: BlockedBanner typed reason from project_health DTO (FR-020)', ()
     const msg = screen.getByTestId('blocked-reason-message');
     expect(msg).toHaveTextContent('Source missing: inv-abc-999');
     // Must NOT show the old hardcoded message
-    expect(msg).not.toHaveTextContent('Project is blocked. Resolve to continue.');
+    expect(msg).not.toHaveTextContent(
+      'Project is blocked. Resolve to continue.',
+    );
   });
 
   it('shows tool_unconfigured message when blockedReasonKind=tool_unconfigured', () => {
@@ -116,7 +118,9 @@ describe('T047: BlockedBanner typed reason from project_health DTO (FR-020)', ()
     const msg = screen.getByTestId('blocked-reason-message');
     expect(msg).toHaveTextContent('Manual block by user');
     // Must NOT show the hardcoded fallback
-    expect(msg).not.toHaveTextContent('Project is blocked. Resolve to continue.');
+    expect(msg).not.toHaveTextContent(
+      'Project is blocked. Resolve to continue.',
+    );
   });
 
   it('falls back to a generic message when blockedReasonKind is absent', () => {

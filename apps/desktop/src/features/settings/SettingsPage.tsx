@@ -38,9 +38,25 @@ type PaneId = (typeof PANES)[number]['id'];
 
 // Grouped sub-nav (Library / Processing / Application).
 const NAV_GROUPS: { label: () => string; panes: PaneId[] }[] = [
-  { label: () => m.settings_nav_group_library(), panes: ['sources', 'equipment', 'ingestion', 'naming', 'catalogs', 'planner'] },
-  { label: () => m.settings_nav_group_processing(), panes: ['tools', 'cal', 'cleanup', 'source-views'] },
-  { label: () => m.settings_nav_group_application(), panes: ['general', 'advanced', 'audit'] },
+  {
+    label: () => m.settings_nav_group_library(),
+    panes: [
+      'sources',
+      'equipment',
+      'ingestion',
+      'naming',
+      'catalogs',
+      'planner',
+    ],
+  },
+  {
+    label: () => m.settings_nav_group_processing(),
+    panes: ['tools', 'cal', 'cleanup', 'source-views'],
+  },
+  {
+    label: () => m.settings_nav_group_application(),
+    panes: ['general', 'advanced', 'audit'],
+  },
 ];
 
 // Render-time thunks so pane titles/descriptions re-read the active locale (spec 046 #8).
@@ -104,19 +120,32 @@ function renderPane(
   save: (scope: string, values: Record<string, unknown>) => void,
 ) {
   switch (paneId) {
-    case 'sources':   return <DataSources save={save} />;
-    case 'equipment': return <Equipment save={save} />;
-    case 'ingestion': return <Ingestion save={save} />;
-    case 'naming':    return <NamingStructure save={save} />;
-    case 'tools':     return <ProcessingTools />;
-    case 'cal':       return <CalibrationMatching save={save} />;
-    case 'catalogs':  return <ResolverSettings save={save} />;
-    case 'planner':   return <PlannerSettings />;
-    case 'cleanup':   return <Cleanup save={save} />;
-    case 'source-views': return <SourceViews save={save} />;
-    case 'general':   return <General />;
-    case 'advanced':  return <Advanced save={save} />;
-    case 'audit':     return <AuditLog />;
+    case 'sources':
+      return <DataSources save={save} />;
+    case 'equipment':
+      return <Equipment save={save} />;
+    case 'ingestion':
+      return <Ingestion save={save} />;
+    case 'naming':
+      return <NamingStructure save={save} />;
+    case 'tools':
+      return <ProcessingTools />;
+    case 'cal':
+      return <CalibrationMatching save={save} />;
+    case 'catalogs':
+      return <ResolverSettings save={save} />;
+    case 'planner':
+      return <PlannerSettings />;
+    case 'cleanup':
+      return <Cleanup save={save} />;
+    case 'source-views':
+      return <SourceViews save={save} />;
+    case 'general':
+      return <General />;
+    case 'advanced':
+      return <Advanced save={save} />;
+    case 'audit':
+      return <AuditLog />;
   }
 }
 
@@ -147,10 +176,15 @@ export function SettingsPage() {
           />
         }
         list={
-          <nav className="alm-settings__nav" aria-label={m.settings_page_nav_aria()}>
+          <nav
+            className="alm-settings__nav"
+            aria-label={m.settings_page_nav_aria()}
+          >
             {NAV_GROUPS.map((group) => (
               <div key={group.label()} className="alm-settings__nav-group">
-                <div className="alm-settings__nav-group-label">{group.label()}</div>
+                <div className="alm-settings__nav-group-label">
+                  {group.label()}
+                </div>
                 {group.panes.map((paneId) => {
                   const pane = PANES.find((p) => p.id === paneId);
                   if (!pane) return null;

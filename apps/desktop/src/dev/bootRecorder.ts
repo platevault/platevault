@@ -18,7 +18,11 @@ import { setInvokeOverride, unwrap } from '@/api/ipc';
  * Queries devMode from backend settings and installs the proxy if enabled.
  */
 export async function installRecorder(
-  wrap: (dispatch: DispatchFn, devMode: boolean, contracts?: import('@/bindings/index').ContractMeta[]) => DispatchFn,
+  wrap: (
+    dispatch: DispatchFn,
+    devMode: boolean,
+    contracts?: import('@/bindings/index').ContractMeta[],
+  ) => DispatchFn,
 ): Promise<void> {
   try {
     const settings = unwrap(await commands.settingsGet('advanced'));

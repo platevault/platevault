@@ -35,5 +35,7 @@ export async function applyPlan(args: {
   // `plansApplyReal(planId, approvalToken, onEvent)` requires a token; when
   // absent we default to '' which the backend rejects — the real flow supplies
   // the token from `plansApprove.approvalToken`.
-  return unwrap(await commands.plansApplyReal(args.id, args.approvalToken ?? '', channel));
+  return unwrap(
+    await commands.plansApplyReal(args.id, args.approvalToken ?? '', channel),
+  );
 }

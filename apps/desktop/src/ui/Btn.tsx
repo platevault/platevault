@@ -14,6 +14,12 @@ export function Btn({ variant, size, className, children, ...rest }: BtnProps) {
     variant && `alm-btn--${variant}`,
     size && `alm-btn--${size}`,
     className,
-  ].filter(Boolean).join(' ');
-  return <button className={cls} {...rest}>{children}</button>;
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <button className={cls} {...rest}>
+      {children}
+    </button>
+  );
 }

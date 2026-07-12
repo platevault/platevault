@@ -9,9 +9,15 @@
 
 import { describe, it, expect } from 'vitest';
 import type { TargetListItem } from '@/bindings/index';
-import { filterPlannerCatalog, isPlannerCatalogTarget } from './planner-catalog';
+import {
+  filterPlannerCatalog,
+  isPlannerCatalogTarget,
+} from './planner-catalog';
 
-function item(primaryDesignation: string, objectType = 'other'): TargetListItem {
+function item(
+  primaryDesignation: string,
+  objectType = 'other',
+): TargetListItem {
   return {
     id: primaryDesignation,
     effectiveLabel: primaryDesignation,
@@ -69,7 +75,11 @@ describe('planner-catalog', () => {
       item('B 142', 'dark_nebula'),
     ];
     const result = filterPlannerCatalog(list);
-    expect(result.map((t) => t.primaryDesignation)).toEqual(['M 42', 'NGC 224', 'B 142']);
+    expect(result.map((t) => t.primaryDesignation)).toEqual([
+      'M 42',
+      'NGC 224',
+      'B 142',
+    ]);
   });
 
   it('matching is case-insensitive', () => {

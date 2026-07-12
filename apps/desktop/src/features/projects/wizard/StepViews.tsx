@@ -69,7 +69,9 @@ export function StepViews({ data, onChange }: StepViewsProps) {
         </div>
         <div className="alm-wizard-views__strategy-row">
           <Pill variant="ok">{m.projects_wizard_strategy_ntfs()}</Pill>
-          <span className="alm-wizard-views__strategy-label">{m.projects_wizard_strategy_ntfs_label()}</span>
+          <span className="alm-wizard-views__strategy-label">
+            {m.projects_wizard_strategy_ntfs_label()}
+          </span>
           <span className="alm-wizard-views__strategy-meta">
             {m.projects_wizard_strategy_ntfs_meta()}
           </span>
@@ -105,15 +107,23 @@ export function StepViews({ data, onChange }: StepViewsProps) {
                     aria-label={m.projects_wizard_col_view_name()}
                   />
                 </td>
-                <td><Pill variant="ok">{row.strategy}</Pill></td>
+                <td>
+                  <Pill variant="ok">{row.strategy}</Pill>
+                </td>
                 <td className="alm-wizard-views__td-scope">{row.scope}</td>
-                <td className="alm-mono alm-wizard-views__td-small">{row.items}</td>
-                <td className="alm-mono alm-wizard-views__td-small">{row.estimatedSize}</td>
+                <td className="alm-mono alm-wizard-views__td-small">
+                  {row.items}
+                </td>
+                <td className="alm-mono alm-wizard-views__td-small">
+                  {row.estimatedSize}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-        <Btn size="sm" className="alm-wizard-views__add-btn">{m.projects_wizard_add_view_btn()}</Btn>
+        <Btn size="sm" className="alm-wizard-views__add-btn">
+          {m.projects_wizard_add_view_btn()}
+        </Btn>
       </Section>
 
       {/* ── Conflict policy ── */}
@@ -128,7 +138,10 @@ export function StepViews({ data, onChange }: StepViewsProps) {
           </button>
         </div>
         <div className="alm-wizard-views__radio-group">
-          <label className="alm-wizard-views__radio-label" htmlFor="conflict-policy-fail">
+          <label
+            className="alm-wizard-views__radio-label"
+            htmlFor="conflict-policy-fail"
+          >
             <input
               id="conflict-policy-fail"
               type="radio"
@@ -139,7 +152,10 @@ export function StepViews({ data, onChange }: StepViewsProps) {
             />{' '}
             {m.projects_wizard_conflict_fail()}
           </label>
-          <label className="alm-wizard-views__radio-label" htmlFor="conflict-policy-rename">
+          <label
+            className="alm-wizard-views__radio-label"
+            htmlFor="conflict-policy-rename"
+          >
             <input
               id="conflict-policy-rename"
               type="radio"
@@ -150,7 +166,10 @@ export function StepViews({ data, onChange }: StepViewsProps) {
             />{' '}
             {m.projects_wizard_conflict_rename()}
           </label>
-          <label className="alm-wizard-views__radio-label" htmlFor="conflict-policy-skip">
+          <label
+            className="alm-wizard-views__radio-label"
+            htmlFor="conflict-policy-skip"
+          >
             <input
               id="conflict-policy-skip"
               type="radio"
@@ -161,7 +180,10 @@ export function StepViews({ data, onChange }: StepViewsProps) {
             />{' '}
             {m.projects_wizard_conflict_skip()}
           </label>
-          <label className="alm-wizard-views__radio-label" htmlFor="conflict-policy-manual">
+          <label
+            className="alm-wizard-views__radio-label"
+            htmlFor="conflict-policy-manual"
+          >
             <input
               id="conflict-policy-manual"
               type="radio"

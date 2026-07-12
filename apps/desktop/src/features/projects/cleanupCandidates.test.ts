@@ -14,7 +14,9 @@ import {
 } from './cleanupCandidates';
 import type { CleanupCandidate } from '@/bindings/index';
 
-function candidate(overrides: Partial<CleanupCandidate> = {}): CleanupCandidate {
+function candidate(
+  overrides: Partial<CleanupCandidate> = {},
+): CleanupCandidate {
   return {
     filePath: 'calibrated/light_001.xisf',
     dataType: 'intermediate',
@@ -56,7 +58,9 @@ describe('isProtectedCandidate', () => {
       ),
     ).toBe(true);
     expect(isProtectedCandidate(candidate())).toBe(false);
-    expect(isProtectedCandidate(candidate({ reason: 'unparseable' }))).toBe(false);
+    expect(isProtectedCandidate(candidate({ reason: 'unparseable' }))).toBe(
+      false,
+    );
   });
 });
 
@@ -68,7 +72,11 @@ describe('groupCandidates', () => {
       candidate({ dataType: 'master', sizeBytes: 4000 }),
       candidate({ dataType: 'intermediate', sizeBytes: 2000 }),
     ]);
-    expect(groups.map((g) => g.dataType)).toEqual(['intermediate', 'master', 'final']);
+    expect(groups.map((g) => g.dataType)).toEqual([
+      'intermediate',
+      'master',
+      'final',
+    ]);
     expect(groups[0].candidates).toHaveLength(2);
     expect(groups[0].totalBytes).toBe(3000);
     expect(groups[1].totalBytes).toBe(4000);

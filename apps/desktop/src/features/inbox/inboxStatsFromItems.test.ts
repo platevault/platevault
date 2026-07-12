@@ -12,7 +12,11 @@ import { describe, it, expect } from 'vitest';
 import { deriveInboxStats } from './inboxStatsFromItems';
 import type { InboxListItem } from '@/bindings/index';
 
-function folder(id: string, frameType: string | null, files: number): InboxListItem {
+function folder(
+  id: string,
+  frameType: string | null,
+  files: number,
+): InboxListItem {
   return {
     inboxItemId: id,
     groupId: id,
@@ -89,7 +93,11 @@ describe('deriveInboxStats', () => {
       folder('y', null, 1),
       folder('z', 'dark', 1),
     ]);
-    expect(stats.perType.map((r) => r.frameType)).toEqual(['dark', 'light', 'mixed']);
+    expect(stats.perType.map((r) => r.frameType)).toEqual([
+      'dark',
+      'light',
+      'mixed',
+    ]);
   });
 
   it('returns zero totals and no rows for an empty list', () => {

@@ -27,7 +27,9 @@ import type { PlanSummary, PlanState } from '@/bindings/index';
 const HISTORY_ORIGINS = ['prepared_view_removal', 'prepared_view_regeneration'];
 const HISTORY_LIMIT = 200;
 
-function planStateVariant(state: PlanState): 'ok' | 'warn' | 'danger' | 'neutral' {
+function planStateVariant(
+  state: PlanState,
+): 'ok' | 'warn' | 'danger' | 'neutral' {
   switch (state) {
     case 'applied':
       return 'ok';
@@ -48,7 +50,10 @@ export interface ViewAuditHistoryProps {
   onViewPlan?: (planId: string) => void;
 }
 
-export function ViewAuditHistory({ viewId, onViewPlan }: ViewAuditHistoryProps) {
+export function ViewAuditHistory({
+  viewId,
+  onViewPlan,
+}: ViewAuditHistoryProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [plans, setPlans] = useState<PlanSummary[] | null>(null);
@@ -57,7 +62,9 @@ export function ViewAuditHistory({ viewId, onViewPlan }: ViewAuditHistoryProps) 
     setLoading(true);
     setError(null);
     try {
-      const resp = unwrap(await commands.plansList(null, HISTORY_ORIGINS, null, HISTORY_LIMIT));
+      const resp = unwrap(
+        await commands.plansList(null, HISTORY_ORIGINS, null, HISTORY_LIMIT),
+      );
       setPlans(resp.plans.filter((p) => p.originPath === viewId));
     } catch (err: unknown) {
       setError(errMessage(err));
@@ -71,7 +78,11 @@ export function ViewAuditHistory({ viewId, onViewPlan }: ViewAuditHistoryProps) 
       className="text-xs text-muted alm-source-views__refs-details"
       data-testid={`view-history-${viewId}`}
       onToggle={(e) => {
-        if ((e.target as HTMLDetailsElement).open && plans === null && !loading) {
+        if (
+          (e.target as HTMLDetailsElement).open &&
+          plans === null &&
+          !loading
+        ) {
           void load();
         }
       }}
@@ -81,7 +92,9 @@ export function ViewAuditHistory({ viewId, onViewPlan }: ViewAuditHistoryProps) 
       </summary>
 
       {loading && <p>{m.common_loading()}</p>}
-      {error !== null && <p>{m.projects_source_views_history_load_error({ error })}</p>}
+      {error !== null && (
+        <p>{m.projects_source_views_history_load_error({ error })}</p>
+      )}
 
       {!loading && error === null && plans !== null && plans.length === 0 && (
         <p>{m.projects_source_views_history_empty()}</p>
@@ -95,7 +108,9 @@ export function ViewAuditHistory({ viewId, onViewPlan }: ViewAuditHistoryProps) 
               className="alm-source-views__refs-item flex items-center gap-2"
               data-testid={`view-history-row-${plan.id}`}
             >
-              <span className="font-mono">{formatDateTime(plan.createdAt)}</span>
+              <span className="font-mono">
+                {formatDateTime(plan.createdAt)}
+              </span>
               <span>
                 {plan.origin === 'prepared_view_removal'
                   ? m.projects_source_views_history_row_removal()

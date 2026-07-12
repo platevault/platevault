@@ -36,9 +36,21 @@ const MOCK_FLAT_ROWS: FlatRow[] = [
     filter: 'Ha',
     lightsCovered: 'NGC 7000 · Ha · 11-30 (54×) · NGC 7000 · Ha · 12-15 (30×)',
     options: [
-      { id: 'm-7', label: () => m.projects_wizard_mock_flat_ha_2024_11(), isDefault: true },
-      { id: 'm-5', label: () => m.projects_wizard_mock_flat_ha_2024_12(), isDefault: false },
-      { id: 'skip-ha', label: () => m.projects_wizard_mock_skip_ha(), isDefault: false },
+      {
+        id: 'm-7',
+        label: () => m.projects_wizard_mock_flat_ha_2024_11(),
+        isDefault: true,
+      },
+      {
+        id: 'm-5',
+        label: () => m.projects_wizard_mock_flat_ha_2024_12(),
+        isDefault: false,
+      },
+      {
+        id: 'skip-ha',
+        label: () => m.projects_wizard_mock_skip_ha(),
+        isDefault: false,
+      },
     ],
     score: '0.88',
     notes: 'filter-matched · same camera',
@@ -47,9 +59,21 @@ const MOCK_FLAT_ROWS: FlatRow[] = [
     filter: 'OIII',
     lightsCovered: 'NGC 7000 · OIII · 11-30 (38×)',
     options: [
-      { id: 'm-8', label: () => m.projects_wizard_mock_flat_oiii_2024_11(), isDefault: true },
-      { id: 'm-6', label: () => m.projects_wizard_mock_flat_oiii_2024_12(), isDefault: false },
-      { id: 'skip-oiii', label: () => m.projects_wizard_mock_skip_oiii(), isDefault: false },
+      {
+        id: 'm-8',
+        label: () => m.projects_wizard_mock_flat_oiii_2024_11(),
+        isDefault: true,
+      },
+      {
+        id: 'm-6',
+        label: () => m.projects_wizard_mock_flat_oiii_2024_12(),
+        isDefault: false,
+      },
+      {
+        id: 'skip-oiii',
+        label: () => m.projects_wizard_mock_skip_oiii(),
+        isDefault: false,
+      },
     ],
     score: '0.88',
     notes: 'filter-matched · same camera',
@@ -75,7 +99,10 @@ const SHARED_ROWS: SharedRow[] = [
     field: 'sharedDarkId',
     options: [
       { value: 'm-1', label: () => m.projects_wizard_mock_dark_recommended() },
-      { value: 'cal-sess', label: () => m.projects_wizard_mock_use_cal_session() },
+      {
+        value: 'cal-sess',
+        label: () => m.projects_wizard_mock_use_cal_session(),
+      },
       { value: '', label: () => m.projects_wizard_mock_skip_darks() },
     ],
     defaultValue: 'm-1',
@@ -113,8 +140,11 @@ const SHARED_ROWS: SharedRow[] = [
 
 // ── Component ───────────────────────────────────────────────────────────────
 
-export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data, onChange }: StepCalibrationProps) {
-
+export function StepCalibration({
+  selectedSessionIds: _selectedSessionIds,
+  data,
+  onChange,
+}: StepCalibrationProps) {
   return (
     <div className="alm-wizard-calib__root">
       {/* Step description */}
@@ -133,42 +163,62 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
               <th>{m.common_filter()}</th>
               <th>{m.projects_wizard_col_lights()}</th>
               <th>{m.projects_wizard_col_master_flat()}</th>
-              <th className="alm-wizard-calib__col-score">{m.projects_wizard_col_score()}</th>
+              <th className="alm-wizard-calib__col-score">
+                {m.projects_wizard_col_score()}
+              </th>
               <th>{m.projects_notes_label()}</th>
             </tr>
           </thead>
           <tbody>
             {MOCK_FLAT_ROWS.map((row) => {
-              const currentValue = data.flatMappings[row.filter] || row.options.find((o) => o.isDefault)?.id || '';
+              const currentValue =
+                data.flatMappings[row.filter] ||
+                row.options.find((o) => o.isDefault)?.id ||
+                '';
               return (
                 <tr key={row.filter}>
-                  <td><Pill variant="ghost">{row.filter}</Pill></td>
-                  <td className="alm-wizard-calib__cell-lights">{row.lightsCovered}</td>
+                  <td>
+                    <Pill variant="ghost">{row.filter}</Pill>
+                  </td>
+                  <td className="alm-wizard-calib__cell-lights">
+                    {row.lightsCovered}
+                  </td>
                   <td>
                     <select
                       value={currentValue}
                       onChange={(e) =>
                         onChange({
                           ...data,
-                          flatMappings: { ...data.flatMappings, [row.filter]: e.target.value },
+                          flatMappings: {
+                            ...data.flatMappings,
+                            [row.filter]: e.target.value,
+                          },
                         })
                       }
                       className="alm-wizard-calib__select"
-                      aria-label={m.projects_wizard_flat_master_for_aria({ filter: row.filter })}
+                      aria-label={m.projects_wizard_flat_master_for_aria({
+                        filter: row.filter,
+                      })}
                     >
                       {row.options.map((opt) => (
-                        <option key={opt.id} value={opt.id}>{opt.label()}</option>
+                        <option key={opt.id} value={opt.id}>
+                          {opt.label()}
+                        </option>
                       ))}
                     </select>
                   </td>
-                  <td className="alm-mono alm-wizard-calib__cell-score">{row.score}</td>
+                  <td className="alm-mono alm-wizard-calib__cell-score">
+                    {row.score}
+                  </td>
                   <td className="alm-wizard-calib__cell-notes">{row.notes}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        <Btn size="sm" className="alm-wizard-calib__add-flat-btn">{m.projects_wizard_add_flat_btn()}</Btn>
+        <Btn size="sm" className="alm-wizard-calib__add-flat-btn">
+          {m.projects_wizard_add_flat_btn()}
+        </Btn>
       </Section>
 
       {/* ── Shared calibration: darks, bias, dark flats ── */}
@@ -176,9 +226,13 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
         <table className="alm-simple-table">
           <thead>
             <tr>
-              <th className="alm-wizard-calib__col-role">{m.projects_wizard_col_role()}</th>
+              <th className="alm-wizard-calib__col-role">
+                {m.projects_wizard_col_role()}
+              </th>
               <th>{m.projects_wizard_col_pick()}</th>
-              <th className="alm-wizard-calib__col-score">{m.projects_wizard_col_score()}</th>
+              <th className="alm-wizard-calib__col-score">
+                {m.projects_wizard_col_score()}
+              </th>
               <th>{m.projects_notes_label()}</th>
             </tr>
           </thead>
@@ -187,29 +241,46 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
               const currentValue = data[row.field] || row.defaultValue;
               return (
                 <tr key={row.role}>
-                  <td><Pill variant="ghost">{row.role}</Pill></td>
+                  <td>
+                    <Pill variant="ghost">{row.role}</Pill>
+                  </td>
                   <td>
                     <select
                       value={currentValue}
-                      onChange={(e) => onChange({ ...data, [row.field]: e.target.value })}
+                      onChange={(e) =>
+                        onChange({ ...data, [row.field]: e.target.value })
+                      }
                       className="alm-wizard-calib__select"
-                      aria-label={m.projects_wizard_pick_role_aria({ role: row.role })}
+                      aria-label={m.projects_wizard_pick_role_aria({
+                        role: row.role,
+                      })}
                     >
                       {row.options.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label()}</option>
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label()}
+                        </option>
                       ))}
                     </select>
                   </td>
                   <td
                     className={
                       'alm-mono alm-wizard-calib__cell-score' +
-                      (row.scoreWarn ? ' alm-wizard-calib__cell-score--warn' : row.score === '—' ? ' alm-wizard-calib__cell-score--faint' : '')
+                      (row.scoreWarn
+                        ? ' alm-wizard-calib__cell-score--warn'
+                        : row.score === '—'
+                          ? ' alm-wizard-calib__cell-score--faint'
+                          : '')
                     }
                   >
                     {row.score}
                   </td>
                   <td
-                    className={'alm-wizard-calib__cell-notes-dyn' + (row.notesWarn ? ' alm-wizard-calib__cell-notes-dyn--warn' : '')}
+                    className={
+                      'alm-wizard-calib__cell-notes-dyn' +
+                      (row.notesWarn
+                        ? ' alm-wizard-calib__cell-notes-dyn--warn'
+                        : '')
+                    }
                   >
                     {row.notes}
                   </td>
@@ -230,9 +301,18 @@ export function StepCalibration({ selectedSessionIds: _selectedSessionIds, data,
       {/* ── Why these were recommended ── */}
       <Box title={m.projects_wizard_why_title()}>
         <ul className="alm-wizard-calib__why-list">
-          <li><strong>{m.projects_wizard_flats_label()}</strong>{m.projects_wizard_why_flats_val()}</li>
-          <li><strong>{m.projects_wizard_why_dark_key()}</strong>{m.projects_wizard_why_dark_val()}</li>
-          <li><strong>{m.projects_wizard_bias_label()}</strong>{m.projects_wizard_why_bias_val()}</li>
+          <li>
+            <strong>{m.projects_wizard_flats_label()}</strong>
+            {m.projects_wizard_why_flats_val()}
+          </li>
+          <li>
+            <strong>{m.projects_wizard_why_dark_key()}</strong>
+            {m.projects_wizard_why_dark_val()}
+          </li>
+          <li>
+            <strong>{m.projects_wizard_bias_label()}</strong>
+            {m.projects_wizard_why_bias_val()}
+          </li>
         </ul>
       </Box>
     </div>

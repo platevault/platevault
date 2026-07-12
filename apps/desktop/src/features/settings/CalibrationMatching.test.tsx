@@ -9,7 +9,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { CalibrationMatching } from './CalibrationMatching';
 import type { CalibrationTolerances } from './settingsIpc';
 
@@ -29,7 +35,9 @@ vi.mock('@/bindings/index', () => ({
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeTolerances(overrides: Partial<CalibrationTolerances> = {}): CalibrationTolerances {
+function makeTolerances(
+  overrides: Partial<CalibrationTolerances> = {},
+): CalibrationTolerances {
   return {
     temperatureToleranceC: 5,
     exposureToleranceS: 2,
@@ -70,7 +78,10 @@ beforeEach(() => {
 
 describe('CalibrationMatching — offset match-required persistence', () => {
   it('loads requireSameOffset from the backend on mount', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeTolerances({ requireSameOffset: false }) });
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeTolerances({ requireSameOffset: false }),
+    });
     render(<CalibrationMatching save={vi.fn()} />);
 
     await waitFor(() => {
@@ -81,9 +92,15 @@ describe('CalibrationMatching — offset match-required persistence', () => {
   it('persists the offset toggle via calibration.tolerances.update, not just local state', async () => {
     mockGet.mockResolvedValue({
       status: 'ok',
-      data: makeTolerances({ requireSameCamera: false, requireSameOffset: true }),
+      data: makeTolerances({
+        requireSameCamera: false,
+        requireSameOffset: true,
+      }),
     });
-    mockUpdate.mockResolvedValue({ status: 'ok', data: makeTolerances({ requireSameOffset: false }) });
+    mockUpdate.mockResolvedValue({
+      status: 'ok',
+      data: makeTolerances({ requireSameOffset: false }),
+    });
 
     render(<CalibrationMatching save={vi.fn()} />);
     // Wait for hydration (camera flips to the fetched non-default value), not
@@ -94,7 +111,9 @@ describe('CalibrationMatching — offset match-required persistence', () => {
     fireEvent.click(offsetToggleInput());
 
     await waitFor(() => {
-      expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ requireSameOffset: false }));
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ requireSameOffset: false }),
+      );
     });
     expect(offsetToggleInput()).not.toBeChecked();
   });
@@ -102,7 +121,10 @@ describe('CalibrationMatching — offset match-required persistence', () => {
   it('does not persist sibling fields as a side effect of toggling offset', async () => {
     mockGet.mockResolvedValue({
       status: 'ok',
-      data: makeTolerances({ requireSameCamera: false, requireSameOffset: true }),
+      data: makeTolerances({
+        requireSameCamera: false,
+        requireSameOffset: true,
+      }),
     });
     mockUpdate.mockResolvedValue({ status: 'ok', data: makeTolerances() });
 
@@ -119,13 +141,22 @@ describe('CalibrationMatching — offset match-required persistence', () => {
     // The persisted patch carries the *current* (unrelated) requireSameCamera
     // state through unchanged — this pane always sends the full DTO.
     expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ requireSameCamera: false, requireSameOffset: false }),
+      expect.objectContaining({
+        requireSameCamera: false,
+        requireSameOffset: false,
+      }),
     );
   });
 
   it('restore-defaults resets requireSameOffset to true and persists it', async () => {
-    mockGet.mockResolvedValue({ status: 'ok', data: makeTolerances({ requireSameOffset: false }) });
-    mockUpdate.mockResolvedValue({ status: 'ok', data: makeTolerances({ requireSameOffset: true }) });
+    mockGet.mockResolvedValue({
+      status: 'ok',
+      data: makeTolerances({ requireSameOffset: false }),
+    });
+    mockUpdate.mockResolvedValue({
+      status: 'ok',
+      data: makeTolerances({ requireSameOffset: true }),
+    });
 
     render(<CalibrationMatching save={vi.fn()} />);
     await waitFor(() => expect(offsetToggleInput()).not.toBeChecked());
@@ -133,7 +164,9 @@ describe('CalibrationMatching — offset match-required persistence', () => {
     fireEvent.click(screen.getByRole('button', { name: /restore/i }));
 
     await waitFor(() => {
-      expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ requireSameOffset: true }));
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ requireSameOffset: true }),
+      );
     });
   });
 
@@ -154,13 +187,19 @@ describe('CalibrationMatching — offset match-required persistence', () => {
     // user's first toggle fires. If the late resolution unconditionally
     // overwrites state, the user's edit reverts (same class of bug as the
     // Ingestion pane's startup-fetch race).
-    let resolveGet!: (value: { status: 'ok'; data: CalibrationTolerances }) => void;
+    let resolveGet!: (value: {
+      status: 'ok';
+      data: CalibrationTolerances;
+    }) => void;
     mockGet.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveGet = resolve;
       }),
     );
-    mockUpdate.mockResolvedValue({ status: 'ok', data: makeTolerances({ requireSameOffset: false }) });
+    mockUpdate.mockResolvedValue({
+      status: 'ok',
+      data: makeTolerances({ requireSameOffset: false }),
+    });
 
     render(<CalibrationMatching save={vi.fn()} />);
 
@@ -169,7 +208,10 @@ describe('CalibrationMatching — offset match-required persistence', () => {
     await waitFor(() => expect(offsetToggleInput()).not.toBeChecked());
 
     // Now let the slow initial fetch resolve with the stale "true" value.
-    resolveGet({ status: 'ok', data: makeTolerances({ requireSameOffset: true }) });
+    resolveGet({
+      status: 'ok',
+      data: makeTolerances({ requireSameOffset: true }),
+    });
     await Promise.resolve();
     await Promise.resolve();
 

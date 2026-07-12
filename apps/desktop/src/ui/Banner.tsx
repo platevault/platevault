@@ -7,10 +7,17 @@ export interface BannerProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
 }
 
-export const Banner = forwardRef<HTMLDivElement, BannerProps>(
-  function Banner({ variant = 'warn', className, children, ...rest }, ref) {
-    const cls = ['alm-banner', `alm-banner--${variant}`, className].filter(Boolean).join(' ');
-    return <div ref={ref} className={cls} {...rest}>{children}</div>;
-  }
-);
+export const Banner = forwardRef<HTMLDivElement, BannerProps>(function Banner(
+  { variant = 'warn', className, children, ...rest },
+  ref,
+) {
+  const cls = ['alm-banner', `alm-banner--${variant}`, className]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <div ref={ref} className={cls} {...rest}>
+      {children}
+    </div>
+  );
+});
 Banner.displayName = 'Banner';

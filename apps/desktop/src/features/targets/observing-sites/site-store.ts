@@ -63,7 +63,9 @@ function coerceIdRef(value: unknown, sites: ObserverSite[]): string | null {
 }
 
 /** Coerce a raw `observing`-scope values bag into a clean {@link ObservingState}. */
-export function coerceObservingState(values: Record<string, unknown>): ObservingState {
+export function coerceObservingState(
+  values: Record<string, unknown>,
+): ObservingState {
   const sites = coerceSites(values[SITES_KEY]);
   return {
     sites,
@@ -124,12 +126,14 @@ export async function saveSites(
 ): Promise<void> {
   const next: ObservingState = {
     sites,
-    defaultSiteId: defaultSiteId !== null && sites.some((s) => s.id === defaultSiteId)
-      ? defaultSiteId
-      : null,
-    activeSiteId: activeSiteId !== null && sites.some((s) => s.id === activeSiteId)
-      ? activeSiteId
-      : null,
+    defaultSiteId:
+      defaultSiteId !== null && sites.some((s) => s.id === defaultSiteId)
+        ? defaultSiteId
+        : null,
+    activeSiteId:
+      activeSiteId !== null && sites.some((s) => s.id === activeSiteId)
+        ? activeSiteId
+        : null,
     usableAltitudeDeg: current.usableAltitudeDeg,
   };
   unwrap(
@@ -144,7 +148,9 @@ export async function saveSites(
 }
 
 /** Persist just the active-site pointer (US3 active switch). */
-export async function saveActiveSiteId(activeSiteId: string | null): Promise<void> {
+export async function saveActiveSiteId(
+  activeSiteId: string | null,
+): Promise<void> {
   await saveSites(current.sites, current.defaultSiteId, activeSiteId);
 }
 
@@ -160,7 +166,11 @@ export async function saveUsableAltitude(degrees: number): Promise<void> {
   const clamped = clampThreshold(degrees);
   current = { ...current, usableAltitudeDeg: clamped };
   emit();
-  unwrap(await commands.settingsUpdate(OBSERVING_SCOPE, { [USABLE_ALTITUDE_KEY]: clamped }));
+  unwrap(
+    await commands.settingsUpdate(OBSERVING_SCOPE, {
+      [USABLE_ALTITUDE_KEY]: clamped,
+    }),
+  );
 }
 
 /** Non-hook read of the current cached state (comparators, tests). */
@@ -179,7 +189,9 @@ export function getUsableAltitude(): number {
 }
 
 /** Test-only: set the cache directly. */
-export function __setObservingStateForTest(state: Partial<ObservingState>): void {
+export function __setObservingStateForTest(
+  state: Partial<ObservingState>,
+): void {
   current = { ...EMPTY_STATE, ...state };
   emit();
 }

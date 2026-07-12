@@ -198,7 +198,11 @@ export function ListPageLayout({
         <div className="alm-listpage__main">{children}</div>
 
         {hasDetail && (
-          <section className={detailClass} role="complementary" aria-label={detailLabel}>
+          <section
+            className={detailClass}
+            role="complementary"
+            aria-label={detailLabel}
+          >
             {onCloseDetail && (
               <div className="alm-listpage__detail-bar">
                 <button

@@ -2,7 +2,11 @@ import { useState, useMemo, useId, useCallback, useEffect } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { Btn, Pill, Table } from '@/ui';
 import { auditList, auditExport } from './settingsIpc';
-import type { AuditEntry, AuditFilterDto, AuditOutcome } from '@/bindings/index';
+import type {
+  AuditEntry,
+  AuditFilterDto,
+  AuditOutcome,
+} from '@/bindings/index';
 import { errMessage } from '@/lib/errors';
 import { formatDateTime, toEpochMs } from '@/lib/datetime';
 import { m } from '@/lib/i18n';
@@ -13,7 +17,9 @@ const ITEMS_PER_PAGE = 8;
 /** Debounce for the free-text search box (matches TargetSearch's DEBOUNCE_MS). */
 const SEARCH_DEBOUNCE_MS = 300;
 
-function outcomeVariant(outcome: AuditOutcome): 'ok' | 'danger' | 'warn' | 'neutral' {
+function outcomeVariant(
+  outcome: AuditOutcome,
+): 'ok' | 'danger' | 'warn' | 'neutral' {
   switch (outcome) {
     case 'applied':
     case 'ok':
@@ -31,11 +37,16 @@ function outcomeVariant(outcome: AuditOutcome): 'ok' | 'danger' | 'warn' | 'neut
 /** Render-time factory (spec 046 #8b) so outcome labels re-read the active locale. */
 function outcomeLabel(outcome: AuditOutcome): string {
   switch (outcome) {
-    case 'applied': return m.settings_auditlog_outcome_applied();
-    case 'ok': return m.settings_auditlog_outcome_ok();
-    case 'refused': return m.settings_auditlog_outcome_refused();
-    case 'failed': return m.settings_auditlog_outcome_failed();
-    case 'paused': return m.settings_auditlog_outcome_paused();
+    case 'applied':
+      return m.settings_auditlog_outcome_applied();
+    case 'ok':
+      return m.settings_auditlog_outcome_ok();
+    case 'refused':
+      return m.settings_auditlog_outcome_refused();
+    case 'failed':
+      return m.settings_auditlog_outcome_failed();
+    case 'paused':
+      return m.settings_auditlog_outcome_paused();
   }
 }
 
@@ -67,7 +78,9 @@ function detailText(e: AuditEntry): string {
       return m.settings_auditlog_detail_actor_not_authorised();
     case 'provenance.unreviewed':
       if (p.count && !Number.isNaN(Number(p.count))) {
-        return m.settings_auditlog_detail_provenance_unreviewed({ count: Number(p.count) });
+        return m.settings_auditlog_detail_provenance_unreviewed({
+          count: Number(p.count),
+        });
       }
       break;
     case 'plan.required':
@@ -80,12 +93,18 @@ function detailText(e: AuditEntry): string {
       }
       break;
     case 'entity.not_found':
-      return m.settings_auditlog_detail_entity_not_found({ entityId: p.entityId ?? e.entityId });
+      return m.settings_auditlog_detail_entity_not_found({
+        entityId: p.entityId ?? e.entityId,
+      });
     case 'target.resolved':
-      if (p.query) return m.settings_auditlog_detail_target_resolved({ query: p.query });
+      if (p.query)
+        return m.settings_auditlog_detail_target_resolved({ query: p.query });
       break;
     case 'target.user_override':
-      if (p.query) return m.settings_auditlog_detail_target_user_override({ query: p.query });
+      if (p.query)
+        return m.settings_auditlog_detail_target_user_override({
+          query: p.query,
+        });
       break;
     default:
       break;
@@ -94,7 +113,11 @@ function detailText(e: AuditEntry): string {
 }
 
 /** Build the `audit.list` filter payload from the screen's search/date controls. */
-function buildFilters(search: string, dateFrom: string, dateTo: string): AuditFilterDto | null {
+function buildFilters(
+  search: string,
+  dateFrom: string,
+  dateTo: string,
+): AuditFilterDto | null {
   const filters: AuditFilterDto = {};
   let hasFilter = false;
   if (search.trim()) {
@@ -214,7 +237,10 @@ export function AuditLog() {
             className="alm-input alm-audit-log__search"
             placeholder={m.settings_auditlog_search_placeholder()}
             value={searchInput}
-            onChange={(e) => { setSearchInput(e.target.value); applySearch(e.target.value); }}
+            onChange={(e) => {
+              setSearchInput(e.target.value);
+              applySearch(e.target.value);
+            }}
             aria-label={m.settings_auditlog_search_aria()}
           />
           <label className="alm-audit-log__date-label" htmlFor={dateFromId}>
@@ -225,7 +251,10 @@ export function AuditLog() {
               type="date"
               className="alm-input alm-audit-log__date-input"
               value={dateFrom}
-              onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                setPage(0);
+              }}
             />
           </label>
           <label className="alm-audit-log__date-label" htmlFor={dateToId}>
@@ -236,7 +265,10 @@ export function AuditLog() {
               type="date"
               className="alm-input alm-audit-log__date-input"
               value={dateTo}
-              onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                setPage(0);
+              }}
             />
           </label>
         </div>
@@ -248,9 +280,7 @@ export function AuditLog() {
         )}
 
         {loading && (
-          <div className="alm-audit-log__status">
-            {m.common_loading()}
-          </div>
+          <div className="alm-audit-log__status">{m.common_loading()}</div>
         )}
 
         {loadError && (
@@ -262,11 +292,23 @@ export function AuditLog() {
         {!loading && !loadError && (
           <Table
             columns={[
-              { key: 'timestamp', label: m.settings_auditlog_col_timestamp(), style: { width: 150 } },
+              {
+                key: 'timestamp',
+                label: m.settings_auditlog_col_timestamp(),
+                style: { width: 150 },
+              },
               { key: 'event', label: m.settings_auditlog_col_event() },
               { key: 'entity', label: m.settings_auditlog_col_entity() },
-              { key: 'outcome', label: m.settings_auditlog_col_outcome(), style: { width: 90 } },
-              { key: 'actor', label: m.settings_auditlog_col_actor(), style: { width: 72 } },
+              {
+                key: 'outcome',
+                label: m.settings_auditlog_col_outcome(),
+                style: { width: 90 },
+              },
+              {
+                key: 'actor',
+                label: m.settings_auditlog_col_actor(),
+                style: { width: 72 },
+              },
             ]}
             rows={entries.map((e) => ({
               timestamp: (
@@ -275,42 +317,51 @@ export function AuditLog() {
                 </code>
               ),
               event: (
-                <span className="alm-audit-log__event">
-                  {e.eventType}
-                </span>
+                <span className="alm-audit-log__event">{e.eventType}</span>
               ),
               entity: (
                 <span className="alm-audit-log__entity" title={detailText(e)}>
                   {e.entityType} · {e.entityId}
                 </span>
               ),
-              outcome: <Pill variant={outcomeVariant(e.outcome)}>{outcomeLabel(e.outcome)}</Pill>,
-              actor: (
-                <span className="alm-audit-log__actor">
-                  {e.actor}
-                </span>
+              outcome: (
+                <Pill variant={outcomeVariant(e.outcome)}>
+                  {outcomeLabel(e.outcome)}
+                </Pill>
               ),
+              actor: <span className="alm-audit-log__actor">{e.actor}</span>,
             }))}
           />
         )}
 
         {!loading && !loadError && entries.length === 0 && (
-          <p className="alm-audit-log__empty">
-            {m.settings_auditlog_empty()}
-          </p>
+          <p className="alm-audit-log__empty">{m.settings_auditlog_empty()}</p>
         )}
 
         {/* Pagination */}
         <div className="alm-audit-log__pagination">
           <span className="alm-audit-log__page-count">
             {m.settings_auditlog_event_count({ count: total })} &middot;{' '}
-            {m.settings_auditlog_page_of({ current: page + 1, total: totalPages })}
+            {m.settings_auditlog_page_of({
+              current: page + 1,
+              total: totalPages,
+            })}
           </span>
           <div className="alm-audit-log__page-btns">
-            <Btn size="sm" variant="ghost" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>
+            <Btn
+              size="sm"
+              variant="ghost"
+              onClick={() => setPage(Math.max(0, page - 1))}
+              disabled={page === 0}
+            >
               {m.settings_auditlog_previous()}
             </Btn>
-            <Btn size="sm" variant="ghost" onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}>
+            <Btn
+              size="sm"
+              variant="ghost"
+              onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+              disabled={page >= totalPages - 1}
+            >
               {m.settings_auditlog_next()}
             </Btn>
           </div>

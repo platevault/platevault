@@ -45,9 +45,7 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
 
   if (loading && !project) {
     return (
-      <div className="alm-project-bottom__loading">
-        {m.common_loading()}
-      </div>
+      <div className="alm-project-bottom__loading">{m.common_loading()}</div>
     );
   }
 
@@ -60,7 +58,9 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
   }
 
   const lifecycle =
-    typeof project.lifecycle === 'string' ? project.lifecycle : 'setup_incomplete';
+    typeof project.lifecycle === 'string'
+      ? project.lifecycle
+      : 'setup_incomplete';
   const sourceIds = project.sources.map((s) => s.inventoryId);
 
   return (

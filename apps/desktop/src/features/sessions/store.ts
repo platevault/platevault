@@ -10,26 +10,30 @@
  * removed along with the review-state machine.
  */
 
-import { useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/data/queryKeys";
-import { commands } from "@/bindings/index";
-import { unwrap } from "@/api/ipc";
-import { ipcArgs } from "@/lib/ipc-args";
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import { ipcArgs } from '@/lib/ipc-args';
 import type {
   InventoryListResponse,
   InventoryListRequest,
   InventoryFrameType,
-} from "@/bindings/index";
+} from '@/bindings/index';
 
 export type { InventoryListResponse };
-export type { InventorySource, InventorySession } from "@/bindings/index";
+export type { InventorySource, InventorySession } from '@/bindings/index';
 
 // Local IPC helper — migrated off the hand-written @/api/commands wrapper
 // (spec 037) onto the generated bindings. unwrap() turns the generated Result
 // into the throw-on-error contract the hooks below rely on.
-async function inventoryList(req: InventoryListRequest): Promise<InventoryListResponse> {
-  return unwrap(await commands.inventoryList(ipcArgs<typeof commands.inventoryList>(req)));
+async function inventoryList(
+  req: InventoryListRequest,
+): Promise<InventoryListResponse> {
+  return unwrap(
+    await commands.inventoryList(ipcArgs<typeof commands.inventoryList>(req)),
+  );
 }
 
 // Filters shape
@@ -49,14 +53,16 @@ export interface QueryState<T> {
 
 function makeRequest(filters?: InventoryFilters): InventoryListRequest {
   return {
-    contractVersion: "2.0.0",
+    contractVersion: '2.0.0',
     requestId: crypto.randomUUID(),
     filters: filters && Object.keys(filters).length > 0 ? filters : undefined,
   };
 }
 
 /** Subscribe to the grouped inventory ledger. */
-export function useInventorySources(filters?: InventoryFilters): QueryState<InventoryListResponse> {
+export function useInventorySources(
+  filters?: InventoryFilters,
+): QueryState<InventoryListResponse> {
   const { data, isFetching, error } = useQuery({
     queryKey: queryKeys.inventory.all(filters),
     queryFn: () => inventoryList(makeRequest(filters)),

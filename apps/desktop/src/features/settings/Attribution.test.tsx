@@ -14,7 +14,9 @@ describe('Attribution', () => {
   it('credits SIMBAD (CDS) and OpenNGC', () => {
     render(<Attribution />);
     expect(screen.getByText('SIMBAD')).toBeInTheDocument();
-    expect(screen.getByText(/CDS, Université de Strasbourg/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/CDS, Université de Strasbourg/),
+    ).toBeInTheDocument();
     expect(screen.getByText('OpenNGC')).toBeInTheDocument();
   });
 

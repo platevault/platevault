@@ -25,7 +25,11 @@ import { SourceProtectionOverride } from './SourceProtectionOverride';
 import { RemapRootDialog } from './RemapRootDialog';
 import { ConfirmOverlay } from '@/components';
 
-const SOURCES_KEYS = ['followSymlinks', 'hashOnScan', 'alwaysPreviewBeforePlan'];
+const SOURCES_KEYS = [
+  'followSymlinks',
+  'hashOnScan',
+  'alwaysPreviewBeforePlan',
+];
 
 // Fallback list used before the backend responds or if the call fails.
 const OVERRIDABLE_KEYS_FALLBACK = ['hashOnScan', 'followSymlinks'] as const;
@@ -36,15 +40,24 @@ interface DataSourcesProps {
 }
 
 /** Display order and labels for category groups (matches mock: Raw / Calibration / Project / Inbox). */
-const CATEGORY_ORDER: RootCategory[] = ['raw', 'calibration', 'project', 'inbox'];
+const CATEGORY_ORDER: RootCategory[] = [
+  'raw',
+  'calibration',
+  'project',
+  'inbox',
+];
 
 /** Render-time factory (spec 046 #8b) so category labels re-read the active locale. */
 function categoryLabel(category: RootCategory): string {
   switch (category) {
-    case 'raw': return m.settings_datasources_category_raw();
-    case 'calibration': return m.settings_datasources_category_calibration();
-    case 'project': return m.settings_datasources_category_project();
-    case 'inbox': return m.settings_datasources_category_inbox();
+    case 'raw':
+      return m.settings_datasources_category_raw();
+    case 'calibration':
+      return m.settings_datasources_category_calibration();
+    case 'project':
+      return m.settings_datasources_category_project();
+    case 'inbox':
+      return m.settings_datasources_category_inbox();
   }
 }
 
@@ -74,7 +87,9 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   // ── Disable/Enable (P6b) ──────────────────────────────────────────────────
   const [disableTarget, setDisableTarget] = useState<LibraryRoot | null>(null);
   const [togglingActiveId, setTogglingActiveId] = useState<string | null>(null);
-  const [toggleActiveError, setToggleActiveError] = useState<string | null>(null);
+  const [toggleActiveError, setToggleActiveError] = useState<string | null>(
+    null,
+  );
 
   // ── Delete (P6b) ───────────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<LibraryRoot | null>(null);
@@ -82,12 +97,16 @@ export function DataSources({ save: _save }: DataSourcesProps) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // ── Overridable keys — fetched from backend (T025) ──────────────────────────
-  const [overridableKeys, setOverridableKeys] = useState<string[]>([...OVERRIDABLE_KEYS_FALLBACK]);
+  const [overridableKeys, setOverridableKeys] = useState<string[]>([
+    ...OVERRIDABLE_KEYS_FALLBACK,
+  ]);
 
   useEffect(() => {
-    settingsOverridableKeys().then(setOverridableKeys).catch(() => {
-      // Keep fallback list on failure.
-    });
+    settingsOverridableKeys()
+      .then(setOverridableKeys)
+      .catch(() => {
+        // Keep fallback list on failure.
+      });
   }, []);
 
   // ── Per-source override (T025) ────────────────────────────────────────────
@@ -105,7 +124,11 @@ export function DataSources({ save: _save }: DataSourcesProps) {
       // Value arrives as string from the text input; cast to boolean when the
       // key is a known boolean flag, otherwise pass as string.
       const coerced: unknown =
-        overrideValue === 'true' ? true : overrideValue === 'false' ? false : overrideValue;
+        overrideValue === 'true'
+          ? true
+          : overrideValue === 'false'
+            ? false
+            : overrideValue;
       await settingsSourceOverrideSet({
         sourceId: overrideSourceId,
         key: overrideKey,
@@ -183,7 +206,9 @@ export function DataSources({ save: _save }: DataSourcesProps) {
     try {
       await reconcileRoot({ rootId: root.id });
       invalidateInventory();
-      await queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all() });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.sessions.all(),
+      });
       loadRoots();
     } catch (err: unknown) {
       setReconcileError(errMessage(err));
@@ -257,225 +282,269 @@ export function DataSources({ save: _save }: DataSourcesProps) {
 
   return (
     <>
-    <SettingsSection
-      title={m.common_sources()}
-      action={
-        <div className="alm-datasources__action-row">
-          <RestoreDefaultsBtn
-            scope="sources"
-            keys={SOURCES_KEYS}
-            onRestored={() => { /* sources pane has no controlled inputs to re-hydrate */ }}
-          />
-          <Btn
-            variant="primary"
-            size="sm"
-            onClick={() => { setShowAdd(true); setAddError(null); }}
-          >
-            {m.settings_datasources_add_btn()}
-          </Btn>
-        </div>
-      }
-    >
-      {showAdd && (
-        <div className="alm-data-sources__add-form">
-          <DirPicker
-            value={addingPath}
-            onChange={setAddingPath}
-            label={m.settings_datasources_folder_label()}
-            lastPathKind="inbox"
-          />
-          <div className="alm-data-sources__add-controls">
-            <select
-              className="alm-select"
-              value={addingCategory}
-              onChange={(e) => setAddingCategory(e.target.value as RootCategory)}
-              aria-label={m.settings_datasources_category_aria()}
-            >
-              <option value="raw">{m.settings_datasources_category_raw()}</option>
-              <option value="calibration">{m.settings_datasources_category_calibration()}</option>
-              <option value="project">{m.settings_datasources_category_project()}</option>
-              <option value="inbox">{m.settings_datasources_category_inbox()}</option>
-            </select>
-            <Btn size="sm" onClick={handleAdd} disabled={!addingPath.trim() || adding}>
-              {adding ? m.common_adding() : m.common_add()}
-            </Btn>
-            <Btn size="sm" variant="ghost" onClick={() => { setShowAdd(false); setAddError(null); setAddingPath(''); }}>
-              {m.common_cancel()}
-            </Btn>
-          </div>
-          {addError && (
-            <div className="alm-data-sources__add-error">
-              {addError}
-            </div>
-          )}
-        </div>
-      )}
-
-      {loading && (
-        <div className="alm-data-sources__status">
-          {m.common_loading()}
-        </div>
-      )}
-
-      {loadError && (
-        <div className="alm-data-sources__load-error">
-          {m.settings_datasources_load_error({ error: loadError })}
-        </div>
-      )}
-
-      {!loading && !loadError && roots.length === 0 && (
-        <div className="alm-data-sources__status">
-          {m.settings_datasources_empty()}
-        </div>
-      )}
-
-      {reconcileError && (
-        <div className="alm-data-sources__add-error">
-          {m.settings_datasources_reconcile_error({ error: reconcileError })}
-        </div>
-      )}
-
-      {grouped.map(({ category, roots: groupRoots }) => (
-        <div key={category} className="alm-data-sources__group">
-          <h4 className="alm-data-sources__group-label">
-            {categoryLabel(category)}
-          </h4>
-          {groupRoots.map((root) => (
-            <RootCard
-              key={root.id}
-              root={root}
-              onRescan={handleRescan}
-              rescanning={rescanningId === root.id}
-              onReconcile={handleReconcile}
-              reconciling={reconcilingId === root.id}
-              onRemap={setRemapRoot}
-              onToggleActive={requestToggleActive}
-              togglingActive={togglingActiveId === root.id}
-              onDelete={requestDelete}
-              deleting={deletingId === root.id}
+      <SettingsSection
+        title={m.common_sources()}
+        action={
+          <div className="alm-datasources__action-row">
+            <RestoreDefaultsBtn
+              scope="sources"
+              keys={SOURCES_KEYS}
+              onRestored={() => {
+                /* sources pane has no controlled inputs to re-hydrate */
+              }}
             />
-          ))}
-        </div>
-      ))}
-    </SettingsSection>
-
-    <RemapRootDialog
-      root={remapRoot}
-      onClose={() => setRemapRoot(null)}
-      onApplied={loadRoots}
-    />
-
-    {/* Disable confirm (P6b) — re-enable applies immediately, no confirm needed. */}
-    <ConfirmOverlay
-      open={disableTarget != null}
-      onClose={() => {
-        if (togglingActiveId) return;
-        setDisableTarget(null);
-        setToggleActiveError(null);
-      }}
-      onConfirm={() => void handleConfirmDisable()}
-      title={m.settings_datasources_disable_confirm_title()}
-      description={m.settings_datasources_disable_confirm_desc()}
-      confirmLabel={togglingActiveId ? m.common_disabling() : m.settings_datasources_disable()}
-      confirmVariant="danger"
-    >
-      {toggleActiveError && <span className="alm-field-error">{toggleActiveError}</span>}
-    </ConfirmOverlay>
-
-    {/* Delete confirm (P6b, decision D8) — surfaces the block reason inline
-        (e.g. root.has_dependents) instead of closing the dialog on failure. */}
-    <ConfirmOverlay
-      open={deleteTarget != null}
-      onClose={() => {
-        if (deletingId) return;
-        setDeleteTarget(null);
-        setDeleteError(null);
-      }}
-      onConfirm={() => void handleConfirmDelete()}
-      title={m.settings_datasources_delete_confirm_title()}
-      description={m.settings_datasources_delete_confirm_desc({ path: deleteTarget?.path ?? '' })}
-      confirmLabel={deletingId ? m.common_deleting() : m.settings_datasources_delete()}
-      confirmVariant="danger"
-    >
-      {deleteError && <span className="alm-field-error">{deleteError}</span>}
-    </ConfirmOverlay>
-
-    {/* Per-source setting override (spec 018 T025) */}
-    {roots.length > 0 && (
-      <div className="alm-settings__group" data-testid="source-override-panel">
-        <div className="alm-settings__group-title">
-          {m.settings_datasources_source_override_title()}
-        </div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">
-            {m.settings_datasources_source_override_source_aria()}
-          </div>
-          <div className="alm-settings__row-content">
-            <select
-              className="alm-select"
-              value={overrideSourceId}
-              onChange={(e) => setOverrideSourceId(e.target.value)}
-              aria-label={m.settings_datasources_source_override_source_aria()}
+            <Btn
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setShowAdd(true);
+                setAddError(null);
+              }}
             >
-              <option value="">{m.settings_datasources_select_source()}</option>
-              {roots.map((r) => (
-                <option key={r.id} value={r.id}>{r.path}</option>
-              ))}
-            </select>
+              {m.settings_datasources_add_btn()}
+            </Btn>
           </div>
-        </div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">
-            {m.settings_datasources_source_override_key_aria()}
-          </div>
-          <div className="alm-settings__row-content">
-            <select
-              className="alm-select"
-              value={overrideKey}
-              onChange={(e) => setOverrideKey(e.target.value)}
-              aria-label={m.settings_datasources_source_override_key_aria()}
-            >
-              {overridableKeys.map((k) => (
-                <option key={k} value={k}>{k}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label">
-            {m.settings_datasources_source_override_value_aria()}
-          </div>
-          <div className="alm-settings__row-content">
-            <select
-              className="alm-select"
-              value={overrideValue}
-              onChange={(e) => setOverrideValue(e.target.value)}
-              aria-label={m.settings_datasources_source_override_value_aria()}
-            >
-              <option value="true">{m.common_true()}</option>
-              <option value="false">{m.common_false()}</option>
-            </select>
-          </div>
-        </div>
-        {overrideError && (
-          <div className="alm-data-sources__add-error">
-            {m.settings_datasources_source_override_error({ error: overrideError })}
+        }
+      >
+        {showAdd && (
+          <div className="alm-data-sources__add-form">
+            <DirPicker
+              value={addingPath}
+              onChange={setAddingPath}
+              label={m.settings_datasources_folder_label()}
+              lastPathKind="inbox"
+            />
+            <div className="alm-data-sources__add-controls">
+              <select
+                className="alm-select"
+                value={addingCategory}
+                onChange={(e) =>
+                  setAddingCategory(e.target.value as RootCategory)
+                }
+                aria-label={m.settings_datasources_category_aria()}
+              >
+                <option value="raw">
+                  {m.settings_datasources_category_raw()}
+                </option>
+                <option value="calibration">
+                  {m.settings_datasources_category_calibration()}
+                </option>
+                <option value="project">
+                  {m.settings_datasources_category_project()}
+                </option>
+                <option value="inbox">
+                  {m.settings_datasources_category_inbox()}
+                </option>
+              </select>
+              <Btn
+                size="sm"
+                onClick={handleAdd}
+                disabled={!addingPath.trim() || adding}
+              >
+                {adding ? m.common_adding() : m.common_add()}
+              </Btn>
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setShowAdd(false);
+                  setAddError(null);
+                  setAddingPath('');
+                }}
+              >
+                {m.common_cancel()}
+              </Btn>
+            </div>
+            {addError && (
+              <div className="alm-data-sources__add-error">{addError}</div>
+            )}
           </div>
         )}
-        <div className="alm-settings__row">
-          <div className="alm-settings__row-label" />
-          <div className="alm-settings__row-content">
-            <Btn
-              size="sm"
-              onClick={() => void handleOverrideApply()}
-              disabled={!overrideSourceId || overrideApplying}
-            >
-              {m.settings_datasources_source_override_apply()}
-            </Btn>
+
+        {loading && (
+          <div className="alm-data-sources__status">{m.common_loading()}</div>
+        )}
+
+        {loadError && (
+          <div className="alm-data-sources__load-error">
+            {m.settings_datasources_load_error({ error: loadError })}
+          </div>
+        )}
+
+        {!loading && !loadError && roots.length === 0 && (
+          <div className="alm-data-sources__status">
+            {m.settings_datasources_empty()}
+          </div>
+        )}
+
+        {reconcileError && (
+          <div className="alm-data-sources__add-error">
+            {m.settings_datasources_reconcile_error({ error: reconcileError })}
+          </div>
+        )}
+
+        {grouped.map(({ category, roots: groupRoots }) => (
+          <div key={category} className="alm-data-sources__group">
+            <h4 className="alm-data-sources__group-label">
+              {categoryLabel(category)}
+            </h4>
+            {groupRoots.map((root) => (
+              <RootCard
+                key={root.id}
+                root={root}
+                onRescan={handleRescan}
+                rescanning={rescanningId === root.id}
+                onReconcile={handleReconcile}
+                reconciling={reconcilingId === root.id}
+                onRemap={setRemapRoot}
+                onToggleActive={requestToggleActive}
+                togglingActive={togglingActiveId === root.id}
+                onDelete={requestDelete}
+                deleting={deletingId === root.id}
+              />
+            ))}
+          </div>
+        ))}
+      </SettingsSection>
+
+      <RemapRootDialog
+        root={remapRoot}
+        onClose={() => setRemapRoot(null)}
+        onApplied={loadRoots}
+      />
+
+      {/* Disable confirm (P6b) — re-enable applies immediately, no confirm needed. */}
+      <ConfirmOverlay
+        open={disableTarget != null}
+        onClose={() => {
+          if (togglingActiveId) return;
+          setDisableTarget(null);
+          setToggleActiveError(null);
+        }}
+        onConfirm={() => void handleConfirmDisable()}
+        title={m.settings_datasources_disable_confirm_title()}
+        description={m.settings_datasources_disable_confirm_desc()}
+        confirmLabel={
+          togglingActiveId
+            ? m.common_disabling()
+            : m.settings_datasources_disable()
+        }
+        confirmVariant="danger"
+      >
+        {toggleActiveError && (
+          <span className="alm-field-error">{toggleActiveError}</span>
+        )}
+      </ConfirmOverlay>
+
+      {/* Delete confirm (P6b, decision D8) — surfaces the block reason inline
+        (e.g. root.has_dependents) instead of closing the dialog on failure. */}
+      <ConfirmOverlay
+        open={deleteTarget != null}
+        onClose={() => {
+          if (deletingId) return;
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
+        onConfirm={() => void handleConfirmDelete()}
+        title={m.settings_datasources_delete_confirm_title()}
+        description={m.settings_datasources_delete_confirm_desc({
+          path: deleteTarget?.path ?? '',
+        })}
+        confirmLabel={
+          deletingId ? m.common_deleting() : m.settings_datasources_delete()
+        }
+        confirmVariant="danger"
+      >
+        {deleteError && <span className="alm-field-error">{deleteError}</span>}
+      </ConfirmOverlay>
+
+      {/* Per-source setting override (spec 018 T025) */}
+      {roots.length > 0 && (
+        <div
+          className="alm-settings__group"
+          data-testid="source-override-panel"
+        >
+          <div className="alm-settings__group-title">
+            {m.settings_datasources_source_override_title()}
+          </div>
+          <div className="alm-settings__row">
+            <div className="alm-settings__row-label">
+              {m.settings_datasources_source_override_source_aria()}
+            </div>
+            <div className="alm-settings__row-content">
+              <select
+                className="alm-select"
+                value={overrideSourceId}
+                onChange={(e) => setOverrideSourceId(e.target.value)}
+                aria-label={m.settings_datasources_source_override_source_aria()}
+              >
+                <option value="">
+                  {m.settings_datasources_select_source()}
+                </option>
+                {roots.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.path}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="alm-settings__row">
+            <div className="alm-settings__row-label">
+              {m.settings_datasources_source_override_key_aria()}
+            </div>
+            <div className="alm-settings__row-content">
+              <select
+                className="alm-select"
+                value={overrideKey}
+                onChange={(e) => setOverrideKey(e.target.value)}
+                aria-label={m.settings_datasources_source_override_key_aria()}
+              >
+                {overridableKeys.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="alm-settings__row">
+            <div className="alm-settings__row-label">
+              {m.settings_datasources_source_override_value_aria()}
+            </div>
+            <div className="alm-settings__row-content">
+              <select
+                className="alm-select"
+                value={overrideValue}
+                onChange={(e) => setOverrideValue(e.target.value)}
+                aria-label={m.settings_datasources_source_override_value_aria()}
+              >
+                <option value="true">{m.common_true()}</option>
+                <option value="false">{m.common_false()}</option>
+              </select>
+            </div>
+          </div>
+          {overrideError && (
+            <div className="alm-data-sources__add-error">
+              {m.settings_datasources_source_override_error({
+                error: overrideError,
+              })}
+            </div>
+          )}
+          <div className="alm-settings__row">
+            <div className="alm-settings__row-label" />
+            <div className="alm-settings__row-content">
+              <Btn
+                size="sm"
+                onClick={() => void handleOverrideApply()}
+                disabled={!overrideSourceId || overrideApplying}
+              >
+                {m.settings_datasources_source_override_apply()}
+              </Btn>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
     </>
   );
 }
@@ -516,7 +585,10 @@ function RootCard({
   const metaParts: string[] = [];
   if (root.fileCount != null && root.fileCount > 0) {
     metaParts.push(
-      m.data_sources_file_count({ count: root.fileCount, formatted: root.fileCount.toLocaleString() }),
+      m.data_sources_file_count({
+        count: root.fileCount,
+        formatted: root.fileCount.toLocaleString(),
+      }),
     );
   }
   if (root.lastScanned) {
@@ -549,9 +621,7 @@ function RootCard({
             </Pill>
           )}
         </div>
-        {meta && (
-          <div className="alm-data-sources__root-meta">{meta}</div>
-        )}
+        {meta && <div className="alm-data-sources__root-meta">{meta}</div>}
         <SourceProtectionOverride sourceId={root.id} />
       </div>
 
@@ -563,7 +633,11 @@ function RootCard({
           </Btn>
         )}
         {!isOffline && RECONCILABLE_CATEGORIES.includes(root.category) && (
-          <Btn size="sm" onClick={() => onReconcile(root)} disabled={reconciling}>
+          <Btn
+            size="sm"
+            onClick={() => onReconcile(root)}
+            disabled={reconciling}
+          >
             {reconciling ? m.common_reconciling() : m.common_reconcile()}
           </Btn>
         )}
@@ -574,8 +648,12 @@ function RootCard({
             disabled={togglingActive}
           >
             {root.active
-              ? (togglingActive ? m.common_disabling() : m.settings_datasources_disable())
-              : (togglingActive ? m.common_enabling() : m.settings_datasources_enable())}
+              ? togglingActive
+                ? m.common_disabling()
+                : m.settings_datasources_disable()
+              : togglingActive
+                ? m.common_enabling()
+                : m.settings_datasources_enable()}
           </Btn>
         )}
         <Btn size="sm" onClick={() => onRemap(root)}>

@@ -73,23 +73,26 @@ describe('T026 — anchor CI gate', () => {
   });
 
   it('inbox.confirm-row anchor is present in InboxPage.tsx', () => {
-    const source = Object.entries(ANCHOR_SOURCES).find(([k]) =>
-      k.includes('InboxPage'),
-    )?.[1] ?? '';
+    const source =
+      Object.entries(ANCHOR_SOURCES).find(([k]) =>
+        k.includes('InboxPage'),
+      )?.[1] ?? '';
     expect(source).toContain(ANCHOR_INBOX_CONFIRM_ROW);
   });
 
   it('projects.create-cta anchor is present in ProjectsPage.tsx', () => {
-    const source = Object.entries(ANCHOR_SOURCES).find(([k]) =>
-      k.includes('ProjectsPage'),
-    )?.[1] ?? '';
+    const source =
+      Object.entries(ANCHOR_SOURCES).find(([k]) =>
+        k.includes('ProjectsPage'),
+      )?.[1] ?? '';
     expect(source).toContain(ANCHOR_PROJECTS_CREATE_CTA);
   });
 
   it('project.open-in-tool anchor is present in ProjectDetail.tsx', () => {
-    const source = Object.entries(ANCHOR_SOURCES).find(([k]) =>
-      k.includes('ProjectDetail'),
-    )?.[1] ?? '';
+    const source =
+      Object.entries(ANCHOR_SOURCES).find(([k]) =>
+        k.includes('ProjectDetail'),
+      )?.[1] ?? '';
     expect(source).toContain(ANCHOR_PROJECT_OPEN_IN_TOOL);
   });
 });

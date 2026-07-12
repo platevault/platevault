@@ -17,7 +17,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+  act,
+} from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { DataSources } from './DataSources';
@@ -26,7 +33,9 @@ import type { LibraryRoot } from '@/bindings/types';
 import { m } from '@/lib/i18n';
 
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -106,7 +115,9 @@ describe('DataSources — Disable/Enable', () => {
 
     const dialog = await screen.findByRole('dialog');
     await act(async () => {
-      fireEvent.click(within(dialog).getByRole('button', { name: /^Disable$/i }));
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /^Disable$/i }),
+      );
       await Promise.resolve();
     });
 
@@ -139,7 +150,9 @@ describe('DataSources — Disable/Enable', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    expect(screen.getByText(m.settings_datasources_disabled_pill())).toBeInTheDocument();
+    expect(
+      screen.getByText(m.settings_datasources_disabled_pill()),
+    ).toBeInTheDocument();
   });
 });
 
@@ -157,7 +170,9 @@ describe('DataSources — Delete', () => {
 
     const dialog = await screen.findByRole('dialog');
     await act(async () => {
-      fireEvent.click(within(dialog).getByRole('button', { name: /^Delete$/i }));
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /^Delete$/i }),
+      );
       await Promise.resolve();
     });
 
@@ -174,7 +189,9 @@ describe('DataSources — Delete', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^Delete$/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('D8: keeps the dialog open and surfaces the block reason when root.has_dependents', async () => {
@@ -185,7 +202,13 @@ describe('DataSources — Delete', () => {
         message: 'root root-1 has dependent records and cannot be deleted',
         severity: 'blocking',
         retryable: false,
-        details: { inboxItems: 1, planItems: 0, fileRecords: 0, acquisitionSessions: 0, calibrationSessions: 0 },
+        details: {
+          inboxItems: 1,
+          planItems: 0,
+          fileRecords: 0,
+          acquisitionSessions: 0,
+          calibrationSessions: 0,
+        },
       }),
     );
 
@@ -196,7 +219,9 @@ describe('DataSources — Delete', () => {
 
     const dialog = await screen.findByRole('dialog');
     await act(async () => {
-      fireEvent.click(within(dialog).getByRole('button', { name: /^Delete$/i }));
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /^Delete$/i }),
+      );
       await Promise.resolve();
     });
 
@@ -205,6 +230,8 @@ describe('DataSources — Delete', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText(m.err_root_has_dependents())).toBeInTheDocument();
     // The root was NOT removed from the list (no optimistic/premature removal).
-    expect(screen.getByText('/astro/raw', { selector: 'code' })).toBeInTheDocument();
+    expect(
+      screen.getByText('/astro/raw', { selector: 'code' }),
+    ).toBeInTheDocument();
   });
 });

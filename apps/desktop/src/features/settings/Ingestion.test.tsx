@@ -11,7 +11,13 @@
  *   4. "Restore defaults" persists the in-code defaults and re-hydrates.
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockGet, mockUpdate } = vi.hoisted(() => ({
@@ -93,7 +99,9 @@ describe('Ingestion', () => {
       await Promise.resolve();
     });
 
-    expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ hashingMode: 'off' }));
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ hashingMode: 'off' }),
+    );
   });
 
   it('a slow initial fetch does not clobber an edit made before it resolves', async () => {
@@ -136,7 +144,9 @@ describe('Ingestion', () => {
     render(<Ingestion save={vi.fn()} />);
     // Wait for the fetched (non-default) value to be applied, not merely for
     // the get call to fire — asserting right after the call races hydration.
-    await waitFor(() => expect(screen.getByLabelText('Follow symbolic links')).toBeChecked());
+    await waitFor(() =>
+      expect(screen.getByLabelText('Follow symbolic links')).toBeChecked(),
+    );
 
     const restoreBtn = screen.getByText('Restore defaults');
     await act(async () => {
@@ -144,7 +154,9 @@ describe('Ingestion', () => {
       await Promise.resolve();
     });
 
-    await waitFor(() => expect(screen.getByLabelText('Follow symbolic links')).not.toBeChecked());
+    await waitFor(() =>
+      expect(screen.getByLabelText('Follow symbolic links')).not.toBeChecked(),
+    );
     expect(mockUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ followSymlinks: false, hashingMode: 'lazy' }),
     );

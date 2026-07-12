@@ -17,8 +17,16 @@
 // `mixed` removed 2026-07-03 (spec 006 iteration): Inbox single-type ingest
 // (spec 041) splits mixed folders at ingest, so an inventory item is never mixed.
 export type FrameType = 'light' | 'dark' | 'flat' | 'bias';
-export type SourceKind = 'local_disk' | 'external_disk' | 'removable' | 'network_share';
-export type SourceState = 'active' | 'missing' | 'disabled' | 'reconnect_required';
+export type SourceKind =
+  | 'local_disk'
+  | 'external_disk'
+  | 'removable'
+  | 'network_share';
+export type SourceState =
+  | 'active'
+  | 'missing'
+  | 'disabled'
+  | 'reconnect_required';
 
 export interface ProvenanceSummary {
   target?: string;
@@ -110,7 +118,10 @@ const LOCAL_SESSIONS: InventorySession[] = [
     linked: {
       projects: [
         { id: PROJECT_NGC7000_NB, name: 'NGC 7000 · HOO' },
-        { id: '550e8400-e29b-41d4-a716-446655440303', name: 'NGC 7000 · SHO mosaic' },
+        {
+          id: '550e8400-e29b-41d4-a716-446655440303',
+          name: 'NGC 7000 · SHO mosaic',
+        },
       ],
     },
   },
@@ -166,7 +177,11 @@ const LOCAL_SESSIONS: InventorySession[] = [
     binning: '1×1',
     setTemp: '0°C',
     capturedOn: '2026-03-28',
-    provenance: { target: 'M31', filter: 'L', inferred: 'filter origin inferred' },
+    provenance: {
+      target: 'M31',
+      filter: 'L',
+      inferred: 'filter origin inferred',
+    },
     linked: undefined,
   },
   {

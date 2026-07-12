@@ -10,7 +10,12 @@
  * single explicit "unknown" state — never a fabricated recommendation.
  */
 
-import { BANDS, bandTier, type Band, type Recommendation } from './astro/moon-avoidance';
+import {
+  BANDS,
+  bandTier,
+  type Band,
+  type Recommendation,
+} from './astro/moon-avoidance';
 import { m } from '@/lib/i18n';
 
 /** i18n label for each derived recommendation category (render-time thunks). */
@@ -44,7 +49,9 @@ export function FilterBadges({ viability, recommendation }: Props) {
   if (viability === null) {
     return (
       <span className="alm-filter-badges" title={label}>
-        <span className="alm-filter-badge alm-filter-badge--unknown">{label}</span>
+        <span className="alm-filter-badge alm-filter-badge--unknown">
+          {label}
+        </span>
       </span>
     );
   }
@@ -58,7 +65,9 @@ export function FilterBadges({ viability, recommendation }: Props) {
             key={band}
             className={
               `alm-filter-badge alm-filter-badge--${bandTier(band)}` +
-              (viable ? ' alm-filter-badge--viable' : ' alm-filter-badge--not-viable')
+              (viable
+                ? ' alm-filter-badge--viable'
+                : ' alm-filter-badge--not-viable')
             }
             aria-label={
               viable

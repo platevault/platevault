@@ -37,7 +37,12 @@ export const CALIBRATION_KINDS = [
   'bad_pixel_map',
 ] as const satisfies readonly CalibrationKind[];
 
-export const FRAME_TYPES = ['light', 'dark', 'flat', 'bias'] as const satisfies readonly FrameType[];
+export const FRAME_TYPES = [
+  'light',
+  'dark',
+  'flat',
+  'bias',
+] as const satisfies readonly FrameType[];
 export const INVENTORY_FRAME_FILTERS = [
   'light',
   'dark',
@@ -45,8 +50,16 @@ export const INVENTORY_FRAME_FILTERS = [
   'bias',
   'mixed',
 ] as const satisfies readonly InventoryFrameFilter[];
-export const SESSIONS_GROUPS = ['none', 'target', 'month'] as const satisfies readonly SessionsGroup[];
-export const INBOX_GROUPS = ['none', 'type', 'date'] as const satisfies readonly InboxGroup[];
+export const SESSIONS_GROUPS = [
+  'none',
+  'target',
+  'month',
+] as const satisfies readonly SessionsGroup[];
+export const INBOX_GROUPS = [
+  'none',
+  'type',
+  'date',
+] as const satisfies readonly InboxGroup[];
 
 // --- Parsers: (unknown) => T | undefined ---
 
@@ -54,7 +67,8 @@ export type Parser<T> = (value: unknown) => T | undefined;
 
 /** Numeric id parser. Accepts a finite number or a numeric string. */
 export const parseNumber: Parser<number> = (value) => {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'number')
+    return Number.isFinite(value) ? value : undefined;
   if (typeof value === 'string' && value.trim() !== '') {
     const n = Number(value);
     return Number.isFinite(n) ? n : undefined;
@@ -69,11 +83,14 @@ export const parseString: Parser<string> = (value) =>
 /** Enum parser bound to an allow-list; values outside the list coerce away. */
 export function parseEnum<T extends string>(allow: readonly T[]): Parser<T> {
   const set = new Set<string>(allow);
-  return (value) => (typeof value === 'string' && set.has(value) ? (value as T) : undefined);
+  return (value) =>
+    typeof value === 'string' && set.has(value) ? (value as T) : undefined;
 }
 
 /** Comma-separated multi-value enum parser; keeps only allow-listed members. */
-export function parseCsvEnum<T extends string>(allow: readonly T[]): Parser<T[]> {
+export function parseCsvEnum<T extends string>(
+  allow: readonly T[],
+): Parser<T[]> {
   const set = new Set<string>(allow);
   return (value) => {
     if (typeof value !== 'string' || value === '') return undefined;

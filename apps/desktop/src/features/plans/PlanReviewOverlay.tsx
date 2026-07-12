@@ -31,7 +31,10 @@ import { formatBytes } from '@/lib/format';
 import { addToast } from '@/shared/toast';
 import { PlanProtectionGate } from './PlanProtectionGate';
 import { usePlanApplyProgress } from './usePlanApplyProgress';
-import type { PlanDetail_Serialize, PlanItemDetail_Serialize } from '@/bindings/index';
+import type {
+  PlanDetail_Serialize,
+  PlanItemDetail_Serialize,
+} from '@/bindings/index';
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -105,15 +108,23 @@ export function PlanReviewOverlay({
   // real terminal plan state to decide whether to offer "Generate retry plan".
   const [finalState, setFinalState] = useState<string | null>(null);
   const [resuming, setResuming] = useState(false);
-  const { progress, run: runApply, resume: resumeApply, reset: resetApply } = usePlanApplyProgress();
+  const {
+    progress,
+    run: runApply,
+    resume: resumeApply,
+    reset: resetApply,
+  } = usePlanApplyProgress();
 
   const busy = approving || discarding || retrying || progress.running;
   const applied = finalState === 'applied';
-  const retryable = finalState === 'failed' || finalState === 'partially_applied';
+  const retryable =
+    finalState === 'failed' || finalState === 'partially_applied';
 
   const invalidatePlan = useCallback(() => {
     if (planId !== null) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.plans.detail(planId) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.plans.detail(planId),
+      });
     }
   }, [planId, queryClient]);
 
@@ -146,7 +157,10 @@ export function PlanReviewOverlay({
     invalidatePlan();
     setFinalState(response?.newState ?? 'failed');
     if (response !== null && response.newState === 'applied') {
-      addToast({ message: m.plans_review_apply_success_toast(), variant: 'success' });
+      addToast({
+        message: m.plans_review_apply_success_toast(),
+        variant: 'success',
+      });
       onApplied?.();
     } else {
       setApplyError(m.plans_review_apply_failed());
@@ -191,7 +205,10 @@ export function PlanReviewOverlay({
     setApplyError(null);
     try {
       const res = unwrap(await commands.plansRetry(planId, 'failed'));
-      addToast({ message: m.plans_review_retry_created_toast(), variant: 'info' });
+      addToast({
+        message: m.plans_review_retry_created_toast(),
+        variant: 'info',
+      });
       resetApply();
       setGateReady(false);
       setFinalState(null);
@@ -222,13 +239,17 @@ export function PlanReviewOverlay({
   const rows = (plan?.items ?? []).map((item) => ({
     _testid: `plan-review-item-${item.index}`,
     _rowClassName:
-      item.protection === 'protected' ? 'alm-plan-review__row--protected' : undefined,
+      item.protection === 'protected'
+        ? 'alm-plan-review__row--protected'
+        : undefined,
     name: item.name,
     action: <Pill variant={actionPillVariant(item.action)}>{item.action}</Pill>,
     from: <span className="alm-mono">{item.from}</span>,
     to:
       item.action === 'delete' ? (
-        <span className="alm-cell--muted">{m.plans_review_deletion_target()}</span>
+        <span className="alm-cell--muted">
+          {m.plans_review_deletion_target()}
+        </span>
       ) : (
         <span className="alm-mono">{item.to}</span>
       ),
@@ -327,7 +348,10 @@ export function PlanReviewOverlay({
 
           {/* Spec-016 protection gate: protected items require acknowledgement
               before Approve & apply unlocks. */}
-          <PlanProtectionGate planId={plan.id} onAcknowledgedChange={setGateReady} />
+          <PlanProtectionGate
+            planId={plan.id}
+            onAcknowledgedChange={setGateReady}
+          />
 
           {/* Live apply progress (D17 — spec 025 progress UI, absorbed here). */}
           {(progress.running ||
@@ -370,19 +394,26 @@ export function PlanReviewOverlay({
                     disabled={resuming}
                     data-testid="plan-review-resume"
                   >
-                    {resuming ? m.plans_review_resuming() : m.plans_review_resume_btn()}
+                    {resuming
+                      ? m.plans_review_resuming()
+                      : m.plans_review_resume_btn()}
                   </Btn>
                 </>
               )}
               {progress.resumeStalled && (
-                <Pill variant="warn" data-testid="plan-review-resume-stalled-badge">
+                <Pill
+                  variant="warn"
+                  data-testid="plan-review-resume-stalled-badge"
+                >
                   {m.plans_review_resume_stalled()}
                 </Pill>
               )}
             </div>
           )}
 
-          {applyError !== null && <Banner variant="danger">{applyError}</Banner>}
+          {applyError !== null && (
+            <Banner variant="danger">{applyError}</Banner>
+          )}
         </div>
       )}
     </Modal>

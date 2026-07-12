@@ -27,22 +27,20 @@ export interface WizardShellProps extends HTMLAttributes<HTMLDivElement> {
  *   left column with a 240px summary rail on the right.
  */
 export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
-  function WizardShell({ steps, currentStep, children, footer, summary, className, ...rest }, ref) {
+  function WizardShell(
+    { steps, currentStep, children, footer, summary, className, ...rest },
+    ref,
+  ) {
     const hasSidebar = summary != null;
     const hasCenteredFooter = footer != null;
     const cls = ['alm-wizard', className].filter(Boolean).join(' ');
 
     return (
-      <div
-        ref={ref}
-        className={cls}
-        {...rest}
-      >
+      <div ref={ref} className={cls} {...rest}>
         {/* Step progress bar */}
-        {hasCenteredFooter && !hasSidebar ? (
-          // Centered bar rendered inside scrollable body below
-          null
-        ) : (
+        {hasCenteredFooter &&
+        !hasSidebar ? // Centered bar rendered inside scrollable body below
+        null : (
           <nav
             className="alm-wizard__rail"
             aria-label={m.ui_wizard_progress_aria()}
@@ -58,16 +56,29 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                   // eslint-disable-next-line no-restricted-syntax -- dynamic: step-badge conditional token colors (active/completed/pending)
                   style={
                     i === currentStep
-                      ? { background: 'var(--alm-ink)', color: 'var(--alm-on-accent)' }
+                      ? {
+                          background: 'var(--alm-ink)',
+                          color: 'var(--alm-on-accent)',
+                        }
                       : step.completed
-                        ? { background: 'var(--alm-chip)', color: 'var(--alm-text-secondary)' }
-                        : { background: 'transparent', border: '1.5px solid var(--alm-border)', color: 'var(--alm-text-faint)' }
+                        ? {
+                            background: 'var(--alm-chip)',
+                            color: 'var(--alm-text-secondary)',
+                          }
+                        : {
+                            background: 'transparent',
+                            border: '1.5px solid var(--alm-border)',
+                            color: 'var(--alm-text-faint)',
+                          }
                   }
                 >
                   {step.completed && i !== currentStep ? '✓' : i + 1}
                 </span>
                 <span
-                  className={'alm-wizard__step-label' + (i === currentStep ? ' alm-wizard__step-label--active' : '')}
+                  className={
+                    'alm-wizard__step-label' +
+                    (i === currentStep ? ' alm-wizard__step-label--active' : '')
+                  }
                 >
                   {step.label}
                 </span>
@@ -83,12 +94,8 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
         {hasSidebar ? (
           /* Sidebar layout (project wizard) */
           <div className="alm-wizard__body--sidebar">
-            <div className="alm-wizard__content--sidebar">
-              {children}
-            </div>
-            <aside className="alm-wizard__summary">
-              {summary}
-            </aside>
+            <div className="alm-wizard__content--sidebar">{children}</div>
+            <aside className="alm-wizard__summary">{summary}</aside>
           </div>
         ) : (
           /* Centered layout (setup wizard) */
@@ -108,7 +115,11 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                         key={step.label}
                         className={
                           'alm-wizard__steps-card' +
-                          (isActive ? ' alm-wizard__steps-card--active' : isPast ? ' alm-wizard__steps-card--past' : '')
+                          (isActive
+                            ? ' alm-wizard__steps-card--active'
+                            : isPast
+                              ? ' alm-wizard__steps-card--past'
+                              : '')
                         }
                         aria-current={isActive ? 'step' : undefined}
                       >
@@ -125,15 +136,13 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
             {/* Pinned navigation footer */}
             {hasCenteredFooter && (
               <div className="alm-wizard__footer">
-                <div className="alm-wizard__footer-inner">
-                  {footer}
-                </div>
+                <div className="alm-wizard__footer-inner">{footer}</div>
               </div>
             )}
           </>
         )}
       </div>
     );
-  }
+  },
 );
 WizardShell.displayName = 'WizardShell';

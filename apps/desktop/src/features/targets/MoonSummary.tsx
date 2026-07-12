@@ -60,7 +60,11 @@ export function MoonSummary({ night }: Props) {
   const pct = Math.round(illuminationFrac * 100);
   const label = phaseLabel(phaseName);
   const direction = waxing ? m.targets_moon_waxing() : m.targets_moon_waning();
-  const ariaLabel = m.targets_moon_summary_aria({ phase: label, pct, direction });
+  const ariaLabel = m.targets_moon_summary_aria({
+    phase: label,
+    pct,
+    direction,
+  });
 
   const ellipseRx = R * Math.abs(1 - 2 * illuminationFrac);
   const ellipseLit = illuminationFrac > 0.5;
@@ -92,7 +96,9 @@ export function MoonSummary({ night }: Props) {
         />
       </svg>
       <span className="alm-moon-summary__text">
-        <span className="alm-moon-summary__title">{m.targets_moon_summary_title()}</span>
+        <span className="alm-moon-summary__title">
+          {m.targets_moon_summary_title()}
+        </span>
         <span className="alm-moon-summary__phase">{label}</span>
         <span className="alm-moon-summary__meta">
           {m.targets_moon_illumination({ pct })} · {direction}

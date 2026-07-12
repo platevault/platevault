@@ -44,7 +44,15 @@ describe('ProjectStatusTag', () => {
   });
 
   it('renders all PillVariant-equivalent states without throwing', () => {
-    const variants = ['ok', 'warn', 'danger', 'info', 'accent', 'neutral', 'ghost'] as const;
+    const variants = [
+      'ok',
+      'warn',
+      'danger',
+      'info',
+      'accent',
+      'neutral',
+      'ghost',
+    ] as const;
     for (const variant of variants) {
       const { unmount } = render(
         <ProjectStatusTag variant={variant}>{variant}</ProjectStatusTag>,

@@ -61,7 +61,9 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
         const res = await commands.toolsDiscover({ toolId: null });
         if (cancelled || res.status !== 'ok') return;
         const found = new Map(
-          res.data.entries.filter((e) => e.available).map((e) => [e.toolId, e.path]),
+          res.data.entries
+            .filter((e) => e.available)
+            .map((e) => [e.toolId, e.path]),
         );
         let changed = false;
         const next: ToolsState = { ...tools };
@@ -107,7 +109,9 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
       const { commands } = await import('@/bindings/index');
       const res = await commands.toolsDiscover({ toolId: key });
       if (res.status !== 'ok') return false;
-      const entry = res.data.entries.find((e) => e.toolId === key && e.available);
+      const entry = res.data.entries.find(
+        (e) => e.toolId === key && e.available,
+      );
       if (entry?.path) {
         onToolsChange({ ...tools, [key]: { enabled: true, path: entry.path } });
         return true;
@@ -120,9 +124,7 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
 
   return (
     <div className="alm-step-tools">
-      <p className="alm-step-tools__intro">
-        {m.setup_tools_intro()}
-      </p>
+      <p className="alm-step-tools__intro">{m.setup_tools_intro()}</p>
 
       <div className="alm-step-tools__list">
         {TOOL_DEFS.map((def) => {
@@ -140,9 +142,7 @@ export function StepTools({ tools, onToolsChange }: StepToolsProps) {
         })}
       </div>
 
-      <p className="alm-step-tools__note">
-        {m.setup_tools_skip_note()}
-      </p>
+      <p className="alm-step-tools__note">{m.setup_tools_skip_note()}</p>
     </div>
   );
 }
@@ -174,26 +174,19 @@ function ToolCard({
   };
 
   return (
-    <div
-      className="alm-step-tools__card"
-      data-testid={`tool-card-${def.key}`}
-    >
+    <div className="alm-step-tools__card" data-testid={`tool-card-${def.key}`}>
       {/* Header row: name + detected pill + description + enable toggle */}
       <div className="alm-step-tools__header">
         <div className="alm-step-tools__tool-info">
           <div className="alm-step-tools__name-row">
-            <span className="alm-step-tools__tool-name">
-              {def.name()}
-            </span>
+            <span className="alm-step-tools__tool-name">{def.name()}</span>
             {detected ? (
               <Pill variant="ok">{m.setup_tools_detected()}</Pill>
             ) : (
               <Pill variant="neutral">{m.setup_tools_not_detected()}</Pill>
             )}
           </div>
-          <span className="alm-step-tools__tool-desc">
-            {def.description()}
-          </span>
+          <span className="alm-step-tools__tool-desc">{def.description()}</span>
         </div>
         <div className="alm-step-tools__controls">
           <div className="alm-step-tools__actions">
@@ -201,7 +194,9 @@ function ToolCard({
               variant="ghost"
               onClick={handleRedetect}
               disabled={redetecting}
-              aria-label={m.setup_tools_redetect_binary_aria({ name: def.name() })}
+              aria-label={m.setup_tools_redetect_binary_aria({
+                name: def.name(),
+              })}
             >
               {redetecting ? m.common_detecting() : m.setup_tools_redetect()}
             </Btn>
@@ -248,7 +243,10 @@ function ToolPathPicker({
     // The processing tool's executable is a file (e.g. PixInsight.exe /
     // pixinsight / Siril), not a directory — pick the binary, not a folder.
     const result = await pick([
-      { name: m.setup_tools_executable_label(), extensions: ['exe', 'app', 'bin'] },
+      {
+        name: m.setup_tools_executable_label(),
+        extensions: ['exe', 'app', 'bin'],
+      },
       { name: m.setup_tools_filter_all_files(), extensions: ['*'] },
     ]);
     if (result.path) {
@@ -262,7 +260,10 @@ function ToolPathPicker({
         {m.setup_tools_executable_label()}
       </span>
       <span
-        className={'alm-mono alm-step-tools__path-value' + (path ? ' alm-step-tools__path-value--set' : '')}
+        className={
+          'alm-mono alm-step-tools__path-value' +
+          (path ? ' alm-step-tools__path-value--set' : '')
+        }
         title={path ?? undefined}
       >
         {path ?? m.setup_tools_no_path()}

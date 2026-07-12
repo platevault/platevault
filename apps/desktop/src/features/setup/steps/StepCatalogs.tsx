@@ -43,12 +43,14 @@ function DefaultProtectionControl() {
 
   useEffect(() => {
     let cancelled = false;
-    commands.settingsGet('cleanup')
+    commands
+      .settingsGet('cleanup')
       .then((r) => unwrap(r))
       .then((data) => {
         const vals = data?.values as Record<string, unknown> | undefined;
         const v = vals?.defaultProtection;
-        if (!cancelled && typeof v === 'string') setValue(v as DefaultProtection);
+        if (!cancelled && typeof v === 'string')
+          setValue(v as DefaultProtection);
       })
       .catch(() => {
         // Backend unavailable — keep the default.
@@ -60,7 +62,8 @@ function DefaultProtectionControl() {
 
   const onChange = (v: DefaultProtection) => {
     setValue(v);
-    void commands.settingsUpdate('cleanup', { defaultProtection: v })
+    void commands
+      .settingsUpdate('cleanup', { defaultProtection: v })
       .then((r) => unwrap(r))
       .catch(() => {});
   };
@@ -72,9 +75,13 @@ function DefaultProtectionControl() {
       aria-label={m.setup_config_default_protection_title()}
       onChange={(e) => onChange(e.target.value as DefaultProtection)}
     >
-      <option value="protected">{m.settings_cleanup_protection_protected()}</option>
+      <option value="protected">
+        {m.settings_cleanup_protection_protected()}
+      </option>
       <option value="normal">{m.settings_cleanup_protection_normal()}</option>
-      <option value="unprotected">{m.settings_cleanup_protection_unprotected()}</option>
+      <option value="unprotected">
+        {m.settings_cleanup_protection_unprotected()}
+      </option>
     </select>
   );
 }
@@ -91,7 +98,9 @@ function DensityControl() {
       onChange={(e) => setDensity(e.target.value as Density)}
     >
       <option value="compact">{m.setup_config_density_compact()}</option>
-      <option value="comfortable">{m.setup_config_density_comfortable()}</option>
+      <option value="comfortable">
+        {m.setup_config_density_comfortable()}
+      </option>
       <option value="spacious">{m.setup_config_density_spacious()}</option>
     </select>
   );
@@ -111,9 +120,7 @@ function ConfigOption({
   return (
     <div className="alm-setup-catalogs__option">
       <div className="alm-setup-catalogs__option-header">
-        <span className="alm-setup-catalogs__option-title">
-          {title}
-        </span>
+        <span className="alm-setup-catalogs__option-title">{title}</span>
         {control}
       </div>
       <div className="alm-settings__row-desc">{description}</div>
@@ -132,9 +139,7 @@ function ConfigOption({
  */
 export function StepCatalogs(_props: StepCatalogsProps) {
   return (
-    <div
-      className="alm-step-catalogs"
-    >
+    <div className="alm-step-catalogs">
       {/* Online SIMBAD resolution (label + toggle on one line, desc below). */}
       <ResolverSettingsControl compact />
 

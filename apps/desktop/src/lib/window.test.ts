@@ -55,7 +55,10 @@ describe('openInNewWindow', () => {
     await openInNewWindow('/targets');
 
     expect(webviewWindowCtor).toHaveBeenCalledTimes(1);
-    const [label, options] = webviewWindowCtor.mock.calls[0] as [string, { url: string }];
+    const [label, options] = webviewWindowCtor.mock.calls[0] as [
+      string,
+      { url: string },
+    ];
     expect(label).toMatch(/^alm-win-/);
     expect(options.url).toContain('#/targets');
     expect(openSpy).not.toHaveBeenCalled();

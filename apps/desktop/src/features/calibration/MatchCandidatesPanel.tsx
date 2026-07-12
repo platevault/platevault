@@ -39,30 +39,44 @@ import { RotationWarningNotice, type RotationWarning } from './RotationWarning';
 
 function statusVariant(status: SuggestStatus | string): PillVariant {
   switch (status) {
-    case 'match': return 'ok';
-    case 'ambiguous': return 'warn';
-    case 'no_match': return 'neutral';
-    case 'observer_location_missing': return 'warn';
-    default: return 'neutral';
+    case 'match':
+      return 'ok';
+    case 'ambiguous':
+      return 'warn';
+    case 'no_match':
+      return 'neutral';
+    case 'observer_location_missing':
+      return 'warn';
+    default:
+      return 'neutral';
   }
 }
 
 function statusLabel(status: SuggestStatus | string): string {
   switch (status) {
-    case 'match': return m.calibration_status_match();
-    case 'ambiguous': return m.calibration_status_ambiguous();
-    case 'no_match': return m.calibration_status_no_match();
-    case 'observer_location_missing': return m.calibration_status_location_missing();
-    default: return status;
+    case 'match':
+      return m.calibration_status_match();
+    case 'ambiguous':
+      return m.calibration_status_ambiguous();
+    case 'no_match':
+      return m.calibration_status_no_match();
+    case 'observer_location_missing':
+      return m.calibration_status_location_missing();
+    default:
+      return status;
   }
 }
 
 function reasonLabel(reason: MismatchReason): string {
   switch (reason) {
-    case 'out_of_tolerance': return m.calibration_reason_out_of_tolerance();
-    case 'metadata_missing': return m.calibration_reason_metadata_missing();
-    case 'hard_rule_violation': return m.calibration_reason_hard_rule_violation();
-    default: return reason;
+    case 'out_of_tolerance':
+      return m.calibration_reason_out_of_tolerance();
+    case 'metadata_missing':
+      return m.calibration_reason_metadata_missing();
+    case 'hard_rule_violation':
+      return m.calibration_reason_hard_rule_violation();
+    default:
+      return reason;
   }
 }
 
@@ -79,7 +93,11 @@ function confidencePct(confidence: number): string {
 function ConfidenceBar({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   const barColor =
-    pct >= 90 ? 'var(--alm-ok)' : pct >= 70 ? 'var(--alm-warn)' : 'var(--alm-danger)';
+    pct >= 90
+      ? 'var(--alm-ok)'
+      : pct >= 70
+        ? 'var(--alm-warn)'
+        : 'var(--alm-danger)';
   return (
     <div className="alm-match-candidates__conf-bar">
       <div className="alm-match-candidates__conf-track">
@@ -104,7 +122,9 @@ function ConfidenceBar({ value }: { value: number }) {
  * T080 / FR-040). The suggest DTO does not yet carry this field; it is read
  * defensively so a future contract enrichment surfaces automatically.
  */
-type MatchWithRotation = CalibrationMatchDto & { rotationWarning?: RotationWarning | null };
+type MatchWithRotation = CalibrationMatchDto & {
+  rotationWarning?: RotationWarning | null;
+};
 
 function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
   const hasMismatches = match.dimensionsMismatched.length > 0;
@@ -113,10 +133,7 @@ function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
       <RotationWarningNotice warning={match.rotationWarning} />
 
       {match.dimensionsMatched.map((d) => (
-        <span
-          key={d.dimension}
-          className="alm-match-candidates__dim-matched"
-        >
+        <span key={d.dimension} className="alm-match-candidates__dim-matched">
           <Check
             size={12}
             role="img"
@@ -124,10 +141,14 @@ function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
             className="alm-match-candidates__dim-check"
           />{' '}
           {d.dimension}
+          {/* eslint-disable alm/no-user-string -- mathematical delta notation, not translatable prose */}
           {d.delta != null && d.delta > 0 && (
-            // eslint-disable-next-line alm/no-user-string -- mathematical delta notation, not translatable prose
-            <span className="alm-match-candidates__dim-delta"> (Δ{d.delta.toFixed(2)})</span>
+            <span className="alm-match-candidates__dim-delta">
+              {' '}
+              (Δ{d.delta.toFixed(2)})
+            </span>
           )}
+          {/* eslint-enable alm/no-user-string */}
         </span>
       ))}
       {hasMismatches &&
@@ -143,10 +164,14 @@ function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
               className="alm-match-candidates__dim-mismatch-icon"
             />{' '}
             {d.dimension}: {reasonLabel(d.reason)}
+            {/* eslint-disable alm/no-user-string -- mathematical delta notation, not translatable prose */}
             {d.delta != null && (
-              // eslint-disable-next-line alm/no-user-string -- mathematical delta notation, not translatable prose
-              <span className="alm-match-candidates__dim-delta"> (Δ{d.delta.toFixed(2)})</span>
+              <span className="alm-match-candidates__dim-delta">
+                {' '}
+                (Δ{d.delta.toFixed(2)})
+              </span>
             )}
+            {/* eslint-enable alm/no-user-string */}
           </span>
         ))}
     </div>
@@ -158,13 +183,31 @@ function DimensionBreakdown({ match }: { match: MatchWithRotation }) {
 interface AssignButtonProps {
   match: CalibrationMatchDto;
   sessionId: string;
-  onAssign: (masterId: string, override: boolean) => Promise<{ status: string; error?: { code: string; message: string; details?: { dimensions: string[] } } }>;
+  onAssign: (
+    masterId: string,
+    override: boolean,
+  ) => Promise<{
+    status: string;
+    error?: {
+      code: string;
+      message: string;
+      details?: { dimensions: string[] };
+    };
+  }>;
   assigning: boolean;
   prefill: boolean;
 }
 
-function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefill }: AssignButtonProps) {
-  const [pending, setPending] = useState<'idle' | 'confirming' | 'override_confirm'>('idle');
+function AssignButton({
+  match,
+  sessionId: _sessionId,
+  onAssign,
+  assigning,
+  prefill,
+}: AssignButtonProps) {
+  const [pending, setPending] = useState<
+    'idle' | 'confirming' | 'override_confirm'
+  >('idle');
   const [errorMsg, setErrorMsg] = useState<string | undefined>(undefined);
   const [overrideDims, setOverrideDims] = useState<string[]>([]);
 
@@ -181,10 +224,14 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
         const dims = res.error.details?.dimensions ?? [];
         setOverrideDims(dims);
         setPending('override_confirm');
-        setErrorMsg(m.calibration_hard_rule_mismatch({ dims: dims.join(', ') }));
+        setErrorMsg(
+          m.calibration_hard_rule_mismatch({ dims: dims.join(', ') }),
+        );
       } else {
         setPending('idle');
-        setErrorMsg(res.error?.message ?? m.calibration_assignment_failed_fallback());
+        setErrorMsg(
+          res.error?.message ?? m.calibration_assignment_failed_fallback(),
+        );
       }
       return;
     }
@@ -213,9 +260,16 @@ function AssignButton({ match, sessionId: _sessionId, onAssign, assigning, prefi
             disabled={assigning}
             data-testid="assign-confirm-btn"
           >
-            {assigning ? m.calibration_assign_assigning() : m.calibration_assign_confirm_btn()}
+            {assigning
+              ? m.calibration_assign_assigning()
+              : m.calibration_assign_confirm_btn()}
           </Btn>
-          <Btn size="sm" variant="ghost" onClick={handleCancel} data-testid="assign-cancel-btn">
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={handleCancel}
+            data-testid="assign-cancel-btn"
+          >
             {m.common_cancel()}
           </Btn>
         </div>
@@ -272,7 +326,17 @@ export interface MatchCandidatesPanelProps {
   response: CalibrationMatchSuggestResponse | undefined;
   loading: boolean;
   error: string | undefined;
-  onAssign: (masterId: string, override: boolean) => Promise<{ status: string; error?: { code: string; message: string; details?: { dimensions: string[] } } }>;
+  onAssign: (
+    masterId: string,
+    override: boolean,
+  ) => Promise<{
+    status: string;
+    error?: {
+      code: string;
+      message: string;
+      details?: { dimensions: string[] };
+    };
+  }>;
   assigning: boolean;
   prefillSuggestion: boolean;
 }
@@ -312,7 +376,10 @@ export function MatchCandidatesPanel({
   if (!response) {
     return (
       <Section title={m.calibration_compatible_sessions_title()}>
-        <EmptyState title={m.calibration_compatible_sessions_no_selection_title()} desc={m.calibration_compatible_sessions_no_selection_desc()} />
+        <EmptyState
+          title={m.calibration_compatible_sessions_no_selection_title()}
+          desc={m.calibration_compatible_sessions_no_selection_desc()}
+        />
       </Section>
     );
   }
@@ -332,14 +399,18 @@ export function MatchCandidatesPanel({
         </Section>
       );
     }
-    const isObserverMissing = code === 'match.observer_location_missing' || response.suggestStatus === 'observer_location_missing';
+    const isObserverMissing =
+      code === 'match.observer_location_missing' ||
+      response.suggestStatus === 'observer_location_missing';
 
     const isMixedState = response.error?.code === 'session.mixed_state';
     const guardMessage = isObserverMissing
       ? m.calibration_observer_missing_guard()
       : isMixedState
         ? m.calibration_session_mixed_state()
-        : m.calibration_suggest_error({ message: response.error?.message ?? code });
+        : m.calibration_suggest_error({
+            message: response.error?.message ?? code,
+          });
     return (
       <Section title={m.calibration_compatible_sessions_title()}>
         <Banner variant="warn" data-testid="suggest-guard-error">
@@ -379,10 +450,13 @@ export function MatchCandidatesPanel({
       count={matches.length}
     >
       <div className="alm-match-candidates__status-row">
-        <Pill variant={statusVariant(suggestStatus)} data-testid="suggest-status-pill">
+        <Pill
+          variant={statusVariant(suggestStatus)}
+          data-testid="suggest-status-pill"
+        >
           {statusLabel(suggestStatus)}
         </Pill>
-        { }
+        {}
         {suggestStatus === 'ambiguous' && (
           <span className="alm-match-candidates__ambiguous-hint">
             {m.calibration_ambiguous_hint()}
@@ -391,12 +465,32 @@ export function MatchCandidatesPanel({
       </div>
       <Table
         columns={[
-          { key: 'session', label: m.calibration_col_session(), style: { width: 150 } },
-          { key: 'target', label: m.projects_create_target_label(), style: { width: 130 } },
+          {
+            key: 'session',
+            label: m.calibration_col_session(),
+            style: { width: 150 },
+          },
+          {
+            key: 'target',
+            label: m.projects_create_target_label(),
+            style: { width: 130 },
+          },
           { key: 'filter', label: m.common_filter(), style: { width: 64 } },
-          { key: 'night', label: m.sessions_col_night(), style: { width: 100 } },
-          { key: 'frames', label: m.projects_wizard_col_frames(), style: { width: 64 } },
-          { key: 'confidence', label: m.calibration_col_match(), style: { width: 120 } },
+          {
+            key: 'night',
+            label: m.sessions_col_night(),
+            style: { width: 100 },
+          },
+          {
+            key: 'frames',
+            label: m.projects_wizard_col_frames(),
+            style: { width: 64 },
+          },
+          {
+            key: 'confidence',
+            label: m.calibration_col_match(),
+            style: { width: 120 },
+          },
           { key: 'dimensions', label: m.calibration_col_dimensions() },
           { key: 'assign', label: '', style: { width: 120 } },
         ]}

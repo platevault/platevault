@@ -109,7 +109,11 @@ export interface BlockedBannerProps {
  * Shows the structured reason text and a primary "Resolve" action that
  * dispatches the appropriate recovery edge.
  */
-export function BlockedBanner({ reason, onResolve, disabled }: BlockedBannerProps) {
+export function BlockedBanner({
+  reason,
+  onResolve,
+  disabled,
+}: BlockedBannerProps) {
   const message = blockedReasonMessage(reason);
   const edge = resolveEdgeForReason(reason);
 

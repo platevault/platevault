@@ -43,11 +43,20 @@ const { mockGenerateArchivePlan } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/features/archive/store', () => ({
-  useGenerateArchivePlan: () => ({ mutateAsync: mockGenerateArchivePlan, isPending: false }),
+  useGenerateArchivePlan: () => ({
+    mutateAsync: mockGenerateArchivePlan,
+    isPending: false,
+  }),
 }));
 
 vi.mock('@/features/plans/PlanReviewOverlay', () => ({
-  PlanReviewOverlay: ({ planId, open }: { planId: string | null; open: boolean }) =>
+  PlanReviewOverlay: ({
+    planId,
+    open,
+  }: {
+    planId: string | null;
+    open: boolean;
+  }) =>
     open ? <div data-testid="archive-plan-review-stub">{planId}</div> : null,
 }));
 
@@ -138,7 +147,9 @@ describe('ProjectDetail archive plan generation (spec 017 US2/WP-B)', () => {
       );
     });
     expect(mockGenerateArchivePlan).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('archive-plan-review-stub')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('archive-plan-review-stub'),
+    ).not.toBeInTheDocument();
   });
 
   it('surfaces an error toast and keeps the overlay closed when plan generation fails', async () => {
@@ -159,6 +170,8 @@ describe('ProjectDetail archive plan generation (spec 017 US2/WP-B)', () => {
         expect.objectContaining({ variant: 'error' }),
       );
     });
-    expect(screen.queryByTestId('archive-plan-review-stub')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('archive-plan-review-stub'),
+    ).not.toBeInTheDocument();
   });
 });

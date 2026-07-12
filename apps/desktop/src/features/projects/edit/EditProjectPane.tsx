@@ -33,17 +33,30 @@ import {
 } from '@/features/projects/store';
 import { SessionSourcePicker } from '@/features/projects/SessionSourcePicker';
 import type { ProjectDetailDto, ProjectChannelDto } from '@/bindings/index';
-import { editProjectFormSchema, type EditProjectFormValues } from '@/features/projects/schemas';
+import {
+  editProjectFormSchema,
+  type EditProjectFormValues,
+} from '@/features/projects/schemas';
 import { errMessage, isContractError } from '@/lib/errors';
 
 // ── Tool-lock and read-only helpers ──────────────────────────────────────────
 
-const TOOL_LOCKED_LIFECYCLES = new Set(['prepared', 'processing', 'completed', 'blocked']);
+const TOOL_LOCKED_LIFECYCLES = new Set([
+  'prepared',
+  'processing',
+  'completed',
+  'blocked',
+]);
 const READ_ONLY_LIFECYCLES = new Set(['archived']);
 // Spec 008 FR-011 (crates/domain/core/src/project/validate.rs
 // SOURCE_REMOVE_LOCKED_LIFECYCLES) — distinct from the tool lock set above:
 // removal is refused for archived too, but not for 'blocked'.
-const SOURCE_REMOVE_LOCKED_LIFECYCLES = new Set(['prepared', 'processing', 'completed', 'archived']);
+const SOURCE_REMOVE_LOCKED_LIFECYCLES = new Set([
+  'prepared',
+  'processing',
+  'completed',
+  'archived',
+]);
 
 function isToolLocked(lifecycle: string) {
   return TOOL_LOCKED_LIFECYCLES.has(lifecycle);
@@ -75,7 +88,9 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
     t === 'Siril' ? 'Siril' : 'PixInsight';
   const [serverError, setServerError] = useState<string | null>(null);
   const [channelWorking, setChannelWorking] = useState(false);
-  const [channels, setChannels] = useState<ProjectChannelDto[]>(project.channels ?? []);
+  const [channels, setChannels] = useState<ProjectChannelDto[]>(
+    project.channels ?? [],
+  );
 
   // ── Sources state (WP-008-C) ────────────────────────────────────────────
   const sourceRemoveLocked = isSourceRemoveLocked(project.lifecycle);
@@ -136,14 +151,19 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
           projectId: project.id,
           name: trimmed !== project.name ? trimmed : undefined,
           tool:
-            values.tool !== (typeof project.tool === 'string' ? project.tool : 'PixInsight')
+            values.tool !==
+            (typeof project.tool === 'string' ? project.tool : 'PixInsight')
               ? values.tool
               : undefined,
-          notes: values.notes !== (project.notes ?? '') ? values.notes : undefined,
+          notes:
+            values.notes !== (project.notes ?? '') ? values.notes : undefined,
         });
         onClose();
       } catch (err: unknown) {
-        const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
+        const code =
+          typeof err === 'string'
+            ? err
+            : ((err as Error)?.message ?? 'unknown');
         setServerError(mapUpdateError(code));
       }
     },
@@ -201,7 +221,11 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         });
         setConfirmRemoveId(null);
       } catch (err: unknown) {
-        if (isContractError(err) && err.code === 'lifecycle.last_confirmed_source' && !confirmLastSource) {
+        if (
+          isContractError(err) &&
+          err.code === 'lifecycle.last_confirmed_source' &&
+          !confirmLastSource
+        ) {
           setConfirmRemoveId(inventoryId);
         } else {
           setConfirmRemoveId(null);
@@ -219,7 +243,9 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
     // Defensive: drop anything that landed in a previous partial attempt
     // (re-derived from the latest project prop, not mutated mid-loop) so a
     // retry after a failure doesn't re-request an already-linked session.
-    const idsToAdd = addSelection.filter((id) => !linkedSessionIds.includes(id));
+    const idsToAdd = addSelection.filter(
+      (id) => !linkedSessionIds.includes(id),
+    );
     if (idsToAdd.length === 0) {
       setShowAddSources(false);
       setAddSelection([]);
@@ -247,17 +273,29 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
   }, [addBusy, addSelection, linkedSessionIds, project.id]);
 
   return (
-    <div className="alm-edit-project-pane" aria-label={m.projects_edit_pane_aria()}>
-
+    <div
+      className="alm-edit-project-pane"
+      aria-label={m.projects_edit_pane_aria()}
+    >
       {/* Channel drift banner (US1c / US4) */}
       {project.channelDrift?.hasNewSources && (
         <Banner variant="warn" role="status" aria-live="polite">
           <span>{m.projects_edit_drift_banner()}</span>
           <div className="alm-edit-project__drift-actions">
-            <Btn size="sm" variant="primary" onClick={handleReinfer} disabled={channelWorking}>
+            <Btn
+              size="sm"
+              variant="primary"
+              onClick={handleReinfer}
+              disabled={channelWorking}
+            >
               {m.projects_detail_reinfer_btn()}
             </Btn>
-            <Btn size="sm" variant="ghost" onClick={handleDismissDrift} disabled={channelWorking}>
+            <Btn
+              size="sm"
+              variant="ghost"
+              onClick={handleDismissDrift}
+              disabled={channelWorking}
+            >
               {m.projects_detail_dismiss_btn()}
             </Btn>
           </div>
@@ -284,25 +322,36 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         <span className="alm-field-label">{m.common_sources()}</span>
         <div className="alm-edit-project__sources">
           {project.sources.length === 0 ? (
-            <span className="alm-field-hint">{m.projects_edit_sources_empty()}</span>
+            <span className="alm-field-hint">
+              {m.projects_edit_sources_empty()}
+            </span>
           ) : (
             <ul className="alm-edit-project__sources-list">
               {project.sources.map((src) => (
-                <li key={src.inventoryId} className="alm-edit-project__source-row">
+                <li
+                  key={src.inventoryId}
+                  className="alm-edit-project__source-row"
+                >
                   <span className="alm-edit-project__source-name">
                     {src.name || src.inventoryId}
                   </span>
                   {confirmRemoveId === src.inventoryId ? (
                     <span className="alm-edit-project__source-confirm">
-                      <span className="alm-field-hint">{m.err_lifecycle_last_confirmed_source()}</span>
+                      <span className="alm-field-hint">
+                        {m.err_lifecycle_last_confirmed_source()}
+                      </span>
                       <Btn
                         type="button"
                         size="sm"
                         variant="danger"
-                        onClick={() => handleRemoveSource(src.inventoryId, true)}
+                        onClick={() =>
+                          handleRemoveSource(src.inventoryId, true)
+                        }
                         disabled={removeBusyId !== null}
                       >
-                        {removeBusyId === src.inventoryId ? m.common_working() : m.common_confirm()}
+                        {removeBusyId === src.inventoryId
+                          ? m.common_working()
+                          : m.common_confirm()}
                       </Btn>
                       <Btn
                         type="button"
@@ -320,9 +369,13 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                       size="sm"
                       variant="ghost"
                       onClick={() => handleRemoveSource(src.inventoryId, false)}
-                      disabled={readOnly || sourceRemoveLocked || removeBusyId !== null}
+                      disabled={
+                        readOnly || sourceRemoveLocked || removeBusyId !== null
+                      }
                     >
-                      {removeBusyId === src.inventoryId ? m.common_working() : m.common_remove()}
+                      {removeBusyId === src.inventoryId
+                        ? m.common_working()
+                        : m.common_remove()}
                     </Btn>
                   )}
                 </li>
@@ -331,11 +384,13 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
           )}
 
           {sourceError && (
-            <span role="alert" className="alm-field-error">{sourceError}</span>
+            <span role="alert" className="alm-field-error">
+              {sourceError}
+            </span>
           )}
 
-          {!readOnly && (
-            showAddSources ? (
+          {!readOnly &&
+            (showAddSources ? (
               <div className="alm-edit-project__add-sources">
                 <SessionSourcePicker
                   selectedSessionIds={addSelection}
@@ -344,7 +399,9 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                   emptyMessage={m.projects_edit_sources_add_empty()}
                 />
                 {addError && (
-                  <span role="alert" className="alm-field-error">{addError}</span>
+                  <span role="alert" className="alm-field-error">
+                    {addError}
+                  </span>
                 )}
                 <div className="alm-edit-project__add-sources-actions">
                   <Btn
@@ -369,7 +426,9 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                   >
                     {addBusy
                       ? m.common_adding()
-                      : m.projects_edit_sources_add_selected_btn({ count: String(addSelection.length) })}
+                      : m.projects_edit_sources_add_selected_btn({
+                          count: String(addSelection.length),
+                        })}
                   </Btn>
                 </div>
               </div>
@@ -383,8 +442,7 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
               >
                 {m.projects_edit_sources_add_btn()}
               </Btn>
-            )
-          )}
+            ))}
         </div>
       </div>
 
@@ -393,11 +451,12 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
         noValidate
         className="alm-edit-project__form"
       >
-
         {/* Name */}
         <div>
-          { }
-          <label className="alm-field-label" htmlFor="ep-name">{m.projects_name_label()}</label>
+          {}
+          <label className="alm-field-label" htmlFor="ep-name">
+            {m.projects_name_label()}
+          </label>
           <input
             id="ep-name"
             className="alm-input"
@@ -417,8 +476,10 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Tool */}
         <div>
-          { }
-          <label className="alm-field-label" htmlFor="ep-tool">{m.projects_tool_label()}</label>
+          {}
+          <label className="alm-field-label" htmlFor="ep-tool">
+            {m.projects_tool_label()}
+          </label>
           <select
             id="ep-tool"
             className="alm-input"
@@ -433,15 +494,19 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
           </select>
           {toolLocked && (
             <span id="ep-tool-lock" className="alm-field-hint">
-              {m.projects_edit_tool_locked_hint({ lifecycle: project.lifecycle })}
+              {m.projects_edit_tool_locked_hint({
+                lifecycle: project.lifecycle,
+              })}
             </span>
           )}
         </div>
 
         {/* Notes */}
         <div>
-          { }
-          <label className="alm-field-label" htmlFor="ep-notes">{m.projects_notes_label()}</label>
+          {}
+          <label className="alm-field-label" htmlFor="ep-notes">
+            {m.projects_notes_label()}
+          </label>
           <textarea
             id="ep-notes"
             className="alm-input"
@@ -454,17 +519,20 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Channels preview (US4) */}
         <div>
-          <span className="alm-field-label">{m.projects_edit_channels_label()}</span>
+          <span className="alm-field-label">
+            {m.projects_edit_channels_label()}
+          </span>
           <div className="alm-edit-project__channels">
             {channels.length === 0 ? (
-              <span className="alm-field-hint">{m.projects_edit_channels_empty()}</span>
+              <span className="alm-field-hint">
+                {m.projects_edit_channels_empty()}
+              </span>
             ) : (
               channels.map((ch) => (
                 <span
                   key={ch.label}
                   className={`alm-channel-chip alm-channel-chip--${ch.source}`}
                   title={
-
                     ch.source === 'inferred'
                       ? m.projects_edit_inferred_title()
                       : m.projects_edit_manual_title()
@@ -473,7 +541,9 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                 >
                   {ch.label}
                   {ch.source === 'inferred' && (
-                    <span className="alm-channel-chip__tag">{m.projects_edit_channels_auto_tag()}</span>
+                    <span className="alm-channel-chip__tag">
+                      {m.projects_edit_channels_auto_tag()}
+                    </span>
                   )}
                 </span>
               ))
@@ -483,12 +553,19 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
         {/* Server error */}
         {serverError && (
-          <span role="alert" className="alm-field-error">{serverError}</span>
+          <span role="alert" className="alm-field-error">
+            {serverError}
+          </span>
         )}
 
         {/* Actions */}
         <div className="alm-edit-project__actions">
-          <Btn type="button" variant="ghost" onClick={onClose} disabled={isSubmitting}>
+          <Btn
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
             {m.common_cancel()}
           </Btn>
           {!readOnly && (
@@ -506,14 +583,23 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
 function mapUpdateError(code: string): string {
   switch (code) {
-    case 'project.not_found': return m.projects_edit_err_not_found();
-    case 'name.empty':        return m.projects_edit_err_name_empty();
-    case 'name.too_long':     return m.projects_edit_err_name_too_long();
-    case 'name.duplicate':    return m.projects_create_name_duplicate();
-    case 'tool.unknown':      return m.projects_edit_err_tool_unknown();
-    case 'tool.locked':       return m.projects_edit_err_tool_locked();
-    case 'lifecycle.read_only': return m.projects_edit_err_read_only();
-    case 'no_op':             return m.projects_edit_err_no_op();
-    default:                  return m.projects_edit_err_generic({ code });
+    case 'project.not_found':
+      return m.projects_edit_err_not_found();
+    case 'name.empty':
+      return m.projects_edit_err_name_empty();
+    case 'name.too_long':
+      return m.projects_edit_err_name_too_long();
+    case 'name.duplicate':
+      return m.projects_create_name_duplicate();
+    case 'tool.unknown':
+      return m.projects_edit_err_tool_unknown();
+    case 'tool.locked':
+      return m.projects_edit_err_tool_locked();
+    case 'lifecycle.read_only':
+      return m.projects_edit_err_read_only();
+    case 'no_op':
+      return m.projects_edit_err_no_op();
+    default:
+      return m.projects_edit_err_generic({ code });
   }
 }

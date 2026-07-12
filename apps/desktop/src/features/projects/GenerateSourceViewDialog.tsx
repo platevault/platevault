@@ -51,7 +51,9 @@ export function GenerateSourceViewDialog({
   const [copyOptIn, setCopyOptIn] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [linkKinds, setLinkKinds] = useState<SourceViewLinkKindSettings | null>(null);
+  const [linkKinds, setLinkKinds] = useState<SourceViewLinkKindSettings | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -79,7 +81,9 @@ export function GenerateSourceViewDialog({
       const warningCount = resp.warnings?.length ?? 0;
       const warning =
         warningCount > 0
-          ? m.projects_source_views_generate_warning_count({ count: String(warningCount) })
+          ? m.projects_source_views_generate_warning_count({
+              count: String(warningCount),
+            })
           : '';
       // Distinguish the materialization path actually taken (FR-003/FR-004b) —
       // a copy fallback is a meaningfully different outcome from a link, not
@@ -99,7 +103,9 @@ export function GenerateSourceViewDialog({
       onClose();
     } catch (err: unknown) {
       const code =
-        typeof err === 'object' && err !== null && 'code' in err ? String((err).code) : 'internal';
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String(err.code)
+          : 'internal';
       setError(errMessage(err));
       addToast({
         variant: 'warn',
@@ -129,7 +135,9 @@ export function GenerateSourceViewDialog({
             disabled={submitting}
             data-testid="generate-source-view-submit"
           >
-            {submitting ? m.common_working() : m.projects_source_views_generate_submit_btn()}
+            {submitting
+              ? m.common_working()
+              : m.projects_source_views_generate_submit_btn()}
           </Btn>
         </>
       }
@@ -138,35 +146,45 @@ export function GenerateSourceViewDialog({
         <span className="text-muted text-sm">
           {m.projects_source_views_generate_profile_label()}
         </span>
-        <span className="text-sm">{m.projects_source_views_generate_profile_default()}</span>
+        <span className="text-sm">
+          {m.projects_source_views_generate_profile_default()}
+        </span>
       </div>
 
-      <p className="text-muted text-sm">{m.projects_source_views_generate_kind_hint()}</p>
+      <p className="text-muted text-sm">
+        {m.projects_source_views_generate_kind_hint()}
+      </p>
 
-      {linkKinds && (linkKinds.sourceViewLinkKindIntraDrive ?? linkKinds.sourceViewLinkKindCrossDrive) && (
-        <div className="text-sm" data-testid="generate-view-link-kinds">
-          <span className="text-muted">
-            {m.projects_source_views_generate_kind_settings_label()}:
-          </span>{' '}
-          {linkKinds.sourceViewLinkKindIntraDrive && (
-            <span>
-              {m.projects_source_views_generate_kind_intra_drive({
-                kind: linkKinds.sourceViewLinkKindIntraDrive,
-              })}
-            </span>
-          )}
-          {linkKinds.sourceViewLinkKindIntraDrive && linkKinds.sourceViewLinkKindCrossDrive && ' · '}
-          {linkKinds.sourceViewLinkKindCrossDrive && (
-            <span>
-              {m.projects_source_views_generate_kind_cross_drive({
-                kind: linkKinds.sourceViewLinkKindCrossDrive,
-              })}
-            </span>
-          )}
-        </div>
-      )}
+      {linkKinds &&
+        (linkKinds.sourceViewLinkKindIntraDrive ??
+          linkKinds.sourceViewLinkKindCrossDrive) && (
+          <div className="text-sm" data-testid="generate-view-link-kinds">
+            <span className="text-muted">
+              {m.projects_source_views_generate_kind_settings_label()}:
+            </span>{' '}
+            {linkKinds.sourceViewLinkKindIntraDrive && (
+              <span>
+                {m.projects_source_views_generate_kind_intra_drive({
+                  kind: linkKinds.sourceViewLinkKindIntraDrive,
+                })}
+              </span>
+            )}
+            {linkKinds.sourceViewLinkKindIntraDrive &&
+              linkKinds.sourceViewLinkKindCrossDrive &&
+              ' · '}
+            {linkKinds.sourceViewLinkKindCrossDrive && (
+              <span>
+                {m.projects_source_views_generate_kind_cross_drive({
+                  kind: linkKinds.sourceViewLinkKindCrossDrive,
+                })}
+              </span>
+            )}
+          </div>
+        )}
 
-      <p className="text-muted text-xs">{m.projects_source_views_generate_kind_drift_note()}</p>
+      <p className="text-muted text-xs">
+        {m.projects_source_views_generate_kind_drift_note()}
+      </p>
 
       <label className="flex items-center gap-2 text-sm">
         <input

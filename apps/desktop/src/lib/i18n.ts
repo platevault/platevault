@@ -16,4 +16,4 @@
  * this release (FR-004). Adding a locale later requires only a new
  * `messages/<locale>.json` — no call-site changes (FR-005).
  */
-export { m } from "@/paraglide/messages";
+export { m } from '@/paraglide/messages';

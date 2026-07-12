@@ -11,11 +11,13 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { settingsGet, settingsUpdate, settingsRestoreDefaults } = vi.hoisted(() => ({
-  settingsGet: vi.fn(),
-  settingsUpdate: vi.fn(),
-  settingsRestoreDefaults: vi.fn(),
-}));
+const { settingsGet, settingsUpdate, settingsRestoreDefaults } = vi.hoisted(
+  () => ({
+    settingsGet: vi.fn(),
+    settingsUpdate: vi.fn(),
+    settingsRestoreDefaults: vi.fn(),
+  }),
+);
 vi.mock('@/bindings/index', () => ({
   commands: { settingsGet, settingsUpdate, settingsRestoreDefaults },
 }));
@@ -29,7 +31,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   __resetGuidanceParamsForTest();
   settingsUpdate.mockResolvedValue(null);
-  settingsRestoreDefaults.mockResolvedValue({ restored: ['plannerMoonAvoidance'] });
+  settingsRestoreDefaults.mockResolvedValue({
+    restored: ['plannerMoonAvoidance'],
+  });
   settingsGet.mockResolvedValue({ scope: 'planner', values: {} });
 });
 afterEach(() => {
@@ -39,22 +43,35 @@ afterEach(() => {
 describe('PlannerSettings — moon avoidance (spec 047 T015)', () => {
   it('renders a distance + width input for every band, seeded with shipped defaults', () => {
     render(<PlannerSettings />);
-    expect(screen.getByTestId('guidance-distance-L')).toHaveValue(DEFAULT_MOON_AVOIDANCE.L.distanceDeg);
-    expect(screen.getByTestId('guidance-width-L')).toHaveValue(DEFAULT_MOON_AVOIDANCE.L.widthDays);
-    expect(screen.getByTestId('guidance-distance-Ha')).toHaveValue(DEFAULT_MOON_AVOIDANCE.Ha.distanceDeg);
-    expect(screen.getByTestId('guidance-distance-OIII')).toHaveValue(DEFAULT_MOON_AVOIDANCE.OIII.distanceDeg);
+    expect(screen.getByTestId('guidance-distance-L')).toHaveValue(
+      DEFAULT_MOON_AVOIDANCE.L.distanceDeg,
+    );
+    expect(screen.getByTestId('guidance-width-L')).toHaveValue(
+      DEFAULT_MOON_AVOIDANCE.L.widthDays,
+    );
+    expect(screen.getByTestId('guidance-distance-Ha')).toHaveValue(
+      DEFAULT_MOON_AVOIDANCE.Ha.distanceDeg,
+    );
+    expect(screen.getByTestId('guidance-distance-OIII')).toHaveValue(
+      DEFAULT_MOON_AVOIDANCE.OIII.distanceDeg,
+    );
   });
 
   it('commits an edited distance on blur via settings.update', async () => {
     render(<PlannerSettings />);
-    const input = screen.getByTestId('guidance-distance-Ha') as HTMLInputElement;
+    const input = screen.getByTestId(
+      'guidance-distance-Ha',
+    ) as HTMLInputElement;
     fireEvent.change(input, { target: { value: '90' } });
     fireEvent.blur(input);
     expect(settingsUpdate).toHaveBeenCalledWith(
       'planner',
       expect.objectContaining({
         plannerMoonAvoidance: expect.objectContaining({
-          Ha: { distanceDeg: 90, widthDays: DEFAULT_MOON_AVOIDANCE.Ha.widthDays },
+          Ha: {
+            distanceDeg: 90,
+            widthDays: DEFAULT_MOON_AVOIDANCE.Ha.widthDays,
+          },
         }),
       }),
     );
@@ -79,6 +96,8 @@ describe('PlannerSettings — moon avoidance (spec 047 T015)', () => {
     render(<PlannerSettings />);
     const resetBtn = screen.getByText('Restore defaults');
     fireEvent.click(resetBtn);
-    expect(settingsRestoreDefaults).toHaveBeenCalledWith({ keys: ['plannerMoonAvoidance'] });
+    expect(settingsRestoreDefaults).toHaveBeenCalledWith({
+      keys: ['plannerMoonAvoidance'],
+    });
   });
 });

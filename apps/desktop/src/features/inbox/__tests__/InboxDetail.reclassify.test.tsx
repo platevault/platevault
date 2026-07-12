@@ -19,15 +19,24 @@
  *   (avoids OOM from the full page tree).
  */
 import React from 'react';
-import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  render as rtlRender,
+  screen,
+  fireEvent,
+  waitFor,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // InboxDetail uses the TanStack-Query-backed `useInboxReclassify` hook (spec 042),
 // so every render must be wrapped in a QueryClientProvider.
 function render(ui: React.ReactElement) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return rtlRender(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return rtlRender(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
 }
 
 import type {
@@ -153,7 +162,13 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
 
     const callArg = mockInboxReclassify.mock.calls[0][0] as {
       inboxItemId: string;
-      overrides: Array<{ filePath: string; frameType?: string; filter?: string; exposureS?: number; binning?: string }>;
+      overrides: Array<{
+        filePath: string;
+        frameType?: string;
+        filter?: string;
+        exposureS?: number;
+        binning?: string;
+      }>;
     };
 
     expect(callArg.inboxItemId).toBe('item-001');
@@ -203,7 +218,9 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     fireEvent.click(screen.getByTestId('reclassify-select-1'));
 
     // Fill in frame type
-    fireEvent.change(screen.getByTestId('bulk-frame-type'), { target: { value: 'light' } });
+    fireEvent.change(screen.getByTestId('bulk-frame-type'), {
+      target: { value: 'light' },
+    });
 
     // Apply
     fireEvent.click(screen.getByTestId('bulk-apply-btn'));
@@ -214,8 +231,12 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     );
 
     // Checkboxes should be unchecked again
-    expect((screen.getByTestId('reclassify-select-0') as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByTestId('reclassify-select-1') as HTMLInputElement).checked).toBe(false);
+    expect(
+      (screen.getByTestId('reclassify-select-0') as HTMLInputElement).checked,
+    ).toBe(false);
+    expect(
+      (screen.getByTestId('reclassify-select-1') as HTMLInputElement).checked,
+    ).toBe(false);
   });
 
   // ── Test 4: only selected files appear in overrides ───────────────────────
@@ -233,7 +254,9 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     fireEvent.click(screen.getByTestId('reclassify-select-0'));
 
     // Set frame type
-    fireEvent.change(screen.getByTestId('bulk-frame-type'), { target: { value: 'bias' } });
+    fireEvent.change(screen.getByTestId('bulk-frame-type'), {
+      target: { value: 'bias' },
+    });
 
     fireEvent.click(screen.getByTestId('bulk-apply-btn'));
 
@@ -262,7 +285,9 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     fireEvent.click(selectAll);
 
     // Set frame type + apply
-    fireEvent.change(screen.getByTestId('bulk-frame-type'), { target: { value: 'flat' } });
+    fireEvent.change(screen.getByTestId('bulk-frame-type'), {
+      target: { value: 'flat' },
+    });
     fireEvent.click(screen.getByTestId('bulk-apply-btn'));
 
     await waitFor(() => expect(mockInboxReclassify).toHaveBeenCalledTimes(1));
@@ -274,7 +299,11 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     // All three unclassified files should appear
     expect(callArg.overrides).toHaveLength(3);
     const paths = callArg.overrides.map((o) => o.filePath).sort();
-    expect(paths).toEqual(['frame_0001.fits', 'frame_0002.fits', 'frame_0003.fits']);
+    expect(paths).toEqual([
+      'frame_0001.fits',
+      'frame_0002.fits',
+      'frame_0003.fits',
+    ]);
   });
 
   // ── Test 6: exposureS included as number when filled in ──────────────────
@@ -290,8 +319,12 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
 
     fireEvent.click(screen.getByTestId('reclassify-select-0'));
 
-    fireEvent.change(screen.getByTestId('bulk-exposure-s'), { target: { value: '300' } });
-    fireEvent.change(screen.getByTestId('bulk-binning'), { target: { value: '2x2' } });
+    fireEvent.change(screen.getByTestId('bulk-exposure-s'), {
+      target: { value: '300' },
+    });
+    fireEvent.change(screen.getByTestId('bulk-binning'), {
+      target: { value: '2x2' },
+    });
 
     fireEvent.click(screen.getByTestId('bulk-apply-btn'));
 
@@ -333,6 +366,9 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
 
     expect(callArg.inboxItemId).toBe('item-001');
     expect(callArg.overrides).toHaveLength(1);
-    expect(callArg.overrides[0]).toEqual({ filePath: 'file_A.fits', frameType: 'light' });
+    expect(callArg.overrides[0]).toEqual({
+      filePath: 'file_A.fits',
+      frameType: 'light',
+    });
   });
 });

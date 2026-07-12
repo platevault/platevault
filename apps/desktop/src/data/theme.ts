@@ -23,10 +23,30 @@ export interface ThemeMeta {
 }
 
 export const THEMES: ThemeMeta[] = [
-  { id: 'warm-clay', label: 'Warm Clay', mode: 'light', swatch: ['#f6f4ef', '#efeae1', '#b25a35'] },
-  { id: 'warm-slate', label: 'Warm Slate', mode: 'light', swatch: ['#f5f4f1', '#ecebe6', '#3f6b7a'] },
-  { id: 'observatory-dark', label: 'Observatory', mode: 'dark', swatch: ['#1b1916', '#232019', '#d98a3d'] },
-  { id: 'espresso-dark', label: 'Espresso', mode: 'dark', swatch: ['#161412', '#1e1b18', '#cf9d63'] },
+  {
+    id: 'warm-clay',
+    label: 'Warm Clay',
+    mode: 'light',
+    swatch: ['#f6f4ef', '#efeae1', '#b25a35'],
+  },
+  {
+    id: 'warm-slate',
+    label: 'Warm Slate',
+    mode: 'light',
+    swatch: ['#f5f4f1', '#ecebe6', '#3f6b7a'],
+  },
+  {
+    id: 'observatory-dark',
+    label: 'Observatory',
+    mode: 'dark',
+    swatch: ['#1b1916', '#232019', '#d98a3d'],
+  },
+  {
+    id: 'espresso-dark',
+    label: 'Espresso',
+    mode: 'dark',
+    swatch: ['#161412', '#1e1b18', '#cf9d63'],
+  },
 ];
 
 const THEME_KEY = 'alm.theme';

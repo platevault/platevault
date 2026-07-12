@@ -75,14 +75,21 @@ import { Pill, Banner } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
-import { rowAltitudeFor, USABLE_ALT_DEG, type RowAltitude } from './planner-altitude';
+import {
+  rowAltitudeFor,
+  USABLE_ALT_DEG,
+  type RowAltitude,
+} from './planner-altitude';
 import type { ObservingNight } from './astro/moon-state';
 import {
   deriveRowMoonPlanning,
   UNKNOWN_ROW_PLANNING,
   type RowMoonPlanning,
 } from './astro/row-planning';
-import { DEFAULT_MOON_AVOIDANCE, type MoonAvoidanceParams } from './astro/moon-avoidance';
+import {
+  DEFAULT_MOON_AVOIDANCE,
+  type MoonAvoidanceParams,
+} from './astro/moon-avoidance';
 import { formatOppositionDate, oppositionRelative } from './astro/opposition';
 import { AltitudeSparkline } from './AltitudeSparkline';
 import { GuidanceCell } from './GuidanceCell';
@@ -130,7 +137,10 @@ export interface TargetSort {
   dir: SortDir;
 }
 
-export const DEFAULT_TARGET_SORT: TargetSort = { col: 'designation', dir: 'asc' };
+export const DEFAULT_TARGET_SORT: TargetSort = {
+  col: 'designation',
+  dir: 'asc',
+};
 
 // ── Grouping model (task #82) ───────────────────────────────────────────────────
 
@@ -146,7 +156,9 @@ export function formatType(objectType: string): string {
 /** Resolve the group key + display headline for a target under `groupBy`. */
 function groupHeadlineOf(t: TargetListItem, groupBy: TargetGroupBy): string {
   if (groupBy === 'type') {
-    return t.objectType ? formatType(t.objectType) : m.targets_table_unknown_type();
+    return t.objectType
+      ? formatType(t.objectType)
+      : m.targets_table_unknown_type();
   }
   const cat = catalogueOf(t);
   return cat ? catalogueLabel(cat) : m.targets_objtype_other();
@@ -193,7 +205,8 @@ function compareTargetRows(
       // lunarDist convention (FR-014), soonest-next first when ascending.
       const da = moonA.daysToOpposition;
       const db = moonB.daysToOpposition;
-      if (da === null && db === null) return compareStr(a.effectiveLabel, b.effectiveLabel);
+      if (da === null && db === null)
+        return compareStr(a.effectiveLabel, b.effectiveLabel);
       if (da === null) return 1;
       if (db === null) return -1;
       cmp = da - db || compareStr(a.effectiveLabel, b.effectiveLabel);
@@ -205,7 +218,8 @@ function compareTargetRows(
       // designation tie-break (FR-007).
       const sa = moonA.lunarSeparationDeg;
       const sb = moonB.lunarSeparationDeg;
-      if (sa === null && sb === null) return compareStr(a.effectiveLabel, b.effectiveLabel);
+      if (sa === null && sb === null)
+        return compareStr(a.effectiveLabel, b.effectiveLabel);
       if (sa === null) return 1;
       if (sb === null) return -1;
       cmp = sa - sb || compareStr(a.effectiveLabel, b.effectiveLabel);
@@ -225,7 +239,11 @@ function compareTargetRows(
 interface TargetGroup {
   label: string;
   /** Each entry holds the item, its altitude row, and its moon-planning row. */
-  rows: Array<{ target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning }>;
+  rows: Array<{
+    target: TargetListItem;
+    alt: RowAltitude;
+    moon: RowMoonPlanning;
+  }>;
 }
 
 /**
@@ -242,13 +260,23 @@ function groupTargets(
   guidanceParams: MoonAvoidanceParams,
   dateMs: number,
 ): TargetGroup[] {
-  const byKey = new Map<string, Array<{ target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning }>>();
+  const byKey = new Map<
+    string,
+    Array<{ target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning }>
+  >();
   for (const t of targets) {
     const key = groupHeadlineOf(t, groupBy);
     // includeMoonGeometry=false: this pass runs over the FULL (possibly
     // ~13k-entry) catalogue for sort/group — the Moon time-series is only
     // computed per visible row at render time (see the row-render loop).
-    const alt = rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false);
+    const alt = rowAltitudeFor(
+      t,
+      usableAltDeg,
+      site,
+      dateMs,
+      guidanceParams,
+      false,
+    );
     const moon = deriveRowMoonPlanning(t, night, guidanceParams);
     const bucket = byKey.get(key);
     if (bucket) bucket.push({ target: t, alt, moon });
@@ -260,7 +288,15 @@ function groupTargets(
     groups.push({
       label,
       rows: [...rows].sort((ra, rb) =>
-        compareTargetRows(ra.target, ra.alt, ra.moon, rb.target, rb.alt, rb.moon, sort),
+        compareTargetRows(
+          ra.target,
+          ra.alt,
+          ra.moon,
+          rb.target,
+          rb.alt,
+          rb.moon,
+          sort,
+        ),
       ),
     });
   }
@@ -287,8 +323,24 @@ function groupTargets(
 // same row height (keyed off --alm-row-height in CSS).
 
 type FlatRow =
-  | { kind: 'group'; key: string; label: string; count: number; path?: string; depth?: number; collapsible?: boolean; collapsed?: boolean }
-  | { kind: 'target'; key: string; target: TargetListItem; alt: RowAltitude; moon: RowMoonPlanning; depth?: number };
+  | {
+      kind: 'group';
+      key: string;
+      label: string;
+      count: number;
+      path?: string;
+      depth?: number;
+      collapsible?: boolean;
+      collapsed?: boolean;
+    }
+  | {
+      kind: 'target';
+      key: string;
+      target: TargetListItem;
+      alt: RowAltitude;
+      moon: RowMoonPlanning;
+      depth?: number;
+    };
 
 // ── Multi-level grouping accessors ────────────────────────────────────────────
 
@@ -303,8 +355,9 @@ function buildTargetAccessors(
   guidanceParams: MoonAvoidanceParams,
 ): Readonly<Record<string, DimensionAccessor<TargetListItem>>> {
   return {
-    constellation: (t) => (t as TargetListItem & { constellation?: string }).constellation ?? null,
-    type: (t) => t.objectType ? formatType(t.objectType) : null,
+    constellation: (t) =>
+      (t as TargetListItem & { constellation?: string }).constellation ?? null,
+    type: (t) => (t.objectType ? formatType(t.objectType) : null),
     catalogue: (t) => {
       const cat = catalogueOf(t);
       return cat ? catalogueLabel(cat) : m.targets_objtype_other();
@@ -312,7 +365,11 @@ function buildTargetAccessors(
     // Applicable filters: group by the target's REAL derived recommendation
     // category (broadband-ok / narrowband-only / avoid-tonight / unknown).
     filters: (t) => {
-      const { recommendation } = deriveRowMoonPlanning(t, night, guidanceParams);
+      const { recommendation } = deriveRowMoonPlanning(
+        t,
+        night,
+        guidanceParams,
+      );
       return recommendationLabel(recommendation);
     },
   };
@@ -353,19 +410,73 @@ const COLUMNS: Array<{
   title?: () => string;
 }> = [
   // task #18: star column (no label — icon-only header)
-  { key: 'star', label: () => '★', className: 'alm-targets-cell--center', title: () => m.targets_col_favourite() },
-  { key: 'designation', label: () => m.targets_col_designation(), sort: 'designation' },
+  {
+    key: 'star',
+    label: () => '★',
+    className: 'alm-targets-cell--center',
+    title: () => m.targets_col_favourite(),
+  },
+  {
+    key: 'designation',
+    label: () => m.targets_col_designation(),
+    sort: 'designation',
+  },
   { key: 'type', label: () => m.cmp_target_search_type_label(), sort: 'type' },
-  { key: 'maxAlt', label: () => m.targets_col_max_alt(), sort: 'maxAlt', className: 'alm-targets-cell--num', title: () => m.targets_table_max_alt_title() },
-  { key: 'spark', label: () => m.targets_col_tonight(), className: 'alm-targets-cell--spark' },
-  { key: 'visible', label: () => m.targets_col_visible(), sort: 'visible', className: 'alm-targets-cell--center', title: () => m.targets_col_visible_title() },
-  { key: 'opposition', label: () => m.targets_col_opposition(), sort: 'opposition', className: 'alm-targets-cell--opposition', title: () => m.targets_table_next_opposition() },
+  {
+    key: 'maxAlt',
+    label: () => m.targets_col_max_alt(),
+    sort: 'maxAlt',
+    className: 'alm-targets-cell--num',
+    title: () => m.targets_table_max_alt_title(),
+  },
+  {
+    key: 'spark',
+    label: () => m.targets_col_tonight(),
+    className: 'alm-targets-cell--spark',
+  },
+  {
+    key: 'visible',
+    label: () => m.targets_col_visible(),
+    sort: 'visible',
+    className: 'alm-targets-cell--center',
+    title: () => m.targets_col_visible_title(),
+  },
+  {
+    key: 'opposition',
+    label: () => m.targets_col_opposition(),
+    sort: 'opposition',
+    className: 'alm-targets-cell--opposition',
+    title: () => m.targets_table_next_opposition(),
+  },
   // task #5: abbreviated header "Lunar" fits the widened 80px column without clipping
-  { key: 'lunarDist', label: () => m.targets_col_lunar(), sort: 'lunarDist', className: 'alm-targets-cell--num', title: () => m.targets_col_lunar_title() },
-  { key: 'filters', label: () => m.common_filters(), className: 'alm-targets-cell--filters', title: () => m.targets_col_filters_title() },
+  {
+    key: 'lunarDist',
+    label: () => m.targets_col_lunar(),
+    sort: 'lunarDist',
+    className: 'alm-targets-cell--num',
+    title: () => m.targets_col_lunar_title(),
+  },
+  {
+    key: 'filters',
+    label: () => m.common_filters(),
+    className: 'alm-targets-cell--filters',
+    title: () => m.targets_col_filters_title(),
+  },
   // task #5: abbreviated header "Img time" fits the widened 100px column without clipping
-  { key: 'imagingTime', label: () => m.targets_col_img_time(), sort: 'imagingTime', className: 'alm-targets-cell--num', title: () => m.targets_col_img_time_title() },
-  { key: 'sessions', label: () => m.common_sessions(), sort: 'sessions', className: 'alm-targets-cell--num', title: () => m.targets_col_sessions_title() },
+  {
+    key: 'imagingTime',
+    label: () => m.targets_col_img_time(),
+    sort: 'imagingTime',
+    className: 'alm-targets-cell--num',
+    title: () => m.targets_col_img_time_title(),
+  },
+  {
+    key: 'sessions',
+    label: () => m.common_sessions(),
+    sort: 'sessions',
+    className: 'alm-targets-cell--num',
+    title: () => m.targets_col_sessions_title(),
+  },
 ];
 
 // COL_COUNT is derived from COLUMNS so adding/removing a column stays in sync.
@@ -488,19 +599,38 @@ export function TargetsTable({
       // legacy-path comment below for why.
       const withAlt = targets.map((t) => ({
         target: t,
-        alt: rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false),
+        alt: rowAltitudeFor(
+          t,
+          usableAltDeg,
+          site,
+          dateMs,
+          guidanceParams,
+          false,
+        ),
         moon: deriveRowMoonPlanning(t, night, guidanceParams),
       }));
       // Sort the flat list first.
       const sortedWithAlt = [...withAlt].sort((a, b) =>
-        compareTargetRows(a.target, a.alt, a.moon, b.target, b.alt, b.moon, sort),
+        compareTargetRows(
+          a.target,
+          a.alt,
+          a.moon,
+          b.target,
+          b.alt,
+          b.moon,
+          sort,
+        ),
       );
       const sorted = sortedWithAlt.map((r) => r.target);
       const altMap = new Map(sortedWithAlt.map((r) => [r.target.id, r.alt]));
       const moonMap = new Map(sortedWithAlt.map((r) => [r.target.id, r.moon]));
 
       // Build the group tree using shared engine.
-      const tree = groupByDimensions(sorted, dims!, buildTargetAccessors(night, guidanceParams));
+      const tree = groupByDimensions(
+        sorted,
+        dims!,
+        buildTargetAccessors(night, guidanceParams),
+      );
       // Flatten with collapse state, then map to our FlatRow shape.
       const visRows = flattenVisibleGroups(tree, collapsed);
       return visRows.map((vrow): FlatRow => {
@@ -521,7 +651,16 @@ export function TargetsTable({
           kind: 'target',
           key: t.id,
           target: t,
-          alt: altMap.get(t.id) ?? rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false),
+          alt:
+            altMap.get(t.id) ??
+            rowAltitudeFor(
+              t,
+              usableAltDeg,
+              site,
+              dateMs,
+              guidanceParams,
+              false,
+            ),
           moon: moonMap.get(t.id) ?? UNKNOWN_ROW_PLANNING,
           depth: vrow.depth,
         };
@@ -529,7 +668,16 @@ export function TargetsTable({
     }
     // Single-tier legacy grouping ONLY if a caller explicitly asks for it.
     if (groupBy) {
-      const groups = groupTargets(targets, sort, groupBy, usableAltDeg, site, night, guidanceParams, dateMs);
+      const groups = groupTargets(
+        targets,
+        sort,
+        groupBy,
+        usableAltDeg,
+        site,
+        night,
+        guidanceParams,
+        dateMs,
+      );
       return flattenGroups(groups);
     }
     // Default: no grouping selected → FLAT sorted list (no group headers).
@@ -546,9 +694,28 @@ export function TargetsTable({
       compareTargetRows(a.target, a.alt, a.moon, b.target, b.alt, b.moon, sort),
     );
     return sortedWithAlt.map(
-      (r): FlatRow => ({ kind: 'target', key: r.target.id, target: r.target, alt: r.alt, moon: r.moon, depth: 0 }),
+      (r): FlatRow => ({
+        kind: 'target',
+        key: r.target.id,
+        target: r.target,
+        alt: r.alt,
+        moon: r.moon,
+        depth: 0,
+      }),
     );
-  }, [targets, sort, groupBy, usableAltDeg, site, night, guidanceParams, dateMs, useMultiGroup, dims, collapsed]);
+  }, [
+    targets,
+    sort,
+    groupBy,
+    usableAltDeg,
+    site,
+    night,
+    guidanceParams,
+    dateMs,
+    useMultiGroup,
+    dims,
+    collapsed,
+  ]);
 
   const virtualizer = useVirtualizer({
     count: flatRows.length,
@@ -575,7 +742,8 @@ export function TargetsTable({
   // two sentinel spacer rows bracket the visible slice. Their combined height
   // equals totalSize so the scrollbar reflects the full virtual list length,
   // but the rendered data rows are in normal table flow at their natural height.
-  const paddingBefore = useWindowing && virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBefore =
+    useWindowing && virtualItems.length > 0 ? virtualItems[0].start : 0;
   const paddingAfter =
     useWindowing && virtualItems.length > 0
       ? totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)
@@ -612,7 +780,11 @@ export function TargetsTable({
       {!site && (
         <Banner variant="info" className="alm-targets-table__no-site-banner">
           {m.targets_planner_no_site_banner()}{' '}
-          <Link to="/settings/$pane" params={{ pane: 'planner' }} className="alm-banner__action-link">
+          <Link
+            to="/settings/$pane"
+            params={{ pane: 'planner' }}
+            className="alm-banner__action-link"
+          >
             {m.targets_planner_no_site_banner_action()}
           </Link>
         </Banner>
@@ -643,7 +815,12 @@ export function TargetsTable({
           <thead>
             <tr>
               {columns.map((c) => (
-                <th key={c.key} className={c.className} title={c.title} aria-sort={c.ariaSort}>
+                <th
+                  key={c.key}
+                  className={c.className}
+                  title={c.title}
+                  aria-sort={c.ariaSort}
+                >
                   {c.header}
                 </th>
               ))}
@@ -654,8 +831,12 @@ export function TargetsTable({
                 Height is dynamic (virtualizer offset), allowed by convention. */}
             {paddingBefore > 0 && (
               <tr aria-hidden="true" className="alm-targets-table__spacer">
-                {/* eslint-disable-next-line no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer before-spacer height; empty presentational cell inside an aria-hidden spacer row (no label needed) */}
-                <td colSpan={COL_COUNT} style={{ height: `${paddingBefore}px` }} />
+                {/* eslint-disable no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer before-spacer height; empty presentational cell inside an aria-hidden spacer row (no label needed) */}
+                <td
+                  colSpan={COL_COUNT}
+                  style={{ height: `${paddingBefore}px` }}
+                />
+                {/* eslint-enable no-restricted-syntax, jsx-a11y/control-has-associated-label */}
               </tr>
             )}
 
@@ -683,10 +864,15 @@ export function TargetsTable({
                           // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
                           style={{ paddingLeft: 8 + depthIndent }}
                         >
-                          <span className="alm-listgroup__caret" aria-hidden="true">
+                          <span
+                            className="alm-listgroup__caret"
+                            aria-hidden="true"
+                          >
                             {row.collapsed ? '▸' : '▾'}
                           </span>
-                          <span className="alm-listgroup__label">{row.label}</span>
+                          <span className="alm-listgroup__label">
+                            {row.label}
+                          </span>
                           <span className="alm-listgroup__count">
                             {m.targets_table_target_count({ count: row.count })}
                           </span>
@@ -720,7 +906,14 @@ export function TargetsTable({
               // screen, not the full (possibly ~13k-entry) catalogue `alt`
               // came from (that pass used includeMoonGeometry=false for
               // performance; see rowAltitudeFor's doc).
-              const altMoon = rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, true);
+              const altMoon = rowAltitudeFor(
+                t,
+                usableAltDeg,
+                site,
+                dateMs,
+                guidanceParams,
+                true,
+              );
               const showAltDesig = t.effectiveLabel !== t.primaryDesignation;
               const isSelected = selected === t.id;
 
@@ -746,9 +939,21 @@ export function TargetsTable({
                         'alm-targets-star' +
                         (isFav ? ' alm-targets-star--active' : '')
                       }
-                      aria-label={isFav ? m.targets_star_unfavourite_aria({ label: t.effectiveLabel }) : m.targets_star_favourite_aria({ label: t.effectiveLabel })}
+                      aria-label={
+                        isFav
+                          ? m.targets_star_unfavourite_aria({
+                              label: t.effectiveLabel,
+                            })
+                          : m.targets_star_favourite_aria({
+                              label: t.effectiveLabel,
+                            })
+                      }
                       aria-pressed={isFav}
-                      title={isFav ? m.targets_star_remove_title() : m.targets_star_add_title()}
+                      title={
+                        isFav
+                          ? m.targets_star_remove_title()
+                          : m.targets_star_add_title()
+                      }
                       onClick={(e) => {
                         e.stopPropagation();
                         resolvedToggle(t.id);
@@ -759,9 +964,13 @@ export function TargetsTable({
                   </td>
                   <td>
                     <span className="alm-targets-cell__desig">
-                      <span className="alm-targets-cell__label">{t.effectiveLabel}</span>
+                      <span className="alm-targets-cell__label">
+                        {t.effectiveLabel}
+                      </span>
                       {showAltDesig && (
-                        <span className="alm-targets-cell__alt">{t.primaryDesignation}</span>
+                        <span className="alm-targets-cell__alt">
+                          {t.primaryDesignation}
+                        </span>
                       )}
                     </span>
                   </td>
@@ -776,7 +985,12 @@ export function TargetsTable({
                   </td>
                   {/* Real inline altitude sparkline for the night (spec 044 Track B). */}
                   <td className="alm-targets-cell--spark">
-                    <AltitudeSparkline alt={alt} label={m.targets_table_alt_sparkline_aria({ label: t.effectiveLabel })} />
+                    <AltitudeSparkline
+                      alt={alt}
+                      label={m.targets_table_alt_sparkline_aria({
+                        label: t.effectiveLabel,
+                      })}
+                    />
                   </td>
                   {/* Visible-tonight indicator (peaks above usable alt).
                       US4/T033: a site/date with no qualifying dark window
@@ -788,28 +1002,45 @@ export function TargetsTable({
                         className="alm-targets-vis alm-targets-vis--no"
                         title={m.targets_table_no_dark_window_title()}
                       >
-                        ○<span className="alm-targets-vis__label">{m.targets_table_no_dark_window()}</span>
+                        ○
+                        <span className="alm-targets-vis__label">
+                          {m.targets_table_no_dark_window()}
+                        </span>
                       </span>
                     ) : alt.visibleTonight ? (
                       <span
                         className="alm-targets-vis alm-targets-vis--yes"
-                        title={m.targets_table_visible_reaches_title({ deg: Math.round(alt.maxAltDeg), hours: alt.hoursAboveUsable.toFixed(1), threshold: usableAltDeg })}
+                        title={m.targets_table_visible_reaches_title({
+                          deg: Math.round(alt.maxAltDeg),
+                          hours: alt.hoursAboveUsable.toFixed(1),
+                          threshold: usableAltDeg,
+                        })}
                       >
-                        ●<span className="alm-targets-vis__label">{m.targets_table_visible_tonight()}</span>
+                        ●
+                        <span className="alm-targets-vis__label">
+                          {m.targets_table_visible_tonight()}
+                        </span>
                       </span>
                     ) : (
                       <span
                         className="alm-targets-vis alm-targets-vis--no"
-                        title={m.targets_table_visible_peaks_title({ deg: Math.round(alt.maxAltDeg), threshold: usableAltDeg })}
+                        title={m.targets_table_visible_peaks_title({
+                          deg: Math.round(alt.maxAltDeg),
+                          threshold: usableAltDeg,
+                        })}
                       >
-                        ○<span className="alm-targets-vis__label">{m.targets_table_visible_low()}</span>
+                        ○
+                        <span className="alm-targets-vis__label">
+                          {m.targets_table_visible_low()}
+                        </span>
                       </span>
                     )}
                   </td>
                   {/* Real next-opposition date (spec 047 US4). Unknown
                       coordinates / no site → explicit "—", never a date. */}
                   <td className="alm-targets-cell--opposition">
-                    {moon.nextOppositionDate === null || moon.daysToOpposition === null ? (
+                    {moon.nextOppositionDate === null ||
+                    moon.daysToOpposition === null ? (
                       <span
                         className="alm-targets-cell--muted"
                         title={m.targets_opposition_unknown_title()}
@@ -822,10 +1053,14 @@ export function TargetsTable({
                         const relText =
                           rel.unit === 'days'
                             ? m.targets_opposition_in_days({ count: rel.count })
-                            : m.targets_opposition_in_months({ count: rel.count });
+                            : m.targets_opposition_in_months({
+                                count: rel.count,
+                              });
                         return (
                           <span title={m.targets_table_next_opposition()}>
-                            {formatOppositionDate(new Date(`${moon.nextOppositionDate}T00:00:00Z`))}
+                            {formatOppositionDate(
+                              new Date(`${moon.nextOppositionDate}T00:00:00Z`),
+                            )}
                             {' · '}
                             {relText}
                           </span>
@@ -846,7 +1081,9 @@ export function TargetsTable({
                     ) : (
                       <span
                         className="alm-targets-cell--lunardist"
-                        title={m.targets_table_lunar_dist_title({ deg: Math.round(moon.lunarSeparationDeg) })}
+                        title={m.targets_table_lunar_dist_title({
+                          deg: Math.round(moon.lunarSeparationDeg),
+                        })}
                       >
                         {Math.round(moon.lunarSeparationDeg)}°
                       </span>
@@ -870,9 +1107,16 @@ export function TargetsTable({
                   {/* MOCK (spec 044): hours above the usable-altitude threshold. */}
                   <td className="alm-targets-cell--num">
                     <span
-                      title={m.targets_table_hours_above_title({ hours: alt.hoursAboveUsable.toFixed(1), threshold: usableAltDeg })}
+                      title={m.targets_table_hours_above_title({
+                        hours: alt.hoursAboveUsable.toFixed(1),
+                        threshold: usableAltDeg,
+                      })}
                     >
-                      {alt.hoursAboveUsable > 0 ? m.targets_hours_above({ hours: alt.hoursAboveUsable.toFixed(1) }) : '—'}
+                      {alt.hoursAboveUsable > 0
+                        ? m.targets_hours_above({
+                            hours: alt.hoursAboveUsable.toFixed(1),
+                          })
+                        : '—'}
                     </span>
                   </td>
                   {/* MOCK (#57): linked-session count not on TargetListItem yet. */}
@@ -887,8 +1131,12 @@ export function TargetsTable({
                 Height is dynamic (virtualizer remainder), allowed by convention. */}
             {paddingAfter > 0 && (
               <tr aria-hidden="true" className="alm-targets-table__spacer">
-                {/* eslint-disable-next-line no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer after-spacer height; empty presentational cell inside an aria-hidden spacer row (no label needed) */}
-                <td colSpan={COL_COUNT} style={{ height: `${paddingAfter}px` }} />
+                {/* eslint-disable no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer after-spacer height; empty presentational cell inside an aria-hidden spacer row (no label needed) */}
+                <td
+                  colSpan={COL_COUNT}
+                  style={{ height: `${paddingAfter}px` }}
+                />
+                {/* eslint-enable no-restricted-syntax, jsx-a11y/control-has-associated-label */}
               </tr>
             )}
           </tbody>

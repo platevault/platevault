@@ -44,13 +44,23 @@ export interface ProjectSort {
   dir: SortDir;
 }
 
-export const DEFAULT_PROJECT_SORT: ProjectSort = { col: 'updated', dir: 'desc' };
+export const DEFAULT_PROJECT_SORT: ProjectSort = {
+  col: 'updated',
+  dir: 'desc',
+};
 
-function compareStr(a: string | null | undefined, b: string | null | undefined): number {
+function compareStr(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number {
   return (a ?? '').localeCompare(b ?? '');
 }
 
-function compareProjects(a: ProjectSummaryDto, b: ProjectSummaryDto, sort: ProjectSort): number {
+function compareProjects(
+  a: ProjectSummaryDto,
+  b: ProjectSummaryDto,
+  sort: ProjectSort,
+): number {
   let cmp = 0;
   switch (sort.col) {
     case 'name':
@@ -76,7 +86,9 @@ function compareProjects(a: ProjectSummaryDto, b: ProjectSummaryDto, sort: Proje
 
 // ── Multi-level grouping accessors ────────────────────────────────────────────
 
-export const PROJECT_ACCESSORS: Readonly<Record<string, DimensionAccessor<ProjectSummaryDto>>> = {
+export const PROJECT_ACCESSORS: Readonly<
+  Record<string, DimensionAccessor<ProjectSummaryDto>>
+> = {
   state: (p) => p.lifecycle,
   tool: (p) => p.tool,
   target: (_p) => null, // STUB: target linkage blocked on task #54
@@ -85,13 +97,37 @@ export const PROJECT_ACCESSORS: Readonly<Record<string, DimensionAccessor<Projec
 // ── Column model ────────────────────────────────────────────────────────────────
 
 // `label` is a render-time thunk so headers re-read the active locale (spec 046 #8).
-const COLUMNS: Array<{ key: string; label: () => string; sort?: ProjectSortCol; className?: string }> = [
+const COLUMNS: Array<{
+  key: string;
+  label: () => string;
+  sort?: ProjectSortCol;
+  className?: string;
+}> = [
   { key: 'name', label: () => m.projects_col_name(), sort: 'name' },
-  { key: 'tool', label: () => m.projects_col_tool(), sort: 'tool', className: 'alm-projects-table__cell--muted' },
-  { key: 'target', label: () => m.projects_create_target_label(), className: 'alm-projects-table__cell--muted' },
+  {
+    key: 'tool',
+    label: () => m.projects_col_tool(),
+    sort: 'tool',
+    className: 'alm-projects-table__cell--muted',
+  },
+  {
+    key: 'target',
+    label: () => m.projects_create_target_label(),
+    className: 'alm-projects-table__cell--muted',
+  },
   { key: 'state', label: () => m.sessions_col_state(), sort: 'state' },
-  { key: 'sources', label: () => m.common_sources(), sort: 'sources', className: 'alm-projects-table__cell--num' },
-  { key: 'updated', label: () => m.projects_stepper_updated(), sort: 'updated', className: 'alm-projects-table__cell--mono' },
+  {
+    key: 'sources',
+    label: () => m.common_sources(),
+    sort: 'sources',
+    className: 'alm-projects-table__cell--num',
+  },
+  {
+    key: 'updated',
+    label: () => m.projects_stepper_updated(),
+    sort: 'updated',
+    className: 'alm-projects-table__cell--mono',
+  },
 ];
 
 // ── Props ───────────────────────────────────────────────────────────────────
@@ -133,7 +169,8 @@ export function ProjectsTable({
   const useMultiGroup = dims.length > 0;
 
   const tree = useMemo(
-    () => (useMultiGroup ? groupByDimensions(sorted, dims, PROJECT_ACCESSORS) : []),
+    () =>
+      useMultiGroup ? groupByDimensions(sorted, dims, PROJECT_ACCESSORS) : [],
     [sorted, dims, useMultiGroup],
   );
 
@@ -191,13 +228,19 @@ export function ProjectsTable({
           )}
           {project.name}
           {project.channelDrift && (
-            <span className="alm-projects-table__drift-badge" title={m.projects_table_channel_drift_title()}>
-              <AlertTriangle size={11} aria-hidden="true" /> {m.projects_table_channel_drift_label()}
+            <span
+              className="alm-projects-table__drift-badge"
+              title={m.projects_table_channel_drift_title()}
+            >
+              <AlertTriangle size={11} aria-hidden="true" />{' '}
+              {m.projects_table_channel_drift_label()}
             </span>
           )}
         </span>
       ),
-      tool: <span className="alm-projects-table__cell--muted">{project.tool}</span>,
+      tool: (
+        <span className="alm-projects-table__cell--muted">{project.tool}</span>
+      ),
       // STUB: target — omitted until FITS OBJECT → target_id linkage lands (#54).
       target: <span className="alm-projects-table__dash">—</span>,
       state: (
@@ -211,17 +254,27 @@ export function ProjectsTable({
         </span>
       ),
       updated: (
-        <span className="alm-projects-table__cell--mono">{formatDateTime(project.updatedAt)}</span>
+        <span className="alm-projects-table__cell--mono">
+          {formatDateTime(project.updatedAt)}
+        </span>
       ),
     };
   }
 
   if (loading && projects.length === 0) {
-    return <div className="alm-projects-table__empty">{m.projects_table_loading()}</div>;
+    return (
+      <div className="alm-projects-table__empty">
+        {m.projects_table_loading()}
+      </div>
+    );
   }
 
   if (projects.length === 0) {
-    return <div className="alm-projects-table__empty">{m.projects_table_empty()}</div>;
+    return (
+      <div className="alm-projects-table__empty">
+        {m.projects_table_empty()}
+      </div>
+    );
   }
 
   // Build rows: multi-level grouping path or flat sorted path.

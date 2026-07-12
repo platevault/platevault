@@ -16,7 +16,11 @@
  * used by the InboxList header and footer.
  */
 
-import type { InboxListItem, InboxStatsResponse, InboxStatsPerType } from '@/bindings/index';
+import type {
+  InboxListItem,
+  InboxStatsResponse,
+  InboxStatsPerType,
+} from '@/bindings/index';
 
 /** Bucket key for a folder/master whose frame type is unknown or spans types. */
 const MIXED_KEY = 'mixed';
@@ -37,7 +41,9 @@ function bucketKey(frameType: string | null | undefined): string {
  * list. Each item contributes to exactly one per-type bucket: non-master
  * folders by their dominant `groupFrameType`, masters by their `masterFrameType`.
  */
-export function deriveInboxStats(items: readonly InboxListItem[]): InboxStatsResponse {
+export function deriveInboxStats(
+  items: readonly InboxListItem[],
+): InboxStatsResponse {
   const byType = new Map<string, InboxStatsPerType>();
   let folders = 0;
   let masters = 0;

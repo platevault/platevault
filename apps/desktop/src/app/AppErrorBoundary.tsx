@@ -38,7 +38,11 @@ export class AppErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Log to console so dev tools and the bottom log viewer can surface it.
-    console.error('[AppErrorBoundary] Uncaught render error:', error, info.componentStack);
+    console.error(
+      '[AppErrorBoundary] Uncaught render error:',
+      error,
+      info.componentStack,
+    );
   }
 
   handleReset = () => {
@@ -62,13 +66,9 @@ export class AppErrorBoundary extends Component<Props, State> {
           <h1 className="alm-error-boundary__heading">
             {m.shell_error_heading()}
           </h1>
-          <p className="alm-error-boundary__body">
-            {m.shell_error_body()}
-          </p>
+          <p className="alm-error-boundary__body">{m.shell_error_body()}</p>
           {error.message && (
-            <pre className="alm-error-boundary__detail">
-              {error.message}
-            </pre>
+            <pre className="alm-error-boundary__detail">{error.message}</pre>
           )}
           <button
             type="button"

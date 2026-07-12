@@ -30,11 +30,19 @@ import { unwrap } from '@/api/ipc';
 import type { TargetDetailV3 } from '@/bindings/aliases';
 import type { ContractError } from '@/lib/errors';
 import type { TargetListItem } from '@/bindings/index';
-import type { TargetSessionItem, TargetProjectItem, TargetAstroFormat } from '@/bindings';
+import type {
+  TargetSessionItem,
+  TargetProjectItem,
+  TargetAstroFormat,
+} from '@/bindings';
 import { DetailPane, PropertyTable, type PropertyDef } from '@/components';
 import { Pill, Section, EmptyState, Banner, Btn } from '@/ui';
 import { m } from '@/lib/i18n';
-import { altitudeFor, rowAltitudeFor, USABLE_ALT_DEG } from './planner-altitude';
+import {
+  altitudeFor,
+  rowAltitudeFor,
+  USABLE_ALT_DEG,
+} from './planner-altitude';
 import { errorMessage } from './target-error-message';
 import { useActiveSite } from './observing-sites/site-store';
 import { usePlannerDateMs } from './planner-date-store';
@@ -126,14 +134,21 @@ const PAD_B = 28;
 const PLOT_W = SVG_W - PAD_L - PAD_R;
 const PLOT_H = SVG_H - PAD_T - PAD_B;
 
-function AltitudeGraph({ points, usableAltDeg, darkWindowHours }: AltitudeGraphProps) {
+function AltitudeGraph({
+  points,
+  usableAltDeg,
+  darkWindowHours,
+}: AltitudeGraphProps) {
   const yScale = altitudeScale(PLOT_H, 0);
   const xScale = hourScale(0, PLOT_W);
 
   const usableYPx = yScale(usableAltDeg);
 
   // Transit marker: find point closest to peak altitude.
-  const peak = points.reduce((best, p) => (p.altDeg > best.altDeg ? p : best), points[0]);
+  const peak = points.reduce(
+    (best, p) => (p.altDeg > best.altDeg ? p : best),
+    points[0],
+  );
   const transitXPx = xScale(peak.tHour);
 
   // X-axis tick labels (every 2 h from 18 to 06).
@@ -225,20 +240,50 @@ function AltitudeGraph({ points, usableAltDeg, darkWindowHours }: AltitudeGraphP
             strokeDasharray="2 2"
             opacity={0.6}
           />
-          <text x={transitXPx + 3} y={9} className="alm-planner__graph-label-text">
+          <text
+            x={transitXPx + 3}
+            y={9}
+            className="alm-planner__graph-label-text"
+          >
             {m.targets_detail_transit()}
           </text>
 
           {/* Y-axis */}
-          <line x1={0} y1={0} x2={0} y2={PLOT_H} stroke="var(--alm-border)" strokeWidth={1} />
+          <line
+            x1={0}
+            y1={0}
+            x2={0}
+            y2={PLOT_H}
+            stroke="var(--alm-border)"
+            strokeWidth={1}
+          />
           {/* X-axis */}
-          <line x1={0} y1={PLOT_H} x2={PLOT_W} y2={PLOT_H} stroke="var(--alm-border)" strokeWidth={1} />
+          <line
+            x1={0}
+            y1={PLOT_H}
+            x2={PLOT_W}
+            y2={PLOT_H}
+            stroke="var(--alm-border)"
+            strokeWidth={1}
+          />
 
           {/* Y-axis ticks + labels */}
           {yTicks.map((alt) => (
             <g key={alt}>
-              <line x1={-3} y1={yScale(alt)} x2={0} y2={yScale(alt)} stroke="var(--alm-border)" strokeWidth={1} />
-              <text x={-5} y={yScale(alt) + 3} textAnchor="end" className="alm-planner__graph-axis-text">
+              <line
+                x1={-3}
+                y1={yScale(alt)}
+                x2={0}
+                y2={yScale(alt)}
+                stroke="var(--alm-border)"
+                strokeWidth={1}
+              />
+              <text
+                x={-5}
+                y={yScale(alt) + 3}
+                textAnchor="end"
+                className="alm-planner__graph-axis-text"
+              >
                 {alt}°
               </text>
             </g>
@@ -255,7 +300,12 @@ function AltitudeGraph({ points, usableAltDeg, darkWindowHours }: AltitudeGraphP
                 stroke="var(--alm-border)"
                 strokeWidth={1}
               />
-              <text x={xScale(tHour)} y={PLOT_H + 12} textAnchor="middle" className="alm-planner__graph-axis-text">
+              <text
+                x={xScale(tHour)}
+                y={PLOT_H + 12}
+                textAnchor="middle"
+                className="alm-planner__graph-axis-text"
+              >
                 {label}
               </text>
             </g>
@@ -268,7 +318,12 @@ function AltitudeGraph({ points, usableAltDeg, darkWindowHours }: AltitudeGraphP
 
 // ── TargetDetailV2 ────────────────────────────────────────────────────────────
 
-export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_ALT_DEG, night = null }: Props) {
+export function TargetDetailV2({
+  targetId,
+  item = null,
+  usableAltDeg = USABLE_ALT_DEG,
+  night = null,
+}: Props) {
   const guidanceParams = useGuidanceParams();
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const [aliasInput, setAliasInput] = useState('');
@@ -297,7 +352,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   // Sexagesimal RA/Dec (adopt target-match): backend-formatted, carry-safe
   // rounding (replaces the hand-rolled fmtRa/fmtDec, which could round a
   // seconds value up to an invalid ":60").
-  const [astroFormat, setAstroFormat] = useState<TargetAstroFormat | null>(null);
+  const [astroFormat, setAstroFormat] = useState<TargetAstroFormat | null>(
+    null,
+  );
 
   const navigate = useNavigate();
 
@@ -317,7 +374,10 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         setDisplayAliasInput(data.displayAlias ?? '');
       })
       .catch(() => {
-        setLoadState({ status: 'error', message: m.targets_detail_load_error() });
+        setLoadState({
+          status: 'error',
+          message: m.targets_detail_load_error(),
+        });
       });
   }, [targetId]);
 
@@ -385,7 +445,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
     setNotesSaving(true);
     setNotesError(null);
     try {
-      const { notes: saved } = unwrap(await commands.targetNoteUpdate({ targetId, notes: notesDraft }));
+      const { notes: saved } = unwrap(
+        await commands.targetNoteUpdate({ targetId, notes: notesDraft }),
+      );
       setNotes(saved ?? null);
       setNotesDraft(saved ?? '');
       setNotesEditing(false);
@@ -435,14 +497,19 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
     setActionError(null);
     try {
       const data = unwrap(
-        await commands.targetDisplayAliasSet({ targetId, displayAlias: displayAliasInput.trim() }),
+        await commands.targetDisplayAliasSet({
+          targetId,
+          displayAlias: displayAliasInput.trim(),
+        }),
       );
       setLoadState({ status: 'loaded', data: data as TargetDetailV3 });
       setDisplayAliasInput(data.displayAlias ?? '');
       setDisplayAliasEditing(false);
     } catch (err) {
       const e = err as ContractError;
-      setActionError(errorMessage(e, m.targets_detail_set_display_alias_failed()));
+      setActionError(
+        errorMessage(e, m.targets_detail_set_display_alias_failed()),
+      );
     }
   }, [targetId, displayAliasInput]);
 
@@ -456,7 +523,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
       setDisplayAliasEditing(false);
     } catch (err) {
       const e = err as ContractError;
-      setActionError(errorMessage(e, m.targets_detail_clear_display_alias_failed()));
+      setActionError(
+        errorMessage(e, m.targets_detail_clear_display_alias_failed()),
+      );
     }
   }, [targetId]);
 
@@ -473,7 +542,10 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   if (loadState.status === 'error') {
     return (
       <DetailPane>
-        <EmptyState title={m.settings_advanced_log_error()} desc={loadState.message} />
+        <EmptyState
+          title={m.settings_advanced_log_error()}
+          desc={loadState.message}
+        />
       </DetailPane>
     );
   }
@@ -482,11 +554,14 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
 
   // Derive catalog pills from aliases with kind='designation' (non-primary).
   const catalogPills = detail.aliases
-    .filter((a) => a.kind === 'designation' && a.alias !== detail.primaryDesignation)
+    .filter(
+      (a) => a.kind === 'designation' && a.alias !== detail.primaryDesignation,
+    )
     .slice(0, 4);
 
   // Common name (first common_name alias, if any).
-  const commonName = detail.aliases.find((a) => a.kind === 'common_name')?.alias ?? null;
+  const commonName =
+    detail.aliases.find((a) => a.kind === 'common_name')?.alias ?? null;
 
   // Tonight planner data — shared with the list row (same rowAltitudeFor source
   // so the graph peak and the "Max alt" stat agree). Falls back to a direct
@@ -516,16 +591,42 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
 
   // Identity facts split across two tabular columns (left-packed).
   const identityA: PropertyDef[] = [
-    { key: 'desig', label: m.targets_col_designation(), value: detail.primaryDesignation },
-    { key: 'type', label: m.cmp_target_search_type_label(), value: detail.objectType.replace(/_/g, ' ') },
-    { key: 'constellation', label: m.targets_prop_constellation(), value: item?.constellation ?? null },
+    {
+      key: 'desig',
+      label: m.targets_col_designation(),
+      value: detail.primaryDesignation,
+    },
+    {
+      key: 'type',
+      label: m.cmp_target_search_type_label(),
+      value: detail.objectType.replace(/_/g, ' '),
+    },
+    {
+      key: 'constellation',
+      label: m.targets_prop_constellation(),
+      value: item?.constellation ?? null,
+    },
     { key: 'radec', label: m.targets_prop_ra_dec(), value: raDecStr },
   ];
   const identityB: PropertyDef[] = [
-    { key: 'magnitude', label: m.targets_prop_magnitude(), value: item?.magnitude ?? null },
-    { key: 'source', label: m.projects_wizard_col_source(), value: detail.source },
+    {
+      key: 'magnitude',
+      label: m.targets_prop_magnitude(),
+      value: item?.magnitude ?? null,
+    },
+    {
+      key: 'source',
+      label: m.projects_wizard_col_source(),
+      value: detail.source,
+    },
     ...(detail.simbadOid != null
-      ? [{ key: 'simbad', label: m.targets_prop_simbad_oid(), value: detail.simbadOid } as PropertyDef]
+      ? [
+          {
+            key: 'simbad',
+            label: m.targets_prop_simbad_oid(),
+            value: detail.simbadOid,
+          } as PropertyDef,
+        ]
       : []),
   ];
 
@@ -549,14 +650,29 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
   })();
   const tonightStats: PropertyDef[] = tonightAvailable
     ? [
-        { key: 'maxalt', label: m.targets_col_max_alt(), value: `${Math.round(rowAlt.maxAltDeg)}°` },
-        { key: 'imgtime', label: m.targets_col_img_time(), value: `${rowAlt.hoursAboveUsable.toFixed(1)} h` },
+        {
+          key: 'maxalt',
+          label: m.targets_col_max_alt(),
+          value: `${Math.round(rowAlt.maxAltDeg)}°`,
+        },
+        {
+          key: 'imgtime',
+          label: m.targets_col_img_time(),
+          value: `${rowAlt.hoursAboveUsable.toFixed(1)} h`,
+        },
         {
           key: 'lunar',
           label: m.targets_col_lunar(),
-          value: moon.lunarSeparationDeg != null ? `${Math.round(moon.lunarSeparationDeg)}°` : null,
+          value:
+            moon.lunarSeparationDeg != null
+              ? `${Math.round(moon.lunarSeparationDeg)}°`
+              : null,
         },
-        { key: 'bestdate', label: m.targets_col_best_date(), value: bestDateValue },
+        {
+          key: 'bestdate',
+          label: m.targets_col_best_date(),
+          value: bestDateValue,
+        },
       ]
     : [];
 
@@ -592,9 +708,13 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
             </div>
           </div>
           <div className="alm-planner__pill-row">
-            <Pill variant="neutral">{detail.objectType.replace(/_/g, ' ')}</Pill>
+            <Pill variant="neutral">
+              {detail.objectType.replace(/_/g, ' ')}
+            </Pill>
             {catalogPills.map((a) => (
-              <Pill key={a.id} variant="ghost">{a.alias}</Pill>
+              <Pill key={a.id} variant="ghost">
+                {a.alias}
+              </Pill>
             ))}
           </div>
         </div>
@@ -616,13 +736,19 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         <div className="alm-planner__tonight">
           <div className="alm-planner__graph-title">
             {site
-              ? m.targets_detail_tonight_title({ lat: Math.round(site.latitudeDeg) })
+              ? m.targets_detail_tonight_title({
+                  lat: Math.round(site.latitudeDeg),
+                })
               : m.targets_detail_tonight_title_no_site()}
           </div>
           {rowAlt.needsSite ? (
             <Banner variant="info">
               {m.targets_planner_no_site_banner()}{' '}
-              <Link to="/settings/$pane" params={{ pane: 'planner' }} className="alm-banner__action-link">
+              <Link
+                to="/settings/$pane"
+                params={{ pane: 'planner' }}
+                className="alm-banner__action-link"
+              >
                 {m.targets_planner_no_site_banner_action()}
               </Link>
             </Banner>
@@ -638,13 +764,17 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
                   graph above is still real, only the imaging-time concept
                   doesn't apply tonight. */}
               {tonightAvailable && rowAlt.noDarkWindow && (
-                <Banner variant="info">{m.targets_table_no_dark_window_title()}</Banner>
+                <Banner variant="info">
+                  {m.targets_table_no_dark_window_title()}
+                </Banner>
               )}
               {tonightAvailable && (
                 <>
                   <PropertyTable mode="view" properties={tonightStats} />
                   <div className="alm-planner__tonight-filters">
-                    <span className="alm-planner__tonight-filters-label">{m.common_filters()}</span>
+                    <span className="alm-planner__tonight-filters-label">
+                      {m.common_filters()}
+                    </span>
                     <GuidanceCell
                       night={night}
                       moon={moon}
@@ -677,7 +807,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         <div>
           <p className="alm-planner__link-col-title">{m.common_sessions()}</p>
           {sessionsLoading ? (
-            <span className="alm-planner__link-empty">{m.common_loading()}</span>
+            <span className="alm-planner__link-empty">
+              {m.common_loading()}
+            </span>
           ) : sessions.length === 0 ? (
             <span className="alm-planner__link-empty">
               {m.targets_detail_no_sessions()}
@@ -685,22 +817,30 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
           ) : (
             <ul className="alm-planner__link-list">
               {sessions.map((s) => {
-                const dateStr = new Date(s.createdAt).toLocaleDateString(undefined, {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                });
+                const dateStr = new Date(s.createdAt).toLocaleDateString(
+                  undefined,
+                  {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                  },
+                );
                 return (
                   <li key={s.id} className="alm-planner__link-item">
                     <button
                       className="alm-planner__link-btn"
                       onClick={() =>
-                        void navigate({ to: '/sessions', search: { selected: s.id } })
+                        void navigate({
+                          to: '/sessions',
+                          search: { selected: s.id },
+                        })
                       }
                     >
                       <span className="alm-planner__link-date">{dateStr}</span>
                       <span className="alm-planner__link-meta">
-                        {m.targets_detail_session_frames({ count: s.frameCount })}
+                        {m.targets_detail_session_frames({
+                          count: s.frameCount,
+                        })}
                       </span>
                     </button>
                   </li>
@@ -712,7 +852,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
         <div>
           <p className="alm-planner__link-col-title">{m.common_projects()}</p>
           {projectsLoading ? (
-            <span className="alm-planner__link-empty">{m.common_loading()}</span>
+            <span className="alm-planner__link-empty">
+              {m.common_loading()}
+            </span>
           ) : projects.length === 0 ? (
             <span className="alm-planner__link-empty">
               {m.targets_detail_no_projects_linked()}
@@ -723,10 +865,17 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
                 <li key={p.id} className="alm-planner__link-item">
                   <button
                     className="alm-planner__link-btn"
-                    onClick={() => void navigate({ to: '/projects', search: { selected: p.id } })}
+                    onClick={() =>
+                      void navigate({
+                        to: '/projects',
+                        search: { selected: p.id },
+                      })
+                    }
                   >
                     <span className="alm-planner__link-name">{p.name}</span>
-                    <span className="alm-planner__link-state">{p.lifecycle}</span>
+                    <span className="alm-planner__link-state">
+                      {p.lifecycle}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -807,7 +956,9 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
               </span>
               {a.kind === 'user' && (
                 <button
-                  aria-label={m.targets_detail_alias_remove_aria({ alias: a.alias })}
+                  aria-label={m.targets_detail_alias_remove_aria({
+                    alias: a.alias,
+                  })}
                   className="alm-target-detail__alias-remove"
                   onClick={() => handleAliasRemove(a.id)}
                 >
@@ -872,11 +1023,18 @@ export function TargetDetailV2({ targetId, item = null, usableAltDeg = USABLE_AL
                 <button
                   className="alm-target-detail__project-btn"
                   onClick={() =>
-                    void navigate({ to: '/projects', search: { selected: p.id } })
+                    void navigate({
+                      to: '/projects',
+                      search: { selected: p.id },
+                    })
                   }
                 >
-                  <span className="alm-target-detail__project-name">{p.name}</span>
-                  <span className="alm-target-detail__project-lifecycle">{p.lifecycle}</span>
+                  <span className="alm-target-detail__project-name">
+                    {p.name}
+                  </span>
+                  <span className="alm-target-detail__project-lifecycle">
+                    {p.lifecycle}
+                  </span>
                 </button>
               </li>
             ))}

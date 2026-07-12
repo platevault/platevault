@@ -37,7 +37,9 @@ export function ListSidebar({
           type="text"
           placeholder={placeholder || m.common_search_placeholder()}
           value={searchValue ?? ''}
-          onChange={onSearchChange ? (e) => onSearchChange(e.target.value) : undefined}
+          onChange={
+            onSearchChange ? (e) => onSearchChange(e.target.value) : undefined
+          }
           readOnly={!onSearchChange}
           aria-label={placeholder || m.common_search_aria()}
         />

@@ -71,7 +71,6 @@ export interface ValidationError {
   message: string;
 }
 
-
 /** Load sources state from localStorage. */
 export function loadSources(): SourcesState {
   try {
@@ -80,22 +79,33 @@ export function loadSources(): SourcesState {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed?.sources)) {
         // Accept persisted entries; supply organizationState default for
-      // entries written before this field existed (backward compat).
-      return parsed.sources
-        .filter(
-          (e: unknown): e is Omit<SourceEntry, 'organizationState'> & { organizationState?: OrganizationState } =>
-            typeof e === 'object' &&
-            e !== null &&
-            typeof (e as SourceEntry).path === 'string' &&
-            typeof (e as SourceEntry).kind === 'string' &&
-            ALL_SOURCE_KINDS.includes((e as SourceEntry).kind),
-        )
-        .map((e: Omit<SourceEntry, 'organizationState'> & { organizationState?: OrganizationState }) => ({
-          ...e,
-          organizationState: e.kind === 'inbox'
-            ? 'unorganized' as OrganizationState
-            : (e.organizationState ?? 'organized'),
-        }));
+        // entries written before this field existed (backward compat).
+        return parsed.sources
+          .filter(
+            (
+              e: unknown,
+            ): e is Omit<SourceEntry, 'organizationState'> & {
+              organizationState?: OrganizationState;
+            } =>
+              typeof e === 'object' &&
+              e !== null &&
+              typeof (e as SourceEntry).path === 'string' &&
+              typeof (e as SourceEntry).kind === 'string' &&
+              ALL_SOURCE_KINDS.includes((e as SourceEntry).kind),
+          )
+          .map(
+            (
+              e: Omit<SourceEntry, 'organizationState'> & {
+                organizationState?: OrganizationState;
+              },
+            ) => ({
+              ...e,
+              organizationState:
+                e.kind === 'inbox'
+                  ? ('unorganized' as OrganizationState)
+                  : (e.organizationState ?? 'organized'),
+            }),
+          );
       }
     }
   } catch {
@@ -144,7 +154,8 @@ export function checkDeduplication(
   const normalizedPath = path.toLowerCase();
 
   const sameKindDuplicate = sources.some(
-    (entry) => entry.kind === kind && entry.path.toLowerCase() === normalizedPath,
+    (entry) =>
+      entry.kind === kind && entry.path.toLowerCase() === normalizedPath,
   );
 
   let crossKindConflict: SourceKind | undefined;
@@ -187,15 +198,16 @@ export function removeSource(
 }
 
 /** Get sources for a specific kind. */
-export function getSourcesByKind(sources: SourcesState, kind: SourceKind): SourceEntry[] {
+export function getSourcesByKind(
+  sources: SourcesState,
+  kind: SourceKind,
+): SourceEntry[] {
   return sources.filter((e) => e.kind === kind);
 }
 
 /** Check which required kinds are missing from the current sources. */
 export function getMissingRequiredKinds(sources: SourcesState): SourceKind[] {
-  return REQUIRED_KINDS.filter(
-    (kind) => !sources.some((e) => e.kind === kind),
-  );
+  return REQUIRED_KINDS.filter((kind) => !sources.some((e) => e.kind === kind));
 }
 
 /**
@@ -214,7 +226,10 @@ export function validatePath(
 
   const dedup = checkDeduplication(sources, kind, path);
   if (dedup.sameKindDuplicate) {
-    return { code: 'path.already_registered', message: m.err_path_already_registered() };
+    return {
+      code: 'path.already_registered',
+      message: m.err_path_already_registered(),
+    };
   }
   if (dedup.crossKindConflict) {
     return {
@@ -257,7 +272,9 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         // organizationState is required by the backend contract (spec 041 R-7).
         // Inbox is always unorganized; non-inbox carries the user's explicit choice.
         organizationState:
-          s.kind === 'inbox' ? 'unorganized' : (s.organizationState ?? 'organized'),
+          s.kind === 'inbox'
+            ? 'unorganized'
+            : (s.organizationState ?? 'organized'),
       })),
     });
 
@@ -273,8 +290,16 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
       }
       // Resolve through the single translation point so the user sees a friendly
       // catalog message, never the raw backend code (spec 046 FR-008/FR-009).
-      const message = errMessage({ code: item.error ?? 'unknown', message: '' });
-      return { kind: item.kind as SourceKind, path: item.path, success: false, error: message };
+      const message = errMessage({
+        code: item.error ?? 'unknown',
+        message: '',
+      });
+      return {
+        kind: item.kind as SourceKind,
+        path: item.path,
+        success: false,
+        error: message,
+      };
     });
 
     return { results, allSucceeded: results.every((r) => r.success) };
@@ -284,7 +309,9 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         kind: s.kind,
         path: s.path,
         success: false,
-        error: m.setup_sources_error_batch_registration_failed({ message: errMessage(err) }),
+        error: m.setup_sources_error_batch_registration_failed({
+          message: errMessage(err),
+        }),
       })),
       allSucceeded: false,
     };

@@ -11,7 +11,10 @@ export interface EmptyStateProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export const EmptyState = forwardRef<HTMLDivElement, EmptyStateProps>(
-  function EmptyState({ title, desc, description, action, className, ...rest }, ref) {
+  function EmptyState(
+    { title, desc, description, action, className, ...rest },
+    ref,
+  ) {
     const body = desc ?? description;
     const cls = ['alm-empty', className].filter(Boolean).join(' ');
     return (
@@ -21,6 +24,6 @@ export const EmptyState = forwardRef<HTMLDivElement, EmptyStateProps>(
         {action}
       </div>
     );
-  }
+  },
 );
 EmptyState.displayName = 'EmptyState';

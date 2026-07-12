@@ -41,7 +41,14 @@
  * long-list performance from US3 while gaining Base UI's accessibility.
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Combobox } from '@base-ui-components/react/combobox';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDebouncedCallback } from 'use-debounce';
@@ -133,7 +140,10 @@ function resolvedToSuggestion(t: ResolvedTarget): TargetSuggestion {
  * different row id — a case-insensitive `primaryDesignation` match. Local hits
  * always win (they are kept; the resolved row is dropped when it collides).
  */
-function mergeDedupe(local: TargetSuggestion[], resolved: TargetSuggestion): TargetSuggestion[] {
+function mergeDedupe(
+  local: TargetSuggestion[],
+  resolved: TargetSuggestion,
+): TargetSuggestion[] {
   const designation = resolved.primaryDesignation.trim().toLowerCase();
   const isDuplicate = local.some(
     (s) =>
@@ -272,7 +282,9 @@ export function TargetSearch({
           // Merge against the current list (the Phase-1 local hits for this
           // generation) so the long-tail row is appended, never duplicated.
           const resolved = res.target;
-          setSuggestions((prev) => mergeDedupe(prev, resolvedToSuggestion(resolved)));
+          setSuggestions((prev) =>
+            mergeDedupe(prev, resolvedToSuggestion(resolved)),
+          );
         }
         // `unresolved` (unknown / offline / resolver-disabled) is non-fatal:
         // leave the local hits untouched and surface no error (FR-011/FR-015).
@@ -398,9 +410,11 @@ export function TargetSearch({
         itemToStringLabel={itemToStringLabel}
         onItemHighlighted={handleItemHighlighted}
       >
-        { }
+        {}
         <label
-          className={hideLabel ? 'alm-target-search__label--sr' : 'alm-field-label'}
+          className={
+            hideLabel ? 'alm-target-search__label--sr' : 'alm-field-label'
+          }
           htmlFor={id}
         >
           {label}
@@ -421,14 +435,23 @@ export function TargetSearch({
         />
 
         {showFilters && (
-          <div className="alm-target-search__filters" role="group" aria-label={m.cmp_target_search_filters_aria()}>
-            <label className="alm-target-search__filter-label" htmlFor={typeFilterId}>
+          <div
+            className="alm-target-search__filters"
+            role="group"
+            aria-label={m.cmp_target_search_filters_aria()}
+          >
+            <label
+              className="alm-target-search__filter-label"
+              htmlFor={typeFilterId}
+            >
               {m.cmp_target_search_type_label()}
               <select
                 id={typeFilterId}
                 className="alm-select alm-target-search__filter-select"
                 value={typeSel}
-                onChange={(e) => setTypeSel(e.target.value as TargetObjectType | '')}
+                onChange={(e) =>
+                  setTypeSel(e.target.value as TargetObjectType | '')
+                }
               >
                 <option value="">{m.cmp_target_search_all_types()}</option>
                 {OBJECT_TYPES.map((t) => (
@@ -438,13 +461,18 @@ export function TargetSearch({
                 ))}
               </select>
             </label>
-            <label className="alm-target-search__filter-label" htmlFor={catalogFilterId}>
+            <label
+              className="alm-target-search__filter-label"
+              htmlFor={catalogFilterId}
+            >
               {m.cmp_target_search_catalogue_label()}
               <select
                 id={catalogFilterId}
                 className="alm-select alm-target-search__filter-select"
                 value={catalogSel}
-                onChange={(e) => setCatalogSel(e.target.value as TargetCatalogId | '')}
+                onChange={(e) =>
+                  setCatalogSel(e.target.value as TargetCatalogId | '')
+                }
               >
                 <option value="">{m.cmp_target_search_all_catalogues()}</option>
                 {CATALOG_IDS.map((c) => (
@@ -505,11 +533,14 @@ export function TargetSearch({
                     {m.cmp_target_search_searching()}
                   </Combobox.Status>
                 )}
-                {!loading && !error && suggestions.length === 0 && !resolving && (
-                  <Combobox.Status className="alm-target-search__status">
-                    {m.cmp_target_search_no_results()}
-                  </Combobox.Status>
-                )}
+                {!loading &&
+                  !error &&
+                  suggestions.length === 0 &&
+                  !resolving && (
+                    <Combobox.Status className="alm-target-search__status">
+                      {m.cmp_target_search_no_results()}
+                    </Combobox.Status>
+                  )}
                 {suggestions.length > 0 && (
                   <div
                     className="alm-virtual-inner"
@@ -541,19 +572,37 @@ export function TargetSearch({
                             {s.primaryDesignation}
                           </span>
                           {secondary && secondary !== s.primaryDesignation && (
-                            <span className="alm-target-search__secondary">{secondary}</span>
+                            <span className="alm-target-search__secondary">
+                              {secondary}
+                            </span>
                           )}
                           <span className="alm-target-search__badges">
-                            <Pill variant="info">{objectTypeLabel(s.objectType)}</Pill>
-                            <Pill variant={s.source === 'user-override' ? 'accent' : 'ghost'}>
+                            <Pill variant="info">
+                              {objectTypeLabel(s.objectType)}
+                            </Pill>
+                            <Pill
+                              variant={
+                                s.source === 'user-override'
+                                  ? 'accent'
+                                  : 'ghost'
+                              }
+                            >
                               {s.source}
                             </Pill>
                             {enableOverride && (
                               <button
                                 type="button"
                                 className="alm-target-search__override"
-                                aria-label={m.cmp_target_search_set_primary_aria({ query: query.trim(), designation: s.primaryDesignation })}
-                                disabled={overriding != null || query.trim().length === 0}
+                                aria-label={m.cmp_target_search_set_primary_aria(
+                                  {
+                                    query: query.trim(),
+                                    designation: s.primaryDesignation,
+                                  },
+                                )}
+                                disabled={
+                                  overriding != null ||
+                                  query.trim().length === 0
+                                }
                                 onPointerDown={(e) => {
                                   // Don't trigger the row's select-on-press.
                                   e.preventDefault();

@@ -99,7 +99,10 @@ export const UNKNOWN_SEPARATION_SCALARS: SeparationScalars = {
 };
 
 /** Nearest `moonSamples` entry to `tMs` (grid is 10-min resolution; linear scan is cheap — ≤ ~72 samples/night). */
-function nearestMoonSample(moonSamples: MoonSample[], tMs: number): MoonSample | null {
+function nearestMoonSample(
+  moonSamples: MoonSample[],
+  tMs: number,
+): MoonSample | null {
   let best: MoonSample | null = null;
   let bestDiffMs = Infinity;
   for (const s of moonSamples) {
@@ -167,7 +170,10 @@ function moonFreeMinutesByBand(
     const moonUp = moon !== null && moon.moonAltDeg >= minHorizonAltDeg;
     for (const band of BANDS) {
       const interfering =
-        moonUp && moon !== null && moon.separationDeg < minSeparationDeg(band, night.moonAgeFromFullDays, params);
+        moonUp &&
+        moon !== null &&
+        moon.separationDeg <
+          minSeparationDeg(band, night.moonAgeFromFullDays, params);
       if (!interfering) out[band] += GRID_STEP_MINUTES;
     }
   }
@@ -175,9 +181,14 @@ function moonFreeMinutesByBand(
 }
 
 /** Best-imaging date (US2, FR-009) — thin wrapper reusing Track A's `nextOpposition` (no second search). */
-function deriveBestDate(raDegJ2000: number | null | undefined, fromMs: number): BestImagingDate | null {
+function deriveBestDate(
+  raDegJ2000: number | null | undefined,
+  fromMs: number,
+): BestImagingDate | null {
   const result = nextOpposition(raDegJ2000, new Date(fromMs));
-  return result ? { dateMs: result.date.getTime(), inDays: result.daysUntil } : null;
+  return result
+    ? { dateMs: result.date.getTime(), inDays: result.daysUntil }
+    : null;
 }
 
 /**
@@ -219,7 +230,11 @@ export function deriveObservability(
     atTransitDeg: night.transit
       ? separationAt(night.moonSamples, night.transit.tMs, minHorizonAltDeg)
       : 'moon-not-up',
-    minOverDarkDeg: minSeparationOverDark(night.moonSamples, night.darkWindow, minHorizonAltDeg),
+    minOverDarkDeg: minSeparationOverDark(
+      night.moonSamples,
+      night.darkWindow,
+      minHorizonAltDeg,
+    ),
     atDarkMidpointDeg: night.darkWindow
       ? separationAt(
           night.moonSamples,
@@ -233,9 +248,17 @@ export function deriveObservability(
     maxAltDeg,
     visibleTonight,
     totalImagingMinutes: usableSamples * GRID_STEP_MINUTES,
-    bestDate: deriveBestDate(options.raDegJ2000, options.bestDateFromMs ?? night.nightStartMs),
+    bestDate: deriveBestDate(
+      options.raDegJ2000,
+      options.bestDateFromMs ?? night.nightStartMs,
+    ),
     separationScalars,
-    moonFreeMinutesByBand: moonFreeMinutesByBand(night, usableAltitudeDeg, minHorizonAltDeg, params),
+    moonFreeMinutesByBand: moonFreeMinutesByBand(
+      night,
+      usableAltitudeDeg,
+      minHorizonAltDeg,
+      params,
+    ),
   };
 }
 
@@ -290,7 +313,13 @@ export function getNightObservability(
   const hit = cache.get(key);
   if (hit) return hit.night;
 
-  const night = computeNightObservability(raDegJ2000, decDegJ2000, site, dateMs, includeMoonGeometry);
+  const night = computeNightObservability(
+    raDegJ2000,
+    decDegJ2000,
+    site,
+    dateMs,
+    includeMoonGeometry,
+  );
   if (cache.size >= CACHE_LIMIT) {
     // Simple bound: drop the oldest insertion.
     const oldest = cache.keys().next().value;

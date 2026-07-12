@@ -50,12 +50,15 @@ export function SourceViewStrategy({ save }: SourceViewStrategyProps) {
   return (
     <div className="alm-svs">
       <div className="alm-svs__field">
-        { }
+        {}
         <label className="alm-svs__label">
           {m.settings_sourceview_default_strategy()}
         </label>
         <Select.Root value={selected} onValueChange={handleChange}>
-          <Select.Trigger className="alm-select" aria-label={m.settings_sourceview_strategy_aria()}>
+          <Select.Trigger
+            className="alm-select"
+            aria-label={m.settings_sourceview_strategy_aria()}
+          >
             <Select.Value />
             <Select.Icon className="alm-select__icon" />
           </Select.Trigger>
@@ -63,7 +66,11 @@ export function SourceViewStrategy({ save }: SourceViewStrategyProps) {
             <Select.Positioner>
               <Select.Popup className="alm-select__popup">
                 {STRATEGIES.map((s) => (
-                  <Select.Item key={s.id} value={s.id} className="alm-select__item">
+                  <Select.Item
+                    key={s.id}
+                    value={s.id}
+                    className="alm-select__item"
+                  >
                     <Select.ItemText>{s.label()}</Select.ItemText>
                   </Select.Item>
                 ))}

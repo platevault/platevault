@@ -13,9 +13,11 @@
     "test:e2e": "playwright test",
     "test:e2e:real": "bash scripts/run-e2e-real.sh",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ && bash ../../scripts/check-tokens.sh",
-    "lint:eslint": "eslint src/",
+    "lint": "pnpm format:check && eslint src/ && bash ../../scripts/check-tokens.sh",
+    "lint:eslint": "pnpm format:check && eslint src/",
     "check:tokens": "bash ../../scripts/check-tokens.sh",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "tokens:types": "node scripts/gen-token-types.mjs",
     "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy baseLocale --emit-ts-declarations",
     "pretypecheck": "pnpm i18n:compile",
@@ -60,6 +62,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.3",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
     "@size-limit/file": "^12.1.0",

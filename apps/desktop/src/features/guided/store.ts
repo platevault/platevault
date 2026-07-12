@@ -108,7 +108,8 @@ export async function getGuidedState(): Promise<GuidedFlowStateDto> {
 }
 
 export async function activateGuidedFlow(): Promise<GuidedFlowStateDto> {
-  if (isMockMode()) return { ...IDLE_STATE, currentStep: STEP_INBOX_CONFIRM_FIRST };
+  if (isMockMode())
+    return { ...IDLE_STATE, currentStep: STEP_INBOX_CONFIRM_FIRST };
   try {
     return unwrap(await commands.guidedActivate());
   } catch {
@@ -121,7 +122,8 @@ export async function completeGuidedStep(
 ): Promise<GuidedStepCompleteResponse> {
   if (isMockMode()) {
     const idx = STEP_ORDER.indexOf(stepId as (typeof STEP_ORDER)[number]);
-    const nextStep = idx >= 0 && idx < STEP_ORDER.length - 1 ? STEP_ORDER[idx + 1] : null;
+    const nextStep =
+      idx >= 0 && idx < STEP_ORDER.length - 1 ? STEP_ORDER[idx + 1] : null;
     return {
       completed: true,
       nextStep,
@@ -137,7 +139,8 @@ export async function dismissGuidedFlow(): Promise<GuidedDismissResponse> {
 }
 
 export async function restartGuidedFlow(): Promise<GuidedFlowStateDto> {
-  if (isMockMode()) return { ...IDLE_STATE, currentStep: STEP_INBOX_CONFIRM_FIRST };
+  if (isMockMode())
+    return { ...IDLE_STATE, currentStep: STEP_INBOX_CONFIRM_FIRST };
   try {
     const resp = unwrap(await commands.guidedRestart());
     return resp.state;

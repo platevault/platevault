@@ -14,7 +14,10 @@
 
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
-import type { CalibrationMatchBatchResponse, CalibrationType } from '@/bindings/index';
+import type {
+  CalibrationMatchBatchResponse,
+  CalibrationType,
+} from '@/bindings/index';
 
 export type CalibrationMatchType = CalibrationType;
 

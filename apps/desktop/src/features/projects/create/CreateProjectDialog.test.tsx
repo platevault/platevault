@@ -12,12 +12,23 @@
  * 7. Calls onSuccess with result on success.
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mock API commands ──────────────────────────────────────────────────────
 
-const { mockCreateProject, mockListProjects, mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
+const {
+  mockCreateProject,
+  mockListProjects,
+  mockSearchTargets,
+  mockResolveTarget,
+} = vi.hoisted(() => ({
   mockCreateProject: vi.fn(),
   mockListProjects: vi.fn(),
   mockSearchTargets: vi.fn(),
@@ -37,9 +48,15 @@ vi.mock('@/bindings/index', async (importOriginal) => {
       ...original.commands,
       projectsList: mockListProjects,
       targetSearch: (req: unknown) =>
-        Promise.resolve(mockSearchTargets(req)).then((data) => ({ status: 'ok', data })),
+        Promise.resolve(mockSearchTargets(req)).then((data) => ({
+          status: 'ok',
+          data,
+        })),
       targetResolve: (req: unknown) =>
-        Promise.resolve(mockResolveTarget(req)).then((data) => ({ status: 'ok', data })),
+        Promise.resolve(mockResolveTarget(req)).then((data) => ({
+          status: 'ok',
+          data,
+        })),
     },
   };
 });
@@ -53,9 +70,22 @@ vi.mock('@/features/projects/store', () => ({
   callReinferChannels: vi.fn(),
   callDismissChannelDrift: vi.fn(),
   useProjects: () => ({ data: [], loading: false, error: undefined }),
-  useProjectDetail: () => ({ data: undefined, loading: false, error: undefined }),
-  projectListStore: { subscribe: vi.fn(), getSnapshot: vi.fn(() => ({ data: [], loading: false, error: undefined })), fetch: vi.fn(), invalidate: vi.fn() },
-  projectDetailStore: { get: vi.fn(), invalidate: vi.fn(), invalidateAll: vi.fn() },
+  useProjectDetail: () => ({
+    data: undefined,
+    loading: false,
+    error: undefined,
+  }),
+  projectListStore: {
+    subscribe: vi.fn(),
+    getSnapshot: vi.fn(() => ({ data: [], loading: false, error: undefined })),
+    fetch: vi.fn(),
+    invalidate: vi.fn(),
+  },
+  projectDetailStore: {
+    get: vi.fn(),
+    invalidate: vi.fn(),
+    invalidateAll: vi.fn(),
+  },
 }));
 
 vi.mock('@/shared/toast', () => ({
@@ -144,7 +174,9 @@ describe('CreateProjectDialog', () => {
       fireEvent.click(submit);
     });
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(/folder path is required/i);
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /folder path is required/i,
+      );
     });
     expect(mockCreateProject).not.toHaveBeenCalled();
   });
@@ -223,8 +255,12 @@ describe('CreateProjectDialog', () => {
     fireEvent.click(option);
 
     // Fill the required fields and submit.
-    fireEvent.change(screen.getByLabelText(/project name/i), { target: { value: 'M31 Project' } });
-    fireEvent.change(screen.getByLabelText(/folder path/i), { target: { value: 'projects/M31' } });
+    fireEvent.change(screen.getByLabelText(/project name/i), {
+      target: { value: 'M31 Project' },
+    });
+    fireEvent.change(screen.getByLabelText(/folder path/i), {
+      target: { value: 'projects/M31' },
+    });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /create project/i }));
@@ -246,8 +282,12 @@ describe('CreateProjectDialog', () => {
     mockCreateProject.mockRejectedValue('name.duplicate');
 
     renderDialog();
-    fireEvent.change(screen.getByLabelText(/project name/i), { target: { value: 'Dupe' } });
-    fireEvent.change(screen.getByLabelText(/folder path/i), { target: { value: 'projects/Dupe' } });
+    fireEvent.change(screen.getByLabelText(/project name/i), {
+      target: { value: 'Dupe' },
+    });
+    fireEvent.change(screen.getByLabelText(/folder path/i), {
+      target: { value: 'projects/Dupe' },
+    });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /create project/i }));

@@ -37,7 +37,12 @@ import {
   type BestImagingDate,
   type SeparationScalars,
 } from './planner-derive';
-import { BANDS, DEFAULT_MOON_AVOIDANCE, type Band, type MoonAvoidanceParams } from './astro/moon-avoidance';
+import {
+  BANDS,
+  DEFAULT_MOON_AVOIDANCE,
+  type Band,
+  type MoonAvoidanceParams,
+} from './astro/moon-avoidance';
 
 /**
  * Default usable-altitude threshold (degrees above horizon for imaging).
@@ -95,10 +100,9 @@ export interface RowAltitude {
   darkWindowHours: { startHour: number; endHour: number } | null;
 }
 
-const ZERO_BY_BAND: Record<Band, number> = Object.fromEntries(BANDS.map((b) => [b, 0])) as Record<
-  Band,
-  number
->;
+const ZERO_BY_BAND: Record<Band, number> = Object.fromEntries(
+  BANDS.map((b) => [b, 0]),
+) as Record<Band, number>;
 
 const DEGRADE_ROW: Omit<RowAltitude, 'needsCoordinates' | 'needsSite'> = {
   points: [],
@@ -162,7 +166,13 @@ export function altitudeFor(
 ): RowAltitude {
   const needsCoordinates = subject.raDeg === null || subject.decDeg === null;
   const needsSite = !site;
-  if (needsCoordinates || needsSite || subject.raDeg === null || subject.decDeg === null || !site) {
+  if (
+    needsCoordinates ||
+    needsSite ||
+    subject.raDeg === null ||
+    subject.decDeg === null ||
+    !site
+  ) {
     return { ...DEGRADE_ROW, needsCoordinates, needsSite };
   }
 
@@ -197,7 +207,8 @@ export function altitudeFor(
     noDarkWindow: night.darkWindow === null,
     darkWindowHours: night.darkWindow
       ? {
-          startHour: (night.darkWindow.startMs - night.nightStartMs) / 3_600_000,
+          startHour:
+            (night.darkWindow.startMs - night.nightStartMs) / 3_600_000,
           endHour: (night.darkWindow.endMs - night.nightStartMs) / 3_600_000,
         }
       : null,

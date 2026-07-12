@@ -17,9 +17,15 @@ import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
 import { GuidedOverlay } from '@/features/guided/GuidedOverlay';
 import { useGuidedFlow } from '@/features/guided/useGuidedFlow';
-import { startGuidedEventBridge, stopGuidedEventBridge } from '@/features/guided/eventBridge';
+import {
+  startGuidedEventBridge,
+  stopGuidedEventBridge,
+} from '@/features/guided/eventBridge';
 import { loadObservingState } from '@/features/targets/observing-sites/site-store';
-import { startUpdateSubscription, stopUpdateSubscription } from '@/data/updateSubscription';
+import {
+  startUpdateSubscription,
+  stopUpdateSubscription,
+} from '@/data/updateSubscription';
 
 function ShellInner() {
   const prefs = usePreferences();

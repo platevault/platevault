@@ -22,12 +22,7 @@
 
 import { useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import {
-  ListPageLayout,
-  PageTopBar,
-  FilterToolbar,
-  Modal,
-} from '@/components';
+import { ListPageLayout, PageTopBar, FilterToolbar, Modal } from '@/components';
 import { Btn, EmptyState } from '@/ui';
 import { m } from '@/lib/i18n';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
@@ -64,7 +59,8 @@ export function ArchivePage() {
   const [sort, setSort] = useState<ArchiveSort>(DEFAULT_ARCHIVE_SORT);
   const filtered = filterEntries(entries, search);
 
-  const item: ArchiveEntry | null = entries.find((a) => a.id === selected) ?? null;
+  const item: ArchiveEntry | null =
+    entries.find((a) => a.id === selected) ?? null;
 
   const sendToTrash = useSendToTrash();
   const permanentlyDelete = usePermanentlyDelete();
@@ -72,16 +68,25 @@ export function ArchivePage() {
   const [confirmInput, setConfirmInput] = useState('');
 
   useStaleSelectionCleanup(selected, item !== null, () => {
-    void navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true });
+    void navigate({
+      search: (prev) => ({ ...prev, selected: undefined }),
+      replace: true,
+    });
   });
 
-  const onSelect = (id: string) => navigate({ search: (prev) => ({ ...prev, selected: id }) });
+  const onSelect = (id: string) =>
+    navigate({ search: (prev) => ({ ...prev, selected: id }) });
   const clearSelection = () =>
-    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true });
+    navigate({
+      search: (prev) => ({ ...prev, selected: undefined }),
+      replace: true,
+    });
 
   const handleSort = (col: ArchiveSortCol) =>
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' },
     );
 
   const closeDeleteModal = () => {
@@ -95,8 +100,11 @@ export function ArchivePage() {
   };
 
   const handleConfirmDelete = () => {
-    if (!item?.archivedViaPlanId || confirmInput !== DELETE_CONFIRM_TEXT) return;
-    permanentlyDelete.mutate(item.archivedViaPlanId, { onSuccess: closeDeleteModal });
+    if (!item?.archivedViaPlanId || confirmInput !== DELETE_CONFIRM_TEXT)
+      return;
+    permanentlyDelete.mutate(item.archivedViaPlanId, {
+      onSuccess: closeDeleteModal,
+    });
   };
 
   // Top bar: search + the selected entry's management actions (spec 043 §4
@@ -165,7 +173,10 @@ export function ArchivePage() {
         ) : error ? (
           <EmptyState title={m.archive_load_error()} />
         ) : entries.length === 0 ? (
-          <EmptyState title={m.archive_empty_title()} desc={m.archive_empty_desc()} />
+          <EmptyState
+            title={m.archive_empty_title()}
+            desc={m.archive_empty_desc()}
+          />
         ) : filtered.length === 0 ? (
           <EmptyState title={m.archive_no_match()} />
         ) : (
@@ -188,12 +199,19 @@ export function ArchivePage() {
           ariaLabel={m.archive_delete_permanently_confirm_title()}
           footer={
             <>
-              <Btn variant="ghost" onClick={closeDeleteModal} disabled={permanentlyDelete.isPending}>
+              <Btn
+                variant="ghost"
+                onClick={closeDeleteModal}
+                disabled={permanentlyDelete.isPending}
+              >
                 {m.common_cancel()}
               </Btn>
               <Btn
                 variant="danger"
-                disabled={confirmInput !== DELETE_CONFIRM_TEXT || permanentlyDelete.isPending}
+                disabled={
+                  confirmInput !== DELETE_CONFIRM_TEXT ||
+                  permanentlyDelete.isPending
+                }
                 onClick={handleConfirmDelete}
               >
                 {m.archive_delete_permanently_btn()}
@@ -201,7 +219,9 @@ export function ArchivePage() {
             </>
           }
         >
-          <p>{m.archive_delete_permanently_confirm_desc({ name: item.name })}</p>
+          <p>
+            {m.archive_delete_permanently_confirm_desc({ name: item.name })}
+          </p>
           <input
             className="alm-input"
             type="text"

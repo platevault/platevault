@@ -15,12 +15,15 @@ import { renderHook, act } from '@testing-library/react';
 
 // ── Mock the generated bindings surface before any module imports it ─────────
 
-const { mockUpdateSettings, mockSettingsRestoreDefaults, mockSettingsSourceOverrideSet } =
-  vi.hoisted(() => ({
-    mockUpdateSettings: vi.fn(),
-    mockSettingsRestoreDefaults: vi.fn(),
-    mockSettingsSourceOverrideSet: vi.fn(),
-  }));
+const {
+  mockUpdateSettings,
+  mockSettingsRestoreDefaults,
+  mockSettingsSourceOverrideSet,
+} = vi.hoisted(() => ({
+  mockUpdateSettings: vi.fn(),
+  mockSettingsRestoreDefaults: vi.fn(),
+  mockSettingsSourceOverrideSet: vi.fn(),
+}));
 
 vi.mock('@/bindings/index', () => ({
   commands: {
@@ -31,7 +34,10 @@ vi.mock('@/bindings/index', () => ({
 }));
 
 import { useAutoSave } from './useAutoSave';
-import { settingsRestoreDefaults, settingsSourceOverrideSet } from './settingsIpc';
+import {
+  settingsRestoreDefaults,
+  settingsSourceOverrideSet,
+} from './settingsIpc';
 
 // ── useAutoSave ───────────────────────────────────────────────────────────────
 
@@ -67,7 +73,9 @@ describe('useAutoSave', () => {
 
     // Only one call — the last value in the burst.
     expect(mockUpdateSettings).toHaveBeenCalledTimes(1);
-    expect(mockUpdateSettings).toHaveBeenCalledWith('advanced', { logLevel: 'warn' });
+    expect(mockUpdateSettings).toHaveBeenCalledWith('advanced', {
+      logLevel: 'warn',
+    });
   });
 
   it('does not fire updateSettings before the 300ms window elapses', () => {

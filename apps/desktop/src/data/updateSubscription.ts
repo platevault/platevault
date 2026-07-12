@@ -51,9 +51,12 @@ export async function startUpdateSubscription(): Promise<void> {
 
   try {
     const { listen } = await import('@tauri-apps/api/event');
-    unlisten = await listen<UpdateAvailableInfo>('update-available', (event) => {
-      setCurrent(event.payload);
-    });
+    unlisten = await listen<UpdateAvailableInfo>(
+      'update-available',
+      (event) => {
+        setCurrent(event.payload);
+      },
+    );
   } catch (err) {
     console.warn('[updateSubscription] listen failed:', err);
   }

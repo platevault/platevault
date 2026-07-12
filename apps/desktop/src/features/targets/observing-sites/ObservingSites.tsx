@@ -23,7 +23,10 @@ import type { TableRow } from '@/ui';
 import { ConfirmOverlay } from '@/components';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
-import { SettingsSection, SettingsFormShell } from '@/features/settings/SettingsKit';
+import {
+  SettingsSection,
+  SettingsFormShell,
+} from '@/features/settings/SettingsKit';
 import { useObservingState, saveSites } from './site-store';
 import { type ObserverSite, type Twilight } from './observer-site';
 import { ianaTimezones, localTimezone } from './iana-timezones';
@@ -73,7 +76,10 @@ function parseRange(text: string, lo: number, hi: number): number | null {
 }
 
 function newSiteId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID();
   }
   return `site-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -160,7 +166,9 @@ export function ObservingSites() {
       await saveSites(nextSites, nextDefaultSiteId, nextActiveSiteId);
       setForm(null);
     } catch (err: unknown) {
-      setFormError(m.settings_observing_sites_save_error({ error: errMessage(err) }));
+      setFormError(
+        m.settings_observing_sites_save_error({ error: errMessage(err) }),
+      );
     } finally {
       setSaving(false);
     }
@@ -171,7 +179,9 @@ export function ObservingSites() {
     try {
       await saveSites(sites, id, activeSiteId);
     } catch (err: unknown) {
-      setListError(m.settings_observing_sites_save_error({ error: errMessage(err) }));
+      setListError(
+        m.settings_observing_sites_save_error({ error: errMessage(err) }),
+      );
     }
   };
 
@@ -180,7 +190,9 @@ export function ObservingSites() {
     try {
       await saveSites(sites, defaultSiteId, id);
     } catch (err: unknown) {
-      setListError(m.settings_observing_sites_save_error({ error: errMessage(err) }));
+      setListError(
+        m.settings_observing_sites_save_error({ error: errMessage(err) }),
+      );
     }
   };
 
@@ -199,7 +211,9 @@ export function ObservingSites() {
       // one) when the deleted site held either pointer, or clear to the
       // no-site state when nothing is left.
       const nextDefaultSiteId =
-        defaultSiteId === deleteTarget.id ? (remaining[0]?.id ?? null) : defaultSiteId;
+        defaultSiteId === deleteTarget.id
+          ? (remaining[0]?.id ?? null)
+          : defaultSiteId;
       const nextActiveSiteId =
         activeSiteId === deleteTarget.id
           ? (nextDefaultSiteId ?? remaining[0]?.id ?? null)
@@ -207,7 +221,9 @@ export function ObservingSites() {
       await saveSites(remaining, nextDefaultSiteId, nextActiveSiteId);
       setDeleteTarget(null);
     } catch (err: unknown) {
-      setDeleteError(m.settings_observing_sites_delete_error({ error: errMessage(err) }));
+      setDeleteError(
+        m.settings_observing_sites_delete_error({ error: errMessage(err) }),
+      );
     } finally {
       setDeleteBusy(false);
     }
@@ -225,13 +241,18 @@ export function ObservingSites() {
       {listError && <p className="alm-equipment__load-error">{listError}</p>}
 
       {sites.length === 0 ? (
-        <p className="alm-equipment__empty">{m.settings_observing_sites_empty()}</p>
+        <p className="alm-equipment__empty">
+          {m.settings_observing_sites_empty()}
+        </p>
       ) : (
         <Table
           columns={[
             { key: 'name', label: m.settings_observing_sites_col_name() },
             { key: 'coords', label: m.settings_observing_sites_col_coords() },
-            { key: 'timezone', label: m.settings_observing_sites_col_timezone() },
+            {
+              key: 'timezone',
+              label: m.settings_observing_sites_col_timezone(),
+            },
             { key: 'status', label: m.settings_observing_sites_col_status() },
             { key: 'actions', label: '', style: { width: 260 } },
           ]}
@@ -250,29 +271,49 @@ export function ObservingSites() {
               status: (
                 <span className="alm-equipment__badges">
                   {site.id === defaultSiteId && (
-                    <Pill variant="info">{m.settings_observing_sites_default_badge()}</Pill>
+                    <Pill variant="info">
+                      {m.settings_observing_sites_default_badge()}
+                    </Pill>
                   )}
                   {site.id === activeSiteId && (
-                    <Pill variant="neutral">{m.settings_observing_sites_active_badge()}</Pill>
+                    <Pill variant="neutral">
+                      {m.settings_observing_sites_active_badge()}
+                    </Pill>
                   )}
                 </span>
               ),
               actions: (
                 <span className="alm-equipment__row-actions">
                   {site.id !== activeSiteId && (
-                    <Btn size="sm" variant="ghost" onClick={() => void handleSetActive(site.id)}>
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void handleSetActive(site.id)}
+                    >
                       {m.settings_observing_sites_set_active()}
                     </Btn>
                   )}
                   {site.id !== defaultSiteId && (
-                    <Btn size="sm" variant="ghost" onClick={() => void handleSetDefault(site.id)}>
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void handleSetDefault(site.id)}
+                    >
                       {m.settings_observing_sites_set_default()}
                     </Btn>
                   )}
-                  <Btn size="sm" variant="ghost" onClick={() => startEdit(site)}>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => startEdit(site)}
+                  >
                     {m.common_edit()}
                   </Btn>
-                  <Btn size="sm" variant="ghost" onClick={() => requestDelete(site)}>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => requestDelete(site)}
+                  >
                     {m.common_remove()}
                   </Btn>
                 </span>
@@ -313,7 +354,9 @@ export function ObservingSites() {
               className="alm-input"
               aria-label={m.settings_observing_sites_field_latitude()}
               value={form.latitudeDegText}
-              onChange={(e) => setForm({ ...form, latitudeDegText: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, latitudeDegText: e.target.value })
+              }
             />
           </div>
           <div className="alm-stack-1">
@@ -327,11 +370,16 @@ export function ObservingSites() {
               className="alm-input"
               aria-label={m.settings_observing_sites_field_longitude()}
               value={form.longitudeDegText}
-              onChange={(e) => setForm({ ...form, longitudeDegText: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, longitudeDegText: e.target.value })
+              }
             />
           </div>
           <div className="alm-stack-1">
-            <label className="alm-field-label" htmlFor="observing-site-elevation">
+            <label
+              className="alm-field-label"
+              htmlFor="observing-site-elevation"
+            >
               {m.settings_observing_sites_field_elevation()}
             </label>
             <input
@@ -341,7 +389,9 @@ export function ObservingSites() {
               className="alm-input"
               aria-label={m.settings_observing_sites_field_elevation()}
               value={form.elevationMText}
-              onChange={(e) => setForm({ ...form, elevationMText: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, elevationMText: e.target.value })
+              }
             />
           </div>
           <div className="alm-stack-1">
@@ -363,7 +413,10 @@ export function ObservingSites() {
             </select>
           </div>
           <div className="alm-stack-1">
-            <label className="alm-field-label" htmlFor="observing-site-twilight">
+            <label
+              className="alm-field-label"
+              htmlFor="observing-site-twilight"
+            >
               {m.settings_observing_sites_field_twilight()}
             </label>
             <select
@@ -372,11 +425,19 @@ export function ObservingSites() {
               aria-label={m.settings_observing_sites_field_twilight()}
               value={form.twilight}
               onChange={(e) =>
-                setForm({ ...form, twilight: e.target.value === 'nautical' ? 'nautical' : 'astronomical' })
+                setForm({
+                  ...form,
+                  twilight:
+                    e.target.value === 'nautical' ? 'nautical' : 'astronomical',
+                })
               }
             >
-              <option value="astronomical">{m.settings_observing_sites_twilight_astronomical()}</option>
-              <option value="nautical">{m.settings_observing_sites_twilight_nautical()}</option>
+              <option value="astronomical">
+                {m.settings_observing_sites_twilight_astronomical()}
+              </option>
+              <option value="nautical">
+                {m.settings_observing_sites_twilight_nautical()}
+              </option>
             </select>
           </div>
           <div className="alm-stack-1">
@@ -390,7 +451,9 @@ export function ObservingSites() {
               className="alm-input"
               aria-label={m.settings_observing_sites_field_horizon()}
               value={form.minHorizonAltDegText}
-              onChange={(e) => setForm({ ...form, minHorizonAltDegText: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, minHorizonAltDegText: e.target.value })
+              }
             />
           </div>
         </SettingsFormShell>
@@ -404,7 +467,9 @@ export function ObservingSites() {
           setDeleteError(null);
         }}
         onConfirm={() => void handleConfirmDelete()}
-        title={m.settings_observing_sites_delete_confirm_title({ name: deleteTarget?.name ?? '' })}
+        title={m.settings_observing_sites_delete_confirm_title({
+          name: deleteTarget?.name ?? '',
+        })}
         description={m.settings_observing_sites_delete_confirm_desc()}
         confirmLabel={deleteBusy ? m.common_removing() : m.common_remove()}
         confirmVariant="danger"

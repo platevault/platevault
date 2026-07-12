@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  type ReactNode,
+} from 'react';
 import { m } from '@/lib/i18n';
 
 export type OperationStatus = 'idle' | 'scanning' | 'applying';

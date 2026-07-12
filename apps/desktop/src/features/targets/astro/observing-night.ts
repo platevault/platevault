@@ -43,7 +43,15 @@ export interface ObservingNightAnchor {
  * the clock crosses 00:00 during a session.
  */
 function anchorDateFor(now: Date): Date {
-  const anchor = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const anchor = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    0,
+    0,
+    0,
+    0,
+  );
   if (now.getHours() >= 12) {
     // Evening/afternoon: the night's midnight is the coming 00:00 (tomorrow).
     anchor.setDate(anchor.getDate() + 1);
@@ -67,7 +75,9 @@ export function formatNightKey(d: Date): string {
  * across a session because DST shifts change the wall-clock offset but not the
  * calendar date of the anchoring midnight.
  */
-export function observingNightAnchor(now: Date = new Date()): ObservingNightAnchor {
+export function observingNightAnchor(
+  now: Date = new Date(),
+): ObservingNightAnchor {
   const midnight = anchorDateFor(now);
   return { nightKey: formatNightKey(midnight), midnight };
 }
@@ -107,7 +117,11 @@ function nightKeySnapshot(): string {
  * cleanly and nothing flips at local midnight mid-session.
  */
 export function useObservingNight(): ObservingNightAnchor {
-  const nightKey = useSyncExternalStore(subscribeNight, nightKeySnapshot, nightKeySnapshot);
+  const nightKey = useSyncExternalStore(
+    subscribeNight,
+    nightKeySnapshot,
+    nightKeySnapshot,
+  );
   return useMemoNight(nightKey);
 }
 

@@ -136,7 +136,10 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
       status: 'error',
       contractVersion: '2.0.0',
       requestId: 'req-3',
-      error: { code: 'transition.refused', message: 'Transition refused: edge not allowed' },
+      error: {
+        code: 'transition.refused',
+        message: 'Transition refused: edge not allowed',
+      },
     });
 
     render(<ProjectDetailContent projectId="proj-001" />);
@@ -186,7 +189,9 @@ describe('ProjectDetail lifecycle transitions (spec 009 US3-3)', () => {
     expect(screen.queryByTestId(/^transition-btn-/)).not.toBeInTheDocument();
     // The Reveal action carries the shared platform-native revealLabel()
     // (jsdom reports no platform → the Linux-generic label).
-    expect(screen.getByTestId('action-reveal')).toHaveTextContent('Show in file manager');
+    expect(screen.getByTestId('action-reveal')).toHaveTextContent(
+      'Show in file manager',
+    );
   });
 
   it('renders unarchive actions for archived state', () => {

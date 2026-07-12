@@ -100,7 +100,11 @@ export interface UseFavouritesResult {
  * optimistic change.
  */
 export function useFavourites(): UseFavouritesResult {
-  const favouriteIds = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const favouriteIds = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
 
   useEffect(() => {
     void ensureLoaded();

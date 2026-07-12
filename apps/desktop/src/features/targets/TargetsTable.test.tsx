@@ -24,7 +24,14 @@ import type { TargetListItem } from '@/bindings/index';
 // a router context this test doesn't provide. Stub it as a plain anchor —
 // consistent with TargetDetailV2.test.tsx's `@tanstack/react-router` mock.
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, to, ...rest }: { children?: import('react').ReactNode; to: string }) => (
+  Link: ({
+    children,
+    to,
+    ...rest
+  }: {
+    children?: import('react').ReactNode;
+    to: string;
+  }) => (
     <a href={to} {...rest}>
       {children}
     </a>
@@ -36,7 +43,10 @@ import { __setObservingStateForTest } from './observing-sites/site-store';
 import type { ObserverSite } from './observing-sites/observer-site';
 import type { ObservingNight } from './astro/moon-state';
 
-function item(primaryDesignation: string, objectType = 'other'): TargetListItem {
+function item(
+  primaryDesignation: string,
+  objectType = 'other',
+): TargetListItem {
   return {
     id: primaryDesignation,
     effectiveLabel: primaryDesignation,
@@ -53,7 +63,9 @@ const TARGETS: TargetListItem[] = [
   item('M 31', 'galaxy'),
 ];
 
-function renderTable(overrides: Partial<React.ComponentProps<typeof TargetsTable>> = {}) {
+function renderTable(
+  overrides: Partial<React.ComponentProps<typeof TargetsTable>> = {},
+) {
   const onSelect = vi.fn();
   const onSort = vi.fn();
   render(
@@ -115,8 +127,12 @@ describe('TargetsTable (#84/#85)', () => {
     // match lunar distance values so just confirm at least 2 are present.
     expect(screen.getAllByText(/^\d+°$/).length).toBeGreaterThanOrEqual(2);
     // One sparkline SVG per target row (role=img with an accessible label).
-    expect(screen.getByLabelText('Altitude tonight for NGC 7000')).toBeInTheDocument();
-    expect(screen.getByLabelText('Altitude tonight for M 31')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Altitude tonight for NGC 7000'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Altitude tonight for M 31'),
+    ).toBeInTheDocument();
   });
 
   it('renders the guidance unknown state when no observing night is provided', () => {
@@ -140,7 +156,9 @@ describe('TargetsTable (#84/#85)', () => {
     );
     // Each row has 7 band pills (L/R/G/B/Ha/SII/OIII), each labelled viable or
     // not-viable — never a fabricated recommendation.
-    const haPills = screen.getAllByLabelText(/^Ha: (viable|not viable) tonight$/);
+    const haPills = screen.getAllByLabelText(
+      /^Ha: (viable|not viable) tonight$/,
+    );
     expect(haPills.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -284,7 +302,11 @@ function nightWithMoonAtVernalEquinox(): ObservingNight {
 }
 
 /** A target row with explicit coordinates (or null for the unknown case). */
-function coordItem(desig: string, raDeg: number | null, decDeg: number | null): TargetListItem {
+function coordItem(
+  desig: string,
+  raDeg: number | null,
+  decDeg: number | null,
+): TargetListItem {
   return {
     id: desig,
     effectiveLabel: desig,

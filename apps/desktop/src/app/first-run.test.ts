@@ -7,16 +7,20 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGetPreferences, mockSetPreference, mockFirstrunState } = vi.hoisted(() => ({
-  mockGetPreferences: vi.fn(),
-  mockSetPreference: vi.fn(),
-  mockFirstrunState: vi.fn(),
-}));
+const { mockGetPreferences, mockSetPreference, mockFirstrunState } = vi.hoisted(
+  () => ({
+    mockGetPreferences: vi.fn(),
+    mockSetPreference: vi.fn(),
+    mockFirstrunState: vi.fn(),
+  }),
+);
 vi.mock('@/data/preferences', () => ({
   getPreferences: mockGetPreferences,
   setPreference: mockSetPreference,
 }));
-vi.mock('@/bindings/index', () => ({ commands: { firstrunState: mockFirstrunState } }));
+vi.mock('@/bindings/index', () => ({
+  commands: { firstrunState: mockFirstrunState },
+}));
 
 import { checkFirstRunComplete } from '@/app/first-run';
 
@@ -59,7 +63,10 @@ describe('checkFirstRunComplete — real backend (DB is source of truth)', () =>
   it('returns false when the DB has no completedAt and corrects a stale-true cache', async () => {
     // The redirect-loop scenario: cache says done, DB says not done.
     mockGetPreferences.mockReturnValue({ setupCompleted: true });
-    mockFirstrunState.mockResolvedValue({ status: 'ok', data: { completedAt: null } });
+    mockFirstrunState.mockResolvedValue({
+      status: 'ok',
+      data: { completedAt: null },
+    });
     await expect(checkFirstRunComplete()).resolves.toBe(false);
     expect(mockSetPreference).toHaveBeenCalledWith('setupCompleted', false);
   });

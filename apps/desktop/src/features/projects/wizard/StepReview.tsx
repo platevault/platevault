@@ -16,10 +16,26 @@ interface PlanRowItem {
 const PLAN_ITEMS: PlanRowItem[] = [
   { action: 'mkdir', destination: 'NGC7000_HOO/', source: null },
   { action: 'mkdir', destination: 'NGC7000_HOO/.alm/', source: null },
-  { action: 'mkdir', destination: 'NGC7000_HOO/sources/views/wbpp_input/', source: null },
-  { action: 'write', destination: 'NGC7000_HOO/.alm/project.json', source: 'generated' },
-  { action: 'junction', destination: '…/wbpp_input/lights/Ha_300s_0001.fit', source: 'D:\\…\\Raw\\…\\Ha_300s_0001.fit' },
-  { action: 'junction', destination: '…/wbpp_input/lights/Ha_300s_0002.fit', source: 'D:\\…\\Raw\\…\\Ha_300s_0002.fit' },
+  {
+    action: 'mkdir',
+    destination: 'NGC7000_HOO/sources/views/wbpp_input/',
+    source: null,
+  },
+  {
+    action: 'write',
+    destination: 'NGC7000_HOO/.alm/project.json',
+    source: 'generated',
+  },
+  {
+    action: 'junction',
+    destination: '…/wbpp_input/lights/Ha_300s_0001.fit',
+    source: 'D:\\…\\Raw\\…\\Ha_300s_0001.fit',
+  },
+  {
+    action: 'junction',
+    destination: '…/wbpp_input/lights/Ha_300s_0002.fit',
+    source: 'D:\\…\\Raw\\…\\Ha_300s_0002.fit',
+  },
 ];
 
 // eslint-disable-next-line alm/no-user-string -- illustrative wireframe preview (mock plan data), not real UI copy; see issue #327
@@ -62,7 +78,8 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
         <div className="alm-wizard-review__banner-row">
           <span className="alm-wizard-review__banner-icon">&#10003;</span>
           <div className="alm-wizard-review__banner-text">
-            <strong>{m.projects_wizard_review_no_destructive()}</strong> {m.projects_wizard_review_safe_desc()}
+            <strong>{m.projects_wizard_review_no_destructive()}</strong>{' '}
+            {m.projects_wizard_review_safe_desc()}
           </div>
         </div>
       </div>
@@ -74,7 +91,9 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
           <table className="alm-simple-table">
             <thead>
               <tr>
-                <th className="alm-wizard-review__col-action">{m.projects_wizard_col_action()}</th>
+                <th className="alm-wizard-review__col-action">
+                  {m.projects_wizard_col_action()}
+                </th>
                 <th>{m.projects_wizard_col_destination()}</th>
                 <th>{m.projects_wizard_col_source()}</th>
               </tr>
@@ -82,11 +101,17 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
             <tbody>
               {PLAN_ITEMS.map((item, i) => (
                 <tr key={i}>
-                  <td><Pill variant="info">{item.action}</Pill></td>
-                  <td className="alm-mono alm-wizard-review__cell-path">{item.destination}</td>
+                  <td>
+                    <Pill variant="info">{item.action}</Pill>
+                  </td>
+                  <td className="alm-mono alm-wizard-review__cell-path">
+                    {item.destination}
+                  </td>
                   <td>
                     {item.source === null ? (
-                      <span className="alm-wizard-review__source-none">&mdash;</span>
+                      <span className="alm-wizard-review__source-none">
+                        &mdash;
+                      </span>
                     ) : (
                       <span className="alm-mono alm-wizard-review__source-path">
                         {item.source}
@@ -103,8 +128,12 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
               </tr>
               {/* Final manifest write */}
               <tr>
-                <td><Pill variant="info">{FINAL_ITEM.action}</Pill></td>
-                <td className="alm-mono alm-wizard-review__cell-path">{FINAL_ITEM.destination}</td>
+                <td>
+                  <Pill variant="info">{FINAL_ITEM.action}</Pill>
+                </td>
+                <td className="alm-mono alm-wizard-review__cell-path">
+                  {FINAL_ITEM.destination}
+                </td>
                 <td>
                   <span className="alm-mono alm-wizard-review__source-path">
                     {FINAL_ITEM.source}
@@ -129,11 +158,20 @@ export function StepReview({ wizardState: _wizardState }: StepReviewProps) {
             <ol className="alm-wizard-review__after-list">
               <li>
                 {m.projects_wizard_lifecycle_label()}{' '}
-                <span className="alm-mono">{m.projects_wizard_lifecycle_setup()}</span> &rarr;{' '}
-                <span className="alm-mono">{m.projects_wizard_lifecycle_prepared()}</span>
+                <span className="alm-mono">
+                  {m.projects_wizard_lifecycle_setup()}
+                </span>{' '}
+                &rarr;{' '}
+                <span className="alm-mono">
+                  {m.projects_wizard_lifecycle_prepared()}
+                </span>
               </li>
               <li>
-                {m.projects_wizard_open_in_wbpp()} <span className="alm-mono">{m.projects_wizard_open_in_wbpp_target()}</span> {m.projects_wizard_open_in_wbpp_app()}
+                {m.projects_wizard_open_in_wbpp()}{' '}
+                <span className="alm-mono">
+                  {m.projects_wizard_open_in_wbpp_target()}
+                </span>{' '}
+                {m.projects_wizard_open_in_wbpp_app()}
               </li>
               <li>{m.projects_wizard_after_process()}</li>
               <li>{m.projects_wizard_after_record()}</li>

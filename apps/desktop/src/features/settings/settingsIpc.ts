@@ -90,13 +90,19 @@ export type {
   InventoryReconcileRunResponse,
 };
 export type { PatternPartDto as PatternPart };
-export type { PatternValidateResponse, PatternPreviewResponse, PathPatternPreviewResponse };
+export type {
+  PatternValidateResponse,
+  PatternPreviewResponse,
+  PathPatternPreviewResponse,
+};
 export type { CalibrationTolerances, UpdateCalibrationTolerances };
 export type { IngestionSettings, UpdateIngestionSettings };
 
 // ── Settings scope read/write (spec 018) ──────────────────────────────────────
 
-export async function getSettings(args: { scope: string }): Promise<SettingsData> {
+export async function getSettings(args: {
+  scope: string;
+}): Promise<SettingsData> {
   return unwrap(await commands.settingsGet(args.scope));
 }
 
@@ -173,7 +179,9 @@ export async function registerRoot(args: {
   category: string;
   scanSettings: Record<string, unknown>;
 }): Promise<void> {
-  unwrap(await commands.rootsRegister(args.path, args.category, args.scanSettings));
+  unwrap(
+    await commands.rootsRegister(args.path, args.category, args.scanSettings),
+  );
 }
 
 /**
@@ -205,9 +213,14 @@ export async function rescanRoot(args: {
  * over a root (spec 048 T022). Read-only walk: reports `missing`/`recovered`/
  * `size_backfilled` counts, never mutates a file.
  */
-export async function reconcileRoot(args: { rootId: string }): Promise<InventoryReconcileRunResponse> {
+export async function reconcileRoot(args: {
+  rootId: string;
+}): Promise<InventoryReconcileRunResponse> {
   return unwrap(
-    await commands.inventoryReconcileRun({ rootId: args.rootId, reason: 'on_demand' }),
+    await commands.inventoryReconcileRun({
+      rootId: args.rootId,
+      reason: 'on_demand',
+    }),
   );
 }
 
@@ -234,7 +247,9 @@ export async function applyRootRemap(args: {
   newPath: string;
   verified: boolean;
 }): Promise<void> {
-  unwrap(await commands.rootsRemapApply(args.rootId, args.newPath, args.verified));
+  unwrap(
+    await commands.rootsRemapApply(args.rootId, args.newPath, args.verified),
+  );
 }
 
 /**
@@ -315,15 +330,21 @@ export async function toolProfileList(): Promise<ToolProfileListResponse> {
   return unwrap(await commands.toolsList());
 }
 
-export async function toolUpdate(request: UpdateProcessingTool): Promise<ToolProfileSummary> {
+export async function toolUpdate(
+  request: UpdateProcessingTool,
+): Promise<ToolProfileSummary> {
   return unwrap(await commands.toolsUpdate(request));
 }
 
-export async function toolValidatePath(path: string): Promise<ToolPathValidation> {
+export async function toolValidatePath(
+  path: string,
+): Promise<ToolPathValidation> {
   return unwrap(await commands.toolsValidatePath(path));
 }
 
-export async function toolDiscover(request: ToolDiscoverRequest): Promise<ToolDiscoverResponse> {
+export async function toolDiscover(
+  request: ToolDiscoverRequest,
+): Promise<ToolDiscoverResponse> {
   return unwrap(await commands.toolsDiscover(request));
 }
 
@@ -420,11 +441,15 @@ export async function equipmentCamerasList(): Promise<Camera[]> {
   return unwrap(await commands.equipmentCamerasList());
 }
 
-export async function equipmentCameraCreate(request: CreateCamera): Promise<Camera> {
+export async function equipmentCameraCreate(
+  request: CreateCamera,
+): Promise<Camera> {
   return unwrap(await commands.equipmentCamerasCreate(request));
 }
 
-export async function equipmentCameraUpdate(request: UpdateCamera): Promise<Camera> {
+export async function equipmentCameraUpdate(
+  request: UpdateCamera,
+): Promise<Camera> {
   return unwrap(await commands.equipmentCamerasUpdate(request));
 }
 
@@ -436,11 +461,15 @@ export async function equipmentTelescopesList(): Promise<Telescope[]> {
   return unwrap(await commands.equipmentTelescopesList());
 }
 
-export async function equipmentTelescopeCreate(request: CreateTelescope): Promise<Telescope> {
+export async function equipmentTelescopeCreate(
+  request: CreateTelescope,
+): Promise<Telescope> {
   return unwrap(await commands.equipmentTelescopesCreate(request));
 }
 
-export async function equipmentTelescopeUpdate(request: UpdateTelescope): Promise<Telescope> {
+export async function equipmentTelescopeUpdate(
+  request: UpdateTelescope,
+): Promise<Telescope> {
   return unwrap(await commands.equipmentTelescopesUpdate(request));
 }
 
@@ -452,11 +481,15 @@ export async function equipmentTrainsList(): Promise<OpticalTrain[]> {
   return unwrap(await commands.equipmentTrainsList());
 }
 
-export async function equipmentTrainCreate(request: CreateOpticalTrain): Promise<OpticalTrain> {
+export async function equipmentTrainCreate(
+  request: CreateOpticalTrain,
+): Promise<OpticalTrain> {
   return unwrap(await commands.equipmentTrainsCreate(request));
 }
 
-export async function equipmentTrainUpdate(request: UpdateOpticalTrain): Promise<OpticalTrain> {
+export async function equipmentTrainUpdate(
+  request: UpdateOpticalTrain,
+): Promise<OpticalTrain> {
   return unwrap(await commands.equipmentTrainsUpdate(request));
 }
 
@@ -468,11 +501,15 @@ export async function equipmentFiltersList(): Promise<Filter[]> {
   return unwrap(await commands.equipmentFiltersList());
 }
 
-export async function equipmentFilterCreate(request: CreateFilter): Promise<Filter> {
+export async function equipmentFilterCreate(
+  request: CreateFilter,
+): Promise<Filter> {
   return unwrap(await commands.equipmentFiltersCreate(request));
 }
 
-export async function equipmentFilterUpdate(request: UpdateFilter): Promise<Filter> {
+export async function equipmentFilterUpdate(
+  request: UpdateFilter,
+): Promise<Filter> {
   return unwrap(await commands.equipmentFiltersUpdate(request));
 }
 
@@ -497,6 +534,8 @@ export async function auditList(
 }
 
 /** `audit.export` — export the filtered audit entries as newline-delimited JSON. */
-export async function auditExport(filters: AuditFilterDto | null): Promise<string> {
+export async function auditExport(
+  filters: AuditFilterDto | null,
+): Promise<string> {
   return unwrap(await commands.auditExport(filters));
 }

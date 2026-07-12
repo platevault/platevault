@@ -15,7 +15,8 @@ export const queryKeys = {
     // inventory.all() })` fuzzy-matches every inventory query regardless of
     // its filters (TanStack Query's partial-match compares own array indices,
     // so a trailing `undefined` element would NOT match a filtered entry).
-    all: (filters?: object) => (filters ? (['inventory', filters] as const) : (['inventory'] as const)),
+    all: (filters?: object) =>
+      filters ? (['inventory', filters] as const) : (['inventory'] as const),
   },
   sessions: {
     all: () => ['sessions'] as const,

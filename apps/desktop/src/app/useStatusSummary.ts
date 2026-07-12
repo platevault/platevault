@@ -11,7 +11,12 @@ export interface StatusSummary {
   targetCount: number;
   projectCount: number;
   cleanupReclaimableBytes: number;
-  volumes: { path: string; freeBytes: number; totalBytes: number; warning: boolean }[];
+  volumes: {
+    path: string;
+    freeBytes: number;
+    totalBytes: number;
+    warning: boolean;
+  }[];
   roots: { id: string; path: string; kind: string; online: boolean }[];
 }
 

@@ -72,7 +72,9 @@ function renderPanel(
   plans: InboxOpenPlan[],
   {
     destructiveDestination = 'archive',
-    onDestructiveDestinationChange = vi.fn<(d: DestructiveDestination) => void>(),
+    onDestructiveDestinationChange = vi.fn<
+      (d: DestructiveDestination) => void
+    >(),
     onApplySelected = vi.fn<(ids: string[]) => void>(),
     onApplyAll = vi.fn<() => void>(),
     onCancel = vi.fn<(id: string) => void>(),
@@ -123,11 +125,18 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
 
   it('renders every open plan grouped by ingestion, with the total count', () => {
     const plans = [
-      makePlan({ inboxItemId: 'a', itemName: 'Night-A', actions: [makeAction({ index: 0 })] }),
+      makePlan({
+        inboxItemId: 'a',
+        itemName: 'Night-A',
+        actions: [makeAction({ index: 0 })],
+      }),
       makePlan({
         inboxItemId: 'b',
         itemName: 'Night-B',
-        actions: [makeAction({ index: 0 }), makeAction({ index: 1, action: 'catalogue' })],
+        actions: [
+          makeAction({ index: 0 }),
+          makeAction({ index: 1, action: 'catalogue' }),
+        ],
       }),
     ];
     renderPanel(plans);
@@ -137,14 +146,21 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     expect(screen.getByText('Night-B')).toBeInTheDocument();
     // 2 plans · 3 actions total.
     expect(screen.getByTestId('plan-total-count')).toHaveTextContent('2 plans');
-    expect(screen.getByTestId('plan-total-count')).toHaveTextContent('3 actions');
+    expect(screen.getByTestId('plan-total-count')).toHaveTextContent(
+      '3 actions',
+    );
   });
 
   it('renders the action destination preview and basename per row when expanded', () => {
     const plans = [
       makePlan({
         inboxItemId: 'item-1',
-        actions: [makeAction({ fromPath: '/deep/path/ngc1234.fits', destinationPreview: '/dest/lights/ngc1234.fits' })],
+        actions: [
+          makeAction({
+            fromPath: '/deep/path/ngc1234.fits',
+            destinationPreview: '/dest/lights/ngc1234.fits',
+          }),
+        ],
       }),
     ];
     renderPanel(plans);
@@ -161,8 +177,16 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
       makePlan({
         inboxItemId: 'g1',
         actions: [
-          makeAction({ index: 0, fromPath: '/in/d1.fits', destinationPreview: '/lib/masters/darks/d1.fits' }),
-          makeAction({ index: 1, fromPath: '/in/d2.fits', destinationPreview: '/lib/masters/darks/d2.fits' }),
+          makeAction({
+            index: 0,
+            fromPath: '/in/d1.fits',
+            destinationPreview: '/lib/masters/darks/d1.fits',
+          }),
+          makeAction({
+            index: 1,
+            fromPath: '/in/d2.fits',
+            destinationPreview: '/lib/masters/darks/d2.fits',
+          }),
         ],
       }),
     ];
@@ -174,9 +198,9 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     const summary = screen.getByTestId('plan-group-summary-g1');
     expect(summary).toHaveTextContent('2 darks');
     const group = screen.getByTestId('plan-group-g1');
-    expect(group.querySelector('.alm-plan-panel__group-dest')).toHaveTextContent(
-      'masters/darks',
-    );
+    expect(
+      group.querySelector('.alm-plan-panel__group-dest'),
+    ).toHaveTextContent('masters/darks');
   });
 
   // ── #75: frame-type-hint aggregation for catalogue actions ───────────────────
@@ -190,9 +214,24 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
         inboxItemId: 'cat',
         itemName: '(root)',
         actions: [
-          makeAction({ index: 0, action: 'catalogue', fromPath: '/lib/cam/a.fits', destinationPreview: '/lib/cam/a.fits' }),
-          makeAction({ index: 1, action: 'catalogue', fromPath: '/lib/cam/b.fits', destinationPreview: '/lib/cam/b.fits' }),
-          makeAction({ index: 2, action: 'catalogue', fromPath: '/lib/cam/c.fits', destinationPreview: '/lib/cam/c.fits' }),
+          makeAction({
+            index: 0,
+            action: 'catalogue',
+            fromPath: '/lib/cam/a.fits',
+            destinationPreview: '/lib/cam/a.fits',
+          }),
+          makeAction({
+            index: 1,
+            action: 'catalogue',
+            fromPath: '/lib/cam/b.fits',
+            destinationPreview: '/lib/cam/b.fits',
+          }),
+          makeAction({
+            index: 2,
+            action: 'catalogue',
+            fromPath: '/lib/cam/c.fits',
+            destinationPreview: '/lib/cam/c.fits',
+          }),
         ],
       }),
     ];
@@ -227,9 +266,24 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
         inboxItemId: 'mix',
         itemName: '(root)',
         actions: [
-          makeAction({ index: 0, action: 'catalogue', fromPath: '/lib/cam/bias_001.fits', destinationPreview: '/lib/cam/bias_001.fits' }),
-          makeAction({ index: 1, action: 'catalogue', fromPath: '/lib/cam/dark_001.fits', destinationPreview: '/lib/cam/dark_001.fits' }),
-          makeAction({ index: 2, action: 'catalogue', fromPath: '/lib/cam/light_001.fits', destinationPreview: '/lib/cam/light_001.fits' }),
+          makeAction({
+            index: 0,
+            action: 'catalogue',
+            fromPath: '/lib/cam/bias_001.fits',
+            destinationPreview: '/lib/cam/bias_001.fits',
+          }),
+          makeAction({
+            index: 1,
+            action: 'catalogue',
+            fromPath: '/lib/cam/dark_001.fits',
+            destinationPreview: '/lib/cam/dark_001.fits',
+          }),
+          makeAction({
+            index: 2,
+            action: 'catalogue',
+            fromPath: '/lib/cam/light_001.fits',
+            destinationPreview: '/lib/cam/light_001.fits',
+          }),
         ],
       }),
     ];
@@ -265,7 +319,9 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     expect(summary).toHaveTextContent('12');
     expect(summary).toHaveTextContent('light');
     // It is a SINGLE composition cell (all types inline), not per-type rows.
-    expect(summary.querySelectorAll('.alm-plan-panel__summary-type')).toHaveLength(3);
+    expect(
+      summary.querySelectorAll('.alm-plan-panel__summary-type'),
+    ).toHaveLength(3);
 
     // The ▸ toggle expands the per-file rows on demand.
     fireEvent.click(screen.getByTestId('plan-group-toggle-mix'));
@@ -327,13 +383,18 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     expect(summary).not.toHaveTextContent('41');
     expect(summary).not.toHaveTextContent('catalogue');
     // SINGLE collapsed composition cell with the three aligned type tokens.
-    expect(summary.querySelectorAll('.alm-plan-panel__summary-type')).toHaveLength(3);
+    expect(
+      summary.querySelectorAll('.alm-plan-panel__summary-type'),
+    ).toHaveLength(3);
   });
 
   // ── Selection ──────────────────────────────────────────────────────────────
 
   it('toggles a single group selection', () => {
-    const plans = [makePlan({ inboxItemId: 'a' }), makePlan({ inboxItemId: 'b', itemName: 'B' })];
+    const plans = [
+      makePlan({ inboxItemId: 'a' }),
+      makePlan({ inboxItemId: 'b', itemName: 'B' }),
+    ];
     renderPanel(plans, { onApplySelected });
     fireEvent.click(screen.getByTestId('plan-group-check-a'));
     fireEvent.click(screen.getByTestId('plan-apply-selected'));
@@ -341,7 +402,10 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
   });
 
   it('select-all checks every selectable plan and Apply selected receives all ids', () => {
-    const plans = [makePlan({ inboxItemId: 'a' }), makePlan({ inboxItemId: 'b', itemName: 'B' })];
+    const plans = [
+      makePlan({ inboxItemId: 'a' }),
+      makePlan({ inboxItemId: 'b', itemName: 'B' }),
+    ];
     renderPanel(plans, { onApplySelected });
     fireEvent.click(screen.getByTestId('plan-select-all'));
     fireEvent.click(screen.getByTestId('plan-apply-selected'));
@@ -354,7 +418,9 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     const selectAll = screen.getByTestId('plan-select-all') as HTMLInputElement;
     fireEvent.click(selectAll); // select
     fireEvent.click(selectAll); // deselect
-    const applyBtn = screen.getByTestId('plan-apply-selected') as HTMLButtonElement;
+    const applyBtn = screen.getByTestId(
+      'plan-apply-selected',
+    ) as HTMLButtonElement;
     expect(applyBtn.disabled).toBe(true);
   });
 
@@ -402,25 +468,44 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
   // ── Destructive control ────────────────────────────────────────────────────
 
   it('does NOT show the destructive control when no action requires destructive confirm', () => {
-    renderPanel([makePlan({ actions: [makeAction({ requiresDestructiveConfirm: false })] })]);
+    renderPanel([
+      makePlan({
+        actions: [makeAction({ requiresDestructiveConfirm: false })],
+      }),
+    ]);
     expect(screen.queryByTestId('plan-destructive-archive')).toBeNull();
   });
 
   it('shows the destructive control + defaults to archive when destructive confirm is required', () => {
     renderPanel(
-      [makePlan({ actions: [makeAction({ requiresDestructiveConfirm: true })] })],
+      [
+        makePlan({
+          actions: [makeAction({ requiresDestructiveConfirm: true })],
+        }),
+      ],
       { destructiveDestination: 'archive' },
     );
-    const archive = screen.getByTestId('plan-destructive-archive') as HTMLInputElement;
-    const trash = screen.getByTestId('plan-destructive-trash') as HTMLInputElement;
+    const archive = screen.getByTestId(
+      'plan-destructive-archive',
+    ) as HTMLInputElement;
+    const trash = screen.getByTestId(
+      'plan-destructive-trash',
+    ) as HTMLInputElement;
     expect(archive.checked).toBe(true);
     expect(trash.checked).toBe(false);
   });
 
   it('reports the backend-accepted "trash" value when System Trash is chosen', () => {
     renderPanel(
-      [makePlan({ actions: [makeAction({ requiresDestructiveConfirm: true })] })],
-      { destructiveDestination: 'archive', onDestructiveDestinationChange: onDestructiveChange },
+      [
+        makePlan({
+          actions: [makeAction({ requiresDestructiveConfirm: true })],
+        }),
+      ],
+      {
+        destructiveDestination: 'archive',
+        onDestructiveDestinationChange: onDestructiveChange,
+      },
     );
     fireEvent.click(screen.getByTestId('plan-destructive-trash'));
     expect(onDestructiveChange).toHaveBeenCalledWith('trash');
@@ -432,8 +517,12 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     const plans = [makePlan({ inboxItemId: 'a' })];
     renderPanel(plans, { busy: true });
     // Pre-select so Apply selected would otherwise be enabled.
-    expect((screen.getByTestId('plan-apply-all') as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByTestId('plan-cancel-a') as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (screen.getByTestId('plan-apply-all') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByTestId('plan-cancel-a') as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });
 
@@ -482,21 +571,38 @@ describe('PlanPanel destination-root picker (US8)', { timeout: 15_000 }, () => {
   it('shows the absolute destination path from absoluteByFromPath (FR-031)', () => {
     const plan = makePlan({
       inboxItemId: 'item-1',
-      actions: [makeAction({ fromPath: '/inbox/img.fits', destinationPreview: 'lights/img.fits' })],
+      actions: [
+        makeAction({
+          fromPath: '/inbox/img.fits',
+          destinationPreview: 'lights/img.fits',
+        }),
+      ],
     });
-    renderWith({ plans: [plan], absoluteByFromPath: { '/inbox/img.fits': '/lib/A/lights/img.fits' } });
+    renderWith({
+      plans: [plan],
+      absoluteByFromPath: { '/inbox/img.fits': '/lib/A/lights/img.fits' },
+    });
     // Per-file rows (and their absolute-dest cell) are collapsed until expanded.
     fireEvent.click(screen.getByTestId('plan-group-toggle-item-1'));
-    expect(screen.getByTestId('inbox-dest-absolute-0')).toHaveTextContent('/lib/A/lights/img.fits');
+    expect(screen.getByTestId('inbox-dest-absolute-0')).toHaveTextContent(
+      '/lib/A/lights/img.fits',
+    );
   });
 
   it('falls back to the relative preview when no absolute path is captured', () => {
     const plan = makePlan({
       inboxItemId: 'item-1',
-      actions: [makeAction({ fromPath: '/inbox/img.fits', destinationPreview: 'lights/img.fits' })],
+      actions: [
+        makeAction({
+          fromPath: '/inbox/img.fits',
+          destinationPreview: 'lights/img.fits',
+        }),
+      ],
     });
     renderWith({ plans: [plan] });
     fireEvent.click(screen.getByTestId('plan-group-toggle-item-1'));
-    expect(screen.getByTestId('inbox-dest-absolute-0')).toHaveTextContent('lights/img.fits');
+    expect(screen.getByTestId('inbox-dest-absolute-0')).toHaveTextContent(
+      'lights/img.fits',
+    );
   });
 });

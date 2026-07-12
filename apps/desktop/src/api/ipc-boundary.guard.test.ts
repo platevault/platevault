@@ -33,7 +33,11 @@ function stripComments(src: string): string {
 }
 
 const files = Object.entries(raw)
-  .filter(([path]) => !path.includes('/paraglide/') && !path.endsWith('/api/ipc-boundary.guard.test.ts'))
+  .filter(
+    ([path]) =>
+      !path.includes('/paraglide/') &&
+      !path.endsWith('/api/ipc-boundary.guard.test.ts'),
+  )
   .map(([path, src]) => ({ path, src: stripComments(src) }));
 
 describe('spec 037 — IPC boundary guards', () => {
@@ -42,7 +46,8 @@ describe('spec 037 — IPC boundary guards', () => {
   });
 
   it('SC-005: nothing imports the retired @/api/commands wrapper', () => {
-    const re = /(from\s*['"]@\/api\/commands['"])|(import\(\s*['"]@\/api\/commands['"])|(vi\.mock\(\s*['"]@\/api\/commands['"])/;
+    const re =
+      /(from\s*['"]@\/api\/commands['"])|(import\(\s*['"]@\/api\/commands['"])|(vi\.mock\(\s*['"]@\/api\/commands['"])/;
     const offenders = files.filter((f) => re.test(f.src)).map((f) => f.path);
     expect(offenders).toEqual([]);
   });
@@ -52,7 +57,11 @@ describe('spec 037 — IPC boundary guards', () => {
     // bindings use the distinct `__TAURI_INVOKE` identifier, which this misses.
     const re = /\binvoke\s*(<[^>]*>)?\(\s*['"`]/;
     const offenders = files
-      .filter((f) => !f.path.endsWith('/api/ipc.ts') && !f.path.endsWith('/bindings/index.ts'))
+      .filter(
+        (f) =>
+          !f.path.endsWith('/api/ipc.ts') &&
+          !f.path.endsWith('/bindings/index.ts'),
+      )
       .filter((f) => re.test(f.src))
       .map((f) => f.path);
     expect(offenders).toEqual([]);

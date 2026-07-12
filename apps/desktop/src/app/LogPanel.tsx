@@ -11,7 +11,13 @@
  * - Truncation marker when history gap is detected.
  * - Escape key closes the panel.
  */
-import { useEffect, useRef, useCallback, useSyncExternalStore, useState } from 'react';
+import {
+  useEffect,
+  useRef,
+  useCallback,
+  useSyncExternalStore,
+  useState,
+} from 'react';
 import { m } from '@/lib/i18n';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Collapsible } from '@base-ui-components/react/collapsible';
@@ -48,11 +54,13 @@ function passesLevelFilter(entryLevel: LogLevel, filter: LevelFilter): boolean {
   return entryLevel === filter;
 }
 
-function passesSourceFilter(entrySource: LogEntrySource, filter: LogEntrySource[]): boolean {
+function passesSourceFilter(
+  entrySource: LogEntrySource,
+  filter: LogEntrySource[],
+): boolean {
   if (filter.length === 0) return true;
   return filter.includes(entrySource);
 }
-
 
 // ── Entity navigation helpers ─────────────────────────────────────────────────
 
@@ -166,7 +174,14 @@ export function LogPanel() {
     } else {
       list.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [visibleEntries.length, expanded, followLogs, scrollPaused, prefersReducedMotion, virtualizer]);
+  }, [
+    visibleEntries.length,
+    expanded,
+    followLogs,
+    scrollPaused,
+    prefersReducedMotion,
+    virtualizer,
+  ]);
 
   // Pause follow on manual scroll-up, resume on scroll-to-top.
   const handleScroll = useCallback(() => {
@@ -206,7 +221,9 @@ export function LogPanel() {
       // Falls back to a temp path when running under mocks or when the API is unavailable.
       let filePath: string | null = null;
       try {
-        const { save: showSaveDialog } = await import('@tauri-apps/plugin-dialog');
+        const { save: showSaveDialog } = await import(
+          '@tauri-apps/plugin-dialog'
+        );
         filePath = await showSaveDialog({
           title: m.logpanel_save_dialog_title(),
           defaultPath: `astro-log-export-${Date.now()}.json`,
@@ -223,7 +240,15 @@ export function LogPanel() {
       }
 
       unwrap(
-        await commands.logExport(requestId, filePath, 'json', null, null, null, showDiagnostics),
+        await commands.logExport(
+          requestId,
+          filePath,
+          'json',
+          null,
+          null,
+          null,
+          showDiagnostics,
+        ),
       );
     } catch (err) {
       setExportError(errMessage(err));
@@ -253,13 +278,19 @@ export function LogPanel() {
 
         {/* Level filter chips (expanded state) */}
         {expanded && (
-          <div className="alm-logpanel__filters" role="group" aria-label={m.logpanel_level_filter_aria()}>
+          <div
+            className="alm-logpanel__filters"
+            role="group"
+            aria-label={m.logpanel_level_filter_aria()}
+          >
             {LEVEL_CHIPS.map((chip) => (
               <button
                 key={chip.value}
                 type="button"
                 className={`alm-btn alm-btn--ghost alm-btn--xs alm-logpanel__chip${
-                  levelFilter === chip.value ? ' alm-logpanel__chip--active' : ''
+                  levelFilter === chip.value
+                    ? ' alm-logpanel__chip--active'
+                    : ''
                 }`}
                 onClick={() => setLevelFilter(chip.value)}
                 aria-pressed={levelFilter === chip.value}
@@ -269,7 +300,7 @@ export function LogPanel() {
             ))}
 
             {/* Diagnostics toggle (only when logLevel === "debug") */}
-            { }
+            {}
             {logLevel === 'debug' && (
               <button
                 type="button"
@@ -292,10 +323,22 @@ export function LogPanel() {
             className={`alm-btn alm-btn--ghost alm-btn--xs${followLogs ? ' alm-logpanel__chip--active' : ''}`}
             onClick={() => setFollowLogs(!followLogs)}
             aria-pressed={followLogs}
-            aria-label={followLogs ? m.log_follow_tail_on_aria() : m.log_follow_tail_off_aria()}
-            title={scrollPaused && followLogs ? m.log_follow_tail_paused_title() : undefined}
+            aria-label={
+              followLogs
+                ? m.log_follow_tail_on_aria()
+                : m.log_follow_tail_off_aria()
+            }
+            title={
+              scrollPaused && followLogs
+                ? m.log_follow_tail_paused_title()
+                : undefined
+            }
           >
-            {followLogs ? (scrollPaused ? m.logpanel_follow_paused() : m.logpanel_follow_active()) : m.logpanel_follow_off()}
+            {followLogs
+              ? scrollPaused
+                ? m.logpanel_follow_paused()
+                : m.logpanel_follow_active()
+              : m.logpanel_follow_off()}
           </button>
         )}
 
@@ -313,7 +356,9 @@ export function LogPanel() {
 
         <Collapsible.Trigger
           className="alm-btn alm-btn--ghost alm-btn--sm"
-          aria-label={expanded ? m.log_collapse_panel_aria() : m.log_expand_panel_aria()}
+          aria-label={
+            expanded ? m.log_collapse_panel_aria() : m.log_expand_panel_aria()
+          }
         >
           {expanded ? '▾' : '▸'}
         </Collapsible.Trigger>
@@ -347,7 +392,10 @@ export function LogPanel() {
             <div
               className="alm-virtual-inner"
               // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
-              style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                position: 'relative',
+              }}
             >
               {virtualizer.getVirtualItems().map((virtualRow) => {
                 const entry = visibleEntries[virtualRow.index];
@@ -437,18 +485,25 @@ function LogEntryRow({
       }
       aria-label={
         isClickable
-          ? m.log_entry_navigate_aria({ level: entry.level, message: entry.message })
+          ? m.log_entry_navigate_aria({
+              level: entry.level,
+              message: entry.message,
+            })
           : undefined
       }
     >
-      <span className="alm-logpanel__event-time">{formatTimeOfDay(entry.time)}</span>
+      <span className="alm-logpanel__event-time">
+        {formatTimeOfDay(entry.time)}
+      </span>
       <span
         className={`alm-logpanel__event-level alm-logpanel__event-level--${entry.level}`}
         aria-label={entry.level}
       >
         {entry.level}
       </span>
-      <span className={`alm-logpanel__event-source alm-logpanel__event-source--${entry.source}`}>
+      <span
+        className={`alm-logpanel__event-source alm-logpanel__event-source--${entry.source}`}
+      >
         {entry.source}
       </span>
       <span className="alm-logpanel__event-msg">{entry.message}</span>

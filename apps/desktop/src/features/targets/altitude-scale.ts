@@ -32,5 +32,9 @@ export function altitudeScale(rangeBottomPx: number, rangeTopPx: number) {
 
 /** Night-hour → pixel-X scale. */
 export function hourScale(rangeLeftPx: number, rangeRightPx: number) {
-  return scaleLinear<number>({ domain: HOUR_DOMAIN, range: [rangeLeftPx, rangeRightPx], clamp: true });
+  return scaleLinear<number>({
+    domain: HOUR_DOMAIN,
+    range: [rangeLeftPx, rangeRightPx],
+    clamp: true,
+  });
 }

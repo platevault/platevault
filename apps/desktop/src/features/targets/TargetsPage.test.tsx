@@ -26,7 +26,13 @@
  *  S1. Clicking a column header sorts the table.
  */
 
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
@@ -82,7 +88,9 @@ vi.mock('@/bindings/index', () => ({
   },
 }));
 
-mockAddTargetAlias.mockResolvedValue(ok({ alias: { id: 'a', alias: 'x', kind: 'user' } }));
+mockAddTargetAlias.mockResolvedValue(
+  ok({ alias: { id: 'a', alias: 'x', kind: 'user' } }),
+);
 mockRemoveTargetAlias.mockResolvedValue(ok({ removed: true }));
 mockSetDisplayAlias.mockResolvedValue(ok({}));
 mockClearDisplayAlias.mockResolvedValue(ok({}));
@@ -101,7 +109,14 @@ vi.mock('@tanstack/react-router', () => ({
   // The no-site banner (spec 044 US3) links to Settings via `Link`, which
   // needs a router context this test doesn't provide. Stub it as a plain
   // anchor, consistent with TargetsTable.test.tsx/TargetDetailV2.test.tsx.
-  Link: ({ children, to, ...rest }: { children?: import('react').ReactNode; to: string }) => (
+  Link: ({
+    children,
+    to,
+    ...rest
+  }: {
+    children?: import('react').ReactNode;
+    to: string;
+  }) => (
     <a href={to} {...rest}>
       {children}
     </a>
@@ -156,8 +171,19 @@ beforeEach(() => {
   mockSelectedId.current = undefined;
   mockListTargets.mockResolvedValue(ok(listItems));
   mockGetTargetDetail.mockResolvedValue(ok(makeDetail()));
-  mockSearchTargets.mockResolvedValue(ok({ contractVersion: '1.0', requestId: 'r', suggestions: [] }));
-  mockResolveTarget.mockResolvedValue(ok({ contractVersion: '1.0', requestId: 'r', status: 'unresolved', target: null, unresolvedReason: 'offline', error: null }));
+  mockSearchTargets.mockResolvedValue(
+    ok({ contractVersion: '1.0', requestId: 'r', suggestions: [] }),
+  );
+  mockResolveTarget.mockResolvedValue(
+    ok({
+      contractVersion: '1.0',
+      requestId: 'r',
+      status: 'unresolved',
+      target: null,
+      unresolvedReason: 'offline',
+      error: null,
+    }),
+  );
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -181,12 +207,16 @@ describe('TargetsPage', () => {
     const { rerender } = render(<TargetsPage />);
     await waitFor(() => screen.getByText('NGC 7000'));
     // No selection → no detail pane region.
-    expect(screen.queryByRole('complementary', { name: 'Target details' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('complementary', { name: 'Target details' }),
+    ).not.toBeInTheDocument();
 
     mockSelectedId.current = TARGET_ID;
     rerender(<TargetsPage />);
     await waitFor(() =>
-      expect(screen.getByRole('complementary', { name: 'Target details' })).toBeInTheDocument(),
+      expect(
+        screen.getByRole('complementary', { name: 'Target details' }),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -228,20 +258,36 @@ describe('TargetsPage', () => {
   it('8. target count appears in the table footer', async () => {
     render(<TargetsPage />);
     // Default tab is Planner; both NGC 7000 and M 31 are allowed catalogs.
-    await waitFor(() => expect(screen.getByText('2 targets')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('2 targets')).toBeInTheDocument(),
+    );
   });
 
   // ── P: My Targets vs Planner filter (task #40, task #91) ────────────────────
 
   it('P1. "All targets" (default) filters to allowed planner catalogs', async () => {
-    mockListTargets.mockResolvedValue(ok([
-      ...listItems,
-      // double-star dump entries that must NOT show in the Planner
-      { id: 'hd1', effectiveLabel: 'HD 1', primaryDesignation: 'HD 1', objectType: 'double_star' },
-      { id: 'wds1', effectiveLabel: 'WDS J1', primaryDesignation: 'WDS J00057+4549', objectType: 'double_star' },
-    ]));
+    mockListTargets.mockResolvedValue(
+      ok([
+        ...listItems,
+        // double-star dump entries that must NOT show in the Planner
+        {
+          id: 'hd1',
+          effectiveLabel: 'HD 1',
+          primaryDesignation: 'HD 1',
+          objectType: 'double_star',
+        },
+        {
+          id: 'wds1',
+          effectiveLabel: 'WDS J1',
+          primaryDesignation: 'WDS J00057+4549',
+          objectType: 'double_star',
+        },
+      ]),
+    );
     render(<TargetsPage />);
-    await waitFor(() => expect(screen.getByText('NGC 7000')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('NGC 7000')).toBeInTheDocument(),
+    );
 
     expect(screen.getByText('M 31')).toBeInTheDocument();
     expect(screen.queryByText('HD 1')).not.toBeInTheDocument();
@@ -341,7 +387,9 @@ describe('TargetsPage', () => {
 
     // Switch back to All — catalog rows return.
     fireEvent.change(showSelect, { target: { value: '' } });
-    await waitFor(() => expect(screen.getByText('NGC 7000')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('NGC 7000')).toBeInTheDocument(),
+    );
   });
 
   // ── G: Add target button ───────────────────────────────────────────────────
@@ -354,7 +402,9 @@ describe('TargetsPage', () => {
     fireEvent.click(addBtn);
 
     await waitFor(() =>
-      expect(screen.getByRole('dialog', { name: /Add target/i })).toBeInTheDocument(),
+      expect(
+        screen.getByRole('dialog', { name: /Add target/i }),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -365,7 +415,9 @@ describe('TargetsPage', () => {
     await waitFor(() => screen.getByText('NGC 7000'));
 
     const table = screen.getByRole('table');
-    const designationHeader = screen.getByRole('button', { name: 'Sort by Designation' });
+    const designationHeader = screen.getByRole('button', {
+      name: 'Sort by Designation',
+    });
 
     // Default sort is designation asc → "M 31" before "NGC 7000".
     let rowText = within(table).getAllByText(/NGC 7000|M 31/);
@@ -434,7 +486,9 @@ describe('TargetsPage', () => {
 
     const unknownCheckbox = screen.getByLabelText('Unknown');
     fireEvent.click(unknownCheckbox);
-    await waitFor(() => expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText('NGC 7000')).not.toBeInTheDocument(),
+    );
 
     fireEvent.click(unknownCheckbox);
     await waitFor(() => {

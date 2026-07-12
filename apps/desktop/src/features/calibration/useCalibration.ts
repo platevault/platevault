@@ -45,7 +45,9 @@ export function useCalibrationMasters(): UseMastersState {
         if (!cancelled)
           setState({ masters: [], loading: false, error: errMessage(err) });
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return state;
@@ -65,7 +67,9 @@ export function useCalibrationSuggest(
   sessionId: string | undefined,
   calibrationTypes?: CalibrationType[],
 ): UseSuggestState {
-  const [response, setResponse] = useState<CalibrationMatchSuggestResponse | undefined>(undefined);
+  const [response, setResponse] = useState<
+    CalibrationMatchSuggestResponse | undefined
+  >(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [rev, setRev] = useState(0);
@@ -101,7 +105,9 @@ export function useCalibrationSuggest(
           setLoading(false);
         }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, rev]);
 
@@ -114,12 +120,18 @@ export interface UseAssignState {
   assigning: boolean;
   result: CalibrationMatchAssignResponse | undefined;
   /** Call to persist an assignment. `override` must be true for hard-rule violations. */
-  assign: (sessionId: string, masterId: string, override?: boolean) => Promise<CalibrationMatchAssignResponse>;
+  assign: (
+    sessionId: string,
+    masterId: string,
+    override?: boolean,
+  ) => Promise<CalibrationMatchAssignResponse>;
 }
 
 export function useCalibrationAssign(): UseAssignState {
   const [assigning, setAssigning] = useState(false);
-  const [result, setResult] = useState<CalibrationMatchAssignResponse | undefined>(undefined);
+  const [result, setResult] = useState<
+    CalibrationMatchAssignResponse | undefined
+  >(undefined);
 
   const assign = useCallback(
     async (sessionId: string, masterId: string, override = false) => {
@@ -156,7 +168,9 @@ export function useCalibrationSettings(): {
   agingThresholdDays: number;
 } {
   const [prefillSuggestion, setPrefillSuggestion] = useState(true);
-  const [agingThresholdDays, setAgingThresholdDays] = useState(DEFAULT_AGING_THRESHOLD_DAYS);
+  const [agingThresholdDays, setAgingThresholdDays] = useState(
+    DEFAULT_AGING_THRESHOLD_DAYS,
+  );
 
   useEffect(() => {
     commands

@@ -22,7 +22,12 @@
 import { Popover } from '@base-ui-components/react/popover';
 import { m } from '@/lib/i18n';
 import { FilterBadges } from './FilterBadges';
-import { BANDS, minSeparationDeg, type Band, type MoonAvoidanceParams } from './astro/moon-avoidance';
+import {
+  BANDS,
+  minSeparationDeg,
+  type Band,
+  type MoonAvoidanceParams,
+} from './astro/moon-avoidance';
 import type { ObservingNight } from './astro/moon-state';
 import type { RowMoonPlanning } from './astro/row-planning';
 import { phaseLabel } from './MoonSummary';
@@ -49,7 +54,13 @@ interface Props {
  * hover or focus (FR-012). Stops row-select click propagation so opening the
  * popover never also selects the row.
  */
-export function GuidanceCell({ night, moon, params, targetLabel, moonFreeMinutesByBand }: Props) {
+export function GuidanceCell({
+  night,
+  moon,
+  params,
+  targetLabel,
+  moonFreeMinutesByBand,
+}: Props) {
   const { bandViability, recommendation, lunarSeparationDeg } = moon;
 
   return (
@@ -61,12 +72,20 @@ export function GuidanceCell({ night, moon, params, targetLabel, moonFreeMinutes
         onClick={(e) => e.stopPropagation()}
         aria-label={m.targets_guidance_explain_title() + ': ' + targetLabel}
       >
-        <FilterBadges viability={bandViability} recommendation={recommendation} />
+        <FilterBadges
+          viability={bandViability}
+          recommendation={recommendation}
+        />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="top" align="start" sideOffset={4}>
-          <Popover.Popup className="alm-guidance-popup" data-testid="guidance-explain-popup">
-            <div className="alm-guidance-popup__title">{m.targets_guidance_explain_title()}</div>
+          <Popover.Popup
+            className="alm-guidance-popup"
+            data-testid="guidance-explain-popup"
+          >
+            <div className="alm-guidance-popup__title">
+              {m.targets_guidance_explain_title()}
+            </div>
             {bandViability === null || !night ? (
               <div className="alm-guidance-popup__unknown">
                 {m.targets_guidance_explain_unknown()}
@@ -87,12 +106,19 @@ export function GuidanceCell({ night, moon, params, targetLabel, moonFreeMinutes
                 </div>
                 <ul className="alm-guidance-popup__bands">
                   {BANDS.map((band) => {
-                    const minDeg = minSeparationDeg(band, night.moonAgeFromFullDays, params);
+                    const minDeg = minSeparationDeg(
+                      band,
+                      night.moonAgeFromFullDays,
+                      params,
+                    );
                     const viable = bandViability[band];
                     return (
                       <li key={band} className="alm-guidance-popup__band-row">
                         <span className="alm-guidance-popup__band-name">
-                          {m.targets_guidance_explain_band_row({ band, deg: Math.round(minDeg) })}
+                          {m.targets_guidance_explain_band_row({
+                            band,
+                            deg: Math.round(minDeg),
+                          })}
                         </span>
                         <span
                           className={
@@ -111,7 +137,9 @@ export function GuidanceCell({ night, moon, params, targetLabel, moonFreeMinutes
                         {moonFreeMinutesByBand != null && (
                           <span className="alm-guidance-popup__band-moonfree">
                             {m.targets_guidance_moon_free_band({
-                              hours: (moonFreeMinutesByBand[band] / 60).toFixed(1),
+                              hours: (moonFreeMinutesByBand[band] / 60).toFixed(
+                                1,
+                              ),
                             })}
                           </span>
                         )}

@@ -31,8 +31,8 @@ function DevModeDisabledStub() {
         Developer mode disabled
       </h2>
       <p className="alm-dev-contracts-page__stub-text">
-        Enable <strong>devMode</strong> in Settings › Advanced, then restart the app to access
-        developer diagnostics.
+        Enable <strong>devMode</strong> in Settings › Advanced, then restart the
+        app to access developer diagnostics.
       </p>
     </div>
   );
@@ -44,7 +44,9 @@ export function ContractsPage() {
   const [devMode, setDevMode] = useState<boolean | null>(null);
   const [contracts, setContracts] = useState<ContractMeta[]>([]);
   const [calls, setCalls] = useState<ContractCall[]>([]);
-  const [selectedContract, setSelectedContract] = useState<ContractMeta | null>(null);
+  const [selectedContract, setSelectedContract] = useState<ContractMeta | null>(
+    null,
+  );
   const [schemaViewerOpen, setSchemaViewerOpen] = useState(false);
   const [schemaPath, setSchemaPath] = useState('');
   const [schemaVersion, setSchemaVersion] = useState('');
@@ -66,7 +68,9 @@ export function ContractsPage() {
       .catch(() => {
         if (!cancelled) setDevMode(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load contracts when devMode is confirmed on.
@@ -165,82 +169,71 @@ export function ContractsPage() {
 
   return (
     <PageShell>
-    <div
-      className="alm-dev-contracts alm-page__scroll alm-dev-contracts-page__body"
-    >
-      <div className="alm-dev-contracts-page__header">
-        <h1 className="alm-dev-contracts-page__title">
-          Developer Contract Diagnostics
-        </h1>
-        <div className="alm-dev-contracts-page__actions">
-          <button
-            type="button"
-            className="alm-btn alm-btn--sm"
-            onClick={loadCalls}
-            aria-label="Refresh calls"
-          >
-            Refresh calls
-          </button>
-          <button
-            type="button"
-            className="alm-btn alm-btn--sm"
-            onClick={handleExport}
-            disabled={exporting}
-            aria-label="Export diagnostics"
-          >
-            {exporting ? 'Exporting…' : 'Export'}
-          </button>
+      <div className="alm-dev-contracts alm-page__scroll alm-dev-contracts-page__body">
+        <div className="alm-dev-contracts-page__header">
+          <h1 className="alm-dev-contracts-page__title">
+            Developer Contract Diagnostics
+          </h1>
+          <div className="alm-dev-contracts-page__actions">
+            <button
+              type="button"
+              className="alm-btn alm-btn--sm"
+              onClick={loadCalls}
+              aria-label="Refresh calls"
+            >
+              Refresh calls
+            </button>
+            <button
+              type="button"
+              className="alm-btn alm-btn--sm"
+              onClick={handleExport}
+              disabled={exporting}
+              aria-label="Export diagnostics"
+            >
+              {exporting ? 'Exporting…' : 'Export'}
+            </button>
+          </div>
         </div>
+
+        {error && (
+          <div role="alert" className="alm-dev-contracts-page__error">
+            Error: {error}
+          </div>
+        )}
+
+        {exportResult && (
+          <div role="status" className="alm-dev-contracts-page__export-result">
+            {exportResult}
+          </div>
+        )}
+
+        <section>
+          <h2 className="alm-dev-contracts-page__section-heading">
+            Contracts ({contracts.length})
+          </h2>
+          <ContractList contracts={contracts} onViewSchema={handleViewSchema} />
+        </section>
+
+        <section>
+          <h2 className="alm-dev-contracts-page__section-heading">
+            Recent Calls ({calls.length})
+          </h2>
+          <CallList
+            calls={calls}
+            contracts={contracts}
+            onViewSchema={handleViewSchemaForCall}
+          />
+        </section>
+
+        {schemaViewerOpen && (
+          <SchemaViewer
+            schemaPath={schemaPath}
+            contractVersion={schemaVersion}
+            contractName={selectedContract?.name ?? ''}
+            onClose={() => setSchemaViewerOpen(false)}
+          />
+        )}
       </div>
-
-      {error && (
-        <div
-          role="alert"
-          className="alm-dev-contracts-page__error"
-        >
-          Error: {error}
-        </div>
-      )}
-
-      {exportResult && (
-        <div
-          role="status"
-          className="alm-dev-contracts-page__export-result"
-        >
-          {exportResult}
-        </div>
-      )}
-
-      <section>
-        <h2 className="alm-dev-contracts-page__section-heading">
-          Contracts ({contracts.length})
-        </h2>
-        <ContractList
-          contracts={contracts}
-          onViewSchema={handleViewSchema}
-        />
-      </section>
-
-      <section>
-        <h2 className="alm-dev-contracts-page__section-heading">
-          Recent Calls ({calls.length})
-        </h2>
-        <CallList
-          calls={calls}
-          contracts={contracts}
-          onViewSchema={handleViewSchemaForCall}
-        />
-      </section>
-
-      {schemaViewerOpen && (
-        <SchemaViewer
-          schemaPath={schemaPath}
-          contractVersion={schemaVersion}
-          contractName={selectedContract?.name ?? ''}
-          onClose={() => setSchemaViewerOpen(false)}
-        />
-      )}
-    </div>
     </PageShell>
   );
 }

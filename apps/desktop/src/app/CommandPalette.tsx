@@ -15,7 +15,10 @@ import type { SearchResult } from '@/bindings/types';
 export const PAGES: Array<{ label: () => string; route: string }> = [
   { label: () => m.common_sessions(), route: '/sessions' },
   { label: () => m.cmdk_page_review_queue(), route: '/review' },
-  { label: () => m.settings_datasources_category_calibration(), route: '/calibration' },
+  {
+    label: () => m.settings_datasources_category_calibration(),
+    route: '/calibration',
+  },
   { label: () => m.nav_targets(), route: '/targets' },
   { label: () => m.common_projects(), route: '/projects' },
   { label: () => m.cmdk_page_plans(), route: '/plans' },
@@ -167,7 +170,9 @@ export function CommandPalette() {
                       <span className="alm-palette__item-kind">{r.kind}</span>
                       <span className="alm-palette__item-label">{r.label}</span>
                       {r.sublabel && (
-                        <span className="alm-palette__item-sub">{r.sublabel}</span>
+                        <span className="alm-palette__item-sub">
+                          {r.sublabel}
+                        </span>
                       )}
                     </Command.Item>
                   ))}
@@ -202,7 +207,9 @@ export function CommandPalette() {
                     void openInNewWindow(currentHref);
                   }}
                 >
-                  <span className="alm-palette__item-label">{m.cmdk_open_new_window()}</span>
+                  <span className="alm-palette__item-label">
+                    {m.cmdk_open_new_window()}
+                  </span>
                 </Command.Item>
               </Command.Group>
             </Command.List>

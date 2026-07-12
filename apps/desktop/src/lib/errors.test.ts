@@ -5,7 +5,10 @@ import { m } from '@/lib/i18n';
 
 describe('errMessage (spec 046 US2 — single translation point)', () => {
   it('maps a known ContractError code to its friendly catalog message', () => {
-    const msg = errMessage({ code: 'path.not_exists', message: 'ENOENT raw backend text' });
+    const msg = errMessage({
+      code: 'path.not_exists',
+      message: 'ENOENT raw backend text',
+    });
     expect(msg).toBe(m.err_path_not_exists());
   });
 

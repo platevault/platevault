@@ -26,7 +26,12 @@ const AVAILABLE_TOKENS = [
   { token: '{binning}', example: '1x1' },
 ];
 
-export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutProps) {
+export function StepLayout({
+  data,
+  nameData,
+  strategy,
+  onChange,
+}: StepLayoutProps) {
   const pattern = data.namingPattern || DEFAULT_PATTERN;
 
   // Generate example paths based on current wizard state
@@ -67,11 +72,8 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
     <div className="alm-wizard-layout">
       {/* Naming pattern */}
       <div className="alm-wizard-layout__section">
-        { }
-        <label
-          htmlFor="naming-pattern"
-          className="alm-wizard-layout__label"
-        >
+        {}
+        <label htmlFor="naming-pattern" className="alm-wizard-layout__label">
           {m.projects_wizard_naming_pattern_label()}
         </label>
         <input
@@ -87,7 +89,9 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
           {AVAILABLE_TOKENS.map((t) => (
             <span
               key={t.token}
-              title={m.projects_wizard_token_example_title({ example: t.example })}
+              title={m.projects_wizard_token_example_title({
+                example: t.example,
+              })}
               className="alm-wizard-layout__token-chip"
             >
               {t.token}
@@ -103,7 +107,8 @@ export function StepLayout({ data, nameData, strategy, onChange }: StepLayoutPro
         </h3>
         <div className="alm-wizard-layout__preview">
           {examplePaths.structure.map((path, i) => {
-            const depth = path.split('/').length - examplePaths.root.split('/').length;
+            const depth =
+              path.split('/').length - examplePaths.root.split('/').length;
             const isDir = path.endsWith('/') || path.includes('(');
             return (
               <div

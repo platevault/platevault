@@ -33,7 +33,13 @@
  * 28. (US4) Save error shows banner message.
  */
 
-import { configure, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import {
+  configure,
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Windows-CI headroom (same flake class as PR #412's settings hydration races):
@@ -97,7 +103,14 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
   // Minimal stub: the no-site banner's "Add a site" link (spec 044 US3) just
   // needs to render as a link, not exercise real routing under test.
-  Link: ({ children, to, ...rest }: { children?: import('react').ReactNode; to: string }) => (
+  Link: ({
+    children,
+    to,
+    ...rest
+  }: {
+    children?: import('react').ReactNode;
+    to: string;
+  }) => (
     <a href={to} {...rest}>
       {children}
     </a>
@@ -118,7 +131,11 @@ const TARGET_ID = '550e8400-e29b-41d4-a716-446655440201';
 
 function makeDetail(overrides?: {
   displayAlias?: string | null;
-  aliases?: Array<{ id: string; alias: string; kind: 'designation' | 'common_name' | 'user' }>;
+  aliases?: Array<{
+    id: string;
+    alias: string;
+    kind: 'designation' | 'common_name' | 'user';
+  }>;
 }) {
   const displayAlias = overrides?.displayAlias ?? null;
   const primaryDesignation = 'NGC 7000';
@@ -134,7 +151,11 @@ function makeDetail(overrides?: {
     source: 'resolved',
     aliases: overrides?.aliases ?? [
       { id: 'alias-desig-1', alias: 'NGC 7000', kind: 'designation' as const },
-      { id: 'alias-cn-1', alias: 'North America Nebula', kind: 'common_name' as const },
+      {
+        id: 'alias-cn-1',
+        alias: 'North America Nebula',
+        kind: 'common_name' as const,
+      },
       { id: 'alias-user-1', alias: 'My Nebula', kind: 'user' as const },
     ],
   };
@@ -144,19 +165,33 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockNavigate.mockResolvedValue(undefined);
   mockGetTargetDetail.mockResolvedValue(ok(makeDetail()));
-  mockAddTargetAlias.mockResolvedValue(ok({
-    alias: { id: 'alias-user-new', alias: 'New Alias', kind: 'user' },
-  }));
+  mockAddTargetAlias.mockResolvedValue(
+    ok({
+      alias: { id: 'alias-user-new', alias: 'New Alias', kind: 'user' },
+    }),
+  );
   mockRemoveTargetAlias.mockResolvedValue(ok({ removed: true }));
-  mockSetDisplayAlias.mockResolvedValue(ok(makeDetail({ displayAlias: 'My NGC 7000' })));
-  mockClearDisplayAlias.mockResolvedValue(ok(makeDetail({ displayAlias: null })));
+  mockSetDisplayAlias.mockResolvedValue(
+    ok(makeDetail({ displayAlias: 'My NGC 7000' })),
+  );
+  mockClearDisplayAlias.mockResolvedValue(
+    ok(makeDetail({ displayAlias: null })),
+  );
   // US2/US3/US4 defaults: empty lists, no notes.
   mockListTargetSessions.mockResolvedValue(ok([]));
   mockListTargetProjects.mockResolvedValue(ok([]));
   mockGetTargetNote.mockResolvedValue(ok({ notes: null }));
   mockUpdateTargetNote.mockResolvedValue(ok({ notes: null }));
   mockAstroFormatBatch.mockResolvedValue(
-    ok({ formatted: [{ id: TARGET_ID, raSexagesimal: '20:59:00', decSexagesimal: '+44:22:12' }] }),
+    ok({
+      formatted: [
+        {
+          id: TARGET_ID,
+          raSexagesimal: '20:59:00',
+          decSexagesimal: '+44:22:12',
+        },
+      ],
+    }),
   );
 });
 
@@ -179,7 +214,9 @@ describe('TargetDetailV2', () => {
   });
 
   it('2b. when displayAlias is set, effectiveLabel shows it', async () => {
-    mockGetTargetDetail.mockResolvedValue(ok(makeDetail({ displayAlias: 'My NGC 7000' })));
+    mockGetTargetDetail.mockResolvedValue(
+      ok(makeDetail({ displayAlias: 'My NGC 7000' })),
+    );
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => {
       const els = screen.getAllByText('My NGC 7000');
@@ -210,8 +247,12 @@ describe('TargetDetailV2', () => {
     await waitFor(() => screen.getByLabelText('Remove alias My Nebula'));
 
     expect(screen.getByLabelText('Remove alias My Nebula')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Remove alias NGC 7000')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Remove alias North America Nebula')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Remove alias NGC 7000'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Remove alias North America Nebula'),
+    ).not.toBeInTheDocument();
   });
 
   it('6. clicking × on user alias calls removeTargetAlias with alias id', async () => {
@@ -252,7 +293,9 @@ describe('TargetDetailV2', () => {
     fireEvent.change(screen.getByRole('textbox', { name: /new alias/i }), {
       target: { value: 'Pelican Region' },
     });
-    fireEvent.keyDown(screen.getByRole('textbox', { name: /new alias/i }), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByRole('textbox', { name: /new alias/i }), {
+      key: 'Enter',
+    });
 
     await waitFor(() => expect(mockAddTargetAlias).toHaveBeenCalled());
   });
@@ -268,7 +311,10 @@ describe('TargetDetailV2', () => {
   });
 
   it('10. alias.blank error from backend shows inline message', async () => {
-    mockAddTargetAlias.mockRejectedValueOnce({ code: 'alias.blank', message: 'blank' });
+    mockAddTargetAlias.mockRejectedValueOnce({
+      code: 'alias.blank',
+      message: 'blank',
+    });
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByRole('textbox', { name: /new alias/i }));
 
@@ -310,9 +356,7 @@ describe('TargetDetailV2', () => {
   it('13. sessions empty-state renders (single mid-page surface)', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
-      expect(
-        screen.getByText(/No linked sessions yet/i),
-      ).toBeInTheDocument(),
+      expect(screen.getByText(/No linked sessions yet/i)).toBeInTheDocument(),
     );
     // The duplicate bottom "No sessions linked" section has been removed.
     expect(screen.queryByText('No sessions linked')).not.toBeInTheDocument();
@@ -329,12 +373,18 @@ describe('TargetDetailV2', () => {
     const updated = makeDetail({
       aliases: [
         { id: 'alias-desig-1', alias: 'NGC 7000', kind: 'designation' },
-        { id: 'alias-cn-1', alias: 'North America Nebula', kind: 'common_name' },
+        {
+          id: 'alias-cn-1',
+          alias: 'North America Nebula',
+          kind: 'common_name',
+        },
         { id: 'alias-user-1', alias: 'My Nebula', kind: 'user' },
         { id: 'alias-user-new', alias: 'New Alias', kind: 'user' },
       ],
     });
-    mockGetTargetDetail.mockResolvedValueOnce(ok(makeDetail())).mockResolvedValueOnce(ok(updated));
+    mockGetTargetDetail
+      .mockResolvedValueOnce(ok(makeDetail()))
+      .mockResolvedValueOnce(ok(updated));
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByRole('textbox', { name: /new alias/i }));
@@ -345,17 +395,25 @@ describe('TargetDetailV2', () => {
     fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
 
     await waitFor(() => expect(mockGetTargetDetail).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.getByText('New Alias')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('New Alias')).toBeInTheDocument(),
+    );
   });
 
   it('16. reloads detail after successful alias remove', async () => {
     const updated = makeDetail({
       aliases: [
         { id: 'alias-desig-1', alias: 'NGC 7000', kind: 'designation' },
-        { id: 'alias-cn-1', alias: 'North America Nebula', kind: 'common_name' },
+        {
+          id: 'alias-cn-1',
+          alias: 'North America Nebula',
+          kind: 'common_name',
+        },
       ],
     });
-    mockGetTargetDetail.mockResolvedValueOnce(ok(makeDetail())).mockResolvedValueOnce(ok(updated));
+    mockGetTargetDetail
+      .mockResolvedValueOnce(ok(makeDetail()))
+      .mockResolvedValueOnce(ok(updated));
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByLabelText('Remove alias My Nebula'));
@@ -371,7 +429,9 @@ describe('TargetDetailV2', () => {
   it('17. display-alias Set/Edit button is visible', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /^set$/i })).toBeInTheDocument(),
+      expect(
+        screen.getByRole('button', { name: /^set$/i }),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -385,7 +445,9 @@ describe('TargetDetailV2', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^set$/i }));
 
-    await waitFor(() => screen.getByRole('textbox', { name: /display label/i }));
+    await waitFor(() =>
+      screen.getByRole('textbox', { name: /display label/i }),
+    );
     fireEvent.change(screen.getByRole('textbox', { name: /display label/i }), {
       target: { value: 'My NGC 7000' },
     });
@@ -400,13 +462,19 @@ describe('TargetDetailV2', () => {
   });
 
   it('19. clearing display alias reverts effectiveLabel to primaryDesignation', async () => {
-    mockGetTargetDetail.mockResolvedValue(ok(makeDetail({ displayAlias: 'My NGC 7000' })));
-    mockClearDisplayAlias.mockResolvedValue(ok(makeDetail({ displayAlias: null })));
+    mockGetTargetDetail.mockResolvedValue(
+      ok(makeDetail({ displayAlias: 'My NGC 7000' })),
+    );
+    mockClearDisplayAlias.mockResolvedValue(
+      ok(makeDetail({ displayAlias: null })),
+    );
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     // Wait for at least one Edit button (display-alias + notes may both show Edit)
     await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: /^edit$/i }).length).toBeGreaterThanOrEqual(1),
+      expect(
+        screen.getAllByRole('button', { name: /^edit$/i }).length,
+      ).toBeGreaterThanOrEqual(1),
     );
 
     // The display-alias Edit button is the first in DOM order
@@ -416,7 +484,9 @@ describe('TargetDetailV2', () => {
     fireEvent.click(screen.getByRole('button', { name: /^clear$/i }));
 
     await waitFor(() =>
-      expect(mockClearDisplayAlias).toHaveBeenCalledWith({ targetId: TARGET_ID }),
+      expect(mockClearDisplayAlias).toHaveBeenCalledWith({
+        targetId: TARGET_ID,
+      }),
     );
   });
 
@@ -431,31 +501,39 @@ describe('TargetDetailV2', () => {
   });
 
   it('21. (US2) linked session rows render date and frameCount', async () => {
-    mockListTargetSessions.mockResolvedValue(ok([
-      {
-        id: 'sess-1',
-        sessionKey: '{}',
-        createdAt: '2026-03-15T22:00:00Z',
-        frameCount: 42,
-      },
-    ]));
+    mockListTargetSessions.mockResolvedValue(
+      ok([
+        {
+          id: 'sess-1',
+          sessionKey: '{}',
+          createdAt: '2026-03-15T22:00:00Z',
+          frameCount: 42,
+        },
+      ]),
+    );
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     // Slow-runner headroom now comes from the file-wide configure/setConfig
     // above (this test flaked on windows-latest while 22 below passed).
-    await waitFor(() => expect(screen.getByText(/42 frames/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/42 frames/i)).toBeInTheDocument(),
+    );
   });
 
   it('22. (US2) clicking session row navigates to /sessions with selected=id', async () => {
-    mockListTargetSessions.mockResolvedValue(ok([
-      {
-        id: 'sess-abc',
-        sessionKey: '{}',
-        createdAt: '2026-03-15T22:00:00Z',
-        frameCount: 5,
-      },
-    ]));
+    mockListTargetSessions.mockResolvedValue(
+      ok([
+        {
+          id: 'sess-abc',
+          sessionKey: '{}',
+          createdAt: '2026-03-15T22:00:00Z',
+          frameCount: 5,
+        },
+      ]),
+    );
     render(<TargetDetailV2 targetId={TARGET_ID} />);
-    await waitFor(() => expect(screen.getByText(/5 frames/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/5 frames/i)).toBeInTheDocument(),
+    );
 
     fireEvent.click(screen.getByText(/5 frames/i).closest('button')!);
 
@@ -473,32 +551,40 @@ describe('TargetDetailV2', () => {
     mockListTargetProjects.mockResolvedValue(ok([]));
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
-      expect(screen.getAllByText(/No projects linked/i).length).toBeGreaterThanOrEqual(1),
+      expect(
+        screen.getAllByText(/No projects linked/i).length,
+      ).toBeGreaterThanOrEqual(1),
     );
   });
 
   it('24. (US3) linked project rows render name and lifecycle', async () => {
-    mockListTargetProjects.mockResolvedValue(ok([
-      { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
-    ]));
+    mockListTargetProjects.mockResolvedValue(
+      ok([{ id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' }]),
+    );
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
-      expect(screen.getAllByText('Horsehead 2026').length).toBeGreaterThanOrEqual(1),
+      expect(
+        screen.getAllByText('Horsehead 2026').length,
+      ).toBeGreaterThanOrEqual(1),
     );
     expect(screen.getAllByText('ready').length).toBeGreaterThanOrEqual(1);
   });
 
   it('25. (US3) clicking project row navigates to /projects with selected=id (mid-page link row)', async () => {
-    mockListTargetProjects.mockResolvedValue(ok([
-      { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
-    ]));
+    mockListTargetProjects.mockResolvedValue(
+      ok([{ id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' }]),
+    );
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
-      expect(screen.getAllByText('Horsehead 2026').length).toBeGreaterThanOrEqual(1),
+      expect(
+        screen.getAllByText('Horsehead 2026').length,
+      ).toBeGreaterThanOrEqual(1),
     );
 
     // Click the first project button (mid-page link row)
-    fireEvent.click(screen.getAllByText('Horsehead 2026')[0].closest('button')!);
+    fireEvent.click(
+      screen.getAllByText('Horsehead 2026')[0].closest('button')!,
+    );
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({
@@ -509,16 +595,20 @@ describe('TargetDetailV2', () => {
   });
 
   it('25b. (US3) clicking project row in bottom section navigates to /projects with selected=id', async () => {
-    mockListTargetProjects.mockResolvedValue(ok([
-      { id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' },
-    ]));
+    mockListTargetProjects.mockResolvedValue(
+      ok([{ id: 'proj-1', name: 'Horsehead 2026', lifecycle: 'ready' }]),
+    );
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
-      expect(screen.getAllByText('Horsehead 2026').length).toBeGreaterThanOrEqual(1),
+      expect(
+        screen.getAllByText('Horsehead 2026').length,
+      ).toBeGreaterThanOrEqual(1),
     );
 
     // Click the last project button (bottom Projects section)
-    const btns = screen.getAllByText('Horsehead 2026').map((el) => el.closest('button')!);
+    const btns = screen
+      .getAllByText('Horsehead 2026')
+      .map((el) => el.closest('button')!);
     fireEvent.click(btns[btns.length - 1]);
 
     await waitFor(() =>
@@ -537,11 +627,15 @@ describe('TargetDetailV2', () => {
     await waitFor(() =>
       expect(screen.getByTestId('target-notes-empty')).toBeInTheDocument(),
     );
-    expect(screen.getByTestId('target-notes-empty')).toHaveTextContent('No notes yet.');
+    expect(screen.getByTestId('target-notes-empty')).toHaveTextContent(
+      'No notes yet.',
+    );
   });
 
   it('27. (US4) existing notes body renders', async () => {
-    mockGetTargetNote.mockResolvedValue(ok({ notes: 'Great transparency last night.' }));
+    mockGetTargetNote.mockResolvedValue(
+      ok({ notes: 'Great transparency last night.' }),
+    );
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() =>
       expect(screen.getByTestId('target-notes-body')).toHaveTextContent(
@@ -572,7 +666,9 @@ describe('TargetDetailV2', () => {
       }),
     );
     await waitFor(() =>
-      expect(screen.getByTestId('target-notes-body')).toHaveTextContent('Updated note'),
+      expect(screen.getByTestId('target-notes-body')).toHaveTextContent(
+        'Updated note',
+      ),
     );
   });
 
@@ -590,7 +686,9 @@ describe('TargetDetailV2', () => {
     fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
 
     await waitFor(() =>
-      expect(screen.getByTestId('target-notes-body')).toHaveTextContent('Original note'),
+      expect(screen.getByTestId('target-notes-body')).toHaveTextContent(
+        'Original note',
+      ),
     );
     expect(mockUpdateTargetNote).not.toHaveBeenCalled();
   });
@@ -621,20 +719,26 @@ describe('TargetDetailV2', () => {
 
 describe('TargetDetailV2 — no-site prompt (US6/T015/T018)', () => {
   beforeEach(async () => {
-    const { __setObservingStateForTest } = await import('./observing-sites/site-store');
+    const { __setObservingStateForTest } = await import(
+      './observing-sites/site-store'
+    );
     __setObservingStateForTest({});
   });
 
   it('31. shows a no-site prompt in the Tonight column when there is no active site', async () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => {
-      const els = screen.getAllByText(/Add an observing site.*see tonight's real altitude/i);
+      const els = screen.getAllByText(
+        /Add an observing site.*see tonight's real altitude/i,
+      );
       expect(els.length).toBeGreaterThanOrEqual(1);
     });
   });
 
   it('32. hides the no-site prompt and shows real tonight stats once a site is active', async () => {
-    const { __setObservingStateForTest } = await import('./observing-sites/site-store');
+    const { __setObservingStateForTest } = await import(
+      './observing-sites/site-store'
+    );
     __setObservingStateForTest({
       sites: [
         {
@@ -654,7 +758,9 @@ describe('TargetDetailV2 — no-site prompt (US6/T015/T018)', () => {
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => {
       expect(
-        screen.queryByText(/Add an observing site.*see tonight's real altitude/i),
+        screen.queryByText(
+          /Add an observing site.*see tonight's real altitude/i,
+        ),
       ).not.toBeInTheDocument();
       // Real max-alt stat renders once a site is active.
       expect(screen.getByText(/^Max alt/)).toBeInTheDocument();

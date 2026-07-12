@@ -8,7 +8,8 @@ import { useStatusSummary } from './useStatusSummary';
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
@@ -55,7 +56,10 @@ export function StatusBar() {
           (currently: Inbox folder/master count + per-frame-type breakdown).
           Sits left-of-center and is cleared automatically on route change. */}
       {pageStatus != null && (
-        <div className="alm-statusbar__page" data-testid="statusbar-page-status">
+        <div
+          className="alm-statusbar__page"
+          data-testid="statusbar-page-status"
+        >
           {pageStatus}
         </div>
       )}
@@ -70,7 +74,9 @@ export function StatusBar() {
           {formatCount(status.sessionCount)} {m.status_sessions_label()}
         </span>
         <span className="alm-statusbar__sep">·</span>
-        <span title={m.status_projects_title()}>{formatCount(status.projectCount)} {m.status_projects_label()}</span>
+        <span title={m.status_projects_title()}>
+          {formatCount(status.projectCount)} {m.status_projects_label()}
+        </span>
         <span className="alm-statusbar__sep">·</span>
         <span title={m.status_masters_title()}>
           {formatCount(status.calibrationCount)} {m.status_masters_label()}
@@ -80,17 +86,31 @@ export function StatusBar() {
       {/* RIGHT — persistent storage / cleanup health + log */}
       <div className="alm-statusbar__right">
         {status.cleanupReclaimableBytes > 0 && (
-          <span>{formatBytes(status.cleanupReclaimableBytes)} {m.status_reclaimable()}</span>
+          <span>
+            {formatBytes(status.cleanupReclaimableBytes)}{' '}
+            {m.status_reclaimable()}
+          </span>
         )}
         {status.volumes.map((vol) => {
           const usedPct =
-            vol.totalBytes > 0 ? Math.round(((vol.totalBytes - vol.freeBytes) / vol.totalBytes) * 100) : 0;
+            vol.totalBytes > 0
+              ? Math.round(
+                  ((vol.totalBytes - vol.freeBytes) / vol.totalBytes) * 100,
+                )
+              : 0;
           const label = vol.path.split(/[\\/]/).pop() || vol.path;
           return (
             <span
               key={vol.path}
-              className={clsx('alm-statusbar__vol', vol.warning && 'alm-statusbar__vol--warn')}
-              title={m.statusbar_vol_title({ path: vol.path, free: formatBytes(vol.freeBytes), total: formatBytes(vol.totalBytes) })}
+              className={clsx(
+                'alm-statusbar__vol',
+                vol.warning && 'alm-statusbar__vol--warn',
+              )}
+              title={m.statusbar_vol_title({
+                path: vol.path,
+                free: formatBytes(vol.freeBytes),
+                total: formatBytes(vol.totalBytes),
+              })}
             >
               <span>{label}</span>
               <span className="alm-statusbar__meter">

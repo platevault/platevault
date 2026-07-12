@@ -41,7 +41,9 @@ describe('RotationWarningNotice', () => {
   });
 
   it('renders the rotation-unavailable banner', () => {
-    render(<RotationWarningNotice warning={{ kind: 'rotation_unavailable' }} />);
+    render(
+      <RotationWarningNotice warning={{ kind: 'rotation_unavailable' }} />,
+    );
     const banner = screen.getByTestId('rotation-warning-rotation_unavailable');
     expect(banner).toBeInTheDocument();
     expect(banner).toHaveTextContent(/ROTATANG/);
@@ -57,6 +59,8 @@ describe('RotationWarningNotice', () => {
 
   it('exposes an accessible label on the warning icon', () => {
     render(<RotationWarningNotice warning={{ kind: 'deviation', deg: 0.6 }} />);
-    expect(screen.getByRole('img', { name: /rotation warning/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: /rotation warning/i }),
+    ).toBeInTheDocument();
   });
 });

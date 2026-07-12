@@ -79,7 +79,9 @@ describe('viewStateLabel', () => {
 
   it('falls back to the raw state string for unknown values', () => {
     // Cast to bypass TypeScript to test the default branch
-    expect(viewStateLabel('unknown_future_state' as never)).toBe('unknown_future_state');
+    expect(viewStateLabel('unknown_future_state' as never)).toBe(
+      'unknown_future_state',
+    );
   });
 });
 
@@ -207,7 +209,9 @@ describe('brokenItemStateLabel', () => {
   });
 
   it('falls back to the raw state string for unknown values', () => {
-    expect(brokenItemStateLabel('unknown_future_state' as never)).toBe('unknown_future_state');
+    expect(brokenItemStateLabel('unknown_future_state' as never)).toBe(
+      'unknown_future_state',
+    );
   });
 });
 
@@ -235,7 +239,9 @@ describe('observedStateLabel', () => {
   });
 
   it('falls back to the raw state string for unknown values', () => {
-    expect(observedStateLabel('unknown_future_state')).toBe('unknown_future_state');
+    expect(observedStateLabel('unknown_future_state')).toBe(
+      'unknown_future_state',
+    );
   });
 });
 
@@ -251,7 +257,7 @@ const sampleView: PreparedViewSummary = {
   items: [],
 };
 
-const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
+const ok = <T>(data: T) => ({ status: 'ok' as const, data });
 
 describe('listPreparedViews', () => {
   it('calls preparedview.list with projectId and returns views', async () => {
@@ -283,7 +289,10 @@ describe('removePreparedView', () => {
   });
 
   it('propagates errors from the backend', async () => {
-    mockRemove.mockRejectedValueOnce({ code: 'lifecycle.read_only', message: 'archived' });
+    mockRemove.mockRejectedValueOnce({
+      code: 'lifecycle.read_only',
+      message: 'archived',
+    });
 
     await expect(removePreparedView('view-arch')).rejects.toMatchObject({
       code: 'lifecycle.read_only',
@@ -293,7 +302,9 @@ describe('removePreparedView', () => {
 
 describe('regeneratePreparedView', () => {
   it('calls preparedview.regenerate with viewId and returns planId + unresolvedCount', async () => {
-    mockRegenerate.mockResolvedValueOnce(ok({ planId: 'plan-xyz', unresolvedItemCount: 2 }));
+    mockRegenerate.mockResolvedValueOnce(
+      ok({ planId: 'plan-xyz', unresolvedItemCount: 2 }),
+    );
 
     const result = await regeneratePreparedView('view-removed');
 
@@ -303,7 +314,10 @@ describe('regeneratePreparedView', () => {
   });
 
   it('surfaces view.not_found error', async () => {
-    mockRegenerate.mockRejectedValueOnce({ code: 'view.not_found', message: 'missing' });
+    mockRegenerate.mockRejectedValueOnce({
+      code: 'view.not_found',
+      message: 'missing',
+    });
 
     await expect(regeneratePreparedView('gone')).rejects.toMatchObject({
       code: 'view.not_found',
@@ -327,7 +341,11 @@ describe('verifySourceView', () => {
       ok({
         clean: false,
         brokenItems: [
-          { inventoryItemId: 'frame-1', viewRelativePath: '/dest/light1.fits', state: 'moved' },
+          {
+            inventoryItemId: 'frame-1',
+            viewRelativePath: '/dest/light1.fits',
+            state: 'moved',
+          },
         ],
       }),
     );
@@ -339,7 +357,10 @@ describe('verifySourceView', () => {
   });
 
   it('surfaces view.not_found error', async () => {
-    mockVerify.mockRejectedValueOnce({ code: 'view.not_found', message: 'missing' });
+    mockVerify.mockRejectedValueOnce({
+      code: 'view.not_found',
+      message: 'missing',
+    });
 
     await expect(verifySourceView('gone')).rejects.toMatchObject({
       code: 'view.not_found',

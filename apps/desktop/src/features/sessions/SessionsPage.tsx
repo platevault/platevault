@@ -37,10 +37,7 @@ import {
 } from './SessionsTable';
 import type { SessionSort, SessionSortCol } from './SessionsTable';
 import { SessionDetail } from './SessionDetail';
-import {
-  useInventorySources,
-  type InventoryFilters,
-} from './store';
+import { useInventorySources, type InventoryFilters } from './store';
 import { addToast } from '@/shared/toast';
 import { m } from '@/lib/i18n';
 import { revealInventoryPath } from './revealInventory';
@@ -59,7 +56,8 @@ export function filterSources(
 ): InventorySource[] {
   const q = query.trim().toLowerCase();
   if (!q && !filterName && !camera) return sources;
-  const matches = (v: string | null | undefined) => (v ?? '').toLowerCase().includes(q);
+  const matches = (v: string | null | undefined) =>
+    (v ?? '').toLowerCase().includes(q);
   return sources
     .map((src) => ({
       ...src,
@@ -89,7 +87,9 @@ export function fieldOptions(
       if (v) seen.add(v);
     }
   }
-  return [...seen].sort((a, b) => a.localeCompare(b)).map((v) => ({ value: v, label: v }));
+  return [...seen]
+    .sort((a, b) => a.localeCompare(b))
+    .map((v) => ({ value: v, label: v }));
 }
 
 export function SessionsPage() {
@@ -111,18 +111,20 @@ export function SessionsPage() {
   });
 
   // Group-by options share their labels with the table's grouping-hint footer.
-  const SESSION_DIMENSIONS: FilterOption[] = Object.entries(SESSION_DIM_LABELS).map(
-    ([value, label]) => ({ value, label: label() }),
-  );
+  const SESSION_DIMENSIONS: FilterOption[] = Object.entries(
+    SESSION_DIM_LABELS,
+  ).map(([value, label]) => ({ value, label: label() }));
 
   // Build filters from URL params and pass directly to useInventorySources.
   const filters: InventoryFilters = {};
-  if (sourceFilter && sourceFilter !== 'all') filters.sourceFilter = sourceFilter;
+  if (sourceFilter && sourceFilter !== 'all')
+    filters.sourceFilter = sourceFilter;
 
   const { data: response, loading, error } = useInventorySources(filters);
 
   const sources = useMemo(
-    () => filterSources(response?.sources ?? [], search, filterName, cameraFilter),
+    () =>
+      filterSources(response?.sources ?? [], search, filterName, cameraFilter),
     [response?.sources, search, filterName, cameraFilter],
   );
 
@@ -143,29 +145,40 @@ export function SessionsPage() {
 
   // Flatten all sessions across sources to find the selected one.
   const allSessions = response?.sources.flatMap((src) => src.sessions) ?? [];
-  const selectedSession = selected != null ? allSessions.find((s) => s.id === selected) : undefined;
+  const selectedSession =
+    selected != null ? allSessions.find((s) => s.id === selected) : undefined;
 
   // Resolve the selected session's owning source path for the Reveal action
   // (FR-007) — sessions carry only `sourceId`; the path lives on the source.
   const selectedSourcePath =
     selectedSession != null
-      ? response?.sources.find((src) => src.id === selectedSession.sourceId)?.path
+      ? response?.sources.find((src) => src.id === selectedSession.sourceId)
+          ?.path
       : undefined;
 
   // Clear stale selection when the session disappears after a filter change.
   const clearSelection = useCallback(
     () =>
-      navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
     [navigate],
   );
-  useStaleSelectionCleanup(selected, selectedSession !== undefined, clearSelection);
+  useStaleSelectionCleanup(
+    selected,
+    selectedSession !== undefined,
+    clearSelection,
+  );
 
   const onSelect = (id: string) =>
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
   const handleSort = useCallback((col: SessionSortCol) => {
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' },
     );
   }, []);
 
@@ -173,7 +186,10 @@ export function SessionsPage() {
   const handleReveal = useCallback(async () => {
     if (!selected || !selectedSourcePath) return;
     try {
-      await revealInventoryPath({ path: selectedSourcePath, sessionId: selected });
+      await revealInventoryPath({
+        path: selectedSourcePath,
+        sessionId: selected,
+      });
     } catch {
       addToast({ message: m.sessions_toast_reveal_error(), variant: 'error' });
     }

@@ -21,7 +21,13 @@
  *     dedicated path field exists in the wizard).
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -67,7 +73,9 @@ vi.mock('./StepName', () => ({
     <div data-testid="step-name">
       <input
         aria-label="Project name"
-        onChange={(e) => onChange({ name: e.target.value, workflowProfile: 'pixinsight' })}
+        onChange={(e) =>
+          onChange({ name: e.target.value, workflowProfile: 'pixinsight' })
+        }
       />
       {serverError && <span role="alert">{serverError.message}</span>}
     </div>
@@ -75,9 +83,17 @@ vi.mock('./StepName', () => ({
 }));
 
 vi.mock('./StepSources', () => ({
-  StepSources: ({ onChange }: { onChange: (d: { selectedSessionIds: string[] }) => void }) => (
+  StepSources: ({
+    onChange,
+  }: {
+    onChange: (d: { selectedSessionIds: string[] }) => void;
+  }) => (
     <div data-testid="step-sources">
-      <button onClick={() => onChange({ selectedSessionIds: ['sess-001', 'sess-002'] })}>
+      <button
+        onClick={() =>
+          onChange({ selectedSessionIds: ['sess-001', 'sess-002'] })
+        }
+      >
         Select sessions
       </button>
     </div>
@@ -87,7 +103,16 @@ vi.mock('./StepSources', () => ({
 vi.mock('./StepCalibration', () => ({
   StepCalibration: ({ onChange }: { onChange: (d: unknown) => void }) => (
     <div data-testid="step-calibration">
-      <button onClick={() => onChange({ flatMappings: {}, sharedDarkId: 'dark-001', sharedBiasId: '', sharedDarkFlatId: '' })}>
+      <button
+        onClick={() =>
+          onChange({
+            flatMappings: {},
+            sharedDarkId: 'dark-001',
+            sharedBiasId: '',
+            sharedDarkFlatId: '',
+          })
+        }
+      >
         Select dark master
       </button>
     </div>
@@ -110,14 +135,29 @@ vi.mock('@/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/ui')>();
   return {
     ...actual,
-    WizardShell: ({ children, summary }: { children: React.ReactNode; summary?: React.ReactNode }) => (
+    WizardShell: ({
+      children,
+      summary,
+    }: {
+      children: React.ReactNode;
+      summary?: React.ReactNode;
+    }) => (
       <div data-testid="wizard-shell">
         <div data-testid="wizard-summary">{summary}</div>
         <div data-testid="wizard-content">{children}</div>
       </div>
     ),
-    Btn: ({ children, onClick, disabled, 'data-testid': testid }: React.ButtonHTMLAttributes<HTMLButtonElement> & { 'data-testid'?: string }) => (
-      <button onClick={onClick} disabled={disabled} data-testid={testid}>{children}</button>
+    Btn: ({
+      children,
+      onClick,
+      disabled,
+      'data-testid': testid,
+    }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+      'data-testid'?: string;
+    }) => (
+      <button onClick={onClick} disabled={disabled} data-testid={testid}>
+        {children}
+      </button>
     ),
   };
 });
@@ -190,7 +230,9 @@ describe('T078c: wizard step navigation with session+calibration selection', () 
 
     // Navigate to step 2 (sources)
     fireEvent.click(screen.getByText(/Next: sources/i));
-    await waitFor(() => expect(screen.getByTestId('step-sources')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('step-sources')).toBeInTheDocument(),
+    );
 
     // The step has a "Select sessions" button
     expect(screen.getByText('Select sessions')).toBeInTheDocument();
@@ -213,7 +255,9 @@ describe('T078c: wizard step navigation with session+calibration selection', () 
 
     // Step 0 → 1
     fireEvent.click(screen.getByText(/Next: sources/i));
-    await waitFor(() => expect(screen.getByTestId('step-sources')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('step-sources')).toBeInTheDocument(),
+    );
 
     // Select sessions so canAdvance() at step 1 returns true
     fireEvent.click(screen.getByText('Select sessions'));
@@ -221,7 +265,9 @@ describe('T078c: wizard step navigation with session+calibration selection', () 
 
     // Step 1 → 2
     fireEvent.click(screen.getByText(/Next: calibration/i));
-    await waitFor(() => expect(screen.getByTestId('step-calibration')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('step-calibration')).toBeInTheDocument(),
+    );
 
     // The step has a "Select dark master" button
     expect(screen.getByText('Select dark master')).toBeInTheDocument();
@@ -241,20 +287,30 @@ describe('T078c: create project end-to-end', () => {
     fireEvent.change(nameInput, { target: { value: nameValue } });
 
     fireEvent.click(screen.getByText(/Next: sources/i));
-    await waitFor(() => expect(screen.getByTestId('step-sources')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('step-sources')).toBeInTheDocument(),
+    );
 
     // Select sessions so step 1 canAdvance = true
     fireEvent.click(screen.getByText('Select sessions'));
     await waitFor(() => expect(screen.getByText('2 sess')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText(/Next: calibration/i));
-    await waitFor(() => expect(screen.getByTestId('step-calibration')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('step-calibration')).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByText(/Next: source views/i));
-    await waitFor(() => expect(screen.getByTestId('step-views')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('step-views')).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByText(/Next: naming/i));
-    await waitFor(() => expect(screen.getByTestId('step-layout')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('step-layout')).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByText(/Next: review/i));
-    await waitFor(() => expect(screen.getByTestId('step-review')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('step-review')).toBeInTheDocument(),
+    );
   }
 
   it('shows "Create project" button at step 6 (Review)', async () => {
@@ -263,7 +319,9 @@ describe('T078c: create project end-to-end', () => {
 
     // Create project button appears at step 6
     expect(screen.getByTestId('wizard-create-btn')).toBeInTheDocument();
-    expect(screen.getByTestId('wizard-create-btn')).toHaveTextContent('Create project');
+    expect(screen.getByTestId('wizard-create-btn')).toHaveTextContent(
+      'Create project',
+    );
   });
 
   it('calls callCreateProject on clicking Create project', async () => {
@@ -405,7 +463,9 @@ describe('T078c: create project end-to-end', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('step-name')).toBeInTheDocument();
-      expect(screen.getByRole('alert')).toHaveTextContent(/unknown processing tool/i);
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /unknown processing tool/i,
+      );
     });
   });
 
@@ -422,7 +482,9 @@ describe('T078c: create project end-to-end', () => {
     // Stays on the review step (path has no dedicated step/field to return to).
     await waitFor(() => {
       expect(screen.getByTestId('step-review')).toBeInTheDocument();
-      expect(screen.getByRole('alert')).toHaveTextContent(/already uses this folder path/i);
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /already uses this folder path/i,
+      );
     });
     expect(mockAddToast).not.toHaveBeenCalled();
   });
@@ -430,7 +492,22 @@ describe('T078c: create project end-to-end', () => {
   it('blocks creation via the live duplicate-name pre-check without calling the backend', async () => {
     mockListProjects.mockResolvedValueOnce({
       status: 'ok',
-      data: [{ id: 'proj-existing', name: 'Existing Project', tool: 'PixInsight', lifecycle: 'active', path: 'projects/existing', notes: null, channelDrift: false, sourceCount: 0, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', blockedReasonKind: null, blockedReasonNote: null }],
+      data: [
+        {
+          id: 'proj-existing',
+          name: 'Existing Project',
+          tool: 'PixInsight',
+          lifecycle: 'active',
+          path: 'projects/existing',
+          notes: null,
+          channelDrift: false,
+          sourceCount: 0,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+          blockedReasonKind: null,
+          blockedReasonNote: null,
+        },
+      ],
     });
 
     render(<WizardPage />);

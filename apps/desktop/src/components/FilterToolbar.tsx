@@ -132,14 +132,24 @@ function GroupingSelects({ grouping }: { grouping: GroupingControl }) {
             value={value}
             disabled={disabled}
             onChange={(e) => setSlot(slot, e.target.value)}
-            aria-label={slot === 0 ? m.inbox_group_by_aria() : m.inbox_group_by_level_aria({ level: slot + 1 })}
+            aria-label={
+              slot === 0
+                ? m.inbox_group_by_aria()
+                : m.inbox_group_by_level_aria({ level: slot + 1 })
+            }
           >
-            <option value="">{slot === 0 ? m.inbox_controls_group_none() : m.inbox_controls_then_none()}</option>
+            <option value="">
+              {slot === 0
+                ? m.inbox_controls_group_none()
+                : m.inbox_controls_then_none()}
+            </option>
             {dimensions
               .filter((d) => d.value === value || !usedEarlier.has(d.value))
               .map((d) => (
                 <option key={d.value} value={d.value}>
-                  {slot === 0 ? m.inbox_groupby_chip_primary({ label: d.label }) : m.inbox_groupby_chip_secondary({ label: d.label })}
+                  {slot === 0
+                    ? m.inbox_groupby_chip_primary({ label: d.label })
+                    : m.inbox_groupby_chip_secondary({ label: d.label })}
                 </option>
               ))}
           </select>
@@ -226,12 +236,23 @@ function MultiSelect({
     <div className="alm-filterbar__field">
       <span className="alm-filterbar__field-label">{label}</span>
       <details className="alm-filterbar__multi" id={id}>
-        <summary className="alm-filterbar__multi-summary" aria-label={`${label}: ${summary}`}>
+        <summary
+          className="alm-filterbar__multi-summary"
+          aria-label={`${label}: ${summary}`}
+        >
           {summary}
         </summary>
-        <div className="alm-filterbar__multi-menu" role="group" aria-label={label}>
+        <div
+          className="alm-filterbar__multi-menu"
+          role="group"
+          aria-label={label}
+        >
           {options.map((o) => (
-            <label key={o.value} className="alm-filterbar__multi-option" htmlFor={`${id}-${o.value}`}>
+            <label
+              key={o.value}
+              className="alm-filterbar__multi-option"
+              htmlFor={`${id}-${o.value}`}
+            >
               <input
                 type="checkbox"
                 id={`${id}-${o.value}`}
@@ -320,15 +341,26 @@ export function FilterToolbar({
             variant="ghost"
             className="alm-filterbar__sort-dir"
             onClick={sort.onDirToggle}
-            aria-label={m.filter_sort_dir_aria({ dir: sort.dir === 'asc' ? m.filter_sort_dir_ascending() : m.filter_sort_dir_descending() })}
-            title={sort.dir === 'asc' ? m.filter_sort_dir_ascending() : m.filter_sort_dir_descending()}
+            aria-label={m.filter_sort_dir_aria({
+              dir:
+                sort.dir === 'asc'
+                  ? m.filter_sort_dir_ascending()
+                  : m.filter_sort_dir_descending(),
+            })}
+            title={
+              sort.dir === 'asc'
+                ? m.filter_sort_dir_ascending()
+                : m.filter_sort_dir_descending()
+            }
           >
             <span aria-hidden="true">{sort.dir === 'asc' ? '▲' : '▼'}</span>
           </Btn>
         </div>
       )}
 
-      {actions != null && <div className="alm-filterbar__actions">{actions}</div>}
+      {actions != null && (
+        <div className="alm-filterbar__actions">{actions}</div>
+      )}
     </div>
   );
 }

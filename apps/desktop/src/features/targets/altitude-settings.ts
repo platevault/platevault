@@ -15,7 +15,11 @@
  * threshold now survives relaunch and is not device-local-only).
  */
 
-import { useUsableAltitude, getUsableAltitude, saveUsableAltitude } from './observing-sites/site-store';
+import {
+  useUsableAltitude,
+  getUsableAltitude,
+  saveUsableAltitude,
+} from './observing-sites/site-store';
 import { USABLE_ALT_DEG } from './planner-altitude';
 
 /** Minimum allowed threshold value (degrees). */

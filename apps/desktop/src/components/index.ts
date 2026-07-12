@@ -34,7 +34,11 @@ export { DetailPane } from './DetailPane';
 export type { DetailPaneProps } from './DetailPane';
 // spec 043 §4 — tasks #100/#99/#101: shared detail panel + FactsKV helper.
 export { DetailPanel, FactsKV } from './DetailPanel';
-export type { DetailPanelProps, DetailPanelVariant, FactsKVProps } from './DetailPanel';
+export type {
+  DetailPanelProps,
+  DetailPanelVariant,
+  FactsKVProps,
+} from './DetailPanel';
 
 // Design v4 detail standard: identity header → metric line → dashboard grid
 // (primary column + unified rail panel), plus the centralized lifecycle.
@@ -61,4 +65,9 @@ export { PropertyTable } from './PropertyTable';
 export type { PropertyDef, PropertyTableProps } from './PropertyTable';
 
 // Legacy ListSidebar types re-exported for feature files pending migration.
-export type { SelectOption, FilterPill, DropdownDef, ActionDef } from './legacy-types';
+export type {
+  SelectOption,
+  FilterPill,
+  DropdownDef,
+  ActionDef,
+} from './legacy-types';

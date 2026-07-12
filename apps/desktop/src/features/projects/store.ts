@@ -6,18 +6,18 @@
  * eviction — replacing the old module-level singleton + unbounded Map.
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/data/queryKeys";
-import { queryClient as sharedQueryClient } from "@/data/queryClient";
-import { commands } from "@/bindings/index";
-import { unwrap } from "@/api/ipc";
-import { ipcArgs } from "@/lib/ipc-args";
-import { applyProjectLifecycleTransition } from "./lifecycleTransition";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/data/queryKeys';
+import { queryClient as sharedQueryClient } from '@/data/queryClient';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import { ipcArgs } from '@/lib/ipc-args';
+import { applyProjectLifecycleTransition } from './lifecycleTransition';
 import type {
   ProjectLifecycleState,
   LifecycleTransitionResponse,
-} from "./lifecycleTransition";
-import type { ProjectSummaryDto, ProjectDetailDto } from "@/bindings/index";
+} from './lifecycleTransition';
+import type { ProjectSummaryDto, ProjectDetailDto } from '@/bindings/index';
 import type {
   ProjectCreateRequest,
   ProjectCreateResult,
@@ -31,7 +31,7 @@ import type {
   ProjectChannelsReinferResult,
   ProjectChannelsDismissDriftRequest,
   ProjectChannelsDismissDriftResult,
-} from "@/bindings/index";
+} from '@/bindings/index';
 
 // Local IPC helpers — migrated off the hand-written @/api/commands wrappers
 // (spec 037) onto the generated bindings. unwrap() turns the generated Result
@@ -45,13 +45,17 @@ async function getProject008(args: { id: string }): Promise<ProjectDetailDto> {
   return unwrap(await commands.projectsGet(args.id));
 }
 
-async function createProject(req: ProjectCreateRequest): Promise<ProjectCreateResult> {
+async function createProject(
+  req: ProjectCreateRequest,
+): Promise<ProjectCreateResult> {
   return unwrap(
     await commands.projectsCreate(ipcArgs<typeof commands.projectsCreate>(req)),
   );
 }
 
-async function updateProject(req: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
+async function updateProject(
+  req: ProjectUpdateRequest,
+): Promise<ProjectUpdateResult> {
   return unwrap(
     await commands.projectsUpdate(ipcArgs<typeof commands.projectsUpdate>(req)),
   );
@@ -125,7 +129,9 @@ export function useCreateProject() {
   return useMutation<ProjectCreateResult, Error, ProjectCreateRequest>({
     mutationFn: createProject,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.all(),
+      });
     },
   });
 }
@@ -135,7 +141,9 @@ export function useUpdateProject() {
   return useMutation<ProjectUpdateResult, Error, ProjectUpdateRequest>({
     mutationFn: updateProject,
     onSuccess: (_data, variables) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.all(),
+      });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.projects.detail(variables.projectId),
       });
@@ -157,7 +165,11 @@ export function useAddProjectSource() {
 
 export function useRemoveProjectSource() {
   const queryClient = useQueryClient();
-  return useMutation<ProjectSourceRemoveResult, Error, ProjectSourceRemoveRequest>({
+  return useMutation<
+    ProjectSourceRemoveResult,
+    Error,
+    ProjectSourceRemoveRequest
+  >({
     mutationFn: removeProjectSource,
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({
@@ -169,7 +181,11 @@ export function useRemoveProjectSource() {
 
 export function useReinferChannels() {
   const queryClient = useQueryClient();
-  return useMutation<ProjectChannelsReinferResult, Error, ProjectChannelsReinferRequest>({
+  return useMutation<
+    ProjectChannelsReinferResult,
+    Error,
+    ProjectChannelsReinferRequest
+  >({
     mutationFn: reinferProjectChannels,
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({
@@ -181,7 +197,11 @@ export function useReinferChannels() {
 
 export function useDismissChannelDrift() {
   const queryClient = useQueryClient();
-  return useMutation<ProjectChannelsDismissDriftResult, Error, ProjectChannelsDismissDriftRequest>({
+  return useMutation<
+    ProjectChannelsDismissDriftResult,
+    Error,
+    ProjectChannelsDismissDriftRequest
+  >({
     mutationFn: dismissProjectChannelDrift,
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({
@@ -198,16 +218,26 @@ export function useDismissChannelDrift() {
 // that use these helpers (rather than the hooks) still refresh the list/detail
 // after a mutation (regression F1).
 
-export async function callCreateProject(req: ProjectCreateRequest): Promise<ProjectCreateResult> {
+export async function callCreateProject(
+  req: ProjectCreateRequest,
+): Promise<ProjectCreateResult> {
   const result = await createProject(req);
-  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+  void sharedQueryClient.invalidateQueries({
+    queryKey: queryKeys.projects.all(),
+  });
   return result;
 }
 
-export async function callUpdateProject(req: ProjectUpdateRequest): Promise<ProjectUpdateResult> {
+export async function callUpdateProject(
+  req: ProjectUpdateRequest,
+): Promise<ProjectUpdateResult> {
   const result = await updateProject(req);
-  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
-  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
+  void sharedQueryClient.invalidateQueries({
+    queryKey: queryKeys.projects.all(),
+  });
+  void sharedQueryClient.invalidateQueries({
+    queryKey: queryKeys.projects.detail(req.projectId),
+  });
   return result;
 }
 
@@ -215,7 +245,9 @@ export async function callAddProjectSource(
   req: ProjectSourceAddRequest,
 ): Promise<ProjectSourceAddResult> {
   const result = await addProjectSource(req);
-  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
+  void sharedQueryClient.invalidateQueries({
+    queryKey: queryKeys.projects.detail(req.projectId),
+  });
   return result;
 }
 
@@ -223,7 +255,9 @@ export async function callRemoveProjectSource(
   req: ProjectSourceRemoveRequest,
 ): Promise<ProjectSourceRemoveResult> {
   const result = await removeProjectSource(req);
-  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
+  void sharedQueryClient.invalidateQueries({
+    queryKey: queryKeys.projects.detail(req.projectId),
+  });
   return result;
 }
 
@@ -231,7 +265,9 @@ export async function callReinferChannels(
   req: ProjectChannelsReinferRequest,
 ): Promise<ProjectChannelsReinferResult> {
   const result = await reinferProjectChannels(req);
-  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
+  void sharedQueryClient.invalidateQueries({
+    queryKey: queryKeys.projects.detail(req.projectId),
+  });
   return result;
 }
 
@@ -239,7 +275,9 @@ export async function callDismissChannelDrift(
   req: ProjectChannelsDismissDriftRequest,
 ): Promise<ProjectChannelsDismissDriftResult> {
   const result = await dismissProjectChannelDrift(req);
-  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(req.projectId) });
+  void sharedQueryClient.invalidateQueries({
+    queryKey: queryKeys.projects.detail(req.projectId),
+  });
   return result;
 }
 
@@ -254,17 +292,21 @@ export async function callTransitionLifecycle(
   actionLabel?: string,
 ): Promise<LifecycleTransitionResponse> {
   const result = await applyProjectLifecycleTransition({
-    contractVersion: "2.0.0",
+    contractVersion: '2.0.0',
     requestId: crypto.randomUUID(),
-    entityType: "project",
+    entityType: 'project',
     entityId: projectId,
     currentState,
     nextState,
     actionLabel,
-    actor: "user",
+    actor: 'user',
   });
-  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
-  void sharedQueryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+  void sharedQueryClient.invalidateQueries({
+    queryKey: queryKeys.projects.all(),
+  });
+  void sharedQueryClient.invalidateQueries({
+    queryKey: queryKeys.projects.detail(projectId),
+  });
   return result;
 }
 
@@ -283,8 +325,10 @@ export function useTransitionLifecycle() {
     mutationFn: ({ projectId, currentState, nextState, actionLabel }) =>
       callTransitionLifecycle(projectId, currentState, nextState, actionLabel),
     onSuccess: (result, variables) => {
-      if (result.status === "success") {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+      if (result.status === 'success') {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.projects.all(),
+        });
         void queryClient.invalidateQueries({
           queryKey: queryKeys.projects.detail(variables.projectId),
         });

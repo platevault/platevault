@@ -62,10 +62,7 @@ import {
   DEFAULT_ENABLED_CATALOGUES,
   loadDefaultCatalogues,
 } from './catalogue-settings';
-import {
-  TargetsTable,
-  DEFAULT_TARGET_SORT,
-} from './TargetsTable';
+import { TargetsTable, DEFAULT_TARGET_SORT } from './TargetsTable';
 import type { TargetSort, TargetSortCol } from './TargetsTable';
 import { useAltitudeThreshold } from './altitude-settings';
 import { useFavourites } from './useFavourites';
@@ -213,7 +210,9 @@ export function TargetsPage() {
    * categories. Empty = no filter. When non-empty, only targets whose REAL
    * derived recommendation matches one of the selected categories are shown.
    */
-  const [filterRecommendations, setFilterRecommendations] = useState<Recommendation[]>([]);
+  const [filterRecommendations, setFilterRecommendations] = useState<
+    Recommendation[]
+  >([]);
   /**
    * User-configured usable-altitude threshold from Settings → Target Planner.
    * Subscribes to localStorage so updates in the Settings pane immediately
@@ -284,7 +283,9 @@ export function TargetsPage() {
       .targetList()
       .then(unwrap)
       .then((items) => setListState({ status: 'loaded', items }))
-      .catch(() => setListState({ status: 'error', message: m.targets_page_error_load() }));
+      .catch(() =>
+        setListState({ status: 'error', message: m.targets_page_error_load() }),
+      );
   }, []);
 
   useEffect(() => {
@@ -295,7 +296,11 @@ export function TargetsPage() {
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
   const clearSelection = useCallback(
-    () => navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+    () =>
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
     [navigate],
   );
 
@@ -309,7 +314,9 @@ export function TargetsPage() {
 
   const handleSort = useCallback((col: TargetSortCol) => {
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' },
     );
   }, []);
 
@@ -348,7 +355,11 @@ export function TargetsPage() {
     if (filterRecommendations.length > 0) {
       const selected = new Set(filterRecommendations);
       result = result.filter((t) => {
-        const { recommendation } = deriveRowMoonPlanning(t, night, guidanceParams);
+        const { recommendation } = deriveRowMoonPlanning(
+          t,
+          night,
+          guidanceParams,
+        );
         return selected.has(recommendation);
       });
     }
@@ -442,7 +453,9 @@ export function TargetsPage() {
               </span>
             </div>
           )}
-          <Btn size="sm" onClick={() => setAddOpen(true)}>{m.targets_add_target()}</Btn>
+          <Btn size="sm" onClick={() => setAddOpen(true)}>
+            {m.targets_add_target()}
+          </Btn>
         </>
       }
     />
@@ -454,7 +467,11 @@ export function TargetsPage() {
     // Tauri/Windows WebView by overriding .alm-listpage__main to overflow:hidden
     // and positioning .alm-targets-table__wrap absolutely within it.
     <div className="alm-targets-page">
-      <AddTargetDialog open={addOpen} onClose={() => setAddOpen(false)} onAdded={handleAdded} />
+      <AddTargetDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onAdded={handleAdded}
+      />
       <ListPageLayout
         topBar={topBar}
         detail={
@@ -471,7 +488,10 @@ export function TargetsPage() {
         detailLabel="Target details"
       >
         {listState.status === 'error' ? (
-          <EmptyState title={m.settings_advanced_log_error()} desc={listState.message} />
+          <EmptyState
+            title={m.settings_advanced_log_error()}
+            desc={listState.message}
+          />
         ) : (
           <TargetsTable
             targets={visibleTargets}
@@ -496,10 +516,10 @@ export function TargetsPage() {
             emptyMessage={
               isMyTargets
                 ? favouriteIds.size === 0
-                  // No stars yet — nudge the user to star something.
-                  ? m.targets_page_my_targets_no_favs()
-                  // Stars exist but filters excluded them all.
-                  : m.targets_page_my_targets_no_match()
+                  ? // No stars yet — nudge the user to star something.
+                    m.targets_page_my_targets_no_favs()
+                  : // Stars exist but filters excluded them all.
+                    m.targets_page_my_targets_no_match()
                 : m.targets_page_no_match()
             }
           />

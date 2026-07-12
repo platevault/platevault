@@ -16,7 +16,13 @@
  *   3. A reload (re-mount with `getSettings` returning the saved map) shows
  *      the override, not the fixture default.
  */
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockGetSettings } = vi.hoisted(() => ({
@@ -44,18 +50,26 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
     });
     render(<Cleanup save={vi.fn()} />);
 
-    const row = await screen.findByRole('row', { name: new RegExp(DARK_FRAMES_ROW) });
+    const row = await screen.findByRole('row', {
+      name: new RegExp(DARK_FRAMES_ROW),
+    });
     await waitFor(() => {
-      expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent('Keep');
+      expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent(
+        'Keep',
+      );
     });
   });
 
   it('defaults to the fixture action when no override is persisted', async () => {
     render(<Cleanup save={vi.fn()} />);
 
-    const row = await screen.findByRole('row', { name: new RegExp(DARK_FRAMES_ROW) });
+    const row = await screen.findByRole('row', {
+      name: new RegExp(DARK_FRAMES_ROW),
+    });
     await waitFor(() => {
-      expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent('Archive');
+      expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent(
+        'Archive',
+      );
     });
   });
 
@@ -63,7 +77,9 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
     const save = vi.fn();
     render(<Cleanup save={save} />);
 
-    const row = await screen.findByRole('row', { name: new RegExp(DARK_FRAMES_ROW) });
+    const row = await screen.findByRole('row', {
+      name: new RegExp(DARK_FRAMES_ROW),
+    });
     const keepBtn = within(row).getByRole('button', { name: 'Keep' });
 
     fireEvent.click(keepBtn);
@@ -82,7 +98,9 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
     // Mount-time `getSettings('cleanup')` is left unresolved until after the
     // user has already edited a row — reproduces the real race (mock IPC's
     // randomized latency letting the fetch resolve after a fast click).
-    let resolveGet: ((value: { values: Record<string, unknown> }) => void) | undefined;
+    let resolveGet:
+      | ((value: { values: Record<string, unknown> }) => void)
+      | undefined;
     mockGetSettings.mockReturnValue(
       new Promise((resolve) => {
         resolveGet = resolve;
@@ -91,10 +109,14 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
 
     render(<Cleanup save={vi.fn()} />);
 
-    const row = await screen.findByRole('row', { name: new RegExp(DARK_FRAMES_ROW) });
+    const row = await screen.findByRole('row', {
+      name: new RegExp(DARK_FRAMES_ROW),
+    });
     fireEvent.click(within(row).getByRole('button', { name: 'Keep' }));
     await waitFor(() => {
-      expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent('Keep');
+      expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent(
+        'Keep',
+      );
     });
 
     // The stale fetch now resolves with the (pre-edit) default — it must be
@@ -104,6 +126,8 @@ describe('Cleanup — per-type action overrides (spec 051 US3)', () => {
     // Give the resolved promise's `.then` a tick to run before asserting it
     // did NOT revert the row.
     await new Promise((r) => setTimeout(r, 0));
-    expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent('Keep');
+    expect(row.querySelector('.alm-seg__btn--active')).toHaveTextContent(
+      'Keep',
+    );
   });
 });

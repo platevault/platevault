@@ -91,7 +91,9 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
   const setFollowLogs = useCallback((v: boolean) => {
     setFollowLogsState(v);
     // Persist via settings.update (spec 018).
-    void commands.settingsUpdate('advanced', { rememberFollowLogs: v }).then(unwrap);
+    void commands
+      .settingsUpdate('advanced', { rememberFollowLogs: v })
+      .then(unwrap);
   }, []);
 
   return (

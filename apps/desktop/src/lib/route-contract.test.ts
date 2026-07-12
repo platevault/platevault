@@ -65,7 +65,9 @@ describe('makeValidateSearch (T051)', () => {
   });
 
   it('drops unknown keys (forward-compat for older links)', () => {
-    expect(validate({ selected: '3', junk: 'x', stale: 'y' })).toEqual({ selected: 3 });
+    expect(validate({ selected: '3', junk: 'x', stale: 'y' })).toEqual({
+      selected: 3,
+    });
   });
 
   it('coerces invalid values of known keys away (omits them)', () => {
@@ -81,7 +83,10 @@ describe('makeValidateSearch (T051)', () => {
 describe('special-character round-trip (T054)', () => {
   // validateSearch receives already-decoded values; the contract layer must
   // preserve them verbatim so encode -> decode round-trips unchanged.
-  const validate = makeValidateSearch({ q: parseString, lifecycle: parseCsvEnum(PROJECT_STATES) });
+  const validate = makeValidateSearch({
+    q: parseString,
+    lifecycle: parseCsvEnum(PROJECT_STATES),
+  });
 
   it('preserves spaces, plus, and commas inside a string value', () => {
     expect(validate({ q: 'a, b +c' })).toEqual({ q: 'a, b +c' });

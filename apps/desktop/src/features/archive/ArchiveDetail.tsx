@@ -29,7 +29,11 @@ export function ArchiveDetail({ item }: Props) {
             <Pill variant="ghost">{m.archive_status_pill()}</Pill>
           </>
         }
-        subtitle={item.originalPath !== '—' ? item.originalPath : m.archive_subtitle_no_path()}
+        subtitle={
+          item.originalPath !== '—'
+            ? item.originalPath
+            : m.archive_subtitle_no_path()
+        }
       />
 
       {/* Single column — no rail. The old rail (Status/Storage/Audit trail)
@@ -39,11 +43,31 @@ export function ArchiveDetail({ item }: Props) {
         <PropertyTable
           mode="view"
           properties={[
-            { key: 'archivedAt', label: m.archive_prop_archived_at(), value: item.archivedAt },
-            { key: 'reason', label: m.archive_prop_reason(), value: item.reason },
-            { key: 'entityType', label: m.archive_prop_entity_type(), value: item.entityType },
-            { key: 'size', label: m.archive_prop_size(), value: formatBytes(item.sizeBytes) },
-            { key: 'originalPath', label: m.archive_prop_original_path(), value: item.originalPath },
+            {
+              key: 'archivedAt',
+              label: m.archive_prop_archived_at(),
+              value: item.archivedAt,
+            },
+            {
+              key: 'reason',
+              label: m.archive_prop_reason(),
+              value: item.reason,
+            },
+            {
+              key: 'entityType',
+              label: m.archive_prop_entity_type(),
+              value: item.entityType,
+            },
+            {
+              key: 'size',
+              label: m.archive_prop_size(),
+              value: formatBytes(item.sizeBytes),
+            },
+            {
+              key: 'originalPath',
+              label: m.archive_prop_original_path(),
+              value: item.originalPath,
+            },
           ]}
         />
       </Section>
@@ -56,7 +80,11 @@ export function ArchiveDetail({ item }: Props) {
         ) : (
           <Table
             columns={[
-              { key: 'ts', label: m.archive_prop_date(), style: { width: 160 } },
+              {
+                key: 'ts',
+                label: m.archive_prop_date(),
+                style: { width: 160 },
+              },
               { key: 'detail', label: m.archive_prop_event() },
             ]}
             rows={history.map((h) => ({

@@ -58,7 +58,9 @@ export const DEFAULT_SESSION_SORT: SessionSort = { col: 'night', dir: 'desc' };
 
 // ── Grouping dimensions ────────────────────────────────────────────────────────
 
-export const SESSION_ACCESSORS: Readonly<Record<string, DimensionAccessor<InventorySession>>> = {
+export const SESSION_ACCESSORS: Readonly<
+  Record<string, DimensionAccessor<InventorySession>>
+> = {
   target: (s) => s.target ?? s.name,
   filter: (s) => s.filter,
   night: (s) => s.capturedOn,
@@ -81,11 +83,18 @@ export const SESSION_DIM_LABELS: Readonly<Record<string, () => string>> = {
 
 // ── Sort helpers ────────────────────────────────────────────────────────────────
 
-function compareStr(a: string | null | undefined, b: string | null | undefined): number {
+function compareStr(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number {
   return (a ?? '').localeCompare(b ?? '');
 }
 
-function compareSessions(a: InventorySession, b: InventorySession, sort: SessionSort): number {
+function compareSessions(
+  a: InventorySession,
+  b: InventorySession,
+  sort: SessionSort,
+): number {
   let cmp = 0;
   switch (sort.col) {
     case 'target':
@@ -115,13 +124,42 @@ function compareSessions(a: InventorySession, b: InventorySession, sort: Session
 // `label` is a render-time thunk so headers re-read the active locale (spec 046 #8).
 // spec 041 FR-051 (T076): the `state` column is dropped along with the session
 // review-state machine — sessions no longer have a review state to display.
-const COLUMNS: Array<{ key: string; label: () => string; sort?: SessionSortCol; className?: string }> = [
-  { key: 'target', label: () => m.projects_create_target_label(), sort: 'target' },
+const COLUMNS: Array<{
+  key: string;
+  label: () => string;
+  sort?: SessionSortCol;
+  className?: string;
+}> = [
+  {
+    key: 'target',
+    label: () => m.projects_create_target_label(),
+    sort: 'target',
+  },
   { key: 'filter', label: () => m.common_filter(), sort: 'filter' },
-  { key: 'frames', label: () => m.projects_wizard_col_frames(), sort: 'frames', className: 'alm-cell--num' },
-  { key: 'integration', label: () => m.projects_wizard_col_integration(), sort: 'exposure', className: 'alm-cell--mono' },
-  { key: 'night', label: () => m.sessions_col_night(), sort: 'night', className: 'alm-cell--mono' },
-  { key: 'camera', label: () => m.settings_calmatch_camera(), sort: 'camera', className: 'alm-cell--muted' },
+  {
+    key: 'frames',
+    label: () => m.projects_wizard_col_frames(),
+    sort: 'frames',
+    className: 'alm-cell--num',
+  },
+  {
+    key: 'integration',
+    label: () => m.projects_wizard_col_integration(),
+    sort: 'exposure',
+    className: 'alm-cell--mono',
+  },
+  {
+    key: 'night',
+    label: () => m.sessions_col_night(),
+    sort: 'night',
+    className: 'alm-cell--mono',
+  },
+  {
+    key: 'camera',
+    label: () => m.settings_calmatch_camera(),
+    sort: 'camera',
+    className: 'alm-cell--muted',
+  },
   { key: 'projects', label: () => m.common_projects() },
 ];
 
@@ -176,7 +214,8 @@ export function SessionsTable({
   // table is a TRUE flat list (Inbox-parity): plain item rows, no synthetic
   // "All" group header (groupByDimensions would emit an `__all__` node).
   const tree = useMemo(
-    () => (grouped ? groupByDimensions(allSessions, dims, SESSION_ACCESSORS) : []),
+    () =>
+      grouped ? groupByDimensions(allSessions, dims, SESSION_ACCESSORS) : [],
     [grouped, allSessions, dims],
   );
 
@@ -184,7 +223,11 @@ export function SessionsTable({
     () =>
       grouped
         ? flattenVisibleGroups(tree, collapsed)
-        : allSessions.map((s) => ({ kind: 'item' as const, item: s, depth: 0 })),
+        : allSessions.map((s) => ({
+            kind: 'item' as const,
+            item: s,
+            depth: 0,
+          })),
     [grouped, tree, collapsed, allSessions],
   );
 
@@ -302,7 +345,10 @@ export function SessionsTable({
         />
       )}
       {groupingHint && (
-        <div className="alm-listtable__foot" data-testid="sessions-grouping-hint">
+        <div
+          className="alm-listtable__foot"
+          data-testid="sessions-grouping-hint"
+        >
           {groupingHint}
         </div>
       )}

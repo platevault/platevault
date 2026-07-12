@@ -26,7 +26,10 @@ function makeDispatch(result: unknown = { status: 'ok' }): DispatchFn {
   return async (_cmd, _args) => result;
 }
 
-function makeFailingDispatch(code = 'not_found', message = 'Not found'): DispatchFn {
+function makeFailingDispatch(
+  code = 'not_found',
+  message = 'Not found',
+): DispatchFn {
   return async (_cmd, _args) => {
     throw Object.assign(new Error(message), { code });
   };
@@ -81,7 +84,9 @@ describe('recorder ring buffer', () => {
 
   it('records failed call with error, does not store response', async () => {
     const dispatch = wrap(makeFailingDispatch('not_found', 'Not found'), true);
-    await expect(dispatch('targets.get', { id: 'x' })).rejects.toThrow('Not found');
+    await expect(dispatch('targets.get', { id: 'x' })).rejects.toThrow(
+      'Not found',
+    );
 
     const snap = getCallSnapshot();
     expect(snap).toHaveLength(1);
@@ -146,7 +151,10 @@ describe('redactPayload', () => {
 
   it('redacts "token" fields at any depth', () => {
     const result = redactPayload({ auth: { token: 'abc', type: 'bearer' } });
-    const auth = (result as Record<string, unknown>).auth as Record<string, unknown>;
+    const auth = (result as Record<string, unknown>).auth as Record<
+      string,
+      unknown
+    >;
     expect(auth.token).toBe('<redacted>');
     expect(auth.type).toBe('bearer');
   });

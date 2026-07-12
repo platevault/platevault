@@ -61,7 +61,10 @@ const sessionDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/sessions/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({ to: '/sessions', search: selectedSearchString(params.id) });
+    throw redirect({
+      to: '/sessions',
+      search: selectedSearchString(params.id),
+    });
   },
 });
 
@@ -99,7 +102,10 @@ const calibrationDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/calibration/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({ to: '/calibration', search: selectedSearchString(params.id) });
+    throw redirect({
+      to: '/calibration',
+      search: selectedSearchString(params.id),
+    });
   },
 });
 
@@ -151,7 +157,10 @@ const projectDetailRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/projects/$id',
   beforeLoad: ({ params }) => {
-    throw redirect({ to: '/projects', search: selectedSearchString(params.id) });
+    throw redirect({
+      to: '/projects',
+      search: selectedSearchString(params.id),
+    });
   },
 });
 

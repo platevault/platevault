@@ -7,7 +7,12 @@ export interface ListDetailLayoutProps {
   sidebar?: ReactNode;
 }
 
-export function ListDetailLayout({ topBar, list, detail, sidebar }: ListDetailLayoutProps) {
+export function ListDetailLayout({
+  topBar,
+  list,
+  detail,
+  sidebar,
+}: ListDetailLayoutProps) {
   if (sidebar) {
     return (
       <>

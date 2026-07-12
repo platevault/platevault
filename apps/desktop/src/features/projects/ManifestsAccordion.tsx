@@ -38,7 +38,10 @@ export interface ManifestsAccordionProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsAccordionProps) {
+export function ManifestsAccordion({
+  projectId,
+  defaultOpen = true,
+}: ManifestsAccordionProps) {
   const [manifests, setManifests] = useState<ManifestSummaryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -58,7 +61,10 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          const msg = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
+          const msg =
+            typeof err === 'string'
+              ? err
+              : ((err as Error)?.message ?? 'unknown');
           setFetchError(msg);
         }
       })
@@ -84,8 +90,14 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
         const resp = await getManifest({ manifestId: id });
         setBodyMap((prev) => ({ ...prev, [id]: resp.manifest.body }));
       } catch (err: unknown) {
-        const msg = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
-        addToast({ message: m.projects_manifests_load_body_failed({ error: msg }), variant: 'error' });
+        const msg =
+          typeof err === 'string'
+            ? err
+            : ((err as Error)?.message ?? 'unknown');
+        addToast({
+          message: m.projects_manifests_load_body_failed({ error: msg }),
+          variant: 'error',
+        });
       } finally {
         setBodyLoading(null);
       }
@@ -94,28 +106,26 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
   );
 
   // Reveal manifest file in OS file manager.
-  const handleReveal = useCallback(
-    async (manifest: ManifestSummaryDto) => {
-      setRevealWorking(manifest.id);
-      try {
-        await revealManifestInOs({ path: manifest.path });
-      } catch (err: unknown) {
-        const msg = typeof err === 'string' ? err : (err as Error)?.message ?? m.projects_manifests_reveal_failed_fallback();
-        addToast({ message: msg, variant: 'error' });
-      } finally {
-        setRevealWorking(null);
-      }
-    },
-    [],
-  );
+  const handleReveal = useCallback(async (manifest: ManifestSummaryDto) => {
+    setRevealWorking(manifest.id);
+    try {
+      await revealManifestInOs({ path: manifest.path });
+    } catch (err: unknown) {
+      const msg =
+        typeof err === 'string'
+          ? err
+          : ((err as Error)?.message ??
+            m.projects_manifests_reveal_failed_fallback());
+      addToast({ message: msg, variant: 'error' });
+    } finally {
+      setRevealWorking(null);
+    }
+  }, []);
 
   if (loading) {
     return (
       <Section title={m.projects_manifests_title()} defaultOpen={defaultOpen}>
-        <div
-          data-testid="manifests-loading"
-          className="alm-manifests__status"
-        >
+        <div data-testid="manifests-loading" className="alm-manifests__status">
           {m.common_loading()}
         </div>
       </Section>
@@ -136,21 +146,19 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
   }
 
   return (
-    <Section title={m.projects_manifests_title()} count={manifests.length} defaultOpen={defaultOpen}>
+    <Section
+      title={m.projects_manifests_title()}
+      count={manifests.length}
+      defaultOpen={defaultOpen}
+    >
       {manifests.length === 0 ? (
-        <div
-          data-testid="manifests-empty"
-          className="alm-manifests__status"
-        >
+        <div data-testid="manifests-empty" className="alm-manifests__status">
           {m.projects_manifests_empty()}
         </div>
       ) : (
         <div data-testid="manifests-list">
           {manifests.map((manifest) => (
-            <div
-              key={manifest.id}
-              className="alm-manifests__item"
-            >
+            <div key={manifest.id} className="alm-manifests__item">
               {/* Row header */}
               <div className="alm-manifests__row-header">
                 <button
@@ -159,7 +167,9 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
                   className="alm-manifests__toggle-btn"
                   aria-expanded={expandedId === manifest.id}
                 >
-                  <span className="alm-manifests__reason-label">{manifestReasonLabel(manifest.reason)}</span>
+                  <span className="alm-manifests__reason-label">
+                    {manifestReasonLabel(manifest.reason)}
+                  </span>
                   <span className="alm-manifests__timestamp">
                     {formatManifestTimestamp(manifest.timestamp)}
                   </span>
@@ -187,11 +197,17 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
                   ) : bodyMap[manifest.id] ? (
                     <div>
                       <div>
-                        <strong>{m.projects_manifests_lifecycle_label()}</strong> {bodyMap[manifest.id].lifecycleState}
+                        <strong>
+                          {m.projects_manifests_lifecycle_label()}
+                        </strong>{' '}
+                        {bodyMap[manifest.id].lifecycleState}
                       </div>
                       {bodyMap[manifest.id].workflowProfile && (
                         <div>
-                          <strong>{m.projects_manifests_workflow_label()}</strong> {bodyMap[manifest.id].workflowProfile}
+                          <strong>
+                            {m.projects_manifests_workflow_label()}
+                          </strong>{' '}
+                          {bodyMap[manifest.id].workflowProfile}
                         </div>
                       )}
                       {bodyMap[manifest.id].notes && (
@@ -202,9 +218,7 @@ export function ManifestsAccordion({ projectId, defaultOpen = true }: ManifestsA
                           </div>
                         </div>
                       )}
-                      <div className="alm-manifests__path">
-                        {manifest.path}
-                      </div>
+                      <div className="alm-manifests__path">{manifest.path}</div>
                     </div>
                   ) : null}
                 </div>

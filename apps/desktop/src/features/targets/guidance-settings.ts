@@ -46,7 +46,9 @@ function clamp(n: number, lo: number, hi: number): number {
  */
 export function coerceParams(value: unknown): MoonAvoidanceParams {
   const src =
-    value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+    value && typeof value === 'object'
+      ? (value as Record<string, unknown>)
+      : {};
   const out = {} as MoonAvoidanceParams;
   for (const band of BANDS) {
     const fallback = DEFAULT_MOON_AVOIDANCE[band];
@@ -110,7 +112,11 @@ export async function saveGuidanceParams(
   params: MoonAvoidanceParams,
 ): Promise<void> {
   const clean = coerceParams(params);
-  unwrap(await commands.settingsUpdate(PLANNER_SCOPE, { [MOON_AVOIDANCE_KEY]: clean }));
+  unwrap(
+    await commands.settingsUpdate(PLANNER_SCOPE, {
+      [MOON_AVOIDANCE_KEY]: clean,
+    }),
+  );
   current = clean;
   emit();
 }

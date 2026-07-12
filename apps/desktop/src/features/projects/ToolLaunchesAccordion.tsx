@@ -60,7 +60,10 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
     >
       {/* Kind badge */}
       <span
-        className={`artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge` + (isFallback ? ' alm-tool-launches__kind-badge--fallback' : '')}
+        className={
+          `artifact-kind-badge artifact-kind-${artifact.kind} alm-tool-launches__kind-badge` +
+          (isFallback ? ' alm-tool-launches__kind-badge--fallback' : '')
+        }
         title={
           isFallback
             ? m.projects_toollaunch_low_confidence({ kind: artifact.kind })
@@ -72,7 +75,10 @@ function ArtifactRow({ artifact, projectId, onResolved }: ArtifactRowProps) {
 
       {/* File name — strikethrough when missing */}
       <span
-        className={'artifact-file-name alm-tool-launches__file-name' + (isMissing ? ' alm-tool-launches__file-name--missing' : '')}
+        className={
+          'artifact-file-name alm-tool-launches__file-name' +
+          (isMissing ? ' alm-tool-launches__file-name--missing' : '')
+        }
         title={artifact.path}
       >
         {fileName}
@@ -118,7 +124,11 @@ interface GroupSectionProps {
   onAction: () => void;
 }
 
-function ArtifactGroupSection({ group, projectId, onAction }: GroupSectionProps) {
+function ArtifactGroupSection({
+  group,
+  projectId,
+  onAction,
+}: GroupSectionProps) {
   const label = group.toolLaunchId
     ? m.projects_toollaunch_label({ id: group.toolLaunchId.slice(0, 8) })
     : m.projects_toollaunch_unattributed();
@@ -166,7 +176,11 @@ export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
   const groups = groupArtifactsByLaunch(artifacts, launchOrder);
 
   if (loading) {
-    return <div className="tool-launches-loading alm-tool-launches__loading">{m.projects_artifacts_loading()}</div>;
+    return (
+      <div className="tool-launches-loading alm-tool-launches__loading">
+        {m.projects_artifacts_loading()}
+      </div>
+    );
   }
 
   if (error) {
@@ -186,7 +200,10 @@ export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
   }
 
   return (
-    <div className="tool-launches-accordion" data-testid="tool-launches-accordion">
+    <div
+      className="tool-launches-accordion"
+      data-testid="tool-launches-accordion"
+    >
       {groups.map((group, idx) => (
         <ArtifactGroupSection
           key={group.toolLaunchId ?? `unattributed-${idx}`}

@@ -8,13 +8,24 @@ import { useState, useEffect, useSyncExternalStore } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Btn } from '@/ui';
 import { getSettings, restartFirstRun } from './settingsIpc';
-import { getGuidedState, restartGuidedFlow, type GuidedFlowStateDto } from '@/features/guided/store';
+import {
+  getGuidedState,
+  restartGuidedFlow,
+  type GuidedFlowStateDto,
+} from '@/features/guided/store';
 import { STEP_ORDER } from '@/features/guided/store';
 import { m } from '@/lib/i18n';
 import { errMessage } from '@/lib/errors';
 import { setPreference } from '@/data/preferences';
-import { resetWizardStateWithSources, type SourceEntry } from '@/features/setup/sources-store';
-import { SettingsSection, SettingsRow, RestoreDefaultsBtn } from './SettingsKit';
+import {
+  resetWizardStateWithSources,
+  type SourceEntry,
+} from '@/features/setup/sources-store';
+import {
+  SettingsSection,
+  SettingsRow,
+  RestoreDefaultsBtn,
+} from './SettingsKit';
 import {
   getUpdateSnapshot,
   subscribeUpdate,
@@ -32,12 +43,17 @@ type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 export function Advanced({ save }: AdvancedProps) {
   const navigate = useNavigate();
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
-  const [guidedState, setGuidedState] = useState<GuidedFlowStateDto | null>(null);
+  const [guidedState, setGuidedState] = useState<GuidedFlowStateDto | null>(
+    null,
+  );
   const [guidedRestarting, setGuidedRestarting] = useState(false);
   const [firstRunConfirming, setFirstRunConfirming] = useState(false);
   const [firstRunRestarting, setFirstRunRestarting] = useState(false);
   const [firstRunError, setFirstRunError] = useState<string | null>(null);
-  const pendingUpdate = useSyncExternalStore(subscribeUpdate, getUpdateSnapshot);
+  const pendingUpdate = useSyncExternalStore(
+    subscribeUpdate,
+    getUpdateSnapshot,
+  );
   const [installing, setInstalling] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
 
@@ -61,7 +77,7 @@ export function Advanced({ save }: AdvancedProps) {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load guided flow state on mount (spec 010, T042).
@@ -71,8 +87,12 @@ export function Advanced({ save }: AdvancedProps) {
       .then((state) => {
         if (!cancelled) setGuidedState(state);
       })
-      .catch(() => {/* Backend unavailable — hide control */});
-    return () => { cancelled = true; };
+      .catch(() => {
+        /* Backend unavailable — hide control */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleGuidedRestart = async () => {
@@ -103,12 +123,14 @@ export function Advanced({ save }: AdvancedProps) {
       // Prefill the wizard's working buffer with the currently registered
       // sources (A7) — RegisterSourceResponse has no scanDepth, so default to
       // 'recursive' per FR-017.
-      const prefilled: SourceEntry[] = response.prefilledSources.map((source) => ({
-        path: source.path,
-        kind: source.kind,
-        scanDepth: 'recursive',
-        organizationState: source.organizationState,
-      }));
+      const prefilled: SourceEntry[] = response.prefilledSources.map(
+        (source) => ({
+          path: source.path,
+          kind: source.kind,
+          scanDepth: 'recursive',
+          organizationState: source.organizationState,
+        }),
+      );
       resetWizardStateWithSources(prefilled);
       setPreference('setupCompleted', false);
       setFirstRunConfirming(false);
@@ -142,16 +164,30 @@ export function Advanced({ save }: AdvancedProps) {
       {/* Database info */}
       <SettingsSection
         title={m.settings_advanced_db_title()}
-        action={<Btn size="sm" onClick={handleExport}>{m.settings_advanced_db_export()}</Btn>}
+        action={
+          <Btn size="sm" onClick={handleExport}>
+            {m.settings_advanced_db_export()}
+          </Btn>
+        }
       >
         <SettingsRow label={m.settings_advanced_db_location()}>
           {/* eslint-disable-next-line alm/no-user-string -- filesystem path identifier, not translatable */}
-          <code className="alm-mono alm-adv-settings__db-path">~/.alm/astro-library.db</code>
+          <code className="alm-mono alm-adv-settings__db-path">
+            ~/.alm/astro-library.db
+          </code>
         </SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_engine()}>{m.settings_advanced_db_engine_value()}</SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_size()}>{m.settings_advanced_db_size_value()}</SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_schema()}>{m.settings_advanced_db_schema_value()}</SettingsRow>
-        <SettingsRow label={m.settings_advanced_db_records()}>{m.settings_advanced_db_records_value()}</SettingsRow>
+        <SettingsRow label={m.settings_advanced_db_engine()}>
+          {m.settings_advanced_db_engine_value()}
+        </SettingsRow>
+        <SettingsRow label={m.settings_advanced_db_size()}>
+          {m.settings_advanced_db_size_value()}
+        </SettingsRow>
+        <SettingsRow label={m.settings_advanced_db_schema()}>
+          {m.settings_advanced_db_schema_value()}
+        </SettingsRow>
+        <SettingsRow label={m.settings_advanced_db_records()}>
+          {m.settings_advanced_db_records_value()}
+        </SettingsRow>
       </SettingsSection>
 
       {/* Log level — persisted via spec 018 settings backend */}
@@ -207,7 +243,9 @@ export function Advanced({ save }: AdvancedProps) {
                 disabled={guidedRestarting}
                 data-testid="guided-restart-btn"
               >
-                {guidedRestarting ? m.common_restarting() : m.settings_advanced_restart_guided()}
+                {guidedRestarting
+                  ? m.common_restarting()
+                  : m.settings_advanced_restart_guided()}
               </Btn>
             </div>
           </SettingsRow>
@@ -262,7 +300,9 @@ export function Advanced({ save }: AdvancedProps) {
             )}
             {firstRunError && (
               <div className="alm-settings__error" role="alert">
-                {m.settings_advanced_firstrun_restart_error({ message: firstRunError })}
+                {m.settings_advanced_firstrun_restart_error({
+                  message: firstRunError,
+                })}
               </div>
             )}
           </div>
@@ -275,7 +315,9 @@ export function Advanced({ save }: AdvancedProps) {
           <div className="alm-adv-settings__control-col">
             <p className="alm-adv-settings__control-desc">
               {pendingUpdate
-                ? m.settings_advanced_updates_available({ version: pendingUpdate.version })
+                ? m.settings_advanced_updates_available({
+                    version: pendingUpdate.version,
+                  })
                 : m.settings_advanced_updates_uptodate()}
             </p>
             {pendingUpdate && (

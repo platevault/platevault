@@ -35,7 +35,11 @@ const { mockSendToTrash, mockPermanentlyDelete } = vi.hoisted(() => ({
   mockPermanentlyDelete: vi.fn(),
 }));
 
-const archiveListState: { data: ArchiveEntry[] | undefined; loading: boolean; error: Error | undefined } = {
+const archiveListState: {
+  data: ArchiveEntry[] | undefined;
+  loading: boolean;
+  error: Error | undefined;
+} = {
   data: [],
   loading: false,
   error: undefined,
@@ -45,7 +49,10 @@ vi.mock('./store', () => ({
   useArchiveList: () => archiveListState,
   useArchiveAudit: () => ({ data: [], loading: false, error: undefined }),
   useSendToTrash: () => ({ mutate: mockSendToTrash, isPending: false }),
-  usePermanentlyDelete: () => ({ mutate: mockPermanentlyDelete, isPending: false }),
+  usePermanentlyDelete: () => ({
+    mutate: mockPermanentlyDelete,
+    isPending: false,
+  }),
 }));
 
 const mockNavigate = vi.fn();
@@ -58,7 +65,9 @@ vi.mock('@tanstack/react-router', () => ({
 
 import { ArchivePage } from './ArchivePage';
 
-function makeEntry(overrides: Partial<ArchiveEntry> & { id: string }): ArchiveEntry {
+function makeEntry(
+  overrides: Partial<ArchiveEntry> & { id: string },
+): ArchiveEntry {
   return {
     name: 'NGC 7000 · HOO (v1)',
     entityType: 'project',
@@ -89,7 +98,9 @@ describe('ArchivePage (spec 017 WP-B)', () => {
   it('2. error state renders an error indicator', () => {
     archiveListState.error = new Error('db down');
     render(<ArchivePage />);
-    expect(screen.getByText('Could not load archived items.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Could not load archived items.'),
+    ).toBeInTheDocument();
   });
 
   it('3. empty state renders when there are no archived projects', () => {
@@ -98,22 +109,30 @@ describe('ArchivePage (spec 017 WP-B)', () => {
   });
 
   it('4. renders entries and selecting one shows the detail pane', () => {
-    archiveListState.data = [makeEntry({ id: 'proj-1', name: 'NGC 7000 · HOO (v1)' })];
+    archiveListState.data = [
+      makeEntry({ id: 'proj-1', name: 'NGC 7000 · HOO (v1)' }),
+    ];
     render(<ArchivePage />);
     fireEvent.click(screen.getByText('NGC 7000 · HOO (v1)'));
     expect(mockNavigate).toHaveBeenCalled();
   });
 
   it('5. management buttons are disabled when archivedViaPlanId is null', () => {
-    archiveListState.data = [makeEntry({ id: 'proj-1', archivedViaPlanId: null })];
+    archiveListState.data = [
+      makeEntry({ id: 'proj-1', archivedViaPlanId: null }),
+    ];
     mockSelectedId.current = 'proj-1';
     render(<ArchivePage />);
     expect(screen.getByText('Send to trash').closest('button')).toBeDisabled();
-    expect(screen.getByText('Delete permanently').closest('button')).toBeDisabled();
+    expect(
+      screen.getByText('Delete permanently').closest('button'),
+    ).toBeDisabled();
   });
 
   it('6. send to trash calls the mutation with the plan id', () => {
-    archiveListState.data = [makeEntry({ id: 'proj-1', archivedViaPlanId: 'plan-001' })];
+    archiveListState.data = [
+      makeEntry({ id: 'proj-1', archivedViaPlanId: 'plan-001' }),
+    ];
     mockSelectedId.current = 'proj-1';
     render(<ArchivePage />);
     fireEvent.click(screen.getByText('Send to trash'));
@@ -121,7 +140,9 @@ describe('ArchivePage (spec 017 WP-B)', () => {
   });
 
   it('7. delete permanently gates on typing DELETE, then calls the mutation', async () => {
-    archiveListState.data = [makeEntry({ id: 'proj-1', archivedViaPlanId: 'plan-001' })];
+    archiveListState.data = [
+      makeEntry({ id: 'proj-1', archivedViaPlanId: 'plan-001' }),
+    ];
     mockSelectedId.current = 'proj-1';
     render(<ArchivePage />);
 
@@ -175,7 +196,9 @@ describe('ArchivePage — spec 043 single-column layout', () => {
       makeEntry({ id: 'proj-2', name: 'M31 · LRGB' }),
     ];
     render(<ArchivePage />);
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'M31' } });
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'M31' },
+    });
     expect(screen.queryByTestId('archive-row-proj-1')).toBeNull();
     expect(screen.getByTestId('archive-row-proj-2')).toBeInTheDocument();
   });

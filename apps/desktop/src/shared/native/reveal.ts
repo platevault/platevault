@@ -18,7 +18,13 @@ import { useAsyncAction } from './useAsyncAction';
 // ---------------------------------------------------------------------------
 
 /** Valid entity kinds for audit correlation (must match Rust EntityKind enum). */
-export type EntityKind = 'inbox_item' | 'inventory_row' | 'project_manifest' | 'master_calibration' | 'registered_source' | 'other';
+export type EntityKind =
+  | 'inbox_item'
+  | 'inventory_row'
+  | 'project_manifest'
+  | 'master_calibration'
+  | 'registered_source'
+  | 'other';
 
 /** Context passed alongside the reveal request for audit correlation. */
 export interface RevealContext {
@@ -100,8 +106,16 @@ export async function revealInOs(
   } catch (err: unknown) {
     const code = isContractError(err) ? err.code : '';
     const message = isContractError(err) ? err.message : errMessage(err);
-    if (code === 'path.not_exists' || message.includes('not found') || message.includes('does not exist')) {
-      throw new RevealError_impl('path.not_exists', `Path does not exist: ${path}`, path);
+    if (
+      code === 'path.not_exists' ||
+      message.includes('not found') ||
+      message.includes('does not exist')
+    ) {
+      throw new RevealError_impl(
+        'path.not_exists',
+        `Path does not exist: ${path}`,
+        path,
+      );
     }
     throw new RevealError_impl('os.command_failed', message, path);
   }

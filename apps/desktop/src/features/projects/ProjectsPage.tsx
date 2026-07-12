@@ -63,7 +63,10 @@ const LIFECYCLE_OPTIONS: FilterOption[] = [
 ].map((value) => ({ value, label: projectStateLabel(value) }));
 
 /** Client-side text search over name + tool. */
-function filterBySearch(projects: ProjectSummaryDto[], query: string): ProjectSummaryDto[] {
+function filterBySearch(
+  projects: ProjectSummaryDto[],
+  query: string,
+): ProjectSummaryDto[] {
   const q = query.trim().toLowerCase();
   if (!q) return projects;
   return projects.filter(
@@ -101,8 +104,14 @@ export function ProjectsPage() {
   // no longer exist. (Supersedes redesign's index-based selectedIdx.)
   const project: ProjectSummaryDto | undefined =
     selected != null ? projects.find((p) => p.id === selected) : undefined;
-  useStaleSelectionCleanup(selected, project !== undefined || selected == null, () =>
-    navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+  useStaleSelectionCleanup(
+    selected,
+    project !== undefined || selected == null,
+    () =>
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
   );
 
   const onSelect = (id: string) => {
@@ -110,7 +119,11 @@ export function ProjectsPage() {
   };
 
   const clearSelection = useCallback(
-    () => navigate({ search: (prev) => ({ ...prev, selected: undefined }), replace: true }),
+    () =>
+      navigate({
+        search: (prev) => ({ ...prev, selected: undefined }),
+        replace: true,
+      }),
     [navigate],
   );
 
@@ -132,7 +145,9 @@ export function ProjectsPage() {
 
   const handleHeaderSort = useCallback((col: ProjectSortCol) => {
     setSort((prev) =>
-      prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' },
+      prev.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' },
     );
   }, []);
 

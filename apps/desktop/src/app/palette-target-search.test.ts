@@ -56,7 +56,7 @@ const MOCK_RESULTS: SearchResult[] = [
     kind: 'session',
     label: 'NGC 7000 Ha 2026-06-01',
     route: '/sessions/ses-001',
-    score: 0.70,
+    score: 0.7,
   },
   {
     id: 'target-ngc7000',
@@ -84,12 +84,16 @@ describe('palette target search routing (T008)', () => {
 
   it('getRoute returns the verbatim route from the result', () => {
     const result = MOCK_RESULTS[0];
-    expect(getRoute(result)).toBe('/targets/550e8400-e29b-41d4-a716-446655440099');
+    expect(getRoute(result)).toBe(
+      '/targets/550e8400-e29b-41d4-a716-446655440099',
+    );
   });
 
   it('alias match surfaced in sublabel (T008 alias-aware search)', () => {
     // The backend includes alias info in sublabel when the match was via alias.
-    const aliasMatchResult = MOCK_RESULTS.find((r) => r.id === 'target-ngc7000')!;
+    const aliasMatchResult = MOCK_RESULTS.find(
+      (r) => r.id === 'target-ngc7000',
+    )!;
     expect(aliasMatchResult.sublabel).toContain('Caldwell 20');
   });
 

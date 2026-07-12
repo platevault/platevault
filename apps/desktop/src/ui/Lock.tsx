@@ -21,9 +21,7 @@ export function Lock({ reason, className, ...rest }: LockProps) {
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Positioner sideOffset={4}>
-            <Tooltip.Popup className="alm-tooltip">
-              {label}
-            </Tooltip.Popup>
+            <Tooltip.Popup className="alm-tooltip">{label}</Tooltip.Popup>
           </Tooltip.Positioner>
         </Tooltip.Portal>
       </Tooltip.Root>

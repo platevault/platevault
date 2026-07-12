@@ -120,7 +120,9 @@ export function SourceViews({ save }: SourceViewsProps) {
         </select>
       </SettingsRow>
 
-      <p className="text-muted text-xs">{m.settings_source_views_drift_note()}</p>
+      <p className="text-muted text-xs">
+        {m.settings_source_views_drift_note()}
+      </p>
     </SettingsSection>
   );
 }

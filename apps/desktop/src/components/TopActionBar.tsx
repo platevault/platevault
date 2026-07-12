@@ -7,7 +7,12 @@ export interface TopActionBarProps {
   children?: ReactNode;
 }
 
-export function TopActionBar({ title, subtitle, right, children }: TopActionBarProps) {
+export function TopActionBar({
+  title,
+  subtitle,
+  right,
+  children,
+}: TopActionBarProps) {
   return (
     <div className="alm-action-bar">
       <span className="alm-action-bar__title">{title}</span>

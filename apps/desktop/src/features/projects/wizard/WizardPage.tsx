@@ -32,7 +32,12 @@ interface WizardData {
 const INITIAL_DATA: WizardData = {
   name: { name: '', workflowProfile: 'pixinsight' },
   sources: { selectedSessionIds: [] },
-  calibration: { flatMappings: {}, sharedDarkId: '', sharedBiasId: '', sharedDarkFlatId: '' },
+  calibration: {
+    flatMappings: {},
+    sharedDarkId: '',
+    sharedBiasId: '',
+    sharedDarkFlatId: '',
+  },
   views: { strategy: 'junction' },
   layout: { namingPattern: '' },
 };
@@ -77,10 +82,14 @@ function stepLabels(): string[] {
 
 function profileLabelFor(profile: string): string | undefined {
   switch (profile) {
-    case 'pixinsight': return 'PixInsight/WBPP';
-    case 'siril': return 'Siril';
-    case 'planetary': return m.projects_wizard_profile_planetary_lunar();
-    default: return undefined;
+    case 'pixinsight':
+      return 'PixInsight/WBPP';
+    case 'siril':
+      return 'Siril';
+    case 'planetary':
+      return m.projects_wizard_profile_planetary_lunar();
+    default:
+      return undefined;
   }
 }
 
@@ -100,7 +109,10 @@ export function WizardPage() {
   // name step (StepName owns both fields); 'path'/'general' have no dedicated
   // step (path is derived from the project name, never user-edited) so they
   // surface inline next to the Create button on the review step.
-  const [createError, setCreateError] = useState<{ field: ProjectCreateErrorField; message: string } | null>(null);
+  const [createError, setCreateError] = useState<{
+    field: ProjectCreateErrorField;
+    message: string;
+  } | null>(null);
 
   // Render-time so labels re-read the active locale (spec 046 #8).
   const labels = stepLabels();
@@ -132,7 +144,9 @@ export function WizardPage() {
         return next.name.trim() !== wizardData.name.name.trim() ? null : prev;
       }
       if (prev.field === 'tool') {
-        return next.workflowProfile !== wizardData.name.workflowProfile ? null : prev;
+        return next.workflowProfile !== wizardData.name.workflowProfile
+          ? null
+          : prev;
       }
       return prev;
     });
@@ -187,12 +201,16 @@ export function WizardPage() {
       const trimmedName = wizardData.name.name.trim();
 
       if (await findDuplicateProjectName(trimmedName)) {
-        setCreateError({ field: 'name', message: m.projects_create_name_duplicate() });
+        setCreateError({
+          field: 'name',
+          message: m.projects_create_name_duplicate(),
+        });
         setCurrentStep(0);
         return;
       }
 
-      const tool = PROFILE_TO_TOOL[wizardData.name.workflowProfile] ?? 'PixInsight';
+      const tool =
+        PROFILE_TO_TOOL[wizardData.name.workflowProfile] ?? 'PixInsight';
       // Derive a safe folder name from the project name (kebab-case, no
       // special chars). The backend anchors this relative name to the
       // registered project folder (registered_sources.kind = 'project'), so
@@ -224,16 +242,23 @@ export function WizardPage() {
       // - null/undefined → plan needs manual review (non-mkdir actions).
       if (result.scaffoldApplied === false) {
         addToast({
-          message: m.projects_wizard_toast_folders_failed({ name: trimmedName }),
+          message: m.projects_wizard_toast_folders_failed({
+            name: trimmedName,
+          }),
           variant: 'error',
         });
       } else if (result.scaffoldApplied) {
         addToast({
-          message: m.projects_wizard_toast_created_folders({ name: trimmedName }),
+          message: m.projects_wizard_toast_created_folders({
+            name: trimmedName,
+          }),
           variant: 'success',
         });
       } else {
-        addToast({ message: m.projects_wizard_toast_created({ name: trimmedName }), variant: 'success' });
+        addToast({
+          message: m.projects_wizard_toast_created({ name: trimmedName }),
+          variant: 'success',
+        });
       }
 
       // Navigate back to projects list; the list re-fetches automatically.
@@ -266,10 +291,14 @@ export function WizardPage() {
   };
 
   const projectLabel = wizardData.name.name || m.projects_create_title();
-  const profileLabel = profileLabelFor(wizardData.name.workflowProfile) ?? wizardData.name.workflowProfile;
+  const profileLabel =
+    profileLabelFor(wizardData.name.workflowProfile) ??
+    wizardData.name.workflowProfile;
 
   // Computed summary counts
-  const flatsMapped = Object.values(wizardData.calibration.flatMappings).filter(Boolean).length;
+  const flatsMapped = Object.values(wizardData.calibration.flatMappings).filter(
+    Boolean,
+  ).length;
   const darkSelected = wizardData.calibration.sharedDarkId ? 1 : 0;
   const biasSelected = wizardData.calibration.sharedBiasId ? 1 : 0;
 
@@ -298,7 +327,9 @@ export function WizardPage() {
         {m.projects_wizard_summary_title()}
       </div>
       <div>
-        <div className="alm-wizard-page__summary-project-name">{projectLabel}</div>
+        <div className="alm-wizard-page__summary-project-name">
+          {projectLabel}
+        </div>
         <div className="alm-wizard-page__summary-profile">{profileLabel}</div>
       </div>
 
@@ -307,10 +338,22 @@ export function WizardPage() {
           {m.projects_wizard_summary_selected()}
         </div>
         <div className="alm-wizard-page__summary-list">
-          <SummaryRow label={m.projects_wizard_summary_lights_label()} value={`${wizardData.sources.selectedSessionIds.length} sess`} />
-          <SummaryRow label={m.projects_wizard_summary_darks_label()} value={m.inbox_count_masters({ count: darkSelected })} />
-          <SummaryRow label={m.projects_wizard_flats_label()} value={m.inbox_count_masters({ count: flatsMapped })} />
-          <SummaryRow label={m.projects_wizard_bias_label()} value={m.inbox_count_masters({ count: biasSelected })} />
+          <SummaryRow
+            label={m.projects_wizard_summary_lights_label()}
+            value={`${wizardData.sources.selectedSessionIds.length} sess`}
+          />
+          <SummaryRow
+            label={m.projects_wizard_summary_darks_label()}
+            value={m.inbox_count_masters({ count: darkSelected })}
+          />
+          <SummaryRow
+            label={m.projects_wizard_flats_label()}
+            value={m.inbox_count_masters({ count: flatsMapped })}
+          />
+          <SummaryRow
+            label={m.projects_wizard_bias_label()}
+            value={m.inbox_count_masters({ count: biasSelected })}
+          />
         </div>
       </div>
 
@@ -323,7 +366,12 @@ export function WizardPage() {
             {labels.slice(currentStep + 1).map((label, i) => (
               <div
                 key={label}
-                className={'alm-wizard-page__coming-up-item' + (i < labels.length - currentStep - 2 ? ' alm-wizard-page__coming-up-item--sep' : '')}
+                className={
+                  'alm-wizard-page__coming-up-item' +
+                  (i < labels.length - currentStep - 2
+                    ? ' alm-wizard-page__coming-up-item--sep'
+                    : '')
+                }
               >
                 {currentStep + i + 2}. {label}
               </div>
@@ -333,7 +381,9 @@ export function WizardPage() {
       )}
 
       <div className="alm-wizard-page__footprint">
-        <div className="alm-wizard-page__footprint-label">{m.projects_wizard_footprint_label()}</div>
+        <div className="alm-wizard-page__footprint-label">
+          {m.projects_wizard_footprint_label()}
+        </div>
         <div className="alm-mono alm-wizard-page__footprint-value">
           {m.projects_wizard_footprint_value()}
         </div>
@@ -350,7 +400,13 @@ export function WizardPage() {
           </Btn>
         )}
         {currentStep < 5 && (
-          <Btn variant="primary" size="sm" onClick={handleNext} disabled={!canAdvance()} className="alm-wizard-page__flex-fill">
+          <Btn
+            variant="primary"
+            size="sm"
+            onClick={handleNext}
+            disabled={!canAdvance()}
+            className="alm-wizard-page__flex-fill"
+          >
             {nextLabels[currentStep]}
           </Btn>
         )}
@@ -360,11 +416,13 @@ export function WizardPage() {
                 field (path is derived from the project name, never user-
                 edited), so they surface here next to the action that raised
                 them — matching CreateProjectDialog's inline serverError. */}
-            {createError && (createError.field === 'path' || createError.field === 'general') && (
-              <span role="alert" className="alm-field-error">
-                {createError.message}
-              </span>
-            )}
+            {createError &&
+              (createError.field === 'path' ||
+                createError.field === 'general') && (
+                <span role="alert" className="alm-field-error">
+                  {createError.message}
+                </span>
+              )}
             <Btn
               variant="primary"
               size="sm"
@@ -373,7 +431,9 @@ export function WizardPage() {
               className="alm-wizard-page__flex-fill"
               data-testid="wizard-create-btn"
             >
-              {creating ? m.projects_create_creating() : m.projects_create_btn()}
+              {creating
+                ? m.projects_create_creating()
+                : m.projects_create_btn()}
             </Btn>
           </>
         )}
@@ -391,21 +451,37 @@ export function WizardPage() {
           {m.projects_wizard_toolbar_title()} {projectLabel}
         </span>
         <span className="alm-wizard-page__spacer" />
-        <Btn size="sm" onClick={() => saveDraft(wizardData)}>{m.projects_wizard_save_draft_btn()}</Btn>
+        <Btn size="sm" onClick={() => saveDraft(wizardData)}>
+          {m.projects_wizard_save_draft_btn()}
+        </Btn>
         {devSkip && (
-          <Btn size="sm" onClick={() => { clearDraft(); setWizardData(INITIAL_DATA); setCurrentStep(0); }}>
+          <Btn
+            size="sm"
+            onClick={() => {
+              clearDraft();
+              setWizardData(INITIAL_DATA);
+              setCurrentStep(0);
+            }}
+          >
             {m.projects_wizard_reset_btn()}
           </Btn>
         )}
-        <Btn size="sm" onClick={handleCancel}>{m.common_cancel()}</Btn>
+        <Btn size="sm" onClick={handleCancel}>
+          {m.common_cancel()}
+        </Btn>
       </div>
 
       {/* Sub-toolbar: workflow profile breadcrumb */}
       <div className="alm-page__bar alm-wizard-page__subbbar">
-        <span>{m.projects_wizard_workflow_profile_label()} {profileLabel}</span>
+        <span>
+          {m.projects_wizard_workflow_profile_label()} {profileLabel}
+        </span>
         <span>&middot;</span>
         {wizardData.name.name && (
-          <span>{m.projects_wizard_from_target_label()} {wizardData.name.name.split(/[\s·—]/)[0]}</span>
+          <span>
+            {m.projects_wizard_from_target_label()}{' '}
+            {wizardData.name.name.split(/[\s·—]/)[0]}
+          </span>
         )}
         <span className="alm-wizard-page__subbar-note">
           {m.projects_wizard_subbar_note()}
@@ -413,12 +489,18 @@ export function WizardPage() {
       </div>
 
       {/* WizardShell fills the remaining space */}
-      <WizardShell steps={steps} currentStep={currentStep} summary={summary} className="alm-wizard-page__flex-fill--noscroll">
+      <WizardShell
+        steps={steps}
+        currentStep={currentStep}
+        summary={summary}
+        className="alm-wizard-page__flex-fill--noscroll"
+      >
         {/* Step title + description */}
         {currentStep < 5 && (
           <div className="alm-wizard-page__step-header">
             <h2 className="alm-wizard-page__step-title">
-              {m.projects_wizard_step_label()} {currentStep + 1} &middot; {labels[currentStep]}
+              {m.projects_wizard_step_label()} {currentStep + 1} &middot;{' '}
+              {labels[currentStep]}
             </h2>
           </div>
         )}
@@ -432,7 +514,8 @@ export function WizardPage() {
               setWizardData({ ...wizardData, name });
             }}
             serverError={
-              createError && (createError.field === 'name' || createError.field === 'tool')
+              createError &&
+              (createError.field === 'name' || createError.field === 'tool')
                 ? { field: createError.field, message: createError.message }
                 : null
             }
@@ -448,7 +531,9 @@ export function WizardPage() {
           <StepCalibration
             selectedSessionIds={wizardData.sources.selectedSessionIds}
             data={wizardData.calibration}
-            onChange={(calibration) => setWizardData({ ...wizardData, calibration })}
+            onChange={(calibration) =>
+              setWizardData({ ...wizardData, calibration })
+            }
           />
         )}
         {currentStep === 3 && (

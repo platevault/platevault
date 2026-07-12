@@ -117,13 +117,18 @@ function SourceSummary({ state }: SourceSummaryProps) {
   const kindCounts = new Map<string, number>();
   for (const [, cls] of classifications) {
     for (const entry of cls.breakdown ?? []) {
-      kindCounts.set(entry.kind, (kindCounts.get(entry.kind) ?? 0) + entry.count);
+      kindCounts.set(
+        entry.kind,
+        (kindCounts.get(entry.kind) ?? 0) + entry.count,
+      );
     }
   }
 
   // Stable sort for the table: by lane, then folder path.
   const sortedItems = [...items].sort(
-    (a, b) => a.lane.localeCompare(b.lane) || a.relativePath.localeCompare(b.relativePath),
+    (a, b) =>
+      a.lane.localeCompare(b.lane) ||
+      a.relativePath.localeCompare(b.relativePath),
   );
 
   // The detail panel (chips + table) is expandable only when scan is done and
@@ -159,22 +164,20 @@ function SourceSummary({ state }: SourceSummaryProps) {
               }
             : undefined
         }
-        className={'alm-setup-scan__header' + (isExpandable ? ' alm-setup-scan__header--expandable' : '')}
+        className={
+          'alm-setup-scan__header' +
+          (isExpandable ? ' alm-setup-scan__header--expandable' : '')
+        }
       >
         {/* Chevron — only shown when expandable */}
         {isExpandable && (
-          <span
-            aria-hidden="true"
-            className="alm-setup-scan__chevron"
-          >
+          <span aria-hidden="true" className="alm-setup-scan__chevron">
             {expanded ? '▾' : '▸'}
           </span>
         )}
 
         {/* Source path */}
-        <span className="alm-setup-scan__path">
-          {source.path}
-        </span>
+        <span className="alm-setup-scan__path">{source.path}</span>
 
         {/* Kind label (muted, small) */}
         <span className="alm-setup-scan__kind">
@@ -183,9 +186,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
 
         {/* Compact count summary */}
         {countSummary && (
-          <span className="alm-setup-scan__count">
-            {countSummary}
-          </span>
+          <span className="alm-setup-scan__count">{countSummary}</span>
         )}
 
         {/* Phase pill */}
@@ -222,10 +223,7 @@ function SourceSummary({ state }: SourceSummaryProps) {
           {kindCounts.size > 0 && (
             <div className="alm-setup-scan__chips">
               {Array.from(kindCounts.entries()).map(([kind, count]) => (
-                <span
-                  key={kind}
-                  className="alm-setup-scan__chip"
-                >
+                <span key={kind} className="alm-setup-scan__chip">
                   {count} {kind}
                 </span>
               ))}
@@ -237,20 +235,33 @@ function SourceSummary({ state }: SourceSummaryProps) {
             <table className="alm-setup-scan__table">
               <thead>
                 <tr className="alm-setup-scan__thead-row">
-                  <th className="alm-setup-scan__cell">{m.setup_scan_col_folder()}</th>
-                  <th className="alm-setup-scan__cell">{m.setup_scan_col_files()}</th>
-                  <th className="alm-setup-scan__cell">{m.setup_scan_col_format()}</th>
-                  <th className="alm-setup-scan__cell">{m.setup_scan_col_types()}</th>
+                  <th className="alm-setup-scan__cell">
+                    {m.setup_scan_col_folder()}
+                  </th>
+                  <th className="alm-setup-scan__cell">
+                    {m.setup_scan_col_files()}
+                  </th>
+                  <th className="alm-setup-scan__cell">
+                    {m.setup_scan_col_format()}
+                  </th>
+                  <th className="alm-setup-scan__cell">
+                    {m.setup_scan_col_types()}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {sortedItems.map((item) => {
-                  const breakdown = classifications.get(item.inboxItemId)?.breakdown ?? [];
-                  const types = breakdown.map((b) => `${b.count} ${b.kind}`).join(', ');
+                  const breakdown =
+                    classifications.get(item.inboxItemId)?.breakdown ?? [];
+                  const types = breakdown
+                    .map((b) => `${b.count} ${b.kind}`)
+                    .join(', ');
                   // Individual calibration masters carry their frame type on the
                   // item itself (spec 040 FR-006); grouped sub-frame folders rely
                   // on the classify breakdown instead.
-                  const detectedTypes = item.isMaster ? masterLabel(item) : types || '—';
+                  const detectedTypes = item.isMaster
+                    ? masterLabel(item)
+                    : types || '—';
                   return (
                     <tr
                       key={item.inboxItemId}
@@ -259,12 +270,16 @@ function SourceSummary({ state }: SourceSummaryProps) {
                     >
                       <td className="alm-setup-scan__cell--path">
                         <span className="alm-setup-scan__path-cell-inner">
-                          {item.isMaster && <Pill variant="info">{m.setup_scan_master()}</Pill>}
+                          {item.isMaster && (
+                            <Pill variant="info">{m.setup_scan_master()}</Pill>
+                          )}
                           {item.relativePath}
                         </span>
                       </td>
                       <td className="alm-setup-scan__cell">{item.fileCount}</td>
-                      <td className="alm-setup-scan__cell">{(item.format ?? item.lane).toUpperCase()}</td>
+                      <td className="alm-setup-scan__cell">
+                        {(item.format ?? item.lane).toUpperCase()}
+                      </td>
                       <td className="alm-setup-scan__cell">{detectedTypes}</td>
                     </tr>
                   );
@@ -291,7 +306,11 @@ function SourceSummary({ state }: SourceSummaryProps) {
  * SetupWizard.  StepScan notifies the parent of scan completion via
  * `onAllDoneChange` so the footer can enable/disable the Finish button.
  */
-export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProps) {
+export function StepScan({
+  sources,
+  flushResult,
+  onAllDoneChange,
+}: StepScanProps) {
   const [sourceStates, setSourceStates] = useState<SourceScanState[]>(() =>
     sources
       .filter((s) => s.path)
@@ -375,8 +394,13 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally empty: run once on mount
 
-  const allDone = sourceStates.every((s) => s.phase === 'done' || s.phase === 'error');
-  const totalDetected = sourceStates.reduce((acc, s) => acc + s.items.length, 0);
+  const allDone = sourceStates.every(
+    (s) => s.phase === 'done' || s.phase === 'error',
+  );
+  const totalDetected = sourceStates.reduce(
+    (acc, s) => acc + s.items.length,
+    0,
+  );
 
   // Notify parent whenever the allDone state changes so the footer can
   // enable/disable the Finish button.
@@ -385,14 +409,9 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
   }, [allDone, onAllDoneChange]);
 
   return (
-    <div
-      className="alm-setup-scan"
-      data-testid="step-scan"
-    >
+    <div className="alm-setup-scan" data-testid="step-scan">
       {sourceStates.length === 0 ? (
-        <p className="alm-setup-scan__empty-msg">
-          {m.setup_scan_no_sources()}
-        </p>
+        <p className="alm-setup-scan__empty-msg">{m.setup_scan_no_sources()}</p>
       ) : (
         <>
           {/* Per-source results — scrollable region; expanding accordions scroll here,
@@ -405,10 +424,7 @@ export function StepScan({ sources, flushResult, onAllDoneChange }: StepScanProp
 
           {/* Summary line (shown when all sources are complete) */}
           {allDone && (
-            <p
-              data-testid="scan-summary"
-              className="alm-setup-scan__summary"
-            >
+            <p data-testid="scan-summary" className="alm-setup-scan__summary">
               {totalDetected > 0
                 ? m.setup_scan_summary_found({ count: totalDetected })
                 : m.setup_scan_summary_empty()}

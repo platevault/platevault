@@ -10,7 +10,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { lifecycleFooterActions, isPlanRequiredError } from './lifecycle-actions';
+import {
+  lifecycleFooterActions,
+  isPlanRequiredError,
+} from './lifecycle-actions';
 
 describe('lifecycleFooterActions', () => {
   it('returns no actions for setup_incomplete', () => {
@@ -93,7 +96,13 @@ describe('lifecycleFooterActions', () => {
   });
 
   it('primary flag is set on the first primary action for each state', () => {
-    const states = ['ready', 'prepared', 'processing', 'completed', 'archived'] as const;
+    const states = [
+      'ready',
+      'prepared',
+      'processing',
+      'completed',
+      'archived',
+    ] as const;
     for (const state of states) {
       const actions = lifecycleFooterActions(state);
       const primaries = actions.filter((a) => a.primary);

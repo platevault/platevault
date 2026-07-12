@@ -6,7 +6,8 @@ export interface RadioOption {
   label: string;
   desc?: string;
 }
-export interface RadioGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
+export interface RadioGroupProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'onChange'> {
   options: (string | RadioOption)[];
   value: string;
   onChange: (value: string) => void;
@@ -17,7 +18,7 @@ export const RadioGroup = forwardRef<HTMLDivElement, RadioGroupProps>(
     const cls = ['alm-radio-group', className].filter(Boolean).join(' ');
     return (
       <div ref={ref} className={cls} {...rest}>
-        {options.map(o => {
+        {options.map((o) => {
           const val = typeof o === 'string' ? o : o.value;
           const label = typeof o === 'string' ? o : o.label;
           const desc = typeof o === 'string' ? null : o.desc;
@@ -34,6 +35,6 @@ export const RadioGroup = forwardRef<HTMLDivElement, RadioGroupProps>(
         })}
       </div>
     );
-  }
+  },
 );
 RadioGroup.displayName = 'RadioGroup';

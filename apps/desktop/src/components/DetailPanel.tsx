@@ -141,7 +141,9 @@ export function DetailPanel({
     variant ? `alm-detailpanel--${variant}` : '',
     hasFacts ? 'alm-detailpanel--has-facts' : '',
     hasAux ? 'alm-detailpanel--has-aux' : '',
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const colsClass = modifiers
     ? `alm-detailpanel__cols ${modifiers}`
@@ -161,9 +163,7 @@ export function DetailPanel({
             <aside className="alm-detailpanel__facts">{facts}</aside>
           )}
           <div className="alm-detailpanel__content">{children}</div>
-          {hasAux && (
-            <aside className="alm-detailpanel__aux">{aux}</aside>
-          )}
+          {hasAux && <aside className="alm-detailpanel__aux">{aux}</aside>}
         </div>
       ) : (
         children

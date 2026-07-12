@@ -78,7 +78,7 @@ const MOCK_TARGET_RESULTS: SearchResult[] = [
     kind: 'session',
     label: 'NGC 7000 Ha 2026-06-01',
     route: '/sessions/ses-001',
-    score: 0.60,
+    score: 0.6,
   },
 ];
 
@@ -93,7 +93,9 @@ describe('CommandPalette routing logic (T008)', () => {
   });
 
   it('2. alias-matched result sublabel surfaces the matched alias', () => {
-    const aliasResult = MOCK_TARGET_RESULTS.find((r) => r.id === 'target-m31-alias')!;
+    const aliasResult = MOCK_TARGET_RESULTS.find(
+      (r) => r.id === 'target-m31-alias',
+    )!;
     expect(aliasResult.sublabel).toContain('NGC 224');
   });
 
@@ -113,11 +115,15 @@ describe('CommandPalette routing logic (T008)', () => {
   it('5. target route UUID segment is a valid UUID v5 format', () => {
     const targetResult = MOCK_TARGET_RESULTS[0];
     const uuid = targetResult.route.replace('/targets/', '');
-    expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(uuid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
   });
 
   it('6. two alias results for same target share the same route (idempotent nav)', () => {
-    const allTargetResults = MOCK_TARGET_RESULTS.filter((r) => r.kind === 'target');
+    const allTargetResults = MOCK_TARGET_RESULTS.filter(
+      (r) => r.kind === 'target',
+    );
     const routes = allTargetResults.map((r) => r.route);
     // Both alias hits for M31 route to the same UUID
     const unique = new Set(routes);

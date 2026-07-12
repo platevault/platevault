@@ -30,7 +30,11 @@ export interface AddTargetDialogProps {
   onAdded: (targetId: string) => void;
 }
 
-export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps) {
+export function AddTargetDialog({
+  open,
+  onClose,
+  onAdded,
+}: AddTargetDialogProps) {
   const [pending, setPending] = useState<TargetSuggestion | null>(null);
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,12 +65,14 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
     setResolving(true);
     setError(null);
     try {
-      const res = unwrap(await commands.targetResolve({
-        contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
-        requestId: crypto.randomUUID(),
-        query: pending.primaryDesignation,
-        override: null,
-      }));
+      const res = unwrap(
+        await commands.targetResolve({
+          contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+          requestId: crypto.randomUUID(),
+          query: pending.primaryDesignation,
+          override: null,
+        }),
+      );
       if (res.status === 'resolved' && res.target) {
         handleOpenChange(false);
         onAdded(res.target.targetId);
@@ -76,7 +82,8 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
         );
       }
     } catch (err: unknown) {
-      const code = typeof err === 'string' ? err : (err as Error)?.message ?? 'unknown';
+      const code =
+        typeof err === 'string' ? err : ((err as Error)?.message ?? 'unknown');
       setError(m.targets_add_failed({ code }));
     } finally {
       setResolving(false);
@@ -116,7 +123,9 @@ export function AddTargetDialog({ open, onClose, onAdded }: AddTargetDialogProps
       <div className="alm-add-target__body">
         {pending ? (
           <div>
-            <span className="alm-field-label">{m.targets_add_target_selected()}</span>
+            <span className="alm-field-label">
+              {m.targets_add_target_selected()}
+            </span>
             <div className="alm-add-target__selected-row">
               <Pill variant="accent">{pending.primaryDesignation}</Pill>
               {pending.commonName && (

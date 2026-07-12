@@ -41,7 +41,9 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
         body
       </DetailPanel>,
     );
-    expect(screen.getByText('Ha · 120 frames · 300s · 2026-01-15')).toBeDefined();
+    expect(
+      screen.getByText('Ha · 120 frames · 300s · 2026-01-15'),
+    ).toBeDefined();
   });
 
   it('3. renders titleExtra alongside the title', () => {
@@ -90,7 +92,11 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
     const { container } = render(
       <DetailPanel
         title={<span data-testid="dp-title">NGC 7000</span>}
-        actions={<button type="button" data-testid="dp-action">Confirm</button>}
+        actions={
+          <button type="button" data-testid="dp-action">
+            Confirm
+          </button>
+        }
       >
         body
       </DetailPanel>,
@@ -277,13 +283,21 @@ describe('DetailPanel — tasks #100/#99/#101', () => {
 
 describe('FactsKV', () => {
   it('14. renders label and value', () => {
-    render(<dl><FactsKV label="Target" value="NGC 7000" /></dl>);
+    render(
+      <dl>
+        <FactsKV label="Target" value="NGC 7000" />
+      </dl>,
+    );
     expect(screen.getByText('Target')).toBeDefined();
     expect(screen.getByText('NGC 7000')).toBeDefined();
   });
 
   it('15. renders optional provenance label', () => {
-    render(<dl><FactsKV label="Filter" value="Ha" provenance="Inferred" /></dl>);
+    render(
+      <dl>
+        <FactsKV label="Filter" value="Ha" provenance="Inferred" />
+      </dl>,
+    );
     expect(screen.getByText('Inferred')).toBeDefined();
   });
 });

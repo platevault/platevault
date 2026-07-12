@@ -70,6 +70,6 @@ export const ToastContainer = forwardRef<HTMLDivElement, ToastContainerProps>(
         ))}
       </div>
     );
-  }
+  },
 );
 ToastContainer.displayName = 'ToastContainer';

@@ -14,7 +14,10 @@ import { unwrap } from '@/api/ipc';
 import { errMessage, isContractError } from '@/lib/errors';
 import { m } from '@/lib/i18n';
 import { useAsyncAction } from './useAsyncAction';
-import type { DirectoryPickResponse, FilePickResponse_Serialize } from '@/bindings/index';
+import type {
+  DirectoryPickResponse,
+  FilePickResponse_Serialize,
+} from '@/bindings/index';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,7 +43,14 @@ export interface FilePickResult {
 }
 
 /** Affordance kinds for last-path persistence (per FR-014). */
-export type LastPathKind = 'raw' | 'calibration' | 'project' | 'inbox' | 'master_calibration' | 'catalog_import' | 'export';
+export type LastPathKind =
+  | 'raw'
+  | 'calibration'
+  | 'project'
+  | 'inbox'
+  | 'master_calibration'
+  | 'catalog_import'
+  | 'export';
 
 /** Error shape returned when a picker invocation fails (non-cancellation). */
 export interface PickerError {
@@ -56,7 +66,10 @@ export interface PickerError {
 // the active locale (spec 046 #8) instead of freezing it at import.
 export function calibrationFileFilters(): FileFilter[] {
   return [
-    { name: m.picker_filter_all_supported(), extensions: ['xisf', 'fits', 'fit', 'fts', 'tif', 'tiff'] },
+    {
+      name: m.picker_filter_all_supported(),
+      extensions: ['xisf', 'fits', 'fit', 'fts', 'tif', 'tiff'],
+    },
     { name: 'FITS', extensions: ['fit', 'fits', 'fts'] },
     { name: 'XISF', extensions: ['xisf'] },
     { name: 'TIFF', extensions: ['tif', 'tiff'] },
@@ -182,7 +195,10 @@ export async function pickDirectory(
   let result: DirectoryPickResponse;
   try {
     result = unwrap(
-      await commands.nativeDirectoryPick({ requestId, defaultPath: resolvedDefault ?? null }),
+      await commands.nativeDirectoryPick({
+        requestId,
+        defaultPath: resolvedDefault ?? null,
+      }),
     );
   } catch (err: unknown) {
     const message = isContractError(err) ? err.message : errMessage(err);
@@ -227,7 +243,11 @@ export async function pickFile(
   let result: FilePickResponse_Serialize;
   try {
     result = unwrap(
-      await commands.nativeFilePick({ requestId, filters, defaultPath: resolvedDefault ?? null }),
+      await commands.nativeFilePick({
+        requestId,
+        filters,
+        defaultPath: resolvedDefault ?? null,
+      }),
     );
   } catch (err: unknown) {
     const message = isContractError(err) ? err.message : errMessage(err);
@@ -273,7 +293,10 @@ export function isPickerError(err: unknown): err is PickerError {
 // ---------------------------------------------------------------------------
 
 export interface UseDirectoryPickerReturn {
-  pick: (defaultPath?: string, kind?: LastPathKind) => Promise<DirectoryPickResult>;
+  pick: (
+    defaultPath?: string,
+    kind?: LastPathKind,
+  ) => Promise<DirectoryPickResult>;
   loading: boolean;
   error: PickerError | null;
   clearError: () => void;
@@ -291,7 +314,9 @@ export function useDirectoryPicker(): UseDirectoryPickerReturn {
   >(
     pickDirectory,
     (err) =>
-      isPickerError(err) ? err : { code: 'picker.unknown', message: errMessage(err) },
+      isPickerError(err)
+        ? err
+        : { code: 'picker.unknown', message: errMessage(err) },
     { path: null, cancelled: false },
   );
 
@@ -321,7 +346,9 @@ export function useFilePicker(): UseFilePickerReturn {
   >(
     pickFile,
     (err) =>
-      isPickerError(err) ? err : { code: 'picker.unknown', message: errMessage(err) },
+      isPickerError(err)
+        ? err
+        : { code: 'picker.unknown', message: errMessage(err) },
     { path: null, selectedFilter: null, cancelled: false },
   );
 

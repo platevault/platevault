@@ -16,7 +16,8 @@ const { mockList } = vi.hoisted(() => ({
 }));
 
 vi.mock('./source-views', async () => {
-  const actual = await vi.importActual<typeof import('./source-views')>('./source-views');
+  const actual =
+    await vi.importActual<typeof import('./source-views')>('./source-views');
   return {
     ...actual,
     listPreparedViews: mockList,
@@ -90,17 +91,21 @@ describe('SourceViewsSection', () => {
     render(<SourceViewsSection projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('source-view-row-view-stale')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('source-view-row-view-stale'),
+      ).toBeInTheDocument();
     });
 
     expect(screen.getByText('Stale')).toBeInTheDocument();
 
     // Broken-reference detail rides the sweep's last_observed_state — no
     // Verify click required.
-    expect(screen.getByTestId('source-view-item-observed-item-broken')).toHaveTextContent(
-      'missing',
-    );
-    expect(screen.queryByTestId('source-view-item-observed-item-ok')).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId('source-view-item-observed-item-broken'),
+    ).toHaveTextContent('missing');
+    expect(
+      screen.queryByTestId('source-view-item-observed-item-ok'),
+    ).not.toBeInTheDocument();
 
     // Persisted stale-item summary banner.
     const summary = screen.getByTestId('stale-summary-view-stale');
@@ -113,11 +118,17 @@ describe('SourceViewsSection', () => {
     render(<SourceViewsSection projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('source-view-row-view-current')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('source-view-row-view-current'),
+      ).toBeInTheDocument();
     });
 
-    expect(screen.queryByTestId('source-view-item-observed-item-clean')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('stale-summary-view-current')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('source-view-item-observed-item-clean'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('stale-summary-view-current'),
+    ).not.toBeInTheDocument();
   });
 
   it('renders the audit-history surface for each view (T019)', async () => {
@@ -126,7 +137,9 @@ describe('SourceViewsSection', () => {
     render(<SourceViewsSection projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('mock-history-view-current')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('mock-history-view-current'),
+      ).toBeInTheDocument();
     });
   });
 
@@ -138,7 +151,9 @@ describe('SourceViewsSection', () => {
     render(<SourceViewsSection projectId="proj-1" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('regenerate-view-view-missing')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('regenerate-view-view-missing'),
+      ).toBeInTheDocument();
     });
   });
 });

@@ -28,7 +28,9 @@ import { errMessage } from '@/lib/errors';
 // Local IPC helpers — migrated off the hand-written @/api/commands wrappers
 // (spec 037) onto the generated bindings.
 
-async function artifactList(request: ArtifactListRequest): Promise<ArtifactListResponse> {
+async function artifactList(
+  request: ArtifactListRequest,
+): Promise<ArtifactListResponse> {
   return unwrap(await commands.artifactList(request));
 }
 
@@ -38,15 +40,21 @@ async function artifactClassify(
   return unwrap(await commands.artifactClassify(request));
 }
 
-async function artifactMarkResolved(request: ArtifactMarkResolvedRequest): Promise<void> {
+async function artifactMarkResolved(
+  request: ArtifactMarkResolvedRequest,
+): Promise<void> {
   unwrap(await commands.artifactMarkResolved(request));
 }
 
-async function artifactWatcherAttach(request: ArtifactWatcherRequest): Promise<void> {
+async function artifactWatcherAttach(
+  request: ArtifactWatcherRequest,
+): Promise<void> {
   unwrap(await commands.artifactWatcherAttach(request));
 }
 
-async function artifactWatcherDetach(request: ArtifactWatcherRequest): Promise<void> {
+async function artifactWatcherDetach(
+  request: ArtifactWatcherRequest,
+): Promise<void> {
   unwrap(await commands.artifactWatcherDetach(request));
 }
 
@@ -214,7 +222,9 @@ export interface UseArtifactClassifyResult {
 }
 
 /** Mutation hook for classifying / overriding an artifact. */
-export function useArtifactClassify(onSuccess?: () => void): UseArtifactClassifyResult {
+export function useArtifactClassify(
+  onSuccess?: () => void,
+): UseArtifactClassifyResult {
   const [working, setWorking] = useState(false);
 
   const classify = useCallback(

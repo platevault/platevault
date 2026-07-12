@@ -22,10 +22,13 @@ export function SessionsFilterBar() {
 
   return (
     <div className="alm-sessions-filter">
-      <span className="alm-sessions-filter__label">{m.sessions_filterbar_label()}</span>
+      <span className="alm-sessions-filter__label">
+        {m.sessions_filterbar_label()}
+      </span>
       {filters.map((f) => (
         <span key={f.key} className="alm-sessions-filter__chip">
-          {f.key}: <span className="alm-sessions-filter__chip-value">{f.value}</span>
+          {f.key}:{' '}
+          <span className="alm-sessions-filter__chip-value">{f.value}</span>
           <button
             type="button"
             className="alm-sessions-filter__chip-remove"

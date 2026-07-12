@@ -33,7 +33,7 @@ import { altitudeScale, hourScale, HOUR_DOMAIN } from './altitude-scale';
 
 const VB_W = 72;
 const CURVE_H = 14; // height of the altitude-curve area (px in viewBox units)
-const TICK_H = 6;   // height reserved below curve for time-axis tick + label
+const TICK_H = 6; // height reserved below curve for time-axis tick + label
 const VB_H = CURVE_H + TICK_H;
 const PAD_Y = 1;
 
@@ -57,8 +57,8 @@ function tHourToX(tHour: number): number {
 // tHour values: 0 → 18:00, 6 → 00:00, 12 → 06:00.
 
 const TIME_TICKS: Array<{ tHour: number; label: string }> = [
-  { tHour: 0,  label: '18' },
-  { tHour: 6,  label: '00' },
+  { tHour: 0, label: '18' },
+  { tHour: 6, label: '00' },
   { tHour: 12, label: '06' },
 ];
 
@@ -111,7 +111,9 @@ export function AltitudeSparkline({ alt, label }: Props) {
     <svg
       className={
         'alm-targets-spark' +
-        (visibleTonight ? ' alm-targets-spark--usable' : ' alm-targets-spark--low')
+        (visibleTonight
+          ? ' alm-targets-spark--usable'
+          : ' alm-targets-spark--low')
       }
       viewBox={`0 0 ${VB_W} ${VB_H}`}
       preserveAspectRatio="none"
@@ -120,7 +122,9 @@ export function AltitudeSparkline({ alt, label }: Props) {
     >
       {/* Hover tooltip: native <title> shown by browser on hover.
           Pointer-events are enabled on the SVG via .cssblocks/targets-wave2.css. */}
-      <title>{label} — {tooltip}</title>
+      <title>
+        {label} — {tooltip}
+      </title>
 
       {/* Usable-altitude guide line (≥30°). Geometry only; colour via CSS. */}
       <line
@@ -163,7 +167,11 @@ export function AltitudeSparkline({ alt, label }: Props) {
               x={x}
               y={VB_H}
               textAnchor={
-                tHour === 0 ? 'start' : tHour === HOUR_DOMAIN[1] ? 'end' : 'middle'
+                tHour === 0
+                  ? 'start'
+                  : tHour === HOUR_DOMAIN[1]
+                    ? 'end'
+                    : 'middle'
               }
             >
               {tickLabel}

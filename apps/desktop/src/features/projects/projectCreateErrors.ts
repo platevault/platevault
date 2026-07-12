@@ -42,13 +42,20 @@ export function projectCreateErrorField(code: string): ProjectCreateErrorField {
  */
 export function mapCreateProjectErrorCode(code: string): string {
   switch (code) {
-    case 'name.empty':     return m.projects_create_err_name_empty();
-    case 'name.too_long':  return m.projects_create_err_name_too_long();
-    case 'name.duplicate': return m.projects_create_name_duplicate();
-    case 'tool.unknown':   return m.projects_create_err_tool_unknown();
-    case 'path.invalid':   return m.projects_create_err_path_invalid();
-    case 'path.collision': return m.projects_create_err_path_collision();
-    default:               return m.projects_create_err_generic({ code });
+    case 'name.empty':
+      return m.projects_create_err_name_empty();
+    case 'name.too_long':
+      return m.projects_create_err_name_too_long();
+    case 'name.duplicate':
+      return m.projects_create_name_duplicate();
+    case 'tool.unknown':
+      return m.projects_create_err_tool_unknown();
+    case 'path.invalid':
+      return m.projects_create_err_path_invalid();
+    case 'path.collision':
+      return m.projects_create_err_path_collision();
+    default:
+      return m.projects_create_err_generic({ code });
   }
 }
 
@@ -63,7 +70,11 @@ export function mapCreateProjectErrorCode(code: string): string {
  */
 export function createProjectErrorCode(err: unknown): string {
   if (typeof err === 'string') return err;
-  if (err && typeof err === 'object' && typeof (err as { code?: unknown }).code === 'string') {
+  if (
+    err &&
+    typeof err === 'object' &&
+    typeof (err as { code?: unknown }).code === 'string'
+  ) {
     return (err as { code: string }).code;
   }
   if (err instanceof Error) return err.message;
@@ -76,7 +87,9 @@ export function createProjectErrorCode(err: unknown): string {
  * on failure (offline/IPC error) — the backend still enforces uniqueness on
  * submit, so a failed pre-check just means the user finds out one step later.
  */
-export async function findDuplicateProjectName(trimmedName: string): Promise<boolean> {
+export async function findDuplicateProjectName(
+  trimmedName: string,
+): Promise<boolean> {
   try {
     const list: ProjectSummaryDto[] = unwrap(await commands.projectsList(null));
     return list.some((p) => p.name.toLowerCase() === trimmedName.toLowerCase());

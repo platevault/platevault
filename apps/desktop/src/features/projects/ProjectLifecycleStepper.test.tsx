@@ -12,23 +12,37 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { ProjectLifecycleStepper } from './ProjectLifecycleStepper';
 
-const TS = { createdAt: '2026-06-01T00:00:00Z', updatedAt: '2026-06-10T00:00:00Z' };
+const TS = {
+  createdAt: '2026-06-01T00:00:00Z',
+  updatedAt: '2026-06-10T00:00:00Z',
+};
 
 describe('ProjectLifecycleStepper', () => {
   it('renders the stepper container and all lifecycle stages', () => {
     render(<ProjectLifecycleStepper state="processing" {...TS} />);
     expect(screen.getByTestId('project-lifecycle-stepper')).toBeInTheDocument();
-    for (const stage of ['setup', 'ready', 'prepared', 'processing', 'completed', 'archived']) {
+    for (const stage of [
+      'setup',
+      'ready',
+      'prepared',
+      'processing',
+      'completed',
+      'archived',
+    ]) {
       expect(screen.getByText(stage)).toBeInTheDocument();
     }
   });
 
   it('marks the current stage active and prior stages done', () => {
-    const { container } = render(<ProjectLifecycleStepper state="prepared" {...TS} />);
+    const { container } = render(
+      <ProjectLifecycleStepper state="prepared" {...TS} />,
+    );
     const active = container.querySelector('.alm-stepper__chip--active');
     expect(active).toHaveTextContent('prepared');
     // setup + ready precede prepared → both done.
-    expect(container.querySelectorAll('.alm-stepper__chip--done')).toHaveLength(2);
+    expect(container.querySelectorAll('.alm-stepper__chip--done')).toHaveLength(
+      2,
+    );
   });
 
   it('renders a contextual next-action line', () => {
@@ -37,7 +51,9 @@ describe('ProjectLifecycleStepper', () => {
   });
 
   it('renders a trailing blocked chip for blocked projects', () => {
-    const { container } = render(<ProjectLifecycleStepper state="blocked" {...TS} />);
+    const { container } = render(
+      <ProjectLifecycleStepper state="blocked" {...TS} />,
+    );
     const blocked = container.querySelector('.alm-stepper__chip--blocked');
     expect(blocked).toHaveTextContent('blocked');
     // No active chip when off-track.

@@ -74,8 +74,7 @@ export function Modal({
   bodyClassName,
   'data-testid': testId,
 }: ModalProps) {
-  const label =
-    ariaLabel ?? (typeof title === 'string' ? title : undefined);
+  const label = ariaLabel ?? (typeof title === 'string' ? title : undefined);
 
   return (
     <Dialog.Root
@@ -111,13 +110,18 @@ export function Modal({
               <span className="alm-modal__subtitle">{subtitle}</span>
             )}
             {!hideClose && (
-              <Dialog.Close className="alm-modal__close" aria-label={m.common_close()}>
+              <Dialog.Close
+                className="alm-modal__close"
+                aria-label={m.common_close()}
+              >
                 ✕
               </Dialog.Close>
             )}
           </div>
 
-          <div className={`alm-modal__body${bodyClassName ? ` ${bodyClassName}` : ''}`}>
+          <div
+            className={`alm-modal__body${bodyClassName ? ` ${bodyClassName}` : ''}`}
+          >
             {children}
           </div>
 

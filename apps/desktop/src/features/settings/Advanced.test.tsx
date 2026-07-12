@@ -39,7 +39,9 @@ vi.mock('@/features/guided/store', () => ({
   STEP_ORDER: ['step-one', 'step-two'],
 }));
 
-const { mockSetPreference } = vi.hoisted(() => ({ mockSetPreference: vi.fn() }));
+const { mockSetPreference } = vi.hoisted(() => ({
+  mockSetPreference: vi.fn(),
+}));
 vi.mock('@/data/preferences', () => ({
   setPreference: mockSetPreference,
 }));
@@ -81,7 +83,9 @@ describe('Advanced — first-run setup restart control (spec 003 US3)', () => {
   it('renders a distinctly-labeled control, separate from the guided-tour restart', async () => {
     render(<Advanced save={vi.fn()} />);
 
-    expect(await screen.findByTestId('firstrun-restart-btn')).toBeInTheDocument();
+    expect(
+      await screen.findByTestId('firstrun-restart-btn'),
+    ).toBeInTheDocument();
     // The guided-tour restart control must not be conflated with this one —
     // its state fetch was made to reject, so its section should not render.
     expect(screen.queryByTestId('guided-restart-btn')).not.toBeInTheDocument();
@@ -94,7 +98,9 @@ describe('Advanced — first-run setup restart control (spec 003 US3)', () => {
     fireEvent.click(trigger);
 
     expect(mockRestartFirstRun).not.toHaveBeenCalled();
-    expect(await screen.findByTestId('firstrun-restart-confirm-btn')).toBeInTheDocument();
+    expect(
+      await screen.findByTestId('firstrun-restart-confirm-btn'),
+    ).toBeInTheDocument();
   });
 
   it('cancels back to the initial control without calling restartFirstRun', async () => {
@@ -141,7 +147,9 @@ describe('Advanced — first-run setup restart control (spec 003 US3)', () => {
     fireEvent.click(await screen.findByTestId('firstrun-restart-confirm-btn'));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('database unavailable');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'database unavailable',
+      );
     });
     expect(mockResetWizardStateWithSources).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();

@@ -33,26 +33,63 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     label: () => m.nav_group_capture(),
-    items: [{ id: 'inbox', icon: Inbox, label: () => m.settings_datasources_category_inbox(), path: '/inbox' }],
+    items: [
+      {
+        id: 'inbox',
+        icon: Inbox,
+        label: () => m.settings_datasources_category_inbox(),
+        path: '/inbox',
+      },
+    ],
   },
   {
     label: () => m.nav_group_library(),
     items: [
-      { id: 'sessions', icon: Camera, label: () => m.common_sessions(), path: '/sessions' },
-      { id: 'calibration', icon: Crosshair, label: () => m.settings_datasources_category_calibration(), path: '/calibration' },
-      { id: 'targets', icon: Target, label: () => m.nav_targets(), path: '/targets' },
+      {
+        id: 'sessions',
+        icon: Camera,
+        label: () => m.common_sessions(),
+        path: '/sessions',
+      },
+      {
+        id: 'calibration',
+        icon: Crosshair,
+        label: () => m.settings_datasources_category_calibration(),
+        path: '/calibration',
+      },
+      {
+        id: 'targets',
+        icon: Target,
+        label: () => m.nav_targets(),
+        path: '/targets',
+      },
     ],
   },
   {
     label: () => m.nav_group_work(),
     items: [
-      { id: 'projects', icon: FolderOpen, label: () => m.common_projects(), path: '/projects' },
-      { id: 'archive', icon: Archive, label: () => m.verb_archive(), path: '/archive' },
+      {
+        id: 'projects',
+        icon: FolderOpen,
+        label: () => m.common_projects(),
+        path: '/projects',
+      },
+      {
+        id: 'archive',
+        icon: Archive,
+        label: () => m.verb_archive(),
+        path: '/archive',
+      },
     ],
   },
 ];
 
-const SETTINGS_ITEM: NavItem = { id: 'settings', icon: Settings, label: () => m.settings_page_title(), path: '/settings' };
+const SETTINGS_ITEM: NavItem = {
+  id: 'settings',
+  icon: Settings,
+  label: () => m.settings_page_title(),
+  path: '/settings',
+};
 
 function badgeFor(id: string, status: StatusSummary): number {
   switch (id) {
@@ -87,7 +124,10 @@ export function Sidebar() {
       <Link
         key={item.id}
         to={item.path}
-        className={clsx('alm-sidebar__item', active && 'alm-sidebar__item--active')}
+        className={clsx(
+          'alm-sidebar__item',
+          active && 'alm-sidebar__item--active',
+        )}
         aria-label={item.label()}
         aria-current={active ? 'page' : undefined}
         title={collapsed ? item.label() : undefined}
@@ -95,7 +135,9 @@ export function Sidebar() {
         <span className="alm-sidebar__item-icon">
           <Icon size={18} />
         </span>
-        {!collapsed && <span className="alm-sidebar__item-label">{item.label()}</span>}
+        {!collapsed && (
+          <span className="alm-sidebar__item-label">{item.label()}</span>
+        )}
         {!collapsed && count > 0 && (
           <span
             className={clsx(
@@ -119,13 +161,23 @@ export function Sidebar() {
       <div className="alm-sidebar__header">
         {/* eslint-disable-next-line alm/no-user-string -- decorative brand glyph, not translatable content */}
         {!collapsed && <div className="alm-sidebar__mark">P</div>}
-        {!collapsed && <span className="alm-sidebar__brand-name">{m.shell_brand_name()}</span>}
-        {!collapsed && <span className="alm-sidebar__version">{m.shell_version()}</span>}
+        {!collapsed && (
+          <span className="alm-sidebar__brand-name">
+            {m.shell_brand_name()}
+          </span>
+        )}
+        {!collapsed && (
+          <span className="alm-sidebar__version">{m.shell_version()}</span>
+        )}
         <button
           type="button"
           className="alm-sidebar__collapse"
           onClick={() => setCollapsed(!collapsed)}
-          aria-label={collapsed ? m.nav_expand_sidebar_aria() : m.nav_collapse_sidebar_aria()}
+          aria-label={
+            collapsed
+              ? m.nav_expand_sidebar_aria()
+              : m.nav_collapse_sidebar_aria()
+          }
         >
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
@@ -135,7 +187,9 @@ export function Sidebar() {
       <div className="alm-sidebar__nav">
         {NAV_GROUPS.map((group) => (
           <div key={group.label()} className="alm-sidebar__group">
-            {!collapsed && <div className="alm-sidebar__group-label">{group.label()}</div>}
+            {!collapsed && (
+              <div className="alm-sidebar__group-label">{group.label()}</div>
+            )}
             {group.items.map(renderItem)}
           </div>
         ))}
@@ -160,11 +214,15 @@ export function Sidebar() {
                   : 'alm-sidebar__root-dot--ok',
               )}
             />
-            {m.nav_roots_summary({ total: status.roots.length, online: onlineRoots.length })}
+            {m.nav_roots_summary({
+              total: status.roots.length,
+              online: onlineRoots.length,
+            })}
           </Link>
           {offlineRoots.length > 0 && (
             <div className="alm-sidebar__offline-warn">
-              {offlineRoots.map((r) => r.path.split(/[\\/]/).pop()).join(', ')} {m.nav_roots_offline_suffix()}
+              {offlineRoots.map((r) => r.path.split(/[\\/]/).pop()).join(', ')}{' '}
+              {m.nav_roots_offline_suffix()}
             </div>
           )}
         </div>

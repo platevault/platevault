@@ -38,10 +38,7 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
   }
 
   return (
-    <table
-      className="alm-dev-calls__table"
-      aria-label="Recent contract calls"
-    >
+    <table className="alm-dev-calls__table" aria-label="Recent contract calls">
       <thead>
         <tr className="alm-dev-calls__thead-row">
           <th className="alm-dev-calls__th">ID</th>
@@ -65,9 +62,7 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
               className="alm-dev-calls__row"
               data-testid={`call-row-${call.id}`}
             >
-              <td className="alm-dev-calls__td--id">
-                {call.id}
-              </td>
+              <td className="alm-dev-calls__td--id">{call.id}</td>
               <td className="alm-dev-calls__td--contract">
                 {call.contract}
                 {call.payloadTruncated && (
@@ -79,9 +74,7 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
                   </span>
                 )}
               </td>
-              <td className="alm-dev-calls__td">
-                {call.contractVersion}
-              </td>
+              <td className="alm-dev-calls__td">{call.contractVersion}</td>
               <td className="alm-dev-calls__td--started">
                 {formatStarted(call.startedAt)}
               </td>
@@ -111,7 +104,12 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
                 </button>
                 <button
                   type="button"
-                  className={'alm-btn alm-btn--xs' + (isReplaySafe ? ' alm-dev-calls__replay-btn--safe' : ' alm-dev-calls__replay-btn--unsafe')}
+                  className={
+                    'alm-btn alm-btn--xs' +
+                    (isReplaySafe
+                      ? ' alm-dev-calls__replay-btn--safe'
+                      : ' alm-dev-calls__replay-btn--unsafe')
+                  }
                   disabled={!isReplaySafe}
                   title={
                     isReplaySafe

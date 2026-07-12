@@ -123,13 +123,26 @@ const STAR_DISTANCE_LY = 1000;
 
 /** Build an astronomy-engine observer from a site. */
 function observerFor(site: ObserverSite): Observer {
-  return new Observer(site.latitudeDeg, site.longitudeDeg, site.elevationM ?? 0);
+  return new Observer(
+    site.latitudeDeg,
+    site.longitudeDeg,
+    site.elevationM ?? 0,
+  );
 }
 
 /** Of-date apparent horizontal coordinates of the currently-defined Star1. */
-function starHorizonAt(date: Date, observer: Observer): { altDeg: number; azDeg: number } {
+function starHorizonAt(
+  date: Date,
+  observer: Observer,
+): { altDeg: number; azDeg: number } {
   // Precess J2000 → of-date (FR-026), then to horizontal with refraction.
-  const eq = Equator(Body.Star1, date, observer, /*ofdate*/ true, /*aberration*/ false);
+  const eq = Equator(
+    Body.Star1,
+    date,
+    observer,
+    /*ofdate*/ true,
+    /*aberration*/ false,
+  );
   const hor = Horizon(date, observer, eq.ra, eq.dec, REFRACTION);
   return { altDeg: hor.altitude, azDeg: hor.azimuth };
 }
@@ -139,12 +152,23 @@ function starHorizonAt(date: Date, observer: Observer): { altDeg: number; azDeg:
  * the given date. Falls back to a fixed ±6h window around solar midnight when
  * the Sun does not rise/set (polar day/night) so the grid is never empty.
  */
-function nightSpan(observer: Observer, dateMs: number): { startMs: number; endMs: number } {
+function nightSpan(
+  observer: Observer,
+  dateMs: number,
+): { startMs: number; endMs: number } {
   const t0 = new Date(dateMs);
   // Solar noon of the day containing `dateMs` (search from 12h before).
-  const noon = SearchHourAngle(Body.Sun, observer, 0, new Date(dateMs - 12 * MS_PER_HOUR), +1);
+  const noon = SearchHourAngle(
+    Body.Sun,
+    observer,
+    0,
+    new Date(dateMs - 12 * MS_PER_HOUR),
+    +1,
+  );
   const sunset = SearchRiseSet(Body.Sun, observer, -1, noon.time.date, 1);
-  const sunrise = sunset ? SearchRiseSet(Body.Sun, observer, +1, sunset.date, 1) : null;
+  const sunrise = sunset
+    ? SearchRiseSet(Body.Sun, observer, +1, sunset.date, 1)
+    : null;
   if (sunset && sunrise) {
     return { startMs: sunset.date.getTime(), endMs: sunrise.date.getTime() };
   }
@@ -152,7 +176,8 @@ function nightSpan(observer: Observer, dateMs: number): { startMs: number; endMs
   const midnight = SearchHourAngle(Body.Sun, observer, 12, noon.time.date, +1);
   const midMs = midnight.time.date.getTime();
   // Guard against an anchor far from the requested date.
-  const anchor = Math.abs(midMs - t0.getTime()) < 36 * MS_PER_HOUR ? midMs : t0.getTime();
+  const anchor =
+    Math.abs(midMs - t0.getTime()) < 36 * MS_PER_HOUR ? midMs : t0.getTime();
   return { startMs: anchor - 6 * MS_PER_HOUR, endMs: anchor + 6 * MS_PER_HOUR };
 }
 
@@ -163,7 +188,14 @@ function darkWindowFor(
   nightStartMs: number,
 ): TimeWindow | null {
   const depression = twilightDepressionDeg(site);
-  const dusk = SearchAltitude(Body.Sun, observer, -1, new Date(nightStartMs), 1, depression);
+  const dusk = SearchAltitude(
+    Body.Sun,
+    observer,
+    -1,
+    new Date(nightStartMs),
+    1,
+    depression,
+  );
   if (!dusk) return null;
   const dawn = SearchAltitude(Body.Sun, observer, +1, dusk.date, 1, depression);
   if (!dawn) return null;
@@ -184,7 +216,14 @@ function riseSetFor(
   const start = new Date(searchStartMs);
   const event =
     site.minHorizonAltDeg > 0
-      ? SearchAltitude(Body.Star1, observer, direction, start, 1, site.minHorizonAltDeg)
+      ? SearchAltitude(
+          Body.Star1,
+          observer,
+          direction,
+          start,
+          1,
+          site.minHorizonAltDeg,
+        )
       : SearchRiseSet(Body.Star1, observer, direction, start, 1);
   if (!event) return null;
   const { altDeg } = starHorizonAt(event.date, observer);
@@ -243,8 +282,20 @@ export function computeNightObservability(
       // Moon apparent topocentric altitude at the site (of-date, aberration-
       // corrected — matches how a real body, as opposed to the fixed Star1
       // proxy, is normally evaluated with astronomy-engine).
-      const moonEq = Equator(Body.Moon, date, observer, /*ofdate*/ true, /*aberration*/ true);
-      const moonHor = Horizon(date, observer, moonEq.ra, moonEq.dec, REFRACTION);
+      const moonEq = Equator(
+        Body.Moon,
+        date,
+        observer,
+        /*ofdate*/ true,
+        /*aberration*/ true,
+      );
+      const moonHor = Horizon(
+        date,
+        observer,
+        moonEq.ra,
+        moonEq.dec,
+        REFRACTION,
+      );
       // Separation reuses Track A's exact geocentric vector math (SC-013).
       const moonGeoVec = GeoVector(Body.Moon, date, true);
       const separationDeg = angleBetweenDeg(targetVec, moonGeoVec);
@@ -255,7 +306,13 @@ export function computeNightObservability(
   // Exact transit nearest the night (search from 1h before night start).
   let transit: AltEvent | null;
   try {
-    const event = SearchHourAngle(Body.Star1, observer, 0, new Date(startMs - MS_PER_HOUR), +1);
+    const event = SearchHourAngle(
+      Body.Star1,
+      observer,
+      0,
+      new Date(startMs - MS_PER_HOUR),
+      +1,
+    );
     transit = { tMs: event.time.date.getTime(), altDeg: event.hor.altitude };
   } catch {
     transit = null;
@@ -291,7 +348,11 @@ export function computeNightObservability(
   // requested — one extra astronomy-engine call saved per skipped target.
   const moonRef = includeMoonGeometry
     ? moonStateAt(
-        new Date(darkWindow ? (darkWindow.startMs + darkWindow.endMs) / 2 : (startMs + endMs) / 2),
+        new Date(
+          darkWindow
+            ? (darkWindow.startMs + darkWindow.endMs) / 2
+            : (startMs + endMs) / 2,
+        ),
       )
     : { illuminationFrac: 0, moonAgeFromFullDays: 0 };
 
@@ -332,7 +393,8 @@ function moonUpWindowsFor(
       openStartMs = null;
     }
   }
-  if (openStartMs !== null) windows.push({ startMs: openStartMs, endMs: darkWindow.endMs });
+  if (openStartMs !== null)
+    windows.push({ startMs: openStartMs, endMs: darkWindow.endMs });
   return windows;
 }
 
@@ -369,7 +431,19 @@ export function angularSeparationFromMoonDeg(
   const observer = observerFor(site);
   const date = new Date(dateMs);
   DefineStar(Body.Star1, raDegJ2000 / 15, decDegJ2000, STAR_DISTANCE_LY);
-  const targetEq = Equator(Body.Star1, date, observer, /*ofdate*/ false, /*aberration*/ false);
-  const moonEq = Equator(Body.Moon, date, observer, /*ofdate*/ false, /*aberration*/ false);
+  const targetEq = Equator(
+    Body.Star1,
+    date,
+    observer,
+    /*ofdate*/ false,
+    /*aberration*/ false,
+  );
+  const moonEq = Equator(
+    Body.Moon,
+    date,
+    observer,
+    /*ofdate*/ false,
+    /*aberration*/ false,
+  );
   return AngleBetween(targetEq.vec, moonEq.vec);
 }

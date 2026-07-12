@@ -13,7 +13,13 @@
  *  8. Confirm button is disabled when no suggestion is pending.
  */
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
@@ -104,9 +110,7 @@ describe('AddTargetDialog', () => {
   });
 
   it('2. selecting a suggestion shows the confirmation view', async () => {
-    render(
-      <AddTargetDialog open onClose={vi.fn()} onAdded={vi.fn()} />,
-    );
+    render(<AddTargetDialog open onClose={vi.fn()} onAdded={vi.fn()} />);
 
     // Type in search box to trigger suggestions
     const input = screen.getByRole('combobox');

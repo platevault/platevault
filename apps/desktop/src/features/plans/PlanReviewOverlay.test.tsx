@@ -67,11 +67,17 @@ import { PlanReviewOverlay } from './PlanReviewOverlay';
 const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
 
 function wrapper({ children }: { children: ReactNode }) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }
 
-function item(overrides: Partial<PlanItemDetail_Serialize> = {}): PlanItemDetail_Serialize {
+function item(
+  overrides: Partial<PlanItemDetail_Serialize> = {},
+): PlanItemDetail_Serialize {
   return {
     id: 'item-0',
     index: 0,
@@ -86,7 +92,9 @@ function item(overrides: Partial<PlanItemDetail_Serialize> = {}): PlanItemDetail
   };
 }
 
-function plan(overrides: Partial<PlanDetail_Serialize> = {}): PlanDetail_Serialize {
+function plan(
+  overrides: Partial<PlanDetail_Serialize> = {},
+): PlanDetail_Serialize {
   const items = overrides.items ?? [
     item(),
     item({
@@ -141,7 +149,9 @@ function protectionCheck(
   };
 }
 
-function renderOverlay(props: Partial<Parameters<typeof PlanReviewOverlay>[0]> = {}) {
+function renderOverlay(
+  props: Partial<Parameters<typeof PlanReviewOverlay>[0]> = {},
+) {
   return render(
     <PlanReviewOverlay planId="plan-1" open onClose={vi.fn()} {...props} />,
     { wrapper },
@@ -161,7 +171,9 @@ beforeEach(() => {
       approvedAt: '2026-07-01T00:00:00Z',
     }),
   );
-  mockPlansDiscard.mockResolvedValue(ok({ planId: 'plan-1', discardedAt: '2026-07-01T00:00:00Z' }));
+  mockPlansDiscard.mockResolvedValue(
+    ok({ planId: 'plan-1', discardedAt: '2026-07-01T00:00:00Z' }),
+  );
   // Default apply: streams item events then a completed terminal event.
   mockApplyPlan.mockImplementation(
     (args: { id: string; onEvent?: (e: OperationEvent) => void }) => {
@@ -180,7 +192,11 @@ beforeEach(() => {
       args.onEvent?.(mk(1, 'item_applied', {}));
       args.onEvent?.(mk(2, 'item_applied', {}));
       args.onEvent?.(mk(3, 'completed', {}));
-      return Promise.resolve({ planId: args.id, runId: 'op-1', newState: 'applied' });
+      return Promise.resolve({
+        planId: args.id,
+        runId: 'op-1',
+        newState: 'applied',
+      });
     },
   );
 });
@@ -195,7 +211,9 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     const protectedRow = screen.getByTestId('plan-review-item-1');
     expect(protectedRow).toHaveClass('alm-plan-review__row--protected');
     // Read-only until approval (FR-002 note).
-    expect(screen.getByText(/Nothing has been changed on disk/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nothing has been changed on disk/),
+    ).toBeInTheDocument();
   });
 
   it('renders the destination for archive items and a deletion cue for delete items (FR-003)', async () => {
@@ -204,14 +222,22 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
         plan({
           items: [
             item({ to: '.astro-plan-archive/plan-1/item-0-light_001.xisf' }),
-            item({ id: 'item-1', index: 1, name: 'raw_002.fits', action: 'delete', to: '' }),
+            item({
+              id: 'item-1',
+              index: 1,
+              name: 'raw_002.fits',
+              action: 'delete',
+              to: '',
+            }),
           ],
         }),
       ),
     );
     renderOverlay();
     expect(
-      await screen.findByText('.astro-plan-archive/plan-1/item-0-light_001.xisf'),
+      await screen.findByText(
+        '.astro-plan-archive/plan-1/item-0-light_001.xisf',
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText('Deleted, not moved')).toBeInTheDocument();
   });
@@ -235,14 +261,18 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     await waitFor(() => expect(approveBtn).not.toBeDisabled());
     fireEvent.click(approveBtn);
 
-    await waitFor(() => expect(mockPlansApprove).toHaveBeenCalledWith('plan-1'));
+    await waitFor(() =>
+      expect(mockPlansApprove).toHaveBeenCalledWith('plan-1'),
+    );
     await waitFor(() =>
       expect(mockApplyPlan).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'plan-1', approvalToken: 'tok-plan-1' }),
       ),
     );
     // Terminal completed state is surfaced (progress UI).
-    expect(await screen.findByTestId('plan-review-progress')).toBeInTheDocument();
+    expect(
+      await screen.findByTestId('plan-review-progress'),
+    ).toBeInTheDocument();
     expect(screen.getByText('2 items applied')).toBeInTheDocument();
     expect(onApplied).toHaveBeenCalledTimes(1);
   });
@@ -255,7 +285,9 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     renderOverlay({ onClose });
 
     fireEvent.click(await screen.findByText('Discard plan'));
-    await waitFor(() => expect(mockPlansDiscard).toHaveBeenCalledWith('plan-1'));
+    await waitFor(() =>
+      expect(mockPlansDiscard).toHaveBeenCalledWith('plan-1'),
+    );
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
@@ -280,7 +312,11 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
         args.onEvent?.(mk(1, 'item_applied', {}));
         args.onEvent?.(mk(2, 'item_failed', {}));
         args.onEvent?.(mk(3, 'failed', {}));
-        return Promise.resolve({ planId: args.id, runId: 'op-1', newState: 'partially_applied' });
+        return Promise.resolve({
+          planId: args.id,
+          runId: 'op-1',
+          newState: 'partially_applied',
+        });
       },
     );
     mockPlansRetry.mockResolvedValue(
@@ -298,7 +334,9 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     expect(screen.getByText('1 item failed')).toBeInTheDocument();
 
     fireEvent.click(retryBtn);
-    await waitFor(() => expect(mockPlansRetry).toHaveBeenCalledWith('plan-1', 'failed'));
+    await waitFor(() =>
+      expect(mockPlansRetry).toHaveBeenCalledWith('plan-1', 'failed'),
+    );
     await waitFor(() => expect(onRetryCreated).toHaveBeenCalledWith('plan-2'));
   });
 
@@ -323,7 +361,11 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
         args.onEvent?.(mk(1, 'item_applied', {}));
         args.onEvent?.(mk(2, 'item_failed', {}));
         args.onEvent?.(mk(3, 'failed', {}));
-        return Promise.resolve({ planId: args.id, runId: 'op-1', newState: 'partially_applied' });
+        return Promise.resolve({
+          planId: args.id,
+          runId: 'op-1',
+          newState: 'partially_applied',
+        });
       },
     );
     // `plans.retry` rejects with a ContractError — the real shape a Tauri
@@ -342,8 +384,12 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     const retryBtn = await screen.findByTestId('plan-review-retry');
     fireEvent.click(retryBtn);
 
-    await waitFor(() => expect(mockPlansRetry).toHaveBeenCalledWith('plan-1', 'failed'));
-    expect(await screen.findByText('There are no items to retry.')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockPlansRetry).toHaveBeenCalledWith('plan-1', 'failed'),
+    );
+    expect(
+      await screen.findByText('There are no items to retry.'),
+    ).toBeInTheDocument();
     expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
     expect(screen.queryByText('no.items.to.retry')).not.toBeInTheDocument();
   });
@@ -365,17 +411,31 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
           sequence,
           payload,
         });
-        args.onEvent?.(mk(0, 'item_started', { itemsTotal: 2, runId: 'run-1' }));
+        args.onEvent?.(
+          mk(0, 'item_started', { itemsTotal: 2, runId: 'run-1' }),
+        );
         args.onEvent?.(mk(1, 'item_applied', {}));
         args.onEvent?.(
-          mk(2, 'warning', { runId: 'run-1', pauseReason: 'item.stale', planId: args.id }),
+          mk(2, 'warning', {
+            runId: 'run-1',
+            pauseReason: 'item.stale',
+            planId: args.id,
+          }),
         );
         // No terminal event — a paused run stops streaming until resumed/cancelled.
-        return Promise.resolve({ planId: args.id, runId: 'run-1', newState: 'applying' });
+        return Promise.resolve({
+          planId: args.id,
+          runId: 'run-1',
+          newState: 'applying',
+        });
       },
     );
     mockPlansResume.mockResolvedValue(
-      ok({ planId: 'plan-1', runId: 'run-1', resumedAt: '2026-07-09T00:00:00Z' }),
+      ok({
+        planId: 'plan-1',
+        runId: 'run-1',
+        resumedAt: '2026-07-09T00:00:00Z',
+      }),
     );
 
     renderOverlay();
@@ -383,30 +443,36 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     await waitFor(() => expect(approveBtn).not.toBeDisabled());
     fireEvent.click(approveBtn);
 
-    expect(await screen.findByTestId('plan-review-paused-badge')).toHaveTextContent(
-      'Paused — item.stale',
-    );
+    expect(
+      await screen.findByTestId('plan-review-paused-badge'),
+    ).toHaveTextContent('Paused — item.stale');
 
     fireEvent.click(screen.getByTestId('plan-review-resume'));
-    await waitFor(() => expect(mockPlansResume).toHaveBeenCalledWith('plan-1', 'run-1'));
     await waitFor(() =>
-      expect(screen.queryByTestId('plan-review-paused-badge')).not.toBeInTheDocument(),
+      expect(mockPlansResume).toHaveBeenCalledWith('plan-1', 'run-1'),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('plan-review-paused-badge'),
+      ).not.toBeInTheDocument(),
     );
 
     // Regression: resume_plan doesn't re-spawn the executor (#575), so no
     // further events ever arrive on this channel. The UI must not render as
     // active progress (no "Applying X of Y…", no infinite-busy trap) and
     // must keep an escape affordance available instead.
-    expect(await screen.findByTestId('plan-review-resume-stalled-badge')).toHaveTextContent(
-      /not restarted yet/i,
-    );
+    expect(
+      await screen.findByTestId('plan-review-resume-stalled-badge'),
+    ).toHaveTextContent(/not restarted yet/i);
     expect(screen.queryByText(/Applying \d+ of \d+/)).not.toBeInTheDocument();
     expect(screen.getByText('Discard plan')).not.toBeDisabled();
     expect(screen.getByTestId('plan-review-approve-apply')).not.toBeDisabled();
   });
 
   it('cannot approve a plan with zero items (FR-014)', async () => {
-    mockPlansGet.mockResolvedValue(ok(plan({ items: [], itemsTotal: 0, itemsPending: 0 })));
+    mockPlansGet.mockResolvedValue(
+      ok(plan({ items: [], itemsTotal: 0, itemsPending: 0 })),
+    );
     mockProtectionCheck.mockResolvedValue(
       ok(
         protectionCheck({
@@ -419,7 +485,9 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     renderOverlay();
     const approveBtn = await screen.findByTestId('plan-review-approve-apply');
     // Gate reports ready (no protected items) but the empty plan still blocks.
-    await waitFor(() => expect(screen.getByText(/No protected items/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/No protected items/)).toBeInTheDocument(),
+    );
     expect(approveBtn).toBeDisabled();
   });
 });
