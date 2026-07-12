@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/nightwatch-astro/alm/compare/v0.4.0...v0.5.0) (2026-07-12)
+
+
+### Features
+
+* adopt simbad-resolver crate (TAP client + Caldwell + opt-in fuzzy) ([#672](https://github.com/nightwatch-astro/alm/issues/672)) ([b35e013](https://github.com/nightwatch-astro/alm/commit/b35e0130a65126885a389e5e7333588a5cf339da))
+
 ## [0.4.0](https://github.com/nightwatch-astro/alm/compare/v0.3.0...v0.4.0) (2026-07-12)
 
 
