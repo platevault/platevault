@@ -25,10 +25,12 @@ use std::path::Path;
 use contracts_core::error_code::ErrorCode;
 use contracts_core::inventory_frame::{
     FramePresenceState, InventoryFrame, InventoryFrameListRequest, InventoryFrameListResponse,
-    InventoryReconcileRunRequest, InventoryReconcileRunResponse, RawFrameType, ReconcileMode,
+    InventoryFrameRelinkRequest, InventoryFrameRelinkResponse, InventoryReconcileRunRequest,
+    InventoryReconcileRunResponse, RawFrameType, ReconcileMode,
 };
 use contracts_core::{ContractError, ErrorSeverity};
 use fs_inventory::reconcile::{reconcile_root, FrameOutcome, KnownFrame};
+use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 
 use app_core_errors::db_err;
@@ -38,13 +40,15 @@ fn internal(msg: impl std::fmt::Display) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, msg.to_string(), ErrorSeverity::Fatal, true)
 }
 
-/// Raw row shape shared by both list paths.
-struct FrameRow {
-    id: String,
-    root_id: String,
-    relative_path: String,
-    size_bytes: i64,
-    state: String,
+/// Raw row shape shared by both list paths. `pub(crate)` so
+/// `cleanup_generator` (spec 048 US3) can reuse the same lookups instead of
+/// duplicating the `file_record` query.
+pub(crate) struct FrameRow {
+    pub(crate) id: String,
+    pub(crate) root_id: String,
+    pub(crate) relative_path: String,
+    pub(crate) size_bytes: i64,
+    pub(crate) state: String,
 }
 
 fn presence_state(state: &str) -> FramePresenceState {
@@ -103,7 +107,10 @@ fn frame_row_from_repo_row(r: persistence_db::repositories::q_core::FileRecordRo
     }
 }
 
-async fn rows_by_ids(pool: &SqlitePool, ids: &[String]) -> Result<Vec<FrameRow>, ContractError> {
+pub(crate) async fn rows_by_ids(
+    pool: &SqlitePool,
+    ids: &[String],
+) -> Result<Vec<FrameRow>, ContractError> {
     let rows = persistence_db::repositories::q_core::file_records_by_ids(pool, ids)
         .await
         .map_err(db_err)?;
@@ -124,7 +131,7 @@ async fn rows_by_root(pool: &SqlitePool, root_id: &str) -> Result<Vec<FrameRow>,
 /// back to `Light` — documented limitation of this scaffold; session-scoped
 /// listing (the common case per contracts/operations.md) does not need this
 /// fallback at all.
-async fn owning_session_frame_type(
+pub(crate) async fn owning_session_frame_type(
     pool: &SqlitePool,
     frame_id: &str,
 ) -> Result<(Option<String>, RawFrameType), ContractError> {
@@ -344,6 +351,61 @@ async fn apply_missing_outcome(
     Ok(())
 }
 
+/// Returns `frame_ids_json` with `frame_id` removed, or `None` if it wasn't
+/// present (no update needed).
+fn drop_id_from_frame_ids(frame_ids_json: &str, frame_id: &str) -> Option<String> {
+    let mut ids: Vec<String> = serde_json::from_str(frame_ids_json).unwrap_or_default();
+    let before = ids.len();
+    ids.retain(|id| id != frame_id);
+    (ids.len() != before).then(|| serde_json::to_string(&ids).unwrap_or_else(|_| "[]".to_owned()))
+}
+
+/// Remove `frame_id` from whichever session's `frame_ids` array currently
+/// references it (spec 048 T021, FR-010 auto-reconcile mode). The
+/// `file_record` row itself is never touched here — only membership — so a
+/// `missing` record stays retained and queryable (INV-4) via a root-scoped
+/// `inventory.frame.list { include_missing: true }`, it just stops being an
+/// active member of its former session.
+async fn drop_frame_from_session_membership(
+    pool: &SqlitePool,
+    frame_id: &str,
+) -> Result<(), ContractError> {
+    let like = format!("%\"{frame_id}\"%");
+
+    for (session_id, frame_ids_json) in
+        persistence_db::repositories::q_core::acquisition_sessions_by_frame_like(pool, &like)
+            .await
+            .map_err(db_err)?
+    {
+        if let Some(updated) = drop_id_from_frame_ids(&frame_ids_json, frame_id) {
+            persistence_db::repositories::q_core::update_acquisition_session_frame_ids(
+                pool,
+                &session_id,
+                &updated,
+            )
+            .await
+            .map_err(db_err)?;
+        }
+    }
+
+    for (session_id, frame_ids_json) in
+        persistence_db::repositories::q_core::calibration_sessions_by_frame_like(pool, &like)
+            .await
+            .map_err(db_err)?
+    {
+        if let Some(updated) = drop_id_from_frame_ids(&frame_ids_json, frame_id) {
+            persistence_db::repositories::q_core::update_calibration_session_frame_ids(
+                pool,
+                &session_id,
+                &updated,
+            )
+            .await
+            .map_err(db_err)?;
+        }
+    }
+    Ok(())
+}
+
 /// `inventory.reconcile.run` — on-demand reconcile pass over a root (spec 048
 /// T003/T015/US2 groundwork). See module docs for exactly what this pass
 /// does and does not apply yet.
@@ -404,11 +466,12 @@ pub async fn run_reconcile(
             }
             FrameOutcome::Missing => {
                 apply_missing_outcome(pool, bus, row, was_missing, &reason, &mut tally).await?;
-                // `reconcile.mode` is loaded above (`config`) so a future US2
-                // T021 patch can drop the id from the owning session's
-                // `frame_ids` array in auto-reconcile mode without
-                // re-plumbing this function's signature.
-                let _ = matches!(config.reconcile_mode, ReconcileMode::AutoReconcile);
+                // FR-010: auto-reconcile drops the id from active session
+                // membership; flag-missing (default) retains it, relying on
+                // the `state != 'missing'` filter for active counts/totals.
+                if matches!(config.reconcile_mode, ReconcileMode::AutoReconcile) {
+                    drop_frame_from_session_membership(pool, &row.id).await?;
+                }
             }
         }
     }
@@ -421,6 +484,133 @@ pub async fn run_reconcile(
         size_backfilled: tally.size_backfilled,
         progress_pct: 100,
     })
+}
+
+/// sha256 of a file's full contents, hex-encoded. Only ever called on demand
+/// (relink), never eagerly at ingest/reconcile — lazy hashing is a
+/// constitution requirement (FR-004).
+fn sha256_hex(path: &Path) -> std::io::Result<String> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 65536];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+/// `inventory.frame.relink` (spec 048 T025/US2, FR-012a/R3): confirm the
+/// identity of a candidate file for a `missing` frame by sha256 content
+/// hash — never by size or mtime (same-camera FITS commonly share identical
+/// sizes; mtime is unreliable across copy tools).
+///
+/// DESIGN NOTE: a `missing` frame's original bytes are, by definition,
+/// unreadable at its recorded path — there is no baseline hash to compare
+/// against on a frame's FIRST relink attempt. `file_record.content_hash` is
+/// populated lazily (data-model.md: "populated only on user-initiated
+/// relink"), so the first relink trusts the caller's candidate selection and
+/// records its hash as the frame's canonical content hash going forward. Any
+/// SUBSEQUENT relink attempt for the same `frame_id` must reproduce that
+/// stored hash exactly, or the operation fails with `hash.mismatch` — this
+/// is what protects a same-size-different-content candidate once a baseline
+/// exists.
+///
+/// # Errors
+///
+/// `frame.not_found` when the frame id is unknown; `root.unavailable` when
+/// the owning root isn't registered; `file.not_found` when the candidate
+/// path doesn't exist under the root; `hash.mismatch` when the candidate's
+/// hash doesn't match a previously recorded one. Never mutates the candidate
+/// file or writes to any other frame's row — only this `file_record` (INV-2).
+pub async fn relink_frame(
+    pool: &SqlitePool,
+    bus: &audit::bus::EventBus,
+    req: &InventoryFrameRelinkRequest,
+) -> Result<InventoryFrameRelinkResponse, ContractError> {
+    let rows = rows_by_ids(pool, std::slice::from_ref(&req.frame_id)).await?;
+    let row = rows.into_iter().next().ok_or_else(|| {
+        ContractError::new(
+            ErrorCode::FrameNotFound,
+            format!("frame {} not found", req.frame_id),
+            ErrorSeverity::Warning,
+            false,
+        )
+    })?;
+
+    let root_path_str =
+        persistence_db::repositories::inventory::get_library_root_path(pool, &row.root_id)
+            .await
+            .map_err(db_err)?
+            .ok_or_else(|| {
+                ContractError::new(
+                    ErrorCode::RootUnavailable,
+                    format!("library root {} is not registered", row.root_id),
+                    ErrorSeverity::Blocking,
+                    false,
+                )
+            })?;
+
+    let candidate_abs = Path::new(&root_path_str).join(&req.candidate_relative_path);
+    if !candidate_abs.is_file() {
+        return Err(ContractError::new(
+            ErrorCode::FileNotFound,
+            format!("candidate path {} does not exist under the root", req.candidate_relative_path),
+            ErrorSeverity::Warning,
+            false,
+        ));
+    }
+
+    let candidate_hash = sha256_hex(&candidate_abs)
+        .map_err(|e| internal(format!("hashing candidate {}: {e}", req.candidate_relative_path)))?;
+
+    let existing_hash =
+        persistence_db::repositories::q_core::get_file_record_content_hash(pool, &req.frame_id)
+            .await
+            .map_err(db_err)?;
+
+    if let Some(expected) = existing_hash {
+        if expected != candidate_hash {
+            return Err(ContractError::new(
+                ErrorCode::HashMismatch,
+                "candidate content hash does not match the frame's recorded hash".to_owned(),
+                ErrorSeverity::Warning,
+                false,
+            ));
+        }
+    }
+
+    let now = iso_now();
+    persistence_db::repositories::q_core::relink_file_record(
+        pool,
+        &req.frame_id,
+        &req.candidate_relative_path,
+        &candidate_hash,
+        &now,
+    )
+    .await
+    .map_err(db_err)?;
+
+    bus.publish(
+        audit::event_bus::TOPIC_FRAME_RELINKED,
+        audit::event_bus::Source::User,
+        audit::event_bus::FrameRelinked {
+            frame_id: req.frame_id.clone(),
+            root_id: row.root_id.clone(),
+            from_path: row.relative_path.clone(),
+            to_path: req.candidate_relative_path.clone(),
+            sha256: candidate_hash.clone(),
+            at: now,
+        },
+    )
+    .await
+    .map_err(internal)?;
+
+    Ok(InventoryFrameRelinkResponse { relinked: true, matched_hash: candidate_hash })
 }
 
 #[cfg(test)]
@@ -586,5 +776,221 @@ mod tests {
         };
         let err = run_reconcile(db.pool(), &bus, &req).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::RootUnavailable);
+    }
+
+    // ── T017/T021/T033: auto-reconcile mode drops missing frames from active
+    // session membership while retaining the record ──────────────────────────
+
+    #[tokio::test]
+    async fn auto_reconcile_mode_drops_frame_from_membership_but_retains_record() {
+        use app_core_settings::root_config::set_root_config;
+        use contracts_core::inventory_frame::RootConfigSetRequest;
+
+        let dir = tempfile::tempdir().unwrap();
+        // "gone.fits" intentionally never written — simulates an external delete.
+
+        let db = test_db().await;
+        insert_root(db.pool(), "root-1", dir.path().to_str().unwrap()).await;
+        let bus = audit::bus::EventBus::with_pool(db.pool().clone());
+
+        let frame_id =
+            upsert_frame_record(db.pool(), "root-1", "gone.fits", 100, "t0", "classified")
+                .await
+                .unwrap();
+        insert_acquisition_session(db.pool(), "sess-1", &[&frame_id]).await;
+
+        // T033: changing the root's mode to auto-reconcile takes effect on
+        // the very next reconcile pass below.
+        set_root_config(
+            db.pool(),
+            &RootConfigSetRequest {
+                root_id: "root-1".to_owned(),
+                reconcile_mode: Some(ReconcileMode::AutoReconcile),
+                detection: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let req = InventoryReconcileRunRequest {
+            root_id: "root-1".to_owned(),
+            reason: ReconcileReason::OnDemand,
+        };
+        run_reconcile(db.pool(), &bus, &req).await.unwrap();
+
+        // Retained: the file_record row still exists, marked missing.
+        let (state,): (String,) = sqlx::query_as("SELECT state FROM file_record WHERE id = ?")
+            .bind(&frame_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(state, "missing", "auto-reconcile must never hard-delete the record (INV-4)");
+
+        // Dropped from active membership: no longer in the session's frame_ids.
+        let (frame_ids_json,): (String,) =
+            sqlx::query_as("SELECT frame_ids FROM acquisition_session WHERE id = 'sess-1'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        let ids: Vec<String> = serde_json::from_str(&frame_ids_json).unwrap();
+        assert!(!ids.contains(&frame_id), "auto-reconcile must drop the id from active membership");
+
+        // Still queryable with include_missing via the root scope (INV-4).
+        let list_req = InventoryFrameListRequest {
+            scope: InventoryFrameListScope { session_id: None, root_id: Some("root-1".to_owned()) },
+            include_missing: Some(true),
+        };
+        let listed = list_frames(db.pool(), &list_req).await.unwrap();
+        assert_eq!(listed.frames.len(), 1);
+        assert_eq!(listed.frames[0].state, FramePresenceState::Missing);
+    }
+
+    #[tokio::test]
+    async fn flag_missing_mode_retains_frame_in_session_membership() {
+        // Default mode (flag_missing): the id stays in frame_ids even after
+        // going missing — only the `state != 'missing'` filter excludes it
+        // from active counts/totals (contrast with the auto-reconcile test
+        // above, which asserts the id is actually removed from the array).
+        let dir = tempfile::tempdir().unwrap();
+        let db = test_db().await;
+        insert_root(db.pool(), "root-1", dir.path().to_str().unwrap()).await;
+        let bus = audit::bus::EventBus::with_pool(db.pool().clone());
+
+        let frame_id =
+            upsert_frame_record(db.pool(), "root-1", "gone.fits", 100, "t0", "classified")
+                .await
+                .unwrap();
+        insert_acquisition_session(db.pool(), "sess-1", &[&frame_id]).await;
+
+        let req = InventoryReconcileRunRequest {
+            root_id: "root-1".to_owned(),
+            reason: ReconcileReason::OnDemand,
+        };
+        run_reconcile(db.pool(), &bus, &req).await.unwrap();
+
+        let (frame_ids_json,): (String,) =
+            sqlx::query_as("SELECT frame_ids FROM acquisition_session WHERE id = 'sess-1'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        let ids: Vec<String> = serde_json::from_str(&frame_ids_json).unwrap();
+        assert!(ids.contains(&frame_id), "flag-missing must retain the id in the array");
+    }
+
+    // ── T019/T025: relink confirms identity by sha256, not size/mtime ────────
+
+    #[tokio::test]
+    async fn relink_first_attempt_populates_hash_and_rehomes() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("rejects")).unwrap();
+        std::fs::write(dir.path().join("rejects").join("light_001.fits"), b"same-content").unwrap();
+
+        let db = test_db().await;
+        insert_root(db.pool(), "root-1", dir.path().to_str().unwrap()).await;
+        let bus = audit::bus::EventBus::with_pool(db.pool().clone());
+
+        let frame_id =
+            upsert_frame_record(db.pool(), "root-1", "lights/light_001.fits", 12, "t0", "missing")
+                .await
+                .unwrap();
+
+        let req = InventoryFrameRelinkRequest {
+            frame_id: frame_id.clone(),
+            candidate_relative_path: "rejects/light_001.fits".to_owned(),
+        };
+        let resp = relink_frame(db.pool(), &bus, &req).await.unwrap();
+        assert!(resp.relinked);
+        assert_eq!(
+            resp.matched_hash,
+            sha256_hex(&dir.path().join("rejects/light_001.fits")).unwrap()
+        );
+
+        let (relative_path, content_hash, state): (String, Option<String>, String) =
+            sqlx::query_as(
+                "SELECT relative_path, content_hash, state FROM file_record WHERE id = ?",
+            )
+            .bind(&frame_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(relative_path, "rejects/light_001.fits");
+        assert_eq!(content_hash.as_deref(), Some(resp.matched_hash.as_str()));
+        assert_eq!(state, "classified");
+    }
+
+    #[tokio::test]
+    async fn relink_second_attempt_same_size_different_content_is_hash_mismatch() {
+        // Proves size is not the identity key (FR-012a/R3): both candidates
+        // are exactly 4 bytes, but their content differs.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("candidate_a.fits"), b"AAAA").unwrap();
+        std::fs::write(dir.path().join("candidate_b.fits"), b"BBBB").unwrap();
+
+        let db = test_db().await;
+        insert_root(db.pool(), "root-1", dir.path().to_str().unwrap()).await;
+        let bus = audit::bus::EventBus::with_pool(db.pool().clone());
+
+        let frame_id =
+            upsert_frame_record(db.pool(), "root-1", "lights/light_001.fits", 4, "t0", "missing")
+                .await
+                .unwrap();
+
+        // First relink establishes the baseline hash from candidate_a.
+        let first = InventoryFrameRelinkRequest {
+            frame_id: frame_id.clone(),
+            candidate_relative_path: "candidate_a.fits".to_owned(),
+        };
+        relink_frame(db.pool(), &bus, &first).await.unwrap();
+
+        // A second relink attempt against a same-size, different-content
+        // file must fail — size alone would have let this through.
+        let second = InventoryFrameRelinkRequest {
+            frame_id: frame_id.clone(),
+            candidate_relative_path: "candidate_b.fits".to_owned(),
+        };
+        let err = relink_frame(db.pool(), &bus, &second).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::HashMismatch);
+
+        // Not re-homed on mismatch — relative_path is unchanged from the
+        // first (successful) relink.
+        let (relative_path,): (String,) =
+            sqlx::query_as("SELECT relative_path FROM file_record WHERE id = ?")
+                .bind(&frame_id)
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(relative_path, "candidate_a.fits");
+    }
+
+    #[tokio::test]
+    async fn relink_missing_candidate_path_returns_file_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = test_db().await;
+        insert_root(db.pool(), "root-1", dir.path().to_str().unwrap()).await;
+        let bus = audit::bus::EventBus::with_pool(db.pool().clone());
+
+        let frame_id =
+            upsert_frame_record(db.pool(), "root-1", "lights/light_001.fits", 4, "t0", "missing")
+                .await
+                .unwrap();
+
+        let req = InventoryFrameRelinkRequest {
+            frame_id,
+            candidate_relative_path: "does/not/exist.fits".to_owned(),
+        };
+        let err = relink_frame(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::FileNotFound);
+    }
+
+    #[tokio::test]
+    async fn relink_unknown_frame_id_returns_frame_not_found() {
+        let db = test_db().await;
+        let bus = audit::bus::EventBus::with_pool(db.pool().clone());
+        let req = InventoryFrameRelinkRequest {
+            frame_id: "no-such-frame".to_owned(),
+            candidate_relative_path: "x.fits".to_owned(),
+        };
+        let err = relink_frame(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::FrameNotFound);
     }
 }
