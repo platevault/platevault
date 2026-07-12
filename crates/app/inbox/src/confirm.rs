@@ -26,11 +26,10 @@
 
 use std::path::PathBuf;
 
+use app_core_targets::metadata_cache::cached_extract;
 use contracts_core::first_run::{OrganizationState, SourceKind};
 use contracts_core::settings::PatternPart as ContractPatternPart;
-use metadata_core::{v1_normalization_table, MetadataExtractor};
-use metadata_fits::FitsExtractor;
-use metadata_xisf::XisfExtractor;
+use metadata_core::v1_normalization_table;
 use patterns::{classify_frame, resolve_pattern_str, FrameTypeClass, MetadataBundle, PatternPart};
 use persistence_db::repositories::first_run as first_run_repo;
 use persistence_db::repositories::inbox::{self as inbox_repo};
@@ -265,8 +264,6 @@ pub async fn confirm(
     // US9 gate (T056) is derived from it rather than a separate matrix. A hard
     // `Err(ResolveError)` signals a structural failure (traversal, length cap).
     let norm_table = v1_normalization_table();
-    let fits_extractor = FitsExtractor;
-    let xisf_extractor = XisfExtractor;
 
     let mut resolved_items: Vec<ResolvedRow> = Vec::with_capacity(plan_files.len());
     // Per-file missing path attributes for the US9 gate (FR-032/FR-033).
@@ -274,6 +271,11 @@ pub async fn confirm(
     // Cache the chosen destination root per category (keyed by the category's
     // stable string name) so a multi-category item resolves each category once.
     let mut chosen_root_cache: std::collections::HashMap<&'static str, DestinationRoot> =
+        std::collections::HashMap::new();
+    // Tier 2.5: cache the resolved per-type destination pattern by (frame_type,
+    // is_master) so a confirmable item (single-type per FR-050) fetches its
+    // pattern once instead of once per file in the loop below.
+    let mut pattern_cache: std::collections::HashMap<(String, bool), Option<String>> =
         std::collections::HashMap::new();
 
     for ev in &plan_files {
@@ -299,9 +301,13 @@ pub async fn confirm(
                 // Select the per-type pattern. `None` → frame type is not a known
                 // class (missing/garbage IMAGETYP) → needs-review (same flow as
                 // missing IMAGETYP: surfaced as a missing path attribute below).
-                let pattern = settings_repo::effective_pattern_for(pool, ft, is_master)
-                    .await
-                    .map_err(|e| {
+                let cache_key = (ft.to_owned(), is_master);
+                let pattern = if let Some(cached) = pattern_cache.get(&cache_key) {
+                    cached.clone()
+                } else {
+                    let fetched = settings_repo::effective_pattern_for(pool, ft, is_master)
+                        .await
+                        .map_err(|e| {
                         ContractError::new(
                             ErrorCode::InternalDatabase,
                             e.to_string(),
@@ -309,6 +315,9 @@ pub async fn confirm(
                             true,
                         )
                     })?;
+                    pattern_cache.insert(cache_key, fetched.clone());
+                    fetched
+                };
                 let Some(pattern) = pattern else {
                     // Unclassified frame: image type is the missing attribute.
                     missing_by_file
@@ -316,13 +325,7 @@ pub async fn confirm(
                     continue;
                 };
 
-                let bundle = build_metadata_bundle(
-                    &abs_path,
-                    ft,
-                    &norm_table,
-                    &fits_extractor,
-                    &xisf_extractor,
-                );
+                let bundle = build_metadata_bundle(&abs_path, ft, &norm_table);
 
                 let result = match resolve_pattern_str(&pattern, &bundle) {
                     Ok(r) => r,
@@ -700,25 +703,12 @@ pub(crate) fn build_metadata_bundle(
     abs_path: &std::path::Path,
     frame_type: &str,
     norm_table: &metadata_core::ImageTypNormalizationTable,
-    fits_ext: &FitsExtractor,
-    xisf_ext: &XisfExtractor,
 ) -> MetadataBundle {
     let mut bundle = MetadataBundle::new();
 
-    // Extract raw metadata from FITS or XISF file
-    let ext = abs_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(str::to_ascii_lowercase)
-        .unwrap_or_default();
-
-    let raw_meta = if xisf_ext.supports_extension(&ext) {
-        xisf_ext.extract(abs_path).ok().flatten()
-    } else if fits_ext.supports_extension(&ext) {
-        fits_ext.extract(abs_path).ok().flatten()
-    } else {
-        None
-    };
+    // Extract raw metadata (F0 cached-extract: memoized by path/mtime/size;
+    // dispatches by extension internally).
+    let raw_meta = cached_extract(abs_path).ok();
 
     // frame_type (authoritative from classification)
     bundle.insert("frame_type".to_owned(), frame_type.to_owned());
