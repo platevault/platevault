@@ -9,8 +9,8 @@ path = "src/lib.rs"
 
 [dependencies]
 metadata_core = { path = "../core" }
-quick-xml.workspace = true
 thiserror.workspace = true
+xisf-header = "0.2"
 
 [lints]
 workspace = true
