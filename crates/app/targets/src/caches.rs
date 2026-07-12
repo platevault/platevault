@@ -69,6 +69,11 @@ mod tests {
 
     #[test]
     fn catalog_cache_store_load_invalidate_round_trips() {
+        // Serialized against every other test in this crate that touches the
+        // shared catalog/resolver-settings statics (`target_management`,
+        // `target_resolve`, `target_search`, `resolver_settings`,
+        // `ingest_resolution`) — see `target_management::cache_test_lock`.
+        let _guard = crate::target_management::cache_test_lock::locked_reset();
         invalidate_catalog();
         assert!(catalog().load().is_none());
 
@@ -93,6 +98,10 @@ mod tests {
 
     #[test]
     fn resolver_settings_cache_store_load_invalidate_round_trips() {
+        // Serialized against every other test in this crate that touches the
+        // shared catalog/resolver-settings statics — see
+        // `target_management::cache_test_lock`.
+        let _guard = crate::target_management::cache_test_lock::locked_reset();
         invalidate_resolver_settings();
         assert!(resolver_settings().load().is_none());
 

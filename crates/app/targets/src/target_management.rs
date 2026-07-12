@@ -499,6 +499,9 @@ pub async fn note_update(
 /// process-wide lock (released when the returned [`LockedDb`] is dropped at
 /// the end of the test), so `setup()` in each of those four files can use
 /// this in place of a bare `Database` with no other test-body changes.
+/// [`locked_reset`] is the sync counterpart for `crate::caches`'s own
+/// round-trip unit tests, which manipulate these same statics directly and
+/// are not `async`.
 #[cfg(test)]
 pub(crate) mod cache_test_lock {
     use persistence_db::Database;
@@ -530,6 +533,17 @@ pub(crate) mod cache_test_lock {
         let db = Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         LockedDb { db, _guard: guard }
+    }
+
+    /// Acquire the shared lock and reset both snapshot caches, for non-async
+    /// `#[test]` functions. Blocks the current thread rather than `.await`ing
+    /// — safe here because these call sites have no Tokio runtime, unlike
+    /// [`locked_db`]'s async callers.
+    pub(crate) fn locked_reset() -> tokio::sync::MutexGuard<'static, ()> {
+        let guard = LOCK.blocking_lock();
+        crate::caches::invalidate_catalog();
+        crate::caches::invalidate_resolver_settings();
+        guard
     }
 }
 
