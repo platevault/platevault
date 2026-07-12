@@ -99,14 +99,54 @@ pub fn angular_separation_deg(a: Pointing, b: Pointing) -> f64 {
     target_match::separation(to_equatorial(a), to_equatorial(b)).degrees()
 }
 
-/// Build a `target_match::Equatorial` from a (already-finite) [`Pointing`],
-/// wrapping RA into `[0, 360)` and clamping Dec into `[-90, 90]` so
-/// out-of-domain-but-finite inputs still produce a position rather than an
-/// error (see the [`Pointing`] docs).
-fn to_equatorial(p: Pointing) -> Equatorial {
+/// Build a `target_match::Equatorial` from a [`Pointing`], wrapping RA into
+/// `[0, 360)` and clamping Dec into `[-90, 90]` so out-of-domain-but-finite
+/// inputs still produce a position rather than an error (see the [`Pointing`]
+/// docs).
+///
+/// # Panics
+/// Panics if `p.ra_deg` or `p.dec_deg` is non-finite (NaN/±inf) — callers with
+/// possibly-non-finite input (e.g. an unvalidated catalog row) MUST filter
+/// first; [`angular_separation_deg`] does this internally.
+#[must_use]
+pub fn to_equatorial(p: Pointing) -> Equatorial {
     let ra = Angle::from_degrees(p.ra_deg).normalized_0_360();
     let dec = Angle::from_degrees(p.dec_deg.clamp(-90.0, 90.0));
     Equatorial::j2000(ra, dec).expect("ra normalized to [0, 360), dec clamped to [-90, 90]")
+}
+
+/// Build a `target_match::Field` from optics + sensor pixel counts
+/// (best-effort), for exact rectangular (optionally rotated) frame membership
+/// via `target_match::Constraint::frame`/`frame_rotated`.
+///
+/// Pixels are assumed square (`pixel_size_um` applies to both axes) and
+/// binning is fixed at `(1, 1)`: neither per-axis pixel size nor a binning
+/// factor is tracked by the caller's per-file metadata. Delegates to
+/// `target_match::Field::from_optics`, which uses the exact arcsec-per-radian
+/// constant (`206_264.806…`) rather than a rounded approximation.
+///
+/// Returns `None` when any input is missing or non-positive, or when
+/// `naxis1`/`naxis2` overflow `u32`. `focal_length_mm` and `pixel_size_um`
+/// must be `> 0`; `naxis1`/`naxis2` must be `> 0`.
+#[must_use]
+pub fn field_from_optics(
+    focal_length_mm: Option<f64>,
+    pixel_size_um: Option<f64>,
+    naxis1: Option<i64>,
+    naxis2: Option<i64>,
+) -> Option<Field> {
+    let focal = focal_length_mm.filter(|v| v.is_finite() && *v > 0.0)?;
+    let pixel = pixel_size_um.filter(|v| v.is_finite() && *v > 0.0)?;
+    let nx = naxis1.filter(|v| *v > 0).and_then(|v| u32::try_from(v).ok())?;
+    let ny = naxis2.filter(|v| *v > 0).and_then(|v| u32::try_from(v).ok())?;
+
+    Field::from_optics(Optics {
+        focal_mm: focal,
+        pixel_um: (pixel, pixel),
+        binning: (1, 1),
+        pixels: (nx, ny),
+    })
+    .ok()
 }
 
 /// Compute a FOV-aware search radius (decimal degrees) from optics + sensor.
@@ -114,16 +154,11 @@ fn to_equatorial(p: Pointing) -> Equatorial {
 /// The radius is **half the sensor diagonal field of view** (`target_match`'s
 /// [`RadiusPolicy::Circumscribed`]), so any catalog target whose true position
 /// lies anywhere on the frame is inside the radius regardless of where in the
-/// frame it sits. Delegates the pixel-scale/field-of-view geometry to
-/// `target_match::Field::from_optics`, which uses the exact arcsec-per-radian
-/// constant (`206_264.806…`) rather than the rounded `206.265` this function
-/// used previously. Binning is fixed at `(1, 1)`: no binning factor is tracked
-/// by the caller's per-file metadata.
+/// frame it sits. See [`field_from_optics`] for the underlying geometry.
 ///
-/// Returns `None` when any input is missing or non-positive (so the caller can
-/// fall back to the configurable fixed radius, R-17 C5), or when `naxis1`/
-/// `naxis2` overflow `u32`. `focal_length_mm` and `pixel_size_um` must be
-/// `> 0`; `naxis1`/`naxis2` must be `> 0`.
+/// Returns `None` when [`field_from_optics`] does (missing/non-positive input,
+/// or `naxis1`/`naxis2` overflowing `u32`), so the caller can fall back to the
+/// configurable fixed radius (R-17 C5).
 #[must_use]
 pub fn fov_radius_deg(
     focal_length_mm: Option<f64>,
@@ -131,19 +166,8 @@ pub fn fov_radius_deg(
     naxis1: Option<i64>,
     naxis2: Option<i64>,
 ) -> Option<f64> {
-    let focal = focal_length_mm.filter(|v| v.is_finite() && *v > 0.0)?;
-    let pixel = pixel_size_um.filter(|v| v.is_finite() && *v > 0.0)?;
-    let nx = naxis1.filter(|v| *v > 0).and_then(|v| u32::try_from(v).ok())?;
-    let ny = naxis2.filter(|v| *v > 0).and_then(|v| u32::try_from(v).ok())?;
-
-    let field = Field::from_optics(Optics {
-        focal_mm: focal,
-        pixel_um: (pixel, pixel),
-        binning: (1, 1),
-        pixels: (nx, ny),
-    })
-    .ok()?;
-    Some(field.radius(RadiusPolicy::Circumscribed).degrees())
+    field_from_optics(focal_length_mm, pixel_size_um, naxis1, naxis2)
+        .map(|f| f.radius(RadiusPolicy::Circumscribed).degrees())
 }
 
 /// Rank catalog targets by angular separation from `pointing`, keeping only

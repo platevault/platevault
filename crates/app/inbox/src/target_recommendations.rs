@@ -6,15 +6,31 @@
 //!
 //! 1. loads the sub-group's per-file pointing + optics from `inbox_file_metadata`
 //!    (the T062 extended columns) and derives a single sub-group pointing,
-//! 2. computes a **FOV-aware radius** from `FOCALLEN` + pixel size + sensor dims,
-//!    falling back to a **configurable fixed radius** when pixel size is absent
-//!    (R-17 C5),
+//! 2. builds a **rectangular frame membership** from the sub-group's optics
+//!    (focal length + pixel size + sensor dims, via `target_match::Field`),
+//!    falling back to a **configurable fixed circular radius** when optics are
+//!    absent (R-17 C5),
 //! 3. ranks every catalog entry (`canonical_target`, via the resolver cache) by
-//!    great-circle (haversine) angular separation, ascending, within the radius.
+//!    great-circle separation, ascending, keeping only those on the frame (or,
+//!    in the fixed-radius fallback, within the radius).
 //!
 //! The `OBJECT` header is returned only as `object_hint` for display — it is
-//! never used for matching or search. The pure ranking lives in
-//! [`targeting::coords`]; this module is orchestration only (DB load + map).
+//! never used for matching or search. Coordinate/geometry primitives come from
+//! [`targeting::coords`] and `target_match`'s `Constraint`/`rank`; this module
+//! is orchestration only (DB load + map).
+//!
+//! # Frame membership is rectangular, not yet rotation-aware
+//!
+//! Membership uses `target_match::Constraint::frame` — an axis-aligned
+//! rectangle sized from the sub-group's optics — instead of the wider
+//! circumscribed-circle radius used previously, so a target near the frame's
+//! corner but off-sensor is correctly excluded (a real precision gain over
+//! plain circular-radius matching). True camera-rotation-aware membership
+//! (`Constraint::frame_rotated`) needs `ROTATANG`
+//! (`inbox_file_metadata.rotator_angle_deg`, already persisted by migration
+//! 0049) added to `persistence_db::repositories::inbox::list_inbox_pointing`'s
+//! projection; that repository change is outside this module's crate — frame
+//! membership is computed un-rotated (position angle 0°) until it lands.
 //!
 //! This operation is **read-only**: it recommends, it does not write the chosen
 //! target (that is reclassify, T068). Propagation to a linked project (T075)
@@ -33,7 +49,9 @@ use contracts_core::inbox::{
     InboxPointing, InboxTargetCandidate, InboxTargetRecommendationsResponse,
 };
 use contracts_core::{ContractError, ErrorSeverity};
-use targeting::coords::{self, Pointing, TargetCoord};
+use target_match::{rank, Constraint, SkyObject};
+use targeting::coords::{self, Pointing};
+use targeting::{Angle, Equatorial};
 use targeting_resolver::cache;
 
 /// Default fixed search radius (degrees) used when a FOV-aware radius cannot be
@@ -102,36 +120,42 @@ pub async fn target_recommendations(
     // Safe: has_pointing guarantees both are Some + finite.
     let ra = pointing_row.ra_deg.unwrap_or_default();
     let dec = pointing_row.dec_deg.unwrap_or_default();
-    let pointing = Pointing::new(ra, dec);
+    let pointing = coords::to_equatorial(Pointing::new(ra, dec));
 
-    // 4. Radius: FOV-aware from optics, else the configurable fixed fallback.
-    let radius_deg = coords::fov_radius_deg(
+    // 4. Frame membership: an axis-aligned rectangle sized from the sub-group's
+    //    optics, else the configurable fixed circular fallback (R-17 C5).
+    let constraint = coords::field_from_optics(
         pointing_row.focal_length_mm,
         pointing_row.pixel_size_um,
         pointing_row.naxis1,
         pointing_row.naxis2,
     )
-    .unwrap_or(fixed_radius_deg);
+    .map_or_else(
+        || Constraint::circular(Angle::from_degrees(fixed_radius_deg)),
+        |field| Constraint::frame(&field),
+    );
 
-    // 5. Load the catalog and rank by angular separation (coordinate-only).
+    // 5. Load the catalog and rank by frame membership (coordinate-only).
     let catalog = cache::list_all(pool).await.map_err(|e| cache_err(&e))?;
-    let coords_list: Vec<TargetCoord> = catalog
+    let objects: Vec<CatalogObject> = catalog
         .into_iter()
-        .map(|t| TargetCoord {
+        // A non-finite catalog coordinate can't build an Equatorial; exclude it
+        // (mirrors the previous NaN-never-compares-within-radius behaviour).
+        .filter(|t| t.ra_deg.is_finite() && t.dec_deg.is_finite())
+        .map(|t| CatalogObject {
             target_id: t.id.to_string(),
             // Effective label: user display_alias wins, else primary designation.
             name: t.display_alias.unwrap_or(t.primary_designation),
-            ra_deg: t.ra_deg,
-            dec_deg: t.dec_deg,
+            position: coords::to_equatorial(Pointing::new(t.ra_deg, t.dec_deg)),
         })
         .collect();
 
-    let candidates = coords::rank_candidates(pointing, &coords_list, radius_deg)
+    let candidates = rank(pointing, &objects, constraint)
         .into_iter()
-        .map(|c| InboxTargetCandidate {
-            target_id: c.target_id,
-            name: c.name,
-            separation_deg: c.separation_deg,
+        .map(|m| InboxTargetCandidate {
+            target_id: m.object.target_id.clone(),
+            name: m.object.name.clone(),
+            separation_deg: m.separation.degrees(),
         })
         .collect();
 
@@ -140,6 +164,21 @@ pub async fn target_recommendations(
         pointing: Some(InboxPointing { ra_deg: ra, dec_deg: dec }),
         object_hint,
     })
+}
+
+/// A catalog entry adapted to `target_match::SkyObject` for frame ranking.
+/// Matching is coordinate-only (R-17): `name` rides along for display and is
+/// never read by [`rank`]/[`Constraint`] membership.
+struct CatalogObject {
+    target_id: String,
+    name: String,
+    position: Equatorial,
+}
+
+impl SkyObject for CatalogObject {
+    fn position(&self) -> Equatorial {
+        self.position
+    }
 }
 
 /// A pointing row is usable when both RA and Dec are present and finite.

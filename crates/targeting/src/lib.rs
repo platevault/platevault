@@ -27,7 +27,7 @@ pub mod coords;
 pub mod identity;
 pub mod normalize;
 
-pub use target_match::{separation, Angle, Epoch, Equatorial};
+pub use target_match::{separation, Angle, Epoch, Equatorial, Field};
 
 pub const CRATE_NAME: &str = "targeting";
 

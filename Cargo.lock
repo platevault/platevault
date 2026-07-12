@@ -182,6 +182,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
+ "target-match",
  "targeting",
  "targeting_resolver",
  "tempfile",
