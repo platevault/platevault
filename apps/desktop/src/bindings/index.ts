@@ -332,7 +332,7 @@ export const commands = {
 	/**
 	 *  `target.astro_format.batch` — sexagesimal RA/Dec formatting for N targets
 	 *  in one call (never per-row round trips). Pure geometry (`targeting::astro_format`,
-	 *  backed by `target_match::Equatorial`'s carry-safe sexagesimal formatting) —
+	 *  backed by `skymath::Equatorial`'s carry-safe sexagesimal formatting) —
 	 *  no database access, so this never fails on a well-formed request.
 	 * 
 	 *  Targets whose RA/Dec is non-finite are omitted from `formatted` (never a
