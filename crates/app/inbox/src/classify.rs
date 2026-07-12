@@ -2136,8 +2136,15 @@ mod tests {
         // runners — a real re-scan is never this fast, so explicitly advance
         // the mtime to model realistic elapsed time and make the assertion
         // deterministic across platforms rather than racing the clock.
+        // A read-only handle (`File::open`) is enough for `set_modified` on
+        // POSIX, but Windows requires FILE_WRITE_ATTRIBUTES access, which
+        // only a writable handle carries — `write(true)` opens for write
+        // without truncating (the file's freshly-written SII content is left
+        // intact) and gives a handle valid on all platforms.
         let flat_a_path = tmp.path().join("flat_a.fits");
-        std::fs::File::open(&flat_a_path)
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&flat_a_path)
             .unwrap()
             .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(2))
             .unwrap();
