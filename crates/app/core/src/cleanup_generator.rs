@@ -430,6 +430,11 @@ pub async fn generate(
 
 #[cfg(test)]
 mod tests {
+    // See the matching allow in `protection::tests`: `setup()`'s test-lock
+    // guard is deliberately held across every `.await` in each test body, and
+    // that's safe under `#[tokio::test]`'s current-thread runtime default.
+    #![allow(clippy::await_holding_lock)]
+
     use super::*;
     use audit::bus::EventBus;
     use contracts_core::protection::{
@@ -440,11 +445,22 @@ mod tests {
     use persistence_db::repositories::projects::{insert_project, InsertProject};
     use persistence_db::Database;
 
-    async fn setup() -> (Database, EventBus) {
+    async fn setup() -> (Database, EventBus, std::sync::MutexGuard<'static, ()>) {
+        // `scan_with_policy` unconditionally calls `protection::load_global_protection`,
+        // which read-throughs the process-global `protection_defaults` cache
+        // (a single unkeyed slot shared by every in-memory DB in this test
+        // binary — see `protection::PROTECTION_DEFAULTS_TEST_LOCK`). Serialize
+        // against `protection.rs`'s tests (e.g. `t041_...`, which mutates the
+        // default to `"unprotected"`) so a value-sensitive assertion here
+        // (e.g. `generate_protected_final_gates_approval` expecting the
+        // default `"protected"`) can't race it.
+        let lock = crate::protection::PROTECTION_DEFAULTS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let db = Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         let bus = EventBus::with_pool(db.pool().clone());
-        (db, bus)
+        (db, bus, lock)
     }
 
     async fn seed_project(db: &Database, id: &str) {
@@ -521,7 +537,7 @@ mod tests {
 
     #[tokio::test]
     async fn policy_defaults_when_unset() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         let policy = get_policy(db.pool()).await.unwrap();
         assert_eq!(policy.entries.len(), 3);
         assert!(!policy.auto_on_completion);
@@ -530,7 +546,7 @@ mod tests {
 
     #[tokio::test]
     async fn policy_round_trip_persists() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         let updated = CleanupPolicy {
             entries: vec![
                 CleanupPolicyEntry {
@@ -558,7 +574,7 @@ mod tests {
 
     #[tokio::test]
     async fn scan_empty_project_has_no_candidates() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         seed_project(&db, "p-empty").await;
         let result = scan(db.pool(), "p-empty").await.unwrap();
         assert!(result.candidates.is_empty());
@@ -568,7 +584,7 @@ mod tests {
     #[tokio::test]
     async fn scan_default_policy_proposes_nothing() {
         // Default policy is all-Keep: even with artifacts present, no candidates.
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         seed_project(&db, "p1").await;
         seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
         let result = scan(db.pool(), "p1").await.unwrap();
@@ -577,7 +593,7 @@ mod tests {
 
     #[tokio::test]
     async fn scan_actioned_type_becomes_candidate_and_sums_bytes() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         seed_project(&db, "p1").await;
         seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
         seed_artifact(&db, "a2", "p1", "calibrated/light_002.xisf", "intermediate", 2000).await;
@@ -611,7 +627,7 @@ mod tests {
 
     #[tokio::test]
     async fn scan_excludes_unclassified() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         seed_project(&db, "p1").await;
         // A present artifact whose kind is not intermediate/master/final cannot
         // exist under the CHECK constraint; simulate the exclusion path by
@@ -639,7 +655,7 @@ mod tests {
 
     #[tokio::test]
     async fn scan_creates_no_plan() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         seed_project(&db, "p1").await;
         seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
         set_policy(
@@ -664,7 +680,7 @@ mod tests {
 
     #[tokio::test]
     async fn generate_creates_plan_with_items() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         seed_project(&db, "p1").await;
         seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
         seed_artifact(&db, "a2", "p1", "calibrated/light_002.xisf", "intermediate", 2000).await;
@@ -701,7 +717,7 @@ mod tests {
     async fn generate_delete_items_require_no_destination_bytes() {
         // Delete-action items are removed, not archived, so they contribute
         // zero to the plan's destination byte requirement (D17).
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         seed_project(&db, "p1").await;
         seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
         set_policy(
@@ -728,7 +744,7 @@ mod tests {
 
     #[tokio::test]
     async fn generate_protected_final_gates_approval() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         seed_project(&db, "p1").await;
         // A final output — default protected categories include "finals".
         seed_artifact(&db, "a1", "p1", "final/M31.xisf", "final", 9000).await;
@@ -768,7 +784,7 @@ mod tests {
         // intermediate item would gate approval. A per-source "unprotected"
         // override must flow through and downgrade it — proving the override
         // path is live, not inert.
-        let (db, bus) = setup().await;
+        let (db, bus, _lock) = setup().await;
         seed_project(&db, "p1").await;
         seed_artifact(&db, "a1", "p1", "calibrated/light_001.xisf", "intermediate", 1000).await;
         set_policy(

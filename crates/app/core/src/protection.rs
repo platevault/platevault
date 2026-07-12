@@ -714,26 +714,46 @@ pub async fn generate_plan(
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
+/// Serializes every test — in this module and in `cleanup_generator.rs`
+/// (`pub(crate)` so that sibling module can reach it) — that reads or writes
+/// the process-global `protection_defaults` cache (directly, or via
+/// `load_global_protection` / `set_global_protection_default`). That cache is
+/// a single unkeyed slot shared by every in-memory DB in this test binary, so
+/// e.g. `t041_set_global_default_persists_and_emits_event` mutating it to
+/// `"unprotected"` could otherwise race a concurrently-running,
+/// value-sensitive read elsewhere that expects the default `"protected"`
+/// (`cleanup_generator::tests::generate_protected_final_gates_approval`).
+/// Acquired for the whole test body via `setup()`'s returned guard — an
+/// invalidate-at-setup reset alone only guards against a *completed* prior
+/// test's leftover value, not a genuinely concurrent mutation.
+#[cfg(test)]
+pub(crate) static PROTECTION_DEFAULTS_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
+    // `setup()`'s `PROTECTION_DEFAULTS_TEST_LOCK` guard is deliberately held
+    // across every `.await` for the rest of each test body — that's the whole
+    // point (serialize the full test, not just the lock acquisition). Safe
+    // here because `#[tokio::test]` defaults to a current-thread runtime: the
+    // guard is never held across a thread hand-off.
+    #![allow(clippy::await_holding_lock)]
+
     use super::*;
     use audit::bus::EventBus;
     use persistence_db::repositories::plans as plans_repo;
     use persistence_db::repositories::plans::InsertPlan;
     use persistence_db::Database;
 
-    async fn setup() -> (Database, EventBus) {
-        // `protection_defaults` is a process-global single-slot cache (F0):
-        // every test in this binary shares it regardless of which in-memory
-        // DB it's keyed to. Force a miss at the start of each test so a
-        // stale value left by a differently-configured DB from an earlier
-        // test can't leak in (same mitigation as the `library_root`
-        // cross-test collision fixed in plan_apply.rs).
+    async fn setup() -> (Database, EventBus, std::sync::MutexGuard<'static, ()>) {
+        // See `PROTECTION_DEFAULTS_TEST_LOCK` for why this lock (not just the
+        // `invalidate` reset below) is required.
+        let lock =
+            PROTECTION_DEFAULTS_TEST_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         app_core_cache::invalidate_protection_defaults();
         let db = Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         let bus = EventBus::with_pool(db.pool().clone());
-        (db, bus)
+        (db, bus, lock)
     }
 
     async fn insert_plan_with_items(db: &Database, plan_id: &str, protection: &str) {
@@ -780,7 +800,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_global_protection_returns_defaults() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         let req = SourceProtectionGetRequest { source_id: None };
         let resp = get_source_protection(db.pool(), &req).await.unwrap();
         assert!(resp.inherits_default);
@@ -790,7 +810,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_source_protection_inherits_when_no_override() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         let req = SourceProtectionGetRequest { source_id: Some("src-abc".to_owned()) };
         let resp = get_source_protection(db.pool(), &req).await.unwrap();
         assert!(resp.inherits_default);
@@ -798,7 +818,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_and_get_source_protection_round_trip() {
-        let (db, bus) = setup().await;
+        let (db, bus, _lock) = setup().await;
         let source_id = "src-001";
 
         let set_req = SourceProtectionSetRequest {
@@ -819,7 +839,7 @@ mod tests {
 
     #[tokio::test]
     async fn plan_protection_check_not_found() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         let req = PlanProtectionCheckRequest { plan_id: "nonexistent".to_owned() };
         let err = plan_protection_check(db.pool(), &req).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PlanNotFound);
@@ -827,7 +847,7 @@ mod tests {
 
     #[tokio::test]
     async fn plan_protection_check_returns_protected_items() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         insert_plan_with_items(&db, "plan-1", "protected").await;
 
         let req = PlanProtectionCheckRequest { plan_id: "plan-1".to_owned() };
@@ -842,7 +862,7 @@ mod tests {
 
     #[tokio::test]
     async fn plan_protection_check_normal_items_in_summary() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         insert_plan_with_items(&db, "plan-2", "normal").await;
 
         let req = PlanProtectionCheckRequest { plan_id: "plan-2".to_owned() };
@@ -855,7 +875,7 @@ mod tests {
 
     #[tokio::test]
     async fn seed_source_protection_inbox_gets_normal() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         seed_source_protection(db.pool(), "src-inbox", "inbox").await.unwrap();
 
         let row = prot_repo::get_source_protection_row(db.pool(), "src-inbox")
@@ -867,7 +887,7 @@ mod tests {
 
     #[tokio::test]
     async fn seed_source_protection_inventory_gets_protected() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         seed_source_protection(db.pool(), "src-inv", "inventory").await.unwrap();
 
         let row = prot_repo::get_source_protection_row(db.pool(), "src-inv")
@@ -879,7 +899,7 @@ mod tests {
 
     #[tokio::test]
     async fn set_protection_emits_audit_event() {
-        let (db, bus) = setup().await;
+        let (db, bus, _lock) = setup().await;
         let source_id = "src-002";
 
         let set_req = SourceProtectionSetRequest {
@@ -895,7 +915,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_action_on_protected_item_gets_rewritten_action() {
-        let (db, _bus) = setup().await;
+        let (db, _bus, _lock) = setup().await;
         // Insert a plan with a "delete" action item marked as protected.
         plans_repo::insert_plan(
             db.pool(),
@@ -955,7 +975,7 @@ mod tests {
 
     #[tokio::test]
     async fn t040_real_cleanup_plan_over_protected_source_is_blocked() {
-        let (db, bus) = setup().await;
+        let (db, bus, _lock) = setup().await;
 
         // Set up a protected source via source.protection.set.
         let source_id = "src-lights-001";
@@ -1033,7 +1053,7 @@ mod tests {
 
     #[tokio::test]
     async fn t041_set_global_default_persists_and_emits_event() {
-        let (db, bus) = setup().await;
+        let (db, bus, _lock) = setup().await;
 
         // Change the global default level to "unprotected".
         let new_value = serde_json::Value::String("unprotected".to_owned());
@@ -1077,7 +1097,7 @@ mod tests {
 
     #[tokio::test]
     async fn t042_non_protected_source_plan_passes_gate() {
-        let (db, bus) = setup().await;
+        let (db, bus, _lock) = setup().await;
 
         // Set up a source explicitly marked as "normal" (e.g. an inbox source).
         let source_id = "src-inbox-002";
