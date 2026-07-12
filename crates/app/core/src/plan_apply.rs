@@ -840,6 +840,32 @@ impl ExecutorCallbacks for PlanApplyCallbacks {
     }
 }
 
+/// Resolve a `root_id` to its absolute path: legacy `library_root` table
+/// first, then `registered_sources` (gen-3 source model).
+///
+/// Read-through `caches::library_root` (F0) wraps only the
+/// `registered_sources` fallback, not the legacy `library_root` table
+/// lookup: `invalidate_library_root` is only called from `first_run.rs`'s
+/// writers of `registered_sources` (register / remap / delete), so caching
+/// the legacy-table branch too would go stale on writes this module never
+/// sees.
+async fn resolve_root_path(pool: &SqlitePool, root_id: &str) -> Option<String> {
+    match inventory_repo::get_library_root_path(pool, root_id).await {
+        Ok(Some(path)) => Some(path),
+        _ => {
+            if let Some(cached) = caches::library_root().get(&root_id.to_owned()) {
+                Some(cached)
+            } else {
+                let loaded = first_run_repo::get_source_path(pool, root_id).await.ok().flatten();
+                if let Some(path) = &loaded {
+                    caches::library_root().insert(root_id.to_owned(), path.clone());
+                }
+                loaded
+            }
+        }
+    }
+}
+
 // ── apply_plan ────────────────────────────────────────────────────────────────
 
 /// Start applying an approved plan (US1, T018, T019, T020, T021, T055).
@@ -923,29 +949,7 @@ pub async fn apply_plan(
             // back to `registered_sources` when `library_root` has no row.
             // Without this, inbox `move` plans resolve to bare relative paths
             // and every apply fails with `source.missing`.
-            //
-            // Read-through `caches::library_root` (F0) wraps only the
-            // `registered_sources` fallback, not the legacy `library_root`
-            // table lookup: `invalidate_library_root` is only called from
-            // `first_run.rs`'s writers of `registered_sources` (register /
-            // remap / delete), so caching the legacy-table branch too would
-            // go stale on writes this module never sees.
-            let resolved = match inventory_repo::get_library_root_path(pool, rid).await {
-                Ok(Some(path)) => Some(path),
-                _ => {
-                    if let Some(cached) = caches::library_root().get(rid) {
-                        Some(cached)
-                    } else {
-                        let loaded =
-                            first_run_repo::get_source_path(pool, rid).await.ok().flatten();
-                        if let Some(path) = &loaded {
-                            caches::library_root().insert(rid.clone(), path.clone());
-                        }
-                        loaded
-                    }
-                }
-            };
-            if let Some(path) = resolved {
+            if let Some(path) = resolve_root_path(pool, rid).await {
                 root_map.insert(rid.clone(), Utf8PathBuf::from(path));
             } else {
                 tracing::warn!(root_id = %rid, "plan item references unknown root (not in library_root or registered_sources); path gate will be inactive for this item");
@@ -1773,6 +1777,53 @@ mod tests {
 
         repo::update_plan_state(db.pool(), plan_id, "ready_for_review").await.unwrap();
         repo::set_approved(db.pool(), plan_id, "2026-06-01T00:00:00Z", "test-token").await.unwrap();
+    }
+
+    /// Regression (FIX review, priority-check #2): `resolve_root_path`'s
+    /// `registered_sources` read-through must never resurface a
+    /// pre-remap path after `apply_root_remap` commits the new one.
+    #[tokio::test]
+    async fn resolve_root_path_reflects_remap_not_stale_cache() {
+        use contracts_core::first_run::{
+            OrganizationState, RegisterSourceRequest, ScanDepth, SourceKind,
+        };
+
+        // Needs two real, existing directories; "/tmp" and "/var/tmp" are Unix-only.
+        if !cfg!(unix) {
+            return;
+        }
+
+        let (db, bus) = setup().await;
+
+        let reg = crate::first_run::register_source(
+            db.pool(),
+            &RegisterSourceRequest {
+                kind: SourceKind::Project,
+                path: "/tmp".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+
+        // Populate the cache via the same registered_sources fallback branch
+        // apply_plan's root_map build resolves through.
+        let resolved = resolve_root_path(db.pool(), &reg.source_id).await;
+        assert_eq!(resolved.as_deref(), Some("/tmp"), "must resolve the registered path");
+
+        // Remap must invalidate the cache entry after its DB write commits.
+        crate::first_run::apply_root_remap(db.pool(), &bus, &reg.source_id, "/var/tmp", true)
+            .await
+            .unwrap();
+
+        let after_remap = resolve_root_path(db.pool(), &reg.source_id).await;
+        assert_eq!(
+            after_remap.as_deref(),
+            Some("/var/tmp"),
+            "resolve_root_path must return the remapped path, not a stale cached one"
+        );
     }
 
     #[tokio::test]

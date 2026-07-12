@@ -6,15 +6,16 @@
 //! rationale (would churn every command signature; background tasks have no
 //! `Tauri::State` handle anyway).
 //!
-//! This module defines the cache handles and their `pub invalidate_*` /
-//! reader functions only. Wiring reads through the cache and calling
-//! `invalidate_*` at write sites is downstream (W-ROOT, W-PROT) work.
+//! This module defines the `library_root` and `source_protection_state`
+//! cache handles and their `pub invalidate_*` / reader functions; read-through
+//! + invalidation wiring lives at their call sites in `first_run.rs` /
+//! `protection.rs` / `plan_apply.rs`. The `protection_defaults` cache is
+//! defined in `app_core_cache` instead (see the note below) because
+//! `app_core_settings` must also be able to invalidate it.
 
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
-use app_core_cache::{CacheConfig, SnapshotCache, TtlCache};
-
-use crate::protection::GlobalProtection;
+use app_core_cache::{CacheConfig, TtlCache};
 
 // ── library_root: root_id → path (`first_run.rs`) ──────────────────────────
 
@@ -62,38 +63,12 @@ pub fn invalidate_source_protection_state(source_id: &str) {
     source_protection_state().invalidate(&source_id.to_owned());
 }
 
-// ── protection defaults: global default level/categories (`protection.rs`) ──
-
-/// Global protection defaults snapshot (`protection_defaults` table, scope
-/// `"global"`), 1 slot.
-///
-/// Invalidate at `protection::set_global_protection_default` and via the
-/// settings-bag fan-out (`app_core_settings::update_setting` /
-/// `restore_defaults` for the `defaultProtection`/`blockPermanentDelete`/
-/// `protectedCategories` keys) since defaults are also legacy-readable from
-/// the `settings` table.
-static PROTECTION_DEFAULTS: OnceLock<SnapshotCache<GlobalProtection>> = OnceLock::new();
-
-/// Return the process-global protection-defaults snapshot cache.
-///
-/// `pub(crate)` (not `pub`): [`GlobalProtection`] itself is `pub(crate)` to
-/// `app_core` (defined in `protection.rs`), so this accessor cannot be any
-/// more public than its return type without also widening that struct's
-/// visibility — every caller already lives inside this crate.
-pub(crate) fn protection_defaults() -> &'static SnapshotCache<GlobalProtection> {
-    PROTECTION_DEFAULTS.get_or_init(SnapshotCache::new)
-}
-
-/// Store a freshly loaded [`GlobalProtection`] snapshot.
-#[allow(dead_code)] // called by the read-through load path once W-PROT wires it in
-pub(crate) fn store_protection_defaults(value: Arc<GlobalProtection>) {
-    protection_defaults().store(value);
-}
-
-/// Clear the protection-defaults snapshot so the next read reloads from the DB.
-pub fn invalidate_protection_defaults() {
-    protection_defaults().invalidate();
-}
+// Note: the `protection_defaults` global-defaults snapshot cache lives in
+// `app_core_cache` (`app_core_cache::protection_defaults` /
+// `invalidate_protection_defaults`), not here — `app_core_settings` also
+// needs to invalidate it, and `app_core` depends on `app_core_settings`, so
+// keeping it in this crate would create a cycle. See `protection.rs` for the
+// read-through wiring.
 
 #[cfg(test)]
 mod tests {
@@ -126,25 +101,5 @@ mod tests {
 
         invalidate_source_protection_state("src-1");
         assert!(cache.get(&"src-1".to_owned()).is_none());
-    }
-
-    #[test]
-    fn protection_defaults_store_load_invalidate_round_trips() {
-        // Reuses the process-global static, so scope this test to values it
-        // fully owns (invalidate at start and end) to stay independent of
-        // other tests' ordering.
-        invalidate_protection_defaults();
-        assert!(protection_defaults().load().is_none());
-
-        store_protection_defaults(Arc::new(GlobalProtection {
-            level: "protected".to_owned(),
-            block_permanent_delete: true,
-            categories: vec!["lights".to_owned()],
-        }));
-        let loaded = protection_defaults().load().expect("stored value must load");
-        assert_eq!(loaded.level, "protected");
-
-        invalidate_protection_defaults();
-        assert!(protection_defaults().load().is_none());
     }
 }

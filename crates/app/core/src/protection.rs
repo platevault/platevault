@@ -11,6 +11,7 @@
 //! `app_core::protection` so the public surface stays byte-identical.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
+use app_core_cache::ProtectionDefaultsSnapshot;
 use audit::bus::EventBus;
 use audit::event_bus::{ProtectionPlanAcknowledged, ProtectionSourceSet, Source};
 use audit::{TOPIC_PROTECTION_PLAN_ACKNOWLEDGED, TOPIC_PROTECTION_SOURCE_SET};
@@ -49,10 +50,16 @@ pub(crate) async fn load_global_protection(
 ) -> Result<GlobalProtection, ContractError> {
     use serde_json::Value;
 
-    // Read-through `caches::protection_defaults` (F0): on a hit, skip the
-    // three-row DB read below entirely.
-    if let Some(cached) = caches::protection_defaults().load() {
-        return Ok((*cached).clone());
+    // Read-through `app_core_cache::protection_defaults` (F0): on a hit, skip
+    // the three-row DB read below entirely. Cache lives in the `app_core_cache`
+    // leaf (not `crate::caches`) so `app_core_settings` can invalidate it too
+    // without a dependency cycle.
+    if let Some(cached) = app_core_cache::protection_defaults().load() {
+        return Ok(GlobalProtection {
+            level: cached.level.clone(),
+            block_permanent_delete: cached.block_permanent_delete,
+            categories: cached.categories.clone(),
+        });
     }
 
     // Prefer protection_defaults table (migration 0035).
@@ -93,7 +100,11 @@ pub(crate) async fn load_global_protection(
     };
 
     let global = GlobalProtection { level, block_permanent_delete, categories };
-    caches::store_protection_defaults(Arc::new(global.clone()));
+    app_core_cache::store_protection_defaults(Arc::new(ProtectionDefaultsSnapshot {
+        level: global.level.clone(),
+        block_permanent_delete: global.block_permanent_delete,
+        categories: global.categories.clone(),
+    }));
     Ok(global)
 }
 
@@ -449,7 +460,7 @@ pub async fn set_global_protection_default(
     crate::settings::update_setting(pool, bus, &req).await?;
     // Invalidate after commit (F0 contract): all three keys share the single
     // protection_defaults snapshot, so any of them changing must drop it.
-    caches::invalidate_protection_defaults();
+    app_core_cache::invalidate_protection_defaults();
     Ok(())
 }
 
@@ -712,6 +723,13 @@ mod tests {
     use persistence_db::Database;
 
     async fn setup() -> (Database, EventBus) {
+        // `protection_defaults` is a process-global single-slot cache (F0):
+        // every test in this binary shares it regardless of which in-memory
+        // DB it's keyed to. Force a miss at the start of each test so a
+        // stale value left by a differently-configured DB from an earlier
+        // test can't leak in (same mitigation as the `library_root`
+        // cross-test collision fixed in plan_apply.rs).
+        app_core_cache::invalidate_protection_defaults();
         let db = Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         let bus = EventBus::with_pool(db.pool().clone());
