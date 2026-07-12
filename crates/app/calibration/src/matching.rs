@@ -30,6 +30,8 @@
     clippy::type_complexity, // DB tuple rows are intentionally typed inline
 )]
 
+use std::sync::Arc;
+
 use audit::bus::EventBus;
 use audit::event_bus::Source;
 use calibration_core::assign::{dimension_names, evaluate_assign, AssignError};
@@ -57,6 +59,8 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use calibration_core::ranking::suggest_status;
+
+use crate::caches;
 
 // ── Settings keys ─────────────────────────────────────────────────────────────
 
@@ -627,8 +631,23 @@ async fn load_master_by_id(
     }))
 }
 
-/// Load `MatchingRuleConfig` from persisted settings keys, falling back to defaults.
+/// Load `MatchingRuleConfig`, reading through the process-global
+/// `caches::calibration_config` snapshot (in-memory caching layer, F0).
+///
+/// A hit returns the cached snapshot without touching the DB; a miss falls
+/// through to [`load_config_from_db`] and stores the freshly loaded value
+/// before returning it.
 async fn load_config(pool: &SqlitePool) -> MatchingRuleConfig {
+    if let Some(cached) = caches::calibration_config().load() {
+        return (*cached).clone();
+    }
+    let config = load_config_from_db(pool).await;
+    caches::store_calibration_config(Arc::new(config.clone()));
+    config
+}
+
+/// Load `MatchingRuleConfig` from persisted settings keys, falling back to defaults.
+async fn load_config_from_db(pool: &SqlitePool) -> MatchingRuleConfig {
     let mut config = MatchingRuleConfig::default();
 
     // `require_same_offset` is persisted on the `calibration_tolerances`
@@ -677,14 +696,27 @@ async fn load_config(pool: &SqlitePool) -> MatchingRuleConfig {
 
 // ── Masters list / get (T037, FR-013) ─────────────────────────────────────────
 
-/// `calibration.masters.list` — return all calibration masters from real DB rows.
-///
-/// Backed by `calibration_master_view` (migration 0033) which joins
-/// `calibration_session` with `calibration_fingerprint`.
+/// `calibration.masters.list` — return all calibration masters, reading
+/// through the process-global `caches::calibration_masters` snapshot
+/// (in-memory caching layer, F0). A hit returns the cached list without a DB
+/// round trip; a miss loads from the DB, stores the snapshot, and returns it.
 ///
 /// # Errors
 /// Returns `Err(String)` on database failure.
 pub async fn masters_list(
+    pool: &SqlitePool,
+) -> Result<Vec<contracts_core::calibration::CalibrationMaster>, String> {
+    if let Some(cached) = caches::calibration_masters().load() {
+        return Ok((*cached).clone());
+    }
+    let masters = masters_list_from_db(pool).await?;
+    caches::store_calibration_masters(Arc::new(masters.clone()));
+    Ok(masters)
+}
+
+/// Load all calibration masters from `calibration_master_view` (migration
+/// 0033), which joins `calibration_session` with `calibration_fingerprint`.
+async fn masters_list_from_db(
     pool: &SqlitePool,
 ) -> Result<Vec<contracts_core::calibration::CalibrationMaster>, String> {
     let rows = q_calibration::list_calibration_masters(pool).await.map_err(|e| e.to_string())?;
@@ -799,9 +831,23 @@ mod masters_tests {
         db
     }
 
+    /// `masters_list`/`load_config` read through process-global snapshot
+    /// caches (`caches::calibration_masters`/`calibration_config`). Tests
+    /// that exercise them run concurrently by default under `cargo test`, so
+    /// without serialization one test's `invalidate`+prime can race another
+    /// test's assertions on the same static slot. Hold this lock for the
+    /// duration of any such test.
+    static CACHE_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    async fn lock_cache_tests() -> tokio::sync::MutexGuard<'static, ()> {
+        CACHE_TEST_LOCK.lock().await
+    }
+
     /// T032 / T037: masters_list returns real rows from calibration_master_view.
     #[tokio::test]
     async fn masters_list_returns_real_rows_not_fixtures() {
+        let _guard = lock_cache_tests().await;
+        caches::invalidate_calibration_masters();
         let db = test_db().await;
 
         sqlx::query(
@@ -832,6 +878,8 @@ mod masters_tests {
     /// T032 / T037: masters_list returns empty on a fresh DB (no fixtures).
     #[tokio::test]
     async fn masters_list_returns_empty_on_fresh_db() {
+        let _guard = lock_cache_tests().await;
+        caches::invalidate_calibration_masters();
         let db = test_db().await;
         let masters = masters_list(db.pool()).await.unwrap();
         assert!(masters.is_empty(), "fresh DB must have no masters — not fixtures");
@@ -876,6 +924,8 @@ mod masters_tests {
     /// T032 / T037: calibration suggest finds real masters from populated fingerprints.
     #[tokio::test]
     async fn suggest_uses_real_fingerprint_rows() {
+        let _guard = lock_cache_tests().await;
+        caches::invalidate_calibration_masters();
         let db = test_db().await;
 
         // Insert acquisition session + fingerprint.
@@ -921,14 +971,85 @@ mod masters_tests {
         assert_eq!(masters[0].id, "cal-t3");
     }
 
+    /// In-memory caching layer (F0 follow-up): a `load_config` cache hit must
+    /// skip the DB entirely, so a `calibration_tolerances` update after the
+    /// first call is invisible until `invalidate_calibration_config` is
+    /// called.
+    #[tokio::test]
+    async fn load_config_cache_hit_skips_db_until_invalidated() {
+        let _guard = lock_cache_tests().await;
+        caches::invalidate_calibration_config();
+        let db = test_db().await;
+
+        let first = load_config(db.pool()).await;
+        assert!(first.require_same_offset, "fresh DB primes the cache with the default (true)");
+
+        let row = persistence_db::repositories::calibration_tolerances::CalibrationTolerancesRow {
+            temperature_tolerance_c: 5.0,
+            exposure_tolerance_s: 2.0,
+            aging_limit_days: 365,
+            require_same_camera: true,
+            require_same_gain: true,
+            require_same_binning: true,
+            require_same_offset: false,
+        };
+        persistence_db::repositories::calibration_tolerances::update(db.pool(), &row)
+            .await
+            .unwrap();
+
+        let cached = load_config(db.pool()).await;
+        assert!(cached.require_same_offset, "cache hit must not see the post-priming update");
+
+        caches::invalidate_calibration_config();
+        let fresh = load_config(db.pool()).await;
+        assert!(!fresh.require_same_offset, "after invalidation, the update must be visible");
+    }
+
     /// Spec 043 P8: `load_config` defaults `require_same_offset` to true on a
     /// fresh DB, matching `MatchingRuleConfig::default()` (migration 0008/0051
     /// seed row).
     #[tokio::test]
     async fn load_config_defaults_require_same_offset_true() {
+        let _guard = lock_cache_tests().await;
+        caches::invalidate_calibration_config();
         let db = test_db().await;
         let config = load_config(db.pool()).await;
         assert!(config.require_same_offset);
+    }
+
+    /// In-memory caching layer (F0 follow-up): a `masters_list` cache hit
+    /// must skip the DB entirely, so a row inserted after the first call is
+    /// invisible until `invalidate_calibration_masters` is called.
+    #[tokio::test]
+    async fn masters_list_cache_hit_skips_db_until_invalidated() {
+        let _guard = lock_cache_tests().await;
+        caches::invalidate_calibration_masters();
+        let db = test_db().await;
+
+        let first = masters_list(db.pool()).await.unwrap();
+        assert!(first.is_empty(), "fresh DB primes the cache with an empty snapshot");
+
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES ('cal-t4', 'dark-60s', 'dark', '2026-06-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO calibration_fingerprint (id, calibration_type, gain, exposure_s, binning) \
+             VALUES ('cal-t4', 'dark', 100.0, 60.0, '1x1')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let cached = masters_list(db.pool()).await.unwrap();
+        assert!(cached.is_empty(), "cache hit must not see the row inserted after priming");
+
+        caches::invalidate_calibration_masters();
+        let fresh = masters_list(db.pool()).await.unwrap();
+        assert_eq!(fresh.len(), 1, "after invalidation, the new row must be visible");
     }
 
     /// Spec 043 P8: the Settings > Calibration Matching "Offset match
@@ -938,6 +1059,8 @@ mod masters_tests {
     /// gap.
     #[tokio::test]
     async fn load_config_reads_require_same_offset_from_tolerances_table() {
+        let _guard = lock_cache_tests().await;
+        caches::invalidate_calibration_config();
         let db = test_db().await;
 
         let row = persistence_db::repositories::calibration_tolerances::CalibrationTolerancesRow {
