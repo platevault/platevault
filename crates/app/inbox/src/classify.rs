@@ -2127,6 +2127,20 @@ mod tests {
 
         // Change flat_a on disk: overwrite with SII filter header so it moves groups.
         write_fits_with_filter(tmp.path(), "flat_a.fits", "Flat Frame", "SII");
+        // app_core_targets::metadata_cache::cached_extract keys on (path, mtime,
+        // size); this rewrite keeps flat_a.fits at the same fixed 2880-byte
+        // length, so mtime is the only thing that can bust the cache. Its key
+        // truncates mtime to whole seconds (metadata_cache.rs's documented,
+        // accepted same-second/same-size collision risk), and a fast test can
+        // complete both writes within one wall-clock second on some CI
+        // runners — a real re-scan is never this fast, so explicitly advance
+        // the mtime to model realistic elapsed time and make the assertion
+        // deterministic across platforms rather than racing the clock.
+        let flat_a_path = tmp.path().join("flat_a.fits");
+        std::fs::File::open(&flat_a_path)
+            .unwrap()
+            .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(2))
+            .unwrap();
 
         // Second classify: now Ha is gone, OIII remains, SII appears.
         classify(
