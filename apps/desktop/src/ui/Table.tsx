@@ -200,10 +200,10 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
     <thead>
       <tr>
         {columns.map((c, i) => (
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: caller-provided column header style passthrough
           <th
             key={i}
             className={c.className}
+            // eslint-disable-next-line no-restricted-syntax -- dynamic: caller-provided column header style passthrough
             style={c.style}
             aria-sort={c.ariaSort}
           >
@@ -249,9 +249,10 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
             <>
               {paddingBefore > 0 && (
                 <tr aria-hidden="true" className="alm-table__spacer">
-                  {/* eslint-disable-next-line no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer before-spacer height; decorative spacer in aria-hidden row, no label needed */}
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- decorative spacer in aria-hidden row, no label needed */}
                   <td
                     colSpan={colCount}
+                    // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer before-spacer height
                     style={{ height: `${paddingBefore}px` }}
                   />
                 </tr>
@@ -259,9 +260,10 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
               {virtualItems.map((vi) => renderRow(rows[vi.index], vi.index))}
               {paddingAfter > 0 && (
                 <tr aria-hidden="true" className="alm-table__spacer">
-                  {/* eslint-disable-next-line no-restricted-syntax, jsx-a11y/control-has-associated-label -- dynamic: virtualizer after-spacer height; decorative spacer in aria-hidden row, no label needed */}
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- decorative spacer in aria-hidden row, no label needed */}
                   <td
                     colSpan={colCount}
+                    // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer after-spacer height
                     style={{ height: `${paddingAfter}px` }}
                   />
                 </tr>
