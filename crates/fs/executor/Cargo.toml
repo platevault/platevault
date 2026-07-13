@@ -22,6 +22,7 @@ trash.workspace = true
 # spec 042 (T206): purely-lexical `.`/`..` collapse for the path-resolution
 # gate (replaces the hand-rolled component walk; symlink-safety is unchanged).
 path-clean.workspace = true
+fs4 = { version = "1.1.0", default-features = false, features = ["sync"] }
 
 [dev-dependencies]
 tempfile.workspace = true

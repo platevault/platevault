@@ -1044,14 +1044,74 @@ pub async fn apply_plan(
         );
     }
 
-    // Spawn executor on a background task.
-    let pool_clone = pool.clone();
-    let bus_clone = bus.clone();
-    let plan_id_owned = plan_id.to_owned();
-    let run_id_owned = run_id.clone();
-    let op_emitter_task = op_emitter.clone();
-    let plan_origin_owned = plan_origin;
-    let plan_project_id_owned = plan_project_id;
+    // Spawn executor on a background task (shared with `resume_plan` — see
+    // `spawn_executor_run`, issue #575 / spec 025 T048-T050).
+    spawn_executor_run(SpawnExecutorParams {
+        pool: pool.clone(),
+        bus: bus.clone(),
+        plan_id: plan_id.to_owned(),
+        run_id: run_id.clone(),
+        executor_items,
+        plan_origin,
+        plan_project_id,
+        cancel_token,
+        skip_set,
+        retry_queue,
+        run_guard,
+        op_emitter,
+    });
+
+    Ok(PlanApplyResponse { plan_id: plan_id.to_owned(), run_id, new_state: "applying".to_owned() })
+}
+
+// ── spawn_executor_run (shared by apply_plan & resume_plan) ──────────────────
+
+/// Inputs to [`spawn_executor_run`].
+///
+/// Bundled into a struct (rather than ~12 positional args) per the shape
+/// suggested in issue #575: `apply_plan` builds one after its `approved ->
+/// applying` CAS; `resume_plan` builds one after re-validating the pause
+/// condition and re-registering the `ActiveRun` for the plan's remaining
+/// `pending` items.
+struct SpawnExecutorParams {
+    pool: SqlitePool,
+    bus: EventBus,
+    plan_id: String,
+    run_id: String,
+    executor_items: Vec<ExecutorItem>,
+    plan_origin: String,
+    plan_project_id: Option<String>,
+    cancel_token: CancellationToken,
+    skip_set: SkipSet,
+    retry_queue: RetryQueue,
+    run_guard: ActiveRunGuard,
+    op_emitter: Option<OpEventEmitter>,
+}
+
+/// Drive `execute_plan` to completion/cancellation/pause on a background
+/// task and persist the outcome (terminal state, audit trail, long-op
+/// projection). Extracted from `apply_plan`'s inline `tokio::spawn` block so
+/// `resume_plan` can restart the executor over a paused run's remaining
+/// items instead of leaving `state = "applying"` with nothing running
+/// (issue #575, R-Pause-1).
+///
+/// Fire-and-forget: callers get no return value; progress is observed via
+/// the audit trail (`plan_apply_events`) and the optional long-op sink.
+fn spawn_executor_run(params: SpawnExecutorParams) {
+    let SpawnExecutorParams {
+        pool,
+        bus,
+        plan_id,
+        run_id,
+        executor_items,
+        plan_origin,
+        plan_project_id,
+        cancel_token,
+        skip_set,
+        retry_queue,
+        run_guard,
+        op_emitter,
+    } = params;
 
     tokio::spawn(async move {
         // Own the RAII removal guard for the whole task scope. Its `Drop`
@@ -1061,11 +1121,11 @@ pub async fn apply_plan(
         let _run_guard = run_guard;
 
         let callbacks = PlanApplyCallbacks {
-            pool: pool_clone.clone(),
-            bus: bus_clone.clone(),
-            plan_id: plan_id_owned.clone(),
-            run_id: run_id_owned.clone(),
-            op_emitter: op_emitter_task.clone(),
+            pool: pool.clone(),
+            bus: bus.clone(),
+            plan_id: plan_id.clone(),
+            run_id: run_id.clone(),
+            op_emitter: op_emitter.clone(),
         };
 
         let outcome =
@@ -1081,15 +1141,9 @@ pub async fn apply_plan(
                 // project into `archived` (the legitimate requires-plan closure).
                 // Only a clean `applied` terminal qualifies — a partial/failed
                 // apply leaves the project where it is.
-                if terminal == "applied" && plan_origin_owned == "archive" {
-                    if let Some(project_id) = plan_project_id_owned.as_deref() {
-                        finalize_archive_lifecycle(
-                            &pool_clone,
-                            &bus_clone,
-                            &plan_id_owned,
-                            project_id,
-                        )
-                        .await;
+                if terminal == "applied" && plan_origin == "archive" {
+                    if let Some(project_id) = plan_project_id.as_deref() {
+                        finalize_archive_lifecycle(&pool, &bus, &plan_id, project_id).await;
                     }
                 }
 
@@ -1100,10 +1154,10 @@ pub async fn apply_plan(
                 // single missing source never blocks recording the rest of
                 // the view (FR-019).
                 if (terminal == "applied" || terminal == "partially_applied")
-                    && plan_origin_owned == "prepared_view_generation"
+                    && plan_origin == "prepared_view_generation"
                 {
-                    if let Some(project_id) = plan_project_id_owned.as_deref() {
-                        finalize_view_generation(&pool_clone, &plan_id_owned, project_id).await;
+                    if let Some(project_id) = plan_project_id.as_deref() {
+                        finalize_view_generation(&pool, &plan_id, project_id).await;
                     }
                 }
 
@@ -1113,21 +1167,21 @@ pub async fn apply_plan(
                 // `finalize_view_regeneration` for why removal gets an explicit
                 // terminal write while regeneration rides the staleness sweep.
                 if terminal == "applied" || terminal == "partially_applied" {
-                    match plan_origin_owned.as_str() {
+                    match plan_origin.as_str() {
                         "prepared_view_removal" => {
-                            finalize_view_removal(&pool_clone, &plan_id_owned, &terminal).await;
+                            finalize_view_removal(&pool, &plan_id, &terminal).await;
                         }
                         "prepared_view_regeneration" => {
-                            finalize_view_regeneration(&pool_clone, &plan_id_owned).await;
+                            finalize_view_regeneration(&pool, &plan_id).await;
                         }
                         _ => {}
                     }
                 }
 
                 let _ = apply_repo::complete_run(
-                    &pool_clone,
-                    &plan_id_owned,
-                    &run_id_owned,
+                    &pool,
+                    &plan_id,
+                    &run_id,
                     &terminal,
                     counts.succeeded,
                     counts.failed,
@@ -1137,10 +1191,10 @@ pub async fn apply_plan(
                 .await;
 
                 let _ = apply_repo::append_event(
-                    &pool_clone,
+                    &pool,
                     &new_id(),
-                    &run_id_owned,
-                    &plan_id_owned,
+                    &run_id,
+                    &plan_id,
                     None,
                     "applying",
                     &terminal,
@@ -1150,13 +1204,13 @@ pub async fn apply_plan(
                 )
                 .await;
 
-                let _ = bus_clone
+                let _ = bus
                     .publish(
                         TOPIC_PLAN_APPLYING_COMPLETED,
                         Source::System,
                         PlanApplyingCompleted {
-                            plan_id: plan_id_owned.clone(),
-                            run_id: run_id_owned.clone(),
+                            plan_id: plan_id.clone(),
+                            run_id: run_id.clone(),
                             terminal_state: terminal.clone(),
                             items_applied: counts.succeeded,
                             items_failed: counts.failed,
@@ -1170,7 +1224,7 @@ pub async fn apply_plan(
                 // Long-op terminal event (spec 042 US16). `terminal` is
                 // "completed" unless any item failed, in which case it is
                 // "failed" — map that onto Completed/Failed event + status.
-                if let Some(emitter) = op_emitter_task.as_ref() {
+                if let Some(emitter) = op_emitter.as_ref() {
                     let failed_run = terminal == "failed";
                     let (event_type, status) = if failed_run {
                         (OperationEventType::Failed, OperationStatus::Failed)
@@ -1182,8 +1236,8 @@ pub async fn apply_plan(
                         event_type,
                         json!({
                             "handle": handle,
-                            "planId": plan_id_owned,
-                            "runId": run_id_owned,
+                            "planId": plan_id,
+                            "runId": run_id,
                             "terminalState": terminal,
                             "itemsApplied": counts.succeeded,
                             "itemsFailed": counts.failed,
@@ -1199,16 +1253,15 @@ pub async fn apply_plan(
                 let at = Timestamp::now_iso();
 
                 // Batch-cancel remaining pending items (T021: emit per-item audit row for EACH).
-                match apply_repo::list_pending_items(&pool_clone, &plan_id_owned).await {
+                match apply_repo::list_pending_items(&pool, &plan_id).await {
                     Ok(pending_ids) => {
-                        let _ = apply_repo::batch_cancel_pending_items(&pool_clone, &plan_id_owned)
-                            .await;
+                        let _ = apply_repo::batch_cancel_pending_items(&pool, &plan_id).await;
                         for item_id in &pending_ids {
                             let _ = apply_repo::append_event(
-                                &pool_clone,
+                                &pool,
                                 &new_id(),
-                                &run_id_owned,
-                                &plan_id_owned,
+                                &run_id,
+                                &plan_id,
                                 Some(item_id.as_str()),
                                 "pending",
                                 "cancelled",
@@ -1221,15 +1274,14 @@ pub async fn apply_plan(
                     }
                     Err(e) => {
                         tracing::error!(error=%e, "failed to list pending items for per-item cancel audit");
-                        let _ = apply_repo::batch_cancel_pending_items(&pool_clone, &plan_id_owned)
-                            .await;
+                        let _ = apply_repo::batch_cancel_pending_items(&pool, &plan_id).await;
                     }
                 }
 
                 let _ = apply_repo::complete_run(
-                    &pool_clone,
-                    &plan_id_owned,
-                    &run_id_owned,
+                    &pool,
+                    &plan_id,
+                    &run_id,
                     "cancelled",
                     counts.succeeded,
                     counts.failed,
@@ -1239,10 +1291,10 @@ pub async fn apply_plan(
                 .await;
 
                 let _ = apply_repo::append_event(
-                    &pool_clone,
+                    &pool,
                     &new_id(),
-                    &run_id_owned,
-                    &plan_id_owned,
+                    &run_id,
+                    &plan_id,
                     None,
                     "applying",
                     "cancelled",
@@ -1252,13 +1304,13 @@ pub async fn apply_plan(
                 )
                 .await;
 
-                let _ = bus_clone
+                let _ = bus
                     .publish(
                         TOPIC_PLAN_APPLYING_COMPLETED,
                         Source::System,
                         PlanApplyingCompleted {
-                            plan_id: plan_id_owned.clone(),
-                            run_id: run_id_owned.clone(),
+                            plan_id: plan_id.clone(),
+                            run_id: run_id.clone(),
                             terminal_state: "cancelled".to_owned(),
                             items_applied: counts.succeeded,
                             items_failed: counts.failed,
@@ -1270,14 +1322,14 @@ pub async fn apply_plan(
                     .await;
 
                 // Long-op terminal event for a cancelled run (spec 042 US16).
-                if let Some(emitter) = op_emitter_task.as_ref() {
+                if let Some(emitter) = op_emitter.as_ref() {
                     let handle = emitter.handle(OperationStatus::Cancelled);
                     emitter.emit(
                         OperationEventType::Completed,
                         json!({
                             "handle": handle,
-                            "planId": plan_id_owned,
-                            "runId": run_id_owned,
+                            "planId": plan_id,
+                            "runId": run_id,
                             "terminalState": "cancelled",
                             "itemsApplied": counts.succeeded,
                             "itemsFailed": counts.failed,
@@ -1293,9 +1345,9 @@ pub async fn apply_plan(
                 let at = Timestamp::now_iso();
 
                 let _ = apply_repo::pause_run(
-                    &pool_clone,
-                    &plan_id_owned,
-                    &run_id_owned,
+                    &pool,
+                    &plan_id,
+                    &run_id,
                     &reason,
                     counts.succeeded,
                     counts.failed,
@@ -1307,10 +1359,10 @@ pub async fn apply_plan(
                 .await;
 
                 let _ = apply_repo::append_event(
-                    &pool_clone,
+                    &pool,
                     &new_id(),
-                    &run_id_owned,
-                    &plan_id_owned,
+                    &run_id,
+                    &plan_id,
                     None,
                     "applying",
                     "paused",
@@ -1324,27 +1376,27 @@ pub async fn apply_plan(
                 // run is not terminal — the UI keeps the handle and waits for a
                 // resume to continue streaming. Status reflects "running" since
                 // the op is still alive (paused), not Completed/Failed.
-                if let Some(emitter) = op_emitter_task.as_ref() {
+                if let Some(emitter) = op_emitter.as_ref() {
                     let handle = emitter.handle(OperationStatus::Running);
                     emitter.emit(
                         OperationEventType::Warning,
                         json!({
                             "handle": handle,
-                            "planId": plan_id_owned,
-                            "runId": run_id_owned,
+                            "planId": plan_id,
+                            "runId": run_id,
                             "pauseReason": reason,
                             "at": at,
                         }),
                     );
                 }
 
-                let _ = bus_clone
+                let _ = bus
                     .publish(
                         TOPIC_PLAN_APPLYING_PAUSED,
                         Source::System,
                         PlanApplyingPaused {
-                            plan_id: plan_id_owned.clone(),
-                            run_id: run_id_owned.clone(),
+                            plan_id: plan_id.clone(),
+                            run_id: run_id.clone(),
                             pause_reason: reason,
                             at,
                         },
@@ -1353,8 +1405,6 @@ pub async fn apply_plan(
             }
         }
     });
-
-    Ok(PlanApplyResponse { plan_id: plan_id.to_owned(), run_id, new_state: "applying".to_owned() })
 }
 
 // ── apply_plan_channel_free ───────────────────────────────────────────────────

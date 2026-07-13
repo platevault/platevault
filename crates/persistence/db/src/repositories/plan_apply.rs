@@ -584,6 +584,56 @@ pub async fn list_events(pool: &SqlitePool, plan_id: &str) -> DbResult<Vec<PlanA
         .await?)
 }
 
+/// Fetch the plan item whose CAS mismatch most recently triggered a pause
+/// (`item_state = 'failed'`, `item_stale = 1`).
+///
+/// The executor halts immediately on the first item that trips a pause
+/// condition (R-Pause-1), so the highest `item_index` among stale items is
+/// the one that caused the *current* pause. `resume_plan` re-probes this
+/// item's source path before allowing `paused -> applying` (spec 025
+/// T048/T049/T050).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_last_stale_item(
+    pool: &SqlitePool,
+    plan_id: &str,
+) -> DbResult<Option<crate::repositories::plans::PlanItemRow>> {
+    Ok(sqlx::query_as(
+        "SELECT * FROM plan_items WHERE plan_id = ? AND item_stale = 1 \
+         ORDER BY item_index DESC LIMIT 1",
+    )
+    .bind(plan_id)
+    .fetch_optional(pool)
+    .await?)
+}
+
+/// Fetch the plan item whose failure reason most recently began with
+/// `code_prefix` (e.g. `"volume.unavailable"`, `"disk.full"`).
+///
+/// Same "highest `item_index` among matching failures = the item that
+/// caused the current pause" reasoning as [`get_last_stale_item`].
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_last_item_with_failure_prefix(
+    pool: &SqlitePool,
+    plan_id: &str,
+    code_prefix: &str,
+) -> DbResult<Option<crate::repositories::plans::PlanItemRow>> {
+    let pattern = format!("{code_prefix}%");
+    Ok(sqlx::query_as(
+        "SELECT * FROM plan_items WHERE plan_id = ? AND item_state = 'failed' \
+         AND failure_reason LIKE ? ORDER BY item_index DESC LIMIT 1",
+    )
+    .bind(plan_id)
+    .bind(pattern)
+    .fetch_optional(pool)
+    .await?)
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -16,6 +16,7 @@ pub mod mkdir_op;
 pub mod move_op;
 pub mod path_gate;
 pub mod trash_op;
+pub mod volume_check;
 
 pub use archive_op::archive_file;
 pub use cas_check::{check_cas, CasSnapshot};
@@ -26,3 +27,4 @@ pub use mkdir_op::make_dir;
 pub use move_op::move_file;
 pub use path_gate::{lexical_normalize, resolve_and_validate};
 pub use trash_op::trash_file;
+pub use volume_check::{recheck_disk_space, recheck_volume_available};
