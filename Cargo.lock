@@ -6240,6 +6240,7 @@ dependencies = [
  "skymath 0.3.0",
  "sqlx",
  "targeting",
+ "tempfile",
  "thiserror 2.0.18",
  "time",
  "tokio",

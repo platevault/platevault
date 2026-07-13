@@ -188,8 +188,12 @@ pub async fn get_by_simbad_oid(
 
 /// Read a cached target by a normalized alias (the typeahead match surface).
 ///
-/// `normalized` must already be normalized via [`targeting::normalize::normalize`].
-/// This is an exact-alias lookup, NOT a prefix/substring search (that is T010).
+/// `normalized` must already be normalized via [`targeting::normalize::normalize`]
+/// (verified identical to [`simbad_resolver::normalize::normalize`] by
+/// construction — same algorithm, both derive from the same author's spec-013
+/// pipeline; see `simbad::tests::namespace_matches_sqlite_identity_derivation`
+/// for the id-level interop proof). This is an exact-alias lookup, NOT a
+/// prefix/substring search (that is T010).
 ///
 /// # Errors
 ///
@@ -494,7 +498,12 @@ pub async fn list_all(pool: &SqlitePool) -> CacheResult<Vec<TargetListRow>> {
 /// Insert a user-added alias for `target_id`.
 ///
 /// The alias is stored with `kind = 'user'`. The `normalized` form is computed
-/// here via [`targeting::normalize::normalize`]. Rejects a duplicate via the
+/// here via [`simbad_resolver::normalize::normalize`] — the single
+/// normalization choke-point (spec 052 P1 T004, FR-007): every identity
+/// string entering the cache (TAP, Sesame, Caldwell, user query, seed, and
+/// this user-added alias) is normalized by the SAME function before
+/// caching/persisting, so alias variants of one physical object dedup
+/// identically regardless of source. Rejects a duplicate via the
 /// `UNIQUE(target_id, normalized)` constraint — returns `false` when the alias
 /// already exists (idempotent), `true` when newly inserted.
 ///
@@ -507,7 +516,7 @@ pub async fn insert_user_alias(
     target_id: Uuid,
     alias: &str,
 ) -> CacheResult<Option<(String, String)>> {
-    let normalized = targeting::normalize::normalize(alias);
+    let normalized = simbad_resolver::normalize::normalize(alias);
     if normalized.is_empty() {
         return Ok(None);
     }
@@ -689,6 +698,40 @@ mod tests {
         assert_eq!(outcome, UpsertOutcome::Updated);
         let got = get_by_simbad_oid(db.pool(), 1_575_544).await.unwrap().unwrap();
         assert!((got.dec_deg - 41.0).abs() < f64::EPSILON);
+    }
+
+    // ── Enrichment at the in-use write (spec 052 P1 T007/T014, D8) ─────────────
+
+    #[tokio::test]
+    async fn upsert_populates_magnitude_and_constellation_when_present() {
+        let db = setup().await;
+        let mut identity = m31(TargetSource::Resolved);
+        identity.v_mag = Some(3.44);
+        let (id, _) = upsert_resolved(db.pool(), &identity).await.unwrap();
+
+        let rows = list_all(db.pool()).await.unwrap();
+        let row = rows.iter().find(|r| r.id == id).unwrap();
+        assert_eq!(row.magnitude, Some(3.44), "magnitude must come from ResolvedIdentity.v_mag");
+        // M 31 (ra=10.68, dec=41.27) sits in Andromeda.
+        assert_eq!(
+            row.constellation.as_deref(),
+            Some("And"),
+            "constellation must be derived from (ra_deg, dec_deg) via skymath"
+        );
+    }
+
+    #[tokio::test]
+    async fn upsert_leaves_magnitude_null_when_source_has_none() {
+        let db = setup().await;
+        let mut identity = m31(TargetSource::Resolved);
+        identity.v_mag = None;
+        let (id, _) = upsert_resolved(db.pool(), &identity).await.unwrap();
+
+        let rows = list_all(db.pool()).await.unwrap();
+        let row = rows.iter().find(|r| r.id == id).unwrap();
+        assert!(row.magnitude.is_none(), "magnitude must never be fabricated when v_mag is None");
+        // Coordinates are always present/valid, so constellation is still derived.
+        assert_eq!(row.constellation.as_deref(), Some("And"));
     }
 
     #[tokio::test]

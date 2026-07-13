@@ -60,6 +60,13 @@ skymath = "0.3"
 # `simbad-resolver` dependency brings its own async runtime requirement for
 # `TapResolver`).
 tokio = { workspace = true }
+# spec 052 P1 (T005, SC-001): the crate's own call-counting FakeResolver, to
+# prove the facade never re-queries a cached object across a
+# drop-and-rebuild pointed at the same redb file — astro-plan's production
+# `simbad::SimbadResolver` wrapper only ever builds a real `TapResolver`, so
+# this test constructs the crate's facade directly.
+simbad-resolver = { version = "0.2.0", features = ["test-util"] }
+tempfile = { workspace = true }
 
 [features]
 # Enables the seeded in-memory test fixture (FakeResolver) for use in
