@@ -115,7 +115,7 @@ use crate::commands::target_favourites::{
 };
 use crate::commands::target_lookup::{
     target_adopt, target_astro_format_batch, target_cache_clear, target_resolution_settings,
-    target_resolution_settings_update, target_resolve, target_search,
+    target_resolution_settings_update, target_resolve, target_resolve_explicit, target_search,
 };
 use crate::commands::target_management as target_mgmt_cmds;
 use crate::commands::targets::{targets_get, targets_list};
@@ -217,6 +217,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_favourites_remove,
         // target resolve (spec 035 — SIMBAD cache-first resolution)
         target_resolve,
+        // target resolve — explicit entrypoint, TAP-first/Sesame-fallback (spec 052 P2)
+        target_resolve_explicit,
         // target search (spec 035, US1)
         target_search,
         // target in-use promotion + resolve-cache clear (spec 052 P1)
@@ -449,6 +451,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_favourites_remove,
         // target resolve (spec 035 — SIMBAD cache-first resolution)
         target_resolve,
+        // target resolve — explicit entrypoint, TAP-first/Sesame-fallback (spec 052 P2)
+        target_resolve_explicit,
         // target search (spec 035, US1)
         target_search,
         // target in-use promotion + resolve-cache clear (spec 052 P1)

@@ -16,6 +16,22 @@
 //! (settings changes rebuild the resolver, e.g. after `target.resolution
 //! .settings.update`) shares that same store via a cheap clone
 //! ([`CacheBackend::custom`]) instead of re-opening the file.
+//!
+//! ## Dual lookup (spec 052 P2, D5 — TAP-first, Sesame fallback)
+//!
+//! [`SimbadResolver`] wraps TWO facade instances sharing the SAME
+//! [`ResolveCache`]: [`Self::typeahead`] (the [`Resolver`] trait impl — TAP +
+//! cache only, used by the debounced as-you-type path) and
+//! [`Self::explicit`] (consulted only by [`Self::resolve_explicit`] — TAP
+//! first, [`simbad_resolver::SesameResolver`] fallback only on a TAP miss).
+//! This two-entrypoint split is what makes FR-009 ("the fallback MUST NOT
+//! fire during as-you-type suggestions") a structural guarantee rather than a
+//! runtime flag the typeahead call site could forget to pass: the typeahead
+//! path's resolver type ([`EitherNetworkResolver`]) has no Sesame reference to
+//! call, at any query. Both facades share one [`ResolveCache`], so a
+//! Sesame-recovered identity is cached/deduped exactly like a TAP hit.
+
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use simbad_resolver::{CacheBackend, ResolverConfig};
@@ -95,12 +111,76 @@ impl ResolveCache {
 /// cached/seeded object is never re-queried", regardless of the online
 /// setting).
 enum EitherNetworkResolver {
-    Online(simbad_resolver::TapResolver),
+    Online(Arc<simbad_resolver::TapResolver>),
     Offline(simbad_resolver::OfflineResolver),
 }
 
 #[async_trait]
 impl simbad_resolver::Resolver for EitherNetworkResolver {
+    async fn resolve(
+        &self,
+        query: &str,
+    ) -> Result<simbad_resolver::ResolvedIdentity, simbad_resolver::ResolveError> {
+        match self {
+            Self::Online(r) => simbad_resolver::Resolver::resolve(r.as_ref(), query).await,
+            Self::Offline(r) => simbad_resolver::Resolver::resolve(r, query).await,
+        }
+    }
+}
+
+/// TAP-first, name-resolver-fallback-on-miss composition (spec 052 P2, D5,
+/// FR-008/FR-010): tries `tap` first; only on a genuine "no match"
+/// ([`simbad_resolver::ResolveError::NotFound`]) does it consult `sesame`.
+/// Any other TAP outcome (a hit, `Ambiguous`, or a transient
+/// `Network`/`Timeout`) is returned as-is — a transient TAP failure is not a
+/// "match miss" and swapping to a different backend for it would silently
+/// change the answer's provenance, not just extend coverage.
+///
+/// Generic over both legs so tests substitute [`simbad_resolver::FakeResolver`]
+/// spies for both `TapResolver` and `SesameResolver` (call-count assertions,
+/// no network). Production wires the real `T = TapResolver`, `S =
+/// SesameResolver` (the latter itself `with_enricher`'d back through `tap` —
+/// FR-010 oid recovery — see [`SimbadResolver::new`]).
+struct DualLookupResolver<T, S> {
+    tap: Arc<T>,
+    sesame: S,
+}
+
+impl<T, S> DualLookupResolver<T, S> {
+    fn new(tap: Arc<T>, sesame: S) -> Self {
+        Self { tap, sesame }
+    }
+}
+
+#[async_trait]
+impl<T, S> simbad_resolver::Resolver for DualLookupResolver<T, S>
+where
+    T: simbad_resolver::Resolver,
+    S: simbad_resolver::Resolver,
+{
+    async fn resolve(
+        &self,
+        query: &str,
+    ) -> Result<simbad_resolver::ResolvedIdentity, simbad_resolver::ResolveError> {
+        match self.tap.resolve(query).await {
+            Ok(identity) => Ok(identity),
+            Err(simbad_resolver::ResolveError::NotFound(_)) => self.sesame.resolve(query).await,
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// Either the [`DualLookupResolver`] (online) or a zero-cost offline stub —
+/// the explicit-resolve counterpart of [`EitherNetworkResolver`], preserving
+/// the same "never build a `reqwest`/TLS client when offline" property
+/// (FIX-3 / FR-011) for the Sesame leg too.
+enum ExplicitNetworkResolver {
+    Online(DualLookupResolver<simbad_resolver::TapResolver, simbad_resolver::SesameResolver>),
+    Offline(simbad_resolver::OfflineResolver),
+}
+
+#[async_trait]
+impl simbad_resolver::Resolver for ExplicitNetworkResolver {
     async fn resolve(
         &self,
         query: &str,
@@ -114,10 +194,15 @@ impl simbad_resolver::Resolver for EitherNetworkResolver {
 
 /// Live SIMBAD resolver: the production [`Resolver`] implementation.
 ///
-/// Wraps the crate's own cache-first [`simbad_resolver::SimbadResolver`]
-/// facade (see the module doc for why astro-plan no longer calls
-/// `TapResolver` directly).
-pub struct SimbadResolver(simbad_resolver::SimbadResolver<EitherNetworkResolver>);
+/// Wraps TWO instances of the crate's own cache-first
+/// [`simbad_resolver::SimbadResolver`] facade, sharing one [`ResolveCache`]
+/// (see the module doc, "Dual lookup"): [`Self::typeahead`] backs the
+/// [`Resolver`] trait impl (TAP + cache only), [`Self::explicit`] backs
+/// [`Self::resolve_explicit`] (TAP-first, Sesame-fallback-on-miss).
+pub struct SimbadResolver {
+    typeahead: simbad_resolver::SimbadResolver<EitherNetworkResolver>,
+    explicit: simbad_resolver::SimbadResolver<ExplicitNetworkResolver>,
+}
 
 impl SimbadResolver {
     /// Construct a resolver from a [`SimbadConfig`] and a shared
@@ -138,21 +223,39 @@ impl SimbadResolver {
         cache: &ResolveCache,
         online_enabled: bool,
     ) -> Result<Self, ResolveError> {
-        let inner = if online_enabled {
-            EitherNetworkResolver::Online(
-                simbad_resolver::TapResolver::new(config).map_err(from_crate_error)?,
+        let (either, explicit_inner) = if online_enabled {
+            // One TAP client, shared by the typeahead leg AND (via a second
+            // `Arc` clone) both the explicit-resolve leg and Sesame's own
+            // oid-recovery enricher — a single `reqwest` connection pool for
+            // every TAP-bound path this resolver builds.
+            let tap =
+                Arc::new(simbad_resolver::TapResolver::new(config).map_err(from_crate_error)?);
+            let sesame = simbad_resolver::SesameResolver::new()
+                .with_enricher(Arc::clone(&tap) as Arc<dyn simbad_resolver::Resolver>);
+            (
+                EitherNetworkResolver::Online(Arc::clone(&tap)),
+                ExplicitNetworkResolver::Online(DualLookupResolver::new(tap, sesame)),
             )
         } else {
-            EitherNetworkResolver::Offline(simbad_resolver::OfflineResolver)
+            (
+                EitherNetworkResolver::Offline(simbad_resolver::OfflineResolver),
+                ExplicitNetworkResolver::Offline(simbad_resolver::OfflineResolver),
+            )
         };
         let resolver_config = ResolverConfig::new(NAMESPACE_SEED).with_online(online_enabled);
-        let facade = simbad_resolver::SimbadResolver::new(
-            inner,
+        let typeahead = simbad_resolver::SimbadResolver::new(
+            either,
+            CacheBackend::custom(cache.cache()),
+            resolver_config.clone(),
+        )
+        .map_err(|e| from_facade_error(&e))?;
+        let explicit = simbad_resolver::SimbadResolver::new(
+            explicit_inner,
             CacheBackend::custom(cache.cache()),
             resolver_config,
         )
         .map_err(|e| from_facade_error(&e))?;
-        Ok(Self(facade))
+        Ok(Self { typeahead, explicit })
     }
 
     /// Convenience constructor using [`SimbadConfig::default`] and an
@@ -178,30 +281,64 @@ impl SimbadResolver {
         query: &str,
         limit: usize,
     ) -> Result<Vec<simbad_resolver::SearchHit>, ResolveError> {
-        self.0.search(query, limit).await.map_err(|e| from_facade_error(&e))
+        self.typeahead.search(query, limit).await.map_err(|e| from_facade_error(&e))
+    }
+
+    /// Explicit resolve/confirm entrypoint (spec 052 P2, FR-008/FR-009):
+    /// TAP-first, Sesame-fallback only on a TAP miss. Callers wire this to a
+    /// deliberate user action (Enter, confirm, "search harder") — never a
+    /// per-keystroke typeahead call, which MUST keep using the [`Resolver`]
+    /// trait's [`Self::resolve`] (TAP + cache only, no fallback).
+    ///
+    /// # Errors
+    ///
+    /// Same error/outcome shape as [`Resolver::resolve`].
+    pub async fn resolve_explicit(&self, query: &str) -> Result<ResolvedIdentity, ResolveError> {
+        resolve_via(&self.explicit, query).await
     }
 }
 
 #[async_trait]
 impl Resolver for SimbadResolver {
     async fn resolve(&self, query: &str) -> Result<ResolvedIdentity, ResolveError> {
-        let query = query.trim();
-        if query.is_empty() {
-            return Err(ResolveError::NotFound(String::new()));
-        }
+        resolve_via(&self.typeahead, query).await
+    }
+}
 
-        // Caldwell translation, cache-first check (redb), and the online-gate
-        // now all live inside the facade's own `resolve_core` (D1) — this
-        // wrapper only converts the outcome back to astro-plan's local types.
-        match self.0.resolve(query).await {
-            Ok(simbad_resolver::Resolution::Resolved(cached)) => {
-                Ok(from_crate_identity(cached.to_identity()))
-            }
-            Ok(simbad_resolver::Resolution::Unresolved { query, reason }) => {
-                Err(from_unresolved_reason(query, reason))
-            }
-            Err(e) => Err(from_facade_error(&e)),
+/// Makes the production resolver satisfy [`crate::ExplicitResolver`] (spec
+/// 052 P2), so the app layer's `resolve_explicit` use case can stay generic
+/// (testable with [`crate::FakeResolver`]) instead of hardcoding this concrete
+/// type.
+#[async_trait]
+impl crate::ExplicitResolver for SimbadResolver {
+    async fn resolve_explicit(&self, query: &str) -> Result<ResolvedIdentity, ResolveError> {
+        Self::resolve_explicit(self, query).await
+    }
+}
+
+/// Shared body for [`SimbadResolver::resolve`] (typeahead) and
+/// [`SimbadResolver::resolve_explicit`] — the only difference between the two
+/// entrypoints is which facade (and therefore which composed network
+/// resolver) `facade` is. Caldwell translation, cache-first check, and the
+/// online-gate all live inside the facade's own `resolve_core` (D1); this
+/// helper only converts the outcome back to astro-plan's local types.
+async fn resolve_via<R: simbad_resolver::Resolver>(
+    facade: &simbad_resolver::SimbadResolver<R>,
+    query: &str,
+) -> Result<ResolvedIdentity, ResolveError> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Err(ResolveError::NotFound(String::new()));
+    }
+
+    match facade.resolve(query).await {
+        Ok(simbad_resolver::Resolution::Resolved(cached)) => {
+            Ok(from_crate_identity(cached.to_identity()))
         }
+        Ok(simbad_resolver::Resolution::Unresolved { query, reason }) => {
+            Err(from_unresolved_reason(query, reason))
+        }
+        Err(e) => Err(from_facade_error(&e)),
     }
 }
 
@@ -491,5 +628,237 @@ mod tests {
             let crate_ot = simbad_resolver::ObjectType::from_wire(wire);
             assert_eq!(from_crate_object_type(crate_ot).as_wire(), wire);
         }
+    }
+
+    // ── spec 052 P2: TAP-first / Sesame-fallback dual lookup ────────────────────
+
+    fn m31_identity() -> simbad_resolver::ResolvedIdentity {
+        simbad_resolver::ResolvedIdentity {
+            simbad_oid: Some(1_575_544),
+            primary_designation: "M 31".to_owned(),
+            common_name: Some("Andromeda Galaxy".to_owned()),
+            object_type: simbad_resolver::ObjectType::Galaxy,
+            otype_raw: "G".to_owned(),
+            ra_deg: 10.684_708,
+            dec_deg: 41.268_75,
+            v_mag: Some(3.44),
+            aliases: vec![simbad_resolver::ResolvedAlias::new(
+                "M 31",
+                simbad_resolver::AliasKind::Designation,
+            )],
+            source: simbad_resolver::TargetSource::Resolved,
+        }
+    }
+
+    /// A coarse Sesame hit that TAP re-enrichment could not place an oid on
+    /// (FR-010's "still none" branch) — `simbad_oid: None`.
+    fn sesame_coarse_identity(designation: &str) -> simbad_resolver::ResolvedIdentity {
+        simbad_resolver::ResolvedIdentity {
+            simbad_oid: None,
+            primary_designation: designation.to_owned(),
+            common_name: None,
+            object_type: simbad_resolver::ObjectType::Other,
+            otype_raw: String::new(),
+            ra_deg: 5.0,
+            dec_deg: -3.0,
+            v_mag: None,
+            aliases: vec![simbad_resolver::ResolvedAlias::new(
+                designation,
+                simbad_resolver::AliasKind::Designation,
+            )],
+            source: simbad_resolver::TargetSource::Resolved,
+        }
+    }
+
+    #[tokio::test]
+    async fn dual_lookup_tap_hit_never_calls_sesame() {
+        let tap = simbad_resolver::FakeResolver::new().with_response("M 31", m31_identity());
+        let sesame = simbad_resolver::FakeResolver::new()
+            .with_response("M 31", sesame_coarse_identity("M 31"));
+        let dual = DualLookupResolver::new(Arc::new(tap), sesame);
+
+        let got = simbad_resolver::Resolver::resolve(&dual, "M 31").await.unwrap();
+        assert_eq!(got.simbad_oid, Some(1_575_544));
+        assert_eq!(dual.sesame.call_count(), 0, "a TAP hit must never consult Sesame (FR-008)");
+    }
+
+    #[tokio::test]
+    async fn dual_lookup_tap_miss_falls_back_to_sesame() {
+        let tap = simbad_resolver::FakeResolver::new().with_error(
+            "Coarse Object",
+            simbad_resolver::ResolveError::NotFound("Coarse Object".to_owned()),
+        );
+        let sesame = simbad_resolver::FakeResolver::new()
+            .with_response("Coarse Object", sesame_coarse_identity("Coarse Object"));
+        let dual = DualLookupResolver::new(Arc::new(tap), sesame);
+
+        let got = simbad_resolver::Resolver::resolve(&dual, "Coarse Object").await.unwrap();
+        assert_eq!(got.primary_designation, "Coarse Object");
+        assert_eq!(dual.sesame.call_count(), 1, "a TAP miss must fall back to Sesame exactly once");
+    }
+
+    #[tokio::test]
+    async fn dual_lookup_transient_tap_error_does_not_fall_back() {
+        // A `Network`/`Timeout`/`Ambiguous` TAP outcome is not a "no match" —
+        // only `NotFound` triggers the Sesame fallback (FR-008's literal
+        // "returns no match").
+        let tap = simbad_resolver::FakeResolver::new()
+            .with_error("M 31", simbad_resolver::ResolveError::Timeout(5));
+        let sesame = simbad_resolver::FakeResolver::new().with_response("M 31", m31_identity());
+        let dual = DualLookupResolver::new(Arc::new(tap), sesame);
+
+        let err = simbad_resolver::Resolver::resolve(&dual, "M 31").await.unwrap_err();
+        assert!(matches!(err, simbad_resolver::ResolveError::Timeout(5)));
+        assert_eq!(dual.sesame.call_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn typeahead_facade_never_invokes_sesame_but_explicit_falls_back_on_miss() {
+        // FR-009: the same TAP-miss query, run through a typeahead-shaped
+        // facade (bare TAP resolver — matching what `EitherNetworkResolver`
+        // wraps, no Sesame reference exists to call) vs an explicit-shaped
+        // facade (`DualLookupResolver`).
+        let query = "NGC-Unknown";
+        let miss = || simbad_resolver::ResolveError::NotFound(query.to_owned());
+
+        let typeahead_tap = simbad_resolver::FakeResolver::new().with_error(query, miss());
+        let typeahead_facade = simbad_resolver::SimbadResolver::new(
+            typeahead_tap,
+            CacheBackend::InMemory,
+            ResolverConfig::new("test.typeahead"),
+        )
+        .unwrap();
+        let outcome = typeahead_facade.resolve(query).await.unwrap();
+        assert!(matches!(outcome, simbad_resolver::Resolution::Unresolved { .. }));
+
+        let explicit_tap = simbad_resolver::FakeResolver::new().with_error(query, miss());
+        let explicit_sesame = simbad_resolver::FakeResolver::new()
+            .with_response(query, sesame_coarse_identity(query));
+        let dual = DualLookupResolver::new(Arc::new(explicit_tap), explicit_sesame);
+        let explicit_facade = simbad_resolver::SimbadResolver::new(
+            dual,
+            CacheBackend::InMemory,
+            ResolverConfig::new("test.explicit"),
+        )
+        .unwrap();
+        let outcome = explicit_facade.resolve(query).await.unwrap();
+        let simbad_resolver::Resolution::Resolved(target) = outcome else {
+            panic!("explicit resolve must fall back to Sesame on a TAP miss");
+        };
+        assert_eq!(target.primary_designation, query);
+        assert_eq!(
+            explicit_facade.resolver().sesame.call_count(),
+            1,
+            "only the explicit-shaped facade may invoke Sesame"
+        );
+    }
+
+    #[tokio::test]
+    async fn sesame_hit_without_oid_still_dedups_via_designation_fallback() {
+        // FR-010/FR-007: a Sesame hit that never recovered an oid still
+        // dedups — via the facade's own `Cache::upsert` UUIDv5-from-designation
+        // fallback — with a second alias of the same physical object.
+        let cache = ResolveCache::in_memory().unwrap();
+        let ns_seed = "test.oid-recovery";
+        let config = ResolverConfig::new(ns_seed);
+
+        let dual1 = DualLookupResolver::new(
+            Arc::new(simbad_resolver::FakeResolver::new().with_error(
+                "Coarse Object",
+                simbad_resolver::ResolveError::NotFound("Coarse Object".to_owned()),
+            )),
+            simbad_resolver::FakeResolver::new()
+                .with_response("Coarse Object", sesame_coarse_identity("Coarse Object")),
+        );
+        let facade1 = simbad_resolver::SimbadResolver::new(
+            dual1,
+            CacheBackend::custom(cache.cache()),
+            config.clone(),
+        )
+        .unwrap();
+        let simbad_resolver::Resolution::Resolved(first) =
+            facade1.resolve("Coarse Object").await.unwrap()
+        else {
+            panic!("expected a Sesame-recovered resolve");
+        };
+        assert_eq!(first.simbad_oid, None, "coarse Sesame hit carries no oid here");
+        let expected_id = simbad_resolver::identity::target_id_from_designation(
+            &simbad_resolver::identity::namespace(ns_seed),
+            &first.primary_designation,
+        );
+        assert_eq!(first.id, expected_id);
+
+        // A second alias of the SAME physical object (Sesame always answers
+        // with the same canonical designation) resolves independently and
+        // MUST land on the identical id — no split identity.
+        let dual2 = DualLookupResolver::new(
+            Arc::new(simbad_resolver::FakeResolver::new().with_error(
+                "Coarse Alias",
+                simbad_resolver::ResolveError::NotFound("Coarse Alias".to_owned()),
+            )),
+            simbad_resolver::FakeResolver::new()
+                .with_response("Coarse Alias", sesame_coarse_identity("Coarse Object")),
+        );
+        let facade2 = simbad_resolver::SimbadResolver::new(
+            dual2,
+            CacheBackend::custom(cache.cache()),
+            config,
+        )
+        .unwrap();
+        let simbad_resolver::Resolution::Resolved(second) =
+            facade2.resolve("Coarse Alias").await.unwrap()
+        else {
+            panic!("expected the second alias to resolve too");
+        };
+        assert_eq!(second.id, first.id, "same physical object must dedup to one id");
+    }
+
+    #[tokio::test]
+    async fn sesame_hit_with_recovered_oid_is_cached() {
+        // FR-010's success path: TAP re-enrichment recovered an oid for the
+        // Sesame hit (modelled here by the Sesame fake returning an identity
+        // that already carries one, standing in for `with_enricher`'s
+        // production TAP round trip).
+        let recovered = simbad_resolver::ResolvedIdentity {
+            simbad_oid: Some(99),
+            ..sesame_coarse_identity("Recovered Object")
+        };
+        let dual = DualLookupResolver::new(
+            Arc::new(simbad_resolver::FakeResolver::new().with_error(
+                "Recovered Object",
+                simbad_resolver::ResolveError::NotFound("Recovered Object".to_owned()),
+            )),
+            simbad_resolver::FakeResolver::new().with_response("Recovered Object", recovered),
+        );
+        let facade = simbad_resolver::SimbadResolver::new(
+            dual,
+            CacheBackend::InMemory,
+            ResolverConfig::new("test.oid-recovered"),
+        )
+        .unwrap();
+        let simbad_resolver::Resolution::Resolved(target) =
+            facade.resolve("Recovered Object").await.unwrap()
+        else {
+            panic!("expected a resolved target");
+        };
+        assert_eq!(target.simbad_oid, Some(99));
+    }
+
+    #[tokio::test]
+    async fn resolve_explicit_offline_uses_cache_only() {
+        // FR-011/FR-018: `resolve_explicit` is gated by the same online
+        // setting as typeahead — a cache hit still resolves offline, and a
+        // miss never touches Sesame (ExplicitNetworkResolver::Offline never
+        // builds a network client at all).
+        let cache = ResolveCache::in_memory().unwrap();
+        let ns = simbad_resolver::identity::namespace(NAMESPACE_SEED);
+        simbad_resolver::Cache::upsert(&cache.cache(), &m31_identity(), &ns).await.unwrap();
+
+        let resolver = SimbadResolver::new(&SimbadConfig::default(), &cache, false).unwrap();
+        let got = resolver.resolve_explicit("M 31").await.unwrap();
+        assert_eq!(got.primary_designation, "M 31");
+
+        let err = resolver.resolve_explicit("Totally Unknown Object").await.unwrap_err();
+        assert_eq!(err, ResolveError::Network("Totally Unknown Object".to_owned()));
     }
 }

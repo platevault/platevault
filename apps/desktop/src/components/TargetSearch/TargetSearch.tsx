@@ -9,11 +9,18 @@
  *      secondary line, and badges for object type and source / catalogue.
  *
  *   2. Long-tail (US3, T022): after the same debounce and a minimum query
- *      length (≥3 chars), ALSO call `target.resolve` (the SIMBAD long-tail).
+ *      length (≥3 chars), ALSO call `target.resolve` (the SIMBAD long-tail,
+ *      TAP + cache only — never the Sesame fallback, spec 052 P2 FR-009).
  *      Any `status = "resolved"` target is merged into the suggestion list,
  *      de-duped against the local hits, so objects not in the seed/cache still
  *      appear. `unresolved` (incl. the offline / resolver-disabled case,
  *      FR-015) is treated as a normal, non-fatal outcome — no error is shown.
+ *
+ * "Search more catalogues" (spec 052 P2, FR-008/FR-009): when both phases
+ * above still leave zero suggestions, a button calls `target.resolve_explicit`
+ * (TAP-first, SIMBAD Sesame/NED/VizieR fallback on a miss) — the deliberate
+ * resolve action the fallback is gated on. Never fired automatically or per
+ * keystroke.
  *
  * Cancel-in-flight (US3 acceptance scenario #2): every query change bumps a
  * monotonic generation counter. Both phases check their captured generation
@@ -202,6 +209,12 @@ export function TargetSearch({
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  // "Search more catalogues" (spec 052 P2): idle until the user explicitly
+  // triggers the Sesame/NED/VizieR fallback; reset on every new query so a
+  // fresh search always starts idle again.
+  const [harderState, setHarderState] = useState<
+    'idle' | 'searching' | 'no-results'
+  >('idle');
 
   // Cancel-in-flight: a monotonic generation counter. Each query bumps `gen`;
   // only the latest generation may commit results, so a slow response from a
@@ -227,6 +240,8 @@ export function TargetSearch({
       // Supersede any in-flight pipeline by bumping the generation.
       const gen = ++genRef.current;
       const isCurrent = () => gen === genRef.current;
+      // A new query always starts the "search more catalogues" affordance idle.
+      setHarderState('idle');
 
       if (!trimmed) {
         setSuggestions([]);
@@ -314,6 +329,41 @@ export function TargetSearch({
     debouncedSearch(query);
     return () => debouncedSearch.cancel();
   }, [query, debouncedSearch]);
+
+  // "Search more catalogues" (spec 052 P2, FR-008/FR-009): the deliberate
+  // resolve action the Sesame/NED/VizieR fallback is gated on — a click, not
+  // a keystroke. Shares the same generation guard as `runSearch` so a query
+  // change while this is in flight drops its (now-stale) result.
+  const handleSearchHarder = useCallback(async () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    const gen = genRef.current;
+    setHarderState('searching');
+    try {
+      const res = unwrap(
+        await commands.targetResolveExplicit({
+          contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+          requestId: crypto.randomUUID(),
+          query: trimmed,
+          override: null,
+        }),
+      );
+      if (gen !== genRef.current) return; // superseded by a newer query
+      if (res.status === 'resolved' && res.target) {
+        const resolved = res.target;
+        setSuggestions((prev) =>
+          mergeDedupe(prev, resolvedToSuggestion(resolved)),
+        );
+        setHarderState('idle');
+      } else {
+        setHarderState('no-results');
+      }
+    } catch {
+      if (gen !== genRef.current) return;
+      setError(m.targetsearch_search_failed());
+      setHarderState('idle');
+    }
+  }, [query]);
 
   const handleSelect = useCallback(
     (s: TargetSuggestion | null) => {
@@ -541,6 +591,47 @@ export function TargetSearch({
                       {m.cmp_target_search_no_results()}
                     </Combobox.Status>
                   )}
+                {/*
+                 * "Search more catalogues" (spec 052 P2, FR-008/FR-009): the
+                 * deliberate resolve action `target.resolve_explicit`'s Sesame
+                 * fallback is gated on. Only offered once both prior phases
+                 * (local cache + TAP long-tail) have already come up empty —
+                 * never fired automatically or per keystroke.
+                 */}
+                {!loading &&
+                  !error &&
+                  !resolving &&
+                  suggestions.length === 0 &&
+                  harderState === 'idle' &&
+                  query.trim().length >= MIN_RESOLVE_LEN && (
+                    <div className="alm-target-search__status">
+                      <button
+                        type="button"
+                        className="alm-target-search__override"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void handleSearchHarder();
+                        }}
+                      >
+                        {m.cmp_target_search_search_harder()}
+                      </button>
+                    </div>
+                  )}
+                {harderState === 'searching' && (
+                  <Combobox.Status className="alm-target-search__status alm-target-search__status--resolving">
+                    {m.cmp_target_search_search_harder_searching()}
+                  </Combobox.Status>
+                )}
+                {harderState === 'no-results' && (
+                  <Combobox.Status className="alm-target-search__status">
+                    {m.cmp_target_search_search_harder_no_results()}
+                  </Combobox.Status>
+                )}
                 {suggestions.length > 0 && (
                   <div
                     className="alm-virtual-inner"

@@ -394,6 +394,26 @@ pub trait Resolver: Send + Sync {
     }
 }
 
+// ── ExplicitResolver seam (spec 052 P2, FR-008/FR-009) ──────────────────────────
+
+/// The deliberate resolve/confirm entrypoint (Enter, confirm, "search harder")
+/// — distinct from [`Resolver::resolve`], which the debounced typeahead path
+/// uses and MUST stay TAP+cache only.
+///
+/// Kept as a separate trait (rather than a second parameter on
+/// [`Resolver::resolve`]) so a call site generic over `Resolver` alone (e.g.
+/// the ingest queue, typeahead) has no way to reach the Sesame fallback even
+/// by mistake — only code that explicitly asks for `ExplicitResolver` can.
+/// Implemented by the production `targeting_resolver::simbad::SimbadResolver`
+/// (TAP-first, Sesame-fallback-on-miss) and, for tests, [`FakeResolver`].
+#[async_trait::async_trait]
+pub trait ExplicitResolver: Resolver {
+    /// Same contract as [`Resolver::resolve`], but permitted to consult a
+    /// broader/slower fallback (production: SIMBAD Sesame) on a primary-path
+    /// miss.
+    async fn resolve_explicit(&self, query: &str) -> Result<ResolvedIdentity, ResolveError>;
+}
+
 // ── FakeResolver (test double) ──────────────────────────────────────────────────
 
 /// In-memory test double for [`Resolver`] (spec 035 R7).
@@ -421,6 +441,13 @@ pub struct FakeResolver {
     default_error: Option<ResolveError>,
     /// Number of times [`Resolver::resolve`] has been called.
     call_count: std::sync::atomic::AtomicUsize,
+    /// [`ExplicitResolver::resolve_explicit`]-only canned identity (spec 052
+    /// P2): models a Sesame hit the plain `resolve()` path (TAP-only) misses.
+    /// Falls back to [`Resolver::resolve`]'s own canned data when a query has
+    /// no explicit-only override registered.
+    explicit_responses: std::collections::HashMap<String, ResolvedIdentity>,
+    /// Number of times [`ExplicitResolver::resolve_explicit`] has been called.
+    explicit_call_count: std::sync::atomic::AtomicUsize,
 }
 
 #[cfg(any(test, feature = "test-fixture"))]
@@ -462,6 +489,22 @@ impl FakeResolver {
     pub fn call_count(&self) -> usize {
         self.call_count.load(std::sync::atomic::Ordering::Relaxed)
     }
+
+    /// Register a canned identity returned ONLY by
+    /// [`ExplicitResolver::resolve_explicit`] — models a Sesame-fallback hit
+    /// the plain (TAP-only) `resolve()` path misses (spec 052 P2, FR-008).
+    #[must_use]
+    pub fn with_explicit_response(mut self, query: &str, identity: ResolvedIdentity) -> Self {
+        self.explicit_responses.insert(targeting::normalize::normalize(query), identity);
+        self
+    }
+
+    /// Return the number of times [`ExplicitResolver::resolve_explicit`] has
+    /// been called.
+    #[must_use]
+    pub fn explicit_call_count(&self) -> usize {
+        self.explicit_call_count.load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 // `FakeResolver` cannot derive `Clone` because `AtomicUsize` does not implement
@@ -475,6 +518,8 @@ impl Clone for FakeResolver {
             errors: self.errors.clone(),
             default_error: self.default_error.clone(),
             call_count: std::sync::atomic::AtomicUsize::new(0),
+            explicit_responses: self.explicit_responses.clone(),
+            explicit_call_count: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 }
@@ -492,6 +537,31 @@ impl Resolver for FakeResolver {
             return Ok(identity.clone());
         }
         Err(self.default_error.clone().unwrap_or_else(|| ResolveError::NotFound(query.to_owned())))
+    }
+}
+
+#[cfg(any(test, feature = "test-fixture"))]
+#[async_trait::async_trait]
+impl ExplicitResolver for FakeResolver {
+    async fn resolve_explicit(&self, query: &str) -> Result<ResolvedIdentity, ResolveError> {
+        self.explicit_call_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let key = targeting::normalize::normalize(query);
+        if let Some(identity) = self.explicit_responses.get(&key) {
+            return Ok(identity.clone());
+        }
+        // No explicit-only override registered: same canned data as resolve()
+        // (does not double-count against `call_count`, which tracks `resolve`
+        // specifically).
+        if let Some(err) = self.errors.get(&key) {
+            Err(err.clone())
+        } else if let Some(identity) = self.responses.get(&key) {
+            Ok(identity.clone())
+        } else {
+            Err(self
+                .default_error
+                .clone()
+                .unwrap_or_else(|| ResolveError::NotFound(query.to_owned())))
+        }
     }
 }
 
