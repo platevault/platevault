@@ -52,7 +52,8 @@ pub async fn target_favourites_add(
     req: TargetFavouriteRequest,
 ) -> Result<TargetFavouriteAddResult, ContractError> {
     tracing::debug!("targets.favourites.add target_id={}", req.target_id);
-    app_core::target_favourites::add(state.repo.pool(), &req).await
+    let cache = state.resolve_cache.read().await.clone();
+    app_core::target_favourites::add(state.repo.pool(), &cache.cache(), &req).await
 }
 
 // ── targets.favourites.remove ────────────────────────────────────────────────

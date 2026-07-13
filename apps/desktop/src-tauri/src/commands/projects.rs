@@ -86,7 +86,8 @@ pub async fn projects_create(
     state: State<'_, AppState>,
     req: ProjectCreateRequest,
 ) -> Result<ProjectCreateResult, ContractError> {
-    app_core::project_create::create(state.repo.pool(), &state.bus, &req).await
+    let cache = state.resolve_cache.read().await.clone();
+    app_core::project_create::create(state.repo.pool(), &state.bus, &cache.cache(), &req).await
 }
 
 // ── projects.update ───────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@
 //! are emitted at test time by `tests/bindings.rs` via tauri-specta.
 
 pub mod commands;
+pub mod resolve_cache;
 pub mod watcher;
 
 use std::sync::Arc;
@@ -113,8 +114,8 @@ use crate::commands::target_favourites::{
     target_favourites_add, target_favourites_list, target_favourites_remove,
 };
 use crate::commands::target_lookup::{
-    target_astro_format_batch, target_resolution_settings, target_resolution_settings_update,
-    target_resolve, target_search,
+    target_adopt, target_astro_format_batch, target_cache_clear, target_resolution_settings,
+    target_resolution_settings_update, target_resolve, target_search,
 };
 use crate::commands::target_management as target_mgmt_cmds;
 use crate::commands::targets::{targets_get, targets_list};
@@ -218,6 +219,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_resolve,
         // target search (spec 035, US1)
         target_search,
+        // target in-use promotion + resolve-cache clear (spec 052 P1)
+        target_adopt,
+        target_cache_clear,
         // resolver settings (spec 035, US5)
         target_resolution_settings,
         target_resolution_settings_update,
@@ -447,6 +451,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_resolve,
         // target search (spec 035, US1)
         target_search,
+        // target in-use promotion + resolve-cache clear (spec 052 P1)
+        target_adopt,
+        target_cache_clear,
         // resolver settings (spec 035, US5)
         target_resolution_settings,
         target_resolution_settings_update,
@@ -934,10 +941,12 @@ pub(crate) async fn check_for_app_update(app: &AppHandle) {
 /// (cache-first → SIMBAD when online; cache-only when offline), then back-fills
 /// `acquisition_session.canonical_target_id` for sessions whose frames resolved
 /// this pass. Failures are logged, never fatal — the next pass retries.
-fn spawn_ingest_resolution_drain(pool: SqlitePool, bus: EventBus) {
-    use targeting_resolver::simbad::{
-        OfflineResolver, SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT,
-    };
+fn spawn_ingest_resolution_drain(
+    pool: SqlitePool,
+    bus: EventBus,
+    resolve_cache: targeting_resolver::simbad::ResolveCache,
+) {
+    use targeting_resolver::simbad::{SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT};
     tokio::spawn(async move {
         let interval = std::time::Duration::from_secs(30);
         loop {
@@ -952,45 +961,28 @@ fn spawn_ingest_resolution_drain(pool: SqlitePool, bus: EventBus) {
                 |r| (r.online_enabled != 0, r.simbad_endpoint, r.request_timeout_secs),
             );
 
-            // When online, build a SimbadResolver (falling back to offline if the
-            // client fails to build, mirroring target.resolve FIX-3); otherwise
-            // drain cache-only.
-            let drain = if online_enabled {
-                let config = SimbadConfig::from_settings(
-                    endpoint,
-                    u64::try_from(timeout_secs.max(1)).unwrap_or(10),
-                );
-                match SimbadResolver::new(&config) {
-                    Ok(resolver) => {
-                        app_core::ingest_resolution::resolve_pending(
-                            &pool,
-                            &resolver,
-                            Some(&bus),
-                            true,
-                            50,
-                        )
-                        .await
-                    }
-                    Err(_) => {
-                        app_core::ingest_resolution::resolve_pending(
-                            &pool,
-                            &OfflineResolver,
-                            Some(&bus),
-                            false,
-                            50,
-                        )
-                        .await
-                    }
+            // `SimbadResolver::new` never builds a reqwest/TLS client when
+            // `online_enabled` is false (mirrors target.resolve FIX-3); cache
+            // hits still resolve regardless.
+            let config = SimbadConfig::from_settings(
+                endpoint,
+                u64::try_from(timeout_secs.max(1)).unwrap_or(10),
+            );
+            let drain = match SimbadResolver::new(&config, &resolve_cache, online_enabled) {
+                Ok(resolver) => {
+                    app_core::ingest_resolution::resolve_pending(
+                        &pool,
+                        &resolver,
+                        Some(&bus),
+                        online_enabled,
+                        50,
+                    )
+                    .await
                 }
-            } else {
-                app_core::ingest_resolution::resolve_pending(
-                    &pool,
-                    &OfflineResolver,
-                    Some(&bus),
-                    false,
-                    50,
-                )
-                .await
+                Err(e) => {
+                    tracing::warn!("failed to build SimbadResolver for ingest drain: {e:?}");
+                    continue;
+                }
             };
             if let Err(e) = drain {
                 tracing::warn!("ingest_resolution drain failed: {e:?}");
@@ -1005,7 +997,12 @@ fn spawn_ingest_resolution_drain(pool: SqlitePool, bus: EventBus) {
     });
 }
 
-pub fn run_app(app: tauri::App, pool: SqlitePool) {
+pub fn run_app(
+    app: tauri::App,
+    pool: SqlitePool,
+    resolve_cache: targeting_resolver::simbad::ResolveCache,
+    resolve_cache_path: std::path::PathBuf,
+) {
     let bus = EventBus::with_pool(pool.clone());
 
     // Live event-bus subscribers. Start these *before* `bus`/`pool` are moved
@@ -1080,10 +1077,44 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
         });
     }
 
+    // spec 052 P1 (D2/T012): warm the shared redb resolve cache from the
+    // bundled seed + existing durable canonical_target rows, in the
+    // background — each cache entry is its own fsync'd write transaction, so
+    // warming the full ~14k-object popular seed synchronously would freeze
+    // startup for many seconds. First-run-guarded (`warm_bundled_on_first_run`
+    // no-ops once already warmed); failure degrades to seed+cache typeahead
+    // simply being emptier until the next launch, never blocks the UI.
+    {
+        let warm_cache = resolve_cache.cache();
+        let warm_pool = pool.clone();
+        tokio::spawn(async move {
+            let namespace = simbad_resolver::identity::namespace("astro-plan.targets");
+            match targeting_resolver::seed::warm_bundled_on_first_run(&warm_cache, &namespace).await
+            {
+                Ok(Some(count)) => tracing::info!("warmed {count} bundled target seed entries"),
+                Ok(None) => tracing::debug!("resolve cache already warmed; skipping bundled seed"),
+                Err(e) => tracing::warn!("failed to warm bundled target seed: {e}"),
+            }
+            match targeting_resolver::seed::warm_from_canonical_target(
+                &warm_cache,
+                &warm_pool,
+                &namespace,
+            )
+            .await
+            {
+                Ok(count) if count > 0 => {
+                    tracing::info!("warmed {count} durable canonical_target rows into resolve cache");
+                }
+                Ok(_) => {}
+                Err(e) => tracing::warn!("failed to warm resolve cache from canonical_target: {e}"),
+            }
+        });
+    }
+
     // spec 035 US4/T043: background ingest-resolution drain + session target
     // back-fill on an interval. Non-blocking; transient/offline outcomes leave
     // rows pending for the next pass.
-    spawn_ingest_resolution_drain(pool.clone(), bus.clone());
+    spawn_ingest_resolution_drain(pool.clone(), bus.clone(), resolve_cache.clone());
 
     // spec 051 US10 (T057): startup self-update check. Non-blocking, non-fatal
     // (FR-031) — failures/unavailability are logged and otherwise ignored.
@@ -1101,7 +1132,7 @@ pub fn run_app(app: tauri::App, pool: SqlitePool) {
     app.manage(pool.clone());
 
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    let state = AppState::new(repo, bus);
+    let state = AppState::new(repo, bus, resolve_cache, resolve_cache_path);
 
     app.manage(state);
 

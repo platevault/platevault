@@ -250,6 +250,31 @@ pub async fn promote_by_id(
     Ok(true)
 }
 
+/// `target.adopt` — the explicit in-use commit for UI flows with no other
+/// natural commit point (e.g. the Targets-page "Add Target" dialog). Thin
+/// DTO wrapper over [`promote_by_id`].
+///
+/// # Errors
+///
+/// Returns [`ContractError`] (`target.invalid_id` for a malformed UUID,
+/// `internal.database` on a backend failure).
+pub async fn adopt(
+    pool: &SqlitePool,
+    redb_cache: &dyn simbad_resolver::Cache,
+    req: &contracts_core::targets::TargetAdoptRequest,
+) -> Result<contracts_core::targets::TargetAdoptResponse, ContractError> {
+    let uuid = Uuid::parse_str(&req.target_id).map_err(|e| {
+        ContractError::new(
+            ErrorCode::TargetInvalidId,
+            format!("target_id '{}' is not a valid UUID: {e}", req.target_id),
+            ErrorSeverity::Blocking,
+            false,
+        )
+    })?;
+    let adopted = promote_by_id(pool, redb_cache, uuid, &req.request_id).await?;
+    Ok(contracts_core::targets::TargetAdoptResponse { target_id: req.target_id.clone(), adopted })
+}
+
 // ── Manual override write (T032, FR-014) ────────────────────────────────────────
 
 /// Bind `query` to the canonical target `target_id` and persist as
@@ -484,6 +509,32 @@ mod tests {
         let got = cache::get_by_id(db.pool(), target_id).await.unwrap().unwrap();
         assert_eq!(got.primary_designation, "M 31");
         assert_eq!(audit_rows(&db, "target.adopted").await, 1);
+    }
+
+    #[tokio::test]
+    async fn adopt_promotes_by_id_and_echoes_target_id() {
+        let db = setup().await;
+        let cache = crate_cache_with_m31().await;
+        let target_id = targeting::identity::target_id_from_designation("M 31");
+        let req = contracts_core::targets::TargetAdoptRequest {
+            request_id: "req-1".to_owned(),
+            target_id: target_id.to_string(),
+        };
+        let resp = adopt(db.pool(), &cache, &req).await.unwrap();
+        assert!(resp.adopted);
+        assert_eq!(resp.target_id, target_id.to_string());
+    }
+
+    #[tokio::test]
+    async fn adopt_invalid_uuid_errors() {
+        let db = setup().await;
+        let cache = crate_cache_with_m31().await;
+        let req = contracts_core::targets::TargetAdoptRequest {
+            request_id: "req-1".to_owned(),
+            target_id: "not-a-uuid".to_owned(),
+        };
+        let err = adopt(db.pool(), &cache, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::TargetInvalidId);
     }
 
     #[tokio::test]

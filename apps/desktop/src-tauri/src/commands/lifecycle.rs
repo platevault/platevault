@@ -27,12 +27,26 @@ use uuid::Uuid;
 pub struct AppState {
     pub repo: Arc<SqliteLifecycleRepository>,
     pub bus: EventBus,
+    /// Spec 052 P1 (D2): the shared SIMBAD resolve cache — one global redb
+    /// file, opened once at app startup. Readers clone the cheap `Arc`-backed
+    /// handle out from under a short-lived read lock; `target.cache.clear`
+    /// (`commands::resolve_cache::clear_and_rewarm`) takes the write lock to
+    /// swap in a freshly reopened, re-warmed store.
+    pub resolve_cache: tokio::sync::RwLock<targeting_resolver::simbad::ResolveCache>,
+    /// Filesystem path backing `resolve_cache`, needed by
+    /// `target.cache.clear` to delete + reopen the redb file.
+    pub resolve_cache_path: std::path::PathBuf,
 }
 
 impl AppState {
     #[must_use]
-    pub fn new(repo: Arc<SqliteLifecycleRepository>, bus: EventBus) -> Self {
-        Self { repo, bus }
+    pub fn new(
+        repo: Arc<SqliteLifecycleRepository>,
+        bus: EventBus,
+        resolve_cache: targeting_resolver::simbad::ResolveCache,
+        resolve_cache_path: std::path::PathBuf,
+    ) -> Self {
+        Self { repo, bus, resolve_cache: tokio::sync::RwLock::new(resolve_cache), resolve_cache_path }
     }
 }
 

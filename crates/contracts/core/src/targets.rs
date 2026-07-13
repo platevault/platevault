@@ -691,3 +691,38 @@ pub struct TargetAstroFormat {
 pub struct TargetAstroFormatBatchResponse {
     pub formatted: Vec<TargetAstroFormat>,
 }
+
+// ── Spec 052 P1: in-use promotion + resolve-cache clear ─────────────────────
+
+/// Request for `target.adopt` — promote a redb-cache-only target (a `target_id`
+/// a prior `target.search`/`target.resolve` response returned) into the
+/// durable `canonical_target` table. The explicit in-use commit for UI flows
+/// with no other natural commit point (e.g. the Targets-page "Add Target"
+/// dialog; favouriting/project-create/session-link promote inline as part of
+/// their own commands).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAdoptRequest {
+    pub request_id: String,
+    pub target_id: String,
+}
+
+/// Response for `target.adopt`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetAdoptResponse {
+    pub target_id: String,
+    /// `false` when `target_id` is unknown to both the redb cache and
+    /// `canonical_target` — never fabricated.
+    pub adopted: bool,
+}
+
+/// Response for `target.cache.clear` (FR-002): the redb resolve cache is
+/// wiped and re-warmed from the bundled seed + existing durable
+/// `canonical_target` rows. Never touches `canonical_target` itself.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetCacheClearResponse {
+    /// Number of entries the cache was re-warmed with after clearing.
+    pub rewarmed_count: u32,
+}

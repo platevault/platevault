@@ -1424,6 +1424,7 @@ dependencies = [
  "persistence_db",
  "serde",
  "serde_json",
+ "simbad-resolver",
  "specta",
  "specta-typescript",
  "sqlx",
