@@ -167,6 +167,113 @@ pub fn parse_mismatched_dimensions(json: &str) -> Vec<String> {
     serde_json::from_str::<Vec<String>>(json).unwrap_or_default()
 }
 
+// ── Missing-frame awareness (spec 048 US5, FR-024/025) ─────────────────────────
+//
+// A "master" here is always a `calibration_session` row (`master_id` ==
+// `calibration_session.id`, per the `calibration_master_view` join in
+// migration 0033) — there is no separate generated-master-file table in the
+// active matching path. `calibration_master` (migration 0002) is a distinct,
+// currently-unpopulated table for a generated master FILE derived from that
+// session; the two presence checks below cover both possibilities (PATH A:
+// the generated file: PATH B: the session's own raw sub-frames) without
+// assuming either is populated.
+
+/// PATH A: state of the generated master artifact for `master_id`'s session,
+/// via `calibration_master.source_session_id` → `.artifact_id` →
+/// spec-012 `processing_artifacts.state`. `None` when no such artifact is
+/// tracked (the common case today — nothing populates `calibration_master`
+/// yet); `Some(state)` is one of `present` / `missing` / `user_resolved_missing`.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn master_artifact_state(pool: &SqlitePool, master_id: &str) -> DbResult<Option<String>> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT pa.state
+         FROM calibration_master cm
+         JOIN processing_artifacts pa ON pa.id = cm.artifact_id
+         WHERE cm.source_session_id = ?
+         LIMIT 1",
+    )
+    .bind(master_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(DbError::Database)?;
+    Ok(row.map(|(state,)| state))
+}
+
+/// PATH B: does `master_id`'s own `calibration_session` currently have any
+/// member frame (`frame_ids`) whose `file_record.state = 'missing'`?
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn master_has_missing_source_frame(pool: &SqlitePool, master_id: &str) -> DbResult<bool> {
+    let (count,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*)
+         FROM calibration_session cs
+         JOIN json_each(cs.frame_ids) je
+         JOIN file_record fr ON fr.id = je.value
+         WHERE cs.id = ? AND fr.state = 'missing'",
+    )
+    .bind(master_id)
+    .fetch_one(pool)
+    .await
+    .map_err(DbError::Database)?;
+    Ok(count > 0)
+}
+
+/// Assignments whose master (`calibration_session`) currently lists
+/// `frame_id` among its `frame_ids` — i.e. matches PATH B would affect when
+/// `frame_id` transitions missing/recovered. Used to scope
+/// `calibration_match.source_missing` / `.source_recovered` audit emission
+/// to exactly the assignments a raw-frame reconcile outcome affects.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn find_by_source_frame(
+    pool: &SqlitePool,
+    frame_id: &str,
+) -> DbResult<Vec<CalibrationAssignmentRow>> {
+    let like = format!("%\"{frame_id}\"%");
+    let rows: Vec<(String, String, String, String, f64, i64, String, String)> = sqlx::query_as(
+        "SELECT ca.id, ca.session_id, ca.calibration_type, ca.master_id, ca.confidence,
+                ca.was_override, ca.mismatched_dimensions, ca.assigned_at
+         FROM calibration_assignment ca
+         JOIN calibration_session cs ON cs.id = ca.master_id
+         WHERE cs.frame_ids LIKE ?",
+    )
+    .bind(like)
+    .fetch_all(pool)
+    .await
+    .map_err(DbError::Database)?;
+    Ok(rows.into_iter().map(row_to_struct).collect())
+}
+
+/// Assignments whose master has a generated-master artifact `artifact_id` —
+/// i.e. matches PATH A would affect when that artifact transitions
+/// missing/recovered. Used to scope `calibration_match.source_missing` /
+/// `.source_recovered` audit emission to exactly the assignments an
+/// artifact reconcile outcome affects.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn find_by_source_artifact(
+    pool: &SqlitePool,
+    artifact_id: &str,
+) -> DbResult<Vec<CalibrationAssignmentRow>> {
+    let rows: Vec<(String, String, String, String, f64, i64, String, String)> = sqlx::query_as(
+        "SELECT ca.id, ca.session_id, ca.calibration_type, ca.master_id, ca.confidence,
+                ca.was_override, ca.mismatched_dimensions, ca.assigned_at
+         FROM calibration_assignment ca
+         JOIN calibration_master cm ON cm.source_session_id = ca.master_id
+         WHERE cm.artifact_id = ?",
+    )
+    .bind(artifact_id)
+    .fetch_all(pool)
+    .await
+    .map_err(DbError::Database)?;
+    Ok(rows.into_iter().map(row_to_struct).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

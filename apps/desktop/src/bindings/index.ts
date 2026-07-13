@@ -2451,6 +2451,24 @@ export type CalibrationMatchDto_Serialize = {
 	frameCount?: number | null,
 };
 
+/**
+ *  Derived "source missing / unverifiable" flag on a calibration match
+ *  (spec 048 US5, FR-024/025). Computed live from current presence state —
+ *  never persisted — so it clears automatically once the referenced
+ *  frame/artifact returns to present. The match itself is NEVER
+ *  auto-invalidated or removed when this is set (FR-024).
+ * 
+ *  Two distinct trigger paths carry distinct user-facing wording because
+ *  they point the user at different problems:
+ *  - `MasterMissing`: the generated master file this match relies on
+ *    (tracked via `calibration_master.artifact_id` → spec-012
+ *    `processing_artifacts.state`) is gone.
+ *  - `SourceSubsMissing`: a raw calibration sub-frame that makes up this
+ *    master's own session is missing, so the master's provenance can't be
+ *    verified even though nothing about the master file itself changed.
+ */
+export type CalibrationMatchMissingFlag = "master_missing" | "source_subs_missing";
+
 /**  Request DTO for `calibration.match.suggest`. */
 export type CalibrationMatchSuggestRequest = CalibrationMatchSuggestRequest_Serialize | CalibrationMatchSuggestRequest_Deserialize;
 
@@ -5223,6 +5241,8 @@ export type MasterDetail_Deserialize = {
 	usedByProjectIds: string[],
 	compatibleSessions: CompatibleSessionEntry[],
 	usageStats: MasterUsageStats,
+	/**  spec 048 US5: `None` when no matches using this master are flagged. */
+	missingFlag: CalibrationMatchMissingFlag | null,
 };
 
 /**  Extended detail view of a calibration master. */
@@ -5238,6 +5258,8 @@ export type MasterDetail_Serialize = {
 	usedByProjectIds: string[],
 	compatibleSessions: CompatibleSessionEntry[],
 	usageStats: MasterUsageStats,
+	/**  spec 048 US5: `None` when no matches using this master are flagged. */
+	missingFlag?: CalibrationMatchMissingFlag | null,
 };
 
 /**  Usage statistics for a calibration master. */

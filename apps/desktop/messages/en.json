@@ -1662,6 +1662,8 @@
   "calibration_col_usage": "Usage",
   "calibration_action_use_in_project": "Use in project",
   "calibration_action_replace_master": "Replace master",
+  "calibration_flag_master_missing": "Master missing — cannot apply",
+  "calibration_flag_source_subs_missing": "Source subs missing — unverifiable provenance",
   "calibration_col_session": "Session",
   "calibration_col_match": "Match",
   "calibration_col_dimensions": "Dimensions",

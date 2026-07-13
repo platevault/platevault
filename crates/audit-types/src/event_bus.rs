@@ -871,6 +871,11 @@ pub const TOPIC_FRAME_RELINKED: &str = "frame.relinked";
 /// Emitted when a calibration frame referenced by a calibration match is
 /// marked missing. The match is flagged "source missing / unverifiable" —
 /// it is NEVER automatically invalidated or removed.
+///
+/// Two distinct trigger paths reuse this same payload shape (US5): `frame_id`
+/// holds a `file_record.id` for a missing raw source sub-frame (PATH B), or a
+/// `processing_artifacts.id` for a missing generated master file (PATH A).
+/// `match_id` is the `calibration_assignment.id` of the affected match.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CalibrationMatchSourceMissing {
@@ -884,7 +889,8 @@ pub const TOPIC_CALIBRATION_MATCH_SOURCE_MISSING: &str = "calibration_match.sour
 /// Payload for the `calibration_match.source_recovered` topic (spec 048 FR-025).
 ///
 /// Emitted when a previously missing referenced frame returns to present,
-/// clearing the match's "source missing" flag.
+/// clearing the match's "source missing" flag. See
+/// [`CalibrationMatchSourceMissing`] for the dual meaning of `frame_id`.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CalibrationMatchSourceRecovered {

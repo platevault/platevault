@@ -38,7 +38,8 @@ import {
   type PropertyDef,
   PropertyTable,
 } from '@/components';
-import { Btn, EmptyState } from '@/ui';
+import { Btn, EmptyState, Pill } from '@/ui';
+import type { CalibrationMatchMissingFlag } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
 import { SessionListPopover } from './SessionListPopover';
@@ -68,6 +69,19 @@ interface DetailState {
   confirmedNames: string[];
   compatibleNames: string[];
   loading: boolean;
+  /** spec 048 US5 (FR-024/025): derived "missing" flag from `calibrationMastersGet`. */
+  missingFlag: CalibrationMatchMissingFlag | null;
+}
+
+// spec 048 US5: distinct wording per trigger path (task requirement — the two
+// paths point the user at different problems, so they must read differently).
+function missingFlagLabel(flag: CalibrationMatchMissingFlag): string {
+  switch (flag) {
+    case 'master_missing':
+      return m.calibration_flag_master_missing();
+    case 'source_subs_missing':
+      return m.calibration_flag_source_subs_missing();
+  }
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -81,6 +95,7 @@ export function MasterDetail({
     confirmedNames: [],
     compatibleNames: [],
     loading: false,
+    missingFlag: null,
   });
 
   // Matching context: the session `calibration.match.suggest` is anchored on.
@@ -123,12 +138,22 @@ export function MasterDetail({
 
   useEffect(() => {
     if (!master) {
-      setDetail({ confirmedNames: [], compatibleNames: [], loading: false });
+      setDetail({
+        confirmedNames: [],
+        compatibleNames: [],
+        loading: false,
+        missingFlag: null,
+      });
       return;
     }
     const masterId = master.id;
     let cancelled = false;
-    setDetail({ confirmedNames: [], compatibleNames: [], loading: true });
+    setDetail({
+      confirmedNames: [],
+      compatibleNames: [],
+      loading: true,
+      missingFlag: null,
+    });
 
     Promise.all([
       commands.calibrationMastersGet(masterId).then(unwrap),
@@ -147,7 +172,12 @@ export function MasterDetail({
         const compatibleNames = masterDetail.compatibleSessions
           .map((e) => idToName.get(e.sessionId) ?? e.sessionId)
           .filter(Boolean);
-        setDetail({ confirmedNames, compatibleNames, loading: false });
+        setDetail({
+          confirmedNames,
+          compatibleNames,
+          loading: false,
+          missingFlag: masterDetail.missingFlag ?? null,
+        });
       })
       .catch(() => {
         if (!cancelled)
@@ -155,6 +185,7 @@ export function MasterDetail({
             confirmedNames: [],
             compatibleNames: [],
             loading: false,
+            missingFlag: null,
           });
       });
 
@@ -245,6 +276,14 @@ export function MasterDetail({
   // Actions inline-left in the title, same pattern as SessionDetail's actionButtons.
   const actionButtons = (
     <span className="alm-session-detail2__actions">
+      {/* spec 048 US5 (FR-024/025): distinct wording per trigger path; the
+			    match itself is never auto-invalidated or removed, so this is a
+			    warning badge, not a blocking state. */}
+      {detail.missingFlag && (
+        <Pill variant="danger" data-testid="calibration-missing-flag">
+          {missingFlagLabel(detail.missingFlag)}
+        </Pill>
+      )}
       <Btn size="sm" variant="primary">
         {m.calibration_action_use_in_project()}
       </Btn>

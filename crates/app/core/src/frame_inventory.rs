@@ -247,6 +247,54 @@ struct ReconcileTally {
     size_backfilled: u32,
 }
 
+/// spec 048 US5 (FR-024/025, PATH B): emit `calibration_match.source_missing`
+/// / `.source_recovered` for every calibration match whose master
+/// (`calibration_session`) lists `frame_id` among its own raw sub-frames.
+/// Best-effort — a lookup/publish failure here must not fail the raw-frame
+/// reconcile pass, since the flag is re-derived live on next read regardless
+/// (never the durable record).
+async fn emit_calibration_match_flag_for_frame(
+    pool: &SqlitePool,
+    bus: &audit::bus::EventBus,
+    frame_id: &str,
+    at: &str,
+    recovered: bool,
+) {
+    let Ok(assignments) =
+        persistence_db::repositories::calibration_assignment::find_by_source_frame(pool, frame_id)
+            .await
+    else {
+        return;
+    };
+    for assignment in assignments {
+        if recovered {
+            let _ = bus
+                .publish(
+                    audit::event_bus::TOPIC_CALIBRATION_MATCH_SOURCE_RECOVERED,
+                    audit::event_bus::Source::System,
+                    audit::event_bus::CalibrationMatchSourceRecovered {
+                        match_id: assignment.id,
+                        frame_id: frame_id.to_owned(),
+                        at: at.to_owned(),
+                    },
+                )
+                .await;
+        } else {
+            let _ = bus
+                .publish(
+                    audit::event_bus::TOPIC_CALIBRATION_MATCH_SOURCE_MISSING,
+                    audit::event_bus::Source::System,
+                    audit::event_bus::CalibrationMatchSourceMissing {
+                        match_id: assignment.id,
+                        frame_id: frame_id.to_owned(),
+                        at: at.to_owned(),
+                    },
+                )
+                .await;
+        }
+    }
+}
+
 /// Apply a single `Present` outcome: correct `size_bytes` when it changed
 /// (including the `0` placeholder backfill, T015) and/or flip a previously
 /// `missing` record back to `classified` (FR-011), emitting the matching
@@ -303,11 +351,15 @@ async fn apply_present_outcome(
                 frame_id: row.id.clone(),
                 root_id: row.root_id.clone(),
                 relative_path: row.relative_path.clone(),
-                at: now,
+                at: now.clone(),
             },
         )
         .await
         .map_err(internal)?;
+
+        // spec 048 US5 (FR-025): clear "source missing" on any calibration
+        // match whose master's raw sub-frames include this frame.
+        emit_calibration_match_flag_for_frame(pool, bus, &row.id, &now, true).await;
     }
 
     Ok(())
@@ -342,11 +394,15 @@ async fn apply_missing_outcome(
             root_id: row.root_id.clone(),
             relative_path: row.relative_path.clone(),
             reason: reason.to_owned(),
-            at: now,
+            at: now.clone(),
         },
     )
     .await
     .map_err(internal)?;
+
+    // spec 048 US5 (FR-024, PATH B): flag any calibration match whose
+    // master's raw sub-frames include this now-missing frame.
+    emit_calibration_match_flag_for_frame(pool, bus, &row.id, &now, false).await;
 
     Ok(())
 }

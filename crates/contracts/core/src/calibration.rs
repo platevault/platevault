@@ -131,6 +131,27 @@ pub struct MasterUsageStats {
     pub project_count: u32,
 }
 
+/// Derived "source missing / unverifiable" flag on a calibration match
+/// (spec 048 US5, FR-024/025). Computed live from current presence state —
+/// never persisted — so it clears automatically once the referenced
+/// frame/artifact returns to present. The match itself is NEVER
+/// auto-invalidated or removed when this is set (FR-024).
+///
+/// Two distinct trigger paths carry distinct user-facing wording because
+/// they point the user at different problems:
+/// - `MasterMissing`: the generated master file this match relies on
+///   (tracked via `calibration_master.artifact_id` → spec-012
+///   `processing_artifacts.state`) is gone.
+/// - `SourceSubsMissing`: a raw calibration sub-frame that makes up this
+///   master's own session is missing, so the master's provenance can't be
+///   verified even though nothing about the master file itself changed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum CalibrationMatchMissingFlag {
+    MasterMissing,
+    SourceSubsMissing,
+}
+
 /// Extended detail view of a calibration master.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -148,6 +169,9 @@ pub struct MasterDetail {
     // Detail-only fields.
     pub compatible_sessions: Vec<CompatibleSessionEntry>,
     pub usage_stats: MasterUsageStats,
+    /// spec 048 US5: `None` when no matches using this master are flagged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub missing_flag: Option<CalibrationMatchMissingFlag>,
 }
 
 /// A candidate match between a session and a calibration master.
