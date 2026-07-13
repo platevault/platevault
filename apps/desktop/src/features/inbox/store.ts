@@ -32,6 +32,7 @@ import type {
   InboxStatsPerType,
   InboxStatsTotals,
   InboxFileMetadata_Serialize as InboxFileMetadata,
+  ConeSearchReason,
 } from '@/bindings/index';
 import type {
   InboxClassifyResponse,
@@ -742,4 +743,107 @@ export function useInboxStats() {
   const refresh = useCallback(() => setEpoch((n) => n + 1), []);
 
   return { ...state, refresh };
+}
+
+// ── Cone-search suggestion (spec 052 P3, US3) ────────────────────────────────
+
+export type {
+  ConeSearchSuggestResponse_Serialize as ConeSearchSuggestResponse,
+  ConeSearchSuggestion_Serialize as ConeSearchSuggestion,
+  ConeSearchCandidateTarget_Serialize as ConeSearchCandidateTarget,
+  ConeSearchConfidence,
+  ConeSearchReason,
+  PointingSource,
+} from '@/bindings/index';
+
+/**
+ * `target.cone_search.suggest` for one light-frameset (spec 052 P3).
+ *
+ * `resolve.offline` (online resolution disabled, or the TAP cone-search
+ * failed) is a non-blocking degraded state (FR-018) — surfaced as
+ * `offline: true` with `data: undefined` rather than a thrown query error, so
+ * the UI can render "unavailable offline" instead of an error banner.
+ * `frameset.not_found` / other backend errors still surface via `error`.
+ *
+ * `reason` distinguishes the automatic ingest-time run from a user-triggered
+ * "re-check" (FR-017); both call the same command.
+ */
+export function useConeSearchSuggestions(
+  framesetId: string | null,
+  reason: ConeSearchReason,
+) {
+  const { data, isFetching, error, refetch } = useQuery({
+    queryKey: [...queryKeys.inbox.coneSearch(framesetId ?? ''), reason],
+    queryFn: async () => {
+      const result = await commands.targetConeSearchSuggest(
+        ipcArgs<typeof commands.targetConeSearchSuggest>({
+          framesetId: framesetId as string,
+          reason,
+        }),
+      );
+      if (result.status === 'ok') {
+        return { offline: false as const, response: result.data };
+      }
+      const code = (result.error as { code?: string } | undefined)?.code;
+      if (code === 'resolve.offline') {
+        return { offline: true as const, response: undefined };
+      }
+      throw result.error;
+    },
+    enabled: !!framesetId,
+  });
+
+  return {
+    response: data?.response,
+    offline: data?.offline ?? false,
+    loading: isFetching,
+    error: error ?? undefined,
+    refetch,
+  };
+}
+
+export interface ConeSearchConfirmState {
+  loading: boolean;
+  error: string | null;
+}
+
+/** `target.cone_search.confirm` (FR-016, SC-006) — the sole write path. */
+export function useConeSearchConfirm(framesetId: string) {
+  const queryClient = useQueryClient();
+  const [state, setState] = useState<ConeSearchConfirmState>({
+    loading: false,
+    error: null,
+  });
+
+  const confirm = useCallback(
+    async (candidate: {
+      canonicalTargetId: string | null;
+      primaryDesignation: string;
+      simbadOid: number | null;
+    }) => {
+      setState({ loading: true, error: null });
+      try {
+        const result = unwrap(
+          await commands.targetConeSearchConfirm(
+            ipcArgs<typeof commands.targetConeSearchConfirm>({
+              framesetId,
+              candidate,
+            }),
+          ),
+        );
+        setState({ loading: false, error: null });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inbox.coneSearch(framesetId),
+        });
+        return result;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setState({ loading: false, error: msg });
+        throw e;
+      }
+    },
+    [framesetId, queryClient],
+  );
+
+  return { ...state, confirm };
 }
