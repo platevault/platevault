@@ -44,7 +44,7 @@ use domain_core::ids::{new_id, Timestamp};
 use fs_executor::ops::cas_check::CasSnapshot;
 use fs_executor::run::{
     execute_plan, ApplyOutcome, CancellationToken, ExecutorCallbacks, ExecutorItem,
-    ExecutorItemAction, ItemProgressEvent, RetryQueue, SkipSet,
+    ExecutorItemAction, ItemProgressEvent, RetryQueue, SkipSet, TerminalCounts,
 };
 use persistence_db::repositories::first_run as first_run_repo;
 use persistence_db::repositories::inventory as inventory_repo;
@@ -1088,6 +1088,41 @@ struct SpawnExecutorParams {
     op_emitter: Option<OpEventEmitter>,
 }
 
+/// Fetch the plan's up-to-date cumulative item counters.
+///
+/// Each item transition (`item_succeeded`/`item_failed`/`item_skip`/
+/// `batch_cancel_pending_items`) increments `plans.items_applied` etc. in
+/// real time via `PlanApplyCallbacks`, so the plan row already reflects the
+/// *whole* run's history — including a pre-pause phase from before a resume
+/// (issue #575). The `TerminalCounts` returned by a single `execute_plan`
+/// invocation only covers the items just processed in that segment, which
+/// would silently regress the plan's counters if fed directly to
+/// `complete_run`/`pause_run` after a resume continues a previously-paused
+/// run. Falls back to `segment_counts` if the fetch fails (best-effort,
+/// matching this function's existing `let _ = ...` error-swallowing
+/// elsewhere).
+async fn cumulative_counts(
+    pool: &SqlitePool,
+    plan_id: &str,
+    segment_counts: &TerminalCounts,
+) -> TerminalCounts {
+    match plans_repo::get_plan(pool, plan_id, false).await {
+        Ok(row) => TerminalCounts {
+            succeeded: row.items_applied,
+            failed: row.items_failed,
+            skipped: row.items_skipped,
+            cancelled: row.items_cancelled,
+        },
+        Err(e) => {
+            tracing::error!(
+                %plan_id, error=%e,
+                "failed to fetch cumulative plan counters; using segment-local counts"
+            );
+            segment_counts.clone()
+        }
+    }
+}
+
 /// Drive `execute_plan` to completion/cancellation/pause on a background
 /// task and persist the outcome (terminal state, audit trail, long-op
 /// projection). Extracted from `apply_plan`'s inline `tokio::spawn` block so
@@ -1134,6 +1169,11 @@ fn spawn_executor_run(params: SpawnExecutorParams) {
         // Compute terminal state and persist.
         match outcome {
             ApplyOutcome::Completed(counts) => {
+                // `counts` covers only the items processed in THIS segment.
+                // After a resume (issue #575), that undercounts a prior
+                // pre-pause phase — use the plan's cumulative counters
+                // instead (see `cumulative_counts`).
+                let counts = cumulative_counts(&pool, &plan_id, &counts).await;
                 let terminal = counts.terminal_state(false).to_owned();
                 let at = Timestamp::now_iso();
 
@@ -1278,6 +1318,11 @@ fn spawn_executor_run(params: SpawnExecutorParams) {
                     }
                 }
 
+                // Fetch cumulative counters (see `cumulative_counts`) AFTER
+                // the batch-cancel above so the just-cancelled items are
+                // included.
+                let counts = cumulative_counts(&pool, &plan_id, &counts).await;
+
                 let _ = apply_repo::complete_run(
                     &pool,
                     &plan_id,
@@ -1343,6 +1388,10 @@ fn spawn_executor_run(params: SpawnExecutorParams) {
 
             ApplyOutcome::Paused { reason, counts } => {
                 let at = Timestamp::now_iso();
+                // See `cumulative_counts`: covers a prior pre-pause phase
+                // too, so a second pause after a resume doesn't regress the
+                // plan's counters.
+                let counts = cumulative_counts(&pool, &plan_id, &counts).await;
 
                 let _ = apply_repo::pause_run(
                     &pool,
@@ -1516,16 +1565,177 @@ pub async fn cancel_plan(
 
 // ── resume_plan ───────────────────────────────────────────────────────────────
 
+/// Resolve the path to probe when re-validating a `volume.unavailable`/
+/// `disk.full` pause for `item` (spec 025 T049/T050).
+///
+/// Prefers the destination root (disk-full is almost always a destination
+/// capacity problem) then the source root (volume-unavailable more often
+/// affects a disconnected source drive); both are registered roots, which
+/// are real, already-existing directories, so no ancestor-walk is needed.
+/// Archive destinations are pre-computed absolute paths that may point at a
+/// not-yet-created subdirectory (spec 017), so that branch walks up to the
+/// nearest existing ancestor before probing.
+async fn resolve_item_probe_path(
+    pool: &SqlitePool,
+    item: &plans_repo::PlanItemRow,
+) -> Option<Utf8PathBuf> {
+    if let Some(to_root_id) = item.to_root_id.as_deref() {
+        if let Some(root) = resolve_root_path(pool, to_root_id).await {
+            return Some(Utf8PathBuf::from(root));
+        }
+    }
+    if let Some(from_root_id) = item.from_root_id.as_deref() {
+        if let Some(root) = resolve_root_path(pool, from_root_id).await {
+            return Some(Utf8PathBuf::from(root));
+        }
+    }
+    if let Some(archive) = item.archive_path.as_deref().filter(|a| !a.is_empty()) {
+        let p = Utf8PathBuf::from(archive);
+        if p.is_absolute() {
+            return Some(nearest_existing_ancestor(&p));
+        }
+    }
+    None
+}
+
+/// Walk up from `path` to the nearest ancestor that exists on disk.
+/// Returns `path` unchanged if no ancestor (including the filesystem root)
+/// exists — the subsequent probe will then fail informatively rather than
+/// silently mis-reporting on a bogus path.
+fn nearest_existing_ancestor(path: &Utf8Path) -> Utf8PathBuf {
+    let mut candidate = path.to_path_buf();
+    while !candidate.exists() {
+        match candidate.parent() {
+            Some(parent) if parent != candidate => candidate = parent.to_path_buf(),
+            _ => break,
+        }
+    }
+    candidate
+}
+
+/// Re-validate the pause condition recorded on a paused run before allowing
+/// `resume_plan` to transition it back to `applying` (contract
+/// `plan.resume.json`, R-Pause-1/R-Env-1, spec 025 T048-T050).
+///
+/// `pause_reason` is the code stored on the run row by whichever executor
+/// pause path last fired (`item.stale`, `volume.unavailable`, `disk.full`).
+/// Each maps to the plan item that triggered it (the executor halts
+/// immediately on the first pausing item, so the highest `item_index` among
+/// matching items is always the current cause) and re-runs the same check
+/// that originally paused the run against that item's current on-disk
+/// state.
+///
+/// Returns `Ok(())` when the condition is resolved, when no matching item
+/// can be found (nothing left to re-validate against), or when
+/// `pause_reason` is `None`/unrecognized (permissive — v1 only classifies
+/// these three R-Pause-1 conditions).
+///
+/// # Errors
+///
+/// Returns `ContractError` with `item.still.stale`, `volume.still.unavailable`,
+/// or `disk.still.full` when the corresponding condition still holds.
+async fn revalidate_pause_condition(
+    pool: &SqlitePool,
+    plan_id: &str,
+    pause_reason: Option<&str>,
+) -> Result<(), ContractError> {
+    let Some(reason) = pause_reason else { return Ok(()) };
+
+    match reason {
+        "item.stale" => {
+            let Some(item) =
+                apply_repo::get_last_stale_item(pool, plan_id).await.map_err(db_err)?
+            else {
+                return Ok(());
+            };
+            let Some(root_id) = item.from_root_id.as_deref() else { return Ok(()) };
+            let Some(root) = resolve_root_path(pool, root_id).await else { return Ok(()) };
+            let abs = Utf8PathBuf::from(root).join(&item.from_relative_path);
+            let snapshot = CasSnapshot {
+                approved_mtime: item.approved_mtime.clone(),
+                approved_size_bytes: item.approved_size_bytes,
+            };
+            fs_executor::ops::check_cas(&abs, &snapshot).map_err(|failure| {
+                ContractError::new(
+                    ErrorCode::ItemStillStale,
+                    format!("item {} in plan {plan_id} is still stale: {failure}", item.id),
+                    ErrorSeverity::Blocking,
+                    false,
+                )
+            })
+        }
+        "volume.unavailable" => {
+            let Some(item) =
+                apply_repo::get_last_item_with_failure_prefix(pool, plan_id, "volume.unavailable")
+                    .await
+                    .map_err(db_err)?
+            else {
+                return Ok(());
+            };
+            let Some(probe_path) = resolve_item_probe_path(pool, &item).await else {
+                return Ok(());
+            };
+            fs_executor::ops::recheck_volume_available(&probe_path).map_err(|failure| {
+                ContractError::new(
+                    ErrorCode::VolumeStillUnavailable,
+                    format!("plan {plan_id}'s volume is still unavailable: {failure}"),
+                    ErrorSeverity::Blocking,
+                    false,
+                )
+            })
+        }
+        "disk.full" => {
+            let Some(item) =
+                apply_repo::get_last_item_with_failure_prefix(pool, plan_id, "disk.full")
+                    .await
+                    .map_err(db_err)?
+            else {
+                return Ok(());
+            };
+            let Some(probe_path) = resolve_item_probe_path(pool, &item).await else {
+                return Ok(());
+            };
+            let required_bytes = u64::try_from(item.approved_size_bytes.unwrap_or(0)).unwrap_or(0);
+            fs_executor::ops::recheck_disk_space(&probe_path, required_bytes).map_err(|failure| {
+                ContractError::new(
+                    ErrorCode::DiskStillFull,
+                    format!("plan {plan_id}'s destination volume is still full: {failure}"),
+                    ErrorSeverity::Blocking,
+                    false,
+                )
+            })
+        }
+        // v1 only classifies the three R-Pause-1 conditions above; any other
+        // recorded reason (or none) has nothing to re-validate against.
+        _ => Ok(()),
+    }
+}
+
 /// Resume a paused plan apply run (R-Pause-1, T052).
 ///
-/// Re-validates that the pause condition has been resolved before
-/// transitioning back to `applying`. For v1, we trust the caller to have
-/// resolved the condition and simply transition the state.
+/// Re-validates the pause condition recorded on the run
+/// ([`revalidate_pause_condition`]) before transitioning back to
+/// `applying`. If the condition is still present, resume is refused with
+/// the matching `*.still.*` code and the plan stays `paused` — it is never
+/// silently flipped to `applying` for a run that would immediately stall
+/// again (constitution §II, issue #575).
+///
+/// On success, re-registers an [`ActiveRun`] (R-Concur-1) and re-spawns the
+/// executor (via [`spawn_executor_run`]) over the plan's remaining
+/// `pending` items. Items already `failed` when the run paused — including
+/// the one that triggered the pause — stay terminal for this run; per-item
+/// retry is a separate affordance (`retry_plan_item`), not part of resume.
 ///
 /// # Errors
 ///
 /// - `plan.not_found` — plan not found.
 /// - `run.not_paused` — plan is not in paused state.
+/// - `run.not_found` — no active run recorded, or `run_id` does not match it.
+/// - `item.still.stale` / `volume.still.unavailable` / `disk.still.full` —
+///   the pause condition has not been resolved.
+/// - `plan.conflict.overlap` — another active run now claims an overlapping
+///   path (FR-017, R-Concur-1) — rare, since the plan's own claim lapsed
+///   while paused.
 pub async fn resume_plan(
     pool: &SqlitePool,
     bus: &EventBus,
@@ -1563,6 +1773,55 @@ pub async fn resume_plan(
         ));
     }
 
+    // R-Pause-1 / R-Env-1: refuse resume while the pause condition persists.
+    revalidate_pause_condition(pool, plan_id, active_run_row.pause_reason.as_deref()).await?;
+
+    // Load the plan's remaining pending items and rebuild the executor's
+    // root map (mirrors apply_plan's item preparation, T023a). Previously
+    // failed/succeeded/skipped/cancelled items are excluded — the executor
+    // is only handed genuinely-pending work to continue.
+    let item_rows = plans_repo::list_plan_items(pool, plan_id).await.map_err(db_err)?;
+
+    let mut root_map: HashMap<String, Utf8PathBuf> = HashMap::new();
+    for row in &item_rows {
+        for rid in [row.from_root_id.as_ref(), row.to_root_id.as_ref()].into_iter().flatten() {
+            if root_map.contains_key(rid) {
+                continue;
+            }
+            if let Some(path) = resolve_root_path(pool, rid).await {
+                root_map.insert(rid.clone(), Utf8PathBuf::from(path));
+            }
+        }
+    }
+
+    let executor_items: Vec<ExecutorItem> = item_rows
+        .iter()
+        .filter(|r| r.item_state == "pending")
+        .map(|r| item_row_to_executor_item(r, &root_map))
+        .collect();
+
+    // Re-register the ActiveRun (R-Concur-1). A paused run has no registry
+    // entry — the original spawned task's ActiveRunGuard already dropped it
+    // when execute_plan returned Paused — so resume must reclaim the plan's
+    // full claimed path set (all items, not just the remaining pending
+    // ones: the plan still owns its whole footprint for the run's
+    // duration) before the executor can run again. Cancel/skip/retry state
+    // does not carry over a pause boundary; a fresh set is correct here.
+    let path_set = compute_plan_path_set(&item_rows, &root_map);
+    let cancel_token = CancellationToken::new();
+    let skip_set = SkipSet::new();
+    let retry_queue = RetryQueue::new();
+    let run_guard = check_overlap_and_register(
+        plan_id,
+        ActiveRun {
+            cancel_token: cancel_token.clone(),
+            skip_set: skip_set.clone(),
+            retry_queue: retry_queue.clone(),
+            run_id: run_id.to_owned(),
+            path_set,
+        },
+    )?;
+
     apply_repo::resume_run(pool, plan_id, run_id).await.map_err(db_err)?;
 
     let resumed_at = Timestamp::now_iso();
@@ -1592,6 +1851,26 @@ pub async fn resume_plan(
         None,
     )
     .await;
+
+    // Restart the executor over the remaining pending items (issue #575).
+    // No live progress-channel caller for resume today (the contract has no
+    // `event_sink` parameter) — `op_emitter: None` matches
+    // `apply_plan_channel_free`'s no-live-progress mode; the durable audit
+    // trail above is unaffected.
+    spawn_executor_run(SpawnExecutorParams {
+        pool: pool.clone(),
+        bus: bus.clone(),
+        plan_id: plan_id.to_owned(),
+        run_id: run_id.to_owned(),
+        executor_items,
+        plan_origin: plan_row.origin,
+        plan_project_id: plan_row.origin_path,
+        cancel_token,
+        skip_set,
+        retry_queue,
+        run_guard,
+        op_emitter: None,
+    });
 
     Ok(PlanResumeResponse { plan_id: plan_id.to_owned(), run_id: run_id.to_owned(), resumed_at })
 }
