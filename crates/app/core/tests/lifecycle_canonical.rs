@@ -42,6 +42,12 @@ fn new_id() -> String {
     Uuid::new_v4().to_string()
 }
 
+/// These tests create projects with no `canonical_target_id`, so
+/// `project_setup::create`'s promotion never touches the cache.
+fn empty_cache() -> simbad_resolver::RedbCache {
+    simbad_resolver::Store::in_memory().unwrap().cache()
+}
+
 async fn create_project(pool: &SqlitePool, bus: &EventBus, name: &str) -> String {
     use contracts_core::projects_v2::ProjectCreateRequest;
     let req = ProjectCreateRequest {
@@ -53,7 +59,7 @@ async fn create_project(pool: &SqlitePool, bus: &EventBus, name: &str) -> String
         notes: None,
         canonical_target_id: None,
     };
-    let result = project_setup::create(pool, bus, &req).await.unwrap();
+    let result = project_setup::create(pool, bus, &empty_cache(), &req).await.unwrap();
     result.project_id
 }
 
@@ -435,7 +441,7 @@ async fn relative_project_path_without_registered_root_is_rejected() {
         canonical_target_id: None,
     };
 
-    let err = project_setup::create(db.pool(), &bus, &req).await.unwrap_err();
+    let err = project_setup::create(db.pool(), &bus, &empty_cache(), &req).await.unwrap_err();
     assert_eq!(
         err.code,
         contracts_core::error_code::ErrorCode::PathInvalid,

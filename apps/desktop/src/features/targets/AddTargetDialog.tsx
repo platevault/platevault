@@ -2,14 +2,16 @@
  * AddTargetDialog — spec 036 "Add target" action.
  *
  * Lets the user search for an astronomical target (via the existing
- * TargetSearch / SIMBAD two-phase pipeline) and confirm a selection, which
- * resolves + persists a `canonical_target` via `target.resolve`.  On success
- * the dialog closes and calls `onAdded(targetId)` so the page can reload
- * the list and navigate to the new target.
+ * TargetSearch / SIMBAD two-phase pipeline) and confirm a selection.
+ * Confirming is the explicit in-use commit (spec 052 P1 FR-004): `target.
+ * search`/`target.resolve` no longer persist a `canonical_target` row on
+ * their own (they only populate the shared redb resolve cache), so the
+ * confirm click calls `target.adopt` with the selected suggestion's
+ * `targetId` to promote it into the durable table. On success the dialog
+ * closes and calls `onAdded(targetId)` so the page can reload the list and
+ * navigate to the new target.
  *
- * Reuses `TargetSearch` (spec 035 US1/US3) unchanged.  No new backend
- * commands are required: `target.search` supplies suggestions and
- * `target.resolve` persists the canonical row.
+ * Reuses `TargetSearch` (spec 035 US1/US3) unchanged.
  */
 
 import { useState, useCallback } from 'react';
@@ -19,9 +21,6 @@ import { Modal, TargetSearch } from '@/components';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type { TargetSuggestion } from '@/bindings/aliases';
-
-/** Contract version for the spec-035 `target.*` resolution commands. */
-const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
 
 export interface AddTargetDialogProps {
   open: boolean;
@@ -66,16 +65,14 @@ export function AddTargetDialog({
     setError(null);
     try {
       const res = unwrap(
-        await commands.targetResolve({
-          contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+        await commands.targetAdopt({
           requestId: crypto.randomUUID(),
-          query: pending.primaryDesignation,
-          override: null,
+          targetId: pending.targetId,
         }),
       );
-      if (res.status === 'resolved' && res.target) {
+      if (res.adopted) {
         handleOpenChange(false);
-        onAdded(res.target.targetId);
+        onAdded(res.targetId);
       } else {
         setError(
           m.targets_add_resolve_failed({ query: pending.primaryDesignation }),

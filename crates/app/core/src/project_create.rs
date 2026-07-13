@@ -49,9 +49,10 @@ const TERMINAL_POLL_INTERVAL_MS: u64 = 25;
 pub async fn create(
     pool: &SqlitePool,
     bus: &EventBus,
+    redb_cache: &dyn simbad_resolver::Cache,
     req: &ProjectCreateRequest,
 ) -> Result<ProjectCreateResult, ContractError> {
-    let mut result = project_setup::create(pool, bus, req).await?;
+    let mut result = project_setup::create(pool, bus, redb_cache, req).await?;
 
     let Some(plan_id) = result.plan_id.clone() else {
         return Ok(result);
@@ -129,6 +130,12 @@ mod tests {
         }
     }
 
+    /// These tests create projects with no `canonical_target_id`, so
+    /// `create`'s promotion never touches the cache.
+    fn empty_cache() -> simbad_resolver::RedbCache {
+        simbad_resolver::Store::in_memory().unwrap().cache()
+    }
+
     /// Happy path: the scaffolding plan auto-applies and the tool folders
     /// exist on disk; the plan row records the applied terminal state.
     #[tokio::test]
@@ -137,7 +144,9 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let project_path = format!("{}/m31", root.path().to_str().unwrap());
 
-        let result = create(db.pool(), &bus, &make_req("M31 LRGB", &project_path)).await.unwrap();
+        let result = create(db.pool(), &bus, &empty_cache(), &make_req("M31 LRGB", &project_path))
+            .await
+            .unwrap();
 
         assert_eq!(result.scaffold_applied, Some(true), "mkdir-only plan must auto-apply");
 
@@ -165,7 +174,9 @@ mod tests {
         std::fs::write(format!("{project_path}/lights"), b"in the way").unwrap();
 
         let result =
-            create(db.pool(), &bus, &make_req("Blocked Project", &project_path)).await.unwrap();
+            create(db.pool(), &bus, &empty_cache(), &make_req("Blocked Project", &project_path))
+                .await
+                .unwrap();
 
         assert_eq!(
             result.scaffold_applied,

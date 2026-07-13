@@ -20,19 +20,6 @@ pub async fn file_record_exists(pool: &SqlitePool, id: &str) -> DbResult<bool> {
     Ok(exists)
 }
 
-/// Whether a `canonical_target` row exists for `id` (spec 008/035 project
-/// creation: validates an optional `canonical_target_id` before storing it).
-///
-/// # Errors
-/// Returns [`crate::DbError::Database`] on query failure.
-pub async fn canonical_target_exists(pool: &SqlitePool, id: &str) -> DbResult<bool> {
-    let row: Option<(String,)> = sqlx::query_as("SELECT id FROM canonical_target WHERE id = ?")
-        .bind(id)
-        .fetch_optional(pool)
-        .await?;
-    Ok(row.is_some())
-}
-
 /// `(relative_path, state)` for a `file_record` row (spec 049 generation:
 /// resolves a session's frame ids to their current path + presence state).
 /// Returns `None` when no row exists.

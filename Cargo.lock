@@ -114,7 +114,9 @@ dependencies = [
  "rstest",
  "serde_json",
  "sha2 0.10.9",
+ "simbad-resolver",
  "sqlx",
+ "targeting",
  "targeting_resolver",
  "tempfile",
  "thiserror 2.0.18",
@@ -221,6 +223,7 @@ version = "0.1.0"
 dependencies = [
  "app_core_cache",
  "app_core_errors",
+ "app_core_targets",
  "audit",
  "camino",
  "contracts_core",
@@ -230,6 +233,7 @@ dependencies = [
  "persistence_db",
  "project_structure",
  "serde_json",
+ "simbad-resolver",
  "sqlx",
  "tempfile",
  "thiserror 2.0.18",
@@ -277,6 +281,7 @@ dependencies = [
  "persistence_db",
  "serde_json",
  "sessions",
+ "simbad-resolver",
  "sqlx",
  "targeting",
  "targeting_resolver",
@@ -1419,6 +1424,7 @@ dependencies = [
  "persistence_db",
  "serde",
  "serde_json",
+ "simbad-resolver",
  "specta",
  "specta-typescript",
  "sqlx",
@@ -5542,9 +5548,9 @@ dependencies = [
 
 [[package]]
 name = "simbad-resolver"
-version = "0.1.3"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15d946b8d40323153db60e0bca59b39989908638e8ad13167d570b5b9cdb909e"
+checksum = "ff6f68107e874c3528e6ff97f9a5de628cadce88405dcc8fc797097b1bd78037"
 dependencies = [
  "async-trait",
  "redb",
@@ -6231,8 +6237,10 @@ dependencies = [
  "serde",
  "serde_json",
  "simbad-resolver",
+ "skymath 0.3.0",
  "sqlx",
  "targeting",
+ "tempfile",
  "thiserror 2.0.18",
  "time",
  "tokio",

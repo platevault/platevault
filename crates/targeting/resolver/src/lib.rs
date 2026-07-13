@@ -256,11 +256,16 @@ pub struct ResolvedAlias {
 }
 
 impl ResolvedAlias {
-    /// Build a [`ResolvedAlias`], computing the normalized form from `alias`.
+    /// Build a [`ResolvedAlias`], computing the normalized form from `alias`
+    /// via [`simbad_resolver::normalize::normalize`] — the single
+    /// normalization choke-point (spec 052 P1 T004, FR-007): every identity
+    /// string that ends up cached/persisted (TAP, Sesame, Caldwell, user
+    /// query, seed) passes through this one function, so alias variants of
+    /// one physical object dedup identically regardless of source.
     #[must_use]
     pub fn new(alias: impl Into<String>, kind: AliasKind) -> Self {
         let alias = alias.into();
-        let normalized = targeting::normalize::normalize(&alias);
+        let normalized = simbad_resolver::normalize::normalize(&alias);
         Self { alias, normalized, kind }
     }
 }
@@ -287,6 +292,12 @@ pub struct ResolvedIdentity {
     pub ra_deg: f64,
     /// ICRS J2000 declination in decimal degrees, `[-90, 90]`.
     pub dec_deg: f64,
+    /// Johnson V-band apparent magnitude (SIMBAD `allfluxes.V`, 0.2.0) when the
+    /// object has V photometry; `None` for objects without it (many extended /
+    /// dark objects) or for seed/override-only entries. Feeds
+    /// `canonical_target.magnitude` at the in-use write (spec 052 P1); never
+    /// fabricated.
+    pub v_mag: Option<f64>,
     /// All designations + common names for this object (the typeahead surface).
     pub aliases: Vec<ResolvedAlias>,
     /// Provenance of this identity.
@@ -496,6 +507,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: Some(3.44),
             aliases: vec![
                 ResolvedAlias::new("M 31", AliasKind::Designation),
                 ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -503,6 +515,28 @@ mod tests {
             ],
             source: TargetSource::Resolved,
         }
+    }
+
+    // ── Normalization choke-point (spec 052 P1 T004, FR-007) ──────────────────
+
+    /// Alias spellings as they'd arrive from different sources — a TAP
+    /// cross-ID (compact, no space), a seed/Caldwell canonical designation
+    /// (space-separated), and a raw user query (extra whitespace) — must all
+    /// normalize to the identical key through the single choke-point
+    /// ([`ResolvedAlias::new`], which calls
+    /// [`simbad_resolver::normalize::normalize`]), so they dedup onto one
+    /// physical object regardless of which path produced them.
+    #[test]
+    fn resolved_alias_normalizes_identically_across_sources() {
+        let tap_style = ResolvedAlias::new("M31", AliasKind::Designation);
+        let seed_style = ResolvedAlias::new("M 31", AliasKind::Designation);
+        let caldwell_style = ResolvedAlias::new("M  31", AliasKind::Designation);
+        let user_query_style = ResolvedAlias::new("  m31  ", AliasKind::User);
+
+        assert_eq!(tap_style.normalized, "m 31");
+        assert_eq!(tap_style.normalized, seed_style.normalized);
+        assert_eq!(tap_style.normalized, caldwell_style.normalized);
+        assert_eq!(tap_style.normalized, user_query_style.normalized);
     }
 
     // ── ObjectType mapping (T005) ──────────────────────────────────────────────

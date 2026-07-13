@@ -13,8 +13,9 @@
 // with the endpoint / debounce / timeout fields deferred to full Settings.
 
 import { useCallback, useEffect, useId, useState } from 'react';
-import { Toggle } from '@/ui';
+import { Btn, Toggle } from '@/ui';
 import {
+  clearResolveCache,
   getResolverSettings,
   updateResolverSettings,
   type ResolverSettings,
@@ -44,6 +45,11 @@ export function ResolverSettingsControl({
   const [settings, setSettings] = useState<ResolverSettings>(DEFAULT_SETTINGS);
   const [loaded, setLoaded] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [clearingCache, setClearingCache] = useState(false);
+  const [cacheClearMessage, setCacheClearMessage] = useState<string | null>(
+    null,
+  );
+  const [cacheClearError, setCacheClearError] = useState<string | null>(null);
 
   // Load persisted settings on mount.
   useEffect(() => {
@@ -78,6 +84,31 @@ export function ResolverSettingsControl({
     },
     [settings],
   );
+
+  // spec 052 P1 (FR-002): manual "clear resolve cache" action — wipes the
+  // shared redb typeahead/search cache and re-warms it; never touches saved
+  // targets (canonical_target).
+  const handleClearCache = useCallback(async () => {
+    setClearingCache(true);
+    setCacheClearMessage(null);
+    setCacheClearError(null);
+    try {
+      const resp = await clearResolveCache();
+      setCacheClearMessage(
+        m.settings_resolver_cache_clear_success({
+          count: resp.rewarmedCount,
+        }),
+      );
+    } catch (e) {
+      setCacheClearError(
+        m.settings_resolver_cache_clear_error({
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
+    } finally {
+      setClearingCache(false);
+    }
+  }, []);
 
   return (
     <>
@@ -201,6 +232,32 @@ export function ResolverSettingsControl({
               }
             />
           </SettingsRow>
+
+          <SettingsRow
+            label={m.settings_resolver_cache_clear_label()}
+            info={m.settings_resolver_cache_clear_info()}
+          >
+            <Btn
+              type="button"
+              variant="ghost"
+              disabled={clearingCache}
+              onClick={() => void handleClearCache()}
+            >
+              {clearingCache
+                ? m.settings_resolver_cache_clear_pending()
+                : m.settings_resolver_cache_clear_label()}
+            </Btn>
+          </SettingsRow>
+          {cacheClearMessage && (
+            <div className="alm-settings__row-desc" role="status">
+              {cacheClearMessage}
+            </div>
+          )}
+          {cacheClearError && (
+            <div className="alm-settings__error" role="alert">
+              {cacheClearError}
+            </div>
+          )}
         </>
       )}
 

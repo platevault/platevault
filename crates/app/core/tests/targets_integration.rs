@@ -43,6 +43,7 @@ async fn seed_target(
         object_type: ObjectType::Galaxy,
         ra_deg: 0.0,
         dec_deg: 0.0,
+        v_mag: None,
         aliases,
         source: TargetSource::Seed,
     };
@@ -69,6 +70,7 @@ async fn resolve_exact_query_returns_resolved() {
             object_type: ObjectType::Galaxy,
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: None,
             aliases: vec![
                 ResolvedAlias::new("M 31", AliasKind::Designation),
                 ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -111,6 +113,7 @@ async fn resolve_cross_catalog_alias_returns_same_target() {
         object_type: ObjectType::Galaxy,
         ra_deg: 10.684_708,
         dec_deg: 41.268_75,
+        v_mag: None,
         aliases: vec![
             ResolvedAlias::new("M 31", AliasKind::Designation),
             ResolvedAlias::new("NGC 224", AliasKind::Designation),

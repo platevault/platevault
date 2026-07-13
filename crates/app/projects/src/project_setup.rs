@@ -49,7 +49,6 @@ use domain_core::project::validate::{
 use persistence_db::repositories::first_run as first_run_repo;
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::projects as repo;
-use persistence_db::repositories::q_projects;
 use project_structure::{required_folders, ProcessingTool as StructureTool, MARKER_FILENAME};
 use sqlx::SqlitePool;
 
@@ -382,6 +381,7 @@ fn build_folder_plan_data(project_path: &str, tool_str: &str) -> FolderPlanData 
 pub async fn create(
     pool: &SqlitePool,
     bus: &EventBus,
+    redb_cache: &dyn simbad_resolver::Cache,
     req: &ProjectCreateRequest,
 ) -> Result<ProjectCreateResult, ContractError> {
     // 1. Validate name.
@@ -441,19 +441,30 @@ pub async fn create(
     let project_id = new_id();
     let now = Timestamp::now_iso();
 
-    // Validate the optional canonical target exists (cheap point lookup) so a
-    // dangling id is rejected rather than silently stored. Spec-035 additive
-    // association; absent → stored as NULL (existing behaviour unchanged).
+    // Promote the optional canonical target into the durable table if it
+    // isn't already there (spec 052 P1 FR-004: adding a target to a project
+    // is an in-use commit). `target.resolve`/`target.search` no longer write
+    // `canonical_target` themselves, so `ctid` is typically a redb-cache-only
+    // id at this point; a dangling id (unknown to both stores) is still
+    // rejected rather than silently stored.
     if let Some(ctid) = req.canonical_target_id.as_deref() {
-        let exists = q_projects::canonical_target_exists(pool, ctid).await.map_err(|e| {
+        let uuid = uuid::Uuid::parse_str(ctid).map_err(|_| {
             ContractError::new(
-                ErrorCode::InternalDatabase,
-                format!("{e}"),
-                ErrorSeverity::Fatal,
-                true,
+                ErrorCode::CanonicalTargetNotFound,
+                "The selected target was not found.",
+                ErrorSeverity::Blocking,
+                false,
             )
+            .with_details(serde_json::json!({ "canonicalTargetId": ctid }))
         })?;
-        if !exists {
+        let promoted = app_core_targets::target_resolve::promote_by_id(
+            pool,
+            redb_cache,
+            uuid,
+            &req.request_id,
+        )
+        .await?;
+        if !promoted {
             return Err(ContractError::new(
                 ErrorCode::CanonicalTargetNotFound,
                 "The selected target was not found.",
@@ -1164,6 +1175,14 @@ mod tests {
         (pool, bus)
     }
 
+    /// An empty redb resolve cache — these tests exercise `create()` either
+    /// with no `canonical_target_id` or with one already seeded directly into
+    /// SQLite (`seed_canonical_target`), so promotion's cache fallback is
+    /// never exercised here (see `promotes_from_redb_cache_when_not_yet_durable`).
+    fn empty_cache() -> simbad_resolver::RedbCache {
+        simbad_resolver::Store::in_memory().unwrap().cache()
+    }
+
     // ── P7: exposure parsing + channel aggregation (pure helpers) ─────────────
 
     #[test]
@@ -1253,7 +1272,7 @@ mod tests {
     async fn create_project_setup_incomplete_no_sources() {
         let (pool, bus) = setup().await;
         let req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        let result = create(&pool, &bus, &req).await.unwrap();
+        let result = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
         assert_eq!(result.lifecycle, "setup_incomplete");
         assert!(result.channels.is_empty());
         // Constitution II: create always produces a folder-structure plan.
@@ -1264,9 +1283,9 @@ mod tests {
     async fn create_project_duplicate_name_rejected() {
         let (pool, bus) = setup().await;
         let req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        create(&pool, &bus, &req).await.unwrap();
+        create(&pool, &bus, &empty_cache(), &req).await.unwrap();
         let req2 = ProjectCreateRequest { path: "projects/other".to_owned(), ..req };
-        let err = create(&pool, &bus, &req2).await.unwrap_err();
+        let err = create(&pool, &bus, &empty_cache(), &req2).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::NameDuplicate);
     }
 
@@ -1274,9 +1293,9 @@ mod tests {
     async fn create_project_duplicate_path_rejected() {
         let (pool, bus) = setup().await;
         let req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        create(&pool, &bus, &req).await.unwrap();
+        create(&pool, &bus, &empty_cache(), &req).await.unwrap();
         let req2 = ProjectCreateRequest { name: "Other Name".to_owned(), ..req };
-        let err = create(&pool, &bus, &req2).await.unwrap_err();
+        let err = create(&pool, &bus, &empty_cache(), &req2).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PathCollision);
     }
 
@@ -1286,7 +1305,7 @@ mod tests {
     async fn create_anchors_relative_path_to_registered_project_root() {
         let (pool, bus) = setup().await;
         let req = make_create_req("M31 LRGB", ProjectTool::PixInsight);
-        let result = create(&pool, &bus, &req).await.unwrap();
+        let result = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
 
         let detail = get(&pool, &result.project_id).await.unwrap();
         assert_eq!(
@@ -1309,7 +1328,7 @@ mod tests {
 
         let (pool, bus) = setup().await;
         let req = make_create_req("NGC 7000 CWD", ProjectTool::PixInsight);
-        let result = create(&pool, &bus, &req).await.unwrap();
+        let result = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
 
         let plan_id = result.plan_id.expect("plan_id must be present");
         let items = plans_repo::list_plan_items(&pool, &plan_id).await.unwrap();
@@ -1337,7 +1356,7 @@ mod tests {
             path: abs("/elsewhere/m101"),
             ..make_create_req("M101 Abs", ProjectTool::PixInsight)
         };
-        let result = create(&pool, &bus, &req).await.unwrap();
+        let result = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
         let detail = get(&pool, &result.project_id).await.unwrap();
         assert_eq!(detail.path, abs("/elsewhere/m101"));
     }
@@ -1349,7 +1368,7 @@ mod tests {
         db.migrate().await.unwrap();
         let bus = EventBus::with_pool(db.pool().clone());
         let req = make_create_req("No Root", ProjectTool::PixInsight);
-        let err = create(db.pool(), &bus, &req).await.unwrap_err();
+        let err = create(db.pool(), &bus, &empty_cache(), &req).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PathInvalid);
     }
 
@@ -1360,7 +1379,7 @@ mod tests {
             path: "projects/../../etc".to_owned(),
             ..make_create_req("Escape Attempt", ProjectTool::PixInsight)
         };
-        let err = create(&pool, &bus, &req).await.unwrap_err();
+        let err = create(&pool, &bus, &empty_cache(), &req).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PathInvalid);
     }
 
@@ -1368,7 +1387,7 @@ mod tests {
     async fn create_project_empty_name_rejected() {
         let (pool, bus) = setup().await;
         let req = make_create_req("", ProjectTool::PixInsight);
-        let err = create(&pool, &bus, &req).await.unwrap_err();
+        let err = create(&pool, &bus, &empty_cache(), &req).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::NameEmpty);
     }
 
@@ -1376,7 +1395,7 @@ mod tests {
     async fn update_project_name() {
         let (pool, bus) = setup().await;
         let create_req = make_create_req("Old Name", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &create_req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
 
         let update_req = ProjectUpdateRequest {
             request_id: new_id(),
@@ -1393,7 +1412,7 @@ mod tests {
     async fn update_archived_project_rejected() {
         let (pool, bus) = setup().await;
         let create_req = make_create_req("My Project", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &create_req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
 
         // Manually set lifecycle to archived.
         repo::update_project_lifecycle(&pool, &created.project_id, "archived").await.unwrap();
@@ -1413,7 +1432,7 @@ mod tests {
     async fn add_source_triggers_ready_transition() {
         let (pool, bus) = setup().await;
         let create_req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &create_req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
         assert_eq!(created.lifecycle, "setup_incomplete");
 
         let add_req = ProjectSourceAddRequest {
@@ -1429,7 +1448,7 @@ mod tests {
     async fn add_source_duplicate_rejected() {
         let (pool, bus) = setup().await;
         let create_req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &create_req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
 
         let add_req = ProjectSourceAddRequest {
             request_id: new_id(),
@@ -1448,7 +1467,7 @@ mod tests {
     async fn remove_source_last_requires_confirmation() {
         let (pool, bus) = setup().await;
         let create_req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &create_req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
 
         let add_req = ProjectSourceAddRequest {
             request_id: new_id(),
@@ -1472,7 +1491,7 @@ mod tests {
     async fn remove_source_with_confirmation_succeeds() {
         let (pool, bus) = setup().await;
         let create_req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &create_req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
 
         let add_req = ProjectSourceAddRequest {
             request_id: new_id(),
@@ -1495,7 +1514,7 @@ mod tests {
     async fn remove_source_from_prepared_rejected() {
         let (pool, bus) = setup().await;
         let create_req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &create_req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
 
         // Add a source so lifecycle can be moved to ready.
         let add_req = ProjectSourceAddRequest {
@@ -1521,7 +1540,7 @@ mod tests {
     async fn reinfer_clears_drift_flag() {
         let (pool, bus) = setup().await;
         let create_req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &create_req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
 
         // Artificially set drift.
         repo::set_channel_drift(&pool, &created.project_id, true).await.unwrap();
@@ -1539,7 +1558,7 @@ mod tests {
     async fn dismiss_drift_clears_flag() {
         let (pool, bus) = setup().await;
         let create_req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &create_req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &create_req).await.unwrap();
 
         repo::set_channel_drift(&pool, &created.project_id, true).await.unwrap();
 
@@ -1555,8 +1574,12 @@ mod tests {
     #[tokio::test]
     async fn list_projects_returns_summary() {
         let (pool, bus) = setup().await;
-        create(&pool, &bus, &make_create_req("A", ProjectTool::PixInsight)).await.unwrap();
-        create(&pool, &bus, &make_create_req("B", ProjectTool::Siril)).await.unwrap();
+        create(&pool, &bus, &empty_cache(), &make_create_req("A", ProjectTool::PixInsight))
+            .await
+            .unwrap();
+        create(&pool, &bus, &empty_cache(), &make_create_req("B", ProjectTool::Siril))
+            .await
+            .unwrap();
         let list = list(&pool).await.unwrap();
         assert_eq!(list.len(), 2);
     }
@@ -1567,7 +1590,7 @@ mod tests {
     async fn create_returns_plan_id() {
         let (pool, bus) = setup().await;
         let req = make_create_req("NGC 7000 NB", ProjectTool::PixInsight);
-        let result = create(&pool, &bus, &req).await.unwrap();
+        let result = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
         assert!(
             result.plan_id.is_some(),
             "create must return a plan_id for the folder-structure plan"
@@ -1580,7 +1603,7 @@ mod tests {
 
         let (pool, bus) = setup().await;
         let req = make_create_req("NGC 7000 PI", ProjectTool::PixInsight);
-        let result = create(&pool, &bus, &req).await.unwrap();
+        let result = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
 
         let plan_id = result.plan_id.expect("plan_id must be present");
         let plan = plans_repo::get_plan(&pool, &plan_id, false).await.unwrap();
@@ -1619,7 +1642,7 @@ mod tests {
 
         let (pool, bus) = setup().await;
         let req = make_create_req("M31 Siril", ProjectTool::Siril);
-        let result = create(&pool, &bus, &req).await.unwrap();
+        let result = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
 
         let plan_id = result.plan_id.expect("plan_id must be present");
         let items = plans_repo::list_plan_items(&pool, &plan_id).await.unwrap();
@@ -1652,7 +1675,7 @@ mod tests {
     async fn create_without_canonical_target_stores_null() {
         let (pool, bus) = setup().await;
         let req = make_create_req("No Target Project", ProjectTool::PixInsight);
-        let result = create(&pool, &bus, &req).await.unwrap();
+        let result = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
         let stored =
             repo::get_project_canonical_target_id(&pool, &result.project_id).await.unwrap();
         assert_eq!(stored, None, "absent canonicalTargetId must persist as NULL");
@@ -1666,7 +1689,7 @@ mod tests {
 
         let mut req = make_create_req("Targeted Project", ProjectTool::PixInsight);
         req.canonical_target_id = Some(ctid.to_owned());
-        let result = create(&pool, &bus, &req).await.unwrap();
+        let result = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
 
         let stored =
             repo::get_project_canonical_target_id(&pool, &result.project_id).await.unwrap();
@@ -1678,7 +1701,7 @@ mod tests {
         let (pool, bus) = setup().await;
         let mut req = make_create_req("Dangling Target", ProjectTool::PixInsight);
         req.canonical_target_id = Some("22222222-2222-5222-8222-222222222222".to_owned());
-        let err = create(&pool, &bus, &req).await.unwrap_err();
+        let err = create(&pool, &bus, &empty_cache(), &req).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::CanonicalTargetNotFound);
     }
 
@@ -1701,7 +1724,7 @@ mod tests {
 
         let mut req = make_create_req("Detail With Target", ProjectTool::PixInsight);
         req.canonical_target_id = Some(ctid.to_owned());
-        let created = create(&pool, &bus, &req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
 
         let detail = get(&pool, &created.project_id).await.unwrap();
         let ct = detail.canonical_target.expect("canonical_target must be present");
@@ -1718,7 +1741,7 @@ mod tests {
 
         let mut req = make_create_req("Detail No Common Name", ProjectTool::PixInsight);
         req.canonical_target_id = Some(ctid.to_owned());
-        let created = create(&pool, &bus, &req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
 
         let detail = get(&pool, &created.project_id).await.unwrap();
         let ct = detail.canonical_target.expect("association present");
@@ -1730,7 +1753,7 @@ mod tests {
     async fn get_returns_no_canonical_target_when_unassociated() {
         let (pool, bus) = setup().await;
         let req = make_create_req("Detail No Target", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
 
         let detail = get(&pool, &created.project_id).await.unwrap();
         assert!(detail.canonical_target.is_none(), "no association → None");
@@ -1773,7 +1796,7 @@ mod tests {
     async fn get_aggregates_sub_frames_and_integration_seconds_per_channel() {
         let (pool, bus) = setup().await;
         let req = make_create_req("Aggregation Project", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
 
         seed_real_source(&pool, &created.project_id, "inv-1", "Ha", 18, "120s").await;
         seed_real_source(&pool, &created.project_id, "inv-2", "Ha", 10, "60s").await;
@@ -1800,7 +1823,7 @@ mod tests {
     async fn get_channel_totals_ignore_unparseable_exposure_without_panicking() {
         let (pool, bus) = setup().await;
         let req = make_create_req("Unparseable Exposure Project", ProjectTool::PixInsight);
-        let created = create(&pool, &bus, &req).await.unwrap();
+        let created = create(&pool, &bus, &empty_cache(), &req).await.unwrap();
 
         seed_real_source(&pool, &created.project_id, "inv-1", "Ha", 5, "Mixed").await;
         repo::replace_project_channels(&pool, &created.project_id, &[("Ha", "inferred")])

@@ -574,6 +574,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: None,
             aliases: vec![
                 ResolvedAlias::new("M 31", CacheKind::Designation),
                 ResolvedAlias::new("NGC 224", CacheKind::Designation),
@@ -662,23 +663,24 @@ mod tests {
         );
     }
 
-    /// `constellation` and `magnitude` are `None` for entries that pre-date
-    /// migration 0046 (the columns were added as nullable).  Seeding via
-    /// `upsert_resolved` does not populate them yet, so they must be `None`.
+    /// Spec 052 P1 (D8): `upsert_resolved` now enriches `constellation` from
+    /// `(ra_deg, dec_deg)` on every write, so it is populated even though the
+    /// `m31()` fixture below doesn't set it explicitly. `magnitude` stays
+    /// `None` because the fixture carries no `v_mag` (never fabricated).
     #[tokio::test]
     async fn list_item_constellation_and_magnitude_none_when_not_stored() {
         let db = setup().await;
         seed_m31(&db).await;
         let items = list(db.pool()).await.unwrap();
         assert_eq!(items.len(), 1);
-        assert!(
-            items[0].constellation.is_none(),
-            "constellation must be None when not stored, got {:?}",
-            items[0].constellation
+        assert_eq!(
+            items[0].constellation.as_deref(),
+            Some("And"),
+            "constellation is now derived from coordinates at every upsert (spec 052 P1 D8)"
         );
         assert!(
             items[0].magnitude.is_none(),
-            "magnitude must be None when not stored, got {:?}",
+            "magnitude must be None when the source has no v_mag, got {:?}",
             items[0].magnitude
         );
     }

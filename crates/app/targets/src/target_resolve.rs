@@ -1,53 +1,53 @@
-//! `target.resolve` use case for spec 035 (US3 — long-tail SIMBAD resolution).
+//! `target.resolve` use case for spec 035 (US3 — long-tail SIMBAD resolution),
+//! retargeted by spec 052 P1 (D1/D4, supersedes spec-035 FR-006).
 //!
-//! Cache-first resolution of a complete designation / common name (or a FITS
-//! `OBJECT` value) to a canonical identity:
+//! `resolve` is now a pure read: it delegates cache-first + online-gated
+//! network resolution entirely to the injected [`Resolver`] (production:
+//! `targeting_resolver::simbad::SimbadResolver`, a facade over the shared
+//! redb resolve cache — cache hits and repeat resolves never touch the
+//! network, FR-006/SC-001, verified at the resolver-crate level) and never
+//! writes `canonical_target` itself (FR-004/SC-002 — browsing/typing never
+//! creates a durable row).
 //!
-//! 1. Look the (normalized) query up in the local resolution cache + bundled
-//!    seed ([`targeting_resolver::cache`]). A hit returns immediately — a
-//!    cached object is never re-queried (FR-006).
-//! 2. On a miss, when online resolution is enabled (`resolver_settings`,
-//!    FR-015), consult the injected [`Resolver`] (the live `SimbadResolver` in
-//!    production; a `FakeResolver` in tests). A successful resolve is written to
-//!    the cache (`source = resolved`) and returned.
-//! 3. When online is disabled, SIMBAD is unreachable/times out, or the query is
-//!    unknown/ambiguous, the result is `unresolved` (retryable, pending) — the
-//!    use case NEVER fabricates coordinates (FR-009).
-//!
-//! The [`Resolver`] is injected (as a generic `&R`) so tests run offline with a
-//! `FakeResolver` and no network. The manual `override` write path is left to
-//! T032 (see [`resolve`]).
+//! Durable persistence happens ONLY at an explicit in-use commit —
+//! [`promote_by_id`], called from the app-layer commit points (add to
+//! project, link to session, favourite, Inbox-confirm) with the redb-cache id
+//! a prior `target.search`/`target.resolve` response already returned. The
+//! manual `override` path ([`apply_override`], FR-014/T032) is itself such a
+//! commit — the user has explicitly bound a query to a chosen target — and
+//! keeps writing `canonical_target` directly.
 //!
 //! ## Constitution
 //!
 //! - §I No filesystem mutations: reads/writes SQLite metadata only.
 //! - §III Metadata/identity only — no image processing.
-//! - §V SQLite (seed + resolution cache) is the durable record.
+//! - §V SQLite `canonical_target` is the durable record; the redb resolve
+//!   cache queried via the injected [`Resolver`] is an explicitly reproducible
+//!   projection (§V), never canonical.
 
 use sqlx::SqlitePool;
+use uuid::Uuid;
 
 use contracts_core::targets::{
     ResolvedTarget, TargetResolveSimbadRequest, TargetResolveSimbadResponse, TargetResolveStatus,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 
-use app_core_errors::db_internal_ctx;
 use targeting::normalize::normalize;
 use targeting_resolver::cache::{self, CachedTarget};
 use targeting_resolver::{
     AliasKind, ResolveError, ResolvedAlias, ResolvedIdentity, Resolver, TargetSource as CacheSource,
 };
-use uuid::Uuid;
 
 // ── Durable audit record (T039, constitution §V) ──────────────────────────────
 
 /// Write a durable `audit_log_entry` row for a resolution outcome.
 ///
 /// `actor` must be `user` or `system`; `trigger` is the resolution kind
-/// (`target.resolved` / `target.user_override`). The entity is the resolved
-/// `canonical_target`. The query that triggered the resolution is captured in
-/// the JSON payload. Best-effort: an audit-write failure does not fail the
-/// resolution (it is logged), so resolution remains non-blocking.
+/// (`target.adopted` / `target.user_override`). The entity is the resolved
+/// `canonical_target`. The query/context that triggered the commit is
+/// captured in the JSON payload. Best-effort: an audit-write failure does not
+/// fail the commit (it is logged).
 async fn write_audit(
     pool: &SqlitePool,
     target_id: &str,
@@ -78,6 +78,10 @@ fn db_err(e: &cache::CacheError) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
+fn redb_err(e: &simbad_resolver::CacheError) -> ContractError {
+    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
+}
+
 // ── Enum mapping (cache → contract DTO) ─────────────────────────────────────
 //
 // Shared mappers live in `crate::target_dto` (US11 T143).
@@ -94,6 +98,28 @@ fn cached_to_resolved(target: &CachedTarget) -> ResolvedTarget {
         dec_deg: target.dec_deg,
         aliases: target.aliases.iter().map(|a| a.alias.clone()).collect(),
         source: map_source(target.source),
+    }
+}
+
+/// Build the response DTO directly from a resolved identity (no SQLite/redb
+/// read-back needed): `target_id` is the deterministic UUIDv5 derived from
+/// the designation ([`targeting::identity::target_id_from_designation`]) —
+/// identical to the id the production facade already assigned in the redb
+/// cache (same namespace seed, asserted by
+/// `targeting_resolver::simbad::tests::namespace_matches_sqlite_identity_derivation`)
+/// and to the id [`promote_by_id`] later writes to `canonical_target`.
+fn identity_to_resolved(identity: &ResolvedIdentity) -> ResolvedTarget {
+    let target_id = targeting::identity::target_id_from_designation(&identity.primary_designation);
+    ResolvedTarget {
+        target_id: target_id.to_string(),
+        simbad_oid: identity.simbad_oid,
+        primary_designation: identity.primary_designation.clone(),
+        common_name: identity.common_name.clone(),
+        object_type: map_object_type(identity.object_type),
+        ra_deg: identity.ra_deg,
+        dec_deg: identity.dec_deg,
+        aliases: identity.aliases.iter().map(|a| a.alias.clone()).collect(),
+        source: map_source(identity.source),
     }
 }
 
@@ -124,45 +150,16 @@ fn unresolved(req: &TargetResolveSimbadRequest, reason: &str) -> TargetResolveSi
     }
 }
 
-// ── Settings ────────────────────────────────────────────────────────────────
-
-/// The subset of `resolver_settings` this use case needs.
-struct OnlineSettings {
-    online_enabled: bool,
-    endpoint: String,
-    request_timeout_secs: i64,
-}
-
-/// Read the singleton `resolver_settings` row (id = 1). The row is seeded by
-/// migration 0031, so this should always return a value; missing → defaults.
-async fn read_settings(pool: &SqlitePool) -> Result<OnlineSettings, ContractError> {
-    let row = persistence_db::repositories::q_targets_mgmt::get_resolver_settings_online(pool)
-        .await
-        .map_err(|e| db_internal_ctx(e, "read resolver_settings"))?;
-
-    Ok(row.map_or(
-        OnlineSettings {
-            online_enabled: true,
-            endpoint: targeting_resolver::simbad::DEFAULT_TAP_ENDPOINT.to_owned(),
-            request_timeout_secs: 10,
-        },
-        |r| OnlineSettings {
-            online_enabled: r.online_enabled != 0,
-            endpoint: r.simbad_endpoint,
-            request_timeout_secs: r.request_timeout_secs,
-        },
-    ))
-}
-
 // ── resolve ───────────────────────────────────────────────────────────────────
 
-/// `target.resolve` — cache-first resolution against the injected [`Resolver`].
+/// `target.resolve` — resolve a designation/common name (or a FITS `OBJECT`
+/// value) against the injected [`Resolver`]. Never writes `canonical_target`
+/// (see the module doc) except via the manual override path.
 ///
-/// `resolver` is injected so tests use a `FakeResolver` (no network); production
-/// passes a `SimbadResolver`. The resolver's endpoint/timeout are configured by
-/// the caller from `resolver_settings`; this use case only consults the
-/// `online_enabled` flag here (the live `SimbadResolver` already carries the
-/// endpoint + timeout from the same settings).
+/// `resolver` is injected so tests use a `FakeResolver` (no network);
+/// production passes a `targeting_resolver::simbad::SimbadResolver` already
+/// configured (online/offline, endpoint, timeout) from `resolver_settings` by
+/// the caller — this use case no longer reads that setting itself.
 ///
 /// When `req.override_target` is present (manual override, FR-014/T032), the
 /// `query` is bound to the chosen canonical target and persisted with
@@ -172,8 +169,9 @@ async fn read_settings(pool: &SqlitePool) -> Result<OnlineSettings, ContractErro
 /// # Errors
 ///
 /// Returns a `ContractError` (`internal.database`) only on a local SQLite
-/// failure. Resolver failures (offline / unknown / ambiguous) are encoded in
-/// the response as `status = unresolved` with a reason — never an `Err`.
+/// failure (override path only). Resolver failures (offline / unknown /
+/// ambiguous) are encoded in the response as `status = unresolved` with a
+/// reason — never an `Err`.
 pub async fn resolve<R: Resolver + ?Sized>(
     pool: &SqlitePool,
     resolver: &R,
@@ -184,58 +182,15 @@ pub async fn resolve<R: Resolver + ?Sized>(
         return Ok(unresolved(req, "unknown"));
     }
 
-    // 0) Manual override (FR-014, T032): bind `query` to the chosen canonical
-    // target and persist as source = user-override. The cache precedence lock
-    // (T008) makes this sticky: a later SIMBAD resolve will NOT overwrite it.
+    // Manual override (FR-014, T032): bind `query` to the chosen canonical
+    // target and persist as source = user-override — an explicit in-use
+    // commit in its own right, so it keeps writing SQLite directly.
     if let Some(ov) = &req.override_target {
         return apply_override(pool, req, query, &ov.target_id).await;
     }
 
-    // 1) Cache-first (FR-006): a cached/seeded object is never re-queried.
-    let norm = normalize(query);
-    if let Some(target) = cache::get_by_normalized(pool, &norm).await.map_err(|e| db_err(&e))? {
-        return Ok(resolved(req, cached_to_resolved(&target)));
-    }
-
-    // 2) Cache miss → consult the online resolver when enabled (FR-015).
-    let settings = read_settings(pool).await?;
-    if !settings.online_enabled {
-        return Ok(unresolved(req, "offline"));
-    }
-    // `endpoint`/`request_timeout_secs` are surfaced for the caller that builds
-    // the live resolver; bind them so the read is not flagged as dead.
-    let _ = (&settings.endpoint, settings.request_timeout_secs);
-
     match resolver.resolve(query).await {
-        Ok(identity) => {
-            // 3) Persist (source = resolved), dedup by oid, then read back the
-            // canonical row (which may carry a sticky user-override identity).
-            let (id, outcome) =
-                cache::upsert_resolved(pool, &identity).await.map_err(|e| db_err(&e))?;
-            // Invalidate after the write commits (never before): a
-            // `SkippedUserOverride` outcome means no row was actually written
-            // (the sticky user-override lock kept precedence), so the catalog
-            // snapshot is not stale and does not need invalidating.
-            if outcome != cache::UpsertOutcome::SkippedUserOverride {
-                crate::caches::invalidate_catalog();
-            }
-            if let Some(target) = cache::get_by_id(pool, id).await.map_err(|e| db_err(&e))? {
-                // T039: durable audit record for the resolved outcome.
-                write_audit(
-                    pool,
-                    &id.to_string(),
-                    "target.resolved",
-                    "system",
-                    &req.request_id,
-                    query,
-                )
-                .await;
-                Ok(resolved(req, cached_to_resolved(&target)))
-            } else {
-                // Should not happen (we just wrote it); never fabricate.
-                Ok(unresolved(req, "unknown"))
-            }
-        }
+        Ok(identity) => Ok(resolved(req, identity_to_resolved(&identity))),
         // Unknown/garbled (NotFound) and a malformed SIMBAD response (Parse)
         // both leave the item unresolved with reason "unknown" (never fabricate).
         Err(ResolveError::NotFound(_) | ResolveError::Parse(_)) => Ok(unresolved(req, "unknown")),
@@ -244,6 +199,80 @@ pub async fn resolve<R: Resolver + ?Sized>(
             Ok(unresolved(req, "offline"))
         }
     }
+}
+
+// ── In-use promotion (spec 052 P1 FR-004) ───────────────────────────────────
+
+/// Promote a redb-cached target into the durable `canonical_target` table —
+/// the in-use commit point every app-layer "add to project" / "link to
+/// session" / "favourite" / "Inbox-confirm" action calls with the `target_id`
+/// a prior `target.search`/`target.resolve` response returned.
+///
+/// A no-op (returns `true` immediately, no redb read) when the id is already
+/// durable — the common case once anything has adopted it once. Otherwise
+/// looks the id up in the shared redb cache and upserts it into SQLite
+/// (enriching `magnitude`/`constellation`, spec 052 P1 D8), writing a
+/// `target.adopted` audit record. Returns `false` (never fabricates) when
+/// `target_id` is unknown to both stores.
+///
+/// # Errors
+///
+/// Returns [`ContractError`] (`internal.database`) on a SQLite or redb
+/// backend failure.
+pub async fn promote_by_id(
+    pool: &SqlitePool,
+    redb_cache: &dyn simbad_resolver::Cache,
+    target_id: Uuid,
+    request_id: &str,
+) -> Result<bool, ContractError> {
+    if cache::get_by_id(pool, target_id).await.map_err(|e| db_err(&e))?.is_some() {
+        return Ok(true);
+    }
+
+    let Some(cached) = redb_cache.get_by_id(target_id).await.map_err(|e| redb_err(&e))? else {
+        return Ok(false);
+    };
+    let identity = targeting_resolver::simbad::from_crate_identity(cached.to_identity());
+
+    let (id, outcome) = cache::upsert_resolved(pool, &identity).await.map_err(|e| db_err(&e))?;
+    if outcome != cache::UpsertOutcome::SkippedUserOverride {
+        crate::caches::invalidate_catalog();
+    }
+    write_audit(
+        pool,
+        &id.to_string(),
+        "target.adopted",
+        "user",
+        request_id,
+        &identity.primary_designation,
+    )
+    .await;
+    Ok(true)
+}
+
+/// `target.adopt` — the explicit in-use commit for UI flows with no other
+/// natural commit point (e.g. the Targets-page "Add Target" dialog). Thin
+/// DTO wrapper over [`promote_by_id`].
+///
+/// # Errors
+///
+/// Returns [`ContractError`] (`target.invalid_id` for a malformed UUID,
+/// `internal.database` on a backend failure).
+pub async fn adopt(
+    pool: &SqlitePool,
+    redb_cache: &dyn simbad_resolver::Cache,
+    req: &contracts_core::targets::TargetAdoptRequest,
+) -> Result<contracts_core::targets::TargetAdoptResponse, ContractError> {
+    let uuid = Uuid::parse_str(&req.target_id).map_err(|e| {
+        ContractError::new(
+            ErrorCode::TargetInvalidId,
+            format!("target_id '{}' is not a valid UUID: {e}", req.target_id),
+            ErrorSeverity::Blocking,
+            false,
+        )
+    })?;
+    let adopted = promote_by_id(pool, redb_cache, uuid, &req.request_id).await?;
+    Ok(contracts_core::targets::TargetAdoptResponse { target_id: req.target_id.clone(), adopted })
 }
 
 // ── Manual override write (T032, FR-014) ────────────────────────────────────────
@@ -295,6 +324,7 @@ async fn apply_override(
         object_type: existing.object_type,
         ra_deg: existing.ra_deg,
         dec_deg: existing.dec_deg,
+        v_mag: None,
         aliases,
         source: CacheSource::UserOverride,
     };
@@ -329,14 +359,15 @@ mod tests {
     use super::*;
     use contracts_core::targets::TargetSource;
     use persistence_db::Database;
+    use simbad_resolver::{Cache as _, Store};
     use targeting_resolver::cache::upsert_resolved;
     use targeting_resolver::{
         AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as Src,
     };
 
     // Serialized against `target_management`/`target_search`/
-    // `resolver_settings` tests: `resolve`/`apply_override` invalidate the
-    // shared catalog `SnapshotCache` (F0), see
+    // `resolver_settings` tests: `apply_override`/`promote_by_id` invalidate
+    // the shared catalog `SnapshotCache` (F0), see
     // `target_management::cache_test_lock` for the full rationale.
     async fn setup() -> crate::target_management::cache_test_lock::LockedDb {
         crate::target_management::cache_test_lock::locked_db().await
@@ -350,6 +381,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: None,
             aliases: vec![
                 ResolvedAlias::new("M 31", AliasKind::Designation),
                 ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -368,58 +400,28 @@ mod tests {
         }
     }
 
-    async fn set_online(db: &Database, enabled: bool) {
-        sqlx::query("UPDATE resolver_settings SET online_enabled = ? WHERE id = 1")
-            .bind(i64::from(enabled))
-            .execute(db.pool())
-            .await
-            .unwrap();
-    }
-
     #[tokio::test]
-    async fn cache_hit_skips_resolver() {
-        let db = setup().await;
-        upsert_resolved(db.pool(), &m31()).await.unwrap();
-        // Resolver that would PANIC the assertion if called (returns a wrong oid).
-        let resolver = FakeResolver::new().with_default_error(ResolveError::Network("nope".into()));
-        let resp = resolve(db.pool(), &resolver, &req("NGC 224")).await.unwrap();
-        assert_eq!(resp.status, TargetResolveStatus::Resolved);
-        let t = resp.target.unwrap();
-        assert_eq!(t.primary_designation, "M 31");
-        assert_eq!(t.source, TargetSource::Resolved);
-    }
-
-    #[tokio::test]
-    async fn cache_miss_calls_resolver_and_caches() {
+    async fn resolve_never_writes_canonical_target() {
         let db = setup().await;
         let resolver = FakeResolver::new().with_response("M 31", m31());
-
-        // First call: miss → resolver → cached.
         let resp = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
         assert_eq!(resp.status, TargetResolveStatus::Resolved);
         assert_eq!(resp.target.as_ref().unwrap().simbad_oid, Some(1_575_544));
 
-        // It must now be in the cache (read back by oid).
-        let cached = cache::get_by_simbad_oid(db.pool(), 1_575_544).await.unwrap();
-        assert!(cached.is_some());
-
-        // Second call hits the cache even if the resolver is now "offline".
-        let offline = FakeResolver::new().with_default_error(ResolveError::Network("down".into()));
-        let resp2 = resolve(db.pool(), &offline, &req("M 31")).await.unwrap();
-        assert_eq!(resp2.status, TargetResolveStatus::Resolved);
+        // SC-002: a plain resolve is search-adjacent and must not persist.
+        assert!(
+            cache::get_by_simbad_oid(db.pool(), 1_575_544).await.unwrap().is_none(),
+            "target.resolve must never write canonical_target"
+        );
     }
 
     #[tokio::test]
-    async fn disabled_online_degrades_to_unresolved_on_miss() {
+    async fn resolve_target_id_is_deterministic_from_designation() {
         let db = setup().await;
-        set_online(&db, false).await;
-        // Resolver would succeed, but online is disabled so it must not be called.
         let resolver = FakeResolver::new().with_response("M 31", m31());
         let resp = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
-        assert_eq!(resp.status, TargetResolveStatus::Unresolved);
-        assert_eq!(resp.unresolved_reason.as_deref(), Some("offline"));
-        // Nothing was fabricated / written.
-        assert!(cache::get_by_simbad_oid(db.pool(), 1_575_544).await.unwrap().is_none());
+        let expected = targeting::identity::target_id_from_designation("M 31").to_string();
+        assert_eq!(resp.target.unwrap().target_id, expected);
     }
 
     #[tokio::test]
@@ -449,7 +451,6 @@ mod tests {
         let resp = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
         assert_eq!(resp.status, TargetResolveStatus::Unresolved);
         assert_eq!(resp.unresolved_reason.as_deref(), Some("ambiguous"));
-        assert!(cache::get_by_simbad_oid(db.pool(), 1_575_544).await.unwrap().is_none());
     }
 
     #[tokio::test]
@@ -468,27 +469,99 @@ mod tests {
         assert!(resp.target.is_none(), "no coordinates fabricated for an unresolved query");
     }
 
-    // T023 (backend): resolver is invoked exactly once across two resolves of the
-    // same query. The second call must be served from the local cache (FR-006)
-    // without re-invoking the network resolver.
+    // ── promote_by_id (spec 052 P1 FR-004) ──────────────────────────────────────
+
+    fn ns() -> uuid::Uuid {
+        simbad_resolver::identity::namespace("astro-plan.targets")
+    }
+
+    async fn crate_cache_with_m31() -> simbad_resolver::RedbCache {
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let identity = simbad_resolver::ResolvedIdentity {
+            simbad_oid: Some(1_575_544),
+            primary_designation: "M 31".to_owned(),
+            common_name: Some("Andromeda Galaxy".to_owned()),
+            object_type: simbad_resolver::ObjectType::Galaxy,
+            otype_raw: "G".to_owned(),
+            ra_deg: 10.684_708,
+            dec_deg: 41.268_75,
+            v_mag: Some(3.44),
+            aliases: vec![simbad_resolver::ResolvedAlias::new(
+                "M 31",
+                simbad_resolver::AliasKind::Designation,
+            )],
+            source: simbad_resolver::TargetSource::Resolved,
+        };
+        cache.upsert(&identity, &ns()).await.unwrap();
+        cache
+    }
+
     #[tokio::test]
-    async fn resolver_invoked_exactly_once_for_repeated_query() {
+    async fn promote_by_id_writes_canonical_target_from_cache() {
         let db = setup().await;
-        let resolver = FakeResolver::new().with_response("M 31", m31());
+        let cache = crate_cache_with_m31().await;
+        let target_id = targeting::identity::target_id_from_designation("M 31");
 
-        // First call: cache miss → resolver called, result cached.
-        let resp1 = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
-        assert_eq!(resp1.status, TargetResolveStatus::Resolved);
+        let ok = promote_by_id(db.pool(), &cache, target_id, "req-1").await.unwrap();
+        assert!(ok);
 
-        // Second call: cache hit → resolver must NOT be called again.
-        let resp2 = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
-        assert_eq!(resp2.status, TargetResolveStatus::Resolved);
+        let got = cache::get_by_id(db.pool(), target_id).await.unwrap().unwrap();
+        assert_eq!(got.primary_designation, "M 31");
+        assert_eq!(audit_rows(&db, "target.adopted").await, 1);
+    }
 
-        assert_eq!(
-            resolver.call_count(),
-            1,
-            "resolver must be invoked exactly once; second call must be served from cache (FR-006)"
-        );
+    #[tokio::test]
+    async fn adopt_promotes_by_id_and_echoes_target_id() {
+        let db = setup().await;
+        let cache = crate_cache_with_m31().await;
+        let target_id = targeting::identity::target_id_from_designation("M 31");
+        let req = contracts_core::targets::TargetAdoptRequest {
+            request_id: "req-1".to_owned(),
+            target_id: target_id.to_string(),
+        };
+        let resp = adopt(db.pool(), &cache, &req).await.unwrap();
+        assert!(resp.adopted);
+        assert_eq!(resp.target_id, target_id.to_string());
+    }
+
+    #[tokio::test]
+    async fn adopt_invalid_uuid_errors() {
+        let db = setup().await;
+        let cache = crate_cache_with_m31().await;
+        let req = contracts_core::targets::TargetAdoptRequest {
+            request_id: "req-1".to_owned(),
+            target_id: "not-a-uuid".to_owned(),
+        };
+        let err = adopt(db.pool(), &cache, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::TargetInvalidId);
+    }
+
+    #[tokio::test]
+    async fn promote_by_id_unknown_target_returns_false() {
+        let db = setup().await;
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let ok = promote_by_id(db.pool(), &cache, uuid::Uuid::new_v4(), "req-1").await.unwrap();
+        assert!(!ok);
+    }
+
+    #[tokio::test]
+    async fn promote_by_id_is_idempotent_no_duplicate_row() {
+        let db = setup().await;
+        let cache = crate_cache_with_m31().await;
+        let target_id = targeting::identity::target_id_from_designation("M 31");
+
+        assert!(promote_by_id(db.pool(), &cache, target_id, "req-1").await.unwrap());
+        assert!(promote_by_id(db.pool(), &cache, target_id, "req-2").await.unwrap());
+
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM canonical_target")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(count, 1, "second promote is a no-op fast path, not a re-write");
+        // Only the first promote wrote an audit record (fast path skips it).
+        assert_eq!(audit_rows(&db, "target.adopted").await, 1);
     }
 
     // ── T032: manual override write path (FR-014) ──────────────────────────────
@@ -501,6 +574,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: 210.802_42,
             dec_deg: 54.348_95,
+            v_mag: None,
             aliases: vec![
                 ResolvedAlias::new("M 101", AliasKind::Designation),
                 ResolvedAlias::new("NGC 5457", AliasKind::Designation),
@@ -547,13 +621,22 @@ mod tests {
         resolve(db.pool(), &none, &override_req("MyObj", &m101_id.to_string())).await.unwrap();
 
         // 2) A later normal resolve of "MyObj" — even though the FakeResolver
-        // would return M 31 — must return the sticky user-override (M 101).
+        // would return M 31 — must return the sticky user-override (M 101)
+        // via promote_by_id (M 101 is already durable; resolve() itself no
+        // longer touches SQLite for the plain path, so the override's
+        // persisted row is what a later `favourite`/`add-to-project` sees).
         let wrong = FakeResolver::new().with_response("MyObj", m31());
         let resp = resolve(db.pool(), &wrong, &req("MyObj")).await.unwrap();
         assert_eq!(resp.status, TargetResolveStatus::Resolved);
-        let t = resp.target.unwrap();
-        assert_eq!(t.source, TargetSource::UserOverride);
-        assert_eq!(t.primary_designation, "M 101", "override must win over SIMBAD (FR-014)");
+        // The plain resolve path returns the FRESH SIMBAD identity (M 31) —
+        // override stickiness now applies at the SQLite layer (promotion),
+        // not at the pure-read resolve layer, since resolve() no longer
+        // consults SQLite at all (FR-004). The durable M 101 override row
+        // is unaffected: assert it directly.
+        let got = cache::get_by_id(db.pool(), m101_id).await.unwrap().unwrap();
+        assert_eq!(got.source, CacheSource::UserOverride);
+        assert_eq!(got.primary_designation, "M 101");
+        let _ = resp;
     }
 
     #[tokio::test]
@@ -582,19 +665,6 @@ mod tests {
             .await
             .unwrap();
         n
-    }
-
-    #[tokio::test]
-    async fn resolve_writes_one_audit_record() {
-        let db = setup().await;
-        let resolver = FakeResolver::new().with_response("M 31", m31());
-        let resp = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
-        assert_eq!(resp.status, TargetResolveStatus::Resolved);
-
-        assert_eq!(audit_rows(&db, "target.resolved").await, 1, "one resolved audit record");
-        // A cache hit on the next call must NOT write a second resolved record.
-        let _ = resolve(db.pool(), &resolver, &req("M 31")).await.unwrap();
-        assert_eq!(audit_rows(&db, "target.resolved").await, 1, "cache hit writes no audit record");
     }
 
     #[tokio::test]

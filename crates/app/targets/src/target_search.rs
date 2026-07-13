@@ -1,44 +1,31 @@
 //! `target.search` use case for spec 035 (US1 — project-creation target search).
 //!
-//! As-you-type target search served PURELY from the local seed + cache index.
-//! There is NO network in this path (FR-005): long-tail / SIMBAD enrichment is
-//! a separate `target.resolve` call. Results are ranked best-first (exact →
-//! prefix → substring) and de-duplicated to one canonical target per hit.
-//!
-//! Candidate ranking runs in memory against the whole-catalog snapshot
-//! (`crate::target_management::list`, backed by `crate::caches::catalog` — the
-//! in-memory caching layer F0) instead of a per-keystroke SQLite `LIKE` scan
-//! (`targeting_resolver::cache::search_by_normalized`, still used by nothing
-//! in this module — kept as the source of truth for the ranking scheme this
-//! mirrors). The winning targets (bounded by `limit`) are still hydrated via
-//! [`targeting_resolver::cache::get_by_id`] — an indexed point lookup, the
-//! same cost `search_by_normalized` already paid per hit — because the
-//! catalog snapshot's `aliases: Vec<String>` carries no alias-kind tag, so
-//! `common_name`/`source`/catalogue-membership derivation still need the full
-//! `CachedTarget`.
+//! As-you-type target search served PURELY from the shared redb resolve cache
+//! (spec 052 P1 D1) — no network, and (per FR-004/SC-002) no SQLite write:
+//! browsing/typeahead never creates a `canonical_target` row. Long-tail /
+//! SIMBAD enrichment is a separate `target.resolve` call. Results are ranked
+//! best-first (exact → prefix → substring, plus fuzzy when the caller's
+//! `SimbadResolver` was built with fuzzy enabled) and de-duplicated to one
+//! canonical target per hit by the facade itself.
 //!
 //! ## Constitution
 //!
-//! - §I No filesystem mutations: this use case only reads SQLite metadata.
+//! - §I No filesystem mutations: this use case only reads the redb cache.
 //! - §III Metadata/identity only — no image processing.
-//! - §V SQLite (seed + resolution cache) is the durable record queried here.
-
-use std::collections::HashMap;
-
-use sqlx::SqlitePool;
-use uuid::Uuid;
+//! - §V SQLite stays the durable record for in-use targets; the redb cache
+//!   queried here is an explicitly reproducible projection (never written to
+//!   from this use case).
 
 use contracts_core::targets::{
-    TargetCatalogId, TargetListItem, TargetSearchRequest, TargetSearchResponse, TargetSuggestion,
+    TargetCatalogId, TargetSearchRequest, TargetSearchResponse, TargetSuggestion,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
-use targeting::normalize::normalize;
-use targeting_resolver::cache::{get_by_id, CachedTarget, SearchHit};
+use targeting_resolver::cache::{CachedTarget, SearchHit};
 use targeting_resolver::AliasKind;
 
 // ── Error mapping ───────────────────────────────────────────────────────────
 
-fn db_err(e: &targeting_resolver::cache::CacheError) -> ContractError {
+fn cache_err(e: &simbad_resolver::CacheError) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
@@ -116,130 +103,45 @@ fn hit_to_suggestion(hit: SearchHit) -> TargetSuggestion {
     }
 }
 
-// ── In-memory typeahead ranking (F0 W-TARGETS) ──────────────────────────────
-//
-// Mirrors `targeting_resolver::cache::search_by_normalized`'s ranking scheme
-// exactly (rank buckets, dedup-by-target, tie-break order) so switching the
-// candidate source from a SQLite `LIKE` scan to the in-memory catalog
-// snapshot does not change result ordering or content.
-
-/// Rank bucket: `0` = exact normalized match, `1` = prefix, `2` = substring.
-const RANK_EXACT: u8 = 0;
-const RANK_PREFIX: u8 = 1;
-const RANK_SUBSTRING: u8 = 2;
-
-/// The best matching alias seen so far for one target during in-memory dedup.
-struct Best {
-    alias: String,
-    normalized_len: usize,
-    rank: u8,
-}
-
-impl Best {
-    /// A lower rank wins; ties break on the shorter matched alias.
-    fn is_better_than(&self, other: &Self) -> bool {
-        (self.rank, self.normalized_len) < (other.rank, other.normalized_len)
-    }
-}
-
-/// Rank every alias of every catalog item against the normalized (non-empty)
-/// query `q`, keeping each target's single best-ranked alias, then return
-/// `(target_id, matched_alias, rank)` sorted best-first and truncated to
-/// `limit`.
-///
-/// The catalog snapshot's `aliases` list is sourced from the same
-/// `target_alias` rows `search_by_normalized`'s SQL scans (including the
-/// primary designation, which is always one of its own aliases), so matching
-/// over it reproduces the same candidate set.
-fn rank_catalog(items: &[TargetListItem], q: &str, limit: usize) -> Vec<(String, String, u8)> {
-    let mut best_by_target: HashMap<&str, Best> = HashMap::new();
-    for item in items {
-        for alias in &item.aliases {
-            let normalized = normalize(alias);
-            if !normalized.contains(q) {
-                continue;
-            }
-            let rank = if normalized == q {
-                RANK_EXACT
-            } else if normalized.starts_with(q) {
-                RANK_PREFIX
-            } else {
-                RANK_SUBSTRING
-            };
-            let candidate = Best { alias: alias.clone(), normalized_len: normalized.len(), rank };
-            match best_by_target.entry(item.id.as_str()) {
-                std::collections::hash_map::Entry::Occupied(mut e) => {
-                    if candidate.is_better_than(e.get()) {
-                        e.insert(candidate);
-                    }
-                }
-                std::collections::hash_map::Entry::Vacant(e) => {
-                    e.insert(candidate);
-                }
-            }
-        }
-    }
-
-    let mut ranked: Vec<(&str, Best)> = best_by_target.into_iter().collect();
-    ranked.sort_by(|(_, a), (_, b)| {
-        (a.rank, a.normalized_len, a.alias.as_str()).cmp(&(
-            b.rank,
-            b.normalized_len,
-            b.alias.as_str(),
-        ))
-    });
-    ranked.truncate(limit);
-    ranked.into_iter().map(|(id, best)| (id.to_owned(), best.alias, best.rank)).collect()
-}
-
 // ── search ──────────────────────────────────────────────────────────────────
 
-/// `target.search` — ranked typeahead suggestions from local seed + cache.
+/// `target.search` — ranked typeahead suggestions from the shared redb resolve
+/// cache (seed + anything the facade has resolved/warmed, spec 052 P1 D1/T012).
 ///
 /// Respects `limit` (default 20, see the request DTO). A blank query yields an
 /// empty suggestion list. Both optional filters are applied as a post-filter and
 /// AND together: `catalog_filter` against the target's catalogue membership
 /// (derived from its alias designations) and `type_filter` against the object
-/// type.
+/// type. Over-fetches a bounded multiple of `limit` from the cache before
+/// filtering, so a narrow filter still fills the page.
 ///
 /// # Errors
 ///
 /// Returns a `ContractError` (`internal.database`) when the local cache query
 /// fails. There is no network in this path, so there is no resolver error here.
 pub async fn search(
-    pool: &SqlitePool,
+    cache: &dyn simbad_resolver::Cache,
     req: &TargetSearchRequest,
 ) -> Result<TargetSearchResponse, ContractError> {
     let limit = if req.limit == 0 { 20 } else { req.limit as usize };
 
-    let q = normalize(&req.query);
-    let ranked: Vec<(String, String, u8)> = if q.is_empty() {
-        Vec::new()
-    } else {
-        let catalog = crate::target_management::list(pool).await?;
-        rank_catalog(&catalog, &q, limit)
-    };
-
-    // Hydrate each winning target's full row (needed for `common_name`/
-    // `source` and catalogue derivation, neither of which survives in the
-    // flat `aliases: Vec<String>` snapshot) — an indexed point lookup per hit.
-    let mut hits = Vec::with_capacity(ranked.len());
-    for (target_id, matched_alias, rank) in ranked {
-        let Ok(uuid) = Uuid::parse_str(&target_id) else { continue };
-        if let Some(target) = get_by_id(pool, uuid).await.map_err(|e| db_err(&e))? {
-            hits.push(SearchHit { target, matched_alias, rank });
-        }
-    }
-
-    // Both filters AND together (T029): catalogue membership is derived from the
-    // target's alias designations; the type filter checks the object type.
     let catalog_filter = &req.catalog_filter;
     let type_filter = &req.type_filter;
+    let fetch_cap = if catalog_filter.is_empty() && type_filter.is_empty() {
+        limit
+    } else {
+        (limit.saturating_mul(8)).clamp(limit, 500)
+    };
+
+    let hits = cache.search(&req.query, fetch_cap).await.map_err(|e| cache_err(&e))?;
+
     let suggestions: Vec<TargetSuggestion> = hits
         .into_iter()
+        .map(targeting_resolver::simbad::from_crate_search_hit)
         .filter(|hit| matches_catalog_filter(&hit.target, catalog_filter))
         .map(hit_to_suggestion)
         .filter(|s| type_filter.is_empty() || type_filter.contains(&s.object_type))
+        .take(limit)
         .collect();
 
     Ok(TargetSearchResponse {
@@ -253,56 +155,59 @@ pub async fn search(
 mod tests {
     use super::*;
     use contracts_core::targets::{TargetObjectType, TargetSource};
-    use persistence_db::Database;
-    use targeting_resolver::cache::upsert_resolved;
-    use targeting_resolver::{
-        AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as CacheSource,
+    use simbad_resolver::{
+        AliasKind as CrateAliasKind, Cache as _, ObjectType as CrateObjectType,
+        ResolvedAlias as CrateResolvedAlias, ResolvedIdentity as CrateResolvedIdentity, Store,
+        TargetSource as CrateTargetSource,
     };
 
-    // Serialized against `target_management`/`target_resolve`/
-    // `resolver_settings` tests: `search` reads through the shared catalog
-    // `SnapshotCache` (F0), see `target_management::cache_test_lock` for the
-    // full rationale.
-    async fn setup() -> crate::target_management::cache_test_lock::LockedDb {
-        crate::target_management::cache_test_lock::locked_db().await
+    fn ns() -> uuid::Uuid {
+        simbad_resolver::identity::namespace("astro-plan.targets")
     }
 
-    fn m31() -> ResolvedIdentity {
-        ResolvedIdentity {
+    fn m31() -> CrateResolvedIdentity {
+        CrateResolvedIdentity {
             simbad_oid: Some(1_575_544),
             primary_designation: "M 31".to_owned(),
             common_name: Some("Andromeda Galaxy".to_owned()),
-            object_type: ObjectType::Galaxy,
+            object_type: CrateObjectType::Galaxy,
+            otype_raw: "G".to_owned(),
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: None,
             aliases: vec![
-                ResolvedAlias::new("M 31", AliasKind::Designation),
-                ResolvedAlias::new("NGC 224", AliasKind::Designation),
-                ResolvedAlias::new("Andromeda Galaxy", AliasKind::CommonName),
+                CrateResolvedAlias::new("M 31", CrateAliasKind::Designation),
+                CrateResolvedAlias::new("NGC 224", CrateAliasKind::Designation),
+                CrateResolvedAlias::new("Andromeda Galaxy", CrateAliasKind::CommonName),
             ],
-            source: CacheSource::Seed,
+            source: CrateTargetSource::Seed,
         }
     }
 
-    fn ngc7000() -> ResolvedIdentity {
-        ResolvedIdentity {
+    fn ngc7000() -> CrateResolvedIdentity {
+        CrateResolvedIdentity {
             simbad_oid: Some(2_222_222),
             primary_designation: "NGC 7000".to_owned(),
             common_name: Some("North America Nebula".to_owned()),
-            object_type: ObjectType::EmissionNebula,
+            object_type: CrateObjectType::EmissionNebula,
+            otype_raw: "EmO".to_owned(),
             ra_deg: 314.75,
             dec_deg: 44.366,
+            v_mag: None,
             aliases: vec![
-                ResolvedAlias::new("NGC 7000", AliasKind::Designation),
-                ResolvedAlias::new("North America Nebula", AliasKind::CommonName),
+                CrateResolvedAlias::new("NGC 7000", CrateAliasKind::Designation),
+                CrateResolvedAlias::new("North America Nebula", CrateAliasKind::CommonName),
             ],
-            source: CacheSource::Resolved,
+            source: CrateTargetSource::Resolved,
         }
     }
 
-    async fn seed(db: &Database) {
-        upsert_resolved(db.pool(), &m31()).await.unwrap();
-        upsert_resolved(db.pool(), &ngc7000()).await.unwrap();
+    async fn seeded_cache() -> simbad_resolver::RedbCache {
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        cache.upsert(&m31(), &ns()).await.unwrap();
+        cache.upsert(&ngc7000(), &ns()).await.unwrap();
+        cache
     }
 
     fn req(query: &str) -> TargetSearchRequest {
@@ -318,9 +223,8 @@ mod tests {
 
     #[tokio::test]
     async fn search_maps_cached_target_to_suggestion() {
-        let db = setup().await;
-        seed(&db).await;
-        let resp = search(db.pool(), &req("M 31")).await.unwrap();
+        let cache = seeded_cache().await;
+        let resp = search(&cache, &req("M 31")).await.unwrap();
         assert_eq!(resp.suggestions.len(), 1);
         let s = &resp.suggestions[0];
         assert_eq!(s.primary_designation, "M 31");
@@ -328,111 +232,111 @@ mod tests {
         assert_eq!(s.object_type, TargetObjectType::Galaxy);
         assert_eq!(s.source, TargetSource::Seed);
         assert_eq!(s.matched_alias.as_deref(), Some("M 31"));
-        // target_id round-trips through the cache's UUIDv5.
         assert!(!s.target_id.is_empty());
     }
 
     #[tokio::test]
     async fn search_prefix_returns_ranked_local_matches() {
-        let db = setup().await;
-        seed(&db).await;
-        let resp = search(db.pool(), &req("NGC")).await.unwrap();
+        let cache = seeded_cache().await;
+        let resp = search(&cache, &req("NGC")).await.unwrap();
         // "NGC 224" (M31) and "NGC 7000" both prefix-match.
         assert_eq!(resp.suggestions.len(), 2);
     }
 
     #[tokio::test]
     async fn search_respects_limit() {
-        let db = setup().await;
-        seed(&db).await;
+        let cache = seeded_cache().await;
         let mut r = req("nebula");
         r.limit = 1;
-        let resp = search(db.pool(), &r).await.unwrap();
+        let resp = search(&cache, &r).await.unwrap();
         assert!(resp.suggestions.len() <= 1);
     }
 
     #[tokio::test]
     async fn search_zero_limit_defaults_to_20() {
-        let db = setup().await;
-        seed(&db).await;
+        let cache = seeded_cache().await;
         let mut r = req("NGC");
         r.limit = 0;
-        let resp = search(db.pool(), &r).await.unwrap();
+        let resp = search(&cache, &r).await.unwrap();
         assert_eq!(resp.suggestions.len(), 2);
     }
 
     #[tokio::test]
     async fn search_type_filter_narrows_results() {
-        let db = setup().await;
-        seed(&db).await;
+        let cache = seeded_cache().await;
         let mut r = req("NGC");
         r.type_filter = vec![TargetObjectType::EmissionNebula];
-        let resp = search(db.pool(), &r).await.unwrap();
+        let resp = search(&cache, &r).await.unwrap();
         assert_eq!(resp.suggestions.len(), 1);
         assert_eq!(resp.suggestions[0].primary_designation, "NGC 7000");
     }
 
     #[tokio::test]
     async fn search_catalog_filter_messier_narrows_to_m31() {
-        let db = setup().await;
-        seed(&db).await;
+        let cache = seeded_cache().await;
         // "NGC" prefix-matches both M31 (NGC 224) and NGC 7000, but only M31
         // also belongs to the Messier catalogue.
         let mut r = req("NGC");
         r.catalog_filter = vec![TargetCatalogId::Messier];
-        let resp = search(db.pool(), &r).await.unwrap();
+        let resp = search(&cache, &r).await.unwrap();
         assert_eq!(resp.suggestions.len(), 1);
         assert_eq!(resp.suggestions[0].primary_designation, "M 31");
     }
 
     #[tokio::test]
     async fn search_catalog_filter_openngc_matches_both() {
-        let db = setup().await;
-        seed(&db).await;
+        let cache = seeded_cache().await;
         let mut r = req("NGC");
         r.catalog_filter = vec![TargetCatalogId::Openngc];
-        let resp = search(db.pool(), &r).await.unwrap();
+        let resp = search(&cache, &r).await.unwrap();
         assert_eq!(resp.suggestions.len(), 2);
     }
 
     #[tokio::test]
     async fn search_catalog_and_type_filter_and_together() {
-        let db = setup().await;
-        seed(&db).await;
+        let cache = seeded_cache().await;
         // openngc ∩ galaxy → only M 31 (NGC 7000 is an emission nebula).
         let mut r = req("NGC");
         r.catalog_filter = vec![TargetCatalogId::Openngc];
         r.type_filter = vec![TargetObjectType::Galaxy];
-        let resp = search(db.pool(), &r).await.unwrap();
+        let resp = search(&cache, &r).await.unwrap();
         assert_eq!(resp.suggestions.len(), 1);
         assert_eq!(resp.suggestions[0].primary_designation, "M 31");
     }
 
     #[tokio::test]
     async fn search_catalog_filter_excludes_non_members() {
-        let db = setup().await;
-        seed(&db).await;
+        let cache = seeded_cache().await;
         // Filtering to Sharpless only → neither seeded target qualifies.
         let mut r = req("NGC");
         r.catalog_filter = vec![TargetCatalogId::Sharpless];
-        let resp = search(db.pool(), &r).await.unwrap();
+        let resp = search(&cache, &r).await.unwrap();
         assert!(resp.suggestions.is_empty());
     }
 
     #[tokio::test]
     async fn search_blank_query_is_empty() {
-        let db = setup().await;
-        seed(&db).await;
-        let resp = search(db.pool(), &req("   ")).await.unwrap();
+        let cache = seeded_cache().await;
+        let resp = search(&cache, &req("   ")).await.unwrap();
         assert!(resp.suggestions.is_empty());
     }
 
     #[tokio::test]
     async fn search_echoes_request_envelope() {
-        let db = setup().await;
-        seed(&db).await;
-        let resp = search(db.pool(), &req("M 31")).await.unwrap();
+        let cache = seeded_cache().await;
+        let resp = search(&cache, &req("M 31")).await.unwrap();
         assert_eq!(resp.contract_version, "1.0");
         assert_eq!(resp.request_id, "req-1");
+    }
+
+    /// SC-002: pure search never writes SQLite — this use case takes no
+    /// `SqlitePool` at all, so there is no `canonical_target` write path to
+    /// exercise here (enforced by the type signature, not a runtime check).
+    #[tokio::test]
+    async fn search_never_touches_sqlite_by_construction() {
+        let cache = seeded_cache().await;
+        let _ = search(&cache, &req("M 31")).await.unwrap();
+        // No `SqlitePool` parameter exists on `search` — nothing to assert at
+        // runtime; this test documents the invariant for future readers.
     }
 }

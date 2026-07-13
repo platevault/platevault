@@ -10,6 +10,11 @@ path = "src/lib.rs"
 [dependencies]
 app_core_cache = { path = "../cache" }
 app_core_errors = { path = "../errors" }
+# spec 052 P1 (scope expansion, ADVICE): project.create promotes the selected
+# canonical target from the shared redb resolve cache into `canonical_target`
+# instead of requiring the row to pre-exist (target.resolve no longer writes
+# it eagerly).
+app_core_targets = { path = "../targets" }
 audit = { path = "../../audit" }
 camino = { workspace = true }
 contracts_core = { path = "../../contracts/core" }
@@ -18,6 +23,7 @@ fs_inventory = { path = "../../fs/inventory" }
 patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
+simbad-resolver = "0.2.0"
 workflow_profiles = { path = "../../workflow/profiles" }
 serde_json.workspace = true
 sqlx.workspace = true

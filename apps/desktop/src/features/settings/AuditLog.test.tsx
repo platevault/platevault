@@ -254,13 +254,19 @@ describe('AuditLog', () => {
     });
 
     render(<AuditLog />);
-    await waitFor(() => expect(mockList).toHaveBeenCalled());
 
-    expect(
-      screen.getByTitle(
-        'Transition ready → prepared for project requires an approved filesystem plan',
-      ),
-    ).toBeInTheDocument();
+    // waitFor on the rendered title (not just "mockList was called") — the
+    // list call resolves asynchronously, so asserting immediately after only
+    // the call-count race with the re-render that actually paints the rows
+    // (observed flaky on a loaded CI runner: assertion ran while the table
+    // still showed "Loading…").
+    await waitFor(() =>
+      expect(
+        screen.getByTitle(
+          'Transition ready → prepared for project requires an approved filesystem plan',
+        ),
+      ).toBeInTheDocument(),
+    );
     expect(
       screen.getByTitle('2 fields require review before this transition'),
     ).toBeInTheDocument();

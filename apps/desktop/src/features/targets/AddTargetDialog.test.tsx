@@ -5,10 +5,10 @@
  * Tests:
  *  1. Dialog is hidden by default.
  *  2. Selecting a suggestion shows the "selected target" confirmation view.
- *  3. "Add target" button calls resolveTarget with the suggestion's primaryDesignation.
- *  4. On resolved status, onAdded is called with the resolved targetId and dialog closes.
- *  5. On unresolved status, an inline error is shown and onAdded is NOT called.
- *  6. On resolveTarget rejection, an error message renders.
+ *  3. "Add target" button calls target.adopt with the suggestion's targetId.
+ *  4. On adopted=true, onAdded is called with the target id and dialog closes.
+ *  5. On adopted=false, an inline error is shown and onAdded is NOT called.
+ *  6. On target.adopt rejection, an error message renders.
  *  7. "Change" resets back to the search view.
  *  8. Confirm button is disabled when no suggestion is pending.
  */
@@ -22,21 +22,23 @@ import {
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
+const { mockSearchTargets, mockAdoptTarget } = vi.hoisted(() => ({
   mockSearchTargets: vi.fn(),
-  mockResolveTarget: vi.fn(),
+  mockAdoptTarget: vi.fn(),
 }));
 
 /** Wrap a value in the generated `{ status: 'ok' }` Result envelope. */
 const ok = <T,>(data: T) => ({ status: 'ok' as const, data });
 
 // AddTargetDialog and its TargetSearch child both call the generated bindings
-// now (spec 037): TargetSearch -> commands.targetSearch, AddTargetDialog ->
-// commands.targetResolve. The real unwrap runs against these Result envelopes.
+// (spec 037/052): TargetSearch -> commands.targetSearch, AddTargetDialog ->
+// commands.targetAdopt (spec 052 P1: confirm is the in-use commit — target.
+// search/target.resolve no longer persist on their own). The real unwrap
+// runs against these Result envelopes.
 vi.mock('@/bindings/index', () => ({
   commands: {
     targetSearch: mockSearchTargets,
-    targetResolve: mockResolveTarget,
+    targetAdopt: mockAdoptTarget,
   },
 }));
 
@@ -56,35 +58,12 @@ const M31: TargetSuggestion = {
   source: 'seed',
 };
 
-function resolved(targetId: string) {
-  return {
-    contractVersion: '1.0',
-    requestId: 'r',
-    status: 'resolved' as const,
-    target: {
-      targetId,
-      primaryDesignation: 'M 31',
-      commonName: null,
-      objectType: 'galaxy',
-      source: 'resolved',
-      raDeg: 10.68,
-      decDeg: 41.27,
-      simbadOid: null,
-    },
-    unresolvedReason: null,
-    error: null,
-  };
+function adopted(targetId: string) {
+  return { targetId, adopted: true };
 }
 
-function unresolved(reason = 'unknown') {
-  return {
-    contractVersion: '1.0',
-    requestId: 'r',
-    status: 'unresolved' as const,
-    target: null,
-    unresolvedReason: reason,
-    error: null,
-  };
+function notAdopted(targetId: string) {
+  return { targetId, adopted: false };
 }
 
 beforeEach(() => {
@@ -97,7 +76,7 @@ beforeEach(() => {
       suggestions: [M31],
     }),
   );
-  mockResolveTarget.mockResolvedValue(ok(resolved('tgt-m31')));
+  mockAdoptTarget.mockResolvedValue(ok(adopted('tgt-m31')));
 });
 
 describe('AddTargetDialog', () => {
@@ -134,7 +113,7 @@ describe('AddTargetDialog', () => {
     });
   });
 
-  it('3. confirm calls resolveTarget with the primaryDesignation', async () => {
+  it('3. confirm calls target.adopt with the selected targetId', async () => {
     const onAdded = vi.fn();
     render(<AddTargetDialog open onClose={vi.fn()} onAdded={onAdded} />);
 
@@ -155,16 +134,16 @@ describe('AddTargetDialog', () => {
     });
 
     await waitFor(() => {
-      expect(mockResolveTarget).toHaveBeenCalledWith(
-        expect.objectContaining({ query: 'M 31', override: null }),
+      expect(mockAdoptTarget).toHaveBeenCalledWith(
+        expect.objectContaining({ targetId: 'tgt-m31' }),
       );
     });
   });
 
-  it('4. resolved status calls onAdded with the target id', async () => {
+  it('4. adopted=true calls onAdded with the target id', async () => {
     const onAdded = vi.fn();
     const onClose = vi.fn();
-    mockResolveTarget.mockResolvedValue(ok(resolved('tgt-m31-persisted')));
+    mockAdoptTarget.mockResolvedValue(ok(adopted('tgt-m31')));
 
     render(<AddTargetDialog open onClose={onClose} onAdded={onAdded} />);
 
@@ -182,13 +161,13 @@ describe('AddTargetDialog', () => {
     });
 
     await waitFor(() => {
-      expect(onAdded).toHaveBeenCalledWith('tgt-m31-persisted');
+      expect(onAdded).toHaveBeenCalledWith('tgt-m31');
     });
   });
 
-  it('5. unresolved status shows error and does not call onAdded', async () => {
+  it('5. adopted=false shows error and does not call onAdded', async () => {
     const onAdded = vi.fn();
-    mockResolveTarget.mockResolvedValue(ok(unresolved('unknown')));
+    mockAdoptTarget.mockResolvedValue(ok(notAdopted('tgt-m31')));
 
     render(<AddTargetDialog open onClose={vi.fn()} onAdded={onAdded} />);
 
@@ -211,9 +190,9 @@ describe('AddTargetDialog', () => {
     expect(onAdded).not.toHaveBeenCalled();
   });
 
-  it('6. resolveTarget rejection shows an error message', async () => {
+  it('6. target.adopt rejection shows an error message', async () => {
     const onAdded = vi.fn();
-    mockResolveTarget.mockRejectedValue(new Error('network_error'));
+    mockAdoptTarget.mockRejectedValue(new Error('network_error'));
 
     render(<AddTargetDialog open onClose={vi.fn()} onAdded={onAdded} />);
 

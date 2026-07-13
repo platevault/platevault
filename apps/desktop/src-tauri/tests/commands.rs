@@ -45,6 +45,15 @@ use desktop_shell::commands::tour::tour_complete_step;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+/// An ephemeral resolve cache + a throwaway path for `AppState::new` in
+/// tests — nothing here ever gets promoted, so an in-memory cache is fine.
+fn test_resolve_cache() -> (targeting_resolver::simbad::ResolveCache, std::path::PathBuf) {
+    (
+        targeting_resolver::simbad::ResolveCache::in_memory().expect("in-memory resolve cache"),
+        std::path::PathBuf::from("test-resolve-cache.redb"),
+    )
+}
+
 /// Build a mock Tauri app with the lifecycle commands and managed `AppState`
 /// backed by an in-memory `SQLite` database.
 async fn mock_lifecycle_app() -> tauri::App<tauri::test::MockRuntime> {
@@ -53,7 +62,8 @@ async fn mock_lifecycle_app() -> tauri::App<tauri::test::MockRuntime> {
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    let state = AppState::new(repo, bus);
+    let (resolve_cache, resolve_cache_path) = test_resolve_cache();
+    let state = AppState::new(repo, bus, resolve_cache, resolve_cache_path);
 
     let app = tauri::test::mock_builder()
         .invoke_handler(tauri::generate_handler![
@@ -174,7 +184,8 @@ async fn make_projects_state() -> AppState {
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    AppState::new(repo, bus)
+    let (resolve_cache, resolve_cache_path) = test_resolve_cache();
+    AppState::new(repo, bus, resolve_cache, resolve_cache_path)
 }
 
 #[tokio::test]
@@ -212,7 +223,9 @@ async fn projects_create_and_list() {
         notes: None,
         canonical_target_id: None,
     };
-    let result = app_core::project_setup::create(state.repo.pool(), &state.bus, &req).await;
+    let cache = state.resolve_cache.read().await.clone();
+    let result =
+        app_core::project_setup::create(state.repo.pool(), &state.bus, &cache.cache(), &req).await;
     assert!(result.is_ok(), "create failed: {result:?}");
     assert_eq!(result.unwrap().lifecycle, "setup_incomplete");
 
@@ -237,7 +250,8 @@ async fn make_plans_state() -> AppState {
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    AppState::new(repo, bus)
+    let (resolve_cache, resolve_cache_path) = test_resolve_cache();
+    AppState::new(repo, bus, resolve_cache, resolve_cache_path)
 }
 
 #[tokio::test]
@@ -850,7 +864,8 @@ async fn lifecycle_transition_apply() {
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    let state = AppState::new(repo, bus);
+    let (resolve_cache, resolve_cache_path) = test_resolve_cache();
+    let state = AppState::new(repo, bus, resolve_cache, resolve_cache_path);
 
     let request = TransitionRequest::Project(ProjectTransitionRequest::new(
         uuid::Uuid::new_v4(),

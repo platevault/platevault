@@ -31,6 +31,7 @@ fn m31_identity() -> ResolvedIdentity {
         object_type: ObjectType::Galaxy,
         ra_deg: 10.684_708,
         dec_deg: 41.268_75,
+        v_mag: None,
         aliases: vec![
             ResolvedAlias::new("M 31", AliasKind::Designation),
             ResolvedAlias::new("NGC 224", AliasKind::Designation),

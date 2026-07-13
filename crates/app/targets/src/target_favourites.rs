@@ -2,8 +2,10 @@
 //! use cases (spec 051 US2).
 //!
 //! Thin orchestration over the `target_favourite` repository functions
-//! (`persistence_db::repositories::target_favourites`): validates the target
-//! exists (for `add`) and maps repository results to contract DTOs.
+//! (`persistence_db::repositories::target_favourites`): promotes the target
+//! from the shared redb resolve cache into `canonical_target` if it is not
+//! already durable (spec 052 P1 FR-004 — favouriting is an in-use commit),
+//! then maps repository results to contract DTOs.
 //!
 //! ## Constitution
 //!
@@ -11,6 +13,7 @@
 //! - §V SQLite (`target_favourite`) is the durable record.
 
 use sqlx::SqlitePool;
+use uuid::Uuid;
 
 use contracts_core::targets::{
     TargetFavouriteAddResult, TargetFavouriteRemoveResult, TargetFavouriteRequest,
@@ -48,16 +51,26 @@ pub async fn list(pool: &SqlitePool) -> Result<TargetFavouritesListResult, Contr
 /// an already-favourited target succeeds with no error and does not reset
 /// `favouritedAt`.
 ///
+/// Promotes the target from the shared redb resolve cache into
+/// `canonical_target` first (spec 052 P1 FR-004: favouriting is an in-use
+/// commit) — `target_id` is a UUID a prior `target.search`/`target.resolve`
+/// response returned, which may not be durable yet.
+///
 /// # Errors
 ///
-/// Returns [`ContractError`] with code `target.not_found` (the id does not
-/// reference an existing `canonical_target` row) or `internal.database`.
+/// Returns [`ContractError`] with code `target.not_found` (the id is not a
+/// valid UUID, or is unknown to both `canonical_target` and the redb cache)
+/// or `internal.database`.
 pub async fn add(
     pool: &SqlitePool,
+    redb_cache: &dyn simbad_resolver::Cache,
     req: &TargetFavouriteRequest,
 ) -> Result<TargetFavouriteAddResult, ContractError> {
-    let exists = target_favourites::target_exists(pool, &req.target_id).await.map_err(db_err)?;
-    if !exists {
+    let uuid = Uuid::parse_str(&req.target_id).map_err(|_| not_found(&req.target_id))?;
+    let promoted =
+        crate::target_resolve::promote_by_id(pool, redb_cache, uuid, "targets.favourites.add")
+            .await?;
+    if !promoted {
         return Err(not_found(&req.target_id));
     }
 
@@ -92,6 +105,7 @@ pub async fn remove(
 mod tests {
     use super::*;
     use persistence_db::Database;
+    use simbad_resolver::{Cache as _, Store};
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");
@@ -99,16 +113,25 @@ mod tests {
         db
     }
 
-    async fn insert_target(pool: &SqlitePool, id: &str) {
+    /// A durable `canonical_target` row already promoted (mirrors a target
+    /// that was already added-to-project/session-linked before favouriting)
+    /// — `promote_by_id`'s fast path finds it without touching the cache.
+    async fn insert_target(pool: &SqlitePool, id: Uuid) {
         sqlx::query(
             "INSERT INTO canonical_target
              (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
              VALUES (?, NULL, 'Test Target', 'galaxy', 10.0, 20.0, 'seed', '2026-01-01T00:00:00Z')",
         )
-        .bind(id)
+        .bind(id.to_string())
         .execute(pool)
         .await
         .expect("insert_target failed");
+    }
+
+    /// An empty redb cache — `add`'s promotion has nothing to fall back to
+    /// beyond an already-durable row (see [`insert_target`]).
+    fn empty_cache() -> simbad_resolver::RedbCache {
+        Store::in_memory().unwrap().cache()
     }
 
     #[tokio::test]
@@ -121,36 +144,92 @@ mod tests {
     #[tokio::test]
     async fn add_then_list_includes_target() {
         let db = setup().await;
-        insert_target(db.pool(), "t-001").await;
+        let id = Uuid::new_v4();
+        insert_target(db.pool(), id).await;
+        let cache = empty_cache();
 
-        let added = add(db.pool(), &TargetFavouriteRequest { target_id: "t-001".to_owned() })
+        let added = add(db.pool(), &cache, &TargetFavouriteRequest { target_id: id.to_string() })
             .await
             .unwrap();
-        assert_eq!(added.target_id, "t-001");
+        assert_eq!(added.target_id, id.to_string());
         assert!(!added.favourited_at.is_empty());
 
         let listed = list(db.pool()).await.unwrap();
-        assert_eq!(listed.target_ids, vec!["t-001".to_owned()]);
+        assert_eq!(listed.target_ids, vec![id.to_string()]);
     }
 
     #[tokio::test]
     async fn add_unknown_target_returns_not_found() {
         let db = setup().await;
-        let err = add(db.pool(), &TargetFavouriteRequest { target_id: "missing".to_owned() })
-            .await
-            .unwrap_err();
+        let cache = empty_cache();
+        let err = add(
+            db.pool(),
+            &cache,
+            &TargetFavouriteRequest { target_id: Uuid::new_v4().to_string() },
+        )
+        .await
+        .unwrap_err();
         assert_eq!(err.code, ErrorCode::TargetNotFound);
+    }
+
+    #[tokio::test]
+    async fn add_invalid_uuid_returns_not_found() {
+        let db = setup().await;
+        let cache = empty_cache();
+        let err =
+            add(db.pool(), &cache, &TargetFavouriteRequest { target_id: "missing".to_owned() })
+                .await
+                .unwrap_err();
+        assert_eq!(err.code, ErrorCode::TargetNotFound);
+    }
+
+    #[tokio::test]
+    async fn add_promotes_from_redb_cache_when_not_yet_durable() {
+        let db = setup().await;
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let ns = simbad_resolver::identity::namespace("astro-plan.targets");
+        let identity = simbad_resolver::ResolvedIdentity {
+            simbad_oid: Some(1_575_544),
+            primary_designation: "M 31".to_owned(),
+            common_name: None,
+            object_type: simbad_resolver::ObjectType::Galaxy,
+            otype_raw: "G".to_owned(),
+            ra_deg: 10.684_708,
+            dec_deg: 41.268_75,
+            v_mag: None,
+            aliases: vec![simbad_resolver::ResolvedAlias::new(
+                "M 31",
+                simbad_resolver::AliasKind::Designation,
+            )],
+            source: simbad_resolver::TargetSource::Resolved,
+        };
+        cache.upsert(&identity, &ns).await.unwrap();
+        let id = targeting::identity::target_id_from_designation("M 31");
+
+        let added = add(db.pool(), &cache, &TargetFavouriteRequest { target_id: id.to_string() })
+            .await
+            .unwrap();
+        assert_eq!(added.target_id, id.to_string());
+
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM canonical_target")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(count, 1, "favouriting must promote the redb-cached target");
     }
 
     #[tokio::test]
     async fn add_twice_is_idempotent_and_preserves_original_timestamp() {
         let db = setup().await;
-        insert_target(db.pool(), "t-002").await;
+        let id = Uuid::new_v4();
+        insert_target(db.pool(), id).await;
+        let cache = empty_cache();
 
-        let first = add(db.pool(), &TargetFavouriteRequest { target_id: "t-002".to_owned() })
+        let first = add(db.pool(), &cache, &TargetFavouriteRequest { target_id: id.to_string() })
             .await
             .unwrap();
-        let second = add(db.pool(), &TargetFavouriteRequest { target_id: "t-002".to_owned() })
+        let second = add(db.pool(), &cache, &TargetFavouriteRequest { target_id: id.to_string() })
             .await
             .unwrap();
 
@@ -163,13 +242,16 @@ mod tests {
     #[tokio::test]
     async fn remove_deletes_and_list_no_longer_includes_it() {
         let db = setup().await;
-        insert_target(db.pool(), "t-003").await;
-        add(db.pool(), &TargetFavouriteRequest { target_id: "t-003".to_owned() }).await.unwrap();
-
-        let removed = remove(db.pool(), &TargetFavouriteRequest { target_id: "t-003".to_owned() })
+        let id = Uuid::new_v4();
+        insert_target(db.pool(), id).await;
+        let cache = empty_cache();
+        add(db.pool(), &cache, &TargetFavouriteRequest { target_id: id.to_string() })
             .await
             .unwrap();
-        assert_eq!(removed.target_id, "t-003");
+
+        let removed =
+            remove(db.pool(), &TargetFavouriteRequest { target_id: id.to_string() }).await.unwrap();
+        assert_eq!(removed.target_id, id.to_string());
 
         let listed = list(db.pool()).await.unwrap();
         assert!(listed.target_ids.is_empty());
@@ -178,10 +260,10 @@ mod tests {
     #[tokio::test]
     async fn remove_of_never_favourited_id_is_a_noop() {
         let db = setup().await;
-        insert_target(db.pool(), "t-004").await;
-        let removed = remove(db.pool(), &TargetFavouriteRequest { target_id: "t-004".to_owned() })
-            .await
-            .unwrap();
-        assert_eq!(removed.target_id, "t-004");
+        let id = Uuid::new_v4();
+        insert_target(db.pool(), id).await;
+        let removed =
+            remove(db.pool(), &TargetFavouriteRequest { target_id: id.to_string() }).await.unwrap();
+        assert_eq!(removed.target_id, id.to_string());
     }
 }
