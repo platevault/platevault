@@ -549,6 +549,25 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         },
         default: |s| serde_json::to_value(s.cleanup_type_overrides).unwrap_or(Value::Null),
     },
+    // ── Appearance (theme durability) ────────────────────────────────────
+    // Not overridable (a single global UI preference, no per-source
+    // concept) and not noisy (a real, low-frequency change worth its own
+    // audit entry, same treatment as e.g. `defaultProtection`).
+    Descriptor {
+        key: "theme",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::EnumStr {
+            allowed: &["warm-clay", "warm-slate", "observatory-dark", "espresso-dark", "system"],
+            expected_msg: "must be \"warm-clay\", \"warm-slate\", \"observatory-dark\", \"espresso-dark\", or \"system\"",
+        },
+        apply: |v, s| {
+            if let Some(x) = v.as_str() {
+                x.clone_into(&mut s.theme);
+            }
+        },
+        default: |s| Value::String(s.theme),
+    },
 ];
 
 /// Look up the descriptor for a stable key, if any.

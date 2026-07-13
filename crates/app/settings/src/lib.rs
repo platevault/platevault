@@ -930,6 +930,32 @@ mod tests {
         assert!(resp.audit_id.is_some());
     }
 
+    /// Theme durability round trip (theme-settings-db): `settings.update`
+    /// persists the choice to the real settings table, and `resolve_setting`
+    /// — the same lookup `settings_get` uses — reads it back, proving the DB
+    /// (not localStorage) is the durable source of truth.
+    #[tokio::test]
+    async fn theme_persists_and_resolves_via_settings_db() {
+        let (db, bus) = setup().await;
+        assert_eq!(
+            resolve_setting(db.pool(), "theme", None).await.unwrap(),
+            serde_json::json!("system"),
+            "default theme should be \"system\" before any write"
+        );
+
+        let req = SettingsUpdateRequest {
+            key: "theme".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("espresso-dark")),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Success);
+
+        assert_eq!(
+            resolve_setting(db.pool(), "theme", None).await.unwrap(),
+            serde_json::json!("espresso-dark")
+        );
+    }
+
     #[tokio::test]
     async fn update_setting_noop_when_value_unchanged() {
         let (db, bus) = setup().await;
@@ -1149,6 +1175,7 @@ mod tests {
     #[case("calibrationDarkOverridePenalty", true)]
     #[case("calibrationFlatOverridePenalty", true)]
     #[case("calibrationBiasOverridePenalty", true)]
+    #[case("theme", true)]
     #[case("tools.pixinsight.bundle_id", true)]
     #[case("tools.pixinsight.executable_path", true)]
     #[case("tools.siril.enabled", true)]
@@ -1225,6 +1252,11 @@ mod tests {
     #[case("usableAltitudeDeg", serde_json::json!(90))]
     #[case("cleanupTypeOverrides", serde_json::json!({}))] // empty map: all defaults apply
     #[case("cleanupTypeOverrides", serde_json::json!({"1": "Keep", "20": "Delete"}))]
+    #[case("theme", serde_json::json!("warm-clay"))]
+    #[case("theme", serde_json::json!("warm-slate"))]
+    #[case("theme", serde_json::json!("observatory-dark"))]
+    #[case("theme", serde_json::json!("espresso-dark"))]
+    #[case("theme", serde_json::json!("system"))]
     fn validate_value_accepts(#[case] key: &str, #[case] value: Value) {
         assert!(validate_value(key, &value).is_ok(), "expected {key}={value} to be accepted");
     }
@@ -1275,6 +1307,8 @@ mod tests {
     #[case("cleanupTypeOverrides", serde_json::json!({"abc": "Keep"}))] // non-numeric id
     #[case("cleanupTypeOverrides", serde_json::json!({"1": "Trash"}))] // not an allowed action
     #[case("cleanupTypeOverrides", serde_json::json!({"1": 5}))] // action not a string
+    #[case("theme", serde_json::json!("neon"))] // not an allowed variant
+    #[case("theme", serde_json::json!(5))] // not a string
     fn validate_value_rejects(#[case] key: &str, #[case] value: Value) {
         let err = validate_value(key, &value).expect_err("expected rejection");
         assert_eq!(err.code, ErrorCode::ValueInvalid, "key {key} value {value}");
