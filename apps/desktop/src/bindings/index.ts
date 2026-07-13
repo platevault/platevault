@@ -3014,7 +3014,20 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  *  path set overlaps an active apply run's path set (spec 025 FR-017,
  *  R-Concur-1).
  */
-"plan.conflict.overlap" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
+"plan.conflict.overlap" | "plan.invalid_state" | "plan.not_found" | "plan.not_in_apply" | "plan.blocked_by_protection" | "plan.in_progress" | "plan.items.empty" | "item.not_failed" | "item.not_found" | "item.not_pending" | "run.not_found" | "run.not_paused" | 
+/**
+ *  `plan.resume` re-validated the pause condition (R-Pause-1, R-Env-1)
+ *  and found the paused item's source is still stale; resume is
+ *  refused and the plan stays `paused` (spec 025 T048/T049/T050).
+ */
+"item.still.stale" | 
+/**
+ *  `plan.resume` re-validated and the paused item's volume is still
+ *  unreachable.
+ */
+"volume.still.unavailable" | 
+/**  `plan.resume` re-validated and the destination volume is still full. */
+"disk.still.full" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
 /**
  *  Returned by `roots.delete` (P6b, decision D8) when dependent records
  *  (inbox items, plan items, file records, sessions) still reference the
