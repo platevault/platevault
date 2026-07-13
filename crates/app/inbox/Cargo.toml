@@ -32,6 +32,11 @@ sha2.workspace = true
 skymath = "0.3"
 sqlx.workspace = true
 target-match = "0.3"
+# spec 052 P3: the cone-search suggestion use case needs the upstream crate's
+# own `ResolvedIdentity` (otype_raw/common_name/aliases, OQ-1/OQ-2 ranking
+# inputs) and `PositionResolver` types directly — mirrors the existing
+# `app_core_targets` precedent (see that crate's Cargo.toml comment).
+simbad-resolver = "0.2.0"
 time = { workspace = true }
 tokio.workspace = true
 tracing = { workspace = true }

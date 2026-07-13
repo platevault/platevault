@@ -16,6 +16,7 @@
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
 pub mod classify;
+pub mod cone_search;
 pub mod confirm;
 pub mod grouping;
 pub mod metadata;
