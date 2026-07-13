@@ -29,6 +29,9 @@ persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
 workflow_artifacts = { path = "../../workflow/artifacts" }
 workflow_profiles = { path = "../../workflow/profiles" }
+# spec 052 P1: project_create::create threads the shared redb resolve cache
+# through to app_core_projects::project_setup::create for in-use promotion.
+simbad-resolver = "0.2.0"
 # In-memory caching layer (F0 foundation).
 app_core_cache = { path = "../cache" }
 camino = { workspace = true }
@@ -48,6 +51,10 @@ app_core_cache = { path = "../cache" }
 tempfile = { workspace = true }
 rstest = { workspace = true }
 proptest = { workspace = true }
+# spec 052 P1 (resolution_e2e.rs): computes the same deterministic UUIDv5 the
+# resolver crate and app_core_targets already derive, to assert target_id
+# stability across the redb cache / SQLite promotion boundary.
+targeting = { path = "../../targeting" }
 # spec 035 (T020): the `FakeResolver` test double lives behind the resolver's
 # `test-fixture` feature; enable it for offline target.resolve use-case tests.
 # (spec 042 / T250: moved from `targeting` to `targeting_resolver`.)

@@ -1,8 +1,9 @@
-//! T014 — `target.search` against a realistically-seeded cache (spec 035).
+//! T014 — `target.search` against a realistically-seeded redb cache (spec 035,
+//! retargeted to the redb resolve cache by spec 052 P1 D1).
 //!
-//! Exercises `app_core::target_search::search` end-to-end after loading the
-//! bundled seed into an in-memory `SQLite` database.  These tests are distinct
-//! from the unit tests in `target_search.rs` (which use a 2-object hand-rolled
+//! Exercises `app_core::target_search::search` end-to-end after warming the
+//! bundled seed into an in-memory redb cache. These tests are distinct from
+//! the unit tests in `target_search.rs` (which use a 2-object hand-rolled
 //! fixture) because they prove:
 //!
 //! - (a) Ranking order across a realistic corpus: exact designation before
@@ -11,26 +12,37 @@
 //! - (c) Common-name / natural-language queries work against real seed data
 //!   (e.g. "androm" surfaces Andromeda Galaxy).
 //!
-//! The bundled seed ships ≥ 110 Messier + Caldwell objects; it is loaded once
-//! in an `async` setup helper and then queries run against the resulting pool.
-//! No network is touched — the seed is embedded in the binary at compile time.
+//! The bundled seed ships ≥ 110 Messier + Caldwell objects (+ thousands of
+//! NGC/IC); it is warmed ONCE into a shared in-memory redb cache (a
+//! process-wide `OnceCell` — each `simbad_resolver::Cache::upsert` is its own
+//! fsync'd write transaction, so warming the full ~14k-object popular seed is
+//! a multi-second operation not worth repeating per test) and every test below
+//! shares that read-only-in-practice cache. No network is touched — the seed
+//! is embedded in the binary at compile time.
 
 use app_core::target_search;
 use contracts_core::targets::{TargetObjectType, TargetSearchRequest};
-use persistence_db::Database;
-use targeting_resolver::seed;
+use simbad_resolver::{RedbCache, Store};
+use tokio::sync::OnceCell;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-async fn seeded_db() -> Database {
-    let db = Database::in_memory().await.expect("in-memory DB");
-    db.migrate().await.expect("migrations");
-    let loaded = seed::load_bundled_on_first_run(db.pool())
+static SEEDED_CACHE: OnceCell<RedbCache> = OnceCell::const_new();
+
+async fn seeded_cache() -> &'static RedbCache {
+    SEEDED_CACHE
+        .get_or_init(|| async {
+            let store = Store::in_memory().expect("in-memory redb store");
+            let cache = store.cache();
+            let namespace = simbad_resolver::identity::namespace("astro-plan.targets");
+            let seed = targeting_resolver::seed::bundled().expect("bundled seed asset must parse");
+            let loaded = targeting_resolver::seed::warm_cache(&cache, &seed, &namespace)
+                .await
+                .expect("seed warm must not fail");
+            assert!(loaded >= 110, "expected >= 110 seeded objects, got {loaded}");
+            cache
+        })
         .await
-        .expect("seed load must not fail")
-        .expect("first-run seed must produce a count");
-    assert!(loaded >= 110, "expected >= 110 seeded objects, got {loaded}");
-    db
 }
 
 fn req(query: &str, limit: u32) -> TargetSearchRequest {
@@ -50,9 +62,9 @@ fn req(query: &str, limit: u32) -> TargetSearchRequest {
 /// Andromeda; any prefix/substring matches for unrelated objects follow.
 #[tokio::test]
 async fn t014_a_exact_designation_ranked_first() {
-    let db = seeded_db().await;
+    let cache = seeded_cache().await;
     let resp =
-        target_search::search(db.pool(), &req("M 31", 20)).await.expect("search must not fail");
+        target_search::search(cache, &req("M 31", 20)).await.expect("search must not fail");
 
     assert!(
         !resp.suggestions.is_empty(),
@@ -80,9 +92,9 @@ async fn t014_a_exact_designation_ranked_first() {
 /// Query "androm" (prefix of the common name) must surface M 31 / Andromeda.
 #[tokio::test]
 async fn t014_a_prefix_common_name_surfaces_andromeda() {
-    let db = seeded_db().await;
+    let cache = seeded_cache().await;
     let resp =
-        target_search::search(db.pool(), &req("androm", 20)).await.expect("search must not fail");
+        target_search::search(cache, &req("androm", 20)).await.expect("search must not fail");
 
     assert!(!resp.suggestions.is_empty(), "prefix 'androm' must match at least one seeded object");
 
@@ -98,12 +110,12 @@ async fn t014_a_prefix_common_name_surfaces_andromeda() {
 /// "nebula" (case-insensitive) confirming the match is against the alias text.
 #[tokio::test]
 async fn t014_a_ranking_exact_before_prefix_before_substring() {
-    let db = seeded_db().await;
+    let cache = seeded_cache().await;
 
     // "M 42" is the exact designation for the Orion Nebula; querying for the
     // exact string should rank it first above any prefix/substring hits.
     let resp =
-        target_search::search(db.pool(), &req("M 42", 20)).await.expect("search must not fail");
+        target_search::search(cache, &req("M 42", 20)).await.expect("search must not fail");
 
     assert!(!resp.suggestions.is_empty(), "search for 'M 42' must return results");
 
@@ -121,8 +133,8 @@ async fn t014_a_ranking_exact_before_prefix_before_substring() {
 /// results.  "M" is a broad prefix that hits every Messier object.
 #[tokio::test]
 async fn t014_b_limit_1_returns_at_most_one() {
-    let db = seeded_db().await;
-    let resp = target_search::search(db.pool(), &req("M", 1)).await.expect("search must not fail");
+    let cache = seeded_cache().await;
+    let resp = target_search::search(cache, &req("M", 1)).await.expect("search must not fail");
 
     assert!(
         resp.suggestions.len() <= 1,
@@ -134,9 +146,8 @@ async fn t014_b_limit_1_returns_at_most_one() {
 /// A limit of 5 must be respected even when the seed matches many objects.
 #[tokio::test]
 async fn t014_b_limit_5_returns_at_most_five() {
-    let db = seeded_db().await;
-    let resp =
-        target_search::search(db.pool(), &req("NGC", 5)).await.expect("search must not fail");
+    let cache = seeded_cache().await;
+    let resp = target_search::search(cache, &req("NGC", 5)).await.expect("search must not fail");
 
     assert!(
         resp.suggestions.len() <= 5,
@@ -148,11 +159,10 @@ async fn t014_b_limit_5_returns_at_most_five() {
 /// The default limit of 20 (limit=0 in the request) must not be exceeded.
 #[tokio::test]
 async fn t014_b_default_limit_20_not_exceeded() {
-    let db = seeded_db().await;
+    let cache = seeded_cache().await;
     // "NGC" matches many seeded objects; with default limit the result must
     // cap at 20.
-    let resp =
-        target_search::search(db.pool(), &req("NGC", 0)).await.expect("search must not fail");
+    let resp = target_search::search(cache, &req("NGC", 0)).await.expect("search must not fail");
 
     assert!(
         resp.suggestions.len() <= 20,
@@ -166,8 +176,8 @@ async fn t014_b_default_limit_20_not_exceeded() {
 /// Querying by a well-known common name must return the right canonical object.
 #[tokio::test]
 async fn t014_c_common_name_query_orion_nebula() {
-    let db = seeded_db().await;
-    let resp = target_search::search(db.pool(), &req("Orion Nebula", 20))
+    let cache = seeded_cache().await;
+    let resp = target_search::search(cache, &req("Orion Nebula", 20))
         .await
         .expect("search must not fail");
 
@@ -193,9 +203,8 @@ async fn t014_c_common_name_query_orion_nebula() {
 /// A partial common name "Crab" should surface M 1 (Crab Nebula).
 #[tokio::test]
 async fn t014_c_partial_common_name_crab_surfaces_m1() {
-    let db = seeded_db().await;
-    let resp =
-        target_search::search(db.pool(), &req("Crab", 20)).await.expect("search must not fail");
+    let cache = seeded_cache().await;
+    let resp = target_search::search(cache, &req("Crab", 20)).await.expect("search must not fail");
 
     assert!(
         !resp.suggestions.is_empty(),
