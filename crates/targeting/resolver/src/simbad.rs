@@ -305,6 +305,17 @@ impl Resolver for SimbadResolver {
     }
 }
 
+/// Makes the production resolver satisfy [`crate::ExplicitResolver`] (spec
+/// 052 P2), so the app layer's `resolve_explicit` use case can stay generic
+/// (testable with [`crate::FakeResolver`]) instead of hardcoding this concrete
+/// type.
+#[async_trait]
+impl crate::ExplicitResolver for SimbadResolver {
+    async fn resolve_explicit(&self, query: &str) -> Result<ResolvedIdentity, ResolveError> {
+        Self::resolve_explicit(self, query).await
+    }
+}
+
 /// Shared body for [`SimbadResolver::resolve`] (typeahead) and
 /// [`SimbadResolver::resolve_explicit`] — the only difference between the two
 /// entrypoints is which facade (and therefore which composed network

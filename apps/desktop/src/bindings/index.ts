@@ -285,11 +285,13 @@ export const commands = {
 	targetFavouritesRemove: (req: TargetFavouriteRequest) => typedError<TargetFavouriteRemoveResult, ContractError_Serialize>(__TAURI_INVOKE("target_favourites_remove", { req })),
 	/**
 	 *  `target.resolve` — resolve a designation / common name (or FITS OBJECT
-	 *  value) against the shared redb resolve cache, falling back to SIMBAD on a
-	 *  miss when online resolution is enabled (spec 035). Never writes
-	 *  `canonical_target` itself (spec 052 P1 FR-004) except via the manual
-	 *  `override` path (T032) — see `app_core::target_resolve` for the in-use
-	 *  promotion commit points.
+	 *  value) against the shared redb resolve cache, falling back to SIMBAD's
+	 *  tabular (TAP) path on a miss when online resolution is enabled (spec 035).
+	 *  The debounced typeahead entrypoint — TAP + cache only, never the Sesame
+	 *  fallback (spec 052 P2 FR-009; see `target_resolve_explicit` for that).
+	 *  Never writes `canonical_target` itself (spec 052 P1 FR-004) except via the
+	 *  manual `override` path (T032) — see `app_core::target_resolve` for the
+	 *  in-use promotion commit points.
 	 * 
 	 *  The live `SimbadResolver` facade is built on demand from the persisted
 	 *  `resolver_settings` (endpoint + timeout) plus the app-lifetime shared
@@ -303,6 +305,21 @@ export const commands = {
 	 *  (offline / unknown / ambiguous) are encoded in the response status.
 	 */
 	targetResolve: (req: TargetResolveSimbadRequest_Deserialize) => typedError<TargetResolveSimbadResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_resolve", { req })),
+	/**
+	 *  `target.resolve_explicit` — the deliberate resolve/confirm entrypoint
+	 *  (Enter with no typeahead match, "search more", or an Add/Confirm submit).
+	 *  Same request/response contract as `target.resolve`; consults
+	 *  [`targeting_resolver::simbad::SimbadResolver::resolve_explicit`]
+	 *  (TAP-first, Sesame-fallback-on-a-miss) instead of the TAP+cache-only path
+	 *  `target.resolve` uses — the frontend MUST NOT call this per keystroke
+	 *  (FR-009).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` only on a local database failure. Resolver outcomes
+	 *  (offline / unknown / ambiguous) are encoded in the response status.
+	 */
+	targetResolveExplicit: (req: TargetResolveSimbadRequest_Deserialize) => typedError<TargetResolveSimbadResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_resolve_explicit", { req })),
 	/**
 	 *  `target.search` — as-you-type target suggestions from the shared redb
 	 *  resolve cache (seed + anything resolved/warmed so far).

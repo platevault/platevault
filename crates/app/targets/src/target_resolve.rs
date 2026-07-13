@@ -36,7 +36,8 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use targeting::normalize::normalize;
 use targeting_resolver::cache::{self, CachedTarget};
 use targeting_resolver::{
-    AliasKind, ResolveError, ResolvedAlias, ResolvedIdentity, Resolver, TargetSource as CacheSource,
+    AliasKind, ExplicitResolver, ResolveError, ResolvedAlias, ResolvedIdentity, Resolver,
+    TargetSource as CacheSource,
 };
 
 // ── Durable audit record (T039, constitution §V) ──────────────────────────────
@@ -189,14 +190,54 @@ pub async fn resolve<R: Resolver + ?Sized>(
         return apply_override(pool, req, query, &ov.target_id).await;
     }
 
-    match resolver.resolve(query).await {
-        Ok(identity) => Ok(resolved(req, identity_to_resolved(&identity))),
-        // Unknown/garbled (NotFound) and a malformed SIMBAD response (Parse)
-        // both leave the item unresolved with reason "unknown" (never fabricate).
-        Err(ResolveError::NotFound(_) | ResolveError::Parse(_)) => Ok(unresolved(req, "unknown")),
-        Err(ResolveError::Ambiguous { .. }) => Ok(unresolved(req, "ambiguous")),
+    Ok(response_for(req, resolver.resolve(query).await))
+}
+
+/// `target.resolve_explicit` (spec 052 P2, FR-008/FR-009) — the deliberate
+/// resolve/confirm entrypoint (Enter with no typeahead match, "search more",
+/// or an Add/Confirm submit). Identical contract shape and override handling
+/// to [`resolve`]; the only difference is `resolver.resolve_explicit`
+/// (TAP-first, Sesame-fallback-on-a-miss) instead of `resolver.resolve`
+/// (TAP + cache only).
+///
+/// Takes an [`ExplicitResolver`] rather than a plain [`Resolver`] so a call
+/// site that only has a `Resolver` (e.g. the debounced typeahead path, the
+/// ingest queue) has no way to reach the Sesame fallback by mistake — see the
+/// trait's doc.
+///
+/// # Errors
+///
+/// Same as [`resolve`].
+pub async fn resolve_explicit<R: ExplicitResolver + ?Sized>(
+    pool: &SqlitePool,
+    resolver: &R,
+    req: &TargetResolveSimbadRequest,
+) -> Result<TargetResolveSimbadResponse, ContractError> {
+    let query = req.query.trim();
+    if query.is_empty() {
+        return Ok(unresolved(req, "unknown"));
+    }
+
+    if let Some(ov) = &req.override_target {
+        return apply_override(pool, req, query, &ov.target_id).await;
+    }
+
+    Ok(response_for(req, resolver.resolve_explicit(query).await))
+}
+
+/// Shared outcome→response mapping for [`resolve`] and [`resolve_explicit`]:
+/// unknown/garbled (`NotFound`) and a malformed SIMBAD response (`Parse`)
+/// both leave the item unresolved with reason "unknown" (never fabricate).
+fn response_for(
+    req: &TargetResolveSimbadRequest,
+    outcome: Result<ResolvedIdentity, ResolveError>,
+) -> TargetResolveSimbadResponse {
+    match outcome {
+        Ok(identity) => resolved(req, identity_to_resolved(&identity)),
+        Err(ResolveError::NotFound(_) | ResolveError::Parse(_)) => unresolved(req, "unknown"),
+        Err(ResolveError::Ambiguous { .. }) => unresolved(req, "ambiguous"),
         Err(ResolveError::Network(_) | ResolveError::Timeout(_) | ResolveError::Disabled) => {
-            Ok(unresolved(req, "offline"))
+            unresolved(req, "offline")
         }
     }
 }
