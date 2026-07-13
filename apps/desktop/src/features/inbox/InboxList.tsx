@@ -20,7 +20,13 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import type { InboxListItem } from '@/bindings/index';
-import { Table, type TableColumn, type TableRow } from '@/ui';
+import {
+  Table,
+  tableIndent,
+  Skeleton,
+  type TableColumn,
+  type TableRow,
+} from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { groupByDimensions, type GroupNode } from './grouping';
 import { ACCESSORS, dimLabel } from './InboxControls';
@@ -154,6 +160,8 @@ export interface InboxListProps {
    * Owned by the page.
    */
   kindFilter?: string;
+  /** When true, the detection list is still loading — show skeleton rows. */
+  loading?: boolean;
   /** Active sort state. Owned by the page. */
   sort?: InboxSort;
   /** Called when the user clicks a sortable column header. */
@@ -165,8 +173,6 @@ export interface InboxListProps {
 }
 
 // ── Flattened visual-row model (drives grouping + windowing) ─────────────────────
-
-const INDENT_PER_DEPTH = 12;
 
 /** A collapsible group header row. */
 export interface HeaderVisualRow {
@@ -213,7 +219,7 @@ export function flattenVisibleTree(
       if (node.children.length > 0) {
         walk(node.children, depth + 1, path);
       } else {
-        const indent = 8 + (depth + 1) * INDENT_PER_DEPTH;
+        const indent = tableIndent(depth + 1);
         for (const item of node.items) {
           rows.push({
             kind: 'item',
@@ -238,6 +244,7 @@ export function InboxList({
   filterType,
   dims = [],
   kindFilter,
+  loading = false,
   sort = DEFAULT_INBOX_SORT,
   onSort,
 }: InboxListProps) {
@@ -360,6 +367,7 @@ export function InboxList({
           const { node, depth, path, collapsed: isCollapsed } = row;
           return {
             _rowClassName: 'alm-inbox-table__group',
+            _indent: tableIndent(depth),
             // The collapse control is a real <button> (keyboard-accessible,
             // announces expanded state) inside the group cell — not a clickable
             // <tr>. It carries the group testid + aria-expanded.
@@ -370,8 +378,6 @@ export function InboxList({
                 data-testid={`inbox-group-${node.dimension}-${node.key}`}
                 aria-expanded={!isCollapsed}
                 onClick={() => toggle(path)}
-                // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
-                style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
               >
                 <span
                   className="alm-inbox-list__group-caret"
@@ -405,12 +411,12 @@ export function InboxList({
             .filter(Boolean)
             .join(' '),
           _onClick: () => onSelect(originalIdx),
+          _selected: selected,
+          _indent: indent || undefined,
           detection: (
             <span
               className="alm-inbox-cell__path"
               title={item.relativePath || m.inbox_list_root_label()}
-              // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
-              style={indent ? { paddingLeft: indent } : undefined}
             >
               {item.relativePath || m.inbox_list_root_label()}
             </span>
@@ -439,7 +445,11 @@ export function InboxList({
 
   return (
     <div className="alm-listtable" data-testid="inbox-list">
-      {visualRows.length === 0 ? (
+      {visualRows.length === 0 && loading ? (
+        <div className="alm-listtable__empty">
+          <Skeleton variant="block" count={8} label={m.common_loading()} />
+        </div>
+      ) : visualRows.length === 0 ? (
         <div className="alm-listtable__empty">{m.inbox_no_detections()}</div>
       ) : (
         <Table

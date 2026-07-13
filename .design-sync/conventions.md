@@ -53,6 +53,24 @@ composing. Data-driven ones (Table, RadioGroup, SegControl, WizardShell) take ar
 `styles.css` → `_ds_bundle.css` (all `--alm-*` tokens + `.alm-*` classes) is the styling
 source; read it before adding custom CSS. Per-component contracts are the `.d.ts` files.
 
+## Two tiers — primitives vs. layout scaffolds
+
+The system is deliberately two-tier; **compose pages from Tier 2, not raw divs**:
+
+- **Tier 1 — primitives** (leaf building blocks): Btn, Pill, Banner, Toggle, SegControl,
+  RadioGroup, Table, Box, Section, EmptyState, CoverageBar, Lock, DirPicker, WizardShell,
+  InfoTip, ToastContainer, KV, Tooltip, Skeleton.
+- **Tier 2 — layout/composite scaffolds** (assemble a whole screen): `ListPageLayout`,
+  `ListDetailLayout`, `PageShell`, `PageTopBar`, `TopActionBar`, `ListSidebar`, `FilterToolbar`,
+  `SortHeader`, `ListItem`, `DetailPanel`, `DetailPane`, `DetailHeader`, `DetailGrid`/`Rail`/
+  `RailCard`, `MetricLine`, `PropertyTable`, `Modal`, `ConfirmOverlay`, `StatusTag`, `Lifecycle`.
+
+**Page shell contract:** a page is `.alm-page` with a pinned `.alm-page__bar` (action/filter
+bars — ALWAYS visible, never scroll) over a `.alm-page__scroll` (the ONLY scrolling region).
+Prefer `ListPageLayout`/`PageTopBar`/`ListDetailLayout` to get this for free; a master-detail
+screen is a list (`Table` + `SortHeader`) beside a `DetailPanel`. Overlays use `Modal` (or
+`ConfirmOverlay` for confirms) — never hand-roll a dialog. Status is `StatusTag` (dot + label).
+
 ## One idiomatic snippet
 
 ```tsx

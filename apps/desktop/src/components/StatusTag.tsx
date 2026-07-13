@@ -1,0 +1,28 @@
+/**
+ * StatusTag — shared status indicator: a small colored dot + plain-text label.
+ *
+ * The Tier-2 canonical affordance for "state at a glance" (project lifecycle,
+ * and any future dot+label status). Color is a 6px accent dot only, never a
+ * filled badge background, so it stays quiet in dense tables. The `variant`
+ * maps to the same {@link PillVariant} tone semantics used elsewhere, so
+ * callers need no extra mapping.
+ *
+ * Not for filled badges (use `Pill`) or multi-step flowcharts (use the
+ * lifecycle stepper). CSS: `.alm-status-tag` in styles/components.
+ */
+
+import type { PillVariant } from '@/ui';
+
+export interface StatusTagProps {
+  variant: PillVariant;
+  children: string;
+}
+
+export function StatusTag({ variant, children }: StatusTagProps) {
+  return (
+    <span className={`alm-status-tag alm-status-tag--${variant}`}>
+      <span className="alm-status-tag__dot" aria-hidden="true" />
+      {children}
+    </span>
+  );
+}

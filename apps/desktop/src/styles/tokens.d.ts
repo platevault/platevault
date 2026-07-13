@@ -29,6 +29,7 @@ export type AlmTokenName =
   | 'alm-ink2'
   | 'alm-ink3'
   | 'alm-ink4'
+  | 'alm-input-recessed-bg'
   | 'alm-leading-normal'
   | 'alm-leading-relaxed'
   | 'alm-leading-tight'

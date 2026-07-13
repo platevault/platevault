@@ -688,7 +688,10 @@
   padding: 3px 6px;
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-sm);
-  background: var(--alm-bg);
+  /* Recessed field bg: --alm-bg on light themes, --alm-surface on dark
+     (where raw --alm-bg is near-black). The token carries the per-theme
+     choice so this rule never branches on theme name. */
+  background: var(--alm-input-recessed-bg);
   color: var(--alm-text);
   transition: border-color var(--alm-transition-fast);
 }
@@ -730,14 +733,6 @@
   font-size: var(--alm-text-xs);
   padding: var(--alm-sp-0) 0;
   cursor: pointer;
-}
-
-/* Dark-theme overrides for the name input */
-[data-theme="observatory-dark"] .alm-wizard-views__name-input,
-[data-theme="espresso-dark"] .alm-wizard-views__name-input {
-  background: var(--alm-surface);
-  color: var(--alm-text);
-  border-color: var(--alm-border);
 }
 
 /* === WIZARD STEP LAYOUT === */

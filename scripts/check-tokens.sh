@@ -97,6 +97,16 @@ else
   echo "  OK: No bare --alm-radius references."
 fi
 
+# ── Check 5: Every [data-theme] block declares the full raw-token set ────────
+echo ""
+echo "5. Checking theme token completeness (all themes override the same raw set)..."
+if node "$REPO_ROOT/apps/desktop/scripts/check-theme-completeness.mjs"; then
+  echo "  OK: All themes are complete."
+else
+  echo "FAIL: A theme is missing raw tokens (see above)."
+  PASS=false
+fi
+
 # ── Result ────────────────────────────────────────────────────────────────────
 echo ""
 if [ "$PASS" = true ]; then

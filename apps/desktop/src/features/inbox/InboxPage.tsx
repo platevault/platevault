@@ -921,6 +921,7 @@ export function InboxPage() {
           filterType={type ?? 'all'}
           dims={dims}
           kindFilter={kindFilter}
+          loading={listLoading}
           sort={inboxSort}
           onSort={handleSort}
         />

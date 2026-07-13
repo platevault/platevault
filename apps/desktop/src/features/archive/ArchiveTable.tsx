@@ -135,6 +135,7 @@ export function ArchiveTable({
       'alm-densetable__row' +
       (selected === a.id ? ' alm-densetable__row--selected' : ''),
     _onClick: () => onSelect(a.id),
+    _selected: selected === a.id,
     name: a.name,
     type: <Pill variant="ghost">{a.entityType}</Pill>,
     reason: a.reason,

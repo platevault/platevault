@@ -4,18 +4,18 @@ import type { ReactNode, HTMLAttributes } from 'react';
 export interface EmptyStateProps extends HTMLAttributes<HTMLDivElement> {
   title: string;
   /** Short description shown below the title. */
-  desc?: string;
-  /** Alias for desc — accepted for backward compatibility. */
   description?: string;
+  /** @deprecated Use `description`. Retained as a backward-compatible alias. */
+  desc?: string;
   action?: ReactNode;
 }
 
 export const EmptyState = forwardRef<HTMLDivElement, EmptyStateProps>(
   function EmptyState(
-    { title, desc, description, action, className, ...rest },
+    { title, description, desc, action, className, ...rest },
     ref,
   ) {
-    const body = desc ?? description;
+    const body = description ?? desc;
     const cls = ['alm-empty', className].filter(Boolean).join(' ');
     return (
       <div ref={ref} className={cls} {...rest}>

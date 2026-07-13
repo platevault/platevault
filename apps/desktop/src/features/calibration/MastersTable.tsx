@@ -24,7 +24,7 @@
  */
 
 import { useMemo } from 'react';
-import { Pill, Table, EmptyState } from '@/ui';
+import { Pill, Table, EmptyState, Skeleton, tableIndent } from '@/ui';
 import type { PillVariant, TableColumn, TableRow } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
@@ -301,8 +301,6 @@ interface Props {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-const INDENT_PER_DEPTH = 12;
-
 export function MastersTable({
   masters,
   loading,
@@ -343,8 +341,13 @@ export function MastersTable({
 
   if (loading) {
     return (
-      <div className="alm-calib-table__status" data-testid="masters-loading">
-        {m.calibration_loading()}
+      <div className="alm-calib-table__status">
+        <Skeleton
+          variant="block"
+          count={6}
+          data-testid="masters-loading"
+          label={m.calibration_loading()}
+        />
       </div>
     );
   }
@@ -409,12 +412,10 @@ export function MastersTable({
         'alm-calib-table__row' +
         (selected === master.id ? ' alm-calib-table__row--selected' : ''),
       _onClick: () => onSelect(master.id),
+      _selected: selected === master.id,
+      _indent: indentPx || undefined,
       master: (
-        <span
-          className="alm-calib-cell__master"
-          // eslint-disable-next-line no-restricted-syntax -- dynamic: nested-group leaf indent
-          style={indentPx ? { paddingLeft: indentPx } : undefined}
-        >
+        <span className="alm-calib-cell__master">
           <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
           <span className="alm-calib-cell__master-label">
             {masterLabel(master)}
@@ -450,6 +451,7 @@ export function MastersTable({
         const { node, depth, path, collapsed: isCollapsed } = vrow;
         rows.push({
           _rowClassName: 'alm-listgroup',
+          _indent: tableIndent(depth),
           master: (
             <button
               type="button"
@@ -457,8 +459,6 @@ export function MastersTable({
               data-testid={`calibration-group-${node.dimension}-${node.key}`}
               aria-expanded={!isCollapsed}
               onClick={() => toggle(path)}
-              // eslint-disable-next-line no-restricted-syntax -- dynamic: depth-based group-header indent
-              style={{ paddingLeft: 8 + depth * INDENT_PER_DEPTH }}
             >
               <span className="alm-listgroup__caret" aria-hidden="true">
                 {isCollapsed ? '▸' : '▾'}
@@ -470,8 +470,7 @@ export function MastersTable({
           ...EMPTY_MASTER_CELLS,
         });
       } else {
-        const indentPx = 8 + vrow.depth * INDENT_PER_DEPTH;
-        rows.push(masterItemRow(vrow.item, indentPx));
+        rows.push(masterItemRow(vrow.item, tableIndent(vrow.depth)));
       }
     }
   } else {

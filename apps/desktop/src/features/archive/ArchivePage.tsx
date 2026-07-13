@@ -23,7 +23,7 @@
 import { useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ListPageLayout, PageTopBar, FilterToolbar, Modal } from '@/components';
-import { Btn, EmptyState } from '@/ui';
+import { Btn, EmptyState, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
 import { revealLabel } from '@/lib/reveal-label';
@@ -169,7 +169,7 @@ export function ArchivePage() {
         onCloseDetail={item != null ? () => void clearSelection() : undefined}
       >
         {loading ? (
-          <EmptyState title={m.common_loading()} />
+          <Skeleton variant="block" count={6} label={m.common_loading()} />
         ) : error ? (
           <EmptyState title={m.archive_load_error()} />
         ) : entries.length === 0 ? (

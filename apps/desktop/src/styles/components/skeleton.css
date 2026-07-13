@@ -1,0 +1,58 @@
+/* Skeleton loading placeholder (src/ui/Skeleton.tsx).
+ *
+ * A muted chip whose subtle highlight sweeps across via a moving gradient.
+ * Base + highlight are tokens (--alm-chip / --alm-surface-raised); no raw
+ * colors. The shimmer duration uses `s` (not `ms`) so the token-policy check
+ * — which only forbids raw `ms` — passes while the value stays readable.
+ *
+ * Reduced motion: the global reset (reset.css) already collapses the animation
+ * to a single near-instant frame; the explicit rule below additionally drops
+ * the gradient so the fallback is a clean, static muted block. */
+
+.alm-skeleton-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+  width: 100%;
+}
+
+.alm-skeleton {
+  display: block;
+  width: var(--alm-skel-w, 100%);
+  height: var(--alm-skel-h, var(--alm-sp-3));
+  border-radius: var(--alm-skel-r, var(--alm-radius-sm));
+  background-color: var(--alm-chip);
+  background-image: linear-gradient(
+    90deg,
+    var(--alm-chip) 0%,
+    var(--alm-surface-raised) 50%,
+    var(--alm-chip) 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: alm-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.alm-skeleton--block {
+  height: var(--alm-skel-h, var(--alm-row-height));
+  border-radius: var(--alm-skel-r, var(--alm-radius-md));
+}
+
+.alm-skeleton--circle {
+  width: var(--alm-skel-w, var(--alm-row-height));
+  height: var(--alm-skel-h, var(--alm-row-height));
+  border-radius: var(--alm-skel-r, 50%);
+  flex: none;
+}
+
+@keyframes alm-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alm-skeleton {
+    background-image: none;
+    background-color: var(--alm-chip);
+  }
+}

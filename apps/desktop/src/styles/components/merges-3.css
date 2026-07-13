@@ -1178,6 +1178,13 @@
   overflow: hidden;
 }
 
+/* Body prose (e.g. a ConfirmOverlay description). */
+.alm-modal__message {
+  margin: 0;
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
+}
+
 .alm-modal__footer {
   flex-shrink: 0;
   display: flex;
@@ -1186,193 +1193,6 @@
   gap: var(--alm-sp-2);
   padding: var(--alm-sp-3) var(--alm-sp-4);
   border-top: 1px solid var(--alm-border-subtle);
-}
-
-/* ==========================================================================
- * Plan-approval overlay (spec 043 Stage B — PlanApprovalOverlay)
- *
- * Full-screen focused overlay for plan review. Opens from the top-bar
- * "Review plans (N)" trigger. Highest-stakes surface → blurred/dimmed
- * backdrop, Dialog focus trap, Escape-to-close.
- *
- * Layout inside the popup:
- *   - .alm-plan-overlay__header  — title + subtitle + close button
- *   - .alm-plan-overlay__body    — flex row: optional rail + main panel
- *   - .alm-plan-overlay__rail    — plan list (only when > 1 plan)
- *   - .alm-plan-overlay__main    — PlanPanel scroll container
- *
- * z-index sits above the app shell (z: 500) but below any toast/tooltip layer.
- * Token-only: no raw hex/rgb values beyond those already in tokens.css.
- * ========================================================================== */
-
-/* ── Backdrop: semi-transparent + blur ────────────────────────────────────── */
-.alm-plan-overlay__backdrop {
-  position: fixed;
-  inset: 0;
-  background: color-mix(in srgb, var(--alm-ink) 45%, transparent);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  z-index: 500;
-}
-
-/* Respect prefers-reduced-motion: drop the blur animation, use instant scrim */
-@media (prefers-reduced-motion: reduce) {
-  .alm-plan-overlay__backdrop {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
-/* ── Popup: centred focused panel ─────────────────────────────────────────── */
-.alm-plan-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 501;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none; /* let clicks pass to backdrop unless on panel */
-}
-
-/* The actual panel card */
-.alm-plan-overlay[data-open] {
-  pointer-events: none;
-}
-
-/* Base UI Dialog.Popup renders the element directly — style the popup itself
- * as the card so we avoid an extra wrapper div. */
-.alm-plan-overlay {
-  /* Override: make the popup itself the card (not a full-screen wrapper). */
-  position: fixed;
-  inset: auto;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(96vw, 1280px);
-  max-height: min(92vh, 880px);
-  background: var(--alm-surface-raised);
-  border: 1px solid var(--alm-border);
-  border-radius: var(--alm-radius-lg);
-  box-shadow: 0 8px 32px color-mix(in srgb, var(--alm-ink) 16%, transparent);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  pointer-events: auto;
-  z-index: 501;
-}
-
-/* ── Header ───────────────────────────────────────────────────────────────── */
-.alm-plan-overlay__header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--alm-sp-3);
-  padding: var(--alm-sp-3) var(--alm-sp-4);
-  border-bottom: 1px solid var(--alm-border-subtle);
-}
-
-.alm-plan-overlay__title {
-  font-size: var(--alm-text-md);
-  font-weight: var(--alm-weight-semibold);
-  color: var(--alm-text);
-  margin: 0;
-}
-
-.alm-plan-overlay__subtitle {
-  font-size: var(--alm-text-sm);
-  color: var(--alm-text-muted);
-}
-
-.alm-plan-overlay__close {
-  margin-left: auto;
-  appearance: none;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--alm-text-muted);
-  font-size: var(--alm-text-sm);
-  line-height: 1;
-  padding: var(--alm-sp-1) var(--alm-sp-2);
-  border-radius: var(--alm-radius-sm);
-}
-.alm-plan-overlay__close:hover {
-  color: var(--alm-text);
-  background: var(--alm-hover-bg);
-}
-
-/* ── Body: rail + main ────────────────────────────────────────────────────── */
-.alm-plan-overlay__body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  overflow: hidden;
-}
-
-/* ── Left rail: plan list (only when > 1 plan) ────────────────────────────── */
-.alm-plan-overlay__rail {
-  flex: 0 0 200px;
-  width: 200px;
-  overflow-y: auto;
-  border-right: 1px solid var(--alm-border-subtle);
-  display: flex;
-  flex-direction: column;
-  padding: var(--alm-sp-2) 0;
-  gap: 1px;
-}
-
-.alm-plan-overlay__rail-item {
-  appearance: none;
-  background: none;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--alm-sp-2);
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  text-align: left;
-  color: var(--alm-text-secondary);
-  font-size: var(--alm-text-sm);
-  border-radius: 0;
-  transition: background var(--alm-transition-fast);
-}
-.alm-plan-overlay__rail-item:hover {
-  background: var(--alm-hover-bg);
-  color: var(--alm-text);
-}
-.alm-plan-overlay__rail-item--active {
-  background: var(--alm-accent-bg);
-  color: var(--alm-accent-text);
-  font-weight: var(--alm-weight-semibold);
-}
-.alm-plan-overlay__rail-item--active:hover {
-  background: var(--alm-accent-bg);
-}
-
-.alm-plan-overlay__rail-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.alm-plan-overlay__rail-count {
-  flex-shrink: 0;
-  font-size: var(--alm-text-2xs);
-  color: var(--alm-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-.alm-plan-overlay__rail-item--active .alm-plan-overlay__rail-count {
-  color: var(--alm-accent-text);
-}
-
-/* ── Main: scrollable PlanPanel host ─────────────────────────────────────── */
-.alm-plan-overlay__main {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
 }
 
 /* ── Planner date picker (spec 044 Track B, US2/T024) ────────────────────── */

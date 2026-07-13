@@ -92,7 +92,8 @@ describe('ArchivePage (spec 017 WP-B)', () => {
   it('1. loading state renders a loading indicator', () => {
     archiveListState.loading = true;
     render(<ArchivePage />);
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    // The list surface now renders a skeleton (role="status") instead of text.
+    expect(screen.getByTestId('skeleton')).toBeInTheDocument();
   });
 
   it('2. error state renders an error indicator', () => {

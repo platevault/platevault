@@ -75,7 +75,8 @@ describe('ProjectsTable', () => {
 
   it('shows loading state when loading and no projects', () => {
     renderTable({ projects: [], loading: true });
-    expect(screen.getByText(/loading projects/i)).toBeInTheDocument();
+    // Loading now renders a skeleton (role="status") instead of text.
+    expect(screen.getByTestId('skeleton')).toBeInTheDocument();
   });
 
   it('calls onSelect with the project id on row click', () => {

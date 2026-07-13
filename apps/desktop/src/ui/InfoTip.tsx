@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Tooltip } from './Tooltip';
 import { m } from '@/lib/i18n';
 
 export interface InfoTipProps {
@@ -14,8 +15,9 @@ export interface InfoTipProps {
  * replacement for always-on help prose under form rows (settings mock).
  * Token-only styling lives in components.css under `.alm-info-tip`.
  *
- * The visible tooltip is CSS-only (`::after` reads `data-tip`); the same text
- * is mirrored into `aria-label` so screen readers get it without a hover.
+ * Uses the shared base-ui `Tooltip`; the tip text is also mirrored into
+ * `aria-label` so screen readers get it without a hover. The trigger is
+ * focusable (`tabIndex={0}`) so keyboard users can reveal it too.
  */
 export function InfoTip({
   tip,
@@ -25,16 +27,15 @@ export function InfoTip({
   const text = typeof tip === 'string' ? tip : undefined;
   const cls = ['alm-info-tip', className].filter(Boolean).join(' ');
   return (
-    <span
+    <Tooltip
+      content={tip}
       className={cls}
       role="note"
-      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- intentionally focusable so keyboard users can reveal the CSS :focus tooltip
       tabIndex={0}
       aria-label={text ? `${label}: ${text}` : label}
-      data-tip={text}
     >
       {/* eslint-disable-next-line alm/no-user-string -- decorative icon glyph, not user prose */}
       {'i'}
-    </span>
+    </Tooltip>
   );
 }

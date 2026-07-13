@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { WizardShell } from '@/ui/WizardShell';
 import { Btn } from '@/ui/Btn';
+import { Banner } from '@/ui';
 import { m } from '@/lib/i18n';
 import { setPreference } from '@/data/preferences';
 import { commands } from '@/bindings/index';
@@ -103,7 +104,10 @@ function loadWizardState(): WizardState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
+      // Persisted state is untrusted JSON; type it as a partial of the runtime
+      // shape so field access is checked while the guards below still coerce
+      // any missing/legacy fields to defaults.
+      const parsed = JSON.parse(raw) as Partial<WizardState>;
       // If persisted state had the wizard already at the scan step, reset to
       // confirm so the scan always starts fresh (avoids stale scan guard).
       const currentStep =
@@ -113,14 +117,12 @@ function loadWizardState(): WizardState {
       return {
         currentStep,
         sources: Array.isArray(parsed.sources) ? parsed.sources : loadSources(),
-        // Migrate/guard: older persisted state used `{ downloadAll }` (no
-        // `selectedCatalogIds`); coerce any shape lacking the array to the default so
-        // consumers reading `selectedCatalogIds.length` never hit `undefined`.
-        catalogSettings: Array.isArray(
-          parsed.catalogSettings?.selectedCatalogIds,
-        )
-          ? parsed.catalogSettings
-          : DEFAULT_CATALOG_SETTINGS,
+        // Guard: accept persisted catalogSettings only if it matches the current
+        // shape (`{ downloadAll }`); older/corrupt shapes fall back to the default.
+        catalogSettings:
+          typeof parsed.catalogSettings?.downloadAll === 'boolean'
+            ? parsed.catalogSettings
+            : DEFAULT_CATALOG_SETTINGS,
         tools: parsed.tools ?? DEFAULT_TOOLS_STATE,
         // spec 044 T016: older persisted state (pre-Site step) has no `site`
         // key — default to the empty (skippable) step state.
@@ -163,6 +165,9 @@ export function SetupWizard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [errors, setErrors] = useState<Record<number, string>>({});
+  // Wizard-level submit error (source registration / finish), surfaced as a
+  // Banner in the step body. Previously these failures were console-only.
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // flushResult is set when the user advances from Confirm → Scan so StepScan
   // can use the registered rootIds.  Null until flushToDB has been called.
@@ -200,7 +205,7 @@ export function SetupWizard() {
 
   // --- Source management ---
   const handleAddSource = useCallback(
-    async (path: string, kind: SourceKind) => {
+    (path: string, kind: SourceKind) => {
       // Deduplication check
       const dedup = checkDeduplication(state.sources, kind, path);
       if (dedup.crossKindConflict) {
@@ -311,20 +316,33 @@ export function SetupWizard() {
   // Called from the Confirm step footer: register roots, then advance to Scan.
   const handleEnterScan = useCallback(async () => {
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       const result = await flushToDB(state.sources);
 
       if (!result.allSucceeded) {
-        console.warn(
-          'Some source registrations failed:',
-          result.results.filter((r) => !r.success),
+        const failed = result.results.filter((r) => !r.success);
+        const detail =
+          failed
+            .map((r) => r.error)
+            .filter(Boolean)
+            .join('; ') || String(failed.length);
+        setSubmitError(
+          m.setup_sources_error_batch_registration_failed({ message: detail }),
         );
+        return;
       }
 
       setFlushResult(result);
       goTo(SCAN_STEP);
     } catch (err) {
-      console.error('Failed to register sources:', err);
+      const msg =
+        typeof err === 'string'
+          ? err
+          : ((err as Error)?.message ?? String(err));
+      setSubmitError(
+        m.setup_sources_error_batch_registration_failed({ message: msg }),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -338,6 +356,7 @@ export function SetupWizard() {
   // Called from StepScan's Finish button: complete first-run and navigate.
   const handleFinish = useCallback(async () => {
     setIsFinishing(true);
+    setSubmitError(null);
     try {
       if (!isMockMode) {
         // Persist processing-tool config from the wizard so Settings →
@@ -398,7 +417,12 @@ export function SetupWizard() {
       setPreference('setupCompleted', true);
       clearWizardState();
       void navigate({ to: '/inbox' });
-    } catch {
+    } catch (err) {
+      const msg =
+        typeof err === 'string'
+          ? err
+          : ((err as Error)?.message ?? String(err));
+      setSubmitError(m.setup_wizard_finish_failed({ message: msg }));
       setIsFinishing(false);
     }
     // `state.tools` was already read here without being a dependency (stale
@@ -519,6 +543,13 @@ export function SetupWizard() {
           <p className="alm-setup-wizard__description">
             {stepMeta.description()}
           </p>
+        )}
+
+        {/* Wizard-level submit error (source registration / finish failures) */}
+        {submitError && (
+          <Banner variant="danger" data-testid="setup-submit-error">
+            {submitError}
+          </Banner>
         )}
 
         {/* Step body */}

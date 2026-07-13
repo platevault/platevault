@@ -217,6 +217,25 @@
   color: var(--alm-text-muted);
 }
 
+/* Selectable rows (`_onClick`): pointer affordance + a keyboard focus ring.
+   `--alm-focus-ring` is a box-shadow triple that does not render on a
+   border-collapsed <tr>, so the ring is drawn with an inset outline (the accent
+   token) which paints on table rows in both WebKit and Chromium webviews. */
+.alm-table__row--clickable {
+  cursor: pointer;
+}
+.alm-table__row--clickable:focus-visible {
+  outline: 2px solid var(--alm-accent);
+  outline-offset: -2px;
+}
+
+/* Grouped/nested rows (`_indent`): the per-row `--alm-row-indent` variable set
+   on the <tr> pads the first cell's content (group-header button or leaf label),
+   replacing the per-table inline paddingLeft clones. */
+.alm-table__row--indented > td:first-child > :first-child {
+  padding-left: var(--alm-row-indent, 0);
+}
+
 /* Virtualized Table (opt-in `virtualized` prop): own scroll container + sticky
    header + zero-chrome sentinel spacer rows (padding-spacer windowing). */
 .alm-table__scroll {
@@ -317,3 +336,11 @@
   flex-direction: column;
   gap: var(--alm-sp-1);
 }
+
+/* Atomic text utilities — replace the removed Tailwind `text-sm` / `text-xs` /
+   `text-muted` no-ops with token-only classes. Compose (e.g.
+   `alm-text-sm alm-text-muted`) instead of cloning per-feature muted-text
+   rules. */
+.alm-text-sm { font-size: var(--alm-text-sm); }
+.alm-text-xs { font-size: var(--alm-text-xs); }
+.alm-text-muted { color: var(--alm-text-muted); }

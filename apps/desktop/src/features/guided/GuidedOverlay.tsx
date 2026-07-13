@@ -17,6 +17,7 @@
  */
 
 import { Joyride, STATUS, type EventData, type Step } from 'react-joyride';
+import { m } from '@/lib/i18n';
 import {
   GUIDE_ANCHOR_ATTR,
   ANCHOR_INBOX_CONFIRM_ROW,
@@ -113,8 +114,8 @@ export function GuidedOverlay({ guidedState, onDismiss }: GuidedOverlayProps) {
         overlayColor: 'rgba(0,0,0,0.35)',
       }}
       locale={{
-        skip: 'Dismiss',
-        last: 'Done',
+        skip: m.guided_coach_dismiss(),
+        last: m.guided_coach_done(),
       }}
     />
   );
