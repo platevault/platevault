@@ -144,7 +144,9 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let project_path = format!("{}/m31", root.path().to_str().unwrap());
 
-        let result = create(db.pool(), &bus, &empty_cache(), &make_req("M31 LRGB", &project_path)).await.unwrap();
+        let result = create(db.pool(), &bus, &empty_cache(), &make_req("M31 LRGB", &project_path))
+            .await
+            .unwrap();
 
         assert_eq!(result.scaffold_applied, Some(true), "mkdir-only plan must auto-apply");
 
@@ -172,7 +174,9 @@ mod tests {
         std::fs::write(format!("{project_path}/lights"), b"in the way").unwrap();
 
         let result =
-            create(db.pool(), &bus, &empty_cache(), &make_req("Blocked Project", &project_path)).await.unwrap();
+            create(db.pool(), &bus, &empty_cache(), &make_req("Blocked Project", &project_path))
+                .await
+                .unwrap();
 
         assert_eq!(
             result.scaffold_applied,

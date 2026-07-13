@@ -457,9 +457,13 @@ pub async fn create(
             )
             .with_details(serde_json::json!({ "canonicalTargetId": ctid }))
         })?;
-        let promoted =
-            app_core_targets::target_resolve::promote_by_id(pool, redb_cache, uuid, &req.request_id)
-                .await?;
+        let promoted = app_core_targets::target_resolve::promote_by_id(
+            pool,
+            redb_cache,
+            uuid,
+            &req.request_id,
+        )
+        .await?;
         if !promoted {
             return Err(ContractError::new(
                 ErrorCode::CanonicalTargetNotFound,
@@ -1570,8 +1574,12 @@ mod tests {
     #[tokio::test]
     async fn list_projects_returns_summary() {
         let (pool, bus) = setup().await;
-        create(&pool, &bus, &empty_cache(), &make_create_req("A", ProjectTool::PixInsight)).await.unwrap();
-        create(&pool, &bus, &empty_cache(), &make_create_req("B", ProjectTool::Siril)).await.unwrap();
+        create(&pool, &bus, &empty_cache(), &make_create_req("A", ProjectTool::PixInsight))
+            .await
+            .unwrap();
+        create(&pool, &bus, &empty_cache(), &make_create_req("B", ProjectTool::Siril))
+            .await
+            .unwrap();
         let list = list(&pool).await.unwrap();
         assert_eq!(list.len(), 2);
     }

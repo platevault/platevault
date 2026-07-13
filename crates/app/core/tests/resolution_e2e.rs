@@ -218,10 +218,8 @@ async fn step2_search_finds_seeded_object_without_persisting() {
     );
 
     // SC-002: browsing never writes canonical_target.
-    let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM canonical_target")
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM canonical_target").fetch_one(db.pool()).await.unwrap();
     assert_eq!(count, 0, "search must never write canonical_target");
 }
 
@@ -250,10 +248,8 @@ async fn step3_long_tail_resolve_then_explicit_promotion() {
     assert_eq!(online_resolver.call_count(), 1);
 
     // FR-004/SC-002: the plain resolve must not have written SQLite.
-    let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM canonical_target")
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM canonical_target").fetch_one(db.pool()).await.unwrap();
     assert_eq!(count, 0, "resolve must never write canonical_target on its own");
 
     let target_id = targeting::identity::target_id_from_designation("B 33");
@@ -304,12 +300,10 @@ async fn step4_alias_variants_group_to_same_target_via_drain() {
     let img_ngc224 = make_image(&db, "ngc224_frame.fits").await;
     let img_common = make_image(&db, "andromeda_raw.fits").await;
 
-    for (img, object) in
-        [(&img_m31, "M 31"), (&img_ngc224, "NGC 224"), (&img_common, "Messier 31")]
+    for (img, object) in [(&img_m31, "M 31"), (&img_ngc224, "NGC 224"), (&img_common, "Messier 31")]
     {
-        let out = ingest_resolution::associate_or_enqueue(db.pool(), None, img, object)
-            .await
-            .unwrap();
+        let out =
+            ingest_resolution::associate_or_enqueue(db.pool(), None, img, object).await.unwrap();
         assert_eq!(
             out,
             app_core::ingest_resolution::AssociateOutcome::Enqueued,

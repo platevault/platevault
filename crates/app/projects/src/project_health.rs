@@ -418,7 +418,9 @@ mod tests {
     async fn ready_invariant_no_sources_no_op() {
         let (pool, bus) = setup().await;
         let created =
-            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("M1 No Sources")).await.unwrap();
+            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("M1 No Sources"))
+                .await
+                .unwrap();
         assert_eq!(created.lifecycle, "setup_incomplete");
 
         let result = check_project_ready_invariant(&pool, &bus, &created.project_id).await.unwrap();
@@ -430,7 +432,9 @@ mod tests {
     async fn ready_invariant_with_source_transitions() {
         let (pool, bus) = setup().await;
         let created =
-            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("NGC 7000 Auto")).await.unwrap();
+            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("NGC 7000 Auto"))
+                .await
+                .unwrap();
         assert_eq!(created.lifecycle, "setup_incomplete");
 
         // Add a source (project_setup.add_source also calls maybe_auto_ready;
@@ -463,7 +467,9 @@ mod tests {
     async fn ready_invariant_already_ready_no_op() {
         let (pool, bus) = setup().await;
         let created =
-            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("Already Ready")).await.unwrap();
+            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("Already Ready"))
+                .await
+                .unwrap();
 
         persistence_db::repositories::projects::update_project_lifecycle(
             &pool,
@@ -483,7 +489,9 @@ mod tests {
         let (pool, bus) = setup().await;
         let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
         let created =
-            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("M31 Block Test")).await.unwrap();
+            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("M31 Block Test"))
+                .await
+                .unwrap();
         let condition = BlockCondition::SourceMissing { inventory_id: "inv-missing".to_owned() };
 
         let first = emit_block_transition(&pool, &bus, &debounce, &created.project_id, &condition)
@@ -512,7 +520,9 @@ mod tests {
         let (pool, bus) = setup().await;
         let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
         let created =
-            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("M82 Expiry")).await.unwrap();
+            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("M82 Expiry"))
+                .await
+                .unwrap();
         let condition = BlockCondition::SourceMissing { inventory_id: "inv-gone".to_owned() };
 
         emit_block_transition(&pool, &bus, &debounce, &created.project_id, &condition)
@@ -543,7 +553,9 @@ mod tests {
         let (pool, bus) = setup().await;
         let debounce = DebounceCache::new(DEBOUNCE_WINDOW);
         let created =
-            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("IC 1805 Rapid")).await.unwrap();
+            project_setup::create(&pool, &bus, &empty_cache(), &make_create_req("IC 1805 Rapid"))
+                .await
+                .unwrap();
         let condition = BlockCondition::SourceMissing { inventory_id: "inv-rapid".to_owned() };
 
         // First signal — applied.

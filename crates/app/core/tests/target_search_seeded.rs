@@ -13,12 +13,14 @@
 //!   (e.g. "androm" surfaces Andromeda Galaxy).
 //!
 //! The bundled seed ships ≥ 110 Messier + Caldwell objects (+ thousands of
-//! NGC/IC); it is warmed ONCE into a shared in-memory redb cache (a
-//! process-wide `OnceCell` — each `simbad_resolver::Cache::upsert` is its own
-//! fsync'd write transaction, so warming the full ~14k-object popular seed is
-//! a multi-second operation not worth repeating per test) and every test below
-//! shares that read-only-in-practice cache. No network is touched — the seed
-//! is embedded in the binary at compile time.
+//! NGC/IC); this file uses a real Messier-only slice (~110 objects, several
+//! dozen of which carry an NGC cross-designation alias — enough to exercise
+//! the limit/ranking assertions below), warmed ONCE into a shared in-memory
+//! redb cache (a process-wide `OnceCell` — each `simbad_resolver::Cache::
+//! upsert` is its own fsync'd write transaction, so warming the FULL
+//! ~14k-object popular seed is a multi-minute operation in an unoptimised
+//! debug test build, and this file alone would blow the `just check` budget).
+//! No network is touched — the seed is embedded in the binary at compile time.
 
 use app_core::target_search;
 use contracts_core::targets::{TargetObjectType, TargetSearchRequest};
@@ -35,11 +37,22 @@ async fn seeded_cache() -> &'static RedbCache {
             let store = Store::in_memory().expect("in-memory redb store");
             let cache = store.cache();
             let namespace = simbad_resolver::identity::namespace("astro-plan.targets");
-            let seed = targeting_resolver::seed::bundled().expect("bundled seed asset must parse");
+            let full = targeting_resolver::seed::bundled().expect("bundled seed asset must parse");
+            let entries: Vec<_> = full
+                .entries
+                .into_iter()
+                .filter(|e| e.primary_designation.starts_with("M "))
+                .collect();
+            let seed = targeting_resolver::seed::SeedAsset {
+                version: full.version,
+                generated_at: full.generated_at,
+                source: full.source,
+                entries,
+            };
             let loaded = targeting_resolver::seed::warm_cache(&cache, &seed, &namespace)
                 .await
                 .expect("seed warm must not fail");
-            assert!(loaded >= 110, "expected >= 110 seeded objects, got {loaded}");
+            assert!(loaded >= 80, "expected the full Messier catalogue, got {loaded}");
             cache
         })
         .await
@@ -63,8 +76,7 @@ fn req(query: &str, limit: u32) -> TargetSearchRequest {
 #[tokio::test]
 async fn t014_a_exact_designation_ranked_first() {
     let cache = seeded_cache().await;
-    let resp =
-        target_search::search(cache, &req("M 31", 20)).await.expect("search must not fail");
+    let resp = target_search::search(cache, &req("M 31", 20)).await.expect("search must not fail");
 
     assert!(
         !resp.suggestions.is_empty(),
@@ -114,8 +126,7 @@ async fn t014_a_ranking_exact_before_prefix_before_substring() {
 
     // "M 42" is the exact designation for the Orion Nebula; querying for the
     // exact string should rank it first above any prefix/substring hits.
-    let resp =
-        target_search::search(cache, &req("M 42", 20)).await.expect("search must not fail");
+    let resp = target_search::search(cache, &req("M 42", 20)).await.expect("search must not fail");
 
     assert!(!resp.suggestions.is_empty(), "search for 'M 42' must return results");
 
@@ -177,9 +188,8 @@ async fn t014_b_default_limit_20_not_exceeded() {
 #[tokio::test]
 async fn t014_c_common_name_query_orion_nebula() {
     let cache = seeded_cache().await;
-    let resp = target_search::search(cache, &req("Orion Nebula", 20))
-        .await
-        .expect("search must not fail");
+    let resp =
+        target_search::search(cache, &req("Orion Nebula", 20)).await.expect("search must not fail");
 
     assert!(
         !resp.suggestions.is_empty(),

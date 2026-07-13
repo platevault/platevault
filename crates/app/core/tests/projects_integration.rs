@@ -81,7 +81,9 @@ async fn create_then_get_returns_persisted_fields() {
         canonical_target_id: None,
     };
 
-    let result = project_setup::create(db.pool(), &bus, &empty_cache(), &req).await.expect("create must succeed");
+    let result = project_setup::create(db.pool(), &bus, &empty_cache(), &req)
+        .await
+        .expect("create must succeed");
 
     // Fresh project has no sources → lifecycle stays setup_incomplete.
     assert_eq!(
@@ -120,14 +122,17 @@ async fn create_duplicate_name_is_rejected_at_db_layer() {
 
     let name = unique_name("Orion");
     let req1 = make_create_req(&name, ProjectTool::PixInsight);
-    project_setup::create(db.pool(), &bus, &empty_cache(), &req1).await.expect("first create must succeed");
+    project_setup::create(db.pool(), &bus, &empty_cache(), &req1)
+        .await
+        .expect("first create must succeed");
 
     let req2 = ProjectCreateRequest {
         path: format!("projects/{name}-2"), // different path
         ..make_create_req(&name, ProjectTool::PixInsight)
     };
-    let err =
-        project_setup::create(db.pool(), &bus, &empty_cache(), &req2).await.expect_err("duplicate name must fail");
+    let err = project_setup::create(db.pool(), &bus, &empty_cache(), &req2)
+        .await
+        .expect_err("duplicate name must fail");
     assert_eq!(err.code, ErrorCode::NameDuplicate);
 }
 
@@ -152,7 +157,9 @@ async fn note_add_update_read_round_trip() {
     // Create the project first (notes are associated by project_id).
     let name = unique_name("Crab");
     let req = make_create_req(&name, ProjectTool::PixInsight);
-    let created = project_setup::create(db.pool(), &bus, &empty_cache(), &req).await.expect("create must succeed");
+    let created = project_setup::create(db.pool(), &bus, &empty_cache(), &req)
+        .await
+        .expect("create must succeed");
     let project_id = &created.project_id;
 
     // 1. Add a note.
@@ -231,7 +238,9 @@ async fn manifest_write_list_get_round_trip() {
     // Create a project to own the manifest.
     let name = unique_name("Andromeda");
     let req = make_create_req(&name, ProjectTool::PixInsight);
-    let created = project_setup::create(db.pool(), &bus, &empty_cache(), &req).await.expect("create must succeed");
+    let created = project_setup::create(db.pool(), &bus, &empty_cache(), &req)
+        .await
+        .expect("create must succeed");
     let project_id = &created.project_id;
 
     // Write uses a real temp dir for the notes/ subdirectory.
@@ -292,7 +301,9 @@ async fn manifest_embeds_notes_snapshot_from_db() {
 
     let name = unique_name("Horsehead");
     let req = make_create_req(&name, ProjectTool::Siril);
-    let created = project_setup::create(db.pool(), &bus, &empty_cache(), &req).await.expect("create must succeed");
+    let created = project_setup::create(db.pool(), &bus, &empty_cache(), &req)
+        .await
+        .expect("create must succeed");
     let project_id = &created.project_id;
 
     // Persist a note before writing the manifest.
