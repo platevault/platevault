@@ -1,73 +1,189 @@
 ---
-status: applied
-created: 2026-06-23
-applied: 2026-06-23
-change_request: "Pre-implementation artifact corrections for the single-type ingest iteration, surfaced by /speckit.analyze — alignment only, no new product behavior. (C1) Renumber the new migration 0046->0047 throughout data-model.md and tasks.md T061 (file 0047_inbox_single_type.sql): two 0046_*.sql already exist on main (0046_session_canonical_target, 0046_target_constellation_magnitude) so a third 0046 breaks sqlx::migrate!. (C2) Mark FR-020, User Story 5, and SC-008 (auto-split of mixed folders) SUPERSEDED by FR-034/FR-050/SC-012. (C3) Fix research.md R-9 extraction-gap table rotation row: ROTATANG->rotatorAngleDeg (mechanical, flat-match key), OBJCTROT->skyRotationDeg (informational only). (C6) Refresh plan.md Summary, Technical Context, and Constitution Check to cover US8-US16 / FR-025-FR-054 and re-assert the post-design constitution gate. (C4) Add or explicitly scope a task for flat<->light ROTATANG matching + metadata-quality warning and UI surfacing (FR-040). (C5) Add pixel-size (XPIXSZ/PIXSIZE) to the extended extraction set (FR-053/T062) so the FOV-aware target radius (FR-052/R-17/T074) is computable, or define a fixed-radius fallback. (C8) Specify in FR-047/R-14/T070 that 'target' is a hard mandatory light key satisfiable by coordinate auto-resolution OR user pick; no pointing and no set target -> needs-review. (C9) Note in FR-017/Edge Cases that under source-groups a single-type sub-item has uniform provenance. (C10) Mark the pre-iteration inbox.reclassify and inbox.confirm contract shapes superseded; inbox.confirm 'action' is removed (not optional no-op)."
-scope: "Feature-wide (artifact alignment / pre-implementation correction)"
+status: pending
+created: 2026-07-13
+change_request: "Global plan/queue + apply-now/add-to-plan + catalogue-no-plan. Every plan-producing action (Inbox move, Cleanup, Archive, Restructure, PreparedView gen/regen/removal, Project-scaffold) gets a combined 'Apply now / Add to plan' control. Introduce a single GLOBAL plan/queue visible app-wide (NOT per-window): a status-bar counter (queuedActionCount in useStatusSummary, a peer chip) plus a fold-out Plan/Queue panel modeled on LogPanel (own PlanQueueContext) listing all queued actions across origins with origin + from->to + per-item Apply/Remove + Apply-all. 'Add to plan' routes into this global queue; 'Apply now' bypasses it. A plan record + audit are ALWAYS written, even for ceremony/auto-apply origins (project_create.rs mkdir precedent). 'Apply now' is not silent: destructive/move origins still show from->to inline before executing; ceremony origins just do it. Catalogue-in-place registers directly at confirm (move the plan_listener registration to confirm-time for catalogue items) — no plan needed since nothing mutates. Stays within the constitution WITHOUT amendment."
+scope: "Feature-wide"
 ---
 
 ## Change Summary
 
-Align the spec-041 artifacts with the already-decided single-type ingest pivot before implementation begins: fix a migration-number collision, retire requirements the pivot superseded, correct an internal rotation-keyword contradiction, close two thin coverage gaps (flat<->light rotation matching; FOV pixel-size), refresh the plan's constitution gate for the expanded scope, and reconcile stale contract shapes. No new product behavior — corrections only.
+Promote the inbox-local plan panel into a single **global plan/queue** shared by
+every plan-producing surface (Inbox move, Cleanup, Archive, Restructure,
+PreparedView gen/regen/removal, Project-scaffold), give every such action a
+combined **"Apply now / Add to plan"** control, always write a plan record +
+audit (even for ceremony/auto-apply origins), and move catalogue-in-place
+registration to confirm-time so it produces no plan. No constitution amendment.
 
 ## Implementation Progress
 
-- **Tasks completed**: T001–T060 (prior iterations, merged to `main`; 60 of 79 total).
-- **Remaining**: T061–T079 (single-type ingest + Phase 13), 0 of 19 started.
-- **Current phase**: Phase 12 (foundational T061/T062 not yet begun).
-- **Files changed on branch**: 0 (fresh branch `041-single-type-impl` off `origin/main`).
-- **Potential task completions to mark**: none (no code yet).
-- **Adhoc changes**: None.
+- **Tasks completed**: T001–T059, T061–T078, T080–T081 (79 of 81; from the
+  applied 2026-06-21 and 2026-06-23 iterations on `main`).
+- **Remaining**: T060 (`[~]` Windows E2E for the destination-model phase,
+  merge-gated by Layer-1 + vitest; live tauri-MCP run recommended post-merge),
+  T079 (`[ ]` Phase 13 quickstart + Windows E2E).
+- **Current phase**: feature is implementation-complete except the two Windows
+  E2E verification tasks; this iteration opens a new **Phase 14**.
+- **Files changed on branch**: 0 (fresh branch `docs/grilling-decisions-2026-07-13`
+  off `origin/main`; this define run adds only `pending-iteration.md`).
+- **Potential task completions to mark**: none.
+- **Adhoc changes**: The prior applied iteration record was archived to
+  `iteration-2026-06-23-applied.md` to preserve history before writing this
+  pending file.
 
 ## Impact Assessment
 
 | Artifact | Action | Details |
 |----------|--------|---------|
-| spec.md | Modify | C2 supersede FR-020 / US5 / SC-008; C8 FR-047 target-mandatory clarification; C9 FR-017 + Edge Cases provenance note |
-| plan.md | Modify | C6 refresh Summary, Technical Context, Constitution Check for US8–US16 / FR-025–FR-054; head 0045→0047; re-assert post-design gate |
-| tasks.md | Modify + Add | C1 T061 migration 0046→0047; C4 add flat<->light rotation task (T080); C5 T062 pixel-size + T074 FOV fallback note; C8 T070 target-gate note |
-| data-model.md | Modify | C1 rename 0046_inbox_single_type.sql → 0047 (heading, "head after 0045", iteration title, DDL summary); C5 add pixel-size field to extended `inbox_file_metadata` |
-| research.md | Modify | C3 fix R-9 extraction-gap rotation row (ROTATANG=key, OBJCTROT=informational); C5 pixel-size in R-9 table + R-17 FOV-radius fallback; C8 R-14 target-mandatory note |
-| contracts/operations.md | Modify | C10 mark pre-iteration `inbox.reclassify` (fixed-field) and `inbox.confirm` (`action` optional/no-op) shapes SUPERSEDED by the 2026-06-23 section; state `action` is **removed** |
-| quickstart.md | Modify | Add T079 verification scenarios for the flat-rotation deviation warning (C4) and the FOV-radius fallback (C5) |
+| spec.md | Modify | Add US17 (global plan/queue), US18 (apply-now vs add-to-plan on every plan producer), US19 (catalogue registers at confirm, no plan); add FR-055–FR-063; add SC entries for the global queue count + apply-now/add-to-plan + catalogue-no-plan; note the plan surface is no longer inbox-local (relaxes FR-003/FR-004 wording) |
+| plan.md | Modify | Add `PlanQueueContext` + fold-out Plan/Queue panel (modeled on `apps/desktop/src/ui/LogPanel.tsx`) + `queuedActionCount` peer chip in `useStatusSummary`/`StatusBar`; a global unapplied-plan enumeration path in app/core; catalogue confirm-time registration move; re-assert constitution gate (II + V hold, no amendment); add Phase 14 |
+| tasks.md | Add | Phase 14: T082–T093 (backend queue query + contract, PlanQueueContext, status chip, fold-out panel, per-origin Apply now/Add to plan control, always-write plan+audit for ceremony origins, catalogue confirm-time registration move, tests) |
+| data-model.md | Modify | Define the global queue as a read model over persisted-but-unapplied plan records across origins; add `origin` discriminator on plan records if not already present; note ceremony/auto-apply origins still persist a (possibly immediately-applied) plan record |
+| research.md | Modify | Record the plan-origin inventory + verdicts (valuable / ceremony / low-stakes), the "always write plan+audit" rationale (project_create.rs precedent), and the constitution-without-amendment argument |
+| contracts/operations.md | Modify | Add `plan.queue.list` (all unapplied actions across origins with origin + from→to), `plan.queue.apply_item` / `plan.queue.remove_item` / `plan.queue.apply_all`; note `inbox.confirm` catalogue path registers at confirm-time (no plan emitted) |
+| quickstart.md | Modify | Add scenarios: queue counter increments on Add-to-plan across origins; Apply now bypasses queue but shows from→to for destructive/move; catalogue confirm produces no queued action; Apply-all drains the queue |
 
 ## Risk Checks
 
-- [x] No completed tasks invalidated — T061–T079 unstarted; FR-020/US5/SC-008 supersession is documentation-only (their impl T036/T037 was already retired by the applied single-type pivot; no code rework).
-- [x] No scope boundary violations — all changes align artifacts with the already-decided pivot; C4/C5 surface small impl already implied by FR-040 / FR-052, not new intent.
-- [x] No downstream dependency breaks — migration renumber 0046→0047 is isolated; new task T080 adds no ordering conflict (depends on T062/T064).
+- [x] No completed tasks invalidated — Phase 14 is additive; the inbox-local
+  `PlanPanel` (T014/T041/T055) is superseded UI-side by the global panel but its
+  app/core plan-generation and audit paths are reused, not reworked. The
+  catalogue registration move (decision 6) touches `plan_listener.rs`
+  (T032) — verify the existing catalogue tests are re-pointed, not deleted.
+- [x] No scope boundary violations — stays within the constitution without
+  amendment: every action still yields a reviewable from→to (Principle II) and a
+  durable audit record (Principle V); ceremony origins auto-apply per the
+  already-decided 2026-07-04 project-scaffold mkdir precedent.
+- [x] No downstream dependency breaks — the global queue is a read model over
+  the existing persisted plan records; adding an `origin` discriminator is
+  backward-compatible (default to the inbox origin for existing rows).
 
 ## Planned Changes
 
 ### spec.md
-- **C2 / FR-020**: append `**[SUPERSEDED by FR-034 / FR-050 / SC-012]**` and a one-line rationale — under single-type sub-items a mixed folder materializes N single-type items at classify, each confirmed into its own 1:1 plan; there is no mixed item to auto-split.
-- **C2 / User Story 5**: prefix the US5 heading with `[SUPERSEDED]` and add a note pointing to US10 (single-type sub-items at ingest) as the replacement; keep the text for history.
-- **C2 / SC-008**: mark `[SUPERSEDED by SC-012]` (a mixed folder produces N single-type items and zero "mixed" items).
-- **C8 / FR-047**: add a sentence — `target` is a hard mandatory attribute for light frames, satisfiable by coordinate auto-resolution (FR-052) **or** an explicit user pick; a light with no pointing and no user-set target routes to the needs-review bucket (consistent with US15 scenario 3).
-- **C9 / FR-017 + Edge Cases**: add a note — under the source-group model a single-type sub-item derives from one leaf folder = one source = one `organization_state`, so its provenance is uniform; the earlier "one item's plan MAY contain both catalogue and move actions" / mixed-provenance edge case no longer applies at the sub-item level.
+
+- **US17 — Global plan/queue (P1)**: as a user I see a single app-wide queue of
+  all not-yet-applied actions regardless of which surface produced them, with a
+  status-bar counter and a fold-out panel; I can Apply or Remove any single
+  queued action or Apply-all. The queue is global, NOT per-window.
+- **US18 — Apply now vs Add to plan on every plan producer (P1)**: every
+  plan-producing action (Inbox move, Cleanup, Archive, Restructure, PreparedView
+  gen/regen/removal, Project-scaffold) offers a combined "Apply now / Add to
+  plan" control. "Add to plan" routes the action into the global queue; "Apply
+  now" bypasses the queue. "Apply now" is not silent — destructive/move origins
+  show from→to inline before executing; ceremony origins just do it.
+- **US19 — Catalogue registers at confirm, no plan (P2)**: cataloguing in place
+  registers records directly at confirm-time and produces no plan/queue entry,
+  since nothing on disk mutates.
+- **FR-055**: The system MUST maintain a single global plan/queue of all
+  not-yet-applied actions across every plan-producing origin, visible app-wide
+  (not scoped to one window/surface).
+- **FR-056**: The status bar MUST show a `queuedActionCount` peer chip reflecting
+  the number of queued (not-yet-applied) actions across all origins.
+- **FR-057**: A fold-out Plan/Queue panel MUST list every queued action with its
+  origin, its from→to (or catalogue/ceremony descriptor), and per-item Apply /
+  Remove controls plus an Apply-all control.
+- **FR-058**: Every plan-producing action MUST expose a combined "Apply now /
+  Add to plan" control; "Add to plan" enqueues into the global queue and "Apply
+  now" bypasses it.
+- **FR-059**: "Apply now" MUST NOT be silent for destructive or move origins —
+  the from→to MUST be shown inline before execution (Principle II); ceremony
+  origins (project-scaffold, catalogue-in-place) MAY apply without an inline
+  review step.
+- **FR-060**: A plan record AND an audit record MUST be written for every applied
+  action, including ceremony/auto-apply origins (per the `project_create.rs`
+  mkdir precedent).
+- **FR-061**: Cataloguing in place MUST register records directly at confirm-time
+  and MUST NOT emit a plan or a queue entry (nothing on disk mutates).
+- **FR-062**: The plan/queue surface MUST be reachable from any page (it is not
+  the inbox-local panel) — relaxes the inbox-local wording of FR-003/FR-004 while
+  preserving "explicit Apply step" and "no unexpected navigation".
+- **FR-063**: Removing a queued action MUST leave all files untouched and MUST
+  NOT write a filesystem-mutation audit record (only queue-management state).
+- **Success Criteria**: add SC entries — (a) the queue counter reflects queued
+  actions across ≥2 distinct origins in one session; (b) Apply-all drains the
+  queue and each drained action writes its own audit record; (c) a catalogue
+  confirm produces zero queue entries; (d) an "Apply now" on a move origin shows
+  from→to before executing.
 
 ### plan.md
-- **C6 / Summary + Technical Context**: extend to cover the destination-model iteration (US8–US9 / FR-025–FR-033) and the single-type ingest iteration (US10–US16 / FR-034–FR-054); correct "7 user stories (US1–US7), 28 functional requirements" → the current 16 user stories / FR-001–FR-054 count; correct "currently through 0044 … New migration 0045" → "0045 applied; this iteration adds 0047 (0046 numbers are already taken)".
-- **C6 / Constitution Check**: re-assert the post-design gate for the new scope — add explicit notes that the session-lifecycle drop (FR-051) keeps reviewable plans + durable audit (Principle II/V), coordinate target resolution adds no heavy dependency (Principle IV), generic overrides remain index-only / never written to files (Principle I/III), and extended extraction stays lazy (no eager hashing). Record verdict PASS.
+
+- Add `PlanQueueContext` (React context) as the single client-side owner of the
+  global queue state; the fold-out panel is a sibling of `LogPanel`
+  (`apps/desktop/src/ui/LogPanel.tsx`) and reuses its fold-out chrome pattern.
+- Add the `queuedActionCount` field to `apps/desktop/src/app/useStatusSummary.ts`
+  and render a peer chip in `apps/desktop/src/app/StatusBar.tsx`.
+- Add an app/core enumeration of unapplied plan records across origins backing
+  `plan.queue.list`; reuse the existing plan-generation + audit paths.
+- Catalogue-in-place: relocate the calibration/light registration from
+  `crates/app/inbox/src/plan_listener.rs` (apply-completion) to confirm-time for
+  catalogue items, so no plan is generated for the catalogue path.
+- Re-assert the Constitution Check: Principle II (reviewable mutation) and
+  Principle V (durable records) both hold — every action yields a reviewable
+  from→to and a durable audit record; ceremony auto-apply follows the
+  already-ratified 2026-07-04 project-scaffold decision. Verdict: PASS, no
+  amendment required.
+- Add **Phase 14** to the phase list.
 
 ### tasks.md
-- **C1 / T061**: change "Migration 0046" → "Migration 0047" and name the file `0047_inbox_single_type.sql`; add a parenthetical noting 0046 is already used by `0046_session_canonical_target.sql` and `0046_target_constellation_magnitude.sql`.
-- **C4 / new T080 [US16/US10]** (Phase 12): flat<->light rotation matching — compare a flat group's `ROTATANG` against the light group's `ROTATANG` (near-exact), emit the metadata-quality warning on any deviation, honour `flat_rotation_required` (default off) when `ROTATANG` is absent, and surface the warning in the UI (FR-040). Depends on T062 (extraction) + T064 (grouping).
-- **C5 / T062**: add `XPIXSZ`/`PIXSIZE` (pixel size, with XISF fallback) to the extended-extraction field list (FR-053).
-- **C5 / T074**: add a note — the FOV-aware radius uses `FOCALLEN` + pixel size + `NAXIS1/2`; when pixel size is unavailable, fall back to a configurable fixed radius (FR-052/R-17).
-- **C8 / T070**: add a note — the derived mandatory set treats `target` as a hard light key satisfiable by auto-resolution or user pick; unresolved + no pointing → needs-review.
+
+- **T082 [US17]** app/core + persistence: enumerate unapplied plan records across
+  all origins; add an `origin` discriminator to plan records (default inbox for
+  existing rows). (FR-055/FR-060)
+- **T083 [US17]** contracts + bindings: `plan.queue.list`,
+  `plan.queue.apply_item`, `plan.queue.remove_item`, `plan.queue.apply_all`.
+  (FR-055/FR-057/FR-063)
+- **T084 [P] [US17]** frontend: `PlanQueueContext` owning global queue state,
+  fed by `plan.queue.list`.
+- **T085 [US17]** frontend: `queuedActionCount` in `useStatusSummary` + a peer
+  chip in `StatusBar`. (FR-056)
+- **T086 [US17]** frontend: fold-out Plan/Queue panel modeled on `LogPanel`,
+  listing origin + from→to + per-item Apply/Remove + Apply-all. (FR-057)
+- **T087 [US18]** frontend: shared combined "Apply now / Add to plan" control;
+  wire it into Inbox move, Cleanup, Archive, Restructure, PreparedView
+  gen/regen/removal, Project-scaffold. One component, all origins inherit it.
+  (FR-058)
+- **T088 [US18]** "Apply now" path: show from→to inline for destructive/move
+  origins before executing; ceremony origins apply directly. (FR-059)
+- **T089 [US18]** always write plan record + audit for ceremony/auto-apply
+  origins (project-scaffold, catalogue) per the `project_create.rs` precedent.
+  (FR-060)
+- **T090 [US19]** move catalogue-in-place registration from `plan_listener.rs`
+  apply-completion to confirm-time; catalogue confirm emits no plan. Re-point
+  (do not delete) the existing catalogue tests. (FR-061)
+- **T091 [P] [US17/US18/US19]** Layer-1 tests: cross-origin queue enumeration;
+  apply-item/remove-item/apply-all; ceremony origins write plan+audit; catalogue
+  confirm emits no plan; remove-item writes no fs-mutation audit.
+- **T092 [P] [US17/US18/US19]** vitest: status chip count, fold-out panel
+  rendering + per-item controls, combined control across origins, Apply-now
+  from→to inline for move.
+- **T093 [US17]** quickstart + Windows E2E (tauri MCP) for the global queue
+  across ≥2 origins; update `specs/037-e2e-integration-testing/contracts/coverage-matrix.md`.
 
 ### data-model.md
-- **C1**: rename the migration throughout — "Iteration 2026-06-23: Single-type sub-items … New migration `0046_inbox_single_type.sql` (head after 0045)" → `0047_inbox_single_type.sql` (head after 0045; 0046 is already taken); update the "## Migration 0046 summary (DDL intent)" heading and the "Migration 0046 re-derivation approach" heading to 0047.
-- **C5**: add `pixel_size_um REAL NULL` (FITS `XPIXSZ`/`PIXSIZE`; XISF `Image:PixelSize`) to the extended `inbox_file_metadata` field table and the DDL summary; note it feeds the FOV-radius computation (R-17).
+
+- Define the global queue as a **read model** over persisted-but-unapplied plan
+  records across origins (no new durable table strictly required; the queue is a
+  projection).
+- Add an `origin` discriminator on plan records (inbox-move | cleanup | archive |
+  restructure | prepared-view | project-scaffold | catalogue) with a default of
+  the inbox origin for existing rows.
+- Note ceremony/auto-apply origins still persist a plan record (possibly
+  immediately marked applied) so the audit trail is complete (FR-060).
 
 ### research.md
-- **C3 / R-9 extraction-gap table**: replace the single conflated `rotation | OBJCTROT | ROTATANG | light+flat grouping` row with two rows consistent with R-18 and the property registry — `rotatorAngleDeg | ROTATANG (= ROTATOR, mechanical) | — | flat-match key + tolerant light grouping` and `skyRotationDeg | OBJCTROT (sky PA) | — | informational only, NOT a flat key`.
-- **C5 / R-9 + R-17**: add a `pixelSize | XPIXSZ/PIXSIZE | XISF Image:PixelSize` row to the extraction table; in R-17 note that the FOV-aware radius is `FOCALLEN` + pixel size + sensor dimensions, with a configurable fixed-radius fallback when pixel size is absent.
-- **C8 / R-14**: note in the mandatory-property discussion that `target` (light) is satisfiable by coordinate auto-resolution (R-17) or user pick and otherwise lands in needs-review.
 
-### contracts/operations.md
-- **C10**: add a `**[SUPERSEDED by the Iteration 2026-06-23 section below]**` marker on the original `inbox.reclassify` (fixed-field `{ filter?, exposure_s?, binning? }`) and `inbox.confirm` blocks; in the 2026-06-23 `inbox.confirm` delta, change "`action` becomes optional / no-op" → "`action` is **removed**" so the contract states a single, unambiguous shape.
+- Record the plan-origin inventory + verdicts: Inbox-move valuable;
+  Inbox-catalogue ceremony (no mutation); Cleanup valuable (§II); Archive
+  valuable; Restructure valuable; PreparedView gen/regen/removal low-stakes
+  (reproducible §V projection); Project-scaffold ceremony (mkdir auto-applies per
+  2026-07-04).
+- Record the "always write plan + audit" rationale (project_create.rs mkdir
+  precedent) and the constitution-without-amendment argument (Principles II + V
+  both satisfied).
 
 ### quickstart.md
-- Add two T079 verification scenarios: (1) a flat group whose `ROTATANG` differs from the matched light group surfaces the rotation-deviation warning (C4); (2) a light with `FOCALLEN` but no pixel size still resolves target candidates using the fixed-radius fallback (C5).
+
+- Add scenarios: queue counter increments on Add-to-plan across ≥2 origins; Apply
+  now bypasses the queue but shows from→to inline for a move origin; a catalogue
+  confirm produces zero queued actions; Apply-all drains the queue and each
+  action writes its own audit record.
