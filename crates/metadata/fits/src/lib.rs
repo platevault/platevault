@@ -21,8 +21,8 @@ use std::path::Path;
 
 use fits_header::{FitsError, FromCard, Header};
 use metadata_core::{
-    sexagesimal_dec_to_deg, sexagesimal_ra_to_deg, MetadataExtractError, MetadataExtractor,
-    RawFileMetadata,
+    interpret_wcs_pointing, sexagesimal_dec_to_deg, sexagesimal_ra_to_deg, MetadataExtractError,
+    MetadataExtractor, RawFileMetadata,
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -198,6 +198,23 @@ fn parse_header(header: &Header) -> RawFileMetadata {
     meta.date_end = get_str(header, "DATE-END");
     meta.mjd_avg = get(header, "MJD-AVG");
     meta.mjd_obs = get(header, "MJD-OBS");
+
+    // Plate-solved WCS pointing (spec 052 P3, FR-012): passthrough keyword
+    // reads only — interpretation (the CTYPE solve-gate, CD/CROTA2 rotation)
+    // lives once in `metadata_core::interpret_wcs_pointing`.
+    if let Some(wcs) = interpret_wcs_pointing(
+        get_str(header, "CTYPE1").as_deref(),
+        get_str(header, "CTYPE2").as_deref(),
+        get(header, "CRVAL1"),
+        get(header, "CRVAL2"),
+        get(header, "CD1_1"),
+        get(header, "CD2_1"),
+        get(header, "CROTA2"),
+    ) {
+        meta.wcs_ra_deg = Some(wcs.ra_deg);
+        meta.wcs_dec_deg = Some(wcs.dec_deg);
+        meta.wcs_rotation_deg = wcs.rotation_deg;
+    }
 
     meta
 }
@@ -516,5 +533,45 @@ mod tests {
         assert!(meta.observer_lat.is_none());
         assert!(meta.date_loc.is_none());
         assert!(meta.mjd_avg.is_none());
+    }
+
+    // ── WCS plate-solved pointing (spec 052 P3) ───────────────────────────────
+
+    #[test]
+    fn parses_wcs_pointing_with_cd_matrix() {
+        let meta = parse(&[
+            pad80("CTYPE1  = 'RA---TAN'"),
+            pad80("CTYPE2  = 'DEC--TAN'"),
+            pad80("CRVAL1  =            10.684708 / [deg] solved RA"),
+            pad80("CRVAL2  =             41.26875 / [deg] solved Dec"),
+            pad80("CD1_1   =        -0.0001935"),
+            pad80("CD2_1   =         0.0000501"),
+        ]);
+        approx(meta.wcs_ra_deg, 10.684_708);
+        approx(meta.wcs_dec_deg, 41.268_75);
+        assert!(meta.wcs_rotation_deg.is_some());
+    }
+
+    #[test]
+    fn wcs_pointing_absent_without_equatorial_ctype() {
+        // A bare CRVAL1/2 pair with no matching CTYPE is not trusted as a solve.
+        let meta = parse(&[
+            pad80("CRVAL1  =                 10.0"),
+            pad80("CRVAL2  =                 20.0"),
+        ]);
+        assert!(meta.wcs_ra_deg.is_none());
+        assert!(meta.wcs_dec_deg.is_none());
+    }
+
+    #[test]
+    fn wcs_rotation_falls_back_to_crota2() {
+        let meta = parse(&[
+            pad80("CTYPE1  = 'RA---TAN'"),
+            pad80("CTYPE2  = 'DEC--TAN'"),
+            pad80("CRVAL1  =                 83.822"),
+            pad80("CRVAL2  =                 -5.391"),
+            pad80("CROTA2  =                 12.5"),
+        ]);
+        assert_eq!(meta.wcs_rotation_deg, Some(12.5));
     }
 }

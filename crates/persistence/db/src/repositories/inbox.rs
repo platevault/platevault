@@ -209,6 +209,18 @@ pub struct UpsertFileMetadata<'a> {
     pub readout_mode: Option<&'a str>,
     pub focal_length_mm: Option<f64>,
     pub date_loc: Option<&'a str>,
+    // `pixel_size_um`/`sky_rotation_deg` columns have existed since migration
+    // 0049 (read by `list_inbox_pointing`/R-17 target recommendations) but
+    // were never wired on the write side until spec 052 P3 — without them,
+    // FOV-aware radius and sky-PA rotation silently fell back to the fixed
+    // radius / axis-aligned frame for every real ingested file.
+    pub pixel_size_um: Option<f64>,
+    pub sky_rotation_deg: Option<f64>,
+    // Plate-solved WCS pointing (spec 052 P3, FR-012), distinct from the
+    // mount `ra_deg`/`dec_deg` above — see migration 0062.
+    pub wcs_ra_deg: Option<f64>,
+    pub wcs_dec_deg: Option<f64>,
+    pub wcs_rotation_deg: Option<f64>,
 }
 
 /// Flat row from `inbox_plan_links`.
@@ -1132,8 +1144,9 @@ pub async fn upsert_inbox_file_metadata(
              binning_x, binning_y, temperature_c, object, date_obs, instrume,
              telescop, naxis1, naxis2, stack_count, file_size_bytes, file_mtime,
              offset, set_temp_c, ccd_temp_c, ra_deg, dec_deg, rotator_angle_deg,
-             readout_mode, focal_length_mm, date_loc)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             readout_mode, focal_length_mm, date_loc, pixel_size_um, sky_rotation_deg,
+             wcs_ra_deg, wcs_dec_deg, wcs_rotation_deg)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(inbox_item_id, relative_file_path) DO UPDATE SET
              filter = excluded.filter,
              exposure_s = excluded.exposure_s,
@@ -1158,7 +1171,12 @@ pub async fn upsert_inbox_file_metadata(
              rotator_angle_deg = excluded.rotator_angle_deg,
              readout_mode = excluded.readout_mode,
              focal_length_mm = excluded.focal_length_mm,
-             date_loc = excluded.date_loc",
+             date_loc = excluded.date_loc,
+             pixel_size_um = excluded.pixel_size_um,
+             sky_rotation_deg = excluded.sky_rotation_deg,
+             wcs_ra_deg = excluded.wcs_ra_deg,
+             wcs_dec_deg = excluded.wcs_dec_deg,
+             wcs_rotation_deg = excluded.wcs_rotation_deg",
     )
     .bind(&id)
     .bind(m.inbox_item_id)
@@ -1187,6 +1205,11 @@ pub async fn upsert_inbox_file_metadata(
     .bind(m.readout_mode)
     .bind(m.focal_length_mm)
     .bind(m.date_loc)
+    .bind(m.pixel_size_um)
+    .bind(m.sky_rotation_deg)
+    .bind(m.wcs_ra_deg)
+    .bind(m.wcs_dec_deg)
+    .bind(m.wcs_rotation_deg)
     .execute(pool)
     .await?;
     Ok(())
@@ -1250,6 +1273,12 @@ pub struct InboxPointingRow {
     pub sky_rotation_deg: Option<f64>,
     /// Raw `OBJECT` header value — display hint only, NEVER a matching key (R-17).
     pub object: Option<String>,
+    /// Plate-solved WCS pointing (spec 052 P3, FR-012, migration 0062) — the
+    /// high-confidence source, distinct from the mount `ra_deg`/`dec_deg`
+    /// above (medium confidence). `None` when the file has no WCS solve.
+    pub wcs_ra_deg: Option<f64>,
+    pub wcs_dec_deg: Option<f64>,
+    pub wcs_rotation_deg: Option<f64>,
 }
 
 /// Read per-file pointing + optics rows for an inbox item (R-17 / T074).
@@ -1266,7 +1295,8 @@ pub async fn list_inbox_pointing(
 ) -> DbResult<Vec<InboxPointingRow>> {
     Ok(sqlx::query_as::<_, InboxPointingRow>(
         "SELECT relative_file_path, ra_deg, dec_deg, focal_length_mm,
-                pixel_size_um, naxis1, naxis2, rotator_angle_deg, sky_rotation_deg, object
+                pixel_size_um, naxis1, naxis2, rotator_angle_deg, sky_rotation_deg, object,
+                wcs_ra_deg, wcs_dec_deg, wcs_rotation_deg
          FROM inbox_file_metadata
          WHERE inbox_item_id = ?
          ORDER BY relative_file_path",

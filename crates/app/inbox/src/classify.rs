@@ -455,6 +455,15 @@ async fn persist_file_metadata(
             readout_mode: meta.readout_mode.as_deref().map(str::trim).filter(|s| !s.is_empty()),
             focal_length_mm: meta.focal_length_mm,
             date_loc: meta.date_loc.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+            // spec 052 P3: pixel_size_um/sky_rotation_deg columns predate this
+            // spec (migration 0049) but were never wired here — without them
+            // `inbox.target_recommendations` (R-17) and cone-search silently
+            // always fell back to the fixed/axis-aligned case for real files.
+            pixel_size_um: meta.pixel_size_um,
+            sky_rotation_deg: meta.sky_rotation_deg,
+            wcs_ra_deg: meta.wcs_ra_deg,
+            wcs_dec_deg: meta.wcs_dec_deg,
+            wcs_rotation_deg: meta.wcs_rotation_deg,
         }
     } else {
         // No header metadata — still record identity for staleness tracking.

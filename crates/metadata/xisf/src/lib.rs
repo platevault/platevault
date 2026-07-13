@@ -20,8 +20,8 @@
 use std::path::Path;
 
 use metadata_core::{
-    sexagesimal_dec_to_deg, sexagesimal_ra_to_deg, MetadataExtractError, MetadataExtractor,
-    RawFileMetadata,
+    interpret_wcs_pointing, sexagesimal_dec_to_deg, sexagesimal_ra_to_deg, MetadataExtractError,
+    MetadataExtractor, RawFileMetadata,
 };
 use xisf_header::{Error as XisfError, FromField, Header};
 
@@ -177,6 +177,24 @@ fn parse_header(header: &Header) -> RawFileMetadata {
     meta.date_end = non_empty(get_str(header, "DATE-END"));
     meta.mjd_avg = get(header, "MJD-AVG");
     meta.mjd_obs = get(header, "MJD-OBS");
+
+    // Plate-solved WCS pointing (spec 052 P3, FR-012): passthrough keyword
+    // reads only — interpretation lives once in
+    // `metadata_core::interpret_wcs_pointing`. XISF carries the same
+    // FITS-compatible WCS keywords via `<FITSKeyword>`.
+    if let Some(wcs) = interpret_wcs_pointing(
+        get_str(header, "CTYPE1").as_deref(),
+        get_str(header, "CTYPE2").as_deref(),
+        get(header, "CRVAL1"),
+        get(header, "CRVAL2"),
+        get(header, "CD1_1"),
+        get(header, "CD2_1"),
+        get(header, "CROTA2"),
+    ) {
+        meta.wcs_ra_deg = Some(wcs.ra_deg);
+        meta.wcs_dec_deg = Some(wcs.dec_deg);
+        meta.wcs_rotation_deg = wcs.rotation_deg;
+    }
 
     meta
 }
@@ -468,5 +486,30 @@ mod tests {
         assert!(meta.pixel_size_um.is_none());
         assert!(meta.observer_lat.is_none());
         assert!(meta.mjd_avg.is_none());
+    }
+
+    // ── WCS plate-solved pointing (spec 052 P3) ───────────────────────────────
+
+    #[test]
+    fn parses_wcs_pointing_with_cd_matrix() {
+        let data = build_xisf(&[
+            ("CTYPE1", "'RA---TAN'", ""),
+            ("CTYPE2", "'DEC--TAN'", ""),
+            ("CRVAL1", "10.684708", ""),
+            ("CRVAL2", "41.26875", ""),
+            ("CD1_1", "-0.0001935", ""),
+            ("CD2_1", "0.0000501", ""),
+        ]);
+        let meta = parse(&data);
+        approx(meta.wcs_ra_deg, 10.684_708);
+        approx(meta.wcs_dec_deg, 41.268_75);
+        assert!(meta.wcs_rotation_deg.is_some());
+    }
+
+    #[test]
+    fn wcs_pointing_absent_without_equatorial_ctype() {
+        let data = build_xisf(&[("CRVAL1", "10.0", ""), ("CRVAL2", "20.0", "")]);
+        let meta = parse(&data);
+        assert!(meta.wcs_ra_deg.is_none());
     }
 }
