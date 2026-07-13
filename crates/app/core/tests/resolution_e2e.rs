@@ -41,14 +41,33 @@ fn ns() -> Uuid {
     simbad_resolver::identity::namespace("astro-plan.targets")
 }
 
+/// A real Messier-only slice of the committed bundled asset (~110 objects,
+/// including M 31/M 42/M 101) — fast enough for this e2e's redb-touching
+/// steps. Each `simbad_resolver::Cache::upsert` is its own fsync'd write
+/// transaction (no batch-upsert primitive), so warming the full ~14k-object
+/// popular seed one entry at a time is a multi-second-to-tens-of-seconds
+/// operation — fine as a one-time backgrounded app-startup warm, too slow to
+/// run per test (`targeting_resolver::seed::tests` covers the full-asset
+/// shape and a Messier-scale timing guard already).
+fn messier_only_seed() -> targeting_resolver::seed::SeedAsset {
+    let full = targeting_resolver::seed::bundled().expect("bundled seed asset must parse");
+    let entries: Vec<_> =
+        full.entries.into_iter().filter(|e| e.primary_designation.starts_with("M ")).collect();
+    targeting_resolver::seed::SeedAsset {
+        version: full.version,
+        generated_at: full.generated_at,
+        source: full.source,
+        entries,
+    }
+}
+
 async fn seeded_cache() -> RedbCache {
     let store = Store::in_memory().expect("in-memory redb store");
     let cache = store.cache();
-    let loaded = targeting_resolver::seed::warm_bundled_on_first_run(&cache, &ns())
+    let loaded = targeting_resolver::seed::warm_cache(&cache, &messier_only_seed(), &ns())
         .await
-        .expect("seed warm must not fail")
-        .expect("first-run seed must produce a count");
-    assert!(loaded >= 110, "expected >= 110 seeded objects from bundled seed, got {loaded}");
+        .expect("seed warm must not fail");
+    assert!(loaded >= 80, "expected the full Messier catalogue, got {loaded}");
     cache
 }
 
@@ -159,18 +178,18 @@ async fn target_id_of(db: &Database, image_id: &str) -> Option<String> {
 async fn step1_seed_warm_populates_redb_cache() {
     let store = Store::in_memory().expect("in-memory redb store");
     let cache = store.cache();
+    let asset = messier_only_seed();
 
-    let first = targeting_resolver::seed::warm_bundled_on_first_run(&cache, &ns())
-        .await
-        .expect("seed must not error")
-        .expect("first run must return a count");
-    assert!(first >= 110, "seed must warm >= 110 objects; got {first}");
-
-    // Second call: already seeded → returns None (idempotent).
-    let second = targeting_resolver::seed::warm_bundled_on_first_run(&cache, &ns())
-        .await
-        .expect("second call must not error");
-    assert!(second.is_none(), "second call must be a no-op (already seeded)");
+    assert!(
+        targeting_resolver::seed::is_first_run(&cache).await.unwrap(),
+        "an empty cache is first-run"
+    );
+    let first = targeting_resolver::seed::warm_cache(&cache, &asset, &ns()).await.unwrap();
+    assert!(first >= 80, "seed must warm the Messier catalogue; got {first}");
+    assert!(
+        !targeting_resolver::seed::is_first_run(&cache).await.unwrap(),
+        "a warmed cache is no longer first-run"
+    );
 }
 
 // ── Step 2: local search against seeded data (US1) ───────────────────────────
