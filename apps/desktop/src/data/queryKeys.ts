@@ -17,6 +17,8 @@ export const queryKeys = {
     // so a trailing `undefined` element would NOT match a filtered entry).
     all: (filters?: object) =>
       filters ? (['inventory', filters] as const) : (['inventory'] as const),
+    rootConfig: (rootId: string) =>
+      ['inventory', 'rootConfig', rootId] as const,
   },
   sessions: {
     all: () => ['sessions'] as const,

@@ -29,6 +29,7 @@
 
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { InventorySource, InventorySession } from '@/bindings/index';
 
 // ── Hoist mocks ───────────────────────────────────────────────────────────────
@@ -119,11 +120,21 @@ function renderToolbar(
 }
 
 // SessionDetail no longer accepts review-action callbacks — only Reveal (FR-007).
+// SessionDetail now mounts SessionFrameInventory/RawFrameCleanupSection
+// (spec 048 T014/US3), which call useMutation — a QueryClientProvider is
+// required in the tree even though neither fires an IPC call on mount.
 function renderDetail(
   session: InventorySession | null,
   props: Partial<React.ComponentProps<typeof SessionDetail>> = {},
 ) {
-  return render(<SessionDetail session={session} {...props} />);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <SessionDetail session={session} {...props} />
+    </QueryClientProvider>,
+  );
 }
 
 // ── Tests: SessionsList ───────────────────────────────────────────────────────

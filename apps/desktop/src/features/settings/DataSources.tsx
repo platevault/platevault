@@ -24,6 +24,7 @@ import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
 import { RemapRootDialog } from './RemapRootDialog';
 import { ConfirmOverlay } from '@/components';
+import { RootDetectionConfig } from '@/features/inventory/RootDetectionConfig';
 
 const SOURCES_KEYS = [
   'followSymlinks',
@@ -623,6 +624,11 @@ function RootCard({
         </div>
         {meta && <div className="alm-data-sources__root-meta">{meta}</div>}
         <SourceProtectionOverride sourceId={root.id} />
+        {/* spec 048 US4: per-root detection config only applies to roots that
+            carry `file_record` rows (raw/calibration). */}
+        {RECONCILABLE_CATEGORIES.includes(root.category) && (
+          <RootDetectionConfig rootId={root.id} />
+        )}
       </div>
 
       {/* Right: action buttons */}
@@ -635,6 +641,7 @@ function RootCard({
         {!isOffline && RECONCILABLE_CATEGORIES.includes(root.category) && (
           <Btn
             size="sm"
+            data-testid={`reconcile-now-${root.id}`}
             onClick={() => onReconcile(root)}
             disabled={reconciling}
           >
