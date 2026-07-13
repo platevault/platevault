@@ -402,6 +402,167 @@ async fn resume_refused_while_disk_still_full() {
     assert!(!dst1.exists(), "item 1 must not have been touched by a refused resume");
 }
 
+/// Once the destination volume has enough free space (a small, satisfiable
+/// required size), resume must succeed and drain the remaining pending item.
+#[tokio::test]
+async fn resume_succeeds_after_disk_space_available_again() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root_id = register_root(db.pool(), dir.path()).await;
+
+    let paths = seed_rooted_approved_plan(db.pool(), &plan_id, &root_id, dir.path(), 2).await;
+    let (_src1, dst1) = &paths[1];
+    let item0_id = format!("{plan_id}-item-0");
+    let run_id = Uuid::new_v4().to_string();
+
+    // A tiny required size — any real tempdir volume satisfies this.
+    plans_repo::update_item_fs_snapshot(db.pool(), &item0_id, None, Some(1))
+        .await
+        .expect("update_item_fs_snapshot with a small satisfiable required size");
+
+    apply_repo::cas_approved_to_applying(db.pool(), &plan_id, &run_id, "tok-test-fixed", 2, 2)
+        .await
+        .expect("cas_approved_to_applying");
+    apply_repo::item_start_applying(db.pool(), &item0_id, &plan_id)
+        .await
+        .expect("item_start_applying");
+    apply_repo::item_failed(
+        db.pool(),
+        &item0_id,
+        &plan_id,
+        "disk.full: move failed: simulated storage-full",
+    )
+    .await
+    .expect("item_failed");
+    apply_repo::pause_run(db.pool(), &plan_id, &run_id, "disk.full", 0, 1, 0, 0, 1)
+        .await
+        .expect("pause_run");
+
+    let resp = app_core::plan_apply::resume_plan(db.pool(), &bus, &plan_id, &run_id)
+        .await
+        .expect("resume must succeed once there is enough free space again");
+    assert_eq!(resp.plan_id, plan_id);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+
+    assert!(dst1.exists(), "item 1's destination should exist after the resumed run");
+    let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
+    assert_eq!(plan_row.state, "partially_applied");
+    assert_eq!(plan_row.items_applied, 1);
+    assert_eq!(plan_row.items_failed, 1, "item 0 stays failed from the original pause");
+}
+
+// ── cancellation during a resumed run ────────────────────────────────────────
+
+/// `cancel_plan` must be able to signal a run that was restarted by
+/// `resume_plan` — the resumed run re-registers a *fresh* `ActiveRun`
+/// (cancel token / skip set / retry queue do not carry over a pause
+/// boundary), so this proves `cancel_plan`'s registry lookup finds that new
+/// entry rather than a stale/missing one from the original (already-dropped)
+/// run.
+///
+/// Cancellation is checked once *between* items, never mid-item (run.rs),
+/// so exactly how many of the many pending items below finish before the
+/// signal lands is a genuine scheduling race — asserting on the aggregate
+/// outcome (run reaches `cancelled`, and it does so before every one of 200
+/// items completed) is what's deterministic, not which specific item was
+/// last. A real per-item filesystem move (via `spawn_blocking`, run.rs:501)
+/// is slow enough relative to `cancel_plan`'s single DB read that this
+/// reliably lands mid-run rather than after the whole (tiny, in-memory) run
+/// already finished.
+#[tokio::test]
+async fn cancel_signals_the_executor_restarted_by_resume() {
+    const PENDING_ITEMS: usize = 200;
+
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root_id = register_root(db.pool(), dir.path()).await;
+
+    let paths =
+        seed_rooted_approved_plan(db.pool(), &plan_id, &root_id, dir.path(), PENDING_ITEMS + 1)
+            .await;
+    let item0_id = format!("{plan_id}-item-0");
+    let run_id = Uuid::new_v4().to_string();
+
+    apply_repo::cas_approved_to_applying(
+        db.pool(),
+        &plan_id,
+        &run_id,
+        "tok-test-fixed",
+        i64::try_from(PENDING_ITEMS + 1).unwrap(),
+        i64::try_from(PENDING_ITEMS + 1).unwrap(),
+    )
+    .await
+    .expect("cas_approved_to_applying");
+    apply_repo::item_start_applying(db.pool(), &item0_id, &plan_id)
+        .await
+        .expect("item_start_applying");
+    apply_repo::item_failed(
+        db.pool(),
+        &item0_id,
+        &plan_id,
+        "volume.unavailable: move failed: simulated disconnect",
+    )
+    .await
+    .expect("item_failed");
+    apply_repo::pause_run(
+        db.pool(),
+        &plan_id,
+        &run_id,
+        "volume.unavailable",
+        0,
+        1,
+        0,
+        0,
+        i64::try_from(PENDING_ITEMS).unwrap(),
+    )
+    .await
+    .expect("pause_run");
+
+    app_core::plan_apply::resume_plan(db.pool(), &bus, &plan_id, &run_id)
+        .await
+        .expect("resume must succeed (volume reachable again)");
+
+    // No `.await` yield point between resume and cancel — gives the
+    // restarted executor task the least possible head start.
+    app_core::plan_apply::cancel_plan(db.pool(), &plan_id)
+        .await
+        .expect("cancel must find the resumed run's freshly re-registered ActiveRun");
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
+    assert_eq!(
+        plan_row.state, "cancelled",
+        "the resumed run must reach 'cancelled', proving cancel_plan signalled it"
+    );
+    assert!(
+        plan_row.items_cancelled > 0,
+        "cancellation must have interrupted at least one of the {PENDING_ITEMS} pending items \
+         (items_cancelled = {}); a run that completed before the signal landed would falsify \
+         this test, not confirm it",
+        plan_row.items_cancelled
+    );
+    assert_eq!(
+        plan_row.items_applied + plan_row.items_cancelled,
+        i64::try_from(PENDING_ITEMS).unwrap(),
+        "every previously-pending item must be accounted for as either applied or cancelled"
+    );
+    assert_eq!(plan_row.items_failed, 1, "item 0 stays failed from the original pause");
+
+    // None of the paths that ended up cancelled were touched.
+    let items = plans_repo::list_plan_items(db.pool(), &plan_id).await.expect("list_plan_items");
+    for (i, (src, dst)) in paths.iter().enumerate().skip(1) {
+        let item = items.iter().find(|it| it.id == format!("{plan_id}-item-{i}")).unwrap();
+        if item.item_state == "cancelled" {
+            assert!(src.exists(), "item {i} was cancelled but its source is missing");
+            assert!(!dst.exists(), "item {i} was cancelled but its destination exists");
+        }
+    }
+}
+
 // ── run.not_paused / run.not_found — resume guards unchanged by this fix ─────
 
 /// Resume on a plan that is not paused must still be rejected (guard

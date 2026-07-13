@@ -258,3 +258,131 @@ async fn concurrent_apply_calls_race_on_cas_exactly_one_wins() {
         "the losing call must surface plan.invalid_state"
     );
 }
+
+// ── PR #685 review: refused items must count as failed ─────────────────────
+
+/// A `delete` item with no destructive confirmation is refused by the
+/// executor's destructive-confirm gate (`requires_destructive_confirm &&
+/// !destructive_confirmed`, run.rs:381-401) *before* `on_item_start` runs,
+/// with no pause. Refused items previously had no persistence arm
+/// (`plan_apply.rs`'s `on_item_progress` match only handled
+/// succeeded/failed/stale/skipped) — they stayed `item_state = 'pending'`
+/// forever and were never counted in `items_failed`, so a plan with one
+/// refused item alongside an otherwise-clean apply could report `applied`
+/// instead of `partially_applied` (constitution §II silent-failure gap,
+/// PR #685 review item 1).
+#[tokio::test]
+async fn apply_counts_refused_item_as_failed_not_silently_applied() {
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let dir = tempfile::tempdir().expect("tempdir");
+
+    plans_repo::insert_plan(
+        db.pool(),
+        &plans_repo::InsertPlan {
+            id: &plan_id,
+            title: "Refused Item Test Plan",
+            origin: "cleanup",
+            origin_path: None,
+            plan_type: "cleanup",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        },
+    )
+    .await
+    .expect("insert_plan");
+
+    // Item 0: a `delete` action with no destructive_confirmed flag set (DB
+    // default 0) — refused by the destructive-confirm gate, never reaches
+    // on_item_start.
+    let delete_src = dir.path().join("to-delete.fits");
+    std::fs::write(&delete_src, b"data").expect("write delete_src");
+    plans_repo::insert_plan_item(
+        db.pool(),
+        &plans_repo::InsertPlanItem {
+            id: &format!("{plan_id}-item-0"),
+            plan_id: &plan_id,
+            item_index: 1,
+            name: "to-delete.fits",
+            action: "delete",
+            from_root_id: None,
+            from_relative_path: delete_src.to_str().expect("utf-8 delete src path"),
+            to_root_id: None,
+            to_relative_path: "",
+            reason: "integration test",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        },
+    )
+    .await
+    .expect("insert_plan_item (delete)");
+
+    // Item 1: an ordinary move that succeeds cleanly.
+    let move_src = dir.path().join("to-move.fits");
+    let move_dst = dir.path().join("moved/to-move.fits");
+    std::fs::write(&move_src, b"data").expect("write move_src");
+    plans_repo::insert_plan_item(
+        db.pool(),
+        &plans_repo::InsertPlanItem {
+            id: &format!("{plan_id}-item-1"),
+            plan_id: &plan_id,
+            item_index: 2,
+            name: "to-move.fits",
+            action: "move",
+            from_root_id: None,
+            from_relative_path: move_src.to_str().expect("utf-8 move src path"),
+            to_root_id: None,
+            to_relative_path: move_dst.to_str().expect("utf-8 move dst path"),
+            reason: "integration test",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        },
+    )
+    .await
+    .expect("insert_plan_item (move)");
+
+    plans_repo::update_plan_state(db.pool(), &plan_id, "ready_for_review")
+        .await
+        .expect("update to ready_for_review");
+    plans_repo::set_approved(db.pool(), &plan_id, "2026-07-13T00:00:00Z", "tok-test-fixed")
+        .await
+        .expect("set_approved");
+
+    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
+        .await
+        .expect("apply_plan should start");
+    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+
+    // The refused delete must not have touched the file.
+    assert!(delete_src.exists(), "a refused destructive item must not be deleted");
+    // The unrelated move must have succeeded normally.
+    assert!(!move_src.exists());
+    assert!(move_dst.exists());
+
+    let items = plans_repo::list_plan_items(db.pool(), &plan_id).await.expect("list_plan_items");
+    let refused_item = items.iter().find(|i| i.id == format!("{plan_id}-item-0")).unwrap();
+    assert_eq!(
+        refused_item.item_state, "failed",
+        "a refused item must persist as failed, not stay pending forever"
+    );
+
+    let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
+    assert_eq!(
+        plan_row.state, "partially_applied",
+        "one refused + one succeeded item must report partially_applied, not applied"
+    );
+    assert_eq!(plan_row.items_applied, 1);
+    assert_eq!(
+        plan_row.items_failed, 1,
+        "the refused item must be counted in items_failed, not silently dropped"
+    );
+}

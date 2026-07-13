@@ -738,10 +738,19 @@ impl ExecutorCallbacks for PlanApplyCallbacks {
             let item_id = event.item_id.clone();
             let at = event.at.clone();
 
-            // Persist item state.
+            // Persist item state. "refused" (destructive-unconfirmed / path-gate
+            // escape-symlink refusals, run.rs:381-401 and :408-426) has no
+            // distinct `plan_items.item_state` value — the CHECK constraint
+            // only allows pending/applying/succeeded/failed/skipped/cancelled
+            // (migration 0045) — so it persists as `failed` exactly like an
+            // ordinary execution failure, via the same `item_failed` write
+            // that increments `items_failed`. Without this arm a refused item
+            // stayed `pending` forever and its failure was never counted,
+            // letting an otherwise-clean run report `applied` (constitution
+            // §II non-silent-failure violation).
             let persist_result = match event.new_state.as_str() {
                 "succeeded" => apply_repo::item_succeeded(&pool, &item_id, &plan_id).await,
-                "failed" | "stale" => {
+                "failed" | "stale" | "refused" => {
                     let reason = event
                         .failure
                         .as_ref()
@@ -1568,27 +1577,35 @@ pub async fn cancel_plan(
 /// Resolve the path to probe when re-validating a `volume.unavailable`/
 /// `disk.full` pause for `item` (spec 025 T049/T050).
 ///
-/// Prefers the destination root (disk-full is almost always a destination
-/// capacity problem) then the source root (volume-unavailable more often
-/// affects a disconnected source drive); both are registered roots, which
-/// are real, already-existing directories, so no ancestor-walk is needed.
-/// Archive destinations are pre-computed absolute paths that may point at a
-/// not-yet-created subdirectory (spec 017), so that branch walks up to the
-/// nearest existing ancestor before probing.
+/// `prefer_source` picks which root is tried first: `volume.unavailable`
+/// passes `true` (a disconnected drive is far more often the *source* of a
+/// move than its destination — probing the destination first let a still-
+/// disconnected source pass re-validation whenever the destination happened
+/// to be reachable, so resume proceeded and the executor immediately
+/// re-paused instead of cleanly refusing); `disk.full` passes `false` (free
+/// space is a destination-capacity question). Either way both roots are
+/// tried as a fallback if the preferred one isn't resolvable — both are
+/// registered roots, which are real, already-existing directories, so no
+/// ancestor-walk is needed. Archive destinations are pre-computed absolute
+/// paths that may point at a not-yet-created subdirectory (spec 017), so
+/// that branch walks up to the nearest existing ancestor before probing.
 async fn resolve_item_probe_path(
     pool: &SqlitePool,
     item: &plans_repo::PlanItemRow,
+    prefer_source: bool,
 ) -> Option<Utf8PathBuf> {
-    if let Some(to_root_id) = item.to_root_id.as_deref() {
-        if let Some(root) = resolve_root_path(pool, to_root_id).await {
+    let (first, second) = if prefer_source {
+        (item.from_root_id.as_deref(), item.to_root_id.as_deref())
+    } else {
+        (item.to_root_id.as_deref(), item.from_root_id.as_deref())
+    };
+
+    for root_id in [first, second].into_iter().flatten() {
+        if let Some(root) = resolve_root_path(pool, root_id).await {
             return Some(Utf8PathBuf::from(root));
         }
     }
-    if let Some(from_root_id) = item.from_root_id.as_deref() {
-        if let Some(root) = resolve_root_path(pool, from_root_id).await {
-            return Some(Utf8PathBuf::from(root));
-        }
-    }
+
     if let Some(archive) = item.archive_path.as_deref().filter(|a| !a.is_empty()) {
         let p = Utf8PathBuf::from(archive);
         if p.is_absolute() {
@@ -1672,7 +1689,7 @@ async fn revalidate_pause_condition(
             else {
                 return Ok(());
             };
-            let Some(probe_path) = resolve_item_probe_path(pool, &item).await else {
+            let Some(probe_path) = resolve_item_probe_path(pool, &item, true).await else {
                 return Ok(());
             };
             fs_executor::ops::recheck_volume_available(&probe_path).map_err(|failure| {
@@ -1692,7 +1709,7 @@ async fn revalidate_pause_condition(
             else {
                 return Ok(());
             };
-            let Some(probe_path) = resolve_item_probe_path(pool, &item).await else {
+            let Some(probe_path) = resolve_item_probe_path(pool, &item, false).await else {
                 return Ok(());
             };
             let required_bytes = u64::try_from(item.approved_size_bytes.unwrap_or(0)).unwrap_or(0);
