@@ -1401,6 +1401,31 @@
   gap: var(--alm-sp-3);
 }
 
+/* Map picker (issue #491) — click sets lat/long; fields stay the source of
+   truth and recenter the pin when edited directly. */
+.alm-step-site__map-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-2);
+}
+
+.alm-step-site__map {
+  width: 100%;
+  height: 240px;
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  overflow: hidden;
+}
+
+.alm-step-site__map-unavailable {
+  margin: 0;
+  padding: var(--alm-sp-3);
+  border: 1px dashed var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  font-size: var(--alm-text-sm);
+  color: var(--alm-text-secondary);
+}
+
 .alm-step-site__note {
   margin: 0;
   font-size: var(--alm-text-xs);
