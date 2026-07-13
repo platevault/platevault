@@ -7,15 +7,15 @@
 //! Steps covered (spec 052 P1 retarget — see `targeting_resolver::seed` /
 //! `app_core::target_resolve` module docs for the full rationale):
 //!   1. Seed warm — `targeting_resolver::seed::warm_bundled_on_first_run`
-//!      populates the shared redb cache (not SQLite — the redb cache is the
+//!      populates the shared redb cache (not `SQLite` — the redb cache is the
 //!      reproducible typeahead/search projection, constitution §V).
 //!   2. Local search (US1) — `target_search::search` finds a seeded object in
-//!      the redb cache, no network, no SQLite write.
+//!      the redb cache, no network, no `SQLite` write.
 //!   3. Long-tail resolve (US3) — `target_resolve::resolve` calls the
 //!      `FakeResolver` for an unseeded object and returns it WITHOUT writing
 //!      `canonical_target` (FR-004/SC-002); `target_resolve::promote_by_id`
 //!      is the explicit in-use commit that persists it.
-//!   4. Ingest grouping (US4) — nothing is pre-promoted to SQLite, so every
+//!   4. Ingest grouping (US4) — nothing is pre-promoted to `SQLite`, so every
 //!      alias variant of one physical object is enqueued and grouped onto the
 //!      same canonical `target_id` by `resolve_pending`'s drain.
 //!   5. Override wins (FR-014) — `resolve` with an `override_target` binding
@@ -236,7 +236,7 @@ async fn step3_long_tail_resolve_then_explicit_promotion() {
     let cache = store.cache();
 
     // FakeResolver knows "B 33" (Horsehead Nebula); a genuine miss for both
-    // the seed and SQLite.
+    // the seed and `SQLite`.
     let online_resolver = FakeResolver::new().with_response("B 33", horsehead());
 
     let resp1 =
@@ -247,7 +247,7 @@ async fn step3_long_tail_resolve_then_explicit_promotion() {
     assert_eq!(t1.source, TargetSource::Resolved);
     assert_eq!(online_resolver.call_count(), 1);
 
-    // FR-004/SC-002: the plain resolve must not have written SQLite.
+    // FR-004/SC-002: the plain resolve must not have written `SQLite`.
     let (count,): (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM canonical_target").fetch_one(db.pool()).await.unwrap();
     assert_eq!(count, 0, "resolve must never write canonical_target on its own");
@@ -287,8 +287,8 @@ async fn step3_long_tail_resolve_then_explicit_promotion() {
 
 // ── Step 4: ingest grouping (US4) ─────────────────────────────────────────────
 
-/// Nothing is pre-promoted to SQLite (spec 052 P1: seed warms redb, not
-/// SQLite), so every alias variant of one physical object is enqueued and
+/// Nothing is pre-promoted to `SQLite` (spec 052 P1: seed warms redb, not
+/// `SQLite`), so every alias variant of one physical object is enqueued and
 /// grouped onto the same canonical `target_id` by `resolve_pending`'s drain —
 /// the resolver stands in for the production facade's own redb-cache-backed
 /// resolution.
@@ -307,7 +307,7 @@ async fn step4_alias_variants_group_to_same_target_via_drain() {
         assert_eq!(
             out,
             app_core::ingest_resolution::AssociateOutcome::Enqueued,
-            "SQLite starts empty post-seed-warm (redb-only) — every OBJECT value \
+            "`SQLite` starts empty post-seed-warm (redb-only) — every OBJECT value \
              is a genuine cache miss until the drain resolves it"
         );
     }
@@ -359,7 +359,7 @@ async fn step4_alias_variants_group_to_same_target_via_drain() {
 async fn step5_override_wins_and_is_sticky() {
     let db = seeded_db().await;
 
-    // Seed M 101 directly into SQLite (simulates a previously-promoted,
+    // Seed M 101 directly into `SQLite` (simulates a previously-promoted,
     // in-use target — the override target must already be durable).
     let m101 = ResolvedIdentity {
         simbad_oid: Some(3_456_789),
@@ -390,14 +390,14 @@ async fn step5_override_wins_and_is_sticky() {
     assert_eq!(t_ov.primary_designation, "M 101", "override must return the chosen target (M 101)");
 
     // (b) Sticky: the durable row stays user-override even though a normal
-    // resolve() no longer consults SQLite at all (FR-004) — stickiness now
-    // lives entirely at the SQLite/promotion layer, asserted directly here.
+    // resolve() no longer consults `SQLite` at all (FR-004) — stickiness now
+    // lives entirely at the `SQLite`/promotion layer, asserted directly here.
     let got = cache::get_by_id(db.pool(), m101_id).await.unwrap().unwrap();
     assert_eq!(got.source, CacheSrc::UserOverride);
     assert_eq!(got.primary_designation, "M 101");
 
     // A later normal resolve of "MyGalaxy" against a resolver that would
-    // answer differently must not touch SQLite at all (never called here,
+    // answer differently must not touch `SQLite` at all (never called here,
     // since target_resolve::resolve is a pure delegate to the resolver).
     let wrong_resolver = FakeResolver::new().with_response(
         "MyGalaxy",
@@ -420,7 +420,7 @@ async fn step5_override_wins_and_is_sticky() {
         resp_wrong.target.as_ref().unwrap().primary_designation,
         "M 31",
         "a plain resolve reflects the injected resolver's fresh answer; override \
-         stickiness is a promotion-time (SQLite) guarantee, not a resolve-time one"
+         stickiness is a promotion-time (`SQLite`) guarantee, not a resolve-time one"
     );
     // The durable M 101 override row is unaffected by that plain resolve.
     let still_override = cache::get_by_id(db.pool(), m101_id).await.unwrap().unwrap();

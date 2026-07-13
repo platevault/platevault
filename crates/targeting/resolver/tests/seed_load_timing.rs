@@ -1,6 +1,6 @@
 //! Sanity timing: warming the redb resolve cache from the bundled seed must
 //! not regress to something absurd (spec 052 P1 D2/D4 retargeted this from a
-//! single-transaction SQLite load to per-identity `simbad_resolver::Cache`
+//! single-transaction `SQLite` load to per-identity `simbad_resolver::Cache`
 //! upserts — see the module doc in `targeting_resolver::seed`).
 //!
 //! Each [`simbad_resolver::Cache::upsert`] call is its own fsync'd redb write

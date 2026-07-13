@@ -63,7 +63,7 @@ impl ResolveCache {
     /// Returns [`ResolveError::Network`] if the redb file cannot be opened or
     /// its tables cannot be initialised.
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, ResolveError> {
-        simbad_resolver::Store::open(path).map(Self).map_err(from_cache_error)
+        simbad_resolver::Store::open(path).map(Self).map_err(|e| from_cache_error(&e))
     }
 
     /// An ephemeral, in-memory resolve cache (nothing persisted) — for tests
@@ -74,7 +74,7 @@ impl ResolveCache {
     /// Returns [`ResolveError::Network`] if the in-memory store cannot be
     /// created.
     pub fn in_memory() -> Result<Self, ResolveError> {
-        simbad_resolver::Store::in_memory().map(Self).map_err(from_cache_error)
+        simbad_resolver::Store::in_memory().map(Self).map_err(|e| from_cache_error(&e))
     }
 
     /// Borrow the crate's own [`simbad_resolver::Cache`] trait object (e.g. for
@@ -151,7 +151,7 @@ impl SimbadResolver {
             CacheBackend::custom(cache.cache()),
             resolver_config,
         )
-        .map_err(from_facade_error)?;
+        .map_err(|e| from_facade_error(&e))?;
         Ok(Self(facade))
     }
 
@@ -178,7 +178,7 @@ impl SimbadResolver {
         query: &str,
         limit: usize,
     ) -> Result<Vec<simbad_resolver::SearchHit>, ResolveError> {
-        self.0.search(query, limit).await.map_err(from_facade_error)
+        self.0.search(query, limit).await.map_err(|e| from_facade_error(&e))
     }
 }
 
@@ -200,7 +200,7 @@ impl Resolver for SimbadResolver {
             Ok(simbad_resolver::Resolution::Unresolved { query, reason }) => {
                 Err(from_unresolved_reason(query, reason))
             }
-            Err(e) => Err(from_facade_error(e)),
+            Err(e) => Err(from_facade_error(&e)),
         }
     }
 }
@@ -269,13 +269,13 @@ fn from_unresolved_reason(
 /// [`simbad_resolver::Resolution::Unresolved`]) to astro-plan's local
 /// `ResolveError`. Treated as transient/offline: a local cache hiccup should
 /// degrade gracefully, never crash `target.resolve`.
-fn from_facade_error(e: simbad_resolver::Error) -> ResolveError {
+fn from_facade_error(e: &simbad_resolver::Error) -> ResolveError {
     ResolveError::Network(e.to_string())
 }
 
 /// Map a cache-backend-only error (cache open/init) to astro-plan's local
 /// `ResolveError`.
-fn from_cache_error(e: simbad_resolver::CacheError) -> ResolveError {
+fn from_cache_error(e: &simbad_resolver::CacheError) -> ResolveError {
     ResolveError::Network(e.to_string())
 }
 
@@ -284,6 +284,7 @@ fn from_cache_error(e: simbad_resolver::CacheError) -> ResolveError {
 /// astro-plan's `canonical_target` schema has no column for it and nothing in
 /// this codebase reads it (kept local type has no such field, by design — see
 /// module doc).
+#[must_use]
 pub fn from_crate_identity(i: simbad_resolver::ResolvedIdentity) -> ResolvedIdentity {
     ResolvedIdentity {
         simbad_oid: i.simbad_oid,
@@ -333,6 +334,7 @@ pub(crate) fn from_crate_object_type(o: simbad_resolver::ObjectType) -> crate::O
 /// `display_alias` is always `None`: it is a SQLite-only, user-owned field
 /// (FR-012) with no redb-cache equivalent — a pure search hit is, by
 /// definition, not yet an adopted/in-use target.
+#[must_use]
 pub fn from_crate_cached_target(t: simbad_resolver::CachedTarget) -> crate::cache::CachedTarget {
     crate::cache::CachedTarget {
         id: t.id,
@@ -350,6 +352,7 @@ pub fn from_crate_cached_target(t: simbad_resolver::CachedTarget) -> crate::cach
 
 /// Convert a crate-side [`simbad_resolver::SearchHit`] to astro-plan's local
 /// `cache::SearchHit`.
+#[must_use]
 pub fn from_crate_search_hit(h: simbad_resolver::SearchHit) -> crate::cache::SearchHit {
     crate::cache::SearchHit {
         target: from_crate_cached_target(h.target),

@@ -28,6 +28,11 @@ const NAMESPACE_SEED: &str = "astro-plan.targets";
 /// Falls back to an ephemeral in-memory cache on failure (e.g. a corrupt or
 /// unwritable file) rather than hard-crashing startup — the app still works,
 /// just without a persistent typeahead cache until the next restart.
+///
+/// # Panics
+///
+/// Panics only if the in-memory fallback itself cannot be constructed, which
+/// `simbad_resolver`'s `InMemoryBackend` never fails to do in practice.
 #[must_use]
 pub fn open_or_in_memory(path: &std::path::Path) -> targeting_resolver::simbad::ResolveCache {
     targeting_resolver::simbad::ResolveCache::open(path).unwrap_or_else(|e| {
