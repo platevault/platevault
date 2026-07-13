@@ -17,10 +17,12 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { mockSearchTargets, mockResolveTarget } = vi.hoisted(() => ({
-  mockSearchTargets: vi.fn(),
-  mockResolveTarget: vi.fn(),
-}));
+const { mockSearchTargets, mockResolveTarget, mockResolveExplicit } =
+  vi.hoisted(() => ({
+    mockSearchTargets: vi.fn(),
+    mockResolveTarget: vi.fn(),
+    mockResolveExplicit: vi.fn(),
+  }));
 
 // Mock the generated bindings: adapt each hoisted mock's raw response into the
 // generated `{ status: 'ok', data }` Result shape the real `unwrap` consumes,
@@ -34,6 +36,11 @@ vi.mock('@/bindings/index', () => ({
       })),
     targetResolve: (req: unknown) =>
       Promise.resolve(mockResolveTarget(req)).then((data) => ({
+        status: 'ok',
+        data,
+      })),
+    targetResolveExplicit: (req: unknown) =>
+      Promise.resolve(mockResolveExplicit(req)).then((data) => ({
         status: 'ok',
         data,
       })),
@@ -117,6 +124,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   mockSearchTargets.mockReset();
   mockResolveTarget.mockReset();
+  mockResolveExplicit.mockReset();
   // Default: the long-tail resolver returns nothing (offline / not found).
   mockResolveTarget.mockResolvedValue(unresolved());
 });
@@ -519,5 +527,116 @@ describe('TargetSearch', () => {
     const result = onOverride.mock.calls[0][0] as TargetSuggestion;
     expect(result.targetId).toBe('tgt-m31');
     expect(result.source).toBe('user-override');
+  });
+
+  // ── "Search more catalogues" (spec 052 P2, FR-008/FR-009) ──────────────────
+
+  it('never calls target.resolve_explicit during ordinary typeahead', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [M31],
+    });
+    render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'm31');
+
+    expect(mockResolveExplicit).not.toHaveBeenCalled();
+  });
+
+  it('offers "search more catalogues" only once both phases come up empty', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'zzz-unknown');
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Search more catalogues (NED/VizieR)',
+      }),
+    ).toBeInTheDocument();
+    // Still not fired automatically — only rendering the affordance.
+    expect(mockResolveExplicit).not.toHaveBeenCalled();
+  });
+
+  it('does not offer "search more catalogues" while local/long-tail hits exist', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [M31],
+    });
+    render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'm31');
+
+    expect(
+      screen.queryByRole('button', {
+        name: 'Search more catalogues (NED/VizieR)',
+      }),
+    ).toBeNull();
+  });
+
+  it('clicking "search more catalogues" calls target.resolve_explicit and merges the hit', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    mockResolveExplicit.mockResolvedValue(resolved(SIMBAD_LBN));
+
+    render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'lbn 552');
+
+    const btn = screen.getByRole('button', {
+      name: 'Search more catalogues (NED/VizieR)',
+    });
+    await act(async () => {
+      fireEvent.click(btn);
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    });
+
+    expect(mockResolveExplicit).toHaveBeenCalledTimes(1);
+    expect(mockResolveExplicit).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'lbn 552', override: null }),
+    );
+    // The debounced typeahead resolve (target.resolve) must never be asked to
+    // fall back — only the explicit command was consulted.
+    expect(mockResolveTarget).not.toHaveBeenCalledWith(
+      expect.objectContaining({ override: expect.anything() }),
+    );
+    expect(screen.getByRole('option')).toHaveTextContent('LBN 552');
+    expect(
+      screen.queryByRole('button', {
+        name: 'Search more catalogues (NED/VizieR)',
+      }),
+    ).toBeNull();
+  });
+
+  it('shows "still no matching targets" when the explicit fallback also misses', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    mockResolveExplicit.mockResolvedValue(unresolved('unknown'));
+
+    render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'zzz-unknown');
+
+    const btn = screen.getByRole('button', {
+      name: 'Search more catalogues (NED/VizieR)',
+    });
+    await act(async () => {
+      fireEvent.click(btn);
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    });
+
+    expect(screen.getByText('Still no matching targets.')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: 'Search more catalogues (NED/VizieR)',
+      }),
+    ).toBeNull();
   });
 });
