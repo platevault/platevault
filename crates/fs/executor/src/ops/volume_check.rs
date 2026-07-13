@@ -11,6 +11,24 @@ use camino::Utf8Path;
 
 use crate::failure::{FailureCode, PlanItemFailure};
 
+/// Whether `path` is currently accessible (a plain existence/readability
+/// probe, platform-agnostic by construction — `std::fs::metadata` fails
+/// with the same "not found" outcome on every platform for a nonexistent
+/// path).
+///
+/// This is checked *before* `fs4::available_space` below because that call
+/// alone is not a reliable "does this path exist" proxy across platforms:
+/// on Windows, `GetDiskFreeSpaceExW` only needs to identify the *volume* a
+/// path would live on and commonly succeeds even when the specific (missing)
+/// leaf directory doesn't exist, as long as the drive itself is still
+/// present — unlike unix's `statvfs`, which fails for any nonexistent path
+/// component. Without this explicit check, a disconnected/missing directory
+/// on a drive that itself is still mounted would pass re-validation on
+/// Windows while correctly failing on unix.
+fn path_is_accessible(path: &Utf8Path) -> bool {
+    std::fs::metadata(path.as_std_path()).is_ok()
+}
+
 /// Re-check that `path`'s volume is currently reachable.
 ///
 /// A `statvfs` (unix) / `GetDiskFreeSpaceEx` (Windows) call is the cheapest
@@ -23,6 +41,13 @@ use crate::failure::{FailureCode, PlanItemFailure};
 ///
 /// Returns `Err(PlanItemFailure { code: VolumeUnavailable })` if the probe fails.
 pub fn recheck_volume_available(path: &Utf8Path) -> Result<(), PlanItemFailure> {
+    if !path_is_accessible(path) {
+        return Err(PlanItemFailure::with_code(
+            FailureCode::VolumeUnavailable,
+            format!("volume still unreachable at {path}: path is not accessible"),
+        ));
+    }
+
     fs4::available_space(path.as_std_path()).map(|_| ()).map_err(|e| {
         PlanItemFailure::with_code(
             FailureCode::VolumeUnavailable,
@@ -42,6 +67,13 @@ pub fn recheck_volume_available(path: &Utf8Path) -> Result<(), PlanItemFailure> 
 /// Returns `Err(PlanItemFailure { code: DiskFull })` if free space is
 /// insufficient or the volume cannot be probed.
 pub fn recheck_disk_space(path: &Utf8Path, required_bytes: u64) -> Result<(), PlanItemFailure> {
+    if !path_is_accessible(path) {
+        return Err(PlanItemFailure::with_code(
+            FailureCode::DiskFull,
+            format!("could not probe free space at {path}: path is not accessible"),
+        ));
+    }
+
     let available = fs4::available_space(path.as_std_path()).map_err(|e| {
         PlanItemFailure::with_code(
             FailureCode::DiskFull,
