@@ -359,19 +359,37 @@ pub async fn item_failed(
     Ok(())
 }
 
-/// Transition an item to `stale` (R-FS-1) — no counter change; run pauses.
+/// Transition an item to `stale` (R-FS-1); increments `items_failed` (the
+/// item is terminally `failed` from the plan's perspective, matching
+/// [`item_failed`]) and the run pauses.
+///
+/// Previously this left `plans.items_failed` unchanged, which `pause_run`
+/// never read either — but `resume_plan`'s cumulative-counter reporting
+/// (issue #575, spec 025 R-Pause-1) and `get_apply_status` both surface
+/// `plans.items_failed` directly, so an under-count here would silently
+/// misreport a stale-paused plan as fully applied once its remaining items
+/// finish on resume.
 ///
 /// # Errors
 ///
 /// Returns [`DbError::Database`] on connection failure.
-pub async fn item_stale(pool: &SqlitePool, item_id: &str) -> DbResult<()> {
+pub async fn item_stale(pool: &SqlitePool, item_id: &str, plan_id: &str) -> DbResult<()> {
+    let mut tx = pool.begin().await?;
+
     sqlx::query(
         "UPDATE plan_items SET item_state = 'failed', item_stale = 1, \
          failure_reason = 'item.stale: source file changed since approval' WHERE id = ?",
     )
     .bind(item_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+
+    sqlx::query("UPDATE plans SET items_failed = items_failed + 1 WHERE id = ?")
+        .bind(plan_id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 

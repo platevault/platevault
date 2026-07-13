@@ -748,7 +748,7 @@ impl ExecutorCallbacks for PlanApplyCallbacks {
                         .map(std::string::ToString::to_string)
                         .unwrap_or_default();
                     if event.new_state == "stale" {
-                        apply_repo::item_stale(&pool, &item_id).await
+                        apply_repo::item_stale(&pool, &item_id, &plan_id).await
                     } else {
                         apply_repo::item_failed(&pool, &item_id, &plan_id, &reason).await
                     }
