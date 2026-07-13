@@ -260,7 +260,11 @@ export function ProjectsTable({
   if (loading && projects.length === 0) {
     return (
       <div className="alm-projects-table__empty">
-        <Skeleton variant="block" count={6} label={m.projects_table_loading()} />
+        <Skeleton
+          variant="block"
+          count={6}
+          label={m.projects_table_loading()}
+        />
       </div>
     );
   }

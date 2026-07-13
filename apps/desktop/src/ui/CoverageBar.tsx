@@ -15,11 +15,16 @@ export interface CoverageBarProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export const CoverageBar = forwardRef<HTMLDivElement, CoverageBarProps>(
-  function CoverageBar({ label, value, max, unit = 'h', formatLabel, className, ...rest }, ref) {
+  function CoverageBar(
+    { label, value, max, unit = 'h', formatLabel, className, ...rest },
+    ref,
+  ) {
     const pct = Math.min(100, (value / max) * 100);
     const cls = pct < 40 ? '--low' : pct >= 80 ? '--ok' : '';
     const rootCls = ['alm-coverage', className].filter(Boolean).join(' ');
-    const valueLabel = formatLabel ? formatLabel(value, max) : `${value}${unit}`;
+    const valueLabel = formatLabel
+      ? formatLabel(value, max)
+      : `${value}${unit}`;
     return (
       <div ref={ref} className={rootCls} {...rest}>
         <span className="alm-coverage__label">{label}</span>

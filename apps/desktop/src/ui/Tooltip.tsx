@@ -1,7 +1,8 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { Tooltip as BaseTooltip } from '@base-ui-components/react/tooltip';
 
-export interface TooltipProps extends Omit<ComponentPropsWithoutRef<'span'>, 'content'> {
+export interface TooltipProps
+  extends Omit<ComponentPropsWithoutRef<'span'>, 'content'> {
   /** Content revealed in the popup on hover/focus. */
   content: ReactNode;
   /** Trigger content (glyph, icon, or label). */
@@ -16,7 +17,13 @@ export interface TooltipProps extends Omit<ComponentPropsWithoutRef<'span'>, 'co
  * `className` and any extra span attributes (aria-label, tabIndex, data-*)
  * pass through to that trigger span. Popup styling lives in `.alm-tooltip`.
  */
-export function Tooltip({ content, children, className, sideOffset = 4, ...rest }: TooltipProps) {
+export function Tooltip({
+  content,
+  children,
+  className,
+  sideOffset = 4,
+  ...rest
+}: TooltipProps) {
   return (
     <BaseTooltip.Provider>
       <BaseTooltip.Root>
@@ -25,7 +32,9 @@ export function Tooltip({ content, children, className, sideOffset = 4, ...rest 
         </BaseTooltip.Trigger>
         <BaseTooltip.Portal>
           <BaseTooltip.Positioner sideOffset={sideOffset}>
-            <BaseTooltip.Popup className="alm-tooltip">{content}</BaseTooltip.Popup>
+            <BaseTooltip.Popup className="alm-tooltip">
+              {content}
+            </BaseTooltip.Popup>
           </BaseTooltip.Positioner>
         </BaseTooltip.Portal>
       </BaseTooltip.Root>

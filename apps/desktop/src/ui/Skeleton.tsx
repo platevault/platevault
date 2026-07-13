@@ -3,7 +3,8 @@ import type { CSSProperties, HTMLAttributes } from 'react';
 
 export type SkeletonVariant = 'line' | 'block' | 'circle';
 
-export interface SkeletonProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
+export interface SkeletonProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
   /**
    * Placeholder shape: `line` (thin text line), `block` (list row / card), or
    * `circle` (avatar / icon). Default `line`.
@@ -33,7 +34,17 @@ const len = (v: number | string | undefined): string | undefined =>
  */
 export const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
   function Skeleton(
-    { variant = 'line', width, height, radius, count = 1, label = 'Loading', className, style, ...rest },
+    {
+      variant = 'line',
+      width,
+      height,
+      radius,
+      count = 1,
+      label = 'Loading',
+      className,
+      style,
+      ...rest
+    },
     ref,
   ) {
     const vars: CSSProperties = {
@@ -55,7 +66,11 @@ export const Skeleton = forwardRef<HTMLDivElement, SkeletonProps>(
         {...rest}
       >
         {Array.from({ length: Math.max(1, count) }, (_, i) => (
-          <span key={i} className={`alm-skeleton alm-skeleton--${variant}`} aria-hidden="true" />
+          <span
+            key={i}
+            className={`alm-skeleton alm-skeleton--${variant}`}
+            aria-hidden="true"
+          />
         ))}
       </div>
     );

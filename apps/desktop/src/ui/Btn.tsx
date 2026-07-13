@@ -18,8 +18,14 @@ export const Btn = forwardRef<HTMLButtonElement, BtnProps>(
       variant && `alm-btn--${variant}`,
       size !== 'md' && `alm-btn--${size}`,
       className,
-    ].filter(Boolean).join(' ');
-    return <button ref={ref} className={cls} {...rest}>{children}</button>;
-  }
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return (
+      <button ref={ref} className={cls} {...rest}>
+        {children}
+      </button>
+    );
+  },
 );
 Btn.displayName = 'Btn';

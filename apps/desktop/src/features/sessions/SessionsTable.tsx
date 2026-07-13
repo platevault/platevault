@@ -291,7 +291,9 @@ export function SessionsTable({
           _selected: selected === s.id,
           _indent: indentPx || undefined,
           target: (
-            <span className="alm-sessions-cell--target">{s.target ?? s.name}</span>
+            <span className="alm-sessions-cell--target">
+              {s.target ?? s.name}
+            </span>
           ),
           filter: s.filter ?? '—',
           frames: s.frames,

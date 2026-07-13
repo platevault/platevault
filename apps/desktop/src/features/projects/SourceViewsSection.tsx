@@ -206,7 +206,11 @@ export function SourceViewsSection({
 
   if (loading) {
     return (
-      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
+      <Section
+        title={m.projects_source_views_title()}
+        defaultOpen={defaultOpen}
+        right={generateButton}
+      >
         <p className="alm-text-sm alm-text-muted">{m.common_loading()}</p>
         {dialog}
       </Section>
@@ -230,8 +234,14 @@ export function SourceViewsSection({
 
   if (views.length === 0) {
     return (
-      <Section title={m.projects_source_views_title()} defaultOpen={defaultOpen} right={generateButton}>
-        <p className="alm-text-sm alm-text-muted">{m.projects_source_views_empty()}</p>
+      <Section
+        title={m.projects_source_views_title()}
+        defaultOpen={defaultOpen}
+        right={generateButton}
+      >
+        <p className="alm-text-sm alm-text-muted">
+          {m.projects_source_views_empty()}
+        </p>
         {dialog}
       </Section>
     );
@@ -253,17 +263,16 @@ export function SourceViewsSection({
           >
             <div className="alm-stack-1 alm-rail">
               <div className="alm-source-views__row-head">
-                <span
-                  className="alm-source-views__id"
-                  title={view.id}
-                >
+                <span className="alm-source-views__id" title={view.id}>
                   {view.id.slice(0, 8)}…
                 </span>
                 <Pill variant={viewStateVariant(view.state)}>
                   {viewStateLabel(view.state)}
                 </Pill>
                 <span className="alm-text-xs alm-text-muted">{view.kind}</span>
-                <span className="alm-text-xs alm-text-muted">{view.itemCount} {m.projects_source_views_items_unit()}</span>
+                <span className="alm-text-xs alm-text-muted">
+                  {view.itemCount} {m.projects_source_views_items_unit()}
+                </span>
               </div>
 
               {/* FR-033 / T078: per-item inventory refs. T016: each item shows

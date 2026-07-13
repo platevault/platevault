@@ -119,9 +119,10 @@ function loadWizardState(): WizardState {
         sources: Array.isArray(parsed.sources) ? parsed.sources : loadSources(),
         // Guard: accept persisted catalogSettings only if it matches the current
         // shape (`{ downloadAll }`); older/corrupt shapes fall back to the default.
-        catalogSettings: typeof parsed.catalogSettings?.downloadAll === 'boolean'
-          ? parsed.catalogSettings
-          : DEFAULT_CATALOG_SETTINGS,
+        catalogSettings:
+          typeof parsed.catalogSettings?.downloadAll === 'boolean'
+            ? parsed.catalogSettings
+            : DEFAULT_CATALOG_SETTINGS,
         tools: parsed.tools ?? DEFAULT_TOOLS_STATE,
         // spec 044 T016: older persisted state (pre-Site step) has no `site`
         // key — default to the empty (skippable) step state.
@@ -321,16 +322,27 @@ export function SetupWizard() {
 
       if (!result.allSucceeded) {
         const failed = result.results.filter((r) => !r.success);
-        const detail = failed.map((r) => r.error).filter(Boolean).join('; ') || String(failed.length);
-        setSubmitError(m.setup_sources_error_batch_registration_failed({ message: detail }));
+        const detail =
+          failed
+            .map((r) => r.error)
+            .filter(Boolean)
+            .join('; ') || String(failed.length);
+        setSubmitError(
+          m.setup_sources_error_batch_registration_failed({ message: detail }),
+        );
         return;
       }
 
       setFlushResult(result);
       goTo(SCAN_STEP);
     } catch (err) {
-      const msg = typeof err === 'string' ? err : (err as Error)?.message ?? String(err);
-      setSubmitError(m.setup_sources_error_batch_registration_failed({ message: msg }));
+      const msg =
+        typeof err === 'string'
+          ? err
+          : ((err as Error)?.message ?? String(err));
+      setSubmitError(
+        m.setup_sources_error_batch_registration_failed({ message: msg }),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -406,7 +418,10 @@ export function SetupWizard() {
       clearWizardState();
       void navigate({ to: '/inbox' });
     } catch (err) {
-      const msg = typeof err === 'string' ? err : (err as Error)?.message ?? String(err);
+      const msg =
+        typeof err === 'string'
+          ? err
+          : ((err as Error)?.message ?? String(err));
       setSubmitError(m.setup_wizard_finish_failed({ message: msg }));
       setIsFinishing(false);
     }

@@ -20,7 +20,13 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import type { InboxListItem } from '@/bindings/index';
-import { Table, tableIndent, Skeleton, type TableColumn, type TableRow } from '@/ui';
+import {
+  Table,
+  tableIndent,
+  Skeleton,
+  type TableColumn,
+  type TableRow,
+} from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
 import { groupByDimensions, type GroupNode } from './grouping';
 import { ACCESSORS, dimLabel } from './InboxControls';

@@ -146,35 +146,45 @@ export function GenerateSourceViewDialog({
         <span className="alm-text-sm alm-text-muted">
           {m.projects_source_views_generate_profile_label()}
         </span>
-        <span className="alm-text-sm">{m.projects_source_views_generate_profile_default()}</span>
+        <span className="alm-text-sm">
+          {m.projects_source_views_generate_profile_default()}
+        </span>
       </div>
 
-      <p className="alm-text-sm alm-text-muted">{m.projects_source_views_generate_kind_hint()}</p>
+      <p className="alm-text-sm alm-text-muted">
+        {m.projects_source_views_generate_kind_hint()}
+      </p>
 
-      {linkKinds && (linkKinds.sourceViewLinkKindIntraDrive ?? linkKinds.sourceViewLinkKindCrossDrive) && (
-        <div className="alm-text-sm" data-testid="generate-view-link-kinds">
-          <span className="alm-text-muted">
-            {m.projects_source_views_generate_kind_settings_label()}:
-          </span>{' '}
-          {linkKinds.sourceViewLinkKindIntraDrive && (
-            <span>
-              {m.projects_source_views_generate_kind_intra_drive({
-                kind: linkKinds.sourceViewLinkKindIntraDrive,
-              })}
-            </span>
-          )}
-          {linkKinds.sourceViewLinkKindIntraDrive && linkKinds.sourceViewLinkKindCrossDrive && ' · '}
-          {linkKinds.sourceViewLinkKindCrossDrive && (
-            <span>
-              {m.projects_source_views_generate_kind_cross_drive({
-                kind: linkKinds.sourceViewLinkKindCrossDrive,
-              })}
-            </span>
-          )}
-        </div>
-      )}
+      {linkKinds &&
+        (linkKinds.sourceViewLinkKindIntraDrive ??
+          linkKinds.sourceViewLinkKindCrossDrive) && (
+          <div className="alm-text-sm" data-testid="generate-view-link-kinds">
+            <span className="alm-text-muted">
+              {m.projects_source_views_generate_kind_settings_label()}:
+            </span>{' '}
+            {linkKinds.sourceViewLinkKindIntraDrive && (
+              <span>
+                {m.projects_source_views_generate_kind_intra_drive({
+                  kind: linkKinds.sourceViewLinkKindIntraDrive,
+                })}
+              </span>
+            )}
+            {linkKinds.sourceViewLinkKindIntraDrive &&
+              linkKinds.sourceViewLinkKindCrossDrive &&
+              ' · '}
+            {linkKinds.sourceViewLinkKindCrossDrive && (
+              <span>
+                {m.projects_source_views_generate_kind_cross_drive({
+                  kind: linkKinds.sourceViewLinkKindCrossDrive,
+                })}
+              </span>
+            )}
+          </div>
+        )}
 
-      <p className="alm-text-xs alm-text-muted">{m.projects_source_views_generate_kind_drift_note()}</p>
+      <p className="alm-text-xs alm-text-muted">
+        {m.projects_source_views_generate_kind_drift_note()}
+      </p>
 
       <label className="alm-source-views__copy-label">
         <input

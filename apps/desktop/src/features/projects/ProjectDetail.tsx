@@ -341,9 +341,15 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const handleReveal = async () => {
     if (!project.path) return;
     try {
-      await revealInOs(project.path, { entityKind: 'project_manifest', entityId: projectId });
+      await revealInOs(project.path, {
+        entityKind: 'project_manifest',
+        entityId: projectId,
+      });
     } catch (err: unknown) {
-      const msg = typeof err === 'string' ? err : (err as Error)?.message ?? m.sessions_toast_reveal_error();
+      const msg =
+        typeof err === 'string'
+          ? err
+          : ((err as Error)?.message ?? m.sessions_toast_reveal_error());
       addToast({ message: msg, variant: 'error' });
     }
   };
