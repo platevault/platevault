@@ -46,7 +46,12 @@ impl AppState {
         resolve_cache: targeting_resolver::simbad::ResolveCache,
         resolve_cache_path: std::path::PathBuf,
     ) -> Self {
-        Self { repo, bus, resolve_cache: tokio::sync::RwLock::new(resolve_cache), resolve_cache_path }
+        Self {
+            repo,
+            bus,
+            resolve_cache: tokio::sync::RwLock::new(resolve_cache),
+            resolve_cache_path,
+        }
     }
 }
 

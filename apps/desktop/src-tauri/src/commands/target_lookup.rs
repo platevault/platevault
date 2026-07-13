@@ -25,7 +25,6 @@ use contracts_core::targets::{
 };
 use contracts_core::ContractError;
 use persistence_db::repositories::q_desktop::get_resolver_settings;
-use simbad_resolver::Cache as _;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;

@@ -72,13 +72,10 @@ pub async fn clear_and_rewarm(state: &AppState) -> Result<usize, ContractError> 
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?
         .unwrap_or(0);
-    let durable_count = targeting_resolver::seed::warm_from_canonical_target(
-        &cache,
-        state.repo.pool(),
-        &namespace,
-    )
-    .await
-    .map_err(|e| ContractError::internal(e.to_string()))?;
+    let durable_count =
+        targeting_resolver::seed::warm_from_canonical_target(&cache, state.repo.pool(), &namespace)
+            .await
+            .map_err(|e| ContractError::internal(e.to_string()))?;
 
     *guard = fresh;
     Ok(seed_count + durable_count)

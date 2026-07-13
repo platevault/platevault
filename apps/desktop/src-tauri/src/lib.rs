@@ -1103,7 +1103,9 @@ pub fn run_app(
             .await
             {
                 Ok(count) if count > 0 => {
-                    tracing::info!("warmed {count} durable canonical_target rows into resolve cache");
+                    tracing::info!(
+                        "warmed {count} durable canonical_target rows into resolve cache"
+                    );
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!("failed to warm resolve cache from canonical_target: {e}"),
