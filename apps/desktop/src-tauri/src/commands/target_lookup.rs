@@ -23,6 +23,10 @@
 //! Spec-013 commands `target.lookup` and `target.resolve.fits` have been
 //! removed by spec 036 (superseded by spec-035 `target.search`/`target.resolve`).
 
+use contracts_core::cone_search::{
+    ConeSearchConfirmRequest, ConeSearchConfirmResponse, ConeSearchSuggestRequest,
+    ConeSearchSuggestResponse,
+};
 use contracts_core::targets::{
     ResolverSettingsGetRequest, ResolverSettingsResponse, ResolverSettingsUpdateRequest,
     TargetAdoptRequest, TargetAdoptResponse, TargetAstroFormat, TargetAstroFormatBatchRequest,
@@ -259,4 +263,53 @@ pub async fn target_astro_format_batch(
             })
             .collect();
     Ok(TargetAstroFormatBatchResponse { formatted })
+}
+
+// ── target.cone_search.suggest / .confirm (spec 052 P3, US3) ────────────────
+
+/// `target.cone_search.suggest` — cone-search a light-frameset's derived
+/// pointing (WCS → mount → none, FR-012) and return ranked,
+/// confidence-carrying target suggestions. Advisory only — creates nothing;
+/// requires online resolution (offline reports `resolve.offline`, FR-018).
+///
+/// # Errors
+///
+/// `frameset.not_found` for an unknown `frameset_id`; `resolve.offline` when
+/// online resolution is disabled or the cone-search fails (non-blocking,
+/// FR-018); `internal.database` on a local query failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn target_cone_search_suggest(
+    state: State<'_, AppState>,
+    req: ConeSearchSuggestRequest,
+) -> Result<ConeSearchSuggestResponse, ContractError> {
+    tracing::debug!("target.cone_search.suggest frameset_id={}", req.frameset_id);
+    let pool = state.repo.pool();
+    let resolver = build_simbad_resolver(&state).await?;
+    app_core::inbox::cone_search::suggest(pool, &resolver, &req.frameset_id, req.reason).await
+}
+
+/// `target.cone_search.confirm` — the single point at which a cone-search
+/// suggestion becomes durable (FR-016, SC-006): adopts the candidate via the
+/// existing in-use promotion path (spec 052 P1) and links it to the
+/// frameset.
+///
+/// # Errors
+///
+/// `frameset.not_found` for an unknown `frameset_id`; `candidate.invalid`
+/// when the candidate no longer resolves; `internal.database` on a local
+/// query failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn target_cone_search_confirm(
+    state: State<'_, AppState>,
+    req: ConeSearchConfirmRequest,
+) -> Result<ConeSearchConfirmResponse, ContractError> {
+    tracing::debug!(
+        "target.cone_search.confirm frameset_id={} candidate={}",
+        req.frameset_id,
+        req.candidate.primary_designation
+    );
+    let cache = state.resolve_cache.read().await.clone();
+    app_core::inbox::cone_search::confirm(state.repo.pool(), &cache.cache(), &req).await
 }

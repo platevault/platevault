@@ -360,6 +360,32 @@ export const commands = {
 	 */
 	targetCacheClear: () => typedError<TargetCacheClearResponse, ContractError_Serialize>(__TAURI_INVOKE("target_cache_clear")),
 	/**
+	 *  `target.cone_search.suggest` — cone-search a light-frameset's derived
+	 *  pointing (WCS → mount → none, FR-012) and return ranked,
+	 *  confidence-carrying target suggestions. Advisory only — creates nothing;
+	 *  requires online resolution (offline reports `resolve.offline`, FR-018).
+	 * 
+	 *  # Errors
+	 * 
+	 *  `frameset.not_found` for an unknown `frameset_id`; `resolve.offline` when
+	 *  online resolution is disabled or the cone-search fails (non-blocking,
+	 *  FR-018); `internal.database` on a local query failure.
+	 */
+	targetConeSearchSuggest: (req: ConeSearchSuggestRequest) => typedError<ConeSearchSuggestResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_cone_search_suggest", { req })),
+	/**
+	 *  `target.cone_search.confirm` — the single point at which a cone-search
+	 *  suggestion becomes durable (FR-016, SC-006): adopts the candidate via the
+	 *  existing in-use promotion path (spec 052 P1) and links it to the
+	 *  frameset.
+	 * 
+	 *  # Errors
+	 * 
+	 *  `frameset.not_found` for an unknown `frameset_id`; `candidate.invalid`
+	 *  when the candidate no longer resolves; `internal.database` on a local
+	 *  query failure.
+	 */
+	targetConeSearchConfirm: (req: ConeSearchConfirmRequest_Deserialize) => typedError<ConeSearchConfirmResponse, ContractError_Serialize>(__TAURI_INVOKE("target_cone_search_confirm", { req })),
+	/**
 	 *  `target.resolution.settings` — read the SIMBAD resolver settings.
 	 * 
 	 *  # Errors
@@ -2644,6 +2670,189 @@ export type CompatibleSessionEntry = {
 	softMismatches: string[],
 };
 
+/**  One candidate object, resolved from cache/online but not yet adopted. */
+export type ConeSearchCandidateTarget = ConeSearchCandidateTarget_Serialize | ConeSearchCandidateTarget_Deserialize;
+
+/**  One candidate object, resolved from cache/online but not yet adopted. */
+export type ConeSearchCandidateTarget_Deserialize = {
+	/**
+	 *  `None` until the candidate is confirmed (FR-004/FR-016) — cone-search
+	 *  itself never writes `canonical_target`.
+	 */
+	canonicalTargetId: string | null,
+	primaryDesignation: string,
+	commonName: string | null,
+	objectType: TargetObjectType,
+	raDeg: number | null,
+	decDeg: number | null,
+	magnitude: number | null,
+	constellation: string | null,
+};
+
+/**  One candidate object, resolved from cache/online but not yet adopted. */
+export type ConeSearchCandidateTarget_Serialize = {
+	/**
+	 *  `None` until the candidate is confirmed (FR-004/FR-016) — cone-search
+	 *  itself never writes `canonical_target`.
+	 */
+	canonicalTargetId?: string | null,
+	primaryDesignation: string,
+	commonName?: string | null,
+	objectType: TargetObjectType,
+	raDeg: number | null,
+	decDeg: number | null,
+	magnitude?: number | null,
+	constellation?: string | null,
+};
+
+/**
+ *  Explicit confidence for a cone-search suggestion (FR-014). `High` is the
+ *  only tier that may carry `preselected: true`; the system never sets it
+ *  without a qualifying confidence, and never applies a link itself.
+ */
+export type ConeSearchConfidence = "high" | "medium" | "low";
+
+/**  The candidate a `target.cone_search.confirm` call binds to the frameset. */
+export type ConeSearchConfirmCandidate = ConeSearchConfirmCandidate_Serialize | ConeSearchConfirmCandidate_Deserialize;
+
+/**  The candidate a `target.cone_search.confirm` call binds to the frameset. */
+export type ConeSearchConfirmCandidate_Deserialize = {
+	canonicalTargetId: string | null,
+	primaryDesignation: string,
+	simbadOid: number | null,
+};
+
+/**  The candidate a `target.cone_search.confirm` call binds to the frameset. */
+export type ConeSearchConfirmCandidate_Serialize = {
+	canonicalTargetId?: string | null,
+	primaryDesignation: string,
+	simbadOid?: number | null,
+};
+
+/**
+ *  Request for `target.cone_search.confirm` — the single point at which a
+ *  cone-search suggestion becomes durable (FR-016, SC-006).
+ */
+export type ConeSearchConfirmRequest = ConeSearchConfirmRequest_Serialize | ConeSearchConfirmRequest_Deserialize;
+
+/**
+ *  Request for `target.cone_search.confirm` — the single point at which a
+ *  cone-search suggestion becomes durable (FR-016, SC-006).
+ */
+export type ConeSearchConfirmRequest_Deserialize = {
+	framesetId: string,
+	candidate: ConeSearchConfirmCandidate_Deserialize,
+};
+
+/**
+ *  Request for `target.cone_search.confirm` — the single point at which a
+ *  cone-search suggestion becomes durable (FR-016, SC-006).
+ */
+export type ConeSearchConfirmRequest_Serialize = {
+	framesetId: string,
+	candidate: ConeSearchConfirmCandidate_Serialize,
+};
+
+/**  Response for `target.cone_search.confirm`. */
+export type ConeSearchConfirmResponse = {
+	canonicalTargetId: string,
+	/**
+	 *  `true` when a new durable row was written, `false` when an existing
+	 *  dedup match was reused.
+	 */
+	created: boolean,
+	linked: boolean,
+};
+
+/**  The derived sky pointing a cone-search ran against. */
+export type ConeSearchPointing = ConeSearchPointing_Serialize | ConeSearchPointing_Deserialize;
+
+/**  The derived sky pointing a cone-search ran against. */
+export type ConeSearchPointing_Deserialize = {
+	source: PointingSource,
+	centerRaDeg: number | null,
+	centerDecDeg: number | null,
+	radiusDeg: number | null,
+	opticsKnown: boolean,
+};
+
+/**  The derived sky pointing a cone-search ran against. */
+export type ConeSearchPointing_Serialize = {
+	source: PointingSource,
+	centerRaDeg?: number | null,
+	centerDecDeg?: number | null,
+	radiusDeg: number | null,
+	opticsKnown: boolean,
+};
+
+/**  What triggered this cone-search run (FR-017). */
+export type ConeSearchReason = "ingest" | "on_demand";
+
+/**
+ *  Request for `target.cone_search.suggest`. The backend derives the
+ *  pointing from the frameset's frames; the client never supplies
+ *  coordinates.
+ */
+export type ConeSearchSuggestRequest = {
+	framesetId: string,
+	reason: ConeSearchReason,
+};
+
+/**
+ *  Response for `target.cone_search.suggest`. Read-only — produces no
+ *  filesystem mutation and no `canonical_target` write.
+ */
+export type ConeSearchSuggestResponse = ConeSearchSuggestResponse_Serialize | ConeSearchSuggestResponse_Deserialize;
+
+/**
+ *  Response for `target.cone_search.suggest`. Read-only — produces no
+ *  filesystem mutation and no `canonical_target` write.
+ */
+export type ConeSearchSuggestResponse_Deserialize = {
+	pointing: ConeSearchPointing_Deserialize,
+	suggestions: ConeSearchSuggestion_Deserialize[],
+};
+
+/**
+ *  Response for `target.cone_search.suggest`. Read-only — produces no
+ *  filesystem mutation and no `canonical_target` write.
+ */
+export type ConeSearchSuggestResponse_Serialize = {
+	pointing: ConeSearchPointing_Serialize,
+	suggestions: ConeSearchSuggestion_Serialize[],
+};
+
+/**  A ranked, confidence-carrying cone-search suggestion. */
+export type ConeSearchSuggestion = ConeSearchSuggestion_Serialize | ConeSearchSuggestion_Deserialize;
+
+/**  A ranked, confidence-carrying cone-search suggestion. */
+export type ConeSearchSuggestion_Deserialize = {
+	candidate: ConeSearchCandidateTarget_Deserialize,
+	separationDeg: number | null,
+	confidence: ConeSearchConfidence,
+	/**  `true` only for `confidence = High` (FR-014); never implies a link. */
+	preselected: boolean,
+	/**
+	 *  `true` when the candidate is in the OQ-2 default exclusion set; still
+	 *  returned so the UI can show it for manual override (FR-015).
+	 */
+	excluded: boolean,
+};
+
+/**  A ranked, confidence-carrying cone-search suggestion. */
+export type ConeSearchSuggestion_Serialize = {
+	candidate: ConeSearchCandidateTarget_Serialize,
+	separationDeg: number | null,
+	confidence: ConeSearchConfidence,
+	/**  `true` only for `confidence = High` (FR-014); never implies a link. */
+	preselected: boolean,
+	/**
+	 *  `true` when the candidate is in the OQ-2 default exclusion set; still
+	 *  returned so the UI can show it for manual override (FR-015).
+	 */
+	excluded: boolean,
+};
+
 /**  Confidence level for inferred or reviewed metadata. */
 export type ConfidenceLevel = "unknown" | "low" | "medium" | "high" | "confirmed" | "rejected";
 
@@ -3095,6 +3304,22 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  *  resolves a duplicate idempotently rather than erroring.
  */
 "alias.duplicate" | "alias.blank" | "alias.not_found" | "alias.not_removable" | "target.not_found" | "target.invalid_id" | 
+/**
+ *  Online resolution disabled or network unavailable — non-blocking
+ *  degraded state (FR-018), not a failure; ingest proceeds without a
+ *  suggestion.
+ */
+"resolve.offline" | "frameset.not_found" | 
+/**
+ *  Equivalent to a pointing `source = "none"` response; kept as a named
+ *  code for callers that prefer an error over an empty-suggestions 200.
+ */
+"pointing.unavailable" | 
+/**
+ *  A `target.cone_search.confirm` candidate no longer resolves (e.g. the
+ *  object vanished from SIMBAD between suggest and confirm).
+ */
+"candidate.invalid" | 
 /**
  *  Appears in `ToolLaunchError.code: String` (`tool_launch.rs`).
  *  Included per task instruction.
@@ -5989,6 +6214,15 @@ export type PlanType = "split" | "restructure" | "cleanup" | "archive" | "source
 "source_view_regeneration" | 
 /**  Spec 049 — first-materializes a project source view. */
 "source_view_generation";
+
+/**
+ *  Coordinate-source quality for a derived [`Pointing`] (FR-012).
+ * 
+ *  `Wcs` (plate-solved `CRVAL1/2`) is high confidence; `Mount` (`OBJCTRA`/
+ *  `OBJCTDEC` or decimal `RA`/`DEC`) is medium; `None` means no reliable
+ *  pointing (never derived from the filename) — `suggestions` is then empty.
+ */
+export type PointingSource = "wcs" | "mount" | "none";
 
 export type PreparedSourceState = "not_created" | "planned" | "ready" | "stale" | "retired";
 

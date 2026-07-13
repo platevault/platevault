@@ -114,8 +114,9 @@ use crate::commands::target_favourites::{
     target_favourites_add, target_favourites_list, target_favourites_remove,
 };
 use crate::commands::target_lookup::{
-    target_adopt, target_astro_format_batch, target_cache_clear, target_resolution_settings,
-    target_resolution_settings_update, target_resolve, target_resolve_explicit, target_search,
+    target_adopt, target_astro_format_batch, target_cache_clear, target_cone_search_confirm,
+    target_cone_search_suggest, target_resolution_settings, target_resolution_settings_update,
+    target_resolve, target_resolve_explicit, target_search,
 };
 use crate::commands::target_management as target_mgmt_cmds;
 use crate::commands::targets::{targets_get, targets_list};
@@ -224,6 +225,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // target in-use promotion + resolve-cache clear (spec 052 P1)
         target_adopt,
         target_cache_clear,
+        // cone-search suggestion at Inbox ingest (spec 052 P3)
+        target_cone_search_suggest,
+        target_cone_search_confirm,
         // resolver settings (spec 035, US5)
         target_resolution_settings,
         target_resolution_settings_update,
@@ -458,6 +462,9 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // target in-use promotion + resolve-cache clear (spec 052 P1)
         target_adopt,
         target_cache_clear,
+        // cone-search suggestion at Inbox ingest (spec 052 P3)
+        target_cone_search_suggest,
+        target_cone_search_confirm,
         // resolver settings (spec 035, US5)
         target_resolution_settings,
         target_resolution_settings_update,
