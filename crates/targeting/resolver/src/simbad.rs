@@ -302,7 +302,7 @@ fn from_crate_alias(a: simbad_resolver::ResolvedAlias) -> ResolvedAlias {
     ResolvedAlias { alias: a.alias, normalized: a.normalized, kind: from_crate_alias_kind(a.kind) }
 }
 
-fn from_crate_alias_kind(k: simbad_resolver::AliasKind) -> AliasKind {
+pub(crate) fn from_crate_alias_kind(k: simbad_resolver::AliasKind) -> AliasKind {
     match k {
         simbad_resolver::AliasKind::Designation => AliasKind::Designation,
         simbad_resolver::AliasKind::CommonName => AliasKind::CommonName,
@@ -310,7 +310,7 @@ fn from_crate_alias_kind(k: simbad_resolver::AliasKind) -> AliasKind {
     }
 }
 
-fn from_crate_source(s: simbad_resolver::TargetSource) -> TargetSource {
+pub(crate) fn from_crate_source(s: simbad_resolver::TargetSource) -> TargetSource {
     match s {
         simbad_resolver::TargetSource::Seed => TargetSource::Seed,
         simbad_resolver::TargetSource::Resolved => TargetSource::Resolved,
@@ -318,11 +318,44 @@ fn from_crate_source(s: simbad_resolver::TargetSource) -> TargetSource {
     }
 }
 
-fn from_crate_object_type(o: simbad_resolver::ObjectType) -> crate::ObjectType {
+pub(crate) fn from_crate_object_type(o: simbad_resolver::ObjectType) -> crate::ObjectType {
     // Both enums share the identical closed SIMBAD-otype vocabulary; round-trip
     // through the wire string so this stays correct even if variant order ever
     // diverges between the two independently-maintained enums.
     crate::ObjectType::from_wire(o.as_wire())
+}
+
+/// Convert a crate-side [`simbad_resolver::CachedTarget`] (redb cache read
+/// model) to astro-plan's local `cache::CachedTarget` shape, for the
+/// `target.search` typeahead path (spec 052 P1 D1: search reads the shared
+/// redb cache via [`SimbadResolver::search`], not SQLite).
+///
+/// `display_alias` is always `None`: it is a SQLite-only, user-owned field
+/// (FR-012) with no redb-cache equivalent — a pure search hit is, by
+/// definition, not yet an adopted/in-use target.
+pub fn from_crate_cached_target(t: simbad_resolver::CachedTarget) -> crate::cache::CachedTarget {
+    crate::cache::CachedTarget {
+        id: t.id,
+        simbad_oid: t.simbad_oid,
+        primary_designation: t.primary_designation,
+        display_alias: None,
+        object_type: from_crate_object_type(t.object_type),
+        ra_deg: t.ra_deg,
+        dec_deg: t.dec_deg,
+        source: from_crate_source(t.source),
+        resolved_at: t.resolved_at,
+        aliases: t.aliases.into_iter().map(from_crate_alias).collect(),
+    }
+}
+
+/// Convert a crate-side [`simbad_resolver::SearchHit`] to astro-plan's local
+/// `cache::SearchHit`.
+pub fn from_crate_search_hit(h: simbad_resolver::SearchHit) -> crate::cache::SearchHit {
+    crate::cache::SearchHit {
+        target: from_crate_cached_target(h.target),
+        matched_alias: h.matched_alias,
+        rank: h.rank,
+    }
 }
 
 #[cfg(test)]

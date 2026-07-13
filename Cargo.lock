@@ -277,6 +277,7 @@ dependencies = [
  "persistence_db",
  "serde_json",
  "sessions",
+ "simbad-resolver",
  "sqlx",
  "targeting",
  "targeting_resolver",

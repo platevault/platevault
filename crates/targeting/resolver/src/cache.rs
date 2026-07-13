@@ -215,10 +215,26 @@ pub async fn get_by_normalized(
 // Spec 052 P1 (D1): the hand-rolled SQLite `search_by_normalized`/
 // `search_fuzzy` typeahead were replaced by the `simbad-resolver` facade's own
 // `SimbadResolver::search()` over the shared redb cache (see
-// `crate::simbad::SimbadResolver::search`); pure search/typeahead no longer
+// `crate::simbad::SimbadResolver::search` +
+// `crate::simbad::from_crate_search_hit`); pure search/typeahead no longer
 // touches SQLite at all (FR-004/SC-002 — browsing never writes
 // `canonical_target`). `targeting_resolver::cache` keeps only the durable
-// read/write surface for already-adopted (in-use) targets.
+// read/write surface for already-adopted (in-use) targets; [`SearchHit`]
+// itself stays here as the shared read-model shape both the (now-removed)
+// SQL search and the redb-backed search converge on.
+
+/// One ranked typeahead hit — the matched (redb-cache) canonical target plus
+/// the alias that matched and its rank bucket (`0` exact, `1` prefix, `2`
+/// substring, `3` fuzzy; see [`simbad_resolver::RANK_EXACT`] and friends).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SearchHit {
+    /// The matched target (aliases loaded).
+    pub target: CachedTarget,
+    /// The display form of the alias that matched.
+    pub matched_alias: String,
+    /// Rank bucket.
+    pub rank: u8,
+}
 
 // ── Writes ──────────────────────────────────────────────────────────────────
 

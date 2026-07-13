@@ -85,6 +85,7 @@ fn horsehead() -> ResolvedIdentity {
         object_type: ObjectType::DarkNebula,
         ra_deg: 85.244_58,
         dec_deg: -2.457_78,
+        v_mag: None,
         aliases: vec![
             ResolvedAlias::new("B 33", AliasKind::Designation),
             ResolvedAlias::new("Horsehead Nebula", AliasKind::CommonName),
@@ -309,6 +310,7 @@ async fn step4_alias_variants_group_to_same_target() {
         object_type: ObjectType::Galaxy,
         ra_deg: 10.684_708,
         dec_deg: 41.268_75,
+        v_mag: None,
         aliases: vec![
             ResolvedAlias::new("M 31", AliasKind::Designation),
             ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -388,6 +390,7 @@ async fn step5_override_wins_and_is_sticky() {
             object_type: ObjectType::Galaxy,
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: None,
             aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
             source: CacheSrc::Resolved,
         },

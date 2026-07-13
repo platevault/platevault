@@ -256,6 +256,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: ra,
             dec_deg: dec,
+            v_mag: None,
             aliases: vec![ResolvedAlias::new(designation, AliasKind::Designation)],
             source: TargetSource::Seed,
         };

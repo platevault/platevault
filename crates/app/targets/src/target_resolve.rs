@@ -295,6 +295,7 @@ async fn apply_override(
         object_type: existing.object_type,
         ra_deg: existing.ra_deg,
         dec_deg: existing.dec_deg,
+        v_mag: None,
         aliases,
         source: CacheSource::UserOverride,
     };
@@ -350,6 +351,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: None,
             aliases: vec![
                 ResolvedAlias::new("M 31", AliasKind::Designation),
                 ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -501,6 +503,7 @@ mod tests {
             object_type: ObjectType::Galaxy,
             ra_deg: 210.802_42,
             dec_deg: 54.348_95,
+            v_mag: None,
             aliases: vec![
                 ResolvedAlias::new("M 101", AliasKind::Designation),
                 ResolvedAlias::new("NGC 5457", AliasKind::Designation),

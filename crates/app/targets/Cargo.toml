@@ -20,6 +20,10 @@ persistence_db = { path = "../../persistence/db" }
 sessions = { path = "../../sessions" }
 targeting = { path = "../../targeting" }
 targeting_resolver = { path = "../../targeting/resolver" }
+# spec 052 P1: `target.search` reads the shared redb resolve cache directly
+# (`simbad_resolver::Cache`), and in-use promotion touches the crate's own
+# `ResolvedIdentity`/`Cache` types at the app-layer commit points.
+simbad-resolver = "0.2.0"
 serde_json.workspace = true
 sqlx.workspace = true
 time = { workspace = true }
