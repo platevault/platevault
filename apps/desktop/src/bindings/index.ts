@@ -284,15 +284,18 @@ export const commands = {
 	 */
 	targetFavouritesRemove: (req: TargetFavouriteRequest) => typedError<TargetFavouriteRemoveResult, ContractError_Serialize>(__TAURI_INVOKE("target_favourites_remove", { req })),
 	/**
-	 *  `target.resolve` — cache-first resolution of a designation / common name (or
-	 *  FITS OBJECT value) against the local cache + bundled seed, falling back to
-	 *  SIMBAD on a miss when online resolution is enabled (spec 035).
+	 *  `target.resolve` — resolve a designation / common name (or FITS OBJECT
+	 *  value) against the shared redb resolve cache, falling back to SIMBAD on a
+	 *  miss when online resolution is enabled (spec 035). Never writes
+	 *  `canonical_target` itself (spec 052 P1 FR-004) except via the manual
+	 *  `override` path (T032) — see `app_core::target_resolve` for the in-use
+	 *  promotion commit points.
 	 * 
-	 *  The live `SimbadResolver` is built on demand from the persisted
-	 *  `resolver_settings` (endpoint + timeout). Cache hits never re-query SIMBAD
-	 *  (FR-006); offline / unknown / ambiguous outcomes return `unresolved` and
-	 *  never fabricate coordinates (FR-009). The manual `override` write path is
-	 *  T032.
+	 *  The live `SimbadResolver` facade is built on demand from the persisted
+	 *  `resolver_settings` (endpoint + timeout) plus the app-lifetime shared
+	 *  redb cache. Cache hits never re-query SIMBAD (FR-006); offline / unknown /
+	 *  ambiguous outcomes return `unresolved` and never fabricate coordinates
+	 *  (FR-009).
 	 * 
 	 *  # Errors
 	 * 
@@ -301,18 +304,44 @@ export const commands = {
 	 */
 	targetResolve: (req: TargetResolveSimbadRequest_Deserialize) => typedError<TargetResolveSimbadResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_resolve", { req })),
 	/**
-	 *  `target.search` — as-you-type target suggestions from local seed + cache.
+	 *  `target.search` — as-you-type target suggestions from the shared redb
+	 *  resolve cache (seed + anything resolved/warmed so far).
 	 * 
-	 *  Served purely from the local resolution cache / bundled seed (no network);
-	 *  long-tail SIMBAD enrichment is a separate `target.resolve` call. Returns
-	 *  ranked, de-duplicated [`TargetSuggestion`]s for the project-creation /
-	 *  target-selection typeahead (spec 035 FR-005).
+	 *  Served purely from the local cache (no network); long-tail SIMBAD
+	 *  enrichment is a separate `target.resolve` call. Returns ranked,
+	 *  de-duplicated [`TargetSuggestion`](contracts_core::targets::TargetSuggestion)s
+	 *  for the project-creation / target-selection typeahead (spec 035 FR-005).
 	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(String)` on an unexpected internal (database) failure.
+	 *  Returns `Err(String)` on an unexpected internal (cache) failure.
 	 */
 	targetSearch: (req: TargetSearchRequest_Deserialize) => typedError<TargetSearchResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("target_search", { req })),
+	/**
+	 *  `target.adopt` — promote a redb-cache-only target into the durable
+	 *  `canonical_target` table. The explicit in-use commit for UI flows with no
+	 *  other natural commit point (e.g. the Targets-page "Add Target" dialog).
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on an invalid `target_id` or a local backend failure.
+	 */
+	targetAdopt: (req: TargetAdoptRequest) => typedError<TargetAdoptResponse, ContractError_Serialize>(__TAURI_INVOKE("target_adopt", { req })),
+	/**
+	 *  `target.cache.clear` — wipe the redb resolve cache and re-warm it from the
+	 *  bundled seed + existing durable `canonical_target` rows. Never touches
+	 *  `canonical_target` itself (§V — the redb cache is a reproducible
+	 *  projection, never canonical).
+	 * 
+	 *  Best-effort on the underlying file swap: a transient failure to remove the
+	 *  old redb file (e.g. a concurrent read still has it open) is reported as an
+	 *  internal error rather than silently leaving a stale cache in place.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` if the cache file cannot be reopened/re-warmed.
+	 */
+	targetCacheClear: () => typedError<TargetCacheClearResponse, ContractError_Serialize>(__TAURI_INVOKE("target_cache_clear")),
 	/**
 	 *  `target.resolution.settings` — read the SIMBAD resolver settings.
 	 * 
@@ -7711,6 +7740,29 @@ export type SuggestStatus = "match" | "ambiguous" | "no_match" |
 /**  An astronomical target as seen in list views (spec 029 stub). */
 export type Target = Target_Serialize | Target_Deserialize;
 
+/**
+ *  Request for `target.adopt` — promote a redb-cache-only target (a `target_id`
+ *  a prior `target.search`/`target.resolve` response returned) into the
+ *  durable `canonical_target` table. The explicit in-use commit for UI flows
+ *  with no other natural commit point (e.g. the Targets-page "Add Target"
+ *  dialog; favouriting/project-create/session-link promote inline as part of
+ *  their own commands).
+ */
+export type TargetAdoptRequest = {
+	requestId: string,
+	targetId: string,
+};
+
+/**  Response for `target.adopt`. */
+export type TargetAdoptResponse = {
+	targetId: string,
+	/**
+	 *  `false` when `target_id` is unknown to both the redb cache and
+	 *  `canonical_target` — never fabricated.
+	 */
+	adopted: boolean,
+};
+
 /**  Request for `target.alias.add` (gen-3). */
 export type TargetAliasAddRequest = {
 	targetId: string,
@@ -7780,6 +7832,16 @@ export type TargetAstroFormatItem = {
 	id: string,
 	raDeg: number | null,
 	decDeg: number | null,
+};
+
+/**
+ *  Response for `target.cache.clear` (FR-002): the redb resolve cache is
+ *  wiped and re-warmed from the bundled seed + existing durable
+ *  `canonical_target` rows. Never touches `canonical_target` itself.
+ */
+export type TargetCacheClearResponse = {
+	/**  Number of entries the cache was re-warmed with after clearing. */
+	rewarmedCount: number,
 };
 
 /**  Closed catalogue identifier slug (spec 035 `CatalogId`). */
