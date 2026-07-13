@@ -284,7 +284,7 @@ fn from_cache_error(e: simbad_resolver::CacheError) -> ResolveError {
 /// astro-plan's `canonical_target` schema has no column for it and nothing in
 /// this codebase reads it (kept local type has no such field, by design — see
 /// module doc).
-fn from_crate_identity(i: simbad_resolver::ResolvedIdentity) -> ResolvedIdentity {
+pub fn from_crate_identity(i: simbad_resolver::ResolvedIdentity) -> ResolvedIdentity {
     ResolvedIdentity {
         simbad_oid: i.simbad_oid,
         primary_designation: i.primary_designation,
