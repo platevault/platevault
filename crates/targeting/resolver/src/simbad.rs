@@ -202,6 +202,12 @@ impl simbad_resolver::Resolver for ExplicitNetworkResolver {
 pub struct SimbadResolver {
     typeahead: simbad_resolver::SimbadResolver<EitherNetworkResolver>,
     explicit: simbad_resolver::SimbadResolver<ExplicitNetworkResolver>,
+    /// The same TAP client the typeahead/explicit legs share, kept for direct
+    /// [`simbad_resolver::PositionResolver`] access (spec 052 P3, D9).
+    /// `None` when built with `online_enabled = false` — cone-search has no
+    /// cache-first path (unlike name resolution) so it is simply unavailable
+    /// offline (FR-018), never silently degraded.
+    position: Option<Arc<simbad_resolver::TapResolver>>,
 }
 
 impl SimbadResolver {
@@ -223,23 +229,26 @@ impl SimbadResolver {
         cache: &ResolveCache,
         online_enabled: bool,
     ) -> Result<Self, ResolveError> {
-        let (either, explicit_inner) = if online_enabled {
-            // One TAP client, shared by the typeahead leg AND (via a second
-            // `Arc` clone) both the explicit-resolve leg and Sesame's own
-            // oid-recovery enricher — a single `reqwest` connection pool for
-            // every TAP-bound path this resolver builds.
+        let (either, explicit_inner, position) = if online_enabled {
+            // One TAP client, shared by the typeahead leg AND (via further
+            // `Arc` clones) both the explicit-resolve leg, Sesame's own
+            // oid-recovery enricher, and cone-search position resolution — a
+            // single `reqwest` connection pool for every TAP-bound path this
+            // resolver builds.
             let tap =
                 Arc::new(simbad_resolver::TapResolver::new(config).map_err(from_crate_error)?);
             let sesame = simbad_resolver::SesameResolver::new()
                 .with_enricher(Arc::clone(&tap) as Arc<dyn simbad_resolver::Resolver>);
             (
                 EitherNetworkResolver::Online(Arc::clone(&tap)),
-                ExplicitNetworkResolver::Online(DualLookupResolver::new(tap, sesame)),
+                ExplicitNetworkResolver::Online(DualLookupResolver::new(Arc::clone(&tap), sesame)),
+                Some(tap),
             )
         } else {
             (
                 EitherNetworkResolver::Offline(simbad_resolver::OfflineResolver),
                 ExplicitNetworkResolver::Offline(simbad_resolver::OfflineResolver),
+                None,
             )
         };
         let resolver_config = ResolverConfig::new(NAMESPACE_SEED).with_online(online_enabled);
@@ -255,7 +264,7 @@ impl SimbadResolver {
             resolver_config,
         )
         .map_err(|e| from_facade_error(&e))?;
-        Ok(Self { typeahead, explicit })
+        Ok(Self { typeahead, explicit, position })
     }
 
     /// Convenience constructor using [`SimbadConfig::default`] and an
@@ -295,6 +304,66 @@ impl SimbadResolver {
     /// Same error/outcome shape as [`Resolver::resolve`].
     pub async fn resolve_explicit(&self, query: &str) -> Result<ResolvedIdentity, ResolveError> {
         resolve_via(&self.explicit, query).await
+    }
+
+    /// Cone-search (spec 052 P3, D9): the top `limit` SIMBAD objects within
+    /// `radius_deg` of `(ra_deg, dec_deg)`, nearest first.
+    ///
+    /// Requires online resolution — cone-search has no cache-first path
+    /// (unlike name resolution, FR-018): offline reports
+    /// [`ResolveError::Disabled`] rather than degrading, so the caller can
+    /// surface "cone-search unavailable offline" instead of an empty result.
+    /// Returns the upstream crate's own [`simbad_resolver::PositionMatch`]
+    /// (not astro-plan's local, `otype_raw`-stripped type) because OQ-1/OQ-2
+    /// ranking needs `otype_raw`/`common_name`/`aliases` — see the module doc
+    /// on [`crate::cone_search`].
+    ///
+    /// # Errors
+    ///
+    /// [`ResolveError::Disabled`] when offline; otherwise the TAP call's own
+    /// network/timeout/parse errors.
+    pub async fn resolve_position(
+        &self,
+        ra_deg: f64,
+        dec_deg: f64,
+        radius_deg: f64,
+        limit: usize,
+    ) -> Result<Vec<simbad_resolver::PositionMatch>, ResolveError> {
+        match &self.position {
+            Some(tap) => simbad_resolver::PositionResolver::resolve_position(
+                tap.as_ref(),
+                ra_deg,
+                dec_deg,
+                radius_deg,
+                limit,
+            )
+            .await
+            .map_err(from_crate_error),
+            None => Err(ResolveError::Disabled),
+        }
+    }
+
+    /// Enrich a cone-search hit's common name + full alias set.
+    ///
+    /// [`Self::resolve_position`] intentionally skips the alias round-trip
+    /// for performance (see the upstream crate's module doc on
+    /// `PositionResolver`) — a cone hit's `common_name` is always `None` and
+    /// `aliases` holds only the primary designation. OQ-1 (common-name
+    /// promotion) and OQ-2 (retain named stars) both need the real values, so
+    /// the caller re-resolves each surviving top-N candidate by its
+    /// `primary_designation` (an exact designation lookup, safe against the
+    /// same physical object). Falls back to the un-enriched identity on any
+    /// resolve failure (transient TAP hiccup) rather than dropping the
+    /// candidate.
+    #[must_use]
+    pub async fn enrich_position_match(
+        &self,
+        m: simbad_resolver::PositionMatch,
+    ) -> simbad_resolver::ResolvedIdentity {
+        let Some(tap) = &self.position else { return m.identity };
+        simbad_resolver::Resolver::resolve(tap.as_ref(), &m.identity.primary_designation)
+            .await
+            .unwrap_or(m.identity)
     }
 }
 
@@ -860,5 +929,26 @@ mod tests {
 
         let err = resolver.resolve_explicit("Totally Unknown Object").await.unwrap_err();
         assert_eq!(err, ResolveError::Network("Totally Unknown Object".to_owned()));
+    }
+
+    // ── spec 052 P3: cone-search offline gating (D9, FR-018) ────────────────────
+
+    #[tokio::test]
+    async fn resolve_position_is_disabled_offline() {
+        // Cone-search has no cache-first path — offline must report Disabled,
+        // never degrade to an (incorrectly empty) local result.
+        let cache = ResolveCache::in_memory().unwrap();
+        let resolver = SimbadResolver::new(&SimbadConfig::default(), &cache, false).unwrap();
+        let err = resolver.resolve_position(10.68, 41.27, 1.0, 10).await.unwrap_err();
+        assert_eq!(err, ResolveError::Disabled);
+    }
+
+    #[tokio::test]
+    async fn enrich_position_match_offline_returns_unenriched_identity() {
+        let cache = ResolveCache::in_memory().unwrap();
+        let resolver = SimbadResolver::new(&SimbadConfig::default(), &cache, false).unwrap();
+        let m = simbad_resolver::PositionMatch { identity: m31_identity(), separation_deg: 0.02 };
+        let got = resolver.enrich_position_match(m).await;
+        assert_eq!(got.primary_designation, "M 31");
     }
 }
