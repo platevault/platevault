@@ -117,6 +117,11 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'alias.not_removable': m.err_alias_not_removable,
   'target.not_found': m.err_target_not_found,
   'target.invalid_id': m.err_target_invalid_id,
+  // Cone-search (spec 052 P3).
+  'resolve.offline': m.err_resolve_offline,
+  'frameset.not_found': m.err_frameset_not_found,
+  'pointing.unavailable': m.err_pointing_unavailable,
+  'candidate.invalid': m.err_candidate_invalid,
   'launch.failed': m.err_launch_failed,
   'macos.quarantine.detected': m.err_macos_quarantine_detected,
   'filters.invalid': m.err_filters_invalid,

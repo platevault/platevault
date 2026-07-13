@@ -81,22 +81,33 @@ Ground-truth code references confirmed during exploration (base `origin/main` @ 
 
 **Rationale**: `target-match` already models optics→FOV and field matching; reusing it avoids re-deriving plate scale. Confidence is explicit per constitution II (inference must carry confidence). "Suggested only, never silent auto-apply" satisfies constitution II's reviewable-mutation posture at the identity-linking layer.
 
-## Open Phase-3 research questions (resolve during P3 design, per Principle IV)
+## Phase-3 OQ resolution (2026-07-13) — T022
 
-These are genuine domain-modeling questions the constitution requires be documented before implementation. Proposed defaults below are the starting point, to be confirmed in P3 design.
+**Governing principle** (user, 2026-07-13): zero static/curated object data — the ranking + exclusion inputs all come from `simbad_resolver::ResolvedIdentity` (`common_name`, `aliases: Vec<ResolvedAlias>` each with `AliasKind::{Designation,CommonName,User}`, `object_type: ObjectType`, `otype_raw`, `simbad_oid`). The only "static" artifacts are two small deterministic rule tables (`crates/targeting/resolver/src/cone_search.rs`), not object lists.
 
-### OQ-1 — Catalogue-prominence ranking
+### OQ-1 — Catalogue-prominence ranking (RESOLVED)
 
-*Question*: How should catalogues be ranked when weighting confidence and breaking primary-object ties?
+**Decision**: tiers option 3, common-name promoted, alias-dedup mandatory.
 
-**Proposed default**: `Messier / common-name > NGC > IC > Caldwell > niche catalogues`. Rationale: mirrors how amateur astrophotographers name targets (a frame centred on M31 should out-rank an incidental catalogued knot). To confirm in P3: exact tier boundaries, treatment of Sharpless/Barnard/LBN/LDN, and whether a well-known common name (e.g. "Veil Nebula") outranks a bare NGC number.
+- Prominence tier of an object = the **best (highest) tier across all its `aliases`** (kind `Designation`), by a catalogue-prefix→tier table (deterministic prefix classifier, not a catalog): `Messier(M) / common-name > NGC > IC > {Sharpless Sh2, Barnard B, LBN, LDN} > Caldwell(C) > other/niche`. (AP nebula catalogues Sh2/B/LBN/LDN are one mid-tier ABOVE Caldwell — user pick #3.)
+- **Common name outranks a bare catalogue number**, sourced from the resolver — NO static name set: an object is in the top tier iff it has `common_name.is_some()` (equivalently any alias `kind == CommonName`, SIMBAD `NAME …`). So "Veil Nebula" (NGC 6960) lands top-tier because SIMBAD carries its `NAME`.
+- **Alias-dedup before ranking (user requirement)**: cone-search returns top-N; before ranking, collapse duplicates of one physical object — primary key `simbad_oid` (same oid → one object, prominence = max over its aliases). Objects lacking an oid (seed/offline) dedup on normalized `primary_designation` (FR-007). Secondary guard: if two distinct candidates share any normalized alias across their alias sets, treat as duplicate and keep the higher-prominence one. Only the surviving highest-priority representative is shown.
 
-### OQ-2 — Default object-type exclusion set
+Implemented in `targeting_resolver::cone_search::{prominence_tier, dedup_candidates}`.
 
-*Question*: Which SIMBAD object types should be excluded by default from primary-object selection?
+### OQ-2 — Default object-type exclusion set (RESOLVED)
 
-**Proposed default**: exclude double/multiple stars and very-niche types (e.g. individual stars that are not the framing target) so a wide-field nebula is not mislabelled by an incidental star at the centre. User-overridable per FR-015. To confirm in P3: the exact otype list against SIMBAD's `otype` vocabulary, and whether some star types (e.g. named variable stars that *are* imaging targets) should be retained.
+**Decision**: Stars + non-DSO points, retain named/notable stars.
 
-## Migration note (impl-time only)
+- Exclude from primary-object selection when `object_type ∈ {DoubleStar, Asterism}` OR `otype_raw` is a single-star/non-DSO point type (SIMBAD otype star family `*`, `**`, `V*`, `PM*`, `HB*`, `WR*`, `Em*`, … and non-object points `Radio`, `X`, `gLens`, `err`, `?`…). Keep Galaxy/\*Nebula/\*Cluster/SupernovaRemnant/GalaxyCluster selectable. (Curated against SIMBAD's vocabulary at impl time — a small rule table in `targeting_resolver::cone_search::EXCLUDED_OTYPES`, resolver-fed.)
+- **Retain named/notable stars**: the exclusion is skipped when `common_name.is_some()` — a genuine stellar target (Betelgeuse, a named variable) stays selectable while incidental field stars drop out. "Notable" signal = the resolver's curated `NAME`, no static list. Excluded objects are still shown, not pre-selected (FR-015); user override can always promote one.
 
-The spec/plan add **no** schema migration: `canonical_target.magnitude`/`constellation` already exist (`0047`), and the resolve cache is redb (outside SQLite). Cone-search suggestions are transient (not persisted) until the user confirms, at which point they reuse the existing target-link path. If P3 design later decides to persist suggestion audit records, take the next free migration number after checking base + open PRs at implementation time.
+Implemented in `targeting_resolver::cone_search::is_default_excluded`.
+
+## Migration note (impl-time)
+
+The Phase-0/1 assumption that WCS `CRVAL1/2` was already extracted (implicit in this doc's D9 and in data-model.md's Pointing entity) did not hold: no format adapter parsed `CRVAL1/2`/`CTYPE1/2` before P3. Reconciled at P3 implementation:
+
+- `crates/metadata/core` gained a shared `interpret_wcs_pointing` helper (CTYPE-gated CRVAL1/2 + CD-matrix/CROTA2 rotation), consumed identically by `crates/metadata/fits` and `crates/metadata/xisf` (no per-adapter WCS logic).
+- Migration `0062_inbox_wcs_pointing.sql` adds `inbox_file_metadata.wcs_ra_deg`/`wcs_dec_deg`/`wcs_rotation_deg` (distinct from the existing mount `ra_deg`/`dec_deg`) — the first schema change this spec required.
+- Cone-search suggestions themselves remain transient (not persisted) until the user confirms, at which point they reuse the existing target-link path (`app_core_targets::target_resolve::promote_by_id`). No new audit-record migration was needed.

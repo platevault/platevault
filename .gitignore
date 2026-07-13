@@ -379,3 +379,4 @@ ds-bundle/
 .design-sync/learnings/
 .design-sync/node_modules
 apps/desktop/.ds-css/
+.scratch.md

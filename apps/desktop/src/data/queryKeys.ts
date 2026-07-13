@@ -28,6 +28,8 @@ export const queryKeys = {
   inbox: {
     list: (rootId: string) => ['inbox', rootId] as const,
     metadata: (itemId: string) => ['inbox', 'metadata', itemId] as const,
+    coneSearch: (framesetId: string) =>
+      ['inbox', 'coneSearch', framesetId] as const,
   },
   calibration: {
     masters: () => ['calibration', 'masters'] as const,

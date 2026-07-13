@@ -34,6 +34,7 @@ import type { PillVariant } from '@/ui';
 import { Banner, Btn, Pill, Section, Table } from '@/ui';
 import type { InboxClassifyResponse } from './store';
 import { useInboxReclassify } from './store';
+import { ConeSearchSuggestions } from './ConeSearchSuggestions';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -983,6 +984,11 @@ export function InboxDetail({
           </div>
         )}
       </div>
+
+      {/* Cone-search target suggestion (spec 052 P3) — light framesets only. */}
+      {itemFrameType === 'light' && (
+        <ConeSearchSuggestions framesetId={item.inboxItemId} />
+      )}
     </DetailPanel>
   );
 }

@@ -324,6 +324,23 @@ pub enum ErrorCode {
     #[serde(rename = "target.invalid_id")]
     TargetInvalidId,
 
+    // ── Cone-search (spec 052 P3) ─────────────────────────────────────────────
+    /// Online resolution disabled or network unavailable — non-blocking
+    /// degraded state (FR-018), not a failure; ingest proceeds without a
+    /// suggestion.
+    #[serde(rename = "resolve.offline")]
+    ResolveOffline,
+    #[serde(rename = "frameset.not_found")]
+    FramesetNotFound,
+    /// Equivalent to a pointing `source = "none"` response; kept as a named
+    /// code for callers that prefer an error over an empty-suggestions 200.
+    #[serde(rename = "pointing.unavailable")]
+    PointingUnavailable,
+    /// A `target.cone_search.confirm` candidate no longer resolves (e.g. the
+    /// object vanished from SIMBAD between suggest and confirm).
+    #[serde(rename = "candidate.invalid")]
+    CandidateInvalid,
+
     // ── Launch ───────────────────────────────────────────────────────────────
     /// Appears in `ToolLaunchError.code: String` (`tool_launch.rs`).
     /// Included per task instruction.

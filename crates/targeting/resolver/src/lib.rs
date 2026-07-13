@@ -27,6 +27,7 @@
 
 pub mod cache;
 pub mod caldwell;
+pub mod cone_search;
 pub mod seed;
 pub mod simbad;
 

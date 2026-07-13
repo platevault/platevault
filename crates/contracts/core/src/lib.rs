@@ -6,6 +6,7 @@ pub mod calibration;
 pub mod calibration_match;
 pub mod calibration_tolerances;
 pub mod cleanup;
+pub mod cone_search;
 pub mod dev;
 pub mod enums;
 pub mod error_code;
