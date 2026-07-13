@@ -296,6 +296,77 @@ artifact canonical).
 
 ---
 
+## Q12 — Sessions: strict ingest completeness, no fallback (spec-006 / spec-033 / spec-041; #564 / #654 / #651 / #567 / #652)
+
+**No folder-based grouping fallback.** Partial/derived session states recreate
+the exact ambiguity this decision removes, so there is no soft/derivable tier —
+no mtime or folder-date guessing.
+
+**Strict ingest gate.** Every attribute needed for **path generation AND session
+identity** is **required at confirm** — the **full union** of:
+
+- the naming-pattern tokens (spec 015), and
+- the type-specific session-grouping key: optic-train, filter, exposure, gain,
+  offset, binning, pointing/rotation (for lights), observing-night, etc.
+
+Values are sourced from headers or user-set. Confirm is **blocked until
+complete**. This extends the existing `inbox.missing_path_attributes` gate
+(`crates/app/inbox/src/confirm.rs`) and now applies to **catalogue-in-place**,
+not just move.
+
+**Friction is handled by an "Apply to all" batch fill** — set a missing value
+once and apply it across the whole selection/session. This is safe because Q8
+scopes edits to a single homogeneous session.
+
+**Independent reveal fix (NOT a fallback).** Derive and store each session's
+**folder** = the common frame-path ancestor, so "Show in File Explorer" opens
+the session's frames rather than the root (#651 / #567). Use a single-source
+derivation for both count and list (#652).
+
+Result: sessions are always well-formed and distinguishable at the source
+(#564 / #654), with no partial-metadata rows.
+
+---
+
+## Q13 — Inbox interaction correctness → app-wide principles (#644 / #643)
+
+- **Id-based stable selection as an app-wide shared pattern.** Adopt the existing
+  `use-stale-selection` hook, replacing Inbox's positional `selectedIdx`
+  (`InboxList.tsx:152`). The detail follows the item across reorder/filter. This
+  applies to **Inbox + Sessions + Targets + Calibration** — any list → detail
+  surface — not per-page.
+- **Selected item filters out of view → keep the detail open** with a "not in
+  current filter" hint (option A). Do not clear it.
+- **Confirm gate fails closed + backend is authoritative.** The client
+  `canConfirm` (`InboxPage.tsx:600`) defaults **disabled** until metadata is
+  loaded AND complete — never optimistically enabled. The backend
+  (`missing_path_attributes`) is the real gate; a refused confirm surfaces via
+  the Q1 error popover. This matters more under Q12's full-union requirement: the
+  last control before a §II mutation must fail closed.
+
+---
+
+## Q14 — Design-system sizing + density / font-size, token-driven (#587 / #616)
+
+**Root cause:** there is no canonical density-aware sizing token. Density only
+sets `--alm-row-height`, while controls use hardcoded heights (`.alm-btn 28px`,
+`--sm 24px`), so the density/font-size settings persist but never reach the
+components; heights drift (statusbar 26 / toolbar 40 / row 32 / btn 28 /
+btn-sm 24).
+
+- **One canonical `--alm-control-h` token** (plus size steps) that buttons,
+  inputs, and selects derive from; replace the hardcoded heights (#616).
+- **Density (compact / default / spacious) scales the sizing tokens together** —
+  `--alm-control-h` + `--alm-row-height` + spacing — so the whole UI responds
+  (#587 density).
+- **Font-size = root `rem` scale**, discrete 3-step (small / default / large), so
+  all rem-based text scales and it respects OS zoom / accessibility (#587
+  font-size).
+- **Reach = full-UI.** Tokenize the hardcoded sizes so the settings are honest
+  across the app — a design-system hygiene pass.
+
+---
+
 ## SpecKit iterate map
 
 Each decision is formalized through a SpecKit iterate when its wave is picked up:
@@ -313,6 +384,9 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q9** log panel | **spec-030** campaign |
 | **Q10** manifests | **spec-024** iterate |
 | **Q11** buttons / one-CTA | **spec-030** campaign |
+| **Q12** sessions strict ingest completeness | **spec-006 / spec-033 / spec-041** iterate |
+| **Q13** id-based selection + fail-closed confirm | **spec-030** campaign (shared selection hook + gate) |
+| **Q14** design-system sizing / density / font-size | **spec-030** campaign / design-system (spec-043 tokens) |
 
 Q8's override decision is small enough to fold into the ingestion/confirm flow
 directly; the **heuristic ADU suggestion** is the part that needs a new
