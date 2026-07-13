@@ -44,6 +44,7 @@ import type {
   PathPatternPreviewResponse,
   ResolverSettings,
   ResolverSettingsResponse,
+  TargetCacheClearResponse,
   FirstRunRestartResponse,
   Camera,
   Telescope,
@@ -72,6 +73,7 @@ export type {
   SourceProtectionSetResponse,
   ToolProfileSummary,
   ResolverSettings,
+  TargetCacheClearResponse,
   FirstRunRestartResponse,
   Camera,
   Telescope,
@@ -429,6 +431,15 @@ export async function updateResolverSettings(
       settings,
     }),
   );
+}
+
+/**
+ * `target.cache.clear` — wipe the shared SIMBAD redb resolve cache and
+ * re-warm it from the bundled seed + existing durable targets (spec 052 P1
+ * FR-002). Never touches durable target records.
+ */
+export async function clearResolveCache(): Promise<TargetCacheClearResponse> {
+  return unwrap(await commands.targetCacheClear());
 }
 
 // ── Equipment (spec 030) ───────────────────────────────────────────────────────
