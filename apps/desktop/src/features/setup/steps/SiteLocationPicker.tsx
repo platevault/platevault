@@ -18,6 +18,15 @@ const DEFAULT_CENTER: [number, number] = [10, 20];
 const DEFAULT_ZOOM = 1;
 const PICKED_ZOOM = 6;
 
+// The lat/long text fields intentionally accept out-of-range values while the
+// user is typing (`siteStepError` catches those on blur/submit) — but
+// MapLibre's LngLat validation throws synchronously for e.g. latitude 200,
+// which would crash the whole step from inside an effect. Only geographically
+// valid coordinates are ever handed to the map.
+function isValidLngLat(lat: number, lon: number): boolean {
+  return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+}
+
 export interface SiteLocationPickerProps {
   /** `null` when the field is blank or not a valid number — no pin is shown. */
   latitudeDeg: number | null;
@@ -46,16 +55,16 @@ export function SiteLocationPicker({
   // Freeze the initial center/zoom at mount time — later coordinate changes
   // are handled by the recenter effect below, not by re-running this one.
   const [initialView] = useState<{ center: [number, number]; zoom: number }>(
-    () => ({
-      center:
-        latitudeDeg != null && longitudeDeg != null
-          ? [longitudeDeg, latitudeDeg]
-          : DEFAULT_CENTER,
-      zoom:
-        latitudeDeg != null && longitudeDeg != null
-          ? PICKED_ZOOM
-          : DEFAULT_ZOOM,
-    }),
+    () => {
+      const hasValidCoords =
+        latitudeDeg != null &&
+        longitudeDeg != null &&
+        isValidLngLat(latitudeDeg, longitudeDeg);
+      return {
+        center: hasValidCoords ? [longitudeDeg, latitudeDeg] : DEFAULT_CENTER,
+        zoom: hasValidCoords ? PICKED_ZOOM : DEFAULT_ZOOM,
+      };
+    },
   );
 
   useEffect(() => {
@@ -90,18 +99,26 @@ export function SiteLocationPicker({
   }, [initialView]);
 
   // Recenter + move the pin when the numeric fields change externally.
+  // Fields are still mid-edit / out-of-range while the user types (e.g. a
+  // latitude of 200 before `siteStepError` catches it on blur) — the map
+  // just leaves the pin where it was rather than touching MapLibre with an
+  // invalid coordinate.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     if (latitudeDeg == null || longitudeDeg == null) return;
-    if (!Number.isFinite(latitudeDeg) || !Number.isFinite(longitudeDeg)) return;
+    if (!isValidLngLat(latitudeDeg, longitudeDeg)) return;
     const lngLat: [number, number] = [longitudeDeg, latitudeDeg];
-    if (markerRef.current) {
-      markerRef.current.setLngLat(lngLat);
-    } else {
-      markerRef.current = new Marker().setLngLat(lngLat).addTo(map);
+    try {
+      if (markerRef.current) {
+        markerRef.current.setLngLat(lngLat);
+      } else {
+        markerRef.current = new Marker().setLngLat(lngLat).addTo(map);
+      }
+      map.easeTo({ center: lngLat });
+    } catch {
+      // Belt-and-suspenders: never let a map call crash the wizard.
     }
-    map.easeTo({ center: lngLat });
   }, [latitudeDeg, longitudeDeg]);
 
   if (unavailable) {

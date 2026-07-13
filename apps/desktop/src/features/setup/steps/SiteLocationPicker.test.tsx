@@ -33,15 +33,32 @@ const { MockMap, MockMarker, MockNavigationControl } = vi.hoisted(() => {
       this.removed = true;
     }
     easeTo(opts: { center: [number, number] }) {
+      assertValidLngLat(opts.center);
       this.easeToCalls.push(opts);
     }
     emit(event: string, ...args: unknown[]) {
       for (const cb of this.listeners[event] ?? []) cb(...args);
     }
   }
+  // Mirrors real MapLibre's `LngLat.convert` validation, which throws
+  // synchronously for out-of-range coordinates (e.g. latitude 200) — the bug
+  // this test suite regression-guards against.
+  function assertValidLngLat([lng, lat]: [number, number]): void {
+    if (lat < -90 || lat > 90) {
+      throw new Error(
+        'Invalid LngLat latitude value: must be between -90 and 90',
+      );
+    }
+    if (lng < -180 || lng > 180) {
+      throw new Error(
+        'Invalid LngLat longitude value: must be between -180 and 180',
+      );
+    }
+  }
   class MockMarker {
     lngLat: [number, number] | null = null;
     setLngLat(ll: [number, number]) {
+      assertValidLngLat(ll);
       this.lngLat = ll;
       return this;
     }
@@ -138,6 +155,36 @@ describe('SiteLocationPicker', () => {
 
     expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
     expect(screen.getByText(/map unavailable/i)).toBeInTheDocument();
+  });
+
+  it('ignores an out-of-range latitude instead of crashing (regression)', () => {
+    // The lat/long fields intentionally accept out-of-range values while the
+    // wizard's own validation (siteStepError) hasn't rejected them yet — the
+    // map must not pass those straight to MapLibre, which throws for them.
+    const { rerender } = render(
+      <SiteLocationPicker
+        latitudeDeg={null}
+        longitudeDeg={null}
+        onPick={vi.fn()}
+      />,
+    );
+    const map = MockMap.instances[0];
+
+    expect(() => {
+      act(() => {
+        rerender(
+          <SiteLocationPicker
+            latitudeDeg={200}
+            longitudeDeg={10}
+            onPick={vi.fn()}
+          />,
+        );
+      });
+    }).not.toThrow();
+
+    expect(map.easeToCalls).toHaveLength(0);
+    expect(screen.getByTestId('site-location-map')).toBeInTheDocument();
+    expect(screen.queryByText(/map unavailable/i)).not.toBeInTheDocument();
   });
 
   it('degrades gracefully when the map fails to construct (no WebGL)', () => {
