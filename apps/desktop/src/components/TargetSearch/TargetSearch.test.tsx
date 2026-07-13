@@ -613,6 +613,131 @@ describe('TargetSearch', () => {
     ).toBeNull();
   });
 
+  // ── "Search more catalogues" hybrid UX (spec 052 P2UX) ─────────────────────
+
+  it('frames the zero-result state as a next step, inline with the fallback button', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'zzz-unknown');
+
+    expect(screen.getByText('No matches in SIMBAD —')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Search more catalogues (NED/VizieR)',
+      }),
+    ).toBeInTheDocument();
+    // The old bare "no matches" message is superseded by the inline framing.
+    expect(screen.queryByText('No matching targets.')).toBeNull();
+  });
+
+  it('shows the plain no-matches message below the resolve minimum length (no fallback offered yet)', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'ic'); // 2 chars < 3
+
+    expect(screen.getByText('No matching targets.')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: 'Search more catalogues (NED/VizieR)',
+      }),
+    ).toBeNull();
+  });
+
+  it('shows "Searching more catalogues…" while the explicit fallback is in flight', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    let releaseExplicit: (() => void) | null = null;
+    mockResolveExplicit.mockImplementation(
+      () =>
+        new Promise((res) => {
+          releaseExplicit = () => res(resolved(SIMBAD_LBN));
+        }),
+    );
+
+    render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'lbn 552');
+
+    const btn = screen.getByRole('button', {
+      name: 'Search more catalogues (NED/VizieR)',
+    });
+    await act(async () => {
+      fireEvent.click(btn);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Searching more catalogues…')).toBeInTheDocument();
+
+    await act(async () => {
+      releaseExplicit?.();
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    });
+    expect(
+      screen.queryByText('Searching more catalogues…'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('Enter fires the explicit fallback exactly once when it is the only actionable thing (0 results)', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    mockResolveExplicit.mockResolvedValue(resolved(SIMBAD_LBN));
+
+    render(<TargetSearch onSelect={vi.fn()} />);
+    const input = screen.getByRole('combobox');
+    await typeAndFlush(input, 'lbn 552');
+
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    });
+
+    expect(mockResolveExplicit).toHaveBeenCalledTimes(1);
+    expect(mockResolveExplicit).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'lbn 552', override: null }),
+    );
+
+    // A second Enter after resolving must not re-fire (harderState left idle).
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await Promise.resolve();
+    });
+    expect(mockResolveExplicit).toHaveBeenCalledTimes(1);
+  });
+
+  it('Enter does NOT fire the explicit fallback when suggestions are present — it selects the highlighted option', async () => {
+    const onSelect = vi.fn();
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [M31, NGC7000],
+    });
+    render(<TargetSearch onSelect={onSelect} />);
+    const input = screen.getByRole('combobox');
+    await typeAndFlush(input, 'm');
+
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'ArrowDown' }); // highlight M31
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await Promise.resolve();
+    });
+
+    expect(onSelect).toHaveBeenCalledWith(M31);
+    expect(mockResolveExplicit).not.toHaveBeenCalled();
+  });
+
   it('shows "still no matching targets" when the explicit fallback also misses', async () => {
     mockSearchTargets.mockResolvedValue({
       contractVersion: '1.0',

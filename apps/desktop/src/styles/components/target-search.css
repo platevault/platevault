@@ -73,6 +73,12 @@
   color: var(--alm-text-faint);
   border-top: 1px solid var(--alm-border-subtle);
 }
+/* Inline "no matches — search more catalogues" framing (spec 052 P2UX). */
+.alm-target-search__no-match {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
 .alm-target-search__option {
   display: flex;
   align-items: center;

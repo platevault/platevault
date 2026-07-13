@@ -16,11 +16,15 @@
  *      appear. `unresolved` (incl. the offline / resolver-disabled case,
  *      FR-015) is treated as a normal, non-fatal outcome — no error is shown.
  *
- * "Search more catalogues" (spec 052 P2, FR-008/FR-009): when both phases
- * above still leave zero suggestions, a button calls `target.resolve_explicit`
- * (TAP-first, SIMBAD Sesame/NED/VizieR fallback on a miss) — the deliberate
- * resolve action the fallback is gated on. Never fired automatically or per
- * keystroke.
+ * "Search more catalogues" (spec 052 P2/P2UX, FR-008/FR-009): when both phases
+ * above still leave zero suggestions, the miss is framed as a next step, not
+ * an error — inline text + a button that calls `target.resolve_explicit`
+ * (TAP-first, SIMBAD Sesame/NED/VizieR fallback on a miss), plus a
+ * "Searching more catalogues…" status while it runs. Enter is a keyboard
+ * accelerator for that same button ONLY when it's the sole actionable thing
+ * on screen (zero typeahead suggestions); with any suggestion present, Enter
+ * still selects the highlighted one. Never fired automatically or per
+ * keystroke otherwise.
  *
  * Cancel-in-flight (US3 acceptance scenario #2): every query change bumps a
  * monotonic generation counter. Both phases check their captured generation
@@ -408,6 +412,17 @@ export function TargetSearch({
     [query, onOverride, onSelect],
   );
 
+  // "Search more catalogues" (spec 052 P2UX): true when the button is the only
+  // actionable next step — both prior phases came up empty and the fallback
+  // hasn't already been fired/exhausted for this query.
+  const harderOffered =
+    !loading &&
+    !error &&
+    !resolving &&
+    suggestions.length === 0 &&
+    harderState === 'idle' &&
+    query.trim().length >= MIN_RESOLVE_LEN;
+
   const showList = open && query.trim().length > 0;
 
   // Keep the highlighted option mounted + visible during keyboard navigation.
@@ -481,6 +496,17 @@ export function TargetSearch({
           autoFocus={autoFocus}
           onFocus={() => {
             if (query.trim().length > 0) setOpen(true);
+          }}
+          onKeyDown={(e) => {
+            // Enter-as-accelerator (spec 052 P2UX): fires the explicit
+            // "search more catalogues" fallback ONLY when it's the sole
+            // actionable thing on screen (zero typeahead suggestions). With
+            // any suggestion present, Enter falls through to Base UI's own
+            // select-the-highlighted-option handling — never both.
+            if (e.key === 'Enter' && harderOffered) {
+              e.preventDefault();
+              void handleSearchHarder();
+            }
           }}
         />
 
@@ -583,45 +609,50 @@ export function TargetSearch({
                     {m.cmp_target_search_searching()}
                   </Combobox.Status>
                 )}
-                {!loading &&
-                  !error &&
-                  suggestions.length === 0 &&
-                  !resolving && (
-                    <Combobox.Status className="alm-target-search__status">
-                      {m.cmp_target_search_no_results()}
-                    </Combobox.Status>
-                  )}
                 {/*
-                 * "Search more catalogues" (spec 052 P2, FR-008/FR-009): the
-                 * deliberate resolve action `target.resolve_explicit`'s Sesame
-                 * fallback is gated on. Only offered once both prior phases
-                 * (local cache + TAP long-tail) have already come up empty —
-                 * never fired automatically or per keystroke.
+                 * Below the minimum resolve length there's no fallback to
+                 * offer yet (Phase 2 hasn't even run) — plain "no matches".
                  */}
                 {!loading &&
                   !error &&
                   !resolving &&
                   suggestions.length === 0 &&
-                  harderState === 'idle' &&
-                  query.trim().length >= MIN_RESOLVE_LEN && (
-                    <div className="alm-target-search__status">
-                      <button
-                        type="button"
-                        className="alm-target-search__override"
-                        onPointerDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          void handleSearchHarder();
-                        }}
-                      >
-                        {m.cmp_target_search_search_harder()}
-                      </button>
-                    </div>
+                  query.trim().length < MIN_RESOLVE_LEN && (
+                    <Combobox.Status className="alm-target-search__status">
+                      {m.cmp_target_search_no_results()}
+                    </Combobox.Status>
                   )}
+                {/*
+                 * "Search more catalogues" (spec 052 P2/P2UX, FR-008/FR-009):
+                 * once both prior phases (local cache + TAP long-tail) have
+                 * come up empty, frame it as a next step rather than a dead
+                 * end — the miss message and the fallback button read as one
+                 * inline sentence, not a separate error. Never fired
+                 * automatically or per keystroke; only this explicit button
+                 * click or the Enter accelerator below invokes it.
+                 */}
+                {harderOffered && (
+                  <div className="alm-target-search__status alm-target-search__no-match">
+                    <Combobox.Status>
+                      {m.cmp_target_search_no_results_hint()}
+                    </Combobox.Status>
+                    <button
+                      type="button"
+                      className="alm-target-search__override"
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void handleSearchHarder();
+                      }}
+                    >
+                      {m.cmp_target_search_search_harder()}
+                    </button>
+                  </div>
+                )}
                 {harderState === 'searching' && (
                   <Combobox.Status className="alm-target-search__status alm-target-search__status--resolving">
                     {m.cmp_target_search_search_harder_searching()}
