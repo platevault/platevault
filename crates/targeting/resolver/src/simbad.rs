@@ -208,6 +208,12 @@ pub struct SimbadResolver {
     /// cache-first path (unlike name resolution) so it is simply unavailable
     /// offline (FR-018), never silently degraded.
     position: Option<Arc<simbad_resolver::TapResolver>>,
+    /// The same shared cache the typeahead/explicit facades were built with,
+    /// kept for [`Self::warm_cache`] (spec 052 P3): cone-search results reach
+    /// this resolver via [`Self::resolve_position`]/[`Self::enrich_position_match`],
+    /// which — unlike [`Resolver::resolve`] — bypass the facade's own
+    /// cache-first path entirely, so nothing else warms the cache for them.
+    cache: ResolveCache,
 }
 
 impl SimbadResolver {
@@ -264,7 +270,7 @@ impl SimbadResolver {
             resolver_config,
         )
         .map_err(|e| from_facade_error(&e))?;
-        Ok(Self { typeahead, explicit, position })
+        Ok(Self { typeahead, explicit, position, cache: cache.clone() })
     }
 
     /// Convenience constructor using [`SimbadConfig::default`] and an
@@ -364,6 +370,22 @@ impl SimbadResolver {
         simbad_resolver::Resolver::resolve(tap.as_ref(), &m.identity.primary_designation)
             .await
             .unwrap_or(m.identity)
+    }
+
+    /// Warm the shared resolve cache with a cone-search identity (spec 052
+    /// P3): [`Self::resolve_position`]/[`Self::enrich_position_match`] never
+    /// go through the facade's own cache-first `resolve`, so without this a
+    /// cone-search suggestion the user has never separately searched/typed
+    /// stays cache-cold — `target.cone_search.confirm`'s
+    /// `app_core_targets::target_resolve::promote_by_id` requires the id to
+    /// already be cache- or SQLite-resident, so a suggestion the caller never
+    /// warms could never actually be confirmed. Dedups exactly like every
+    /// other cache write (`simbad_oid` → normalized designation, FR-007);
+    /// best-effort — a failure here only means a slower confirm, never a
+    /// correctness issue (the identity is still fully known to the caller).
+    pub async fn warm_cache(&self, identity: &simbad_resolver::ResolvedIdentity) {
+        let ns = simbad_resolver::identity::namespace(NAMESPACE_SEED);
+        let _ = simbad_resolver::Cache::upsert(&self.cache.cache(), identity, &ns).await;
     }
 }
 
@@ -950,5 +972,20 @@ mod tests {
         let m = simbad_resolver::PositionMatch { identity: m31_identity(), separation_deg: 0.02 };
         let got = resolver.enrich_position_match(m).await;
         assert_eq!(got.primary_designation, "M 31");
+    }
+
+    #[tokio::test]
+    async fn warm_cache_makes_a_cone_search_identity_findable_by_oid() {
+        // A cone-search hit that was never separately typed/searched must
+        // still be cache-resident after warm_cache, so a later
+        // `target.cone_search.confirm` (which requires the id to be cache-
+        // or SQLite-resident, see `promote_by_id`) can find it.
+        let cache = ResolveCache::in_memory().unwrap();
+        let resolver = SimbadResolver::new(&SimbadConfig::default(), &cache, true).unwrap();
+        resolver.warm_cache(&m31_identity()).await;
+
+        let found =
+            simbad_resolver::Cache::get_by_simbad_oid(&cache.cache(), 1_575_544).await.unwrap();
+        assert_eq!(found.map(|t| t.primary_designation), Some("M 31".to_owned()));
     }
 }

@@ -255,7 +255,14 @@ pub async fn suggest(
     let mut suggestions = Vec::with_capacity(in_field.len());
     for i in in_field {
         suggestions.push(
-            assemble_suggestion(pool, &candidates[i], pointing.source, primary == Some(i)).await,
+            assemble_suggestion(
+                pool,
+                resolver,
+                &candidates[i],
+                pointing.source,
+                primary == Some(i),
+            )
+            .await,
         );
     }
     suggestions.sort_by(|a, b| {
@@ -325,13 +332,24 @@ fn primary_index(candidates: &[ConeCandidate], in_field: &[usize]) -> Option<usi
 
 /// Build one [`ConeSearchSuggestion`], looking up whether the candidate is
 /// already an adopted `canonical_target` (informational only — `suggest`
-/// itself never writes it).
+/// itself never writes it) and warming the shared resolve cache with the
+/// candidate's identity.
+///
+/// The cache warm is necessary, not cosmetic: `resolve_position`/
+/// `enrich_position_match` bypass the facade's own cache-first `resolve`
+/// entirely, so a cone-search candidate the user has never separately
+/// searched/typed stays cache-cold; `target.cone_search.confirm`'s
+/// `promote_by_id` requires the id to already be cache- or SQLite-resident,
+/// so without this, confirming a genuinely fresh suggestion would always
+/// fail (see `targeting_resolver::simbad::SimbadResolver::warm_cache`).
 async fn assemble_suggestion(
     pool: &SqlitePool,
+    resolver: &SimbadResolver,
     candidate: &ConeCandidate,
     source: PointingSource,
     is_primary: bool,
 ) -> ConeSearchSuggestion {
+    resolver.warm_cache(&candidate.identity).await;
     let excluded = is_default_excluded(&candidate.identity);
     let confidence = confidence_for(source, is_primary, excluded);
     let canonical_target_id = match candidate.identity.simbad_oid {
@@ -412,9 +430,26 @@ pub async fn confirm(
             )
         })?
     } else {
-        // Deterministic id from the designation — dedups exactly like every
-        // other adoption path (targeting::identity, FR-007).
-        targeting::identity::target_id_from_designation(&req.candidate.primary_designation)
+        // OQ-1/FR-007: prefer the cache's own oid-keyed identity over a
+        // designation-derived guess. The redb cache dedups by `simbad_oid`
+        // first (spec 052 P1) — if this physical object was already cached
+        // under a DIFFERENT alias/primary_designation (e.g. the frame's
+        // cone-search hit returned "M 31" but the user had previously
+        // searched "NGC 224"), the cache kept the FIRST id assigned; a bare
+        // `target_id_from_designation("M 31")` guess would miss it and
+        // `promote_by_id` would then treat it as unknown. Falls back to the
+        // designation-derived id (existing FR-007 behaviour) when no oid is
+        // given or nothing is cached under it yet.
+        let by_oid = match req.candidate.simbad_oid {
+            Some(oid) => {
+                redb_cache.get_by_simbad_oid(oid).await.map_err(|e| db_err(e.to_string()))?
+            }
+            None => None,
+        };
+        by_oid.map_or_else(
+            || targeting::identity::target_id_from_designation(&req.candidate.primary_designation),
+            |t| t.id,
+        )
     };
     let was_durable_before =
         targeting_resolver::cache::get_by_id(pool, id).await.map_err(db_err)?.is_some();
@@ -548,6 +583,109 @@ mod tests {
         }
     }
 
+    /// A minimal [`ConeCandidate`] for `confidence_for`/`primary_index`
+    /// tests: `designation` doubles as a stand-in for both the primary
+    /// designation and its sole alias (unused by these two pure functions,
+    /// but required to build a well-formed identity).
+    fn cone_candidate(
+        designation: &str,
+        object_type: simbad_resolver::ObjectType,
+        otype_raw: &str,
+        separation_deg: f64,
+    ) -> ConeCandidate {
+        ConeCandidate {
+            identity: simbad_resolver::ResolvedIdentity {
+                simbad_oid: None,
+                primary_designation: designation.to_owned(),
+                common_name: None,
+                object_type,
+                otype_raw: otype_raw.to_owned(),
+                ra_deg: 0.0,
+                dec_deg: 0.0,
+                v_mag: None,
+                aliases: vec![simbad_resolver::ResolvedAlias::new(
+                    designation,
+                    simbad_resolver::AliasKind::Designation,
+                )],
+                source: simbad_resolver::TargetSource::Resolved,
+            },
+            separation_deg,
+        }
+    }
+
+    // ── confidence_for (FR-014, SC-005) ──────────────────────────────────────
+
+    #[test]
+    fn wcs_primary_non_excluded_is_high() {
+        // High is the only tier `assemble_suggestion` marks `preselected`.
+        assert_eq!(confidence_for(PointingSource::Wcs, true, false), ConeSearchConfidence::High);
+    }
+
+    #[test]
+    fn mount_primary_is_medium_never_preselected() {
+        // SC-005: a mount-only frameset must never reach High/preselected,
+        // even for the nearest non-excluded (primary) candidate.
+        assert_eq!(
+            confidence_for(PointingSource::Mount, true, false),
+            ConeSearchConfidence::Medium
+        );
+    }
+
+    #[test]
+    fn wcs_non_primary_is_medium() {
+        assert_eq!(confidence_for(PointingSource::Wcs, false, false), ConeSearchConfidence::Medium);
+    }
+
+    #[test]
+    fn mount_non_primary_is_low() {
+        assert_eq!(confidence_for(PointingSource::Mount, false, false), ConeSearchConfidence::Low);
+    }
+
+    #[test]
+    fn excluded_is_always_low_regardless_of_source_or_primacy() {
+        assert_eq!(confidence_for(PointingSource::Wcs, true, true), ConeSearchConfidence::Low);
+        assert_eq!(confidence_for(PointingSource::Mount, true, true), ConeSearchConfidence::Low);
+    }
+
+    // ── primary_index (FR-015) ────────────────────────────────────────────────
+
+    #[test]
+    fn nearest_non_excluded_wins() {
+        let candidates = vec![
+            cone_candidate("HD 1", simbad_resolver::ObjectType::Other, "*", 0.01), // excluded, nearest
+            cone_candidate("M 31", simbad_resolver::ObjectType::Galaxy, "G", 0.5),
+            cone_candidate("M 33", simbad_resolver::ObjectType::Galaxy, "G", 1.0),
+        ];
+        let in_field = vec![0, 1, 2];
+        let primary = primary_index(&candidates, &in_field);
+        assert_eq!(primary, Some(1), "the excluded nearest candidate must never become primary");
+    }
+
+    #[test]
+    fn excluded_candidates_never_become_primary_even_if_only_candidate() {
+        let candidates =
+            vec![cone_candidate("HD 1", simbad_resolver::ObjectType::DoubleStar, "**", 0.01)];
+        assert_eq!(primary_index(&candidates, &[0]), None);
+    }
+
+    #[test]
+    fn prominence_breaks_separation_ties() {
+        // Equal separation: the NGC-tier candidate must win over the niche one.
+        let candidates = vec![
+            cone_candidate("vdB 1", simbad_resolver::ObjectType::ReflectionNebula, "RNe", 0.3),
+            cone_candidate("NGC 1", simbad_resolver::ObjectType::Galaxy, "G", 0.3),
+        ];
+        let primary = primary_index(&candidates, &[0, 1]);
+        assert_eq!(primary, Some(1), "NGC-tier must win the separation tie over niche");
+    }
+
+    #[test]
+    fn empty_in_field_has_no_primary() {
+        let candidates =
+            vec![cone_candidate("M 31", simbad_resolver::ObjectType::Galaxy, "G", 0.1)];
+        assert_eq!(primary_index(&candidates, &[]), None);
+    }
+
     // ── derive_pointing / pick_tier (FR-012) ─────────────────────────────────
 
     #[test]
@@ -671,6 +809,82 @@ mod tests {
         let ns = simbad_resolver::identity::namespace("astro-plan.targets");
         simbad_resolver::Cache::upsert(&cache, &m31_identity(), &ns).await.unwrap();
         cache
+    }
+
+    /// Reproduces the real production path: `suggest()` cache-warms every
+    /// candidate it returns (`assemble_suggestion` → `resolver.warm_cache`),
+    /// so a candidate the user has NEVER separately searched/typed (unlike
+    /// `seeded_cache_with_m31`'s manual pre-seed) is still confirmable
+    /// afterwards — `promote_by_id` requires the id to be cache-resident.
+    #[tokio::test]
+    async fn confirm_succeeds_for_a_never_seeded_candidate_after_suggest_warms_the_cache() {
+        let db = test_db().await;
+        seed_item(&db, "item-fresh", None, None, None, None, None, None, None).await;
+        let resolve_cache = ResolveCache::in_memory().unwrap();
+        let resolver =
+            SimbadResolver::new(&SimbadConfig::default(), &resolve_cache, false).unwrap();
+
+        let candidate = ConeCandidate { identity: m31_identity(), separation_deg: 0.02 };
+        let _ =
+            assemble_suggestion(db.pool(), &resolver, &candidate, PointingSource::Wcs, true).await;
+
+        let req = ConeSearchConfirmRequest {
+            frameset_id: "item-fresh".to_owned(),
+            candidate: contracts_core::cone_search::ConeSearchConfirmCandidate {
+                canonical_target_id: None,
+                primary_designation: "M 31".to_owned(),
+                simbad_oid: Some(1_575_544),
+            },
+        };
+        let resp = confirm(db.pool(), &resolve_cache.cache(), &req).await.unwrap();
+        assert!(resp.created, "the cache-warmed candidate must be confirmable");
+    }
+
+    /// FR-007/OQ-1: when the SAME physical object was already cached under a
+    /// DIFFERENT alias (a prior typeahead search for "NGC 224"), confirming a
+    /// cone-search hit that resolved as "M 31" must reuse that existing id —
+    /// never derive a second, mismatched id from the "M 31" designation.
+    #[tokio::test]
+    async fn confirm_reuses_existing_oid_cached_id_even_under_a_different_designation() {
+        let db = test_db().await;
+        seed_item(&db, "item-alias", None, None, None, None, None, None, None).await;
+        let resolve_cache = ResolveCache::in_memory().unwrap();
+        let ns = simbad_resolver::identity::namespace("astro-plan.targets");
+        // Pre-cache the object under its NGC alias (as if from an earlier,
+        // unrelated typeahead search) — a DIFFERENT primary_designation than
+        // the cone-search hit will carry below.
+        let ngc_identity = simbad_resolver::ResolvedIdentity {
+            primary_designation: "NGC 224".to_owned(),
+            ..m31_identity()
+        };
+        simbad_resolver::Cache::upsert(&resolve_cache.cache(), &ngc_identity, &ns).await.unwrap();
+        let expected_id =
+            simbad_resolver::Cache::get_by_simbad_oid(&resolve_cache.cache(), 1_575_544)
+                .await
+                .unwrap()
+                .unwrap()
+                .id;
+
+        // Cone-search resolved the object as "M 31" (a different designation
+        // than the cached "NGC 224"); a naive designation-derived id would
+        // NOT equal `expected_id`.
+        let naive_id = targeting::identity::target_id_from_designation("M 31");
+        assert_ne!(naive_id, expected_id, "the test must exercise a genuine alias mismatch");
+
+        let req = ConeSearchConfirmRequest {
+            frameset_id: "item-alias".to_owned(),
+            candidate: contracts_core::cone_search::ConeSearchConfirmCandidate {
+                canonical_target_id: None,
+                primary_designation: "M 31".to_owned(),
+                simbad_oid: Some(1_575_544),
+            },
+        };
+        let resp = confirm(db.pool(), &resolve_cache.cache(), &req).await.unwrap();
+        assert_eq!(
+            resp.canonical_target_id,
+            expected_id.to_string(),
+            "must reuse the oid-cached id, not a fresh designation-derived one"
+        );
     }
 
     #[tokio::test]
