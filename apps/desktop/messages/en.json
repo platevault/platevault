@@ -961,6 +961,8 @@
   "setup_step_site_heading": "Where do you observe from?",
   "setup_step_site_desc": "Add your observing location so the Targets Planner can show real tonight altitude, visibility, and imaging time.",
   "setup_site_intro": "Optional — add one observing site now, or skip and add it later from Settings → Target Planner.",
+  "setup_site_map_label": "Pick on map",
+  "setup_site_map_unavailable": "Map unavailable right now — enter your coordinates in the fields below.",
   "setup_site_skip_note": "You can leave this blank and set it up later; the Planner will prompt you when it's needed.",
   "setup_step_scan_desc": "Scanning each source folder and detecting ingestion groups.",
   "setup_step_scan_heading": "Scanning your library",

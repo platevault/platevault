@@ -14,6 +14,7 @@ import {
   ianaTimezones,
 } from '@/features/targets/observing-sites/iana-timezones';
 import type { Twilight } from '@/features/targets/observing-sites/observer-site';
+import { SiteLocationPicker } from './SiteLocationPicker';
 
 export interface SiteStepState {
   name: string;
@@ -75,6 +76,14 @@ export function siteStepError(state: SiteStepState): string | null {
  * wizard owns its own step-state shape rather than the settings-backed
  * site-store (the site isn't persisted until Finish).
  */
+/** Parsed field value for the map, or `null` when blank/not-a-number (no pin shown). */
+function parsedCoord(text: string): number | null {
+  const trimmed = text.trim();
+  if (trimmed === '') return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function StepSite({ state, onChange }: StepSiteProps) {
   const timezones = ianaTimezones();
   const error = siteStepError(state);
@@ -82,6 +91,21 @@ export function StepSite({ state, onChange }: StepSiteProps) {
   return (
     <div className="alm-step-site">
       <p className="alm-step-site__intro">{m.setup_site_intro()}</p>
+
+      <div className="alm-step-site__map-section">
+        <span className="alm-field-label">{m.setup_site_map_label()}</span>
+        <SiteLocationPicker
+          latitudeDeg={parsedCoord(state.latitudeDegText)}
+          longitudeDeg={parsedCoord(state.longitudeDegText)}
+          onPick={(lat, lon) =>
+            onChange({
+              ...state,
+              latitudeDegText: lat.toFixed(5),
+              longitudeDegText: lon.toFixed(5),
+            })
+          }
+        />
+      </div>
 
       <div className="alm-step-site__grid">
         <div className="alm-stack-1">
