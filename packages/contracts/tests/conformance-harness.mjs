@@ -824,12 +824,15 @@ validate(
   true
 );
 
-// T048: plan.resume response shape — success and `run.not_paused` (the two
-// paths actually implemented by `resume_plan`; see crates/app/core/src/plan_apply.rs).
-// The re-validation failure codes (`volume.still.unavailable`, `disk.still.full`,
-// `item.still.stale`) are schema-valid but NOT YET produced by the
-// implementation — resume_plan's docstring documents trusting the caller for
-// v1. Tracked as a follow-up (see tasks.md).
+// T048: plan.resume response shape — success, `run.not_paused`, and the
+// R-Pause-1 re-validation failure codes. `resume_plan` (see
+// crates/app/core/src/plan_apply.rs) now re-checks the pause condition
+// against the item that triggered it and produces `item.still.stale` /
+// `volume.still.unavailable` / `disk.still.full` for real when it is not
+// resolved (issue #575); real-backend coverage lives in
+// crates/app/core/tests/plan_resume_integration.rs. This harness only
+// checks the response shape is schema-valid, independent of the Rust
+// backend.
 const planResumeSchema = loadSchema("specs/025-filesystem-plan-application/contracts/plan.resume.json");
 const planResumeResponseSchema = responseSchema(planResumeSchema, "plan-resume-response");
 
@@ -860,7 +863,7 @@ validate(
 );
 
 validate(
-  "T048 plan.resume item.still.stale failure response is schema-valid (code reserved, not yet produced)",
+  "T048 plan.resume item.still.stale failure response is valid",
   planResumeResponseSchema,
   {
     status: "failure",

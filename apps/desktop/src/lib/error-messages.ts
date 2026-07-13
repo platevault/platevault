@@ -69,6 +69,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'item.not_pending': m.err_item_not_pending,
   'run.not_found': m.err_run_not_found,
   'run.not_paused': m.err_run_not_paused,
+  // Resume re-validation (spec 025 R-Pause-1, issue #575).
+  'item.still.stale': m.err_item_still_stale,
+  'volume.still.unavailable': m.err_volume_still_unavailable,
+  'disk.still.full': m.err_disk_still_full,
   'archive.empty': m.err_archive_empty,
   'confirm.text.mismatch': m.err_confirm_text_mismatch,
   'no.items.to.retry': m.err_no_items_to_retry,

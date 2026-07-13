@@ -185,6 +185,18 @@ pub enum ErrorCode {
     RunNotFound,
     #[serde(rename = "run.not_paused")]
     RunNotPaused,
+    /// `plan.resume` re-validated the pause condition (R-Pause-1, R-Env-1)
+    /// and found the paused item's source is still stale; resume is
+    /// refused and the plan stays `paused` (spec 025 T048/T049/T050).
+    #[serde(rename = "item.still.stale")]
+    ItemStillStale,
+    /// `plan.resume` re-validated and the paused item's volume is still
+    /// unreachable.
+    #[serde(rename = "volume.still.unavailable")]
+    VolumeStillUnavailable,
+    /// `plan.resume` re-validated and the destination volume is still full.
+    #[serde(rename = "disk.still.full")]
+    DiskStillFull,
 
     // ── Archive ──────────────────────────────────────────────────────────────
     #[serde(rename = "archive.empty")]

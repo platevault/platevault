@@ -1920,6 +1920,7 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "domain_core",
+ "fs4",
  "fs_pathsafe",
  "path-clean",
  "serde",
