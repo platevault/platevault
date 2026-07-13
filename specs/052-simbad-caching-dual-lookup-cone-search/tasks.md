@@ -87,20 +87,20 @@ description: "Task list for 052-simbad-caching-dual-lookup-cone-search"
 > **Gate (Principle IV)**: Before P3 implementation, resolve research OQ-1 (catalogue-prominence ranking) and OQ-2 (default otype exclusion set) with the user; encode the confirmed values before T028/T029.
 
 ### Design gate (US3)
-- [ ] T022 [US3] Resolve OQ-1 + OQ-2 with the user (proposed defaults in research.md); record the confirmed prominence ranking and exclusion set in research.md before implementing ranking.
+- [x] T022 [US3] Resolve OQ-1 + OQ-2 with the user (proposed defaults in research.md); record the confirmed prominence ranking and exclusion set in research.md before implementing ranking.
 
 ### Tests (US3)
-- [ ] T023 [P] [US3] Contract test: `target.cone_search.suggest` — plate-solved frameset → high-confidence `preselected: true`; mount-only → shown, `preselected: false`; filename-only / no pointing → `source: "none"`, empty suggestions (SC-005, FR-012, FR-014).
-- [ ] T024 [P] [US3] Unit test: multi-object frame → primary = nearest-to-centre among non-excluded, tie-broken by prominence; excluded otypes flagged not pre-selected (FR-015).
-- [ ] T025 [P] [US3] Integration test: `suggest` writes no `canonical_target` row; `confirm` writes exactly one (or reuses a dedup match) and links the frameset (SC-006, FR-016).
-- [ ] T026 [P] [US3] Unit test: rotation-aware footprint includes an object inside the true rotated field that an axis-aligned box would drop; unknown optics → ~1° default radius (FR-013).
+- [x] T023 [P] [US3] Contract test: `target.cone_search.suggest` — plate-solved frameset → high-confidence `preselected: true`; mount-only → shown, `preselected: false`; filename-only / no pointing → `source: "none"`, empty suggestions (SC-005, FR-012, FR-014).
+- [x] T024 [P] [US3] Unit test: multi-object frame → primary = nearest-to-centre among non-excluded, tie-broken by prominence; excluded otypes flagged not pre-selected (FR-015).
+- [x] T025 [P] [US3] Integration test: `suggest` writes no `canonical_target` row; `confirm` writes exactly one (or reuses a dedup match) and links the frameset (SC-006, FR-016).
+- [x] T026 [P] [US3] Unit test: rotation-aware footprint includes an object inside the true rotated field that an axis-aligned box would drop; unknown optics → ~1° default radius (FR-013).
 
 ### Implementation (US3)
-- [ ] T027 [US3] Pointing derivation (per light-frameset) in `crates/app/inbox/` / `crates/app/targets/`: WCS `CRVAL1/2` → mount `OBJCTRA/OBJCTDEC` → none; never filename; sub-disagreement beyond tolerance → none (FR-012). (D9)
-- [ ] T028 [US3] Cone-search + ranking in `crates/targeting/`: FOV/footprint via target-match 0.3 (rotation-aware), radius from optics with ~1° default, top-N candidates; confidence = separation + source quality + prominence (OQ-1); exclusion set (OQ-2); nearest-to-centre primary (FR-013, FR-014, FR-015). (D9)
-- [ ] T029 [US3] Contract DTOs in `crates/contracts/core/` for `target.cone_search.suggest` + `target.cone_search.confirm` (per contracts/operations.md); register Tauri commands (fn name == invoke target, no specta rename); regenerate `packages/contracts` bindings.
-- [ ] T030 [US3] Wire cone-search at Inbox ingest per light-frameset (auto `reason: ingest`) and expose the on-demand re-run (`reason: on_demand`) (FR-017); gate on the online-resolve setting, degrade gracefully offline (`resolve.offline`, FR-018).
-- [ ] T031 [US3] Inbox confirm-gate suggestion UI in `apps/desktop/src/features/inbox/`: show ranked suggestions, pre-select only high confidence, require explicit confirm; confirm calls `target.cone_search.confirm` (never auto-apply) (FR-014, FR-016, SC-006).
+- [x] T027 [US3] Pointing derivation (per light-frameset) in `crates/app/inbox/`: WCS `CRVAL1/2` → mount `OBJCTRA/OBJCTDEC` → none; never filename; sub-disagreement beyond tolerance → none (FR-012). (D9) — scope expanded (ADVICE) to extract real WCS from `crates/metadata/{core,fits,xisf}` + migration 0062, since no CRVAL parsing existed anywhere pre-P3.
+- [x] T028 [US3] Cone-search + ranking: FOV/footprint via target-match 0.3 (rotation-aware, `crates/app/inbox/src/cone_search.rs`), radius from optics with ~1° default, top-N candidates; confidence = separation + source quality + prominence (OQ-1); exclusion set (OQ-2); nearest-to-centre primary (FR-013, FR-014, FR-015). Prominence/exclusion/dedup live in `targeting_resolver::cone_search` (D9).
+- [x] T029 [US3] Contract DTOs in `crates/contracts/core/src/cone_search.rs` for `target.cone_search.suggest` + `target.cone_search.confirm` (per contracts/operations.md); registered Tauri commands (fn name == invoke target, no specta rename); regenerated TS bindings (`apps/desktop/src/bindings/`; this repo has no separate `packages/contracts` package).
+- [x] T030 [US3] Wired via the Inbox UI: `ConeSearchSuggestions` calls `suggest` on mount (`reason: ingest`) and exposes an on-demand "Re-check" (`reason: on_demand`) (FR-017); gated on the online-resolve setting via `SimbadResolver::resolve_position`, degrades to `resolve.offline` (FR-018) rendered as an inert note, never blocking ingest.
+- [x] T031 [US3] Inbox confirm-gate suggestion UI in `apps/desktop/src/features/inbox/ConeSearchSuggestions.tsx`: shows ranked suggestions, pre-selects (visually, via the primary button variant) only the high-confidence suggestion, requires an explicit Confirm click per suggestion; confirm calls `target.cone_search.confirm` (never auto-apply) (FR-014, FR-016, SC-006).
 
 **Checkpoint**: SC-005, SC-006 met — coordinate-driven suggestions, confirm-only.
 
@@ -108,10 +108,10 @@ description: "Task list for 052-simbad-caching-dual-lookup-cone-search"
 
 ## Phase 6: Polish & Verification
 
-- [ ] T032 Constitution re-check (custody, reviewable/confidence-carrying suggestion, PixInsight boundary, §V cache-projection vs canonical) against the built feature.
-- [ ] T033 `just lint` / per-crate `cargo test` / `just typecheck` green; regenerate + commit bindings.
-- [ ] T034 `speckit-verify` against FR-001..FR-018 and SC-001..SC-006; `speckit-verify-tasks` to catch phantom completions.
-- [ ] T035 `verify-on-windows` scenario for US1 (persist-across-restart + in-use write) and US3 (Inbox suggestion) on the real Tauri app; add the matching tauri-driver Layer-2 journey + coverage-matrix update.
+- [x] T032 Constitution re-check (custody, reviewable/confidence-carrying suggestion, PixInsight boundary, §V cache-projection vs canonical) against the built feature — PASS (see plan.md's Constitution Check; no filesystem mutation, `suggest` is read-only, `confirm` is the sole write path via the existing promotion, every suggestion carries confidence and requires explicit confirm).
+- [x] T033 Rust: `cargo fmt --check` / `cargo clippy --workspace --all-targets -D warnings` / `cargo nextest run` (touched crates, 830/830) / `cargo test --doc` all green. JS: `pnpm typecheck` / `pnpm build` / `pnpm vitest run` (1357/1357) / `pnpm format:check` all green. Bindings regenerated + committed (`just check-generated` clean on the pushed tree).
+- [ ] T034 `speckit-verify` / `speckit-verify-tasks` — not run (no such skill/tool available in this environment); FR-001..FR-018/SC-001..SC-006 cross-check was done manually against spec.md instead (see the P3 REPORTED summary).
+- [ ] T035 `verify-on-windows` + tauri-driver Layer-2 journey — not run (Linux sandbox, no Windows/Tauri runtime access in this session); flagged for the reviewer/CI-shepherd to schedule.
 
 ---
 
