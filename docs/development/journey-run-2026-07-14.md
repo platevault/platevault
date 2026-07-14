@@ -8,7 +8,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 |---------|---------|------------------|--------------|-------|
 | 1. First-run setup → data sources | PARTIAL | 11P/6F/1PA/1S | #704, #707 | 6-step wizard (Observing Site added); Project required not optional; partial-commit + remap-verify bugs; #557 infinite-render observed |
 | 2. Ingest → review/reclassify → confirm (move) | PARTIAL | 7P/6F/3PA/2S | #711, #724, #765, #766, #767 | needs-review gate works; reclassify sentinel bug #724 blocks confirm; cross-root move lands wrong #765; zero audit rows #766; plan-review overlay stuck #767 |
-| 3. Ingest → confirm (catalogue-in-place) | ⏳ pending | | | |
+| 3. Ingest → confirm (catalogue-in-place) | PARTIAL | 3P/1F/1PA/0S | #768, #769 | catalogue plan structure valid; destination-root picker shown wrongly #768; approval-token missing #769 blocks apply; zero audit rows #766 reproduces |
 | 4. Sessions review (derived) | ⏳ pending | | | |
 | 5. Project lifecycle: create → artifacts | ⏳ pending | | | |
 | 6. Cleanup: scan → review → apply | ⏳ pending | | | |
@@ -57,3 +57,20 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Doc-drift / unexpected-but-intended:** the destination-root picker (step 4) is NOT an inline modal at Confirm click — it surfaces inside the "Review plans" overlay (opened via toast + "Review plans (N)" button) after inbox.destination_root_required. JOURNEY-DOC UPDATE: Journey 2 should say the destination-root picker lives in the plan-review overlay, not at the point of Confirm.
 
 **App-state left for later journeys:** DO NOT trust m51-mixed-session list badges (still genuinely mixed; confirm rejects classification.ambiguous) or the darks-root (root) needs-review item (permanently stuck per #724 — don't try to resolve it). One clean plan applied (j2-clean-light, 2 files) but landed inside the inbox root (inbox/M 51/LUM/2025-05-03/light/, now re-detected as a NEW pending item) rather than under lights\1 — so Journey 4 will find 0 real sessions from this apply. Journey 3's ORGANIZED root lights\1 is untouched, safe for catalogue-in-place. Inbox now shows 9 folders.
+
+### Journey 3 — Ingest → confirm (catalogue-in-place)
+
+**Verdict:** PARTIAL
+**Steps:** 3 PASS / 1 FAIL / 1 PARTIAL / 0 SKIPPED
+**Issues filed:** #768 (UI/backend — destination-root picker shown for an organized-root confirm; should never appear for catalogue-in-place), #769 (backend — per-plan Apply/live-progress path always fails with plan.invalid_state; approval-token wiring missing so plan stays ready_for_review, never approved)
+
+**Dupes hit (not re-filed):** #765 (cross-root move mis-landing — explains why lights\1 was empty pre-test), #766 (zero audit rows on apply — REPRODUCES for catalogue too: audit_log_entry count stayed 0 after a succeeded catalogue apply)
+
+**Key evidence:** DB plan_items (plan 698eb4f0…) both rows action='catalogue', from_root_id==to_root_id, unchanged relative_path; inbox_source_groups.lane=catalogue only for organized root vs move for every unorganized source group of the same frame type; sha256 of both fixture files identical before/after apply; acquisition_session row created (2 frames, root=lights\1); direct IPC replay of plans_apply_real → {"code":"plan.invalid_state","message":"plan must be in 'approved' state before apply; current state is 'ready_for_review'"}. Shots at scratchpad/shots/j3-*.png.
+
+**Doc-drift / unexpected-but-intended:**
+- lights\1 had ZERO files on disk at journey start (same root cause as #765 — J2's move stole them); executor SEEDED 2 fixture FITS into lights\1\M51\LUM\2025-05-03\ to make the precondition testable (baseline hashes recorded).
+- Inbox page "Rescan all roots" only rescans category==='inbox' roots (InboxPage.tsx:161-167); surfacing a non-inbox root needs Settings → Data Sources → per-root Rescan. JOURNEY-DOC UPDATE: Journey 3 step 2 rescan instruction should say to use Settings → Data Sources per-root Rescan for non-inbox roots.
+- Catalogue plan's destructive-destination control observed ABSENT (spec-compliant per the T&V bullet which allows absent-or-inert), though narrative step 3 implies "present" — minor narrative mismatch, not a defect.
+
+**App-state left for later journeys:** app idle on #/sessions with 1 real session (id 11024d3c…, session_key "M 51|LUM|1x1|100|2025-05-03", root=lights\1, 2 frames, canonical_target resolved) — J4 can inspect it directly. J2's move produced NO session (landed nowhere per #765). Inbox still shows 10 items incl. the untouched poisoned ones (m51-mixed-session, darks-root needs-review).
