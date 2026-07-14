@@ -12,5 +12,8 @@ domain_core = { path = "../domain/core" }
 thiserror = { workspace = true }
 time = { workspace = true }
 
+[dev-dependencies]
+uuid = { workspace = true }
+
 [lints]
 workspace = true
