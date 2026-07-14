@@ -820,6 +820,60 @@ builds them. So the pool + matching exist; the open decision is the reuse
 
 ---
 
+## Q27 — Project ↔ target cardinality, mosaics, and the supergroup layer (spec-008/009/035 + §III)
+
+A project (and session, migration 0046) carries a single nullable
+`canonical_target_id`; there is **no mosaic/panel concept**. Research on NINA's
+mosaic mode ([Framing Assistant docs](https://nighttime-imaging.eu/docs/master/site/tabs/framing/))
+shows each panel is its own Target named `[Base] Panel [N]` whose name → the
+`OBJECT` keyword, with a **different offset pointing AND rotation per panel** —
+and it is **user-overridable and vendor-specific** (ASIAIR/SGP/APT/Ekos differ).
+So OBJECT strings, per-panel coordinates, and rotation are all unreliable for
+attribution. The model is physical, not textual.
+
+- **No `OBJECT`/panel-name string parsing anywhere** — vendor-variant and
+  user-overridable.
+- **Introduce a supergroup (framing) layer:** `project → supergroup → session →
+  frames`. A **supergroup = one framing** = the light sessions sharing
+  **target + optic-train + pointing + rotation within tolerance**, across filters
+  *and* nights — i.e. the co-registerable integration unit (all L/R/G/B/Ha for one
+  framing). Rotation drift is a **tolerance** parameter (FOV-relative pointing, a
+  few degrees rotation; sensible default, tunable), never an exact key. Clustering
+  is **suggested and user-adjustable** (merge/split/reassign) — assist, not
+  authoritative (posture of Q22/Q26).
+- **One target per project holds.** A normal project is usually **one supergroup**
+  (one framing, many filters/nights). A multi-target *night* → multiple projects,
+  sessions attributed per-target (0046).
+- **Mosaic mode = a minimal project flag**, not a panel entity: a mosaic project
+  has **multiple supergroups (panels)** that **all inherit the project's declared
+  target**, and **per-frame OBJECT/coordinate resolution is suppressed** (panels
+  point away from the target center, so deriving per-panel would mis-resolve). The
+  only job of the flag is "inherit declared target across supergroups; don't
+  resolve per-frame." No string parsing, no panel table — panels are just the
+  supergroups of a mosaic project, detected by the same pointing+rotation
+  clustering.
+- **Incremental ingestion attribution (the payoff).** At the Inbox confirm gate,
+  each new light session is matched against existing supergroups/projects by
+  **target + optic-train + pointing+rotation (tolerance)** and the app *suggests*:
+  - same target + optic-train + same framing → **add to the existing supergroup**
+    (multi-night data flows in; a mosaic's night-2 panel-3 subs match panel-3);
+  - same target + optic-train + different framing → **add as a new supergroup**
+    (a new mosaic panel);
+  - same target + different optic-train → suggest the project but **flag the optic
+    difference**;
+  - no match → **new project / unassigned**.
+  **Match = *suggest* merge, never auto-merge** (§II reviewable); multiple
+  candidates → **ranked by framing match, user picks** (recommend-then-override).
+  This is the **same pre-ingest pass as Q22** (one sweep does duplicate detection
+  *and* project attribution), relies on **Q12**'s complete grouping attributes,
+  and honors **Q25** (matching a completed project → suggest add + reopen, with
+  the reopen revoke/warn).
+- **§III boundary holds** — the app groups and prepares framings (a **Q20 source
+  view per supergroup**, one WBPP-ready folder per framing; the **Q10 manifest**
+  is per-supergroup) but **never stitches or integrates**.
+
+---
+
 ## SpecKit iterate map
 
 Each decision is formalized through a SpecKit iterate when its wave is picked up:
@@ -852,6 +906,7 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q24** cross-platform path safety | **spec-025 / spec-015** iterate (long-path >260 hard-block in plan; case-insensitive collision in Q23 detector; safe-filename rejections surfaced as plan fixes; per-segment LCD sanitization already shipped via `safe-filename`) |
 | **Q25** verified-complete trigger + output observation | **spec-011 / spec-012 / spec-009** iterate (purely manual completion, no detection; observation reframed as tracking + optional evidence; manual gate unlocks Q19 cleanup; reopen revokes + warns) |
 | **Q26** calibration reuse policy & master library | **spec-007 / spec-040** iterate (per-type reusability in Q18 rules; flats reusable + default warning w/ disable setting; detect-not-create §III; reuse tracking; master protected while any non-completed project references it) |
+| **Q27** project↔target, mosaics, supergroup layer | **spec-008 / spec-009 / spec-006** iterate (new supergroup=framing layer clustered by target+optic-train+pointing+rotation tolerance; mosaic mode = flag inheriting declared target, no panel entity, no OBJECT parsing; incremental ingestion attribution suggests routing new sessions; per-supergroup source view/manifest) |
 
 Q8's override decision is small enough to fold into the ingestion/confirm flow
 directly; the **heuristic ADU suggestion** is the part that needs a new
