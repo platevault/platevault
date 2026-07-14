@@ -1,5 +1,24 @@
 # Feature Specification: Inbox Confirmation & Reviewable Plan Surface
 
+> **AMENDED (2026-07-14) by the Q27 framing-layer iteration on
+> [Spec 008 — Project Create, Onboard, And Edit](../008-project-create-onboard-edit/spec.md).**
+> Q27 extends this spec's **confirm contract additively** in both directions:
+> the confirm **response** gains a ranked `IngestionAttributionCandidate[]`
+> (framing/project attribution suggestions) and the confirm **request** gains a
+> per-item `chosenAttribution` field persisting the user's pick (spec-008
+> FR-019/FR-022; shapes in spec-008 `data-model.md`). The **framing-membership
+> write happens at confirm time in ALL paths** — catalogue-in-place or queued
+> move — because membership is database metadata, independent of filesystem
+> plan application; it MUST NOT be deferred to plan-apply completion. The
+> **pending Q7 iteration** (`pending-iteration.md`), which reworks this same
+> confirm/queue surface (T090 confirm-time catalogue registration, US18
+> Apply-now/Add-to-plan), **must preserve that confirm-time membership write**.
+> Residual Q7×Q27 shape questions — flagged, not resolved here: (a) both
+> iterations extend the confirm request/response, so whichever lands second
+> reconciles the contract shape; (b) whether attribution suggestions also
+> surface inside the Q7 global queue UI (vs confirm-gate-only) is a Q7-side
+> design call.
+
 **Feature Branch**: `041-inbox-plan-surface`
 
 **Created**: 2026-06-20
@@ -65,6 +84,20 @@ Several defects encountered during this review were already repaired (PR #298): 
 **Scope**: Pivot (changes the core inbox granularity invariant; folds in the lifecycle drop; cross-spec impact on 045/006/035).
 **Artifacts updated**: spec.md, research.md, data-model.md, plan.md, contracts/operations.md, tasks.md, quickstart.md.
 **Tasks added**: T061–T079. **Tasks retired**: T036, T037.
+
+### Iteration 2026-07-14: Q27 confirm-contract extension (cross-spec delta, owned by spec 008)
+
+**Change**: The Q27 framing layer (spec 008) additively extends the confirm
+contract — response: ranked `IngestionAttributionCandidate[]`; request:
+per-item `chosenAttribution` persisting the user's attribution pick at confirm
+time. Membership is DB metadata written at confirm in all paths (catalogue or
+queued move), independent of plan application. The pending Q7 iteration must
+preserve that write when it reworks the confirm/queue surface; contract-shape
+reconciliation falls to whichever of Q7/Q27 lands second (flagged in the
+amendment note above).
+**Scope**: Cross-spec delta (documentation only; contracts/tasks live in
+spec-008 Phase F — F-Framing-5/10).
+**Artifacts updated**: spec.md (amendment note + this log entry).
 
 ## User Scenarios & Testing *(mandatory)*
 

@@ -63,6 +63,10 @@ As a user, I want all project setup fields to be editable from one project setti
 
 ---
 
+> **US4 is reserved.** There is no "User Story 4" section in this spec; US4
+> (channel inference) exists as a task-level story in `tasks.md` (§US 4). The
+> number is reserved to keep task↔story traceability stable — do not reuse it.
+
 ### User Story 5 - Group A Project Into Framings (Priority: P2)
 
 As a user, I want my project's light sessions grouped into **framings** — each framing being the sessions that share target, optic-train, pointing, and rotation within a tolerance (all filters and nights of one co-registerable integration unit) — so that a normal project's multi-night, multi-filter data reads as one integration unit and a mosaic's panels read as separate ones.
@@ -91,6 +95,7 @@ As a user, I want to mark a project as a **mosaic** so that its multiple framing
 
 1. **Given** a project is marked mosaic, **When** its framings are derived, **Then** each framing inherits the project's declared target and per-frame OBJECT/coordinate resolution is suppressed.
 2. **Given** a mosaic project, **When** a second panel's subs are ingested, **Then** they form (or match) a distinct framing by pointing+rotation clustering, without any OBJECT/panel-name string parsing.
+3. **Given** a mosaic project with existing framings, **When** subs for a **first new panel** are ingested (pointing matches no existing framing, per-frame target resolution suppressed), **Then** attribution still suggests the mosaic project with **add-as-new-framing**, via the FR-019 mosaic relaxation (optic-train match + pointing within the envelope of the project's existing framings).
 
 ---
 
@@ -145,12 +150,15 @@ As a user, when I confirm new light sessions at the Inbox gate, I want the app t
 - **FR-013**: A project's light sessions MUST be groupable into **framings**, where a framing is the set of light sessions sharing target + optic-train + pointing + rotation within a configured **tolerance** (never an exact key). A framing is the co-registerable integration unit spanning all filters and nights of one pointing.
 - **FR-014**: Framing tolerance (FOV-relative pointing offset; rotation drift in degrees) MUST be a tunable parameter with a sensible default; it MUST NOT be an exact-match key.
 - **FR-015**: Framing clustering MUST be presented as a **suggestion** the user can adjust — **merge**, **split**, and **reassign** sessions between framings — and MUST NOT be treated as authoritative.
-- **FR-016**: The one-target-per-project rule MUST hold. A normal (non-mosaic) project is usually a single framing (one framing, many filters/nights).
+- **FR-016**: The one-target-per-project rule MUST hold: every framing of a non-mosaic project MUST share the single project target. A non-mosaic project has **one active framing** (one framing, many filters/nights); when clustering yields additional framings (pointing/rotation beyond tolerance), they MUST be surfaced for user reconciliation (reassign, retune tolerance, or enable mosaic mode), never silently accepted as parallel integration units.
 - **FR-017**: A project MUST carry a minimal **mosaic-mode flag**. A mosaic project MAY hold multiple framings that all **inherit the project's declared target**, and per-frame OBJECT/coordinate resolution MUST be **suppressed** for mosaic projects.
 - **FR-018**: The system MUST NOT parse `OBJECT` values or panel-name strings for attribution anywhere; panel identity is derived only from the physical pointing+rotation clustering. There is **no panel entity** — panels are simply the framings of a mosaic project.
-- **FR-019**: At the Inbox confirm gate, the system MUST run an **attribution pass** (the same pre-ingest sweep as Q22 duplicate detection) that matches each new light session against existing framings/projects by target + optic-train + pointing+rotation (tolerance) and **suggests** one of: add-to-existing-framing, add-as-new-framing, add-to-project-but-flag-optic-difference, or new-project/unassigned. Multiple candidates MUST be **ranked by framing match** and the user picks (recommend-then-override).
+- **FR-019**: At the Inbox confirm gate, the system MUST run an **attribution pass** that matches each new light session against existing framings/projects by target + optic-train + pointing+rotation (tolerance) and **suggests** one of: add-to-existing-framing, add-as-new-framing, add-to-project-but-flag-optic-difference, or new-project/unassigned. Multiple candidates MUST be **ranked by framing match** and the user picks (recommend-then-override). Attribution is the **first** pre-ingest pass at the confirm gate; the Q22 duplicate-detection sweep joins the **same** pass when its iterate lands (composition point, not a prerequisite). **Mosaic relaxation**: for `isMosaic` candidate projects, target equality (unresolvable for panels — per-frame resolution is suppressed and panels point away from the declared center) is replaced by **optic-train match + pointing within an envelope of the project's existing framings** (FOV-relative; default pinned in research R11a, tunable) — this is what lets a first NEW panel suggest add-as-new-framing.
 - **FR-020**: Attribution suggestions MUST NOT auto-merge (reviewable-mutation principle). A suggestion that matches a **completed** project MUST offer add + reopen and honor the reopen revoke/warn (raw-subs-archived warning).
-- **FR-021**: The app MUST support a **per-framing source view** (Q20 — one processing-tool-ready folder per framing) and a **per-framing manifest** (Q10). It MUST NOT stitch, register, or integrate framings (PixInsight-boundary principle).
+- **FR-021**: The app MUST support a **per-framing source view** (Q20 — one processing-tool-ready folder per framing) and a **per-framing manifest** (Q10). It MUST NOT stitch, register, or integrate framings (PixInsight-boundary principle). These projections are **consumers** of the framing model, delivered when the Q20 (spec-026/049) and Q10 (spec-024) iterations land — not prerequisites for it.
+- **FR-022**: The user's attribution pick MUST be **persisted at confirm time as part of the confirm request** (an additive extension of the existing confirm contract). Framing membership is database metadata, not a filesystem mutation, so no reviewable filesystem plan is required for the write; it applies identically on catalogue-in-place and queued-move confirms. Later membership changes go through the merge/split/reassign adjustment surface (FR-015).
+
+**Note — `{target}` path token on mosaic panels**: path generation currently fills the `{target}` token from the OBJECT header, so a mosaic panel confirmed as a move lands under an `…Panel N/` folder while inheriting the declared target. This is legal — FR-018 is **attribution-scoped**, not naming-scoped — and is the documented current behavior; `{target}` token semantics for `isMosaic` projects are deferred to the Q23 naming iterate (spec-015/025, Wave 1).
 
 ### Key Entities
 
@@ -189,12 +197,19 @@ As a user, when I confirm new light sessions at the Inbox gate, I want the app t
 **Tasks marked complete**: none.
 **Cross-spec deltas**: spec-009 (reopen-on-attribution-match; framing orthogonal to lifecycle; per-framing prepared source) and spec-006 (session→framing membership; clustering suggestion surfaced; attribution shares the Q22 pre-ingest sweep) recorded in those specs' iteration logs.
 
+### Iteration 2026-07-14 (b): Framing-layer gate fixes (critique 2026-07-14-q27-gate)
+
+**Change**: Pre-implementation gate fixes — no model rethink. Durable session-level geometry persistence + NULL-legacy exclusion (F-Framing-1); attribution apply-path persisted in the confirm request (FR-022, F-Framing-10); mosaic first-new-panel relaxation (FR-019, US6 AS3); blocked-by/composition-fallback annotations for Q22/Q20/Q10/Q12 (attribution is the first pass); `framing.list` folded into F-Framing-3; clustering trigger + `user_adjusted` protection invariant; clustering semantics pinned in research R11a + tunables settings task (F-Framing-11); migration claim-next-free rule; FR-016 one-active-framing normative; US4 reservation note; `{target}` mosaic token behavior documented (deferred to Q23 iterate); attribution prefilter note.
+**Scope**: Fix round (spec/tasks granularity).
+**Artifacts updated**: spec.md, data-model.md, plan.md, tasks.md, research.md; cross-spec amendment note added to spec-041.
+**Tasks added**: F-Framing-10, F-Framing-11. **Tasks modified**: F-Framing-1/2/3/5/7/8.
+
 ## Assumptions
 
 - Initial project creation happens in the guided first-project flow after first-run source setup.
 - Workflow-specific generated files are app-owned projections.
 - Framing membership is derived from physical acquisition attributes (target + optic-train + pointing + rotation), never from OBJECT/panel-name strings.
-- Pointing and rotation are available on light frames because Q12's strict ingest gate requires them for session identity.
+- Pointing/rotation/optic-train are persisted at session level at confirm time (F-Framing-1). Once the Q12 strict-gate iterate is applied (spec-006/033/041 — **not yet applied**), those attributes are guaranteed present on new ingests; until then, and for legacy rows, geometry is nullable — NULL-geometry sessions are excluded from clustering until backfilled via rescan (Q28 path).
 
 ## Out of Scope
 

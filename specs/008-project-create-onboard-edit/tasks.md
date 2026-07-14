@@ -219,41 +219,80 @@ task above. Cross-spec deltas land in spec-009 (reopen-on-match) and spec-006
 (session→framing membership).
 
 - [ ] F-Framing-1. `[US5]` Add the `framing` table + `framing_session` join +
-  `project.is_mosaic` column (backward-compatible migration, default false) in
-  `crates/persistence/db`. Add the `Framing` entity per `data-model.md` in
-  `crates/domain/core/src/project/` (or `crates/sessions/`). (FR-013/FR-016/FR-017)
-- [ ] F-Framing-2. `[US5]` Tolerance-based clustering in `crates/sessions/`:
-  group a project's light sessions by target + optic-train + pointing + rotation
-  within a tunable tolerance; emit a **suggested** clustering. Unit-test the
-  collapse (multi-night/multi-filter → one framing) and the split (pointing
-  beyond tolerance → distinct framings). (FR-013/FR-014/FR-015)
-- [ ] F-Framing-3. `[US5]` `framing.merge` / `framing.split` / `framing.reassign`
-  use cases in `crates/app/core/` + contracts + bindings; flip
-  `Framing.clustering` to `user_adjusted`; membership-only mutation (no
+  `project.is_mosaic` column (default false) **+ session-level nullable
+  geometry columns** — `pointing (ra/dec)`, `rotation`, `optic_train_key` on
+  the acquisition-session table, **populated at confirm** (today
+  pointing/rotation live only on non-durable inbox staging) — in
+  `crates/persistence/db`. **Legacy rows keep NULL geometry** (Q16 null
+  semantics) and are excluded from clustering until backfilled via rescan
+  (Q28). Claim the **next free migration version at merge** against
+  origin/main; reviewer MUST dup-check `migrations/` (duplicate-0046
+  precedent, PR #317); touch persistence `lib.rs` to force sqlx re-embed. Add
+  the `Framing` entity per `data-model.md` in
+  `crates/domain/core/src/project/` (or `crates/sessions/`).
+  (FR-013/FR-016/FR-017)
+- [ ] F-Framing-2. `[US5]` Tolerance-based clustering in `crates/sessions/` per
+  **research R11a** (single-link vs representative linkage, circular-mean
+  representative, FOV source + fallback, concrete defaults): group a project's
+  light sessions by target + optic-train + pointing + rotation within the
+  tunable tolerance; emit a **suggested** clustering. Triggers: incremental at
+  confirm + explicit bulk derive (onboarding/rescan). **Re-derivation never
+  modifies `user_adjusted` framings** — it only surfaces new suggestions.
+  NULL-geometry sessions are excluded (surface as unassigned). Unit-test the
+  collapse (multi-night/multi-filter → one framing), the split (pointing
+  beyond tolerance → distinct framings), the `user_adjusted` protection, and
+  the NULL-geometry exclusion. Blocked-by: F-Framing-1 (session geometry);
+  new-ingest completeness guarantee arrives with the Q12 strict-gate iterate
+  (not yet applied — cluster whatever has geometry until then).
+  (FR-013/FR-014/FR-015)
+- [ ] F-Framing-3. `[US5]` `framing.list` + `framing.merge` / `framing.split` /
+  `framing.reassign` use cases in `crates/app/core/` + contracts + bindings;
+  flip `Framing.clustering` to `user_adjusted`; membership-only mutation (no
   filesystem); emit audit events. (FR-015)
 - [ ] F-Framing-4. `[US6]` Mosaic-mode flag on `project.create` / `project.update`
   (`is_mosaic`); when set, framings inherit the project's declared target and
   per-frame OBJECT/coordinate resolution is suppressed. No panel entity, no
   OBJECT/panel-name string parsing. (FR-017/FR-018)
-- [ ] F-Framing-5. `[US7]` Inbox-confirm attribution pass composed with the Q22
-  pre-ingest sweep in `crates/app/inbox/src/confirm.rs`: match each new light
-  session against existing framings/projects; return ranked
-  `IngestionAttributionCandidate`s (add-to-framing / new-framing /
-  flag-optic-difference / new-project). Suggest-never-auto-merge; user picks.
-  (FR-019/FR-020)
+- [ ] F-Framing-5. `[US7]` Inbox-confirm attribution pass in
+  `crates/app/inbox/src/confirm.rs`: match each new light session against
+  existing framings/projects; return ranked `IngestionAttributionCandidate`s
+  (add-to-framing / new-framing / flag-optic-difference / new-project) with the
+  **FR-019 mosaic relaxation** (optic-train + pointing within the existing-
+  framings envelope) and an **optic-train + coarse-sky-bin prefilter**.
+  Suggest-never-auto-merge; user picks. **Attribution is the FIRST pre-ingest
+  pass**: the Q22 duplicate sweep exists in no spec/code yet and **joins this
+  same pass when its iterate lands** (documented composition point — not a
+  blocker). Blocked-by: F-Framing-1/2. (FR-019/FR-020)
 - [ ] F-Framing-6. `[US7]` Completed-project attribution match → add + reopen via
   the spec-009 `completed → processing` edge with the Q25 raw-subs-archived
   reopen warning. (FR-020)
 - [ ] F-Framing-7. `[US5]` Per-framing source view (Q20) + per-framing manifest
   (Q10) wiring as reproducible projections; assert §III — the app groups and
-  prepares but never stitches/integrates. (FR-021)
-- [ ] F-Framing-8. `[P]` Layer-1 tests: multi-night/multi-filter collapse into
+  prepares but never stitches/integrates. **Blocked-by: the Q20 (spec-026/049)
+  and Q10 (spec-024) iterations** — these projections are consumers of the
+  framing model, not Phase F prerequisites; do not start this task before they
+  land. (FR-021)
+- [ ] F-Framing-8. Layer-1 tests: multi-night/multi-filter collapse into
   one framing; merge/split/reassign persistence + `user_adjusted`; mosaic
-  multi-framing inherit target with no OBJECT parsing; attribution ranking +
-  user-pick-only apply; completed-project add+reopen.
+  multi-framing inherit target with no OBJECT parsing; **first-new-panel mosaic
+  suggestion (US6 AS3)**; attribution ranking + user-pick-only apply via
+  `chosenAttribution` (SC-008); **NULL-geometry exclusion**; completed-project
+  add+reopen. Depends on F-Framing-3/4/6/7 and F-Framing-10 — not
+  parallelizable with them.
 - [ ] F-Framing-9. Quickstart + Windows-E2E scenario (tauri MCP) for the framing
   grouping + attribution flow; update
   `specs/037-e2e-integration-testing/contracts/coverage-matrix.md`.
+- [ ] F-Framing-10. `[US7]` **Attribution apply-path (FR-022)**: extend the
+  Inbox confirm **request** contract with the per-item `chosenAttribution`
+  field (see data-model.md §Apply-path) and persist the picked membership at
+  confirm time — create the framing/project when the kind requires it.
+  Membership is DB metadata (no §II plan); the write applies identically on
+  catalogue-in-place and queued-move confirms. Additive contract extension +
+  bindings + Layer-1 test proving SC-008 end-to-end. Blocked-by: F-Framing-5.
+- [ ] F-Framing-11. `[US5]` **Clustering tunables settings storage (FR-014)**:
+  persist the R11a tolerance parameters (pointing fraction of FOV, rotation
+  degrees, mosaic envelope factor, no-FOV fallback) in Settings with the R11a
+  defaults; surface them in the Settings UI. Blocked-by: F-Framing-2.
 
 ## Cross-Cutting
 
@@ -307,13 +346,20 @@ US3-4, US1b-1..US1b-5 (remove/add-source UI): DONE (WP-008-C) — see ticked ite
 US2-3 depends on spec 004 (native filesystem controls) — backend ready, UI deferred.
 
 Phase F (framing layer, Q27):
-F-Framing-1 ─► F-Framing-2 ─► F-Framing-3 (adjustment) 
-                          └─► F-Framing-5 ─► F-Framing-6 (attribution + reopen)
+F-Framing-1 ─► F-Framing-2 ─► F-Framing-3 (list + adjustment)
+                          ├─► F-Framing-11 (tunables settings)
+                          └─► F-Framing-5 ─► F-Framing-6 (reopen)
+                                         └─► F-Framing-10 (apply-path, FR-022)
 F-Framing-1 ─► F-Framing-4 (mosaic flag)
-F-Framing-2 ─► F-Framing-7 (per-framing view/manifest)
-F-Framing-8 (tests) follows F-Framing-3/4/6/7; F-Framing-9 (E2E) last.
-F-Framing-5 composes with the Q22 pre-ingest sweep (spec 006/041) and consumes
-Q12's required pointing/rotation grouping attributes.
+F-Framing-2 ─► F-Framing-7 (per-framing view/manifest —
+               ALSO blocked-by the Q20 spec-026/049 + Q10 spec-024 iterations)
+F-Framing-8 (tests) follows F-Framing-3/4/6/7/10 — NOT parallelizable with
+them; F-Framing-9 (E2E) last.
+External ordering: attribution (F-Framing-5) is the FIRST pre-ingest pass —
+the Q22 duplicate sweep (no spec/code yet) joins the same pass when its
+iterate lands; the Q12 strict-gate iterate (not yet applied) later guarantees
+geometry on new ingests; NULL-geometry legacy sessions are excluded until a
+Q28 rescan backfill.
 ```
 
 ## Out of Scope

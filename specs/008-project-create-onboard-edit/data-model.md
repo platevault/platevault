@@ -122,6 +122,20 @@ FramingManifestRef { id: Uuid, path: String }   // Q10 projection, not a stored 
   OBJECT/panel-name strings (FR-018).
 - A framing is a lights-only unit; calibration sessions are matched by the
   Q18/Q26 rules and are not framing members.
+- **Durable clustering key (session-level geometry)**: the clustering inputs
+  MUST be durably persisted on the acquisition session — **nullable**
+  `pointing (ra/dec)`, `rotation`, and `optic_train_key` columns populated at
+  confirm time (today pointing/rotation exist only on non-durable inbox staging;
+  `acquisition_session` has no geometry/optic-train columns). **Legacy rows keep
+  NULL geometry** (consistent with the merged Q16 null semantics — missing is
+  missing, never fabricated); NULL-geometry sessions are **excluded from
+  clustering** until backfilled via rescan (the Q28 onboarding path) and surface
+  as unassigned for manual reassign.
+- **Clustering trigger + protection**: clustering runs **incrementally at
+  confirm** (the attribution pass) and as an **explicit bulk derive**
+  (onboarding/rescan, Q28). Re-derivation MUST NEVER modify a framing with
+  `clustering == "user_adjusted"` — it may only surface **new** suggestions
+  (this is what makes US5 AS2's "the adjustment persists" hold).
 
 ## Cross-Spec References
 
@@ -169,8 +183,14 @@ spec-009 operation that runs after the create plan is applied.
 - A `Framing` belongs to exactly one project; a light session belongs to at most
   one framing.
 - `isMosaic == false` ⇒ all framings share the single project target
-  (`Framing.targetId == Project.canonical_target_id`); a non-mosaic project is
-  usually a single framing.
+  (`Framing.targetId == Project.canonical_target_id`) and the project has **one
+  active framing** — extra derived framings surface for user reconciliation
+  (reassign, retune tolerance, or enable mosaic mode), never as silent parallel
+  integration units (FR-016).
+- Re-derivation never modifies a `user_adjusted` framing; it only surfaces new
+  suggestions.
+- Sessions with NULL geometry (legacy/pre-Q12 rows) are excluded from clustering
+  until backfilled via rescan (Q28); they surface as unassigned.
 - `isMosaic == true` ⇒ every framing inherits the project's declared target, and
   per-frame OBJECT/coordinate resolution is suppressed. There is no panel entity.
 - Framing membership is derived from physical clustering (target + optic-train +
@@ -188,6 +208,14 @@ spec-009 operation that runs after the create plan is applied.
 - `framing` is a child table keyed by `id`, FK `project_id`, with a
   `framing_session` join keyed by `(framing_id, session_id)`. `Project.is_mosaic`
   is a new column defaulting to `false` (backward-compatible migration).
+  Session-level nullable geometry columns (`pointing`, `rotation`,
+  `optic_train_key`) are added to the acquisition-session table (see Durable
+  clustering key above).
+- **Migration numbering**: no version is pinned in spec text — claim the next
+  free version at implementation merge against origin/main, and the reviewer
+  MUST dup-check `crates/persistence/db/migrations/` for version collisions
+  (duplicate-0046 precedent, PR #317). Touch the persistence crate's `lib.rs`
+  to force the sqlx macro to re-embed new migration files.
 
 ## Derived Views
 
@@ -252,7 +280,8 @@ calling `project.channels.reinfer` or `project.channels.dismiss_drift`
 
 ### IngestionAttributionCandidate (Q27 — Inbox confirm response extension)
 
-The Inbox confirm gate's attribution pass (the same pre-ingest sweep as Q22)
+The Inbox confirm gate's attribution pass (the first pre-ingest pass; the Q22
+duplicate sweep joins the same pass when its iterate lands)
 returns a ranked list of candidates per incoming light session. It is a
 **suggestion surface**: it never writes a merge (FR-019/FR-020).
 
@@ -272,6 +301,24 @@ Candidates are **ranked by `matchScore`**; the user picks (recommend-then-
 override). A `reopen == true` candidate targets a completed project and, on
 selection, uses the spec-009 `completed → processing` reopen edge with its
 raw-subs-archived warning (Q25).
+
+**Apply-path (FR-022)** — the pick is persisted at confirm time as an
+**additive field on the confirm request** (per session/item):
+
+```
+chosenAttribution? {
+  kind:       "add_to_framing" | "new_framing" | "flag_optic_difference" | "new_project" | "unassigned"
+  projectId?: Uuid
+  framingId?: Uuid            // required for add_to_framing
+}
+```
+
+Confirm writes the framing membership (and creates the framing/project when the
+kind requires it) as **database metadata** — not a filesystem mutation, so no
+§II plan is generated for it, and the write applies identically on
+catalogue-in-place and queued-move confirms. Omitting `chosenAttribution`
+leaves the session unassigned (attributable later via reassign). This is what
+makes SC-008 testable end-to-end.
 
 ### Framing adjustment results (Q27)
 
