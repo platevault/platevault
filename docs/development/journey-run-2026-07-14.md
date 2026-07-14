@@ -11,6 +11,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 3. Ingest → confirm (catalogue-in-place) | PARTIAL | 3P/1F/1PA/0S | #768, #769 | catalogue plan structure valid; destination-root picker shown wrongly #768; approval-token missing #769 blocks apply; zero audit rows #766 reproduces |
 | 4. Sessions review (derived) | PARTIAL | 6P/6F/1PA/2S | #770, #771, #772, #773 | filter/camera dropdowns + grouping work; unresolved values indistinguishable #770; detail Escape fails #771; no calibration field #772; no notes field #773; sessionKey parse bug #564 |
 | 5. Project lifecycle: create → artifacts | PARTIAL | 2P/0F/4PA/0S | #775, #776, #778, #780 | create+mkdir+lifecycle work; integration always 0s #775; manifests never generated #665; artifact tracking broken #780; tool workdir \\?\ path fails #778 |
+| J1-5 UX diff-check | PASS | 6P/0F | #783 | 6 surfaces audited; Inbox render-loop recovers; Sessions/Projects/Edit surfaces clean except documented dupes |
 | 6. Cleanup: scan → review → apply | ⏳ pending | | | |
 | 7. Archive → delete from archive | ⏳ pending | | | |
 | 8. Calibration: ingest → masters → matching | ⏳ pending | | | |
@@ -104,3 +105,18 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Untested (noted, not defects):** last-source-guard inline-confirm (code exists EditProjectPane.tsx:338-365 but unreachable — Remove is lifecycle-locked in processing/completed, only 1 session); archived-state edit refusal (no archived project yet); tool-launch containment-refusal + OS-spawn-failure (couldn't misconfigure); Save-draft→resume + exact 1100×720 stepper (skipped for budget).
 
 **App-state left for later journeys:** app idle on #/projects with "J5 Lifecycle Test" (id bf6f5e26-…) selected, lifecycle=completed, 1 attached source (M51 session 11024d3c…), tool=PixInsight, path C:\Temp\pv-projects\j5-lifecycle-test. On-disk outputs for J6/J7: output\J5_integration_master.xisf (recorded artifact, now state=missing per #780) and output\J5_final_closed.fits (on disk, unrecorded per #780). Detail shows Archive + Re-open ready for J7.
+
+### J1–J5 UX diff-check — quick pass
+
+**Verdict:** PASS
+**Issues filed:** #783 (UI — New-project wizard "From target context" label fabricated from first word of the typed project name; WizardPage.tsx:480-485)
+
+**Dupes hit (not re-filed):** #557 (Inbox render-loop, recovered), #564/#654 (Sessions dash rows), #622 (Projects Target column always "—"), #663 (raw session UUIDs in Sources/Edit/Calibration-readiness), #664 (raw match.observer_location_missing code leak), #562 (Data Sources raw ISO timestamp + duplicated pills + detached override editor), #327/#599 (wizard steps 3+6 hardcoded mock data — P0, still present), #776 (wizard step 4 hardcoded counts), #612
+
+**Key evidence:** shots ux15-*.png; console "Maximum update depth exceeded" burst tied to Inbox visits only, silent elsewhere after navigate-away.
+
+**Surface-by-surface audit:** Inbox NOT clean (#557 render-loop); Sessions clean@1100×720 (dash dupe #564/#654); Projects list clean (Target "—" dupe #622); J5 detail+Edit clean (raw-UUID/code dupes #663/#664); Data Sources clean (dupe #562); create-wizard step 2 bug new (#783), steps 3/4/6 mock-data dupes.
+
+**Doc-drift / unexpected-but-intended:** Step 5 Naming preview uses a fixed example token (NGC7000) intentionally (StepLayout.tsx:20/47) — not a bug; distinguish from the genuinely-mock steps 3/6 (#599).
+
+**Note:** A COMPREHENSIVE whole-app UX/design review (per-view impeccable analysts + cross-app synthesis) is now running as a follow-on; a consolidated "Comprehensive UX review" report block will arrive for its own section. App left clean, no mutations.
