@@ -513,6 +513,122 @@ subs); **copy** works everywhere but duplicates GBs and goes stale.
 
 ---
 
+## Q21 — Target recommendation / planning (spec-044 / spec-047; #678)
+
+**Reframe: not an opaque score — a transparent, band-aware planner, and "plan"
+is an ephemeral view, not a saved entity.** Spec-044 (Track B) already computes
+the honest unit: per-band **moon-free usable hours tonight** (altitude × dark
+window × Moon geometry, `apps/desktop/src/features/targets/planner-derive.ts`),
+and spec-047 (Track A) owns the per-band Lorentzian
+`min_sep(moonAge) = distance/(1+(moonAge/width)²)`. The decision is how those
+surface as a "recommendation."
+
+### Grading and factors
+
+- **The grade IS moon-free usable hours per band** — already computed, the best
+  actionable unit. Rank the list by a chosen column; "recommendation" = the top
+  of that ranked list. No invented composite/0–100 score.
+- **Visibility** is graded continuously (hours above the usable-altitude floor,
+  which is already a live slider), never a hard "enough" threshold.
+- **Season folds into visibility**: opposition proximity manifests as more usable
+  dark-window hours tonight; keep a **best-date annotation** (`nextOpposition`)
+  for project planning. Season is **not** a third co-equal score.
+
+### Moon integration
+
+- **Hard per-instant threshold integrated to hours** stays the v1 model
+  (`planner-derive.ts:172` — `interfering = moonUp && separationDeg <
+  minSeparationDeg(band, moonAge)`, summed per sample). This correctly handles
+  the Moon crossing the avoidance radius or setting mid-night.
+- **Mean and min are both rejected** as the separation aggregate — mean hides the
+  Moon setting mid-night; min throws away good hours. Time-resolved integration
+  is the honest answer; the three summary separation figures are display only.
+- **Graded/soft falloff deferred** (no calibrated narrowband SNR-vs-separation
+  curve exists; **Krisciunas & Schaefer 1991** is the future basis). If ever
+  added, it's an explicit "Strict ⇄ Graded" toggle with a **linear** ramp and a
+  relabel to "Moon-weighted hours" — never a silent exponential.
+
+### Differentiated broadband Moon defaults (spec-047 param change)
+
+- **L/R/G/B must NOT default to identical avoidance** — Rayleigh scattering
+  (∝λ⁻⁴) makes moon sky-glow **blue-biased** (peaks ~470 nm far from the Moon):
+  **B most affected, R least, G/L between.** Ship differentiated defaults
+  **R < G ≲ L < B**, following the same wavelength trend the existing narrowband
+  defaults already encode (OIII 110°/10d vs Ha/SII 60°/7d,
+  `crates/domain/core/src/settings.rs:319-326`). The current flat `120°/14d` for
+  L/R/G/B (`settings.rs:322-323`) is an oversight to correct. Values tunable.
+
+### Band suitability (research-gated; seeded from `ObjectType`)
+
+- **`band_suitability` = which acquisition bands are worth imaging on a target**,
+  **seeded once from the existing `ObjectType`** (SIMBAD `otype`, already
+  persisted — `crates/targeting/resolver/src/cache.rs:88`,
+  `apps/desktop/src/bindings/index.ts:8149`): emission/SNR/PN → narrowband +
+  broadband; galaxy/reflection/cluster/star → broadband only; "both"
+  first-class. **No separate central mapping surface** — otype just seeds a
+  per-target field.
+- **Target-level hide vs cell-level n/a.** In a band-filtered view, a target with
+  **no applicable band in the selection is hidden** (a broadband-only galaxy
+  drops out of the narrowband view); within an **included** target, a
+  non-applicable band renders **n/a** (M33 shows Ha, marks SII/OIII n/a). This
+  refines "mark-not-hide": marking governs cells, hiding governs row membership.
+- **Editable on every target** via a small suitability editor (opened from the
+  detail pane / the row's suitability chip): explicit per-band toggles, the
+  `ObjectType` default shown, and **reset-to-default**. The **"overridden" badge
+  shows only when a target deviates** from its default. A seed dual-target list
+  (M33, M31, …) ships the common overrides correct.
+- **Ephemeral "Compute all bands (ignore suitability)"** view toggle — computes
+  and ranks every band for every target regardless of suitability (the
+  "what's best for Ha tonight, galaxies included" workflow). Resets each session.
+
+### Presentation (retires spec-047 pills)
+
+- **Per-band moon-free hour columns** + a **grade-colored `BandProfile`
+  fingerprint glyph** (a micro bar-chart; bar height = hours, color = tier
+  high≥3h / med 1.5–3h / low <1.5h) + **one summary verdict tier**. The profile
+  shows **all applicable bands regardless of which columns are toggled** (it's
+  the at-a-glance fingerprint; columns are the numeric drill-down).
+- **Retire the seven per-band viability pills** — **spec-047 FR-009a /
+  `FilterBadges`** is superseded by the hour columns + fingerprint; a single
+  summary chip is fine, seven boolean pills are redundant.
+
+### Aggregates (rotators)
+
+- **Coverage (any / union)** = usable time if you shoot whatever's best each
+  moment (default; matches the flexible rotator) and **Balanced (min)** = limited
+  by the worst band (can you complete an even set) — both over the **selected
+  bands**. **Mean is rejected** (maps to no real observing plan). The fingerprint
+  keeps the aggregate transparent.
+
+### Controls and surface
+
+- **Bands selector = All / Narrowband / Broadband presets + per-band checkboxes +
+  the Compute-all-bands toggle** — one consolidated control, **no palette
+  vocabulary** (uncheck L for RGB-only). The context selector is folded in here,
+  not separate buttons. Column visibility + preset **persist** as a UI
+  preference; **ignore-suitability stays ephemeral**.
+- **Sort** offers Coverage, Balanced, Max-altitude, **+ the currently selected
+  bands** (dynamic).
+- **Plan is an ephemeral view within Targets** — a **Manage ⇄ Plan** mode switch
+  on `/targets` reusing the existing table (no separate page, no second target
+  list; Targets stays primary nav). Components stay **presentation-agnostic** so
+  a future dedicated Plan page / saved observing-plan entity is a cheap
+  extraction, not a rewrite. **"Multiple plans open" = multiple planner windows**
+  (each its own date/site/band context) via the existing multi-window support.
+- **plan → project** = a **"Create project for this target"** action reusing the
+  existing `create_project(canonical_target_id)` use case
+  (`crates/app/projects/src/project_setup.rs:450,491`); the plan itself is
+  advisory and unpersisted — the durable artifact is the project.
+- **Selection continuity**: switching Manage⇄Plan keeps the selected target
+  (Q13 id-based stable selection).
+- **Adopt the skymath planning surface wholesale** (twilight `Night`/`NeverDark`/
+  `AlwaysDark`, topocentric `lunar_separation`, `moon_illumination`, rise/set,
+  88-constellation metadata — AstroPy-validated). **High-latitude honesty**:
+  surface `NeverDark`/`AlwaysDark` as real states, never a fabricated window.
+  **Constellation metadata** for grouping/filter/display.
+
+---
+
 ## SpecKit iterate map
 
 Each decision is formalized through a SpecKit iterate when its wave is picked up:
@@ -539,6 +655,7 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q18** calibration matching tolerance | **spec-040** calibration-matching iterate |
 | **Q19** lifecycle / cleanup | **spec-048 / spec-033** lifecycle iterate |
 | **Q20** source-view generation strategy | **spec-026 / spec-049** iterate |
+| **Q21** target recommendation / planner | **spec-044 / spec-047** iterate (differentiated LRGB defaults, band suitability, hour columns + fingerprint, Coverage/Balanced, pill retirement, Plan mode) |
 
 Q8's override decision is small enough to fold into the ingestion/confirm flow
 directly; the **heuristic ADU suggestion** is the part that needs a new
