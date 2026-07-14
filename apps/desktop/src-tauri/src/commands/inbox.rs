@@ -111,7 +111,7 @@ pub async fn inbox_classify(
 #[specta::specta]
 pub async fn inbox_confirm(
     req: InboxConfirmRequest,
-    pool: tauri::State<'_, SqlitePool>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<InboxConfirmResponse, ContractError> {
     let use_case_req = ConfirmRequest {
         inbox_item_id: req.inbox_item_id,
@@ -127,7 +127,7 @@ pub async fn inbox_confirm(
     // `inbox.invalid_destination_root`) or a missing path attribute
     // (`inbox.missing_path_attributes`). The ContractError carries code +
     // details so the UI can branch on the error code.
-    let resp = confirm(&pool, use_case_req).await?;
+    let resp = confirm(state.repo.pool(), &state.bus, use_case_req).await?;
 
     let organization_state = match resp.organization_state {
         contracts_core::first_run::OrganizationState::Organized => "organized",

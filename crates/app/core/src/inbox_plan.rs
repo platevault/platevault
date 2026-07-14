@@ -581,7 +581,8 @@ mod tests {
             root_absolute_path: root_path.to_path_buf(),
             root_id: None,
         };
-        let resp = confirm(db.pool(), req).await.unwrap();
+        let bus = EventBus::with_pool(db.pool().clone());
+        let resp = confirm(db.pool(), &bus, req).await.unwrap();
         assert!(!resp.plan_id.is_empty(), "confirm must return a plan_id");
         resp.plan_id
     }

@@ -33,6 +33,7 @@ import type {
   GenerateArchivePlanResult,
   TransitionError_Serialize,
   InboxReclassifyResponse_Serialize,
+  InboxReclassifyV2Response_Serialize,
   TargetListItem,
   TargetDetailV3_Serialize,
   TargetSearchResponse_Serialize,
@@ -1840,6 +1841,19 @@ export async function mockInvoke(
         appliedCount: 1,
         breakdown: [],
       } satisfies InboxReclassifyResponse_Serialize;
+    }
+
+    case 'inbox_reclassify_v2': {
+      // Field-agnostic + bulk reclassify (spec 041 R-13/T068, issue #755).
+      // No sub-item re-split fixture is modeled here — InboxDetail only reads
+      // `needsReviewCount` and relies on cache invalidation to re-fetch the
+      // list/classify queries (which their own mock cases already serve).
+      const args = _args as { req?: { inboxItemId?: string } } | undefined;
+      return {
+        sourceGroupId: args?.req?.inboxItemId ?? 'item-001',
+        subItems: [],
+        needsReviewCount: 0,
+      } satisfies InboxReclassifyV2Response_Serialize;
     }
 
     // ── Inbox plan surface (spec 041 US2) ─────────────────────────────────────

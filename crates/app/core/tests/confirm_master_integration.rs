@@ -210,6 +210,7 @@ async fn confirm_master_creates_plan_then_registers_at_apply() {
 
     let resp = confirm(
         db.pool(),
+        &bus,
         ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
             content_signature: sig.to_owned(),
@@ -282,6 +283,7 @@ async fn organized_master_catalogues_then_registers_at_apply() {
 
     let resp = confirm(
         db.pool(),
+        &bus,
         ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
             content_signature: sig.to_owned(),
@@ -317,6 +319,7 @@ async fn non_master_item_still_creates_plan() {
     write_fits(tmp.path(), "light_001.fits", "Light Frame");
 
     let db = test_db().await;
+    let bus = EventBus::with_pool(db.pool().clone());
     let item_id = "non-master-item";
     let sig = "sig-non-master";
 
@@ -367,6 +370,7 @@ async fn non_master_item_still_creates_plan() {
 
     let resp = confirm(
         db.pool(),
+        &bus,
         ConfirmRequest {
             inbox_item_id: item_id.to_owned(),
             content_signature: sig.to_owned(),
