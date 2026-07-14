@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Integration tests for `resume_plan` (spec 025 R-Pause-1, issue #575).
 //!
 //! Prior to this fix, `resume_plan` flipped `paused -> applying` and emitted

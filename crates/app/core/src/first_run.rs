@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! First-run source registration and wizard use cases (spec 003).
 //!
 //! Thin orchestration layer adding path validation, error mapping to

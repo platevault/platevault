@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for plan storage (spec 017).
 //!
 //! Operates on the `plans` and `plan_items` tables from migration 0014.

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Raw-frame reconcile walker skeleton (spec 048 T003).
 //!
 //! Mirrors the shape of `crates/workflow/artifacts/reconciler.rs`: a pure,

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ProjectDetail — spec 008 wired, redesigned per PlateVault mock (2026-06-22).
  *

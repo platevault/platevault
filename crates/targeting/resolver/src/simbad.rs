@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! SIMBAD resolver adapter: delegates to the published `simbad-resolver`
 //! crate's own [`simbad_resolver::SimbadResolver`] cache-first facade (spec
 //! 052 P1, D1) rather than calling [`simbad_resolver::TapResolver`] directly.

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Generate a COMPREHENSIVE master/frame-type detection fixture library (spec 040).
 
 Exhaustive permutation coverage with REALISTIC astrophotography directory + file

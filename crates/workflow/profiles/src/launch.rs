@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Platform-specific detached process spawning (spec 011 T008).
 //!
 //! The actual spawn is hidden behind the [`ProcessSpawner`] trait so tests

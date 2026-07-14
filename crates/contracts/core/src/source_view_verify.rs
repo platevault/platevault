@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Contract DTOs for spec 049 US4 — `sourceview.verify` (read-only
 //! pre-processing check that every link in a generated source view still
 //! resolves to a present canonical source).

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository query functions for `app_core_targets`' resolver-settings,
 //! target-management, and target-resolve use cases (db-boundary-zero drain).
 //!

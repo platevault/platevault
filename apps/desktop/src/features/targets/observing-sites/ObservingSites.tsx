@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ObservingSites — Settings → Target Planner → observing-site management
  * (spec 044 Track B, US3, T019-T023).

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 003 (roots/sources) — wired to real backend via listRoots/registerRoot.
 // Redesigned to match platevault-settings-menu.html data pane (authoritative mock).
 import { useState, useEffect, useCallback } from 'react';

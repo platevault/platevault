@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journey — Sessions derived-view invariants
 //! (batch #9 of the coverage-matrix "Batched plan", Journey 4). Promotes
 //! `docs/development/windows-journeys/journey-04-sessions-review.md`'s

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * SessionsPage — spec 006 wired; spec 043 §4 redesign (task #36) + shared
  * layout-system adoption (tasks #62/#63/#73).

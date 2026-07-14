@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Recursive inbox folder scan (spec 005, T-RecursiveScanImpl).
 //! Each leaf directory containing at least one FITS or XISF file becomes one
 //! `ScannedInboxItem`. Intermediate folders containing only sub-folders are

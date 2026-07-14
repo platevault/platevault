@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * PlannerDatePicker — the Planner's "plan a different night" control (spec 044
  * US2, T024, FR-008). A single `<input type="date">` bound to the non-persisted

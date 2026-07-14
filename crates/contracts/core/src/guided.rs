@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Rust-side contract DTOs for guided first-project-flow commands (spec 010).
 //!
 //! Three commands:

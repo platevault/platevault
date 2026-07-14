@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Integration tests for spec 049 US4 — `sourceview.verify`.
 //!
 //! T037: an all-present view verifies clean (0 false alarms, SC-006); a

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * SessionsTable — spec 043 §4 Sessions redesign (task #36) + multi-level
  * grouping (spec 043 gold-standard, shared groupByDimensions engine).

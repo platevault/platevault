@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `AuditLogEntry` — the durable, append-only transition record.
 //! Spec 002 data-model.md §AuditLogEntry.
 //!

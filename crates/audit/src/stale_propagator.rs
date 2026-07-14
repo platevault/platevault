@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Event-bus driven stale-propagation subscriber (spec 002 T046).
 //!
 //! Subscribes to `lifecycle.transition.applied` events and recomputes

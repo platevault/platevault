@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 r"""Upload an image, HTML, or Markdown file to a Stitch project via BatchCreateScreens.
 
 WHY THIS SCRIPT EXISTS:

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Prepared source view Tauri commands (spec 026 remove/regenerate; spec 049
 //! generation).
 //!

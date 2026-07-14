@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tests for new-handover.py frontmatter quoting and write-failure handling.
 
 Run with:  uv run --with pytest pytest test_new_handover.py

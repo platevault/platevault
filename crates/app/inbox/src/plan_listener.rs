@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Inbox plan-state listener (spec 005, T030).
 //!
 //! Subscribes to the audit event bus and transitions `InboxItem.state` when a

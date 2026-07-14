@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Single-source settings descriptor table (US11 T144).
 //!
 //! Before this module, the stable (non-structured-path) settings keys and their

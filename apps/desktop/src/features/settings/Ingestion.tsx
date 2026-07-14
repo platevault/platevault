@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 030 (ingestion settings) — package P12: real backend persistence.
 //
 // Owned backend keys (IngestionSettings / UpdateIngestionSettings, its own

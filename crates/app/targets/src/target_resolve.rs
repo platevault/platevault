@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `target.resolve` use case for spec 035 (US3 — long-tail SIMBAD resolution),
 //! retargeted by spec 052 P1 (D1/D4, supersedes spec-035 FR-006).
 //!

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Appearance runtime — theme + density (PlateVault redesign).
 //
 // Theme is applied as a `data-theme` attribute on <html>; tokens.css defines

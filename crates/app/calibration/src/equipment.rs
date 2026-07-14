@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Equipment use cases (spec 030, T017).
 //!
 //! CRUD orchestration for cameras, telescopes, optical trains, and filters.

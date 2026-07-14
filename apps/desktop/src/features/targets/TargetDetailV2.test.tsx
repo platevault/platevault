@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * TargetDetailV2 component tests — spec 036 gen-3 detail pane + spec 023 US2/US3/US4.

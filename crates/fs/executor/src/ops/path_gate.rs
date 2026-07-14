@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Lexical path-resolution gate (spec 033, T018, FR-001/002, D8).
 //!
 //! Enforces the §II promise that every executor operation resolves under its

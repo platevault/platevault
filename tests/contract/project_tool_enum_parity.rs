@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 008 X-2 — enum-drift snapshot test between the `project.create`/
 //! `project.update` JSON Schemas and the two Rust sources of truth for the
 //! processing-tool vocabulary: `contracts_core::projects_v2::ProjectTool`

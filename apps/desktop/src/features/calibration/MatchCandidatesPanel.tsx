@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * MatchCandidatesPanel — spec 007 US1-US4 · spec 043 §4 (calibration hero).
  *

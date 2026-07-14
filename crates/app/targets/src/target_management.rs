@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Gen-3 target management use cases (spec 036).
 //!
 //! Implements `target.get`, `target.list`, `target.alias.add`,

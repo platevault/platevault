@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Playwright mock-mode smoke: Journey 6 (spec 017 WP-E) — Cleanup
  * scan → review candidates → generate plan → protection gate → approve

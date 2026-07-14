@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // First-run gate for the index route (spec 020 T003/T052). Extracted so it is
 // unit-testable without importing the whole router/Shell tree.
 

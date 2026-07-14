@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! T014 — `target.search` against a realistically-seeded redb cache (spec 035,
 //! retargeted to the redb resolve cache by spec 052 P1 D1).
 //!

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 002 lifecycle commands exposed to the Tauri webview.
 //!
 //! Every command is annotated with both `#[tauri::command]` (so Tauri

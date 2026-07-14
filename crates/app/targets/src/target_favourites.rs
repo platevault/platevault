@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `targets.favourites.list` / `targets.favourites.add` / `targets.favourites.remove`
 //! use cases (spec 051 US2).
 //!

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `inbox.confirm` use case — the single confirm path (spec 005, T027/T028).
 //!
 //! Spec 041 FR-050/T071: the legacy "split" action and its mixed per-type

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * PlanReviewOverlay — shared, parameterised focused overlay for reviewing and
  * applying ONE generated plan (spec 017 review surface; first consumer is the

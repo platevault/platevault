@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Read access over the durable `audit_log_entry` table (migration
 //! `0002_lifecycle.sql`).
 //!

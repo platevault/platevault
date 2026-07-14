@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Pure grouping engine for single-type inbox sub-items (spec 041 T064).
 //!
 //! Implements the deterministic **group-key recipe** from research R-9 and the

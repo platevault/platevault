@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Per-frame inventory use cases (spec 048 T006/T015).
 //!
 //! `list_frames` backs `inventory.frame.list`: a read-only projection of

@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Layer-1 integration tests for calibration matching & masters — feature 037 (T005 coverage area #5).
 //!
 //! Tests use the shared harness (`support::setup`) which provides a real in-memory

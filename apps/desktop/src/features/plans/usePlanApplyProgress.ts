@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * usePlanApplyProgress — live plan-apply progress consumer (spec 042 US16 /
  * FR-021).

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `audit.list` / `audit.export` — Tauri commands exposed to the webview.
 //!
 //! These were spec-029 stubs (hardcoded fixture, filters/pagination ignored).

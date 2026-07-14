@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Format utilities -- consolidates formatting functions that were duplicated
  * across StatusBar, CleanupPlan, ProjectsList, SessionDetail, InboxList,

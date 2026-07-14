@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Filesystem plan contract DTOs for the Tauri IPC surface (spec 017).
 //!
 //! These types mirror the JSON Schema contracts under

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * T073 — Dev build auto-captures an operation via the recording proxy
  * and exports to a chosen (absolute) path (FR-030).

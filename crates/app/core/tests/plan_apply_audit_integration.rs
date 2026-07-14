@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Integration tests for plan apply, filesystem execution, and audit records
 //! (spec 017 cleanup/archive plans #17, spec 025 filesystem plan apply #18,
 //! audit record #22).

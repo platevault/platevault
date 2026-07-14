@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * planner-date-store.ts — the Planner's chosen planning date (spec 044 US2, T024).
  *

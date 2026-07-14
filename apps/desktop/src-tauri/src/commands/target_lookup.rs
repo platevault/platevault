@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Target search/resolve Tauri commands (spec 035 SIMBAD resolution; redb
 //! resolve-cache facade adoption + in-use promotion by spec 052 P1).
 #![allow(clippy::doc_markdown)] // spec/domain terminology not suited for backticks

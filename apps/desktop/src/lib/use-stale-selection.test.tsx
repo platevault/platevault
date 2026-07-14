@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Spec 020 — stale-id cleanup hook tests (T053 / D-020-H1: fires at most once).
  *

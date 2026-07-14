@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journeys — Calibration masters (batch #3 of the
 //! coverage-matrix "Batched plan", Journey 8): masters-ingest-as-individual-
 //! items and the Calibration page's kind-conditional master detail, promoted

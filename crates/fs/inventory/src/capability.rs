@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 049 (T008): filesystem link-capability probe for source-view
 //! generation (FR-004/FR-004c).
 

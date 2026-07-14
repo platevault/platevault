@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Multi-level grouping — shared across every list page (promoted from the
  * Inbox, spec 041 US2/FR-009). Groups a flat list into nested, collapsible

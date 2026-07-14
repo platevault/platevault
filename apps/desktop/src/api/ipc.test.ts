@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Spec 037 Phase 1 — proves the generated tauri-specta bindings dispatch through
  * our IPC switcher (api/ipc.ts), not directly through @tauri-apps/api/core, so

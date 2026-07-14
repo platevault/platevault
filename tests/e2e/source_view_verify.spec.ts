@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Playwright mock-mode: spec 049 US4 — "Verify before processing" on a
  * generated source view.

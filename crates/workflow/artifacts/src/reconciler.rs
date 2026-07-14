@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Reconciler: on-attach rescan + missing-state transitions (spec 012 T005).
 //!
 //! When a project drawer opens (or the watcher re-attaches after a drive

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 003 first-run wizard and batch registration Tauri commands.
 //!
 //! Delegates to `app_core::first_run` use cases. Commands are registered

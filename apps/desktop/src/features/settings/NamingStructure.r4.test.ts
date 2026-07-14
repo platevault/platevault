@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * R-4 Regression: NamingStructure.tsx token refs are valid (spec 028, 2026-06-17).
  *

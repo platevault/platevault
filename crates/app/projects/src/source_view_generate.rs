@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 049 US1: `sourceview.generate` — first-materialization of a project
 //! source view as a reviewable `prepared_view_generation` plan.
 //!

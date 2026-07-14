@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Calibration master detection (spec 040, FR-001..FR-004).
 //!
 //! # Architecture

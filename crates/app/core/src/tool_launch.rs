@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Processing tool launch use cases (spec 011 T007/T009/T012/T014/T015).
 //!
 //! Entry points:

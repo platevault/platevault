@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Per-frame inventory + raw sub-frame cleanup mutation/query hooks (spec 048
  * US1/US2/US3/US4 frontend). Frame-list and raw-cleanup scans follow the

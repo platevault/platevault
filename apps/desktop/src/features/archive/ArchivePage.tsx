@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ArchivePage — spec 017 WP-B (real archive backend) on the spec 043
  * SINGLE-COLUMN list-page layout.

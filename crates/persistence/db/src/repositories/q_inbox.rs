@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! DB-boundary-zero drain: free-fn queries migrated out of
 //! `crates/app/inbox` (`confirm.rs`, `plan_listener.rs`, `reclassify.rs`).
 //!

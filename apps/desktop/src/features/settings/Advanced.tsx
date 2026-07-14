@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 018 — owned pane: logLevel, rememberFollowLogs, devMode.
 // On mount, loads persisted values from backend via settings.get('advanced').
 // Changes are auto-saved via the save() prop (useAutoSave -> settings.update).

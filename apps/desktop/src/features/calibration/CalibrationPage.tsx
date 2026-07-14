@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * CalibrationPage — spec 007 wired; spec 043 §4 redesign + shared layout-system
  * adoption (tasks #62/#63/#73).

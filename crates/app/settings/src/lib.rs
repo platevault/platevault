@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Settings use cases (spec 018, T006/T013/T018/T019/T023/T024/T027).
 //!
 //! Entry points:

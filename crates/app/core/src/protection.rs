@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Application use-case for spec 016 source protection (US2–US4).
 //!
 //! - US2: per-source protection override (get + set + resolve).

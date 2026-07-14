@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * TargetsPage — spec 043 shared list-page adoption (task #73), spec 044 mock
  * columns + filter-by-filter + altitude threshold setting.

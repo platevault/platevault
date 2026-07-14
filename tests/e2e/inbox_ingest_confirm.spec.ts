@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Playwright mock-e2e: Inbox ingest → reclassify → confirm (spec 041, the
  * "Inbox universal gate" — Journeys 2/3 of the E2E revalidation Phase B,

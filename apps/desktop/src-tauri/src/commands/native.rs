@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Native filesystem control commands exposed to the Tauri webview (spec 004).
 //!
 //! `native.directory.pick` and `native.file.pick` delegate to

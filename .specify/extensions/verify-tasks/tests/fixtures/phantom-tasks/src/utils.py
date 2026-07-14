@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """
 Utility helpers.
 PHANTOM T008: parse_request_body is absent. Only unrelated utilities are present.

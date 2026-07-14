@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * T072 — Release build has NO reachable developer route or commands (FR-031, SC-009).
  *

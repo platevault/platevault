@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Real-backend integration test: a file dropped into a project's *live*
 //! watched output folder (after `artifact_watcher_attach`, not the on-attach
 //! reconciliation pass) emits `artifact.detected` AND `artifact.classified`

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Contract DTOs for `calibration.match.suggest`, `calibration.match.assign`,
 //! and `calibration.match.suggest.batch` (spec 007).
 //!

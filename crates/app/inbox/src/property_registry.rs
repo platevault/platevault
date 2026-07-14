@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Typed property registry for the field-agnostic inbox reclassifier (spec 041
 //! R-13 / FR-044).
 //!

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Token registry (data-model.md §TokenRegistry v1, spec 015 T3.2).
 //!
 //! Defines the v1 token vocabulary: name, source_field, fallback, and

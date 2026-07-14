@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Sequential per-item executor loop (spec 025, T013).
 //!
 //! Walks an approved plan's items in order. For each item:

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Integration tests for spec 041 US4 — confirm a detected calibration master
 //! inbox item now routes through a reviewable plan (Constitution §II) instead
 //! of the old confirm-time "register directly" fast path (spec 040 US3).

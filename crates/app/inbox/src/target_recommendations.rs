@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `inbox.target_recommendations` use case (spec 041 R-17 / FR-052, T074).
 //!
 //! Resolves a light sub-group's **target by sky-coordinate proximity**, never by

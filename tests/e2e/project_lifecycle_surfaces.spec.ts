@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Playwright mock-mode: Journey 5 (spec 008/011/012/024) — project detail
  * operational surfaces: notes, manifests, outputs (honest empty stub),

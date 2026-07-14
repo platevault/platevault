@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Layer-1 integration tests for settings/configuration model (#19) and
 //! bottom log viewer (#20) — feature 037 (T006/T007).
 //!

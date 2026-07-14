@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // First-run wizard: "Configuration" step.
 //
 // Originally the spec-014 catalog-download step; that backend was removed (spec

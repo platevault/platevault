@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Pattern resolver (spec 015 T3.4 + T3.6).
 //!
 //! `resolve(pattern, metadata, config) -> Result<ResolveResult, ResolveError>`

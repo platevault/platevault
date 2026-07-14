@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 016 US2 — per-source protection override control (T015).
 //
 // Renders a protection badge + override control for a specific source UUID.

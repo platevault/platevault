@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ProjectsPage — spec 008 wired; spec 043 shared-layout adoption (tasks #73/#74/#104).
  *

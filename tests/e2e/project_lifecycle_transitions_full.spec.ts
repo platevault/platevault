@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Playwright mock-mode: Journey 5 (spec 008/009/017) — the FULL project
  * lifecycle state machine, extending the single processing→completed button

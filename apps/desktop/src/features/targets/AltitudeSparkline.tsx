@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * AltitudeSparkline — tiny inline altitude sparkline for a Planner row (task
  * #85, spec 043; polished task #19; real ephemeris since spec 044 Track B).

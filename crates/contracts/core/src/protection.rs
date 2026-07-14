@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Contract DTOs for spec 016 source protection (US2–US4).
 //!
 //! Covers three operations:

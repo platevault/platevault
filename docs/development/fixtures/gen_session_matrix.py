@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Generate a SESSION + CALIBRATION-MATCHING fixture library for PlateVault.
 
 Sibling of ``gen_detection_matrix.py`` (which exercises frame-type / master

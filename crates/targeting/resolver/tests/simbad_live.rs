@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Online integration tests against the live SIMBAD CDS service (SC-004).
 //!
 //! These exercise the real [`SimbadResolver`] end-to-end: two ADQL round-trips

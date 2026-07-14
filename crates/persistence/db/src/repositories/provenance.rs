@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Provenance hydration for spec 002 Phase 4.
 //!
 //! Reads `provenance_history_archive` rows for a given (entity_type, entity_id)

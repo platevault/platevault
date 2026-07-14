@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! PixInsight / WBPP-specific calibration master detector (spec 040, FR-002).
 //!
 //! # PixInsight / WBPP master heuristics

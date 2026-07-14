@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for settings storage (spec 018, T003).
 //!
 //! Operates on the `settings` and `source_overrides` tables from migration 0013.

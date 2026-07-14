@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Durable event-bus table repository (migration `0003_events.sql`).
 //!
 //! Backs `audit::bus::EventBus` (publish/replay) and, in future, the log

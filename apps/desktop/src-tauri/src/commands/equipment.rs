@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 030 equipment Tauri commands (T018).
 //!
 //! CRUD commands for cameras, telescopes, optical trains, and filters.

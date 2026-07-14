@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Vitest unit tests for the per-type destination pattern live preview
  * (spec 041 package P11 — real `pattern.path_preview` backend wiring).

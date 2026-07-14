@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Tool launch store and helpers — spec 011 T010/T011/T012/T017/T021.
  *

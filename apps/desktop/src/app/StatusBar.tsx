@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
 import { useLogPanel } from './LogPanelContext';

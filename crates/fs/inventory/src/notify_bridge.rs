@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared `notify`-event classification + UTF-8-safe path conversion, used by
 //! both [`crate::watcher`] and [`crate::artifact_watcher`] (duplication-and-
 //! abstraction audit Tier 3).

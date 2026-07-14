@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `inbox.item.metadata` use case (spec 041 US2/FR-010, T017).
 //!
 //! Assembles the per-file metadata DTO for an inbox item by combining three

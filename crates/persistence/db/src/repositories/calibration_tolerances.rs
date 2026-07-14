@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository for the calibration matching tolerances singleton row
 //! (spec 007 / spec 043 P8, migration 0008 + 0051).
 //!

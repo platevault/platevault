@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, it, expect } from 'vitest';
 import { Linter } from 'eslint';
 // The local ESLint rule that drives the i18n migration (spec 046).

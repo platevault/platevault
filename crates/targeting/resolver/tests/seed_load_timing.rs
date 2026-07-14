@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Sanity timing: warming the redb resolve cache from the bundled seed must
 //! not regress to something absurd (spec 052 P1 D2/D4 retargeted this from a
 //! single-transaction `SQLite` load to per-identity `simbad_resolver::Cache`

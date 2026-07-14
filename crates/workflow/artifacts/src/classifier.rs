@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Rule-driven artifact classifier (spec 012 T013).
 //!
 //! Applies an ordered list of `ArtifactRule` entries to a file name and

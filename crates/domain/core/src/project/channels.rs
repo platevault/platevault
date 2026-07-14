@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Channel inference and merge logic (spec 008 F-2, US4-1, US4-2).
 //!
 //! Rules per data-model.md §ProjectChannel (research R4):

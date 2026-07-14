@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for spec 003 first-run source registration.
 //!
 //! Operates on `registered_sources` and `first_run_state` tables

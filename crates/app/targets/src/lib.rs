@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Target catalog, resolution, search, and ingest-resolution use cases.
 //!
 //! Groups the target-domain use-case modules (spec 035 / spec 036). Each

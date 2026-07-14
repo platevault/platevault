@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Spec 020 — first-run index gate test (T052) + redirect-loop-fix coverage.
  * When setup is incomplete the index route redirects to /setup; when complete

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `inbox.classify` use case (spec 005, T014/T016/T020).
 //!
 //! Reads cached classification when `content_signature` matches; falls back

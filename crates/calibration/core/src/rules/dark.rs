@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Dark frame matching rule (spec 007 US1, FR-003).
 //!
 //! Hard dimensions: `gain`, `offset` — exact match required.

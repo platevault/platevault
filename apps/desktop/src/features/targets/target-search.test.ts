@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * target-search.test.ts — alias-aware search normalization (#103b, #29, spec-043).
  *

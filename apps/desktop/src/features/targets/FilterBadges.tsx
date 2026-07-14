@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * FilterBadges — parameterised per-band Moon-avoidance viability pills for the
  * Planner table and detail pane (spec 047, plan D4/T016, FR-009a).

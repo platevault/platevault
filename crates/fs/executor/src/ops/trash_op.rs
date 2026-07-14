@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! OS trash primitive (spec 025, spec 033 T022, FR-006, D4).
 //!
 //! Moves the file to the OS recycle bin / Trash / XDG trash via the `trash`

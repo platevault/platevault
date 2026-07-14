@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, it, expect, vi } from 'vitest';
 import { errMessage, isContractError } from './errors';
 import { errorFallback } from './error-messages';

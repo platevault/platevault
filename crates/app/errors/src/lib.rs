@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Canonical error conversion helpers for `app_core`.
 //!
 //! Provides a single `db_to_contract` helper that replaces the scattered,

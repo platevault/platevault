@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import './styles/reset.css';
 import './styles/tokens.css';
 import './styles/components.css';

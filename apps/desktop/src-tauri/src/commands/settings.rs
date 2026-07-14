@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Settings Tauri commands (spec 018, T014/T015).
 //!
 //! ## Stable transport (T015)

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journeys — Targets catalog, SIMBAD resolve-on-
 //! demand path (offline seed hit, no live network), the stub-disclosure
 //! guard, and real planner astronomy after an observing site is created

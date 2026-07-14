@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Log stream and export contract DTOs (spec 019).
 //!
 //! Mirrors the JSON Schemas in `specs/019-bottom-log-viewer/contracts/`.

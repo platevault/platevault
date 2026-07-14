@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Mock log entries for browser-only / test mode (VITE_USE_MOCKS=true).
  * Matches the LogEntry shape from spec 019.

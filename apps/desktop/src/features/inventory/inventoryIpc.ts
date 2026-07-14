@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Per-frame inventory IPC helpers (spec 048 T014/T022/T025/T034 frontend).
  *

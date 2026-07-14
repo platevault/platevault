@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { Select as BaseSelect } from "@base-ui-components/react/select";
 import { ChevronDown, Check } from "lucide-react";
 import type { ReactNode } from "react";

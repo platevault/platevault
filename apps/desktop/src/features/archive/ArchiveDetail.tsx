@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { DetailPane, DetailHeader, PropertyTable } from '@/components';
 import { m } from '@/lib/i18n';
 import { Pill, Section, Table, EmptyState, Skeleton } from '@/ui';

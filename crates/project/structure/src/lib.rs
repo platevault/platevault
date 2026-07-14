@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! App-owned project envelope and folder-structure rules (spec 008 F-1).
 //!
 //! Defines the expected on-disk folder layout for each `ProcessingTool` and

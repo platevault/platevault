@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared domain primitives for Astro Library Manager.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 

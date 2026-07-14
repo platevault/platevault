@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Spec 042 US16 / FR-021: `usePlanApplyProgress` is the end-to-end consumer of
  * the plan-apply long-operation `OperationEvent` channel. This test drives the

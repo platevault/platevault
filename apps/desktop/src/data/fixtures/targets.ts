@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Static mock fixture data for Target and TargetDetail
 // Matches design V3 mock data.
 

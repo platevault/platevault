@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! End-to-end integration tests for spec 026 US1/US2 (T008/T013) — the real
 //! spec 025 executor, not `simulateApply`: generate → remove → apply, and
 //! generate → remove → apply → regenerate → apply.

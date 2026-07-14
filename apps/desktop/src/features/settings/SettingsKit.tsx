@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useState, type ReactNode } from 'react';
 import { Btn, InfoTip } from '@/ui';
 import { settingsRestoreDefaults, getSettings } from './settingsIpc';

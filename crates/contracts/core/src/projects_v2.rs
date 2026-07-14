@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 008 project create/update/source/channel contract DTOs.
 //!
 //! These types correspond to the seven JSON Schemas under

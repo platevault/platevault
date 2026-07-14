@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project Tauri commands (spec 008 F-5).
 //!
 //! Provides real implementations for:

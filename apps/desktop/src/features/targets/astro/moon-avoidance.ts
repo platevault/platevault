@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * moon-avoidance.ts — SHARED Lorentzian Moon-avoidance rule (spec 047, plan D4).
  *

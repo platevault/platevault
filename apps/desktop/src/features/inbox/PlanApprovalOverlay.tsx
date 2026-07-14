@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * PlanApprovalOverlay — focused overlay for reviewing and applying open inbox
  * plans. A thin wrapper over the shared {@link Modal}: it owns only the

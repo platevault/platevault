@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Per-root reconcile mode + detection-trigger controls (spec 048 US4,
  * T034-T036 frontend). `inventory.root_config.{get,set}` (T034, backend

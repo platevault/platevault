@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! DataAsset trait + enum dispatch over all tracked entity families.
 //! Spec 002 FR-007: every Data Asset exposes a common lifecycle interface.
 

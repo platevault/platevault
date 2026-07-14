@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared enums NOT defined in domain-specific contract modules.
 //!
 //! Enums that span multiple command groups or UI concerns live here.

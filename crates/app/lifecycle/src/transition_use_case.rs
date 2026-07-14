@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Contract-shaped lifecycle transition use case
 //! (spec 002 T036/T038/T044/T050).
 //!

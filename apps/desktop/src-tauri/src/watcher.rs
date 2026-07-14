@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Bridge between the `fs_inventory::watcher::WatcherService` and the Tauri
 //! event system.
 //!

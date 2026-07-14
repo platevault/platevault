@@ -1,4 +1,7 @@
 #![allow(clippy::doc_markdown)]
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Real-backend integration test: the REAL production trigger for a completed
 //! workflow run (`artifact::complete_run`) drives the REAL production
 //! consumer (`project_manifests::spawn_workflow_run_subscriber`) end to end,

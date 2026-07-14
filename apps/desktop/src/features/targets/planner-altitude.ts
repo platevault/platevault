@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * planner-altitude.ts — per-row tonight observability for the Planner table +
  * detail pane (spec 044 Track B, T011).

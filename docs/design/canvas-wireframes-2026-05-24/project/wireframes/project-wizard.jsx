@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // New-project wizard — end-to-end: target → sources (sessions + masters) → source views → review plan → create
 // Single page; the wizard is a modal-like centered surface but framed in the app.
 

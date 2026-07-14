@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Assignment logic (spec 007 US4, T025).
 #![allow(clippy::must_use_candidate)]
 //!

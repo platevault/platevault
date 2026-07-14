@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Cleanup-scan view helpers (spec 017 WP-E, D11 step 1).
  *
