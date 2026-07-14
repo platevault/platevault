@@ -245,6 +245,39 @@ mod tests {
         assert!(!s.target_id.is_empty());
     }
 
+    /// #818 follow-up: the warm-complete sentinel (`simbad_oid = -1`, the
+    /// crate has no metadata table separate from this same cache) must never
+    /// surface as a typeahead suggestion, even for a query that would
+    /// otherwise match it (a substring of its designation/alias).
+    #[tokio::test]
+    async fn search_excludes_the_warm_complete_sentinel() {
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let sentinel = CrateResolvedIdentity {
+            simbad_oid: Some(-1),
+            primary_designation: "ALM SEED WARM SENTINEL".to_owned(),
+            common_name: Some("2026-07-14T00:00:00Z".to_owned()),
+            object_type: CrateObjectType::Other,
+            otype_raw: String::new(),
+            ra_deg: 0.0,
+            dec_deg: 0.0,
+            v_mag: None,
+            aliases: vec![CrateResolvedAlias::new(
+                "ALM SEED WARM SENTINEL",
+                CrateAliasKind::Designation,
+            )],
+            source: CrateTargetSource::Seed,
+        };
+        cache.upsert(&sentinel, &ns()).await.unwrap();
+
+        let resp = search(&cache, &req("SENTINEL")).await.unwrap();
+        assert!(
+            resp.suggestions.is_empty(),
+            "the warm-complete sentinel must never surface as a typeahead suggestion, got {:?}",
+            resp.suggestions
+        );
+    }
+
     #[tokio::test]
     async fn search_prefix_returns_ranked_local_matches() {
         let cache = seeded_cache().await;
