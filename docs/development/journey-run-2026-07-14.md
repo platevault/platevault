@@ -16,7 +16,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 7. Archive → delete from archive | PARTIAL | 2P/0F/2PA/3S | | plan-generation wired; archive page clean; 0-item plan from #780; empty plan no reason #603 |
 | 8. Calibration: ingest → masters → matching | PARTIAL | 2P/1F/2PA/0S | | masters register+ingest work; fingerprint extraction fails #620; matching blocked #664; tolerances dont persist #639; 0 audit #766 |
 | 9. Targets & planning (real vs. stub) | PARTIAL | 3P/0F/2PA/0S | #815, #816 | logic correct; detail+modal overflow clips controls #815
-| 10. Settings, appearance, and i18n | ⏳ pending | | | |
+| 10. Settings, appearance, and i18n | PARTIAL | 8P/5F/2PA/0S | #820, #822, #823, #825, #827 | theme persists; naming/resolution/altitude dont persist; unhandled validation #825; #794 contradiction flagged
 | 11. Mistake recovery | ⏳ pending | | | |
 | 12. Failure & refusal handling | ⏳ pending | | | |
 | 13. Audit & activity investigation | ⏳ pending | | | |
@@ -248,3 +248,21 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Issue filed:** #817 (UI, spec:044) — recommends the no-dark-window graph shade the whole plot as non-dark (or grey the usable fill) so graph and metric agree.
 
 **Context (not a calc bug):** the active site "Home Backyard" 52.09°N/5.12°E is the wizard's PLACEHOLDER default, not necessarily the user's real location — the source of the Telescopius mismatch; motivates surfacing the active site prominently + editable on the planner (candidate spec 044/047 iterate).
+
+### Journey 10 — Settings, appearance, and i18n
+
+**Verdict:** PARTIAL
+**Steps:** 8 PASS / 5 FAIL / 2 PARTIAL / 0 SKIPPED
+**Issues filed:** #820 (UI/backend — Naming & Structure literal-chip discards the default pattern instead of appending), #822 (backend — Target Resolution debounce/timeout number fields don't persist; also widens to catalogue toggles), #823 (backend — Target Planner altitude threshold doesn't persist / clamp unverifiable), #825 (UI/backend — Processing Tools path-save validation errors are unhandled rejections with zero UI feedback), #827 (UI — Advanced "Restart guided flow" has no confirm gate, asymmetric with "Restart first-run setup")
+
+**Dupes hit (not re-filed):** #655 (frame_type fallback on default naming pattern), #645 (Default Catalogues toggles dead — same root cause as #822), #802, #804, #581/#617, #639, #601, #587, #604
+
+**Key evidence:** Appearance theme (Warm Clay) SURVIVED a full app kill+relaunch (shots j10-40/41/42), DB + counts intact post-restart. Naming live preview shows "NGC7000/Ha/2026-04-12/unknown/ (fallback used for: frame_type)" on the UNTOUCHED default pattern (dupe #655). Processing Tools: backend console UNHANDLED_REJECTION {"message":"executable_path for 'pixinsight' must be absolute; got 'x'"} with zero surfaced UI. Command palette listed real routes but unstyled (#581/#617). Audit Log empty-range/search/pagination all work. 1100×720 clean (j10-68). NO raw i18n keys found across Targets/Inbox/Settings DOM scans.
+
+**IMPORTANT CONTRADICTION:** #794 (Warm Clay "not applying", filed by the shell UX analyst, root cause self-flagged unconfirmed) is CONTRADICTED by J10's live restart test — the theme applied and persisted across restart. #794 likely needs re-verification / may be nav-specific or a false positive. (Not refiled; flagging for the issue record.)
+
+**Systemic note (not a new issue):** settings-persistence failures cluster across ≥4 panes (Target Resolution #822, Target Planner #823, Cleanup #804-dupe, Naming chip #820) — likely ONE root cause (settings-descriptor registration gaps per #645); worth a consolidated backend sweep, not pane-by-pane.
+
+**Doc-drift (JOURNEY-DOC UPDATE):** app has 13 panes, not the doc's "12"; the doc's pane list omits Target Resolution + Source Views and mislabels "Catalogs"/"General" (actually "Target Resolution"/"Appearance"). Update step 1's pane list.
+
+**App-state left for J11:** Inbox has 10 folders (Dark 1, Light 5, Mixed 4 — plenty of heterogeneous items for mistake-recovery). Calibration has 3 masters (NO assignment made — and note #664 blocks assignment app-wide, so J11's un-assign step may be untestable). All settings J10 changed were restored. Bridge connected.
