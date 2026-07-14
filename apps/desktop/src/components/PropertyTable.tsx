@@ -5,21 +5,45 @@
  * PropertyTable — key-value property display supporting both read-only and
  * editable modes. Used for session details, inbox review, and equipment.
  *
- * Source badge colors: fits=blue, user=green, inferred=amber, default=gray.
+ * Value rendering goes through the shared missing-value renderer (spec-030
+ * Q16 / FR-135–FR-138, `@/components/RenderValue`): a real value (including
+ * a real 0/false/"") renders plain, a missing-but-applicable value renders
+ * the muted unresolved chip, and a not-applicable value renders blank — the
+ * source badge only ever appears next to a real value (FR-138). Each
+ * `PropertyDef` carries an explicit `applicability` marker (default
+ * `'applicable'`) rather than overloading `value === null`, so a caller that
+ * knows a field genuinely doesn't apply to the entity (per the
+ * data-model.md field-applicability matrix) states that, instead of the
+ * renderer guessing from data absence (FR-135).
+ *
  * Uses @base-ui-components/react/checkbox for confirm toggles.
  */
 
 import { Checkbox } from '@base-ui-components/react/checkbox';
 import { Select } from '@base-ui-components/react/select';
-import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
+import {
+  renderValueOnly,
+  SourceBadge,
+  valueState,
+  type FieldApplicability,
+  type ValueSource,
+} from './RenderValue';
 
 export interface PropertyDef {
   key: string;
   label: string;
   value: string | number | boolean | null;
   editable?: boolean;
-  source?: 'fits' | 'user' | 'inferred' | 'default';
+  source?: ValueSource;
+  /**
+   * Whether this field applies to the entity being shown (Q16 / FR-135).
+   * Defaults to `'applicable'` — a `null` value then renders the unresolved
+   * chip, not a silent blank. Set `'not_applicable'` when the
+   * data-model.md field-applicability matrix says the field doesn't apply
+   * to this entity/frame-type (e.g. filter on a dark).
+   */
+  applicability?: FieldApplicability;
   confirmed?: boolean;
   onConfirmToggle?: () => void;
   onChange?: (newValue: string) => void;
@@ -32,19 +56,6 @@ export interface PropertyTableProps {
   mode: 'view' | 'edit';
   showSource?: boolean;
   showConfirm?: boolean;
-}
-
-const SOURCE_LABELS: Record<string, string> = {
-  fits: 'FITS',
-  user: 'User',
-  inferred: 'Inferred',
-  default: 'Default',
-};
-
-function formatDisplayValue(value: string | number | boolean | null): string {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  return String(value);
 }
 
 function PropertyValueEditor({ prop }: { prop: PropertyDef }) {
@@ -157,6 +168,8 @@ export function PropertyTable({
       {/* Data rows */}
       {properties.map((prop) => {
         const isEditing = mode === 'edit' && prop.editable;
+        const applicability = prop.applicability ?? 'applicable';
+        const state = valueState(prop.value, applicability);
 
         return (
           <div key={prop.key} className="alm-property-table__row" role="row">
@@ -174,7 +187,7 @@ export function PropertyTable({
               {isEditing ? (
                 <PropertyValueEditor prop={prop} />
               ) : (
-                formatDisplayValue(prop.value)
+                renderValueOnly(prop.value, { applicability })
               )}
             </span>
 
@@ -183,15 +196,10 @@ export function PropertyTable({
                 className="alm-property-table__cell alm-property-table__cell--source"
                 role="cell"
               >
-                {prop.source && (
-                  <span
-                    className={clsx(
-                      'alm-property-table__source-badge',
-                      `alm-property-table__source-badge--${prop.source}`,
-                    )}
-                  >
-                    {SOURCE_LABELS[prop.source] ?? prop.source}
-                  </span>
+                {/* Source pills couple to value presence (FR-138) — never
+                    shown for an unresolved or not-applicable field. */}
+                {state === 'real' && prop.source && (
+                  <SourceBadge source={prop.source} />
                 )}
               </span>
             )}
