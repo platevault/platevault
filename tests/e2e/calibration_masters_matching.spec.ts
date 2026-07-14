@@ -110,15 +110,19 @@ test.describe("calibration · masters listing + matching (spec 040 / 007)", () =
 		await expect(flatRow.getByText("FLAT", { exact: true })).toBeVisible();
 		await expect(biasRow.getByText("BIAS", { exact: true })).toBeVisible();
 
-		// Kind-CONDITIONAL columns (MastersTable.filterCell / exposureCell):
-		//   cell order → 2 = Filter, 4 = Exposure. "—" is the EMPTY marker.
-		//   DARK: Exposure "120s", Filter "—".
+		// Applicability-driven columns (MastersTable.filterCell / exposureCell,
+		// spec-030 Q16 field-applicability matrix): cell order → 2 = Filter,
+		// 4 = Exposure. "—" is the NOT-APPLICABLE marker (a missing-but-
+		// applicable value would render the "Unresolved" chip instead).
+		//   DARK: Exposure "120s"; Filter not applicable to darks → "—".
 		await expect(darkRow.locator("td").nth(4)).toHaveText("120s");
 		await expect(darkRow.locator("td").nth(2)).toHaveText("—");
-		//   FLAT: Filter "Ha", Exposure "—".
+		//   FLAT: Filter "Ha"; Exposure applies to flats (matrix) and the
+		//   fixture carries a real 3.0s FlatWizard exposure → "3s", no longer
+		//   suppressed to a dash by the old kind-hardcoded cell.
 		await expect(flatRow.locator("td").nth(2)).toHaveText("Ha");
-		await expect(flatRow.locator("td").nth(4)).toHaveText("—");
-		//   BIAS: neither Filter nor Exposure is meaningful → both "—".
+		await expect(flatRow.locator("td").nth(4)).toHaveText("3s");
+		//   BIAS: neither Filter nor Exposure applies → both "—".
 		await expect(biasRow.locator("td").nth(2)).toHaveText("—");
 		await expect(biasRow.locator("td").nth(4)).toHaveText("—");
 	});

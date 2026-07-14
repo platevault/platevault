@@ -25,12 +25,17 @@ pub struct ArchiveEntry {
     pub entity_type: String,
     /// When the entity reached the `archived` lifecycle state (ISO-8601).
     pub archived_at: String,
-    /// Human-readable reason (the archive plan title when available).
-    pub reason: String,
+    /// Human-readable reason (the archive plan title). `None` when the owning
+    /// plan row no longer exists (spec-030 Q16 / FR-136 — never an empty-string
+    /// sentinel standing in for absence).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     /// The entity's original on-disk location (project-relative library path).
     pub original_path: String,
-    /// Bytes moved into the app-managed archive by the owning plan.
-    pub size_bytes: i64,
+    /// Bytes moved into the app-managed archive by the owning plan. `None`
+    /// when unresolved (spec-030 Q16 / FR-136 — never a sentinel 0, "Size 0 KB").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<i64>,
     /// Plan that archived this entity. Drives the management operations
     /// (`archive.send_to_trash` / `archive.permanently_delete`). `None` only
     /// for legacy rows archived before this column existed.

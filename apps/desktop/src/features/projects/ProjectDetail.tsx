@@ -41,6 +41,7 @@ import {
   DetailPane,
   MetricLine,
   TopActionBar,
+  renderValue,
 } from '@/components';
 import { ProjectLifecycleStepper } from './ProjectLifecycleStepper';
 import { Pill, Btn, Section, Banner, CoverageBar, Table } from '@/ui';
@@ -430,7 +431,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const sourceRows = project.sources.map((src) => ({
     role: (
       <span className="alm-project-detail__role-cell">
-        {src.role ?? <span className="alm-project-detail__dash">—</span>}
+        {renderValue(src.role ?? null, { applicability: 'applicable' })}
       </span>
     ),
     source: (
@@ -438,10 +439,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         {src.name || src.inventoryId}
       </span>
     ),
+    // Project sources are light sessions (filter is applicable, data-model.md
+    // matrix) — a missing filter is unresolved, not the same blank marker a
+    // not-applicable field would use (spec-030 Q16 / FR-135).
     filter: src.filter ? (
       <Pill variant={sourceTypeVariant(src.filter)}>{src.filter}</Pill>
     ) : (
-      <span className="alm-project-detail__dash">—</span>
+      renderValue(null, { applicability: 'applicable' })
     ),
     subs: (
       <span className="alm-project-detail__num-cell">

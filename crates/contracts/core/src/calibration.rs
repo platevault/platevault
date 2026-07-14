@@ -87,17 +87,27 @@ impl TryFrom<&str> for CalibrationKind {
 // ── Structs ─────────────────────────────────────────────────────────────────
 
 /// Sensor/optical fingerprint that determines calibration compatibility.
+///
+/// Every field is `Option` (Q16 / #620, FR-135/FR-136): extraction may leave
+/// any of these unresolved, and the contract MUST carry that absence as
+/// `null` rather than a synthesized value (empty string, fabricated `"1x1"`
+/// binning, or a defaulted `0.0`) — the missing/real-zero distinction is
+/// unrecoverable once a sentinel overwrites it at this hop.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CalibrationFingerprint {
-    pub camera: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub camera: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sensor_mode: Option<String>,
-    pub exposure_s: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exposure_s: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temp_c: Option<f64>,
-    pub gain: f64,
-    pub binning: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub binning: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
 }
@@ -109,10 +119,16 @@ pub struct CalibrationMaster {
     pub id: String,
     pub kind: CalibrationKind,
     pub fingerprint: CalibrationFingerprint,
-    pub source_session_id: String,
+    /// `None` when the originating session is unresolved (Q16 / FR-136) —
+    /// never self-referentially defaulted to this master's own id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_session_id: Option<String>,
     pub created_at: String,
     pub age_days: u32,
-    pub size_bytes: u64,
+    /// `None` when file size is unresolved (Q16 / FR-136) — never a
+    /// sentinel 0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
     pub used_by_session_ids: Vec<String>,
     pub used_by_project_ids: Vec<String>,
 }
@@ -163,10 +179,12 @@ pub struct MasterDetail {
     pub id: String,
     pub kind: CalibrationKind,
     pub fingerprint: CalibrationFingerprint,
-    pub source_session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_session_id: Option<String>,
     pub created_at: String,
     pub age_days: u32,
-    pub size_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
     pub used_by_session_ids: Vec<String>,
     pub used_by_project_ids: Vec<String>,
     // Detail-only fields.

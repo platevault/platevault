@@ -283,15 +283,19 @@ describe('SessionDetail — contextual header actions (task #79)', () => {
 });
 
 describe('SessionDetail — Facts section (spec 006 FR-005; task #79 provenance merge)', () => {
-  it('12. renders em-dash for missing fact values', () => {
+  // spec-030 Q16 (#620, #619, FR-135/FR-137): every fact field here is
+  // applicable to a light session (data-model.md matrix — the Light column
+  // is all-✓), so a missing value now renders the unresolved chip, not a
+  // silent em-dash indistinguishable from "field doesn't apply here".
+  it('12. renders the unresolved chip (not a bare em-dash) for missing fact values', () => {
     const session = makeSession({
       filter: null,
       exposure: null,
       camera: undefined,
     });
     renderDetail(session);
-    const dashes = screen.getAllByText('—');
-    expect(dashes.length).toBeGreaterThan(0);
+    const chips = screen.getAllByTestId('unresolved-chip');
+    expect(chips.length).toBeGreaterThan(0);
   });
 
   // Task #79: the standalone Provenance section was removed. Inference is now
