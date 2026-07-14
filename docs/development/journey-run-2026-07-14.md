@@ -15,7 +15,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 6. Cleanup: scan → review → apply | PARTIAL | 2P/1F/1PA/0S | #804, #806, #807 | scan/UI fully works; protected-item ack cosmetic #807; default-protected fails apply unconditionally; zero audit #766 reproduces |
 | 7. Archive → delete from archive | PARTIAL | 2P/0F/2PA/3S | | plan-generation wired; archive page clean; 0-item plan from #780; empty plan no reason #603 |
 | 8. Calibration: ingest → masters → matching | PARTIAL | 2P/1F/2PA/0S | | masters register+ingest work; fingerprint extraction fails #620; matching blocked #664; tolerances dont persist #639; 0 audit #766 |
-| 9. Targets & planning (real vs. stub) | ⏳ pending | | | |
+| 9. Targets & planning (real vs. stub) | PARTIAL | 3P/0F/2PA/0S | #815, #816 | logic correct; detail+modal overflow clips controls #815
 | 10. Settings, appearance, and i18n | ⏳ pending | | | |
 | 11. Mistake recovery | ⏳ pending | | | |
 | 12. Failure & refusal handling | ⏳ pending | | | |
@@ -212,3 +212,21 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Doc-drift:** JOURNEY-DOC UPDATE — raw dark/flat fixtures are NOT master files per spec-040 MasterDetector (needs "master"/"_stacked" in name or IMAGETYP master); journey doc implies any calibration-root ingest yields masters. Executor created 3 master-named copies (disclosed) + hand-patched one FITS header (EXPTIME/GAIN/CCD-TEMP) to pass the correct inbox.missing_path_attributes:exposure gate (that gate is correct behavior, not a bug). Journey 8 should note masters need master-style filenames/IMAGETYP.
 
 **App-state left for J9:** app on #/calibration showing 3 masters (bias/dark/flat, unused/unassigned), console clean. Inbox has 3 fewer master items (resolved). Tolerances at defaults. No assignments made (blocked by #664). Journey 9 (Targets) independent + unaffected.
+
+### Journey 9 — Targets & planning (real vs stub)
+
+**Verdict:** PARTIAL
+**Steps:** 3 PASS / 0 FAIL / 2 PARTIAL / 0 SKIPPED
+**Issues filed:** #815 (UI — Add-target dropdown/no-match message invisibly clipped by .alm-modal__body overflow; clientHeight 89 vs popover y489-527; blank where DOM has real content), #816 (UI — Target detail Aliases/Notes/Coverage/Links/back-btn silently clipped by .alm-detail--fill overflow-y:hidden, scrollHeight 1229 vs clientHeight 330; unreachable by any real user; DetailPane.tsx:18 / primitives.css:105-127 / TargetDetailV2.tsx:685-802)
+
+**Dupes hit (not re-filed):** #658 (alias-search AND display-label propagation both need reload — reproduced twice), #792 (Opposition/Best-date dup label), #574 (seed catalog only searchable via typeahead, not materialized)
+
+**Key evidence:** ALL underlying logic verified correct via DOM/JS bypass — local typeahead ("M 31 · seed"), dedupe on re-add (stays "2 targets"), SIMBAD-unresolvable inline message (role=status aria-live, no fabricated row), alias add ([user] tag), label set/clear (honest "Not set — showing primary designation"), notes save+persist across reload, favourites star + My-Targets filter, guidance popover (row+detail, per-filter thresholds, Escape/outside close) — all functionally PASS, just visually blocked by #815/#816. Sessions column correctly stays "—" (only genuine remaining stub).
+
+**Doc-drift (JOURNEY-DOC UPDATE — major, not filed):**
+1. Specs 044 Track B / 047 Track A have SHIPPED: Max alt / Tonight / Visible / Opposition / Lunar / Filters / Img time are now REAL per-site astronomy-engine computations against the configured site ("Home Backyard", 52.09°N via settings_get/observingSites) — the doc's entire "stubbed/pending" narrative (steps 4-5 + Known gaps) is STALE except Sessions.
+2. Favourites are DB-backed (target_favourite table w/ timestamp), NOT localStorage-only as documented.
+3. aria-sort works (PR #415 merged); doc's "requires PR #415 (open)" is stale.
+4. Main Targets table = the user's added-target library (2 rows), NOT "the seeded catalog (thousands of rows)"; the ~13k seed is searched only via Add-target typeahead, never browsable rows — doc step 1 wording should be corrected.
+
+**App-state left for J10:** 2 targets (M31 favourited★ + test alias "MyTestAliasJ9" + test note + cleared label; M51 not); filters/search reset; app idle on #/targets; console clean.
