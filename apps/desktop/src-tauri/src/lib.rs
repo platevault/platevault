@@ -37,7 +37,7 @@ use crate::commands::cleanup::{
 };
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::{
-    dev_calls_list, dev_contracts_list, dev_export, dev_schema_get, CallBuffer,
+    dev_calls_list, dev_calls_push, dev_contracts_list, dev_export, dev_schema_get, CallBuffer,
 };
 use crate::commands::equipment::{
     equipment_cameras_create, equipment_cameras_delete, equipment_cameras_list,
@@ -646,6 +646,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // developer diagnostics (spec 021) — dev-tools build only
         dev_contracts_list,
         dev_calls_list,
+        dev_calls_push,
         dev_export,
         dev_schema_get,
     ])

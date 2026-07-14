@@ -1835,6 +1835,19 @@ export const commands = {
 	 */
 	devCallsList: (request: DevCallsListRequest_Deserialize) => typedError<DevCallsListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_calls_list", { request })),
 	/**
+	 *  `dev.calls.push` — record a call captured by the JS-side recording proxy
+	 *  (spec 021 US2 / follow-up #736) into the shared ring buffer, so
+	 *  `dev.calls.list` and `dev.export` observe live calls too. The frontend
+	 *  recorder (`apps/desktop/src/dev/recorder.ts`) keeps its own buffer for
+	 *  instant, reactive rendering; this is a best-effort mirror for backend
+	 *  consumers (export). The call is already redacted client-side before this
+	 *  is invoked.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` when `devMode` is disabled.
+	 */
+	devCallsPush: (call: ContractCall_Deserialize) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("dev_calls_push", { call })),
+	/**
 	 *  `dev.export` — dump contract registry + calls to a JSON file (spec 021 US4).
 	 * 
 	 *  # Errors

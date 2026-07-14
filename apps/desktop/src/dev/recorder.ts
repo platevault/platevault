@@ -129,6 +129,39 @@ function pushCall(call: ContractCall): void {
   notify();
 }
 
+// ── Contract name normalization ─────────────────────────────────────────────
+
+/**
+ * Explicit aliases for commands whose Tauri fn name has MORE segments than
+ * the registry's dotted contract name — the blanket underscore-to-dot
+ * fallback below only recovers names where the two shapes are 1:1.
+ * `lifecycle.transition` is one logical (replay-unsafe) registry operation
+ * split into two backend command variants; both must resolve to the same
+ * `ContractMeta`. Add further entries here if another such split appears.
+ */
+const CONTRACT_NAME_ALIASES: Record<string, string> = {
+  lifecycle_transition_apply: 'lifecycle.transition',
+  lifecycle_transition_preview: 'lifecycle.transition',
+};
+
+/**
+ * Normalize a Tauri invoke command name to the dotted contract-registry name.
+ *
+ * The real dispatcher receives the Rust `#[tauri::command]` fn name
+ * (snake_case, e.g. `dev_calls_list`), not the dotted operation name used in
+ * `ContractMeta.name` (e.g. `dev.calls.list`) — `tauri-specta` registers
+ * commands under the Rust fn name (see `apps/desktop/src-tauri/tests/bindings.rs`
+ * "IPC name alignment regression"). Every current registry entry EXCEPT
+ * `lifecycle.transition` (see `CONTRACT_NAME_ALIASES`) follows a 1:1
+ * `namespace_operation` -> `namespace.operation` shape, so aliases are
+ * checked first and a blanket underscore-to-dot replacement is the fallback.
+ * Commands outside the dev registry simply fail to match a `ContractMeta`
+ * afterward, same as before normalization (spec 021 follow-up #736).
+ */
+function toContractName(cmd: string): string {
+  return CONTRACT_NAME_ALIASES[cmd] ?? cmd.replace(/_/g, '.');
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /** Subscribe to buffer changes. Returns an unsubscribe function. */
@@ -197,7 +230,8 @@ export function wrap(
     const startedAt = new Date().toISOString();
     const t0 = performance.now();
 
-    const sensitiveFields = sensitiveByContract.get(cmd) ?? [];
+    const contract = toContractName(cmd);
+    const sensitiveFields = sensitiveByContract.get(contract) ?? [];
     const rawRequest = args ?? {};
     const redactedRequest = redactPayload(rawRequest, sensitiveFields);
     const { value: storedRequest, truncated: reqTruncated } =
@@ -230,9 +264,9 @@ export function wrap(
 
     const durationMs = performance.now() - t0;
 
-    pushCall({
+    const record: ContractCall = {
       id,
-      contract: cmd,
+      contract,
       contractVersion: '1.0.0',
       request: storedRequest,
       response,
@@ -240,7 +274,18 @@ export function wrap(
       startedAt,
       durationMs,
       payloadTruncated: reqTruncated || resTruncated,
-    });
+    };
+    pushCall(record);
+
+    // Best-effort mirror into the backend ring buffer so `dev.export` also
+    // observes live calls (spec 021 follow-up #736). Uses the raw dispatcher
+    // captured above — NOT `recordingDispatch` itself — so this forwarding
+    // call is never recorded (would otherwise recurse). Failures (e.g. the
+    // command not yet available, or `devMode` racing off) are swallowed:
+    // the JS-side buffer above is the source of truth for the UI.
+    if (cmd !== 'dev_calls_push') {
+      void dispatch('dev_calls_push', { call: record }).catch(() => {});
+    }
 
     if (error)
       throw Object.assign(new Error(error.message), { code: error.code });
