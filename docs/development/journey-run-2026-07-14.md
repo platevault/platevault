@@ -230,3 +230,21 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 4. Main Targets table = the user's added-target library (2 rows), NOT "the seeded catalog (thousands of rows)"; the ~13k seed is searched only via Add-target typeahead, never browsable rows — doc step 1 wording should be corrected.
 
 **App-state left for J10:** 2 targets (M31 favourited★ + test alias "MyTestAliasJ9" + test note + cleared label; M51 not); filters/search reset; app idle on #/targets; console clean.
+
+### Planner accuracy verification — M31 imaging time & opposition
+
+**Trigger:** user observed "M31 shows 0 imaging time today yet the opposition graph shows imaging time."
+
+**Verdict:** FRAMING/GRAPH-SHADING CONTRADICTION — NOT a calc bug. Both numbers individually correct; the graph contradicts itself.
+
+**Method:** read real planner-derive/opposition/moon-avoidance + TargetDetailV2 graph; pulled app's live M31 values via bridge; independently recomputed with skyfield/DE421 at the same site/date. (Telescopius fetch was SKIPPED — physics deemed conclusive from two agreeing engines; noted as the one gap.)
+
+**Side-by-side (App @ Home Backyard 52.0907°N/5.1214°E, twilight=astronomical, threshold 30°, date 2026-07-14):**
+- App Max alt: 73°, Img time: 0.0h, Lunar: 89°, Best date: 5 Oct (~3mo)
+- Independent (skyfield DE421, same site/date): Sun bottoms at −16.4° → astronomical darkness (−18°) NEVER reached → 0 dark minutes → 0 imaging minutes ✓. M31 true transit 79° ~04:50 UTC (app's in-window peak 73° correct for its sunset→sunrise span). Opposition/midnight-transit 2026-10-05 (~83d) ✓. Under NAUTICAL twilight same night = ~180 imaging min → the zero is a correct consequence of the astronomical-twilight setting, not a low-altitude target.
+
+**Root cause of on-screen contradiction:** TargetDetailV2.tsx:177-197 omits twilight shading when there's no dark window, while the green usable-altitude fill (:201-211) still paints under M31's high curve → graph reads "imageable" while metric = 0.0h; disclosure lives only in an out-of-graph banner.
+
+**Issue filed:** #817 (UI, spec:044) — recommends the no-dark-window graph shade the whole plot as non-dark (or grey the usable fill) so graph and metric agree.
+
+**Context (not a calc bug):** the active site "Home Backyard" 52.09°N/5.12°E is the wizard's PLACEHOLDER default, not necessarily the user's real location — the source of the Telescopius mismatch; motivates surfacing the active site prominently + editable on the planner (candidate spec 044/047 iterate).
