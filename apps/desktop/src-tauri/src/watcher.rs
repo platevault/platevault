@@ -12,17 +12,30 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
 
 use audit::bus::EventBus;
-use fs_inventory::artifact_watcher::{start_artifact_watcher, ArtifactEventKind, WatcherGuard};
+use fs_inventory::artifact_watcher::{
+    start_artifact_watcher, ArtifactEventKind, ArtifactFileEvent, WatcherGuard,
+};
 use fs_inventory::watcher::{InboxFileEvent, SharedWatcherService};
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
+use workflow_artifacts::{
+    check_stability, FileSnapshot, StabilityStatus, DEFAULT_STABILITY_DEBOUNCE,
+};
+
+/// How often the per-project watcher re-checks its open tool launches for
+/// completion (#727). The attribution window itself defaults to 6h
+/// (`workflow_artifacts::DEFAULT_ATTRIBUTION_WINDOW`); this only bounds how
+/// stale that check can be, so a coarse interval is deliberate — there is no
+/// user-facing latency requirement on top of the attribution window itself.
+const STALE_LAUNCH_SWEEP_INTERVAL: Duration = Duration::from_mins(5);
 
 /// Start watching the given inbox paths and forward events to the Tauri webview.
 ///
@@ -156,6 +169,98 @@ fn real_metadata(path: &Path) -> Option<(u64, std::time::SystemTime)> {
     }
     let modified = meta.modified().ok()?;
     Some((meta.len(), modified))
+}
+
+// ── Live-watch debounce (spec 012 T003/T004, #729) ─────────────────────────────
+
+/// Record or cancel debounce tracking for a raw watcher event.
+///
+/// `Removed` events cancel any in-flight debounce for that path — no
+/// `detect()` fires for a file that vanished before stabilizing; removals
+/// otherwise stay handled by the on-attach reconciliation pass, matching the
+/// existing T005 design. Non-watched extensions are ignored (pre-existing
+/// filter). `Created`/`Modified` events (re-)seed the path's [`FileSnapshot`]
+/// with the size observed *now*; [`sweep_pending_artifacts`] decides once the
+/// size has held steady for the debounce window.
+fn record_raw_event(
+    evt: &ArtifactFileEvent,
+    extensions: &[String],
+    pending: &mut HashMap<PathBuf, FileSnapshot>,
+) {
+    let path = evt.path.as_std_path().to_path_buf();
+    if evt.kind == ArtifactEventKind::Removed {
+        pending.remove(&path);
+        return;
+    }
+
+    let file_name = evt.path.file_name().unwrap_or_default();
+    let ext_refs: Vec<&str> = extensions.iter().map(String::as_str).collect();
+    if !workflow_artifacts::extension_allowed(file_name, &ext_refs) {
+        return;
+    }
+
+    // File already gone by the time we could stat it — nothing to track.
+    if let Some((size_bytes, _)) = real_metadata(&path) {
+        pending.insert(path, FileSnapshot { size_bytes, arrived_at: Instant::now() });
+    }
+}
+
+/// Re-check every pending path's stability: `detect()` any that stabilized
+/// with their real observed size (fixing the previously-hardcoded
+/// `size_bytes: 0`), drop any that disappeared, and re-arm the debounce
+/// window for any still being written.
+async fn sweep_pending_artifacts(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    project_id: &str,
+    tool_id: &str,
+    pending: &mut HashMap<PathBuf, FileSnapshot>,
+) {
+    let now = Instant::now();
+    let probe = |p: &Path| real_metadata(p).map(|(size, _)| size);
+    let paths: Vec<PathBuf> = pending.keys().cloned().collect();
+
+    for path in paths {
+        let Some(snapshot) = pending.get(&path).cloned() else { continue };
+        match check_stability(&path, &snapshot, now, DEFAULT_STABILITY_DEBOUNCE, probe) {
+            StabilityStatus::Stable { size_bytes } => {
+                pending.remove(&path);
+                let path_str = path.to_string_lossy().into_owned();
+                let now_iso = OffsetDateTime::now_utc()
+                    .format(&Rfc3339)
+                    .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+                let size_i64 = i64::try_from(size_bytes).unwrap_or(i64::MAX);
+                if let Err(e) = app_core::artifact::detect(
+                    pool, bus, project_id, &path_str, tool_id, size_i64, &now_iso, &now_iso,
+                )
+                .await
+                {
+                    tracing::debug!("artifact watcher: detect failed for {path_str}: {e}");
+                } else {
+                    tracing::debug!(
+                        "artifact watcher: detected {path_str} (project {project_id}, {size_bytes} bytes)"
+                    );
+                }
+            }
+            StabilityStatus::Gone => {
+                pending.remove(&path);
+            }
+            StabilityStatus::Writing => {
+                // Re-arm only once the window actually elapsed against a
+                // changed size, so the debounce restarts from the latest
+                // write instead of comparing against the original snapshot
+                // forever (`check_stability` alone can't distinguish "too
+                // early to check" from "checked, still growing").
+                if now.duration_since(snapshot.arrived_at) >= DEFAULT_STABILITY_DEBOUNCE {
+                    if let Some(size_bytes) = probe(&path) {
+                        pending.insert(path, FileSnapshot { size_bytes, arrived_at: now });
+                    } else {
+                        pending.remove(&path);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Run the on-attach reconciliation pass (T005): scan `project_root`,
@@ -301,48 +406,53 @@ pub async fn attach_project_watcher(
     let task_tool_id = tool_id.clone();
     let task_extensions = extensions.clone();
     let forward_task = tokio::spawn(async move {
-        while let Some(evt) = rx.recv().await {
-            // Only handle create/modify — removals are handled by the
-            // on-attach reconciliation pass, matching the existing T005 design.
-            if evt.kind == ArtifactEventKind::Removed {
-                continue;
-            }
+        // Per-path debounce state for the stable-size check (spec 012
+        // T003/T004, #729): the raw watcher fires on every write; a file is
+        // only `detect()`-ed once its size has been unchanged for
+        // `DEFAULT_STABILITY_DEBOUNCE`, so the recorded `size_bytes` is real
+        // instead of the previously-hardcoded 0.
+        let mut pending: HashMap<PathBuf, FileSnapshot> = HashMap::new();
+        let mut debounce_tick = tokio::time::interval(DEFAULT_STABILITY_DEBOUNCE / 2);
+        debounce_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        // #727: periodically complete tool launches whose attribution window
+        // has closed — the real production trigger for `complete_run` /
+        // `workflow.run_completed`, previously exercised only by tests.
+        let mut launch_sweep_tick = tokio::time::interval(STALE_LAUNCH_SWEEP_INTERVAL);
+        launch_sweep_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
-            let file_name = evt.path.file_name().unwrap_or_default();
-            let ext_refs: Vec<&str> = task_extensions.iter().map(String::as_str).collect();
-            if !workflow_artifacts::extension_allowed(file_name, &ext_refs) {
-                continue;
-            }
-
-            let path_str = evt.path.as_str().to_owned();
-            let now = OffsetDateTime::now_utc()
-                .format(&Rfc3339)
-                .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
-
-            match app_core::artifact::detect(
-                &task_pool,
-                &task_bus,
-                &task_project_id,
-                &path_str,
-                &task_tool_id,
-                0, // size unknown at watch time; the next reconciliation fills it
-                &now,
-                &now,
-            )
-            .await
-            {
-                Ok(_) => {
-                    tracing::debug!(
-                        "artifact watcher: detected {path_str} (project {task_project_id})"
-                    );
+        loop {
+            tokio::select! {
+                maybe_evt = rx.recv() => {
+                    let Some(evt) = maybe_evt else {
+                        tracing::debug!(
+                            "artifact watcher: channel closed for project {task_project_id}"
+                        );
+                        break;
+                    };
+                    record_raw_event(&evt, &task_extensions, &mut pending);
                 }
-                Err(e) => {
-                    tracing::debug!("artifact watcher: detect failed for {path_str}: {e}");
+                _ = debounce_tick.tick() => {
+                    sweep_pending_artifacts(
+                        &task_pool,
+                        &task_bus,
+                        &task_project_id,
+                        &task_tool_id,
+                        &mut pending,
+                    )
+                    .await;
+                }
+                _ = launch_sweep_tick.tick() => {
+                    if let Err(e) =
+                        app_core::artifact::sweep_stale_launches(&task_pool, &task_bus, &task_project_id)
+                            .await
+                    {
+                        tracing::debug!(
+                            "artifact watcher: stale-launch sweep failed for project {task_project_id}: {e}"
+                        );
+                    }
                 }
             }
         }
-
-        tracing::debug!("artifact watcher: channel closed for project {task_project_id}");
     });
 
     tracing::info!("artifact watcher: attached for project {project_id} ({})", project.path);
@@ -360,5 +470,68 @@ pub async fn detach_project_watcher(registry: &ArtifactWatcherRegistry, project_
         entry.forward_task.abort();
         // Dropping `_guard` here (end of scope) stops the OS watcher.
         tracing::info!("artifact watcher: detached for project {project_id}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn xisf_extensions() -> Vec<String> {
+        vec![".xisf".to_owned()]
+    }
+
+    fn evt(path: &Path, kind: ArtifactEventKind) -> ArtifactFileEvent {
+        ArtifactFileEvent { path: Utf8PathBuf::from_path_buf(path.to_path_buf()).unwrap(), kind }
+    }
+
+    #[test]
+    fn record_raw_event_ignores_unwatched_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("notes.txt");
+        std::fs::write(&path, b"hello").unwrap();
+        let mut pending = HashMap::new();
+
+        record_raw_event(&evt(&path, ArtifactEventKind::Created), &xisf_extensions(), &mut pending);
+
+        assert!(pending.is_empty(), "unwatched extension must not be tracked");
+    }
+
+    #[test]
+    fn record_raw_event_seeds_pending_snapshot_with_real_size() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("MasterDark.xisf");
+        std::fs::write(&path, b"0123456789").unwrap(); // 10 bytes
+        let mut pending = HashMap::new();
+
+        record_raw_event(&evt(&path, ArtifactEventKind::Created), &xisf_extensions(), &mut pending);
+
+        let snapshot = pending.get(&path).expect("watched extension must be tracked");
+        assert_eq!(snapshot.size_bytes, 10, "must record the real observed size, not 0");
+    }
+
+    #[test]
+    fn record_raw_event_removed_cancels_pending_debounce() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("MasterDark.xisf");
+        std::fs::write(&path, b"0123456789").unwrap();
+        let mut pending = HashMap::new();
+        record_raw_event(&evt(&path, ArtifactEventKind::Created), &xisf_extensions(), &mut pending);
+        assert!(!pending.is_empty());
+
+        record_raw_event(&evt(&path, ArtifactEventKind::Removed), &xisf_extensions(), &mut pending);
+
+        assert!(pending.is_empty(), "a Removed event must cancel any in-flight debounce");
+    }
+
+    #[test]
+    fn record_raw_event_ignores_vanished_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("MasterDark.xisf"); // never created
+        let mut pending = HashMap::new();
+
+        record_raw_event(&evt(&path, ArtifactEventKind::Created), &xisf_extensions(), &mut pending);
+
+        assert!(pending.is_empty(), "a path that can't be stat'd must not be tracked");
     }
 }

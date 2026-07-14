@@ -93,6 +93,11 @@ where
 pub const DEFAULT_WATCH_EXTENSIONS: &[&str] =
     &[".xisf", ".fits", ".fit", ".tif", ".tiff", ".png", ".jpg", ".jpeg", ".ser", ".avi"];
 
+/// Default stable-size debounce window (spec 012 edge case: "bounded debounce
+/// window (default 2s)"). Consumers call [`check_stability`] on a timer no
+/// coarser than this to detect the "no further events" quiet period.
+pub const DEFAULT_STABILITY_DEBOUNCE: Duration = Duration::from_secs(2);
+
 /// Returns `true` when the file name's extension is in the watch-extensions
 /// list (case-insensitive comparison).
 #[must_use]
