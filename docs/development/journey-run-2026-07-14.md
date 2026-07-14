@@ -12,7 +12,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 4. Sessions review (derived) | PARTIAL | 6P/6F/1PA/2S | #770, #771, #772, #773 | filter/camera dropdowns + grouping work; unresolved values indistinguishable #770; detail Escape fails #771; no calibration field #772; no notes field #773; sessionKey parse bug #564 |
 | 5. Project lifecycle: create → artifacts | PARTIAL | 2P/0F/4PA/0S | #775, #776, #778, #780 | create+mkdir+lifecycle work; integration always 0s #775; manifests never generated #665; artifact tracking broken #780; tool workdir \\?\ path fails #778 |
 | J1-5 UX diff-check | PASS | 6P/0F | #783 | 6 surfaces audited; Inbox render-loop recovers; Sessions/Projects/Edit surfaces clean except documented dupes |
-| 6. Cleanup: scan → review → apply | ⏳ pending | | | |
+| 6. Cleanup: scan → review → apply | PARTIAL | 2P/1F/1PA/0S | #804, #806, #807 | scan/UI fully works; protected-item ack cosmetic #807; default-protected fails apply unconditionally; zero audit #766 reproduces |
 | 7. Archive → delete from archive | ⏳ pending | | | |
 | 8. Calibration: ingest → masters → matching | ⏳ pending | | | |
 | 9. Targets & planning (real vs. stub) | ⏳ pending | | | |
@@ -158,3 +158,24 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Ruled out after source check (not filed):** unstyled-overlay beyond palette (ConfirmOverlay now wraps Modal — commented #640 for live re-verify); notes-fragmentation is Projects-only; no list/detail label drift beyond Targets.
 
 **Design-system health:** Shared-component adoption is broadly STRONG (ListPageLayout/DetailPanel/PropertyTable/Table/SortHeader/Modal/FilterToolbar reused, token-only CSS, few clones). Standout gaps: CommandPalette fully unstyled (#581 dupe), and the cross-app consistency issues above.
+
+### Journey 6 — Cleanup: scan → review → apply
+
+**Verdict:** PARTIAL
+**Steps:** 2 PASS / 1 FAIL / 1 PARTIAL / 0 SKIPPED
+- Step 1 Scan (read-only preview): PASS — grouped by kind, protected lock icons, reclaimable total, idempotent, disk untouched, "no candidates" case verified.
+- Step 2 Destination + Generate: PASS — Archive/System-trash both selectable, destination frozen+read-only in overlay (but System-trash plans still materialize an .astro-plan-archive path — #806).
+- Step 3 Review overlay + protected-ack + Discard: PARTIAL — ack enables Approve (UI PASS), Discard leaves disk untouched + sets plans.state='discarded'; BUT ack is cosmetic at apply (#807), and "empty plan can't be approved, states why" has no UI path (Generate never renders at 0 candidates).
+- Step 4 Apply: FAIL for default/realistic case, PASS for manually-unprotected item — with defaultProtection=protected, every candidate permanently fails apply (protected.source) regardless of ack (#807). With protection=Normal, apply succeeded end-to-end: plan pending→applying→applied, file moved to .astro-plan-archive/<planId>/ (not deleted), re-scan clear, disk verified.
+
+**Issues filed:** #804 (backend/UI — Settings>Cleanup per-type table is a disconnected fixture; real policy has no UI control), #806 (backend — System-trash-destination plan still computes .astro-plan-archive item path), #807 (backend/UI — protected-item acknowledgement in cleanup review is cosmetic; apply unconditionally fails every protected+mutating item)
+
+**Dupes hit (not re-filed):** #780 (artifact state flips present→missing via periodic reconciliation UPDATE ... SET state='missing' — reproduced live, blocked most real-candidate testing), #766 (zero audit_log_entry rows for plan apply — reproduced for BOTH failed and successful cleanup applies; added corroborating comment), #523 (J6 epic)
+
+**UX/quality notes:** #804/#806/#807 are UI+backend mixed; also noted not-filed: size_bytes always 0 for detected artifacts ("0 B" everywhere) — likely same detection defect as #780.
+
+**Doc-drift:** JOURNEY-DOC UPDATE — Journey 6 "Known gaps (2026-07-04)" PR #413 caveat is STALE; scan/review/generate UI is fully implemented (button, grouped UI, destination picker, review overlay). Real blocking gap now is the protection/audit backend (#780/#807/#766), not missing UI.
+
+**Key evidence:** wizard-test.db plans 408d2bb0… (succeeded), 936ea14b… (failed), 151f994b… (discarded); shots j6-01..12; backend log UPDATE processing_artifacts SET state='missing' at 11:41:57.
+
+**App-state left for J7:** project restored to lifecycle=completed, cleanup_policy=all-Keep, defaultProtection=protected (pre-J6 defaults). Output folder has extra harmless test files + one .astro-plan-archive/408d2bb0…/ from the successful apply (fine on C:\Temp copy). Journey 7 precondition (completed project) intact.
