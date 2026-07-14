@@ -19,7 +19,7 @@ import { useMemo } from 'react';
 import type { ArchiveEntry } from '@/bindings/index';
 import { Pill, Table } from '@/ui';
 import type { TableColumn, TableRow } from '@/ui';
-import { SortHeader, ariaSortFor } from '@/components';
+import { SortHeader, ariaSortFor, renderValue } from '@/components';
 import { formatBytes } from '@/lib/format';
 import { m } from '@/lib/i18n';
 
@@ -52,10 +52,12 @@ function compareEntries(
       cmp = a.entityType.localeCompare(b.entityType);
       break;
     case 'reason':
-      cmp = a.reason.localeCompare(b.reason);
+      cmp = (a.reason ?? '').localeCompare(b.reason ?? '');
       break;
     case 'size':
-      cmp = a.sizeBytes - b.sizeBytes;
+      // Unresolved sorts as lowest — never fabricated as 0 in the DISPLAYED
+      // value, only in this internal ordering key (spec-030 Q16 / FR-136).
+      cmp = (a.sizeBytes ?? -Infinity) - (b.sizeBytes ?? -Infinity);
       break;
     case 'archived':
       cmp = a.archivedAt.localeCompare(b.archivedAt);
@@ -141,8 +143,12 @@ export function ArchiveTable({
     _selected: selected === a.id,
     name: a.name,
     type: <Pill variant="ghost">{a.entityType}</Pill>,
-    reason: a.reason,
-    size: formatBytes(a.sizeBytes),
+    reason: renderValue(a.reason ?? null, { applicability: 'applicable' }),
+    size: renderValue(
+      a.sizeBytes ?? null,
+      { applicability: 'applicable' },
+      (v) => formatBytes(v as number),
+    ),
     archived: a.archivedAt,
   }));
 

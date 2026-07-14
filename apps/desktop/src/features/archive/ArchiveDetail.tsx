@@ -1,10 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { DetailPane, DetailHeader, PropertyTable } from '@/components';
+import { DetailPane, DetailHeader } from '@/components';
 import { m } from '@/lib/i18n';
 import { Pill, Section, Table, EmptyState, Skeleton } from '@/ui';
-import { formatBytes } from '@/lib/format';
 import { useArchiveAudit } from './store';
 import type { ArchiveEntry } from '@/bindings/index';
 
@@ -40,41 +39,16 @@ export function ArchiveDetail({ item }: Props) {
       />
 
       {/* Single column — no rail. The old rail (Status/Storage/Audit trail)
-          duplicated the Details table and the Audit history table; dropped it
-          along with the hero MetricLine. */}
-      <Section title={m.common_details()}>
-        <PropertyTable
-          mode="view"
-          properties={[
-            {
-              key: 'archivedAt',
-              label: m.archive_prop_archived_at(),
-              value: item.archivedAt,
-            },
-            {
-              key: 'reason',
-              label: m.archive_prop_reason(),
-              value: item.reason,
-            },
-            {
-              key: 'entityType',
-              label: m.archive_prop_entity_type(),
-              value: item.entityType,
-            },
-            {
-              key: 'size',
-              label: m.archive_prop_size(),
-              value: formatBytes(item.sizeBytes),
-            },
-            {
-              key: 'originalPath',
-              label: m.archive_prop_original_path(),
-              value: item.originalPath,
-            },
-          ]}
-        />
-      </Section>
-
+          duplicated the Details table and the Audit history table, so it was
+          dropped along with the hero MetricLine. The "Details" table that
+          used to sit here (archivedAt/reason/entityType/size/originalPath)
+          was ALSO dropped (spec-030 Q16/#619, T133 detail-as-delta audit):
+          every one of those fields already renders on the ArchiveTable row
+          (Reason/Size/Type/Archived columns) or in this header (title=name,
+          pill=entityType, subtitle=originalPath), so the table was a pure
+          echo with zero new information — FR-139 requires a detail panel to
+          add information beyond the row, not restate it. Audit history below
+          is the panel's one real information class (SC-011). */}
       <Section title={m.archive_audit_history_title()} count={history.length}>
         {loading ? (
           <Skeleton count={4} label={m.common_loading()} />

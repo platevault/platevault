@@ -48,7 +48,7 @@ function filterEntries(entries: ArchiveEntry[], query: string): ArchiveEntry[] {
   return entries.filter(
     (a) =>
       a.name.toLowerCase().includes(q) ||
-      a.reason.toLowerCase().includes(q) ||
+      (a.reason?.toLowerCase().includes(q) ?? false) ||
       a.originalPath.toLowerCase().includes(q),
   );
 }
