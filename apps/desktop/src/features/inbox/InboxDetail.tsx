@@ -30,8 +30,9 @@ import type {
   InboxItemSummary,
 } from '@/bindings/index';
 import type { PropertyDef } from '@/components';
-import { DetailPanel, PropertyTable } from '@/components';
+import { DetailPanel, PropertyTable, renderValue } from '@/components';
 import { errMessage } from '@/lib/errors';
+import { fieldApplicability } from '@/lib/field-applicability';
 import { m } from '@/lib/i18n';
 import type { PillVariant } from '@/ui';
 import { Banner, Btn, Pill, Section, Table } from '@/ui';
@@ -85,46 +86,6 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-/** Format a nullable value as a muted dash. */
-function fmtOrDash(value: string | number | null | undefined): React.ReactNode {
-  if (value === null || value === undefined || value === '') {
-    return <span className="alm-inbox-detail__dash">—</span>;
-  }
-  return String(value);
-}
-
-/** Format binning as "XxY" or dash. */
-function fmtBinning(
-  x: number | null | undefined,
-  y: number | null | undefined,
-): React.ReactNode {
-  if (x == null && y == null)
-    return <span className="alm-inbox-detail__dash">—</span>;
-  return `${x != null ? x : '?'}x${y != null ? y : '?'}`;
-}
-
-/** Format exposure in seconds. */
-function fmtExposure(s: number | null | undefined): React.ReactNode {
-  if (s == null) return <span className="alm-inbox-detail__dash">—</span>;
-  return `${s} s`;
-}
-
-/** Format temperature in °C. */
-function fmtTemp(c: number | null | undefined): React.ReactNode {
-  if (c == null) return <span className="alm-inbox-detail__dash">—</span>;
-  return `${c} °C`;
-}
-
-/** Format pixel dimensions as "WxH" or dash. */
-function fmtDimensions(
-  w: number | null | undefined,
-  h: number | null | undefined,
-): React.ReactNode {
-  if (w == null && h == null)
-    return <span className="alm-inbox-detail__dash">—</span>;
-  return `${w ?? '?'}×${h ?? '?'}`;
-}
-
 /**
  * Build a plain-language composition summary for a mixed classification.
  * Example: "12 light · 4 dark · 1 bias"
@@ -158,27 +119,34 @@ function FileInspector({ file }: { file: InboxFileMetadata | null }) {
     [
       {
         label: m.inbox_field_instrument(),
-        value: fmtOrDash(file.instrume),
+        value: renderValue(file.instrume ?? null, { applicability: 'applicable' }),
         testid: 'inspector-instrume',
       },
       {
         label: m.inbox_field_telescope(),
-        value: fmtOrDash(file.telescop),
+        value: renderValue(file.telescop ?? null, {
+          applicability: fieldApplicability(file.frameTypeEffective, 'telescope'),
+        }),
         testid: 'inspector-telescop',
       },
       {
         label: m.inbox_field_dimensions(),
-        value: fmtDimensions(file.naxis1, file.naxis2),
+        value: renderValue(
+          file.naxis1 != null || file.naxis2 != null
+            ? `${file.naxis1 ?? '?'}×${file.naxis2 ?? '?'}`
+            : null,
+          { applicability: 'applicable' },
+        ),
         testid: 'inspector-dims',
       },
       {
         label: m.inbox_field_stack_count(),
-        value: fmtOrDash(file.stackCount),
+        value: renderValue(file.stackCount ?? null, { applicability: 'applicable' }),
         testid: 'inspector-stackcount',
       },
       {
         label: m.inbox_field_raw_imagetyp(),
-        value: fmtOrDash(file.imageTyp),
+        value: renderValue(file.imageTyp ?? null, { applicability: 'applicable' }),
         testid: 'inspector-imagetyp',
       },
     ];
@@ -455,14 +423,36 @@ export function InboxDetail({
           )}
         </span>
       ),
-      type: fmtOrDash(f.frameTypeEffective),
-      filter: fmtOrDash(f.filter),
-      exposure: fmtExposure(f.exposureS),
-      binning: fmtBinning(f.binningX, f.binningY),
-      gain: fmtOrDash(f.gain),
-      temp: fmtTemp(f.temperatureC),
-      object: fmtOrDash(f.object),
-      date: fmtOrDash(f.dateObs),
+      // Per-row applicability (spec-030 Q16 / FR-135, FR-137): each file in a
+      // mixed folder can have its own effective frame type, so a field that
+      // doesn't apply to THIS row's type renders blank while a genuinely
+      // missing-but-applicable value renders the unresolved chip — never the
+      // same dash for both.
+      type: renderValue(f.frameTypeEffective ?? null, { applicability: 'applicable' }),
+      filter: renderValue(f.filter ?? null, {
+        applicability: fieldApplicability(f.frameTypeEffective, 'filter'),
+      }),
+      exposure: renderValue(
+        f.exposureS ?? null,
+        { applicability: fieldApplicability(f.frameTypeEffective, 'exposure') },
+        (v) => `${v} s`,
+      ),
+      binning: renderValue(
+        f.binningX != null || f.binningY != null
+          ? `${f.binningX ?? '?'}x${f.binningY ?? '?'}`
+          : null,
+        { applicability: 'applicable' },
+      ),
+      gain: renderValue(f.gain ?? null, { applicability: 'applicable' }),
+      temp: renderValue(
+        f.temperatureC ?? null,
+        { applicability: fieldApplicability(f.frameTypeEffective, 'setTemp') },
+        (v) => `${v} °C`,
+      ),
+      object: renderValue(f.object ?? null, {
+        applicability: fieldApplicability(f.frameTypeEffective, 'target'),
+      }),
+      date: renderValue(f.dateObs ?? null, { applicability: 'applicable' }),
       _rowClassName: [
         needsAttention ? 'alm-inbox-meta-row--warn' : '',
         isInspected ? 'alm-inbox-meta-row--inspected' : '',
@@ -505,96 +495,76 @@ export function InboxDetail({
           )
         : String(item.fileCount),
     },
-    ...(repFile?.object != null
-      ? [
-          {
-            key: 'target',
-            label: m.inbox_dim_target(),
-            value: repFile.object,
-            source: 'fits',
-          } as PropertyDef,
-        ]
-      : []),
-    ...(repFile?.filter != null
-      ? [
-          {
-            key: 'filter',
-            label: m.common_filter(),
-            value: repFile.filter,
-            source: 'fits',
-          } as PropertyDef,
-        ]
-      : []),
-    ...(repFile?.exposureS != null
-      ? [
-          {
-            key: 'exposure',
-            label: m.inbox_col_exposure(),
-            value: fmtExposure(repFile.exposureS),
-            source: 'fits',
-          } as PropertyDef,
-        ]
-      : []),
-    ...(repFile?.binningX != null || repFile?.binningY != null
-      ? [
-          {
-            key: 'binning',
-            label: m.settings_calmatch_binning(),
-            value: fmtBinning(repFile?.binningX, repFile?.binningY),
-            source: 'fits',
-          } as PropertyDef,
-        ]
-      : []),
-    ...(repFile?.gain != null
-      ? [
-          {
-            key: 'gain',
-            label: m.inbox_col_gain(),
-            value: repFile.gain,
-            source: 'fits',
-          } as PropertyDef,
-        ]
-      : []),
-    ...(repFile?.temperatureC != null
-      ? [
-          {
-            key: 'temp',
-            label: m.settings_calmatch_sensor_temp(),
-            value: fmtTemp(repFile.temperatureC),
-            source: 'fits',
-          } as PropertyDef,
-        ]
-      : []),
-    ...(repFile?.instrume != null
-      ? [
-          {
-            key: 'instrume',
-            label: m.inbox_field_instrument(),
-            value: repFile.instrume,
-            source: 'fits',
-          } as PropertyDef,
-        ]
-      : []),
-    ...(repFile != null && (repFile.naxis1 != null || repFile.naxis2 != null)
-      ? [
-          {
-            key: 'dims',
-            label: m.inbox_field_dimensions(),
-            value: fmtDimensions(repFile.naxis1, repFile.naxis2),
-            source: 'fits',
-          } as PropertyDef,
-        ]
-      : []),
-    ...(repFile?.dateObs != null
-      ? [
-          {
-            key: 'date',
-            label: m.sessions_col_night(),
-            value: repFile.dateObs,
-            source: 'fits',
-          } as PropertyDef,
-        ]
-      : []),
+    // Rows below are always present (never conditionally omitted for a
+    // missing value — that collapsed "missing" into "not-applicable", spec-030
+    // Q16 / FR-135); applicability per frame type comes from the shared
+    // `fieldApplicability` matrix (data-model.md), so an applicable-but-absent
+    // field renders the unresolved chip instead of silently vanishing.
+    {
+      key: 'target',
+      label: m.inbox_dim_target(),
+      value: repFile?.object ?? null,
+      source: 'fits',
+      applicability: fieldApplicability(itemFrameType, 'target'),
+    },
+    {
+      key: 'filter',
+      label: m.common_filter(),
+      value: repFile?.filter ?? null,
+      source: 'fits',
+      applicability: fieldApplicability(itemFrameType, 'filter'),
+    },
+    {
+      key: 'exposure',
+      label: m.inbox_col_exposure(),
+      value: repFile?.exposureS != null ? `${repFile.exposureS} s` : null,
+      source: 'fits',
+      applicability: fieldApplicability(itemFrameType, 'exposure'),
+    },
+    {
+      key: 'binning',
+      label: m.settings_calmatch_binning(),
+      value:
+        repFile?.binningX != null || repFile?.binningY != null
+          ? `${repFile?.binningX ?? '?'}x${repFile?.binningY ?? '?'}`
+          : null,
+      source: 'fits',
+    },
+    {
+      key: 'gain',
+      label: m.inbox_col_gain(),
+      value: repFile?.gain ?? null,
+      source: 'fits',
+    },
+    {
+      key: 'temp',
+      label: m.settings_calmatch_sensor_temp(),
+      value: repFile?.temperatureC != null ? `${repFile.temperatureC} °C` : null,
+      source: 'fits',
+      applicability: fieldApplicability(itemFrameType, 'setTemp'),
+    },
+    {
+      key: 'instrume',
+      label: m.inbox_field_instrument(),
+      value: repFile?.instrume ?? null,
+      source: 'fits',
+    },
+    {
+      key: 'dims',
+      label: m.inbox_field_dimensions(),
+      value:
+        repFile != null && (repFile.naxis1 != null || repFile.naxis2 != null)
+          ? `${repFile.naxis1 ?? '?'}×${repFile.naxis2 ?? '?'}`
+          : null,
+      source: 'fits',
+    },
+    {
+      key: 'date',
+      label: m.sessions_col_night(),
+      value: repFile?.dateObs ?? null,
+      source: 'fits',
+      applicability: fieldApplicability(itemFrameType, 'date'),
+    },
   ];
 
   // Spread the detection facts across two left-packed columns (the canonical

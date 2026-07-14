@@ -3,32 +3,21 @@
 
 /**
  * Per-kind field applicability for calibration masters (spec-030 Q16 / #620,
- * FR-135, data-model.md "Field-Applicability Matrix"). One place both
- * `MasterDetail` and `MastersTable` read from, so kind-conditional fields
- * (exposure, filter, set-temperature) are never re-derived ad hoc per
- * surface. Camera / gain / binning / sensor mode / size are applicable to
- * every master kind and need no lookup here.
+ * FR-135). Thin, calibration-scoped wrapper over the shared
+ * `@/lib/field-applicability` matrix (also used by Inbox review) — `Master*`
+ * kinds are always dark/flat/bias, never light, so the shared matrix's Light
+ * column is simply never queried here.
  */
 
 import type { FieldApplicability } from '@/components';
+import { fieldApplicability } from '@/lib/field-applicability';
 
 export type MasterApplicabilityField = 'exposure' | 'filter' | 'setTemp';
-
-const APPLICABLE_KINDS: Record<MasterApplicabilityField, ReadonlySet<string>> = {
-  // Exposure time: Light/Dark/Flat — not Bias.
-  exposure: new Set(['dark', 'flat']),
-  // Filter: Light/Flat — not Dark/Bias.
-  filter: new Set(['flat']),
-  // Set temperature: Light/Dark — not Flat/Bias.
-  setTemp: new Set(['dark']),
-};
 
 /** `kind` is the master's `CalibrationKind` (case-insensitive). */
 export function masterFieldApplicability(
   kind: string,
   field: MasterApplicabilityField,
 ): FieldApplicability {
-  return APPLICABLE_KINDS[field].has(kind.toLowerCase())
-    ? 'applicable'
-    : 'not_applicable';
+  return fieldApplicability(kind, field);
 }

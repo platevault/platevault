@@ -622,15 +622,14 @@ export function TargetDetailV2({
       label: m.projects_wizard_col_source(),
       value: detail.source,
     },
-    ...(detail.simbadOid != null
-      ? [
-          {
-            key: 'simbad',
-            label: m.targets_prop_simbad_oid(),
-            value: detail.simbadOid,
-          } as PropertyDef,
-        ]
-      : []),
+    {
+      // Always applicable to a target identity (data-model.md: target-identity
+      // fields are always applicable) — present the row even when unresolved
+      // (spec-030 Q16 / FR-135) instead of omitting it for a non-SIMBAD target.
+      key: 'simbad',
+      label: m.targets_prop_simbad_oid(),
+      value: detail.simbadOid ?? null,
+    },
   ];
 
   // Tonight stats (numeric) — Filters render separately (a component, not a value).

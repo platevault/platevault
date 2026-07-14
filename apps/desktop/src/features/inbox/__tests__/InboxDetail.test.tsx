@@ -547,3 +547,115 @@ describe('InboxDetail — compact layout: detection col + popover trigger', () =
     expect(screen.queryByText('Frame type breakdown')).not.toBeInTheDocument();
   });
 });
+
+// ── spec-030 Q16 (#620, #619): missing vs not-applicable per-row ────────────
+
+describe('InboxDetail — missing-value semantics (Q16 / #620)', () => {
+  it('detection facts (col A/B) render the unresolved chip for a missing applicable value, never a bare dash', () => {
+    // singleTypeClassification is 'light' — filter/target/exposure are all
+    // applicable to light, so a null repFile field must render the chip.
+    const noFilter: InboxFileMetadata[] = [
+      { ...fileMetadataFixture[0], filter: null },
+    ];
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification}
+        fileMetadata={noFilter}
+      />,
+    );
+    expect(screen.getAllByTestId('unresolved-chip').length).toBeGreaterThan(0);
+  });
+
+  it('per-file metadata popup: filter/target cells are blank (not-applicable) on a dark row, never the unresolved chip', () => {
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={mixedClassification}
+        fileMetadata={fileMetadataFixture}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('inbox-files-popover-trigger'));
+    // calib_dark_0001.fits (frameTypeEffective: 'dark') has filter=null and
+    // object=null — both not-applicable to dark (data-model.md matrix), so
+    // those specific cells must render blank, never the unresolved chip.
+    // Column order (metadataColumns): file, type, filter, exposure, binning,
+    // gain, temp, object, date.
+    const darkRow = screen.getByTitle('calib_dark_0001.fits').closest('tr');
+    expect(darkRow).not.toBeNull();
+    const cells = darkRow?.querySelectorAll('td') ?? [];
+    const filterCell = cells[2];
+    const objectCell = cells[7];
+    expect(
+      filterCell.querySelector('[data-testid="unresolved-chip"]'),
+    ).toBeNull();
+    expect(
+      objectCell.querySelector('[data-testid="unresolved-chip"]'),
+    ).toBeNull();
+    // Exposure/temp/date ARE applicable to dark and are absent on this
+    // fixture row — they DO get the unresolved chip (the contrast that
+    // proves filter/object are genuinely not-applicable, not just "also
+    // missing").
+    const exposureCell = cells[3];
+    expect(
+      exposureCell.querySelector('[data-testid="unresolved-chip"]'),
+    ).not.toBeNull();
+  });
+
+  it('per-file metadata popup: a missing-but-applicable value on a light row renders the unresolved chip', () => {
+    const lightMissingGain: InboxFileMetadata[] = [
+      { ...fileMetadataFixture[0], gain: null },
+    ];
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification}
+        fileMetadata={lightMissingGain}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('inbox-files-popover-trigger'));
+    const row = screen.getByTitle('light_0001.fits').closest('tr');
+    expect(row).not.toBeNull();
+    expect(
+      row?.querySelector('[data-testid="unresolved-chip"]'),
+    ).not.toBeNull();
+  });
+
+  it('FileInspector: telescope is not-applicable (blank) for a dark file, never the unresolved chip', () => {
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={mixedClassification}
+        fileMetadata={fileMetadataFixture}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('inbox-files-popover-trigger'));
+    // Click the dark row to inspect it (telescop is null on that fixture row).
+    fireEvent.click(screen.getByTitle('calib_dark_0001.fits'));
+    const telescopeRow = screen.getByTestId('inspector-telescop');
+    expect(
+      telescopeRow.querySelector('[data-testid="unresolved-chip"]'),
+    ).toBeNull();
+  });
+
+  it('FileInspector: instrument (always-applicable) missing on the dark file renders the unresolved chip', () => {
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={mixedClassification}
+        fileMetadata={fileMetadataFixture}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('inbox-files-popover-trigger'));
+    fireEvent.click(screen.getByTitle('calib_dark_0001.fits'));
+    const instrumeRow = screen.getByTestId('inspector-instrume');
+    expect(
+      instrumeRow.querySelector('[data-testid="unresolved-chip"]'),
+    ).not.toBeNull();
+  });
+});
