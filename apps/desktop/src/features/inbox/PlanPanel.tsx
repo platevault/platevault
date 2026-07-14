@@ -533,7 +533,9 @@ export function PlanPanel({
     setConfirmDestructiveError(null);
     try {
       await Promise.all(
-        pending.map(async (id) => unwrap(await commands.plansConfirmDestructive(id))),
+        pending.map(async (id) =>
+          unwrap(await commands.plansConfirmDestructive(id)),
+        ),
       );
       setConfirmedPlanIds((prev) => new Set([...prev, ...pending]));
     } catch (e) {
@@ -925,7 +927,9 @@ export function PlanPanel({
                       disabled={
                         busy ||
                         plan.stale ||
-                        (plan.actions.some((a) => a.requiresDestructiveConfirm) &&
+                        (plan.actions.some(
+                          (a) => a.requiresDestructiveConfirm,
+                        ) &&
                           !confirmedPlanIds.has(plan.planId))
                       }
                       data-testid={`plan-apply-one-${plan.inboxItemId}`}

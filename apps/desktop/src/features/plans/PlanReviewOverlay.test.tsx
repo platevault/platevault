@@ -569,8 +569,6 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
 
     const cancelBtn = await screen.findByTestId('plan-review-cancel-run');
     fireEvent.click(cancelBtn);
-    await waitFor(() =>
-      expect(mockPlansCancel).toHaveBeenCalledWith('plan-1'),
-    );
+    await waitFor(() => expect(mockPlansCancel).toHaveBeenCalledWith('plan-1'));
   });
 });
