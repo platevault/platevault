@@ -21,7 +21,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 12. Failure | 12. Failure & refusal handling | ⏳ pending | | | | refusal handling | PARTIAL | 0P/3F/2PA/0S | #829, #830 | SAFETY: plan approval never snapshots FS #829 (CAS check dead code); partial fail silently succeeds; refusals not surfaced at control
 | 13. Audit & activity investigation | PARTIAL | 4P/2F/3PA/0S | #831, #832, #833 | HEADLINE: 10 successful plan-applies produce ZERO durable audit rows (#766/#647); Activity shows sequences live then disappears
 | 14. Target-first project start | FAIL | 1P/3F/2PA/0S | | wizard never receives target context #612; sources gate blocks 0-select #719; created project has NO target link
-| 15. Equipment & observing-site setup | ⏳ pending | | | |
+| 15. Equipment & observing-site setup | PARTIAL | 3P/3F/3PA/0S | #835, #836, #837, #838, #839, #840 | HEADLINE: alias-JOIN broken #564 (hardcoded None); moon-avoidance edits dont persist; Restore-defaults scope unclear
 | 16. Keyboard-first navigation & windows | ⏳ pending | | | |
 | 17. Software update & install | ⏳ pending | | | |
 
@@ -339,3 +339,19 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Doc-drift:** none — the described "pre-filled editable default name + target-as-fact summary rail" behavior does not exist in the build; this is a defect (#612), not intended drift.
 
 **App-state left for J15:** created project "J14-target-first-M51" (id 3fd4e30d, Ready, PixInsight, 1 source, NO target link) now in Projects list alongside "J5 Lifecycle Test". App on #/targets, window at 1100×720. J15 (Equipment/site) is independent.
+
+### Journey 15 — Equipment & observing-site setup
+
+**Verdict:** PARTIAL
+**Steps:** 3 PASS / 3 FAIL / 3 PARTIAL / 0 SKIPPED
+**Issues filed:** #835 (backend/UI — optical train saves with Camera/Telescope both "—None—", no parts required), #836 (backend — moon-avoidance per-cell edits don't persist), #837 (UI — Restore-defaults never states its scope, all 7 panes), #838 (UI — site row Edit/Remove action buttons overflow past 1100px, clipped), #839 (UI — planner never names the active site), #840 (UI/backend — removing the active site auto-falls-back instead of forcing an explicit choice)
+
+**HEADLINE (root-caused onto #564):** the alias-JOIN — the entire purpose of equipment setup — DOES NOT WORK. With a camera+telescope registered whose aliases EXACTLY match the M51 session's real FITS INSTRUME/TELESCOP ("ZWO ASI2600MM Pro"/"Celestron C925", verified via inbox_file_metadata), the Sessions/Calibration Camera column stays "—" after reload. Traced to crates/app/core/src/inventory.rs:243-246 hardcoding `camera: None` unconditionally — NO alias-resolution logic exists in that path at all. Added corroborating comment to #564.
+
+**Dupes hit (not re-filed):** #659 (duplicate camera name/alias not flagged), #830 (slow events-insert on every mutation)
+
+**Key evidence:** DB inbox_file_metadata confirms the INSTRUME/TELESCOP strings; Sessions row for 11024d3c stayed Camera="—" before AND after registering matching equipment; moon-avoidance OIII cell reverted 95→110 across reload; site Edit(x=1094)/Remove(x=1134) measured past the 1100px edge. Shots j15-01..45.
+
+**Doc-drift (JOURNEY-DOC UPDATE):** Moon avoidance is a FIXED 7-band Lorentzian model (L/R/G/B/Ha/SII/OIII, spec 047 FR-010), NOT dynamically derived from the registered filter/category list — dual-band (HO/SO), NII, "Other" get no dedicated moon row despite being registered filters. Journey 15's "categories feed per-band moon avoidance" should note the band set is fixed, not filter-driven.
+
+**App-state left for J16:** equipment fully RESTORED to baseline (0 cameras/telescopes/trains; filters back to seeded "L"); observing sites back to single "Home Backyard" (Default+Active, 52.0907/5.1214/Europe-Amsterdam) matching J1. No lingering console/backend errors (only known #830 slow-query WARNs). App on Settings→Equipment, bridge live.
