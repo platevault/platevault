@@ -23,7 +23,7 @@
 //!
 //! Constitution §II: never overwrite silently; per-item audit via callbacks.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -323,6 +323,20 @@ impl RetryQueue {
     pub fn take(&self, item_id: &str) -> bool {
         self.inner.lock().expect("retry-queue mutex poisoned").remove(item_id)
     }
+
+    /// Remove and return every queued item id (order unspecified).
+    ///
+    /// Used between forward-loop items to pick up any retry requests filed
+    /// against already-passed items (issue #742) — a plain `take` only
+    /// checks a single id, so a retry filed for an EARLIER item was never
+    /// consumed by anything.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
+    #[must_use]
+    pub fn drain_all(&self) -> Vec<String> {
+        self.inner.lock().expect("retry-queue mutex poisoned").drain().collect()
+    }
 }
 
 // ── Executor entry point ──────────────────────────────────────────────────────
@@ -347,6 +361,12 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
 ) -> ApplyOutcome {
     let mut counts = TerminalCounts::default();
     let mut cancelled = false;
+
+    // Id-indexed lookup so a retry (which only carries an item id, filed by
+    // `retry_plan_item` against an item this loop has already passed) can be
+    // re-executed with its original action/paths/CAS-snapshot (issue #742).
+    let item_by_id: HashMap<&str, &ExecutorItem> =
+        items.iter().map(|i| (i.id.as_str(), i)).collect();
 
     for item in &items {
         // Skip items that are already in a terminal state (re-apply idempotency).
@@ -377,199 +397,243 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
             continue;
         }
 
-        // Destructive-confirm gate (FR-003, D9, T020).
-        // `requires_destructive_confirm` is derived from the action type (delete/trash),
-        // independent of protection status. Replaces the old `confirm_required = is_protected`
-        // inversion at plan_apply.rs:199.
-        if item.requires_destructive_confirm && !item.destructive_confirmed {
-            let failure = PlanItemFailure::with_code(
-                FailureCode::DestructiveUnconfirmed,
-                format!(
-                    "item {} requires destructive confirmation (action is destructive); \
-                     confirm before applying",
-                    item.id
-                ),
-            );
-            callbacks
-                .on_item_progress(ItemProgressEvent::terminal(
-                    item.id.clone(),
-                    "pending",
-                    "refused",
-                    Some(failure),
-                    Some("destructive_unconfirmed".to_owned()),
-                ))
-                .await;
-            counts.failed += 1;
-            continue;
+        match process_single_item(item, callbacks, &mut counts, "pending", true).await {
+            ItemOutcome::Pause(reason) => return ApplyOutcome::Paused { reason, counts },
+            ItemOutcome::Continue => {}
         }
 
-        // Notify start.
-        callbacks.on_item_start(&item.id).await;
-
-        // Path-resolution gate (FR-001/002, D8, T018): resolve + validate source path
-        // against the library root before any filesystem CAS or mutation.
-        if let (Some(ref src_rel), Some(ref root)) = (&item.source_path, &item.library_root) {
-            match path_gate::resolve_and_validate(root, src_rel) {
-                Err(gate_failure) => {
-                    let audit_reason = gate_failure.code.as_str().to_owned();
-                    let triggers_pause = gate_failure.code.triggers_pause();
-                    callbacks
-                        .on_item_progress(ItemProgressEvent::terminal(
-                            item.id.clone(),
-                            "applying",
-                            "refused",
-                            Some(gate_failure),
-                            Some(audit_reason),
-                        ))
-                        .await;
-                    counts.failed += 1;
-                    if triggers_pause {
-                        return ApplyOutcome::Paused { reason: "path.invalid".to_owned(), counts };
-                    }
-                    continue;
-                }
-                Ok(_resolved) => {
-                    // Path is safe; the resolved absolute path will be used by execute_item.
-                }
-            }
-        }
-
-        // Per-item FS CAS revalidation (R-FS-1).
-        // Use the library-root-resolved path if available; otherwise use the raw path (legacy).
-        let resolved_source_for_cas: Option<Utf8PathBuf> =
-            if let (Some(ref src_rel), Some(ref root)) = (&item.source_path, &item.library_root) {
-                // Already validated above; re-resolve (cheap lexical op).
-                path_gate::resolve_and_validate(root, src_rel).ok().map(|r| r.0)
-            } else {
-                item.source_path.clone()
-            };
-
-        if let Some(ref src) = resolved_source_for_cas {
-            if let Err(stale_failure) = check_cas(src, &item.cas_snapshot) {
-                let triggers_pause = stale_failure.code.triggers_pause();
-                let failure_clone = stale_failure.clone();
-
-                callbacks
-                    .on_item_progress(ItemProgressEvent::terminal(
-                        item.id.clone(),
-                        "applying",
-                        "stale",
-                        Some(failure_clone),
-                        Some("stale".to_owned()),
-                    ))
-                    .await;
-
-                counts.failed += 1;
-
-                if triggers_pause {
-                    return ApplyOutcome::Paused {
-                        reason: stale_failure.code.as_str().to_owned(),
-                        counts,
-                    };
-                }
+        // Drain and re-execute any items queued for retry (US4, issue #742).
+        // `retry_plan_item` only flips the item's DB row and pushes its id
+        // here; nothing previously consumed the queue for real (a single
+        // forward pass never revisits an earlier index). Checking between
+        // every item — the same boundary already used for cancel/skip —
+        // picks up a retry filed against ANY already-passed item, matching
+        // this loop's "never mid-item" invariant.
+        for retry_id in retry_queue.drain_all() {
+            let Some(retry_item) = item_by_id.get(retry_id.as_str()) else {
+                tracing::warn!(item_id = %retry_id, "retry queued for unknown item id; ignored");
                 continue;
+            };
+            // `retry_plan_item` already transitioned the DB row `failed ->
+            // applying` before queuing, so `on_item_start` (which would
+            // double-decrement `items_pending`) must NOT run again, and the
+            // gate/terminal events' prior_state is "applying", not "pending".
+            match process_single_item(retry_item, callbacks, &mut counts, "applying", false).await {
+                ItemOutcome::Pause(reason) => return ApplyOutcome::Paused { reason, counts },
+                ItemOutcome::Continue => {}
             }
         }
-
-        // Protection check (FR-008).
-        if item.is_protected
-            && !matches!(item.action, ExecutorItemAction::NoOp | ExecutorItemAction::Catalogue)
-        {
-            let failure = PlanItemFailure::with_code(
-                FailureCode::ProtectedSource,
-                format!("item {} is protected by source policy", item.id),
-            );
-            callbacks
-                .on_item_progress(ItemProgressEvent::terminal(
-                    item.id.clone(),
-                    "applying",
-                    "failed",
-                    Some(failure),
-                    Some("protected".to_owned()),
-                ))
-                .await;
-            counts.failed += 1;
-            continue;
-        }
-
-        // Execute the operation.
-        //
-        // T212: the filesystem primitives in `execute_item` are synchronous and
-        // blocking (`std::fs::rename`/`copy`/`remove_file`, trash). Running them
-        // directly on a tokio worker thread would stall the async runtime, so we
-        // hand the work to `spawn_blocking`, which dispatches it onto the
-        // dedicated blocking thread pool and yields the worker thread back to the
-        // runtime until the fs op completes.
-        let item_for_blocking = item.clone();
-        let op_result = tokio::task::spawn_blocking(move || execute_item(&item_for_blocking))
-            .await
-            .unwrap_or_else(|join_err| {
-                // The blocking task panicked. Surface it as an internal failure
-                // rather than propagating the panic through the executor loop.
-                Err((
-                    PlanItemFailure::with_code(
-                        FailureCode::Unknown,
-                        format!("filesystem worker task failed: {join_err}"),
-                    ),
-                    false,
-                    RollbackOutcome::NotApplicable,
-                    None,
-                ))
-            });
-
-        match op_result {
-            Ok(()) => {
-                callbacks
-                    .on_item_progress(ItemProgressEvent::terminal(
-                        item.id.clone(),
-                        "applying",
-                        "succeeded",
-                        None,
-                        None,
-                    ))
-                    .await;
-                counts.succeeded += 1;
-            }
-            Err((failure, rollback_attempted, rollback_outcome, rollback_message)) => {
-                let triggers_pause = failure.code.triggers_pause();
-                let failure_clone = failure.clone();
-
-                callbacks
-                    .on_item_progress(ItemProgressEvent {
-                        item_id: item.id.clone(),
-                        prior_state: "applying".to_owned(),
-                        new_state: "failed".to_owned(),
-                        at: Timestamp::now_iso(),
-                        failure: Some(failure_clone),
-                        rollback_attempted,
-                        rollback_outcome,
-                        rollback_message,
-                        audit_reason: None,
-                    })
-                    .await;
-                counts.failed += 1;
-
-                if triggers_pause {
-                    return ApplyOutcome::Paused {
-                        reason: failure.code.as_str().to_owned(),
-                        counts,
-                    };
-                }
-            }
-        }
-
-        // After resolving this item, check if a retry was queued.
-        // (Retry items are re-inserted at the front of the pending list by
-        // the use case; within this loop they would need re-ordering which
-        // is deferred to the use case. Here we just clear the queue entry
-        // to avoid phantom state.)
-        let _ = retry_queue.take(&item.id);
     }
 
     if cancelled {
         ApplyOutcome::Cancelled(counts)
     } else {
         ApplyOutcome::Completed(counts)
+    }
+}
+
+/// Outcome of processing a single item through the gate/execute pipeline.
+enum ItemOutcome {
+    /// Resolved (terminal or otherwise) — the caller should move on.
+    Continue,
+    /// A pause condition was hit; the caller should halt the whole run.
+    Pause(String),
+}
+
+/// Run one item through the destructive-confirm gate, path gate, CAS check,
+/// protection check, and (if all pass) the filesystem mutation itself,
+/// emitting progress events and updating `counts` throughout.
+///
+/// Shared by the main forward pass (`emit_start: true`, `gate_prior_state:
+/// "pending"`) and mid-run retry re-execution (`emit_start: false`,
+/// `gate_prior_state: "applying"` — the DB row is already `applying` via
+/// `retry_plan_item`, and calling `on_item_start` again would double-decrement
+/// `plans.items_pending`, which the retry path never re-incremented).
+#[allow(clippy::too_many_lines)]
+async fn process_single_item<C: ExecutorCallbacks>(
+    item: &ExecutorItem,
+    callbacks: &C,
+    counts: &mut TerminalCounts,
+    gate_prior_state: &str,
+    emit_start: bool,
+) -> ItemOutcome {
+    // Destructive-confirm gate (FR-003, D9, T020).
+    // `requires_destructive_confirm` is derived from the action type (delete/trash),
+    // independent of protection status. Replaces the old `confirm_required = is_protected`
+    // inversion at plan_apply.rs:199.
+    if item.requires_destructive_confirm && !item.destructive_confirmed {
+        let failure = PlanItemFailure::with_code(
+            FailureCode::DestructiveUnconfirmed,
+            format!(
+                "item {} requires destructive confirmation (action is destructive); \
+                 confirm before applying",
+                item.id
+            ),
+        );
+        callbacks
+            .on_item_progress(ItemProgressEvent::terminal(
+                item.id.clone(),
+                gate_prior_state,
+                "refused",
+                Some(failure),
+                Some("destructive_unconfirmed".to_owned()),
+            ))
+            .await;
+        counts.failed += 1;
+        return ItemOutcome::Continue;
+    }
+
+    // Notify start.
+    if emit_start {
+        callbacks.on_item_start(&item.id).await;
+    }
+
+    // Path-resolution gate (FR-001/002, D8, T018): resolve + validate source path
+    // against the library root before any filesystem CAS or mutation.
+    if let (Some(ref src_rel), Some(ref root)) = (&item.source_path, &item.library_root) {
+        match path_gate::resolve_and_validate(root, src_rel) {
+            Err(gate_failure) => {
+                let audit_reason = gate_failure.code.as_str().to_owned();
+                let triggers_pause = gate_failure.code.triggers_pause();
+                callbacks
+                    .on_item_progress(ItemProgressEvent::terminal(
+                        item.id.clone(),
+                        "applying",
+                        "refused",
+                        Some(gate_failure),
+                        Some(audit_reason),
+                    ))
+                    .await;
+                counts.failed += 1;
+                if triggers_pause {
+                    return ItemOutcome::Pause("path.invalid".to_owned());
+                }
+                return ItemOutcome::Continue;
+            }
+            Ok(_resolved) => {
+                // Path is safe; the resolved absolute path will be used by execute_item.
+            }
+        }
+    }
+
+    // Per-item FS CAS revalidation (R-FS-1).
+    // Use the library-root-resolved path if available; otherwise use the raw path (legacy).
+    let resolved_source_for_cas: Option<Utf8PathBuf> =
+        if let (Some(ref src_rel), Some(ref root)) = (&item.source_path, &item.library_root) {
+            // Already validated above; re-resolve (cheap lexical op).
+            path_gate::resolve_and_validate(root, src_rel).ok().map(|r| r.0)
+        } else {
+            item.source_path.clone()
+        };
+
+    if let Some(ref src) = resolved_source_for_cas {
+        if let Err(stale_failure) = check_cas(src, &item.cas_snapshot) {
+            let triggers_pause = stale_failure.code.triggers_pause();
+            let failure_clone = stale_failure.clone();
+
+            callbacks
+                .on_item_progress(ItemProgressEvent::terminal(
+                    item.id.clone(),
+                    "applying",
+                    "stale",
+                    Some(failure_clone),
+                    Some("stale".to_owned()),
+                ))
+                .await;
+
+            counts.failed += 1;
+
+            if triggers_pause {
+                return ItemOutcome::Pause(stale_failure.code.as_str().to_owned());
+            }
+            return ItemOutcome::Continue;
+        }
+    }
+
+    // Protection check (FR-008).
+    if item.is_protected
+        && !matches!(item.action, ExecutorItemAction::NoOp | ExecutorItemAction::Catalogue)
+    {
+        let failure = PlanItemFailure::with_code(
+            FailureCode::ProtectedSource,
+            format!("item {} is protected by source policy", item.id),
+        );
+        callbacks
+            .on_item_progress(ItemProgressEvent::terminal(
+                item.id.clone(),
+                "applying",
+                "failed",
+                Some(failure),
+                Some("protected".to_owned()),
+            ))
+            .await;
+        counts.failed += 1;
+        return ItemOutcome::Continue;
+    }
+
+    // Execute the operation.
+    //
+    // T212: the filesystem primitives in `execute_item` are synchronous and
+    // blocking (`std::fs::rename`/`copy`/`remove_file`, trash). Running them
+    // directly on a tokio worker thread would stall the async runtime, so we
+    // hand the work to `spawn_blocking`, which dispatches it onto the
+    // dedicated blocking thread pool and yields the worker thread back to the
+    // runtime until the fs op completes.
+    let item_for_blocking = item.clone();
+    let op_result = tokio::task::spawn_blocking(move || execute_item(&item_for_blocking))
+        .await
+        .unwrap_or_else(|join_err| {
+            // The blocking task panicked. Surface it as an internal failure
+            // rather than propagating the panic through the executor loop.
+            Err((
+                PlanItemFailure::with_code(
+                    FailureCode::Unknown,
+                    format!("filesystem worker task failed: {join_err}"),
+                ),
+                false,
+                RollbackOutcome::NotApplicable,
+                None,
+            ))
+        });
+
+    match op_result {
+        Ok(()) => {
+            callbacks
+                .on_item_progress(ItemProgressEvent::terminal(
+                    item.id.clone(),
+                    "applying",
+                    "succeeded",
+                    None,
+                    None,
+                ))
+                .await;
+            counts.succeeded += 1;
+            ItemOutcome::Continue
+        }
+        Err((failure, rollback_attempted, rollback_outcome, rollback_message)) => {
+            let triggers_pause = failure.code.triggers_pause();
+            let failure_clone = failure.clone();
+
+            callbacks
+                .on_item_progress(ItemProgressEvent {
+                    item_id: item.id.clone(),
+                    prior_state: "applying".to_owned(),
+                    new_state: "failed".to_owned(),
+                    at: Timestamp::now_iso(),
+                    failure: Some(failure_clone),
+                    rollback_attempted,
+                    rollback_outcome,
+                    rollback_message,
+                    audit_reason: None,
+                })
+                .await;
+            counts.failed += 1;
+
+            if triggers_pause {
+                return ItemOutcome::Pause(failure.code.as_str().to_owned());
+            }
+            ItemOutcome::Continue
+        }
     }
 }
 
@@ -892,6 +956,96 @@ mod tests {
             }
             other => panic!("expected Paused, got {other:?}"),
         }
+    }
+
+    /// Callbacks that, on seeing `item-1` fail, clear the conflicting
+    /// destination that caused the failure and files a retry — mirroring
+    /// what `retry_plan_item` + a user fix do in the real app (issue #742).
+    #[derive(Clone)]
+    struct RetryOnFailureCallbacks {
+        events: Arc<Mutex<Vec<ItemProgressEvent>>>,
+        retry_queue: RetryQueue,
+        conflicting_destination: Utf8PathBuf,
+    }
+
+    impl ExecutorCallbacks for RetryOnFailureCallbacks {
+        fn on_item_start(
+            &self,
+            _item_id: &str,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+            Box::pin(async {})
+        }
+
+        fn on_item_progress(
+            &self,
+            event: ItemProgressEvent,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+            let events = self.events.clone();
+            let retry_queue = self.retry_queue.clone();
+            let conflicting_destination = self.conflicting_destination.clone();
+            Box::pin(async move {
+                if event.item_id == "item-1" && event.new_state == "failed" {
+                    let _ = std::fs::remove_file(&conflicting_destination);
+                    retry_queue.push("item-1");
+                }
+                events.lock().await.push(event);
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn mid_run_retry_reexecutes_already_passed_item() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = utf8(dir.path());
+        let src1 = root.join("a.fits");
+        let dst1 = root.join("a_dst.fits");
+        let src2 = root.join("b.fits");
+        let dst2 = root.join("b_dst.fits");
+        std::fs::write(&src1, b"a").unwrap();
+        std::fs::write(&src2, b"b").unwrap();
+        // item-1's destination already exists, so its first attempt fails
+        // with a non-pausing conflict — exactly the class of failure a user
+        // fixes and retries mid-run.
+        std::fs::write(&dst1, b"stale").unwrap();
+
+        let item1 = make_move_item("item-1", &src1, &dst1);
+        let item2 = make_move_item("item-2", &src2, &dst2);
+
+        let retry = RetryQueue::new();
+        let callbacks = RetryOnFailureCallbacks {
+            events: Arc::new(Mutex::new(Vec::new())),
+            retry_queue: retry.clone(),
+            conflicting_destination: dst1.clone(),
+        };
+        let cancel = CancellationToken::new();
+        let skip = SkipSet::new();
+
+        let outcome = execute_plan(vec![item1, item2], &callbacks, &cancel, &skip, &retry).await;
+
+        match outcome {
+            ApplyOutcome::Completed(counts) => {
+                // item-1's original failure is still counted; its retry
+                // succeeds, and item-2 succeeds normally.
+                assert_eq!(counts.succeeded, 2);
+                assert_eq!(counts.failed, 1);
+            }
+            other => panic!("expected Completed, got {other:?}"),
+        }
+
+        // item-1 actually moved once the conflicting destination was cleared
+        // and the retry re-executed the real filesystem operation — not just
+        // a DB-state flip with no corresponding work (the original bug).
+        assert!(dst1.exists());
+        assert!(!src1.exists());
+
+        let events = callbacks.events.lock().await;
+        let item1_events: Vec<_> = events.iter().filter(|e| e.item_id == "item-1").collect();
+        assert_eq!(item1_events.len(), 2, "expected a failed then a succeeded event");
+        assert_eq!(item1_events[0].new_state, "failed");
+        assert_eq!(item1_events[1].new_state, "succeeded");
+        // The retry's prior_state reflects the DB row `retry_plan_item`
+        // already transitioned to `applying` — not the original "pending".
+        assert_eq!(item1_events[1].prior_state, "applying");
     }
 
     #[test]
