@@ -783,6 +783,43 @@ the gate Q19's cleanup depends on.
 
 ---
 
+## Q26 — Calibration reuse policy & master-library semantics (spec-007 / spec-040 + §III)
+
+Masters are **library-wide by design** — a `calibration_master` table (migration
+0002) + a **process-global masters cache**, matched to any light session by the
+Q18 rules, not owned by a project. Spec-040's detector *finds* masters; it never
+builds them. So the pool + matching exist; the open decision is the reuse
+*policy*, which differs sharply by calibration type.
+
+- **Per-type reusability encodes the physics, shipped in the Q18 rule set
+  (user-tunable):**
+  - **Bias** — broadly reusable (stable read noise); match on gain/offset/binning.
+  - **Darks** — reusable within Q18 tolerance (temp for cooled, exposure, gain) +
+    the soft age-penalty.
+  - **Flats** — **reusable, not restricted** (static rigs legitimately reuse
+    flats — not everyone re-shoots flats each session). But because reuse is risky
+    when the optical setup changes (dust/rotation), **default to a warning on
+    cross-session flat reuse**, with a **setting to disable that warning** for
+    static-setup users. Reusable by default, warned by default, warning
+    dismissible globally.
+- **App detects/registers masters, never creates them (§III).** Integration is
+  PixInsight/WBPP's job; the app inventories raw calibration frames and can
+  *prepare* them for integration (a Q20 source view), but never builds a master.
+- **Reuse is tracked** — each master links to its **source calibration session**
+  (`source_session_id`) and to **every light session that consumed it**. This
+  feeds the manifest (Q10) and master cleanup protection.
+- **Master cleanup protection.** A master **stays indefinitely by default** and is
+  **protected while any non-completed project references it**. It becomes a
+  **reviewable cleanup candidate only when no non-completed project references it**
+  (every referencing project is verified-complete per Q25, or none reference it) —
+  and even then it is user-reviewed, **never auto-deleted** (§I custody, §II
+  reviewable).
+- **Multi-match = recommend-then-override** (spec-007): when several masters match,
+  the app recommends the highest-confidence one (closest temp/date) and the user
+  can override — never a silent assignment (Q18 confidence).
+
+---
+
 ## SpecKit iterate map
 
 Each decision is formalized through a SpecKit iterate when its wave is picked up:
@@ -814,6 +851,7 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q23** naming & path generation | **spec-015 / spec-025** iterate (folders-only preserve-basename; pre-move collision options in the reviewable plan; no fallback — resolver errors + pattern validates guaranteed tokens) |
 | **Q24** cross-platform path safety | **spec-025 / spec-015** iterate (long-path >260 hard-block in plan; case-insensitive collision in Q23 detector; safe-filename rejections surfaced as plan fixes; per-segment LCD sanitization already shipped via `safe-filename`) |
 | **Q25** verified-complete trigger + output observation | **spec-011 / spec-012 / spec-009** iterate (purely manual completion, no detection; observation reframed as tracking + optional evidence; manual gate unlocks Q19 cleanup; reopen revokes + warns) |
+| **Q26** calibration reuse policy & master library | **spec-007 / spec-040** iterate (per-type reusability in Q18 rules; flats reusable + default warning w/ disable setting; detect-not-create §III; reuse tracking; master protected while any non-completed project references it) |
 
 Q8's override decision is small enough to fold into the ingestion/confirm flow
 directly; the **heuristic ADU suggestion** is the part that needs a new
