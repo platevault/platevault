@@ -22,7 +22,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 13. Audit & activity investigation | PARTIAL | 4P/2F/3PA/0S | #831, #832, #833 | HEADLINE: 10 successful plan-applies produce ZERO durable audit rows (#766/#647); Activity shows sequences live then disappears
 | 14. Target-first project start | FAIL | 1P/3F/2PA/0S | | wizard never receives target context #612; sources gate blocks 0-select #719; created project has NO target link
 | 15. Equipment & observing-site setup | PARTIAL | 3P/3F/3PA/0S | #835, #836, #837, #838, #839, #840 | HEADLINE: alias-JOIN broken #564 (hardcoded None); moon-avoidance edits dont persist; Restore-defaults scope unclear
-| 16. Keyboard-first navigation & windows | ⏳ pending | | | |
+| 16. Keyboard-first navigation & windows | PARTIAL | 7P/3F/3PA/4S | #842, #844 | palette lists dead routes; Escape wont close detail panels #771; log-panel persist broken #842; Modal focus return broken #844
 | 17. Software update & install | ⏳ pending | | | |
 
 ## Per-journey detail
@@ -355,3 +355,19 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Doc-drift (JOURNEY-DOC UPDATE):** Moon avoidance is a FIXED 7-band Lorentzian model (L/R/G/B/Ha/SII/OIII, spec 047 FR-010), NOT dynamically derived from the registered filter/category list — dual-band (HO/SO), NII, "Other" get no dedicated moon row despite being registered filters. Journey 15's "categories feed per-band moon avoidance" should note the band set is fixed, not filter-driven.
 
 **App-state left for J16:** equipment fully RESTORED to baseline (0 cameras/telescopes/trains; filters back to seeded "L"); observing sites back to single "Home Backyard" (Default+Active, 52.0907/5.1214/Europe-Amsterdam) matching J1. No lingering console/backend errors (only known #830 slow-query WARNs). App on Settings→Equipment, bridge live.
+
+### Journey 16 — Keyboard-first navigation & window management
+
+**Verdict:** PARTIAL
+**Steps:** 7 PASS / 3 FAIL / 3 PARTIAL / 4 SKIPPED (bridge limit)
+**Issues filed:** #842 (UI — log panel expand/collapse does not persist across restart; LogPanelContext.tsx:58 plain useState), #844 (UI — Modal dialogs don't return focus to the invoking control on close; Modal.tsx base-ui controlled mode, no Dialog.Trigger)
+
+**Dupes hit (not re-filed):** #617 (palette lists dead /review, /plans, /audit — confirmed all 3 absent from router.tsx), #771 (Escape doesn't close detail — root cause is the SHARED keyless ListPageLayout/Modal detail panel, only a ✕ onClick, no keydown; affects EVERY ListPageLayout page not just Sessions — scope broader than the issue title)
+
+**Key evidence:** row keyboard traversal WORKS (ArrowDown moves focus row→row via ui/Table.tsx:31-41; Enter opens detail) — PASS; Escape does NOTHING to the detail panel (URL selected param unchanged; ListPageLayout wires onCloseDetail only to ✕). Modal (Add Target): Escape closes but activeElement→<body> not the invoker. "Open view in new window": real OS window opened (label alm-win-j16test, loaded #/targets independently), main window state survived — PASS (driven via window.__TAURI__.webviewWindow since Ctrl+K undrivable). Persistence: sidebar collapse SURVIVED kill+relaunch (alm-preferences.sidebarCollapsed), collapsed icons kept title tooltips — PASS; log-panel expand did NOT survive (#842). BRIDGE DISCOVERY (new, beyond documented modifier-freeze): plain Tab never moves DOM focus + native button Enter/Space never fires a click — only React onKeyDown handlers respond to synthetic keys, so visible-focus-ring / :focus-visible checks are INCONCLUSIVE via this bridge (marked SKIPPED not FAIL to avoid fabricating a defect).
+
+**Doc-drift (JOURNEY-DOC UPDATE):** "detail-panel orientation" as a persistent user-facing choice does NOT exist — detailPlacement ('bottom'|'side'|'side-and-bottom') is a fixed per-page developer prop, not a user toggle. Drop it from the persistence bullet or reword to "detail placement is fixed per page (bottom for Sessions/Calibration/Targets, side for Projects)."
+
+**CAMPAIGN FLAG:** this bridge cannot exercise native Tab-order or native <button> keyboard activation — any future keyboard journey should budget for the SKIPPED-with-source-verification fallback used here.
+
+**App-state left for J17:** app restarted once mid-journey (DB preserved), left on #/settings/advanced (exactly where J17 needs it). A stray secondary OS window (alm-win-j16test, PlateVault, showing #/targets) is still open — harmless, closeable via its OS titlebar.
