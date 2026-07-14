@@ -213,6 +213,23 @@ mod tests {
         assert!(warmed, "background re-warm never populated the fresh cache");
     }
 
+    /// Bounded-poll deadline for [`poll_until`]/[`poll_until_non_empty`]
+    /// against a REAL, file-backed warm (`test_state` opens a real temp-dir
+    /// redb file, not an in-memory store) — the full bundled seed, chunked
+    /// into ~14 `Cache::upsert_batch` write transactions (#818 follow-up),
+    /// each a real fsync. A tighter (10s) deadline here was previously
+    /// observed to fail ONLY on Windows CI (macOS/Linux always passed):
+    /// Windows fsync is well documented as markedly slower than Linux/macOS,
+    /// especially on a virtualized CI runner, so a real (not stuck) warm can
+    /// legitimately still be running past 10s there. This is generous enough
+    /// to absorb that without masking an actual stuck task (a genuinely
+    /// hung/panicked warm still fails the assertion, just after a longer
+    /// wait) — reasoned through the `CacheWarmingGuard` Drop path (an
+    /// unconditional store, no early-return/`?` to skip — see its doc
+    /// comment) and tokio's task scheduling (both platform-independent), so
+    /// a real leak would misbehave identically on every OS, not Windows-only.
+    const WARM_SETTLE_DEADLINE: Duration = Duration::from_mins(1);
+
     /// Regression test for #818: `cache_warming` must be observably `true`
     /// while the background re-warm is running and `false` once it settles,
     /// so `target.search` can tell a still-warming empty result apart from a
@@ -245,7 +262,7 @@ mod tests {
     /// Polls (bounded) rather than sleeping a fixed duration — avoids both
     /// flakiness on a slow CI runner and a needlessly slow test on a fast one.
     async fn poll_until(mut done: impl FnMut() -> bool) -> bool {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let deadline = tokio::time::Instant::now() + WARM_SETTLE_DEADLINE;
         loop {
             if done() {
                 return true;
@@ -260,7 +277,7 @@ mod tests {
     /// Polls (bounded) rather than sleeping a fixed duration — avoids both
     /// flakiness on a slow CI runner and a needlessly slow test on a fast one.
     async fn poll_until_non_empty(cache: &targeting_resolver::simbad::ResolveCache) -> bool {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let deadline = tokio::time::Instant::now() + WARM_SETTLE_DEADLINE;
         loop {
             if !cache.cache().list().await.expect("cache list failed").is_empty() {
                 return true;
