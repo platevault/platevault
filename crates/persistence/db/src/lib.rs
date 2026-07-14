@@ -10,6 +10,8 @@
 //! Migration 0053 added `projects.archived_via_plan_id` + re-added `'archive'`
 //! to the `plans.origin` CHECK (spec 017 C5).
 //! Migration 0061 added `target_favourite` (spec 051 US2).
+//! Migration 0064 added the `framing`/`framing_session` tables, `projects.is_mosaic`,
+//! and the durable `acquisition_session` clustering-key columns (spec 008 Q27).
 
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 
@@ -93,7 +95,7 @@ impl Database {
     ///
     /// Returns [`DbError::Migration`] if any migration script fails, or a
     /// database error if the reconciliation scan fails.
-    // Touched for spec 030 (migration 0063) to force `sqlx::migrate!`
+    // Touched for spec 008 Q27 (migration 0064) to force `sqlx::migrate!`
     // re-embed (project memory: stale-embed guard).
     pub async fn migrate(&self) -> DbResult<()> {
         sqlx::migrate!("./migrations").run(&self.pool).await?;
