@@ -209,11 +209,93 @@ pub fn bundled() -> Result<SeedAsset, SeedError> {
 /// idempotent (upsert dedups), so this is an optimization, not a correctness
 /// requirement.
 ///
+/// NOT used by [`warm_bundled_on_first_run`] (see the warm-complete sentinel
+/// below) — emptiness is unreliable there: a durable single-item write (a
+/// user search mid-warm, since [`Cache::upsert`] always stays durable even
+/// against an [`simbad_resolver::BatchDurability::Eventual`] store) can
+/// persist earlier `Eventual` seed chunks too (redb commits are cumulative),
+/// so a crash mid-warm can leave a non-empty but PARTIAL cache — this check
+/// would then see "not empty" and skip the re-warm forever (#818 follow-up).
+/// Still useful on its own (kept for `warm_cache`'s callers and the
+/// `canonical_target` backfill, which has no version concept to gate on).
+///
 /// # Errors
 ///
 /// Returns [`SeedError::Cache`] on a cache backend failure.
 pub async fn is_first_run(cache: &dyn Cache) -> Result<bool, SeedError> {
     Ok(cache.list().await?.is_empty())
+}
+
+/// Reserved, never-real `simbad_oid` for the warm-complete sentinel row
+/// below — real SIMBAD physical-object ids are always positive, so a
+/// negative value can never collide with an actual resolved/seeded object.
+const SENTINEL_SIMBAD_OID: i64 = -1;
+
+/// Whether `simbad_oid` identifies the warm-complete sentinel row (see
+/// [`sentinel_identity`]) rather than a real cached target. The bundled seed
+/// is stored in the SAME `Cache`-backed store any typeahead/cone-search
+/// query reads from (the crate exposes no separate metadata table), so any
+/// app-facing surface that reads broadly from the cache (`target.search`'s
+/// `cache.search`, in particular) MUST filter this out explicitly — a
+/// reserved designation string alone is not a structural guarantee against a
+/// fuzzy/substring match.
+#[must_use]
+pub fn is_warm_sentinel(simbad_oid: Option<i64>) -> bool {
+    simbad_oid == Some(SENTINEL_SIMBAD_OID)
+}
+
+/// Reserved designation for the warm-complete sentinel row. The crate has no
+/// metadata table separate from the target/alias store it already exposes
+/// via [`Cache`] (confirmed against `simbad-resolver` 0.3.2's public API), so
+/// the sentinel lives as an ordinary row in that same store instead — but
+/// always looked up and deduped by [`SENTINEL_SIMBAD_OID`] (`simbad_oid`
+/// takes precedence over a designation-derived id in the crate's own
+/// dedup — see `simbad-resolver`'s `upsert_within`), so this string's exact
+/// spelling is not a correctness requirement, only a debugging aid; the
+/// leading `∅` plus spaces make it visually obvious in a redb dump or log
+/// line that this is not a real catalogue designation.
+const SENTINEL_DESIGNATION: &str = "\u{2205} ALM SEED WARM SENTINEL";
+
+/// Build the warm-complete sentinel row for `seed`, carrying its
+/// `generated_at` in `common_name` as the version key (spec 052 P4/#818
+/// follow-up — "prefer a content hash or that timestamp"; the timestamp is
+/// simpler and the seed-builder tool already bumps it on every regen, so a
+/// hash would only guard against a same-timestamp-different-content mistake
+/// that tool doesn't make).
+fn sentinel_identity(seed: &SeedAsset) -> simbad_resolver::ResolvedIdentity {
+    simbad_resolver::ResolvedIdentity {
+        simbad_oid: Some(SENTINEL_SIMBAD_OID),
+        primary_designation: SENTINEL_DESIGNATION.to_owned(),
+        common_name: Some(seed.generated_at.clone()),
+        object_type: simbad_resolver::ObjectType::Other,
+        otype_raw: String::new(),
+        ra_deg: 0.0,
+        dec_deg: 0.0,
+        v_mag: None,
+        aliases: vec![simbad_resolver::ResolvedAlias::new(
+            SENTINEL_DESIGNATION,
+            simbad_resolver::AliasKind::Designation,
+        )],
+        source: simbad_resolver::TargetSource::Seed,
+    }
+}
+
+/// Whether the cache already holds a warm-complete sentinel matching `seed`'s
+/// `generated_at` — i.e. the bundled seed warm can be skipped. `false` for
+/// both "never warmed" (no sentinel) and "warmed a since-superseded seed
+/// version" (sentinel present, `generated_at` differs, e.g. after #696-style
+/// regenerated-asset ships in a new app build) — either way
+/// [`warm_bundled_on_first_run`] must (re-)run, which is safe: the warm is
+/// idempotent (upsert dedups).
+///
+/// # Errors
+///
+/// Returns [`SeedError::Cache`] on a cache backend failure.
+async fn sentinel_matches(cache: &dyn Cache, seed: &SeedAsset) -> Result<bool, SeedError> {
+    Ok(cache
+        .get_by_simbad_oid(SENTINEL_SIMBAD_OID)
+        .await?
+        .is_some_and(|row| row.common_name.as_deref() == Some(seed.generated_at.as_str())))
 }
 
 /// Chunk size for [`chunked_upsert_batch`] (spec 052 P4/#818 follow-up): one
@@ -282,11 +364,21 @@ pub async fn warm_cache(
     chunked_upsert_batch(cache, &identities, namespace).await
 }
 
-/// Warm the redb cache from the bundled seed **only when the cache is empty**.
+/// Warm the redb cache from the bundled seed **only when it isn't already
+/// warmed for this exact seed version**.
 ///
-/// Convenience wrapper combining [`is_first_run`] + [`bundled`] +
-/// [`warm_cache`]. Returns `Some(count)` of warmed entries when a first-run
-/// warm happened, or `None` when the cache was already populated (no-op).
+/// Gated on the warm-complete sentinel ([`sentinel_matches`]), not cache
+/// emptiness (spec 052 P4/#818 follow-up) — a crash partway through a
+/// chunked `Eventual` warm can leave a non-empty but partial cache (see
+/// [`is_first_run`]'s doc comment), which an emptiness check would mistake
+/// for "already done" forever. The sentinel also carries the seed's
+/// `generated_at`, so a newer app build shipping a regenerated asset
+/// (#696-style) re-warms existing installs instead of leaving them stuck on
+/// the version they first launched with.
+///
+/// Returns `Some(count)` of warmed entries when a warm happened (first run,
+/// a prior partial/crashed warm, or a seed version bump), or `None` when the
+/// cache already matches the current bundled seed (no-op).
 ///
 /// # Errors
 ///
@@ -295,11 +387,20 @@ pub async fn warm_bundled_on_first_run(
     cache: &dyn Cache,
     namespace: &Uuid,
 ) -> Result<Option<usize>, SeedError> {
-    if !is_first_run(cache).await? {
+    let seed = bundled()?;
+    if sentinel_matches(cache, &seed).await? {
         return Ok(None);
     }
-    let seed = bundled()?;
     let loaded = warm_cache(cache, &seed, namespace).await?;
+    // Sentinel written LAST, via a single-item `Cache::upsert` (always
+    // durable regardless of the store's bulk `BatchDurability` — see
+    // `simbad-resolver` 0.3.2's `BatchDurability` doc comment): this one
+    // commit persists itself AND every prior `Eventual` chunk from
+    // `warm_cache` above (redb commits are cumulative), so "sentinel
+    // present and matching" is only ever true once the whole seed warm it
+    // attests to is itself durably on disk.
+    let identity = sentinel_identity(&seed);
+    cache.upsert(&identity, namespace).await?;
     Ok(Some(loaded))
 }
 
@@ -542,14 +643,18 @@ mod tests {
     /// including M 31/M 42) — fast enough for redb-touching tests. [`warm_cache`]
     /// goes through [`chunked_upsert_batch`] (one [`simbad_resolver::Cache::
     /// upsert_batch`] write transaction per [`WARM_CHUNK_SIZE`]-sized chunk —
-    /// spec 052 P4/#695, chunked by the #818 follow-up), which on a
-    /// file-backed store measures ~2.4s for the full ~13k-object bundled seed
-    /// (debug build) — fast in absolute terms, but still needless overhead to
-    /// pay on every `cargo test`/`nextest` invocation across every test that
-    /// only needs a handful of real, known objects. A Messier-only slice keeps
-    /// this suite fast regardless. [`bundled_asset_loads_and_covers_messier_and_caldwell`]
-    /// separately proves the full committed asset's shape (pure JSON parse,
-    /// no redb).
+    /// spec 052 P4/#695, chunked by the first #818 follow-up), which on a
+    /// `simbad_resolver::BatchDurability::Eventual` file-backed store
+    /// (`crate::simbad::ResolveCache::open`'s production configuration since
+    /// the second #818 follow-up) measures ~3.2s total (warm + one flush)
+    /// for the full ~13k-object bundled seed, debug build — close to a
+    /// single atomic transaction's ~2.4s, and far better than the ~5.8s a
+    /// `Durable`-store chunked warm costs (13 fsyncs instead of 1) — but
+    /// still needless overhead to pay on every `cargo test`/`nextest`
+    /// invocation across every test that only needs a handful of real,
+    /// known objects. A Messier-only slice keeps this suite fast regardless.
+    /// [`bundled_asset_loads_and_covers_messier_and_caldwell`] separately
+    /// proves the full committed asset's shape (pure JSON parse, no redb).
     fn messier_only_seed() -> SeedAsset {
         let full = bundled().expect("bundled seed asset must parse");
         let entries: Vec<SeedEntry> =
@@ -579,6 +684,89 @@ mod tests {
         assert!(!cache.list().await.unwrap().is_empty());
         let reloaded = warm_cache(&cache, &seed, &ns()).await.unwrap();
         assert!(reloaded >= 80, "re-warm dedups by oid/id, not by row count delta");
+    }
+
+    /// Regression guard for the #818 follow-up (crash-recovery for partial
+    /// warms): a crashed process can leave the cache non-empty but PARTIAL
+    /// (an unrelated durable single-item write — e.g. a live resolve — can
+    /// persist earlier `Eventual` seed chunks too, since redb commits are
+    /// cumulative, without the warm ever reaching its sentinel step). The
+    /// NEXT `warm_bundled_on_first_run` call — modelling the next app
+    /// launch — must recognize this as incomplete (no sentinel yet) and
+    /// finish the job, not treat "non-empty" as "already done".
+    #[tokio::test]
+    async fn warm_bundled_on_first_run_recovers_from_a_partial_warm() {
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let namespace = ns();
+        let full = bundled().expect("bundled seed asset must parse");
+
+        // Simulate the crash: durably persist a slice of the real bundled
+        // seed directly via `warm_cache` (bypassing `warm_bundled_on_first_run`
+        // entirely, so no sentinel is ever written) — the cache ends up
+        // non-empty but with only part of the seed present.
+        let partial = SeedAsset {
+            version: full.version,
+            generated_at: full.generated_at.clone(),
+            source: full.source.clone(),
+            entries: full.entries.iter().take(50).cloned().collect(),
+        };
+        let partial_loaded = warm_cache(&cache, &partial, &namespace).await.unwrap();
+        assert_eq!(partial_loaded, 50, "the simulated partial warm must land exactly 50 rows");
+        assert!(
+            !sentinel_matches(&cache, &full).await.unwrap(),
+            "a partial (crashed) warm must not look complete — no sentinel was ever written"
+        );
+
+        // The next warm call: must NOT skip (an emptiness check would have —
+        // the cache is non-empty), and must warm the FULL seed, not just
+        // whatever was missing.
+        let loaded = warm_bundled_on_first_run(&cache, &namespace)
+            .await
+            .unwrap()
+            .expect("a partial/unsentineled cache must trigger a real warm, not a no-op");
+        assert!(
+            loaded >= full.entries.len(),
+            "expected the full seed to be (re-)warmed, got {loaded}"
+        );
+        assert!(
+            sentinel_matches(&cache, &full).await.unwrap(),
+            "warm_bundled_on_first_run must write a matching sentinel once it completes"
+        );
+
+        // Idempotent: a further call now correctly no-ops (sentinel matches).
+        let noop = warm_bundled_on_first_run(&cache, &namespace).await.unwrap();
+        assert!(noop.is_none(), "a matching sentinel must skip the warm on the next call");
+    }
+
+    /// Regression guard for the #818 follow-up: a newer seed build shipping
+    /// a regenerated asset (#696-style) must trigger a re-warm on existing
+    /// installs rather than being masked by an old, no-longer-matching
+    /// sentinel — proven directly against `sentinel_matches` (the exact
+    /// mechanism `warm_bundled_on_first_run` gates on), independent of the
+    /// committed asset's real size.
+    #[tokio::test]
+    async fn seed_version_change_invalidates_the_sentinel() {
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let namespace = ns();
+
+        let mut seed = messier_only_seed();
+        seed.generated_at = "2020-01-01T00:00:00Z".to_owned();
+        warm_cache(&cache, &seed, &namespace).await.unwrap();
+        let identity = sentinel_identity(&seed);
+        cache.upsert(&identity, &namespace).await.unwrap();
+        assert!(
+            sentinel_matches(&cache, &seed).await.unwrap(),
+            "a freshly-written sentinel must match the seed it was written for"
+        );
+
+        let mut newer_seed = seed.clone();
+        newer_seed.generated_at = "2026-07-14T00:00:00Z".to_owned();
+        assert!(
+            !sentinel_matches(&cache, &newer_seed).await.unwrap(),
+            "a version-mismatched sentinel must not be treated as complete"
+        );
     }
 
     /// A synthetic seed of `n` distinct objects (unique `simbad_oid` +

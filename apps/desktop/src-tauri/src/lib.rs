@@ -1111,6 +1111,12 @@ pub fn run_app(
     // (issue #818).
     let cache_warming = Arc::new(std::sync::atomic::AtomicBool::new(false));
     {
+        // Cloned (cheap — an `Arc` handle, see `ResolveCache`'s doc comment),
+        // not moved: `resolve_cache` itself is still needed below to build
+        // `AppState`. `warm_handle` keeps the CONCRETE type so `.flush()` is
+        // reachable after the warm; `warm_cache` (its `.cache()`) is the
+        // erased `Cache` trait object the warm functions themselves take.
+        let warm_handle = resolve_cache.clone();
         let warm_cache = resolve_cache.cache();
         let warm_pool = pool.clone();
         let warm_guard =
@@ -1138,6 +1144,15 @@ pub fn run_app(
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!("failed to warm resolve cache from canonical_target: {e}"),
+            }
+            // #818 follow-up: both phases above write `Eventual` (fsync-free)
+            // chunks; this is the one fsync that persists all of them (redb
+            // commits are cumulative) — the bundled-seed phase's own warm-
+            // complete sentinel write is ALSO durable on its own (single-item
+            // upsert), but the canonical_target phase has no such capstone,
+            // so this explicit flush is what actually protects it.
+            if let Err(e) = warm_handle.flush().await {
+                tracing::warn!("failed to flush resolve cache after startup warm: {e}");
             }
         });
     }

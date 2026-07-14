@@ -141,6 +141,9 @@ pub async fn search(
     let suggestions: Vec<TargetSuggestion> = hits
         .into_iter()
         .map(targeting_resolver::simbad::from_crate_search_hit)
+        // The warm-complete sentinel (#818 follow-up) lives in this same
+        // cache — it must never surface as a typeahead suggestion.
+        .filter(|hit| !targeting_resolver::seed::is_warm_sentinel(hit.target.simbad_oid))
         .filter(|hit| matches_catalog_filter(&hit.target, catalog_filter))
         .map(hit_to_suggestion)
         .filter(|s| type_filter.is_empty() || type_filter.contains(&s.object_type))

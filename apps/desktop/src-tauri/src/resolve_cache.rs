@@ -16,28 +16,35 @@
 //! Windows (sharing violation), surfaced as an error rather than silently
 //! leaving a stale cache in place.
 //!
-//! The re-warm (bundled seed + durable `canonical_target` rows, batched into
-//! one `Cache::upsert_batch` write transaction per phase since spec 052
-//! P4/#695) runs as a **background task** spawned right after the swap,
-//! mirroring the startup warm in `lib.rs` (issue #695: awaiting it inline
-//! froze the `target.cache.clear` IPC call — and, because the write lock
-//! used to stay held for the whole warm, every other resolve cache reader
-//! too — for minutes on a debug build). The background task never takes
+//! The re-warm (bundled seed + durable `canonical_target` rows, chunked into
+//! ~1000-entry `Cache::upsert_batch` write transactions per phase since spec
+//! 052 P4/#695 + #818 follow-up, `Eventual`-durability since #818's second
+//! follow-up — see [`targeting_resolver::simbad::ResolveCache::open`]) runs
+//! as a **background task** spawned right after the swap, mirroring the
+//! startup warm in `lib.rs` (issue #695: awaiting it inline froze the
+//! `target.cache.clear` IPC call — and, because the write lock used to stay
+//! held for the whole warm, every other resolve cache reader too — for
+//! minutes on a debug build). The background task never takes
 //! `AppState::resolve_cache`'s lock; it is handed the fresh cache's own
 //! handle (cloned out before the swap, so it keeps warming the same
 //! underlying store regardless of what `AppState::resolve_cache` is swapped
-//! to next).
+//! to next), plus a second clone of the whole [`ResolveCache`] (not just its
+//! erased `.cache()`) to call [`ResolveCache::flush`] on once both phases
+//! finish — the one fsync that persists every `Eventual` chunk.
 //!
-//! Batching each phase's warm into one transaction means nothing is visible
-//! to a reader until that whole phase commits (no more per-entry partial
-//! visibility) — a `target.search` query racing this window can get a
-//! legitimate-looking empty result for an object the seed does contain
-//! simply because it hasn't committed yet (issue #818). A
+//! Chunking each phase's warm means nothing in a given chunk is visible to a
+//! reader until THAT chunk's transaction commits (no more per-entry partial
+//! visibility, but no more one-giant-atomic-transaction either) — a
+//! `target.search` query racing this window can get a legitimate-looking
+//! empty result for an object the seed does contain simply because its
+//! chunk hasn't committed yet (issue #818). A
 //! [`crate::commands::lifecycle::CacheWarmingGuard`] set true before this
 //! spawn and moved into the task (so a panic mid-warm still clears it) makes
 //! `AppState::cache_warming` true for the spawn's whole duration, so
 //! `target.search` can surface that in-flight state and the frontend can
 //! retry instead of freezing on a stale empty result.
+//!
+//! [`ResolveCache`]: targeting_resolver::simbad::ResolveCache
 
 use contracts_core::ContractError;
 
@@ -112,6 +119,7 @@ pub async fn clear_and_rewarm(state: &AppState) -> Result<(), ContractError> {
     // one; the stale task keeps writing into the now-unlinked file (wasted,
     // harmless) or — on Windows — the delete surfaces its own sharing-
     // violation error rather than corrupting anything.
+    let warm_handle = fresh.clone();
     let warm_cache = fresh.cache();
     let warm_pool = state.repo.pool().clone();
     *guard = fresh;
@@ -152,6 +160,12 @@ pub async fn clear_and_rewarm(state: &AppState) -> Result<(), ContractError> {
             Err(e) => tracing::warn!(
                 "failed to re-warm resolve cache from canonical_target after cache clear: {e}"
             ),
+        }
+        // #818 follow-up: persists every `Eventual` chunk from both phases
+        // above in one fsync (redb commits are cumulative) — see the
+        // matching comment in `lib.rs`'s startup warm.
+        if let Err(e) = warm_handle.flush().await {
+            tracing::warn!("failed to flush resolve cache after cache-clear re-warm: {e}");
         }
     });
 
