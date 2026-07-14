@@ -23,7 +23,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 14. Target-first project start | FAIL | 1P/3F/2PA/0S | | wizard never receives target context #612; sources gate blocks 0-select #719; created project has NO target link
 | 15. Equipment & observing-site setup | PARTIAL | 3P/3F/3PA/0S | #835, #836, #837, #838, #839, #840 | HEADLINE: alias-JOIN broken #564 (hardcoded None); moon-avoidance edits dont persist; Restore-defaults scope unclear
 | 16. Keyboard-first navigation & windows | PARTIAL | 7P/3F/3PA/4S | #842, #844 | palette lists dead routes; Escape wont close detail panels #771; log-panel persist broken #842; Modal focus return broken #844
-| 17. Software update & install | ⏳ pending | | | |
+| 17. Software update & install | PARTIAL | 2P/0F/1PA/1S | #845 | running version never shown #845; updater functional; no auto-install/silent-restart (source-verified)
 
 ## Per-journey detail
 
@@ -371,3 +371,42 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **CAMPAIGN FLAG:** this bridge cannot exercise native Tab-order or native <button> keyboard activation — any future keyboard journey should budget for the SKIPPED-with-source-verification fallback used here.
 
 **App-state left for J17:** app restarted once mid-journey (DB preserved), left on #/settings/advanced (exactly where J17 needs it). A stray secondary OS window (alm-win-j16test, PlateVault, showing #/targets) is still open — harmless, closeable via its OS titlebar.
+
+### Journey 17 — Software update & install
+
+**Verdict:** PARTIAL
+**Steps:** 2 PASS / 0 FAIL / 1 PARTIAL / 1 SKIPPED (observe, source-verified)
+**Issues filed:** #845 (UI/backend — Advanced "Software Update" section never shows the running app version)
+
+**Dupes hit (not re-filed):** #762 (updater tamper-rejection test deferred; real minisign key exists but stale "placeholder pubkey" comments)
+
+**Key evidence:** running version 0.5.0 (real semver via __TAURI__.app.getVersion()) never renders in the UI — outerHTML dump shows only title + "You're running the latest version." (j17-software-update-scrolled.png). Live __TAURI__.updater.check() resolved null (no update) with no error — updater plugin functional/reachable in this dev build, reporting sensibly; NO Install button (correct up-to-date state). Source-verified no-auto-install/no-silent-restart: updateSubscription.ts:86-100 + Advanced.tsx:326-336 (install/relaunch only on explicit click), lib.rs:920-949 (startup check event-driven, non-blocking, no polling). Failure-branch copy en.json:1319 "Update failed: {message}" not exercisable live (tracked by #762).
+
+**Doc-drift:** none — spec's "shows the running version" is plainly unimplemented, not a renamed affordance.
+
+**App-state:** last journey. App left running on #/settings/advanced, bridge connected. Final version 0.5.0, updater state up-to-date, no pending install/restart.
+
+## Campaign totals
+
+**Journeys validated:** 17 numbered journeys + 3 special sections (J1-J5 UX quick pass, Comprehensive UX review, M31 planner verification)
+
+**Verdicts:**
+- FAIL: 1 (Journey 14 — target-first project start)
+- PARTIAL: 16 (Journeys 1–13, 15–17)
+- PASS: 1 (J1–J5 UX quick pass)
+- Sections: Comprehensive UX review (23 new issues filed), M31 planner verification (calc-correct, framing bug #817)
+
+**Issues filed:** ~65 new issues across the campaign (dedupe-checked). Key safety findings: #829 (plan approval never snapshots FS — CAS check dead code), #766/#647 (zero audit rows on plan-apply — durable audit gap), #564 (alias-join broken — equipment setup non-functional).
+
+**Merged side-PRs from this run:** #785 (PixInsight bare-spawn fix), #828 (journey-validation doc-drift deltas J01-J09)
+
+**Draft side-PR:** #819 (planner-observability UX iterate)
+
+**Recurring systemic themes:**
+- Zero audit rows on plan-apply (#766/#647) — pervasive coverage failure
+- Dead CAS staleness check (#829) — safety issue
+- Alias-join non-functional (#564) — equipment feature broken
+- Settings non-persistence cluster (#645/#822/#823/#820) — likely one root cause
+- Mock wizard steps (#327/#599) — calibration/review data hardcoded
+- Overflow-clipping (#816/#838) — detail panels + action buttons clipped past 1100px
+- Static-plural i18n (#808) — ICU plural convention exists but unused app-wide
