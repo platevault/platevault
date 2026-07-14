@@ -231,3 +231,41 @@ plate-solved (High) or mount-only (Medium).
   **manual only** for the network path; confirm/persistence is Layer-1-covered
   (P3 integration tests). Offline banner (Test 7) is automatable if a journey is
   ever added.
+
+---
+
+# Live-run results — 2026-07-14 (Tauri MCP bridge, headless)
+
+Executed against `main` @ `1efdc0c5` on the Windows dev app (fresh `wizard-test.db`,
+fresh resolve cache, real SIMBAD network), driven from WSL via the Tauri MCP
+bridge instead of a human/vision agent. Deviations from the script: first-run
+wizard folders set via the `VITE_E2E` path inputs; the two Test-6 inbox roots
+were registered via `roots_register_batch` backend IPC (the Data Sources "+ Add
+source folder" opens a native picker the bridge cannot drive); Test-6 WCS data
+= real M 51 lights with injected `CRVAL/CTYPE/CD/CROTA2` headers (the library
+holds no FITS-keyword plate solves — PixInsight stores solutions as XISF
+properties).
+
+| Test | Verdict | Evidence |
+|---|---|---|
+| 1 — typing never saves (SC-002) | **PASS** | M 31 (`seed`), NGC 7000 / Veil / UGC 12158 (`resolved`) browsed; `canonical_target` count stayed 0 |
+| 2 — add persists + enrichment | **PASS** (finding #696) | NGC 2903 → `magnitude=9.07, constellation='Leo'` in DB + detail UI; M 31 seed-add → `magnitude=NULL` (seed asset has no `v_mag`) |
+| 3 — cache survives restart | **PASS** (finding #694) | after restart + online OFF: UGC 12158 still resolves (cache), UGC 12588 doesn't; offline no-match shows no feedback at all |
+| 4 — clear resolve cache | **PASS** (finding #695) | "Resolve cache cleared and re-warmed with 13076 entries." (13,073 seed + 3 durable) — but ~12 min synchronous "Clearing…"; post-clear: UGC 12158 gone, M 42 seed hit, saved targets untouched |
+| 5 — broad search + Enter | **PARTIAL** (finding #697) | inline "No matches in SIMBAD — [Search more catalogues (NED/VizieR)]" ✓; click path ✓ ("Searching more catalogues…" → "Still no matching targets."); **Enter clears the query instead of firing the search** (3× repro incl. fresh reload) |
+| 6 — cone-search suggestions | **PASS** (findings #698, #699) | WCS group: **"M 51 (Whirlpool)" High confidence, ranked #1, primary/pre-selected Confirm**; confirm → banner + `canonical_target` M 51 (`CVn`, mag 8.36) + per-file `target='M 51'` overrides; `inbox_file_metadata.wcs_ra/dec_deg` exact (202.469575/47.195258, solved files only). Mount group: Medium top as designed, **but M 51 absent from its 8 suggestions** (#698); all rows "0.00° from centre" (#699) |
+| 7 — offline suggestions | **PASS** | "Target suggestions are unavailable offline." banner, no error/spinner |
+
+Filed from this run: [#694](https://github.com/nightwatch-astro/alm/issues/694)
+offline no-match feedback (user decision), [#695](https://github.com/nightwatch-astro/alm/issues/695)
+instant wipe + batched/background re-warm, [#696](https://github.com/nightwatch-astro/alm/issues/696)
+regenerate seed with `v_mag`, [#697](https://github.com/nightwatch-astro/alm/issues/697)
+Enter accelerator, [#698](https://github.com/nightwatch-astro/alm/issues/698)
+top-N truncation drops prominent object, [#699](https://github.com/nightwatch-astro/alm/issues/699)
+separation display units.
+
+Not covered live (Layer-1 only): project-create / session-link / favourite
+in-use promotion (project creation is a 6-step wizard needing library sessions;
+the test library is empty), positive Sesame/NED-VizieR fallback hit (needs an object
+in NED/VizieR but not SIMBAD), wcs_rotation_deg value semantics (synthetic CD matrix
+was not a valid rotation matrix — re-verify with a genuine plate solve).
