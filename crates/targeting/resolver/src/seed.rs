@@ -216,14 +216,51 @@ pub async fn is_first_run(cache: &dyn Cache) -> Result<bool, SeedError> {
     Ok(cache.list().await?.is_empty())
 }
 
+/// Chunk size for [`chunked_upsert_batch`] (spec 052 P4/#818 follow-up): one
+/// write transaction for the WHOLE seed leaves nothing visible to a reader
+/// until it all commits, so a `target.search` query racing a multi-second
+/// warm can miss an object the seed does contain simply because its part of
+/// the batch hasn't committed yet. Chunking restores incremental
+/// visibility — each chunk's rows become searchable the moment ITS
+/// transaction commits — while keeping nearly all of batching's fsync
+/// savings (~13 write transactions for the full ~13k-object bundled seed,
+/// instead of 1 atomic transaction or ~13k per-entry ones pre-#695).
+const WARM_CHUNK_SIZE: usize = 1000;
+
+/// Upsert `identities` in [`WARM_CHUNK_SIZE`]-sized slices, one
+/// [`Cache::upsert_batch`] write transaction per chunk, summing the loaded
+/// count across chunks. Shared by [`warm_cache`] and
+/// [`warm_from_canonical_target`], which both build a full identity list up
+/// front and then need this exact chunk-and-count upsert.
+async fn chunked_upsert_batch(
+    cache: &dyn Cache,
+    identities: &[simbad_resolver::ResolvedIdentity],
+    namespace: &Uuid,
+) -> Result<usize, SeedError> {
+    let mut loaded = 0usize;
+    for chunk in identities.chunks(WARM_CHUNK_SIZE) {
+        let results = cache.upsert_batch(chunk, namespace).await?;
+        loaded += results
+            .iter()
+            .filter(|(_, outcome)| {
+                !matches!(outcome, simbad_resolver::UpsertOutcome::SkippedUserOverride)
+            })
+            .count();
+    }
+    Ok(loaded)
+}
+
 /// Warm the redb cache from a seed asset, writing rows with `source = seed`.
 ///
-/// Entries are upserted in one call to [`simbad_resolver::Cache::upsert_batch`]
-/// (a single backend write transaction for the whole batch, rather than one
-/// per entry — spec 052 P4/#695), so the warm is idempotent: re-running it
-/// dedups by `simbad_oid` (or the designation-derived id) and never overwrites
-/// a sticky `user-override` row. Returns the number of entries that resulted
-/// in a new or refreshed cache row.
+/// Entries are upserted via [`chunked_upsert_batch`] (one
+/// [`simbad_resolver::Cache::upsert_batch`] write transaction per
+/// [`WARM_CHUNK_SIZE`]-sized chunk, rather than one per entry — spec 052
+/// P4/#695 — or one atomic transaction for the whole seed, which left
+/// nothing visible until it all committed — #818 follow-up), so the warm is
+/// idempotent: re-running it dedups by `simbad_oid` (or the
+/// designation-derived id) and never overwrites a sticky `user-override`
+/// row. Returns the number of entries that resulted in a new or refreshed
+/// cache row.
 ///
 /// `namespace` MUST be the same id-namespace the production facade uses
 /// ([`crate::simbad`]'s `"astro-plan.targets"` seed) so warmed ids match the
@@ -242,14 +279,7 @@ pub async fn warm_cache(
 ) -> Result<usize, SeedError> {
     let identities: Vec<simbad_resolver::ResolvedIdentity> =
         seed.entries.iter().map(SeedEntry::to_crate_identity).collect();
-    let results = cache.upsert_batch(&identities, namespace).await?;
-    let loaded = results
-        .iter()
-        .filter(|(_, outcome)| {
-            !matches!(outcome, simbad_resolver::UpsertOutcome::SkippedUserOverride)
-        })
-        .count();
-    Ok(loaded)
+    chunked_upsert_batch(cache, &identities, namespace).await
 }
 
 /// Warm the redb cache from the bundled seed **only when the cache is empty**.
@@ -314,14 +344,7 @@ pub async fn warm_from_canonical_target(
             source: to_crate_source(durable.source),
         });
     }
-    let results = cache.upsert_batch(&identities, namespace).await?;
-    let warmed = results
-        .iter()
-        .filter(|(_, outcome)| {
-            !matches!(outcome, simbad_resolver::UpsertOutcome::SkippedUserOverride)
-        })
-        .count();
-    Ok(warmed)
+    chunked_upsert_batch(cache, &identities, namespace).await
 }
 
 #[cfg(test)]
@@ -517,17 +540,16 @@ mod tests {
 
     /// A real Messier-only slice of the committed bundled asset (~110 objects,
     /// including M 31/M 42) — fast enough for redb-touching tests. [`warm_cache`]
-    /// now goes through [`simbad_resolver::Cache::upsert_batch`] (one fsync'd
-    /// write transaction for the whole batch, since `simbad-resolver` 0.3.0 —
-    /// spec 052 P4/#695) instead of one transaction per entry, but the
-    /// per-entry dedup-by-`simbad_oid` lookup the crate's backend does inside
-    /// that transaction is still an O(n) scan per entry (O(n²) for the whole
-    /// batch), so warming the FULL ~14k-object popular seed is still far too
-    /// slow for `cargo test`/`nextest` (measured: low hundreds of ms at
-    /// n=500, growing to minutes by n=4000) — a Messier-only slice keeps this
-    /// suite fast regardless of the transaction-count change.
-    /// [`bundled_asset_loads_and_covers_messier_and_caldwell`] separately
-    /// proves the full committed asset's shape (pure JSON parse, no redb).
+    /// goes through [`chunked_upsert_batch`] (one [`simbad_resolver::Cache::
+    /// upsert_batch`] write transaction per [`WARM_CHUNK_SIZE`]-sized chunk —
+    /// spec 052 P4/#695, chunked by the #818 follow-up), which on a
+    /// file-backed store measures ~2.4s for the full ~13k-object bundled seed
+    /// (debug build) — fast in absolute terms, but still needless overhead to
+    /// pay on every `cargo test`/`nextest` invocation across every test that
+    /// only needs a handful of real, known objects. A Messier-only slice keeps
+    /// this suite fast regardless. [`bundled_asset_loads_and_covers_messier_and_caldwell`]
+    /// separately proves the full committed asset's shape (pure JSON parse,
+    /// no redb).
     fn messier_only_seed() -> SeedAsset {
         let full = bundled().expect("bundled seed asset must parse");
         let entries: Vec<SeedEntry> =
@@ -557,6 +579,58 @@ mod tests {
         assert!(!cache.list().await.unwrap().is_empty());
         let reloaded = warm_cache(&cache, &seed, &ns()).await.unwrap();
         assert!(reloaded >= 80, "re-warm dedups by oid/id, not by row count delta");
+    }
+
+    /// A synthetic seed of `n` distinct objects (unique `simbad_oid` +
+    /// designation each), for exercising chunk boundaries without depending
+    /// on the committed asset's real size.
+    fn synthetic_seed(n: usize) -> SeedAsset {
+        let entries = (0..n)
+            .map(|i| SeedEntry {
+                simbad_oid: Some(9_000_000 + i64::try_from(i).expect("test seed size fits i64")),
+                primary_designation: format!("SYN {i}"),
+                common_name: None,
+                object_type: ObjectType::Galaxy,
+                ra_deg: f64::from(u32::try_from(i % 360).expect("modulo 360 fits u32")),
+                dec_deg: 0.0,
+                v_mag: None,
+                aliases: vec![SeedAlias {
+                    alias: format!("SYN {i}"),
+                    kind: AliasKind::Designation,
+                }],
+            })
+            .collect();
+        SeedAsset { version: 1, generated_at: String::new(), source: String::new(), entries }
+    }
+
+    /// Regression guard for the #818 follow-up (chunked batching,
+    /// [`WARM_CHUNK_SIZE`]): a seed spanning multiple chunks must warm
+    /// EVERY entry exactly once — no drop, duplicate, or corruption at a
+    /// chunk boundary — proving `chunked_upsert_batch`'s per-chunk loop is
+    /// equivalent to the old single whole-seed `upsert_batch` call for the
+    /// final state, even though visibility now arrives incrementally.
+    #[tokio::test]
+    async fn warm_cache_across_multiple_chunks_loses_nothing() {
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let n = WARM_CHUNK_SIZE * 2 + 500; // spans 3 chunks
+        let seed = synthetic_seed(n);
+
+        let loaded = warm_cache(&cache, &seed, &ns()).await.unwrap();
+        assert_eq!(loaded, n, "every synthetic entry must be counted as loaded");
+
+        let rows = cache.list().await.unwrap();
+        assert_eq!(rows.len(), n, "every synthetic entry must be a distinct cache row");
+
+        // First entry (chunk 1), one crossing the chunk-1/chunk-2 boundary,
+        // and the last entry (final chunk) must all be independently queryable.
+        for i in [0, WARM_CHUNK_SIZE - 1, WARM_CHUNK_SIZE, n - 1] {
+            let norm = targeting::normalize::normalize(&format!("SYN {i}"));
+            assert!(
+                cache.get_by_normalized(&norm).await.unwrap().is_some(),
+                "SYN {i} must be resolvable after a multi-chunk warm"
+            );
+        }
     }
 
     /// SC-001: repeat search of a cached object issues zero network calls, and

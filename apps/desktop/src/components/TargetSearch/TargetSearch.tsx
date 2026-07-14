@@ -107,16 +107,20 @@ const OPTION_ESTIMATE = 44;
 /**
  * Bounds for the empty-result-while-warming retry (#818): `target.search`
  * reports `cacheWarming = true` while the shared resolve cache's background
- * seed/durable-row re-warm is still running (batched into one write
- * transaction per phase since spec 052 P4 — nothing is visible to a reader
- * until that whole phase commits). A query that lands in this window and
- * comes back empty is retried on this interval until either a suggestion
- * appears, the backend reports the warm has settled (`cacheWarming` flips to
- * `false`), or this budget runs out — never on an ordinary (non-warming)
- * miss, so the common case pays no extra latency.
+ * seed/durable-row re-warm is still running (one write transaction per
+ * ~1000-entry chunk since the #818 follow-up — nothing in a given chunk is
+ * visible to a reader until THAT chunk's transaction commits, so a query for
+ * an object in a not-yet-committed chunk can still legitimately come back
+ * empty). A query that lands in this window and comes back empty is retried
+ * on this interval for as long as the backend keeps reporting
+ * `cacheWarming = true` — never on an ordinary (settled) miss, so the common
+ * case pays no extra latency. `WARM_RETRY_BUDGET_MS` is a safety cap, not
+ * the expected wait: it only bites if the backend's own flag never flips
+ * back to `false` (e.g. a stuck/crashed warm task), well past the seconds a
+ * real warm takes even on a slow disk.
  */
 const WARM_RETRY_INTERVAL_MS = 250;
-const WARM_RETRY_BUDGET_MS = 5000;
+const WARM_RETRY_BUDGET_MS = 30_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

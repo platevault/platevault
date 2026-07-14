@@ -274,9 +274,9 @@ describe('TargetSearch', () => {
       vi.advanceTimersByTime(300);
       await Promise.resolve();
     });
-    // Advance past the retry budget (5000ms, mirroring WARM_RETRY_BUDGET_MS).
+    // Advance past the retry budget (30000ms, mirroring WARM_RETRY_BUDGET_MS).
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5200);
+      await vi.advanceTimersByTimeAsync(30_200);
     });
 
     expect(screen.queryByRole('option')).toBeNull();
