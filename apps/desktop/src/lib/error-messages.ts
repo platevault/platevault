@@ -145,6 +145,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'framing.not_found': m.err_framing_not_found,
   'framing.project_mismatch': m.err_framing_project_mismatch,
   'framing.merge.requires_two': m.err_framing_merge_requires_two,
+  'framing.merge.duplicate_id': m.err_framing_merge_duplicate_id,
   'framing.split.empty_selection': m.err_framing_split_empty_selection,
   'framing.split.invalid_session': m.err_framing_split_invalid_session,
   'framing.split.would_empty_source': m.err_framing_split_would_empty_source,

@@ -240,6 +240,8 @@ pub enum ErrorCode {
     FramingProjectMismatch,
     #[serde(rename = "framing.merge.requires_two")]
     FramingMergeRequiresTwo,
+    #[serde(rename = "framing.merge.duplicate_id")]
+    FramingMergeDuplicateId,
     #[serde(rename = "framing.split.empty_selection")]
     FramingSplitEmptySelection,
     #[serde(rename = "framing.split.invalid_session")]

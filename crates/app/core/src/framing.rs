@@ -13,11 +13,10 @@
 //!
 //! Every mutation writes a durable audit row via the spec-030 Q15
 //! `EventBus::write_audit` write-through helper, following the pattern
-//! `crates/app/core/src/protection.rs` established. `EntityType::Framing`
-//! does not exist yet (`domain_core::lifecycle::data_asset::EntityType` is
-//! outside this task's scope) — audit rows reuse `EntityType::Project` since
-//! a framing is a project sub-entity; a dedicated variant is a reasonable
-//! fast-follow.
+//! `crates/app/core/src/protection.rs` established, tagged
+//! `EntityType::Framing` so per-entity audit consumers (e.g. the archive
+//! store's `entityType: 'project'` query) don't silently swallow framing
+//! events under the wrong entity type.
 
 use audit::bus::EventBus;
 use audit::event_bus::Source;
@@ -96,7 +95,7 @@ async fn write_framing_audit(
     payload: serde_json::Value,
 ) -> Result<String, ContractError> {
     let entry = AuditLogEntry::new(
-        EntityType::Project,
+        EntityType::Framing,
         framing_entity_id(framing_id),
         action,
         "user",
@@ -184,6 +183,20 @@ pub async fn merge(
         return Err(ContractError::new(
             ErrorCode::FramingMergeRequiresTwo,
             "framing.merge requires at least one framing, distinct from the primary, to merge in.",
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
+    // Reject duplicates up front: without this, a second occurrence of the
+    // same id would hit an already-deleted framing (NotFound) after the
+    // first occurrence already moved its sessions and deleted the row —
+    // partial-mutation state with no transaction to roll it back.
+    let mut seen_merge_ids: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    if !req.merge_framing_ids.iter().all(|id| seen_merge_ids.insert(id.as_str())) {
+        return Err(ContractError::new(
+            ErrorCode::FramingMergeDuplicateId,
+            "framing.merge received the same framing id more than once in mergeFramingIds.",
             ErrorSeverity::Blocking,
             false,
         ));
@@ -594,7 +607,7 @@ mod tests {
                 .fetch_one(db.pool())
                 .await
                 .unwrap();
-        assert_eq!(row.0, "project");
+        assert_eq!(row.0, "framing");
         assert_eq!(row.1, "applied");
     }
 
@@ -619,6 +632,56 @@ mod tests {
         .await
         .unwrap_err();
         assert_eq!(err.code, ErrorCode::FramingMergeRequiresTwo);
+    }
+
+    /// A duplicate id in `merge_framing_ids` must be rejected before any
+    /// mutation happens — without this upfront check, the second occurrence
+    /// would hit an already-deleted framing (NotFound) after the first
+    /// occurrence had already moved its sessions and deleted the row,
+    /// leaking partial state (no transaction wraps the merge loop).
+    #[tokio::test]
+    async fn merge_rejects_duplicate_merge_framing_id_with_no_partial_mutation() {
+        let (db, bus) = setup().await;
+        insert_project(db.pool(), "proj-m4").await;
+        insert_session(db.pool(), "sess-a").await;
+        insert_session(db.pool(), "sess-b").await;
+        framing_repo::insert_framing(db.pool(), &insert_data("framing-primary", "proj-m4"))
+            .await
+            .unwrap();
+        framing_repo::insert_framing(db.pool(), &insert_data("framing-dup", "proj-m4"))
+            .await
+            .unwrap();
+        framing_repo::add_session_to_framing(db.pool(), "framing-primary", "sess-a").await.unwrap();
+        framing_repo::add_session_to_framing(db.pool(), "framing-dup", "sess-b").await.unwrap();
+
+        let err = merge(
+            db.pool(),
+            &bus,
+            &FramingMergeRequest {
+                request_id: "req-dup".to_owned(),
+                project_id: "proj-m4".to_owned(),
+                primary_framing_id: "framing-primary".to_owned(),
+                merge_framing_ids: vec!["framing-dup".to_owned(), "framing-dup".to_owned()],
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.code, ErrorCode::FramingMergeDuplicateId);
+
+        // No partial mutation: both framings still exist with their original
+        // membership and clustering, untouched by the rejected request.
+        let primary_row = framing_repo::get_framing(db.pool(), "framing-primary").await.unwrap();
+        assert_eq!(primary_row.clustering, "suggested");
+        assert_eq!(
+            framing_repo::list_session_ids_for_framing(db.pool(), "framing-primary").await.unwrap(),
+            vec!["sess-a".to_owned()]
+        );
+        let dup_row = framing_repo::get_framing(db.pool(), "framing-dup").await.unwrap();
+        assert_eq!(dup_row.clustering, "suggested");
+        assert_eq!(
+            framing_repo::list_session_ids_for_framing(db.pool(), "framing-dup").await.unwrap(),
+            vec!["sess-b".to_owned()]
+        );
     }
 
     #[tokio::test]
