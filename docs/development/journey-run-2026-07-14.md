@@ -14,7 +14,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | J1-5 UX diff-check | PASS | 6P/0F | #783 | 6 surfaces audited; Inbox render-loop recovers; Sessions/Projects/Edit surfaces clean except documented dupes |
 | 6. Cleanup: scan → review → apply | PARTIAL | 2P/1F/1PA/0S | #804, #806, #807 | scan/UI fully works; protected-item ack cosmetic #807; default-protected fails apply unconditionally; zero audit #766 reproduces |
 | 7. Archive → delete from archive | PARTIAL | 2P/0F/2PA/3S | | plan-generation wired; archive page clean; 0-item plan from #780; empty plan no reason #603 |
-| 8. Calibration: ingest → masters → matching | ⏳ pending | | | |
+| 8. Calibration: ingest → masters → matching | PARTIAL | 2P/1F/2PA/0S | | masters register+ingest work; fingerprint extraction fails #620; matching blocked #664; tolerances dont persist #639; 0 audit #766 |
 | 9. Targets & planning (real vs. stub) | ⏳ pending | | | |
 | 10. Settings, appearance, and i18n | ⏳ pending | | | |
 | 11. Mistake recovery | ⏳ pending | | | |
@@ -198,3 +198,17 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Doc-drift:** JOURNEY-DOC UPDATE — Journey 7 Known-gap #1 ("no shipped UI button that generates an archive plan yet", user-journeys.md:626-630) is now FALSE: the project-detail Archive button refuses server-side then auto-generates the plan + opens the review overlay in ONE click (no backend IPC needed). Doc should say the UI path is wired; backend-only access no longer required.
 
 **App-state left for J8:** archive plan 33a1f975 discarded (state=discarded, 0 items); project bf6f5e26 lifecycle unchanged=completed; nothing moved/trashed/deleted (apply/lifecycle-flip/read-only-edit/trash/permanent-delete steps UNTESTABLE — 0-item plan from #780, not a new defect). App idle on #/projects, bridge connected. J8 (Calibration) independent + unaffected.
+
+### Journey 8 — Calibration: ingest cal frames → masters → matching
+
+**Verdict:** PARTIAL
+**Steps:** 2 PASS / 1 FAIL / 2 PARTIAL / 0 SKIPPED
+**Issues filed:** none (every defect already open — referenced, not re-filed)
+
+**Dupes hit (with sharper repros):** #620 (fake-zero: Master Dark shows Exposure 0s/Gain 0/Size 0 KB despite injected EXPTIME=120/GAIN=100/CCD-TEMP=-10 → fingerprint pipeline NEVER extracts gain/temp/binning; also reproduces in LIST view), #639 (Calibration Matching pane persists nothing — root cause: frontend always sends exposureToleranceS:null, backend rejects "invalid type: null, expected f64"; every toggle/tolerance silently no-ops), #642 (Use-in-project/Replace-master/Reveal all dead, byte-identical DOM pre/post-click), #664 (calibration_match_suggest/assign both error observer_location_missing because acquisition_fingerprint has 0 rows — blocks ALL matching/assign app-wide, even override:true), #669 (search no-match renders identical "No masters/Run a scan" empty-library state), #766 (0 audit_log_entry rows across all 3 master confirm+applies and both tolerance updates), #811 (Flat master real exposure_s=6.92 renders "—"), #557 (Inbox render-loop, navigated away)
+
+**Key evidence:** 3 masters registered end-to-end (masterBias_g100_bin1 / masterDark_g100_-10C_bin1 / masterFlat_Ha_bin1) → moved on apply to masters/bias|darks/120.0|flats/LUM/; DB calibration_fingerprint has 3 rows (the calibration_master table is empty/unused — architectural dead end, noted not filed); inbox_items.is_master_item=1 for all 3 with distinct master_frame_type/filter/exposure. Matching blocked proven via IPC (match.observer_location_missing even override:true). Tolerances non-persist proven via IPC (null→reject, real float→ok; restored to temp=5/exp=2/aging=365). Shots j8-01..23.
+
+**Doc-drift:** JOURNEY-DOC UPDATE — raw dark/flat fixtures are NOT master files per spec-040 MasterDetector (needs "master"/"_stacked" in name or IMAGETYP master); journey doc implies any calibration-root ingest yields masters. Executor created 3 master-named copies (disclosed) + hand-patched one FITS header (EXPTIME/GAIN/CCD-TEMP) to pass the correct inbox.missing_path_attributes:exposure gate (that gate is correct behavior, not a bug). Journey 8 should note masters need master-style filenames/IMAGETYP.
+
+**App-state left for J9:** app on #/calibration showing 3 masters (bias/dark/flat, unused/unassigned), console clean. Inbox has 3 fewer master items (resolved). Tolerances at defaults. No assignments made (blocked by #664). Journey 9 (Targets) independent + unaffected.
