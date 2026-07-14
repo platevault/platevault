@@ -134,10 +134,13 @@ framing layer: `project → framing → session → frames`). The `Framing` enti
 the tolerance-based clustering (target + optic-train + pointing + rotation), and
 the membership store are **owned by spec 008**; this projection references
 sessions by id and does **not** add a framing field or change any
-`InventorySession` state. The Q27 incremental ingestion-attribution pass runs at
-the Inbox confirm gate as the same pre-ingest sweep as Q22 and consumes the
-pointing/rotation grouping attributes the strict ingest gate already requires
-for lights.
+`InventorySession` state. The Q27 incremental ingestion-attribution pass is the
+first pre-ingest pass at the Inbox confirm gate (the Q22 duplicate sweep joins
+the same pass when its iterate lands) and reads session-level geometry
+(pointing/rotation/optic-train) persisted at confirm by spec-008 F-Framing-1;
+NULL-geometry legacy sessions are excluded from clustering until a Q28 rescan
+backfill (the Q12 strict-gate iterate, once applied, guarantees geometry on new
+ingests).
 
 ### Lifecycle
 
