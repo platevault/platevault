@@ -34,6 +34,18 @@ pub enum Outcome {
     Failed,
 }
 
+impl Outcome {
+    /// DB column value (matches the `audit_log_entry.outcome` CHECK constraint).
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Applied => "applied",
+            Self::Refused => "refused",
+            Self::Failed => "failed",
+        }
+    }
+}
+
 /// Visibility tier for the audit event (FR-008).
 #[derive(
     Clone,
@@ -56,6 +68,15 @@ pub enum Severity {
 }
 
 impl Severity {
+    /// DB column value (matches the `audit_log_entry.severity` CHECK constraint).
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Workflow => "workflow",
+            Self::Diagnostic => "diagnostic",
+        }
+    }
+
     /// Default UI severity for newly minted audit entries (FR-008).
     ///
     /// Workflow is the visible tier; diagnostic stays log-only behind the
@@ -105,7 +126,16 @@ impl SeverityFilter {
     }
 }
 
-/// Durable, append-only record of a lifecycle transition attempt.
+/// Durable, append-only record of a mutation attempt.
+///
+/// Spec 030 FR-133 (T120, Q15/#647): generalized from a lifecycle-transition
+/// record to a generic mutation record — `entity_type` extends beyond the
+/// lifecycle `DataAsset` families (see `EntityType::Settings/Protection/
+/// Equipment`), `trigger` doubles as the generic `action`, and `reason_code`
+/// is the first-class machine-readable detail for `refused`/`failed`
+/// outcomes. `from_state`/`to_state` stay lifecycle-transition-specific;
+/// non-lifecycle mutations carry their before→after value pair in `payload`
+/// instead (data-model.md "Audit Entry — Generalized Mutation Record").
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditLogEntry {
@@ -124,6 +154,10 @@ pub struct AuditLogEntry {
     pub at: Timestamp,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
+    /// Machine-readable reason/code for `refused`/`failed` outcomes; `None`
+    /// for `applied` (T120 migration: nullable `reason_code` column).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
 }
 
 impl AuditLogEntry {
@@ -150,6 +184,7 @@ impl AuditLogEntry {
             request_id,
             at: Timestamp::now_utc(),
             payload: None,
+            reason_code: None,
         }
     }
 
@@ -163,6 +198,13 @@ impl AuditLogEntry {
     #[must_use]
     pub fn with_payload(mut self, payload: Value) -> Self {
         self.payload = Some(payload);
+        self
+    }
+
+    /// Attach the machine-readable reason/code for a `refused`/`failed` outcome.
+    #[must_use]
+    pub fn with_reason_code(mut self, reason_code: impl Into<String>) -> Self {
+        self.reason_code = Some(reason_code.into());
         self
     }
 }

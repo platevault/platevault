@@ -21,6 +21,14 @@ use crate::lifecycle::projection::{ProcessingArtifact, ProjectionState};
 /// `InventorySession` were removed. Sessions no longer carry a
 /// review-transitionable lifecycle state, so they are no longer Data Assets
 /// dispatched through the generic `lifecycle.transition` machinery.
+///
+/// Spec 030 FR-130–FR-134 (T120, Q15/#647): `Settings`, `Protection`, and
+/// `Equipment` extend the tag set to non-lifecycle audit-worthy mutations
+/// (durable `audit_log_entry` rows written via `EventBus::write_audit`, not
+/// through `lifecycle.transition`/`record_transition`'s CAS state-column
+/// path — they carry no lifecycle state and are never dispatched through
+/// `DataAsset`). Source/root mutations reuse the existing `DataSource` /
+/// `LibraryRoot` tags.
 #[derive(
     Clone,
     Copy,
@@ -46,6 +54,9 @@ pub enum EntityType {
     Projection,
     Plan,
     FilesystemPlan,
+    Settings,
+    Protection,
+    Equipment,
 }
 
 impl EntityType {
@@ -61,6 +72,9 @@ impl EntityType {
             Self::Projection => "projection",
             Self::Plan => "plan",
             Self::FilesystemPlan => "filesystem_plan",
+            Self::Settings => "settings",
+            Self::Protection => "protection",
+            Self::Equipment => "equipment",
         }
     }
 }

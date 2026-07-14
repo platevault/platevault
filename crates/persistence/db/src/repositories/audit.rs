@@ -21,6 +21,7 @@
 
 use std::fmt::Write as _;
 
+use audit_types::AuditLogEntry;
 use sqlx::SqlitePool;
 
 use crate::DbResult;
@@ -42,6 +43,9 @@ pub struct AuditLogRow {
     pub request_id: String,
     pub at: String,
     pub payload: Option<String>,
+    /// Machine-readable reason/code for `refused`/`failed` outcomes (T120
+    /// migration 0063); `NULL` for `applied`.
+    pub reason_code: Option<String>,
 }
 
 /// Filter for `audit_log_entry` queries. All fields are AND-combined.
@@ -58,6 +62,8 @@ pub struct AuditLogFilter {
     pub outcome: Option<String>,
     /// Exact match against the `severity` column (`workflow` | `diagnostic`).
     pub severity: Option<String>,
+    /// Exact match against the `reason_code` column (T120 migration 0063).
+    pub reason_code: Option<String>,
     /// RFC 3339 lower bound on `at` (inclusive).
     pub from: Option<String>,
     /// RFC 3339 upper bound on `at` (exclusive).
@@ -102,6 +108,10 @@ fn build_where(filter: &AuditLogFilter) -> (String, Vec<String>) {
         clauses.push("severity = ?".to_owned());
         binds.push(v.clone());
     }
+    if let Some(ref v) = filter.reason_code {
+        clauses.push("reason_code = ?".to_owned());
+        binds.push(v.clone());
+    }
     if let Some(ref v) = filter.from {
         clauses.push("at >= ?".to_owned());
         binds.push(v.clone());
@@ -141,7 +151,7 @@ pub async fn list_audit_entries(
 
     let mut sql = format!(
         "SELECT audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
-         outcome, severity, request_id, at, payload \
+         outcome, severity, request_id, at, payload, reason_code \
          FROM audit_log_entry{where_sql} ORDER BY at DESC, audit_id DESC"
     );
 
@@ -231,6 +241,53 @@ pub async fn insert_project_auto_transition(
     Ok(())
 }
 
+/// Insert a generalized `audit_log_entry` row from an `AuditLogEntry` (T120,
+/// spec 030 FR-131/FR-133).
+///
+/// The single durable-write half of `EventBus::write_audit` (`crates::audit`
+/// crate, T121) — the load-bearing half per constitution §II: callers MUST
+/// propagate an `Err` here as a command failure, unlike the bus emit, which
+/// is best-effort. Distinct from `record_transition`/`record_refused_transition`
+/// (`crate::repositories::lifecycle`): this is a plain append with no
+/// accompanying CAS state-column update, for audit-worthy mutations that
+/// have no lifecycle state (settings, protection, equipment) as well as any
+/// other mutation that does not need the CAS coupling.
+///
+/// # Errors
+/// Returns [`DbError`](crate::DbError) if the insert fails.
+pub async fn insert_audit_entry(pool: &SqlitePool, entry: &AuditLogEntry) -> DbResult<()> {
+    let at_str = entry
+        .at
+        .as_offset_date_time()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    let payload_str = entry.payload.as_ref().map(std::string::ToString::to_string);
+
+    sqlx::query(
+        "INSERT INTO audit_log_entry \
+         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+          outcome, severity, request_id, at, payload, reason_code) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(entry.audit_id.as_uuid().to_string())
+    .bind(entry.entity_type.as_str())
+    .bind(entry.entity_id.to_string())
+    .bind(&entry.from_state)
+    .bind(&entry.to_state)
+    .bind(&entry.trigger)
+    .bind(&entry.actor)
+    .bind(entry.outcome.as_str())
+    .bind(entry.severity.as_str())
+    .bind(entry.request_id.to_string())
+    .bind(&at_str)
+    .bind(&payload_str)
+    .bind(&entry.reason_code)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{count_audit_entries, list_audit_entries, AuditLogFilter};
@@ -251,7 +308,8 @@ mod tests {
              severity TEXT NOT NULL CHECK (severity IN ('workflow', 'diagnostic')),\
              request_id TEXT NOT NULL,\
              at TEXT NOT NULL,\
-             payload TEXT\
+             payload TEXT,\
+             reason_code TEXT\
              )",
         )
         .execute(&pool)
