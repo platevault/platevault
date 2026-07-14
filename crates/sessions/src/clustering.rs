@@ -164,14 +164,23 @@ pub fn derive_clustering(
     existing: &[ExistingFraming],
     params: &ToleranceParams,
 ) -> ClusteringResult {
-    let protected_framing_of: BTreeMap<EntityId, EntityId> = existing
+    // Every session already declared a member of an existing framing (whether
+    // `Suggested` or `UserAdjusted`) resolves to that framing directly and
+    // contributes to its accumulator exactly once via seeding in
+    // `cluster_partition` — never re-decided by matching within this same
+    // pass. This is what makes `UserAdjusted` membership untouchable (FR-015)
+    // and, as a side effect, keeps already-`Suggested`-attributed sessions
+    // stable within one call instead of being re-litigated (and potentially
+    // double-counted, or reassigned by input-order luck) against every other
+    // candidate framing each time. A session can still move between framings
+    // via the explicit F-Framing-3 merge/split/reassign use cases.
+    let member_framing_of: BTreeMap<EntityId, EntityId> = existing
         .iter()
-        .filter(|f| f.clustering == Clustering::UserAdjusted)
         .flat_map(|f| f.member_session_ids.iter().map(move |session_id| (*session_id, f.id)))
         .collect();
 
-    let (mut resolved, partitions) =
-        split_protected_and_null_geometry(sessions, &protected_framing_of);
+    let (mut resolved, partitions, geometry_by_id) =
+        split_known_members_and_null_geometry(sessions, &member_framing_of);
 
     let mut new_framings = Vec::new();
     for ((target_id, optic_train_key), members) in partitions {
@@ -180,6 +189,7 @@ pub fn derive_clustering(
             &optic_train_key,
             members,
             existing,
+            &geometry_by_id,
             params,
             &mut new_framings,
             &mut resolved,
@@ -200,20 +210,42 @@ pub fn derive_clustering(
 }
 
 type ClusterableSession = (EntityId, Pointing, f32, Option<f64>);
+/// A resolved session's pointing/rotation/FOV, keyed by session id elsewhere —
+/// used to seed an existing framing's accumulator from its declared
+/// `member_session_ids`' *actual* geometry (never from input-order luck).
+type SessionGeom = (Pointing, f32, Option<f64>);
+type SplitResult = (
+    BTreeMap<EntityId, Assignment>,
+    BTreeMap<(EntityId, String), Vec<ClusterableSession>>,
+    BTreeMap<EntityId, SessionGeom>,
+);
 
-/// Splits sessions into eagerly-resolved assignments (protected membership,
-/// NULL-geometry exclusion) and the remaining clusterable sessions, grouped
-/// by the exact `(target, optic_train_key)` identity key — pointing/rotation
-/// tolerance only applies *within* one such partition (FR-013).
-fn split_protected_and_null_geometry(
+/// Splits sessions into eagerly-resolved assignments (known existing
+/// membership, NULL-geometry exclusion) and the remaining not-yet-attributed
+/// clusterable sessions, grouped by the exact `(target, optic_train_key)`
+/// identity key — pointing/rotation tolerance only applies *within* one such
+/// partition (FR-013). Also returns a session-id-keyed geometry lookup
+/// covering *every* session with complete geometry, including already-a-member
+/// ones, so `cluster_partition` can seed existing framings' representatives
+/// from their real members (rather than leaving them unseeded, or double-
+/// counting a member that also appears in the clusterable set).
+fn split_known_members_and_null_geometry(
     sessions: &[SessionGeometry],
-    protected_framing_of: &BTreeMap<EntityId, EntityId>,
-) -> (BTreeMap<EntityId, Assignment>, BTreeMap<(EntityId, String), Vec<ClusterableSession>>) {
+    member_framing_of: &BTreeMap<EntityId, EntityId>,
+) -> SplitResult {
     let mut resolved: BTreeMap<EntityId, Assignment> = BTreeMap::new();
+    let mut geometry_by_id: BTreeMap<EntityId, SessionGeom> = BTreeMap::new();
     let mut clusterable: Vec<(EntityId, EntityId, String, Pointing, f32, Option<f64>)> = Vec::new();
 
     for session in sessions {
-        if let Some(&framing_id) = protected_framing_of.get(&session.session_id) {
+        if let (Some(pointing), Some(rotation_deg)) = (session.pointing, session.rotation_deg) {
+            if session.target_id.is_some() && session.optic_train_key.is_some() {
+                geometry_by_id
+                    .insert(session.session_id, (pointing, rotation_deg, session.fov_diagonal_deg));
+            }
+        }
+
+        if let Some(&framing_id) = member_framing_of.get(&session.session_id) {
             resolved.insert(session.session_id, Assignment::JoinExisting(framing_id));
             continue;
         }
@@ -266,7 +298,7 @@ fn split_protected_and_null_geometry(
             fov,
         ));
     }
-    (resolved, partitions)
+    (resolved, partitions, geometry_by_id)
 }
 
 /// Runs single-link-to-representative clustering for one `(target,
@@ -277,22 +309,39 @@ fn cluster_partition(
     optic_train_key: &str,
     members: Vec<ClusterableSession>,
     existing: &[ExistingFraming],
+    geometry_by_id: &BTreeMap<EntityId, SessionGeom>,
     params: &ToleranceParams,
     new_framings: &mut Vec<NewFramingGroup>,
     resolved: &mut BTreeMap<EntityId, Assignment>,
 ) {
-    let candidate_ids: Vec<EntityId> = existing
+    let candidates: Vec<&ExistingFraming> = existing
         .iter()
         .filter(|f| {
             f.clustering == Clustering::Suggested
                 && f.target_id == Some(target_id)
                 && f.optic_train_key == optic_train_key
         })
-        .map(|f| f.id)
         .collect();
+    let candidate_count = candidates.len();
 
-    let mut groups: Vec<GroupAccumulator> =
-        candidate_ids.iter().map(|&id| GroupAccumulator::new(Some(id))).collect();
+    // Seed each existing framing's accumulator from its declared members'
+    // *actual* geometry before any new session is matched — matching against
+    // an unseeded (count==0) accumulator would let whichever new session
+    // happens to be processed first squat an existing framing regardless of
+    // fit (the order-dependent anti-pattern R11a rejects).
+    let mut groups: Vec<GroupAccumulator> = candidates
+        .iter()
+        .map(|framing| {
+            let mut group =
+                GroupAccumulator::new(Some(framing.id), framing.member_session_ids.is_empty());
+            for member_id in &framing.member_session_ids {
+                if let Some(&(pointing, rotation_deg, fov)) = geometry_by_id.get(member_id) {
+                    group.push(*member_id, pointing, rotation_deg, fov.is_none());
+                }
+            }
+            group
+        })
+        .collect();
     let group_offset_for_new = new_framings.len();
 
     for (session_id, pointing, rotation_deg, fov) in members {
@@ -310,7 +359,7 @@ fn cluster_partition(
             params,
         )
         .unwrap_or_else(|| {
-            groups.push(GroupAccumulator::new(None));
+            groups.push(GroupAccumulator::new(None, false));
             groups.len() - 1
         });
         groups[group_idx].push(session_id, pointing, rotation_deg, used_fallback);
@@ -318,12 +367,12 @@ fn cluster_partition(
         let assignment = if let Some(framing_id) = groups[group_idx].existing_id {
             Assignment::JoinExisting(framing_id)
         } else {
-            Assignment::NewFraming(group_offset_for_new + (group_idx - candidate_ids.len()))
+            Assignment::NewFraming(group_offset_for_new + (group_idx - candidate_count))
         };
         resolved.insert(session_id, assignment);
     }
 
-    for group in groups.into_iter().skip(candidate_ids.len()) {
+    for group in groups.into_iter().skip(candidate_count) {
         new_framings.push(NewFramingGroup {
             target_id,
             optic_train_key: optic_train_key.to_owned(),
@@ -347,6 +396,14 @@ fn cluster_partition(
 /// single-link-to-representative rule (R11a). Ties prefer the lower group
 /// index — pre-existing-framing candidates are indexed first, so a match
 /// prefers a stable, DB-anchored suggestion over a brand-new group.
+///
+/// A genuinely-empty existing framing (declared zero members — e.g. one the
+/// user just created via reassign/new-framing) has no representative to
+/// compare against; it is a **last-resort** candidate only, considered when
+/// nothing else matched geometrically. It must never outrank or displace a
+/// real geometric match against a seeded group (regression: an unrelated
+/// session must not "claim" a populated framing just because it happens to
+/// be processed before that framing's real members are evaluated).
 fn best_matching_group(
     groups: &[GroupAccumulator],
     pointing: Pointing,
@@ -354,20 +411,11 @@ fn best_matching_group(
     effective_pointing_tolerance_deg: f64,
     params: &ToleranceParams,
 ) -> Option<usize> {
-    groups
+    let real_match = groups
         .iter()
         .enumerate()
+        .filter(|(_, group)| group.count > 0)
         .filter_map(|(idx, group)| {
-            // An empty existing-framing candidate has no representative to be
-            // out of tolerance with — it trivially matches the first session
-            // that reaches it (e.g. a framing the user just created via
-            // reassign/new-framing, still empty).
-            if group.existing_id.is_some() && group.count == 0 {
-                return Some((idx, 0.0));
-            }
-            if group.count == 0 {
-                return None;
-            }
             let pointing_distance =
                 angular_separation_deg(pointing, group.representative_pointing());
             if pointing_distance > effective_pointing_tolerance_deg {
@@ -383,12 +431,25 @@ fn best_matching_group(
         .min_by(|(idx_a, dist_a), (idx_b, dist_b)| {
             dist_a.partial_cmp(dist_b).unwrap_or(std::cmp::Ordering::Equal).then(idx_a.cmp(idx_b))
         })
-        .map(|(idx, _)| idx)
+        .map(|(idx, _)| idx);
+    if real_match.is_some() {
+        return real_match;
+    }
+
+    groups
+        .iter()
+        .position(|group| group.existing_id.is_some() && group.count == 0 && group.declared_empty)
 }
 
 /// Running exact circular-mean accumulator for one candidate group.
 struct GroupAccumulator {
     existing_id: Option<EntityId>,
+    /// True only for an existing framing whose `member_session_ids` was
+    /// genuinely empty (not merely unresolved this call) — the sole
+    /// condition under which this group is eligible for the last-resort
+    /// trivial match in [`best_matching_group`]. Meaningless for new
+    /// (`existing_id: None`) groups.
+    declared_empty: bool,
     sum_sin_ra: f64,
     sum_cos_ra: f64,
     sum_dec: f64,
@@ -400,9 +461,10 @@ struct GroupAccumulator {
 }
 
 impl GroupAccumulator {
-    fn new(existing_id: Option<EntityId>) -> Self {
+    fn new(existing_id: Option<EntityId>, declared_empty: bool) -> Self {
         Self {
             existing_id,
+            declared_empty,
             sum_sin_ra: 0.0,
             sum_cos_ra: 0.0,
             sum_dec: 0.0,
@@ -484,6 +546,13 @@ pub fn rotation_circular_distance_deg(a: f32, b: f32) -> f64 {
 
 /// Circular mean of a set of degree angles (mod 360°), for standalone testing
 /// of the wraparound behaviour independent of [`derive_clustering`].
+///
+/// Caution for external callers: near-antipodal angle sets (e.g. `[0.0,
+/// 180.0]`, cancelling resultant vectors) are directionally undefined and
+/// resolve to `atan2(0, 0) == 0.0` — a well-defined float, but not a
+/// meaningful "center" of two opposite points. `derive_clustering` never
+/// exercises this case because tolerance gates keep every grouped angle set
+/// tightly clustered by construction.
 ///
 /// # Panics
 /// Never panics; returns `0.0` for an empty iterator (no observations).
@@ -598,6 +667,56 @@ mod tests {
         // forms its own new suggested group instead.
         assert!(matches!(assignment_for(&result, 2), Assignment::NewFraming(_)));
         assert!(result.new_framings.iter().all(|g| !g.session_ids.contains(&id(1))));
+    }
+
+    // ── regression: seeded existing framings must not be displaced ──────────
+
+    #[test]
+    fn unrelated_new_session_does_not_displace_or_orphan_seeded_existing_framings() {
+        // Reviewer repro: two populated existing framings (B near RA 200,
+        // C near RA 50) plus an unrelated new session at RA 125 — roughly
+        // equidistant, but far beyond tolerance from both. Before the fix,
+        // unseeded accumulators trivially auto-matched whichever session was
+        // processed first, letting the RA-125 newcomer "claim" framing B and
+        // orphan its real member.
+        let framing_b = id(60);
+        let framing_c = id(61);
+        let existing = vec![
+            ExistingFraming {
+                id: framing_b,
+                target_id: Some(id(10)),
+                optic_train_key: "scope-a|cam-a".to_owned(),
+                clustering: Clustering::Suggested,
+                member_session_ids: vec![id(2)],
+            },
+            ExistingFraming {
+                id: framing_c,
+                target_id: Some(id(10)),
+                optic_train_key: "scope-a|cam-a".to_owned(),
+                clustering: Clustering::Suggested,
+                member_session_ids: vec![id(3)],
+            },
+        ];
+        let sessions = vec![
+            geom(2, 10, "scope-a|cam-a", 200.0, 20.0, 0.0, Some(2.0)), // framing B's real member
+            geom(3, 10, "scope-a|cam-a", 50.0, 20.0, 0.0, Some(2.0)),  // framing C's real member
+            geom(1, 10, "scope-a|cam-a", 125.0, 20.0, 0.0, Some(2.0)), // unrelated newcomer
+        ];
+
+        let result = derive_clustering(&sessions, &existing, &params());
+        assert_eq!(*assignment_for(&result, 2), Assignment::JoinExisting(framing_b));
+        assert_eq!(*assignment_for(&result, 3), Assignment::JoinExisting(framing_c));
+        assert!(matches!(assignment_for(&result, 1), Assignment::NewFraming(_)));
+
+        // Order independence: same outcome regardless of input session order.
+        let shuffled = vec![sessions[2].clone(), sessions[0].clone(), sessions[1].clone()];
+        let reshuffled_result = derive_clustering(&shuffled, &existing, &params());
+        let mut expected = result.assignments.clone();
+        let mut actual = reshuffled_result.assignments.clone();
+        expected.sort_by_key(|(session_id, _)| *session_id);
+        actual.sort_by_key(|(session_id, _)| *session_id);
+        assert_eq!(expected, actual);
+        assert_eq!(result.new_framings, reshuffled_result.new_framings);
     }
 
     // ── NULL-geometry exclusion ──────────────────────────────────────────────
