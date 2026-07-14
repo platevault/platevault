@@ -1,6 +1,7 @@
 # Planner Observability UX Iterate — 044 (Track B) / 047 (Track A)
 
-**Status**: Proposal (reviewable design, not an implementation plan)
+**Status**: Approved (design reviewed 2026-07-14; all open questions
+resolved — see Resolved Questions below). Not an implementation plan.
 **Date**: 2026-07-14
 **Scope**: presentation of already-correct astronomy, plus one equipment field
 and one aggregation function. No change to ephemeris math, the shared
@@ -104,7 +105,8 @@ a new spec.
   a bare 0 is indistinguishable from a bug; a stated reason is not.
 - **Tradeoff**: requires picking exactly one "the" reason when multiple
   blockers overlap (e.g., no dark window AND never above threshold can both
-  be true in the same high-latitude summer case) — see Open Questions.
+  be true in the same high-latitude summer case) — precedence is fixed in
+  Recommended Defaults (darkness > altitude > moon).
 
 ### D3 — Table why-glyph (narrow columns)
 
@@ -137,27 +139,30 @@ a new spec.
 - **D4-FR2**: The imaging-time column (`.alm-targets-col--imagingtime`,
   currently 7.5% per `merges-3.css:355`) MUST be widened to hold a value
   like "2h10m" plus the D3 glyph without clipping.
-- **D4-FR3**: The ~7 astronomy columns currently in the table
-  (`TargetsTable.tsx:12-13`: Max alt, sparkline, Visible tonight,
-  Opposition, Lunar dist, Filters, Imaging time) MUST be consolidated: fold
+- **D4-FR3** *(revised per review)*: The ~7 astronomy columns currently in
+  the table (`TargetsTable.tsx:12-13`: Max alt, sparkline, Visible tonight,
+  Opposition, Lunar dist, Filters, Imaging time) MUST be consolidated by
+  dropping the **altitude sparkline** column (hard removal — the detail
+  panel's full altitude graph, upgraded by D6, is the canonical altitude
+  view; a per-row thumbnail duplicates it at unreadable size) and folding
   "Visible tonight" into the D3 glyph (a zero-imaging-time row already
   implies not-visible; a dedicated column is redundant once the glyph
-  exists), and move Opposition and Max-alt to the detail panel, leaving
-  survivors (Designation, Type, sparkline, Lunar dist, Filters, Imaging
-  time) with the reclaimed width.
+  exists). Survivors — Designation, Type, Max alt, Opposition, Lunar dist,
+  Filters, Imaging time — keep their columns, right-sized per D4-FR1/FR2
+  with the width reclaimed from the sparkline.
 - **Rationale**: #792 is a direct instance of "column never revisited once
   real data replaced a stub" — the general fix is content-driven sizing,
-  not a one-off width bump for the Opposition column alone. Consolidating
+  not a one-off width bump for the Opposition column alone. Consolidation
   is necessary because content-right-sizing seven columns without dropping
   any would still not fit at common desktop widths (confirmed narrow at
-  1100×720 per the #792 repro).
-- **Tradeoff**: moving Opposition/Max-alt out of the table means they are
-  no longer sortable-at-a-glance across the whole catalogue in one view;
-  the table's own sort-by-opposition (spec 047 FR-014) and sort-by-max-alt
-  behaviors must be preserved as *available* sorts even if the column is
-  visually demoted (see Open Questions — this needs a decision on whether
-  "moved to detail" means "removed as a column" or "removed by default,
-  toggle-able").
+  1100×720 per the #792 repro). Review chose the sparkline (the widest
+  column, and informationally redundant with the detail graph) as the drop
+  over the originally proposed Opposition/Max-alt move, which would have
+  cost at-a-glance sortable scanning of both values across the catalogue.
+- **Tradeoff**: none of substance remains — Opposition and Max-alt stay
+  sortable in place (spec 047 FR-014 / SC-003 and spec 044 max-alt
+  behaviors unaffected), and no column-visibility-toggle machinery is
+  needed. Verify the survivor set fits without clipping at 1100×720.
 
 ### D5 — Prominent + editable active site
 
@@ -165,6 +170,12 @@ a new spec.
   `<site name>` `<lat>`°N · change" in one always-visible place, with
   "change" opening the active-site switch (existing US3 site-switching from
   spec 044 FR-012).
+- **D5-FR2** *(added per review)*: The label MUST also disclose the two
+  settings that silently change imaging time besides location: the active
+  twilight definition (astronomical/nautical, spec 044 FR-015) and the
+  minimum-horizon / usable-altitude value (FR-018) — e.g. "Computed for:
+  `<site>` `<lat>`°N · astro twilight · ≥30° · change", with "change"
+  covering all of them.
 - **Rationale**: spec 044 already requires switching sites to recompute
   everything (FR-012, SC-005) and the wizard seeds a default site (US6,
   e.g. "Home Backyard" 52.09°N — the exact site in the #817 repro). Without
@@ -228,6 +239,14 @@ a new spec.
 - **D7-FR4**: When equipment is unset, the default inference is: a single
   OSC-style exposure with no filter wheel → single-pass; per-filter subs →
   per-filter (mono model, unchanged).
+- **D7-FR5** *(added per review)*: For an OSC narrowband passband, the
+  **detail panel** MUST additionally list each captured line's own
+  moon-viable window (e.g. "Ha 4h · OIII 1h"), mirroring the mono per-band
+  display (D1/D3 resolution). The strict single-pass number (D7-FR3)
+  remains the table headline; the per-line breakdown discloses that a
+  moonlit night may still yield usable data on the tolerant line (the
+  common "shoot dual-band through moonlight, keep the Ha" workflow),
+  without breaking the one-number table cell or sort semantics.
 - **Rationale**: today's model implicitly assumes every imager is mono
   with a filter wheel; an OSC/DSLR imager's single sub is bound by
   whichever of its passband's channels is least Moon-tolerant, not by an
@@ -254,10 +273,10 @@ a new spec.
   glyph whenever Track A's rule is cutting into the band-free total for
   *some* band, muted, so it reads as "worth checking a darker night," not
   as an error.
-- D4: keep Opposition and Max-alt as available sort keys (spec 047 FR-014,
-  spec 044) even after their columns move to the detail panel — sorting is
-  a data operation independent of column visibility; do not regress spec
-  047's SC-003 (sortable, soonest-next) or spec 044's max-alt behaviors.
+- D4: Opposition and Max-alt keep their columns (revised D4-FR3), so spec
+  047's SC-003 (sortable, soonest-next) and spec 044's max-alt sort need no
+  new access point; the only removed data views are the sparkline (canonical
+  altitude view = detail graph) and the redundant Visible-tonight column.
 - D7 default sensor type when nothing is configured: infer from the
   existing per-frame FILTER header presence in ingested sessions (mono
   workflows populate a `FILTER` keyword per sub; OSC/DSLR workflows
@@ -289,31 +308,34 @@ a new spec.
   astronomical/nautical twilight choice (FR-015) and minimum-horizon model
   (FR-018) are consumed as-is.
 
-## Open Questions
+## Resolved Questions (user review, 2026-07-14)
 
-1. D3: when Moon cuts *some* bands' windows but not others (e.g., Ha is
-   moon-free all night but OIII isn't), does the table glyph key off "any
-   band affected" or "the user's currently-selected/most-used band"? The
-   planner has no per-user "my band" setting today.
-2. D4: is "moved to the detail panel" a hard removal of the Opposition/
-   Max-alt table columns, or a default-hidden column-visibility toggle?
-   Affects whether spec 047's sort-by-opposition needs a new access point
-   in the consolidated table.
-3. D6: should the Moon-excluded overlay default to the band with the most
-   moon-free time (spec 044 FR-007's existing "default: band with most
-   moon-free time, pending a later global band picker") or should this
-   iterate finally add that deferred global band picker?
-4. D7: is the "strictest band wins" aggregation (max across passband) the
-   right model for a genuinely narrowband OSC filter (e.g., a dual-band Ha
-   +OIII filter often has different per-line efficiency), or should the
-   two lines be tracked with separate effective windows even though they
-   share one exposure? Proposed default (D7-FR3) treats them as one
-   pass/one window; flagging as open because it's a real astrophotography
-   nuance, not just an implementation detail.
-5. Does D5's "Computed for: `<site>` · change" label also need to surface
-   the twilight definition (astronomical/nautical) and minimum-horizon
-   value, since both silently change imaging-time (spec 044 FR-015/FR-018),
-   or is site name+lat sufficient disclosure?
+1. **D3 glyph band — resolved: any band, no per-user setting.** The table's
+   single imaging-time cell shows the muted ☾ whenever the Moon cuts *any*
+   band's window (the Recommended Defaults tie-break is now the decision);
+   the tooltip names the affected bands, and the per-band truth ("Ha fine,
+   OIII moon-cut") lives in the detail panel's per-band imaging-time
+   breakdown (D1). No "my band" user setting.
+2. **D4 columns — resolved: keep Opposition and Max-alt, drop the sparkline
+   instead.** The original move-to-detail proposal is withdrawn; the
+   sparkline column is a hard removal (the D6-upgraded detail graph is the
+   canonical altitude view) and Visible-tonight folds into the glyph as
+   proposed. No column-visibility toggle; D4-FR3 above is rewritten
+   accordingly.
+3. **D6 overlay band — resolved: keep spec 044 FR-007's automatic default**
+   (band with the most moon-free time). The deferred global band picker
+   stays deferred; it can be added later if users ask for it.
+4. **D7 OSC aggregation — resolved: strict headline + per-line detail.**
+   The single-pass headline number stays strictest-band-wins (D7-FR3), and
+   the detail panel additionally lists each captured line's own moon-viable
+   window (new D7-FR5) so a moonlit night's usable Ha time is visible
+   instead of a bare 0. Separate per-line windows as the *primary* model
+   were rejected (breaks the one-number table cell and sort semantics);
+   strictest-only was rejected (misreads moonlit nights as useless for the
+   common shoot-through-moonlight dual-band workflow).
+5. **D5 disclosure — resolved: yes.** The "Computed for:" label also
+   surfaces the twilight definition and minimum-horizon value (new D5-FR2),
+   since both silently change imaging time (FR-015/FR-018).
 
 ## References
 
