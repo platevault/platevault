@@ -6223,9 +6223,9 @@ dependencies = [
 name = "targeting"
 version = "0.1.0"
 dependencies = [
+ "simbad-resolver",
  "skymath 0.3.0",
  "target-match",
- "unicode-normalization",
  "uuid",
 ]
 

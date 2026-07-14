@@ -191,12 +191,12 @@ pub async fn get_by_simbad_oid(
 
 /// Read a cached target by a normalized alias (the typeahead match surface).
 ///
-/// `normalized` must already be normalized via [`targeting::normalize::normalize`]
-/// (verified identical to [`simbad_resolver::normalize::normalize`] by
-/// construction — same algorithm, both derive from the same author's spec-013
-/// pipeline; see `simbad::tests::namespace_matches_sqlite_identity_derivation`
-/// for the id-level interop proof). This is an exact-alias lookup, NOT a
-/// prefix/substring search (that is T010).
+/// `normalized` must already be normalized via [`targeting::normalize::normalize`],
+/// which delegates to [`simbad_resolver::normalize::normalize`] — the single
+/// normalization choke-point (spec 052 D6/T004, #701) that this crate's own
+/// cache writes also normalize through, so lookups always agree with stored
+/// aliases regardless of which copy a caller reaches through. This is an
+/// exact-alias lookup, NOT a prefix/substring search (that is T010).
 ///
 /// # Errors
 ///
