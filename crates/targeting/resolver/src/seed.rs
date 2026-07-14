@@ -218,11 +218,12 @@ pub async fn is_first_run(cache: &dyn Cache) -> Result<bool, SeedError> {
 
 /// Warm the redb cache from a seed asset, writing rows with `source = seed`.
 ///
-/// Each entry is upserted through [`simbad_resolver::Cache::upsert`], so the
-/// warm is idempotent: re-running it dedups by `simbad_oid` (or the
-/// designation-derived id) and never overwrites a sticky `user-override` row.
-/// Returns the number of entries that resulted in a new or refreshed cache
-/// row.
+/// Entries are upserted in one call to [`simbad_resolver::Cache::upsert_batch`]
+/// (a single backend write transaction for the whole batch, rather than one
+/// per entry — spec 052 P4/#695), so the warm is idempotent: re-running it
+/// dedups by `simbad_oid` (or the designation-derived id) and never overwrites
+/// a sticky `user-override` row. Returns the number of entries that resulted
+/// in a new or refreshed cache row.
 ///
 /// `namespace` MUST be the same id-namespace the production facade uses
 /// ([`crate::simbad`]'s `"astro-plan.targets"` seed) so warmed ids match the
@@ -239,14 +240,15 @@ pub async fn warm_cache(
     seed: &SeedAsset,
     namespace: &Uuid,
 ) -> Result<usize, SeedError> {
-    let mut loaded = 0usize;
-    for entry in &seed.entries {
-        let identity = entry.to_crate_identity();
-        let (_, outcome) = cache.upsert(&identity, namespace).await?;
-        if !matches!(outcome, simbad_resolver::UpsertOutcome::SkippedUserOverride) {
-            loaded += 1;
-        }
-    }
+    let identities: Vec<simbad_resolver::ResolvedIdentity> =
+        seed.entries.iter().map(SeedEntry::to_crate_identity).collect();
+    let results = cache.upsert_batch(&identities, namespace).await?;
+    let loaded = results
+        .iter()
+        .filter(|(_, outcome)| {
+            !matches!(outcome, simbad_resolver::UpsertOutcome::SkippedUserOverride)
+        })
+        .count();
     Ok(loaded)
 }
 
@@ -288,10 +290,10 @@ pub async fn warm_from_canonical_target(
     namespace: &Uuid,
 ) -> Result<usize, SeedError> {
     let rows = crate::cache::list_all(pool).await?;
-    let mut warmed = 0usize;
+    let mut identities = Vec::with_capacity(rows.len());
     for row in rows {
         let Some(durable) = crate::cache::get_by_id(pool, row.id).await? else { continue };
-        let identity = simbad_resolver::ResolvedIdentity {
+        identities.push(simbad_resolver::ResolvedIdentity {
             simbad_oid: durable.simbad_oid,
             primary_designation: durable.primary_designation,
             common_name: durable
@@ -310,12 +312,15 @@ pub async fn warm_from_canonical_target(
                 .map(|a| simbad_resolver::ResolvedAlias::new(a.alias, to_crate_alias_kind(a.kind)))
                 .collect(),
             source: to_crate_source(durable.source),
-        };
-        let (_, outcome) = cache.upsert(&identity, namespace).await?;
-        if !matches!(outcome, simbad_resolver::UpsertOutcome::SkippedUserOverride) {
-            warmed += 1;
-        }
+        });
     }
+    let results = cache.upsert_batch(&identities, namespace).await?;
+    let warmed = results
+        .iter()
+        .filter(|(_, outcome)| {
+            !matches!(outcome, simbad_resolver::UpsertOutcome::SkippedUserOverride)
+        })
+        .count();
     Ok(warmed)
 }
 
@@ -511,16 +516,18 @@ mod tests {
     }
 
     /// A real Messier-only slice of the committed bundled asset (~110 objects,
-    /// including M 31/M 42) — fast enough for redb-touching tests. Each
-    /// [`simbad_resolver::Cache::upsert`] is its own fsync'd write transaction
-    /// (no batch-upsert primitive; a future `simbad-resolver` release may add
-    /// one), so warming the FULL ~14k-object popular seed one entry at a time
-    /// is a multi-second-to-tens-of-seconds operation — acceptable as a
-    /// one-time, backgrounded app-startup warm (never blocks the UI, see
-    /// `apps/desktop/src-tauri/src/lib.rs`), but too slow to run twice per
-    /// `cargo test`/`nextest` invocation. [`bundled_asset_loads_and_covers_messier_and_caldwell`]
-    /// separately proves the full committed asset's shape (pure JSON parse,
-    /// no redb).
+    /// including M 31/M 42) — fast enough for redb-touching tests. [`warm_cache`]
+    /// now goes through [`simbad_resolver::Cache::upsert_batch`] (one fsync'd
+    /// write transaction for the whole batch, since `simbad-resolver` 0.3.0 —
+    /// spec 052 P4/#695) instead of one transaction per entry, but the
+    /// per-entry dedup-by-`simbad_oid` lookup the crate's backend does inside
+    /// that transaction is still an O(n) scan per entry (O(n²) for the whole
+    /// batch), so warming the FULL ~14k-object popular seed is still far too
+    /// slow for `cargo test`/`nextest` (measured: low hundreds of ms at
+    /// n=500, growing to minutes by n=4000) — a Messier-only slice keeps this
+    /// suite fast regardless of the transaction-count change.
+    /// [`bundled_asset_loads_and_covers_messier_and_caldwell`] separately
+    /// proves the full committed asset's shape (pure JSON parse, no redb).
     fn messier_only_seed() -> SeedAsset {
         let full = bundled().expect("bundled seed asset must parse");
         let entries: Vec<SeedEntry> =
