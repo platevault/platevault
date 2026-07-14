@@ -243,13 +243,49 @@ Mapping onto the existing `audit_log_entry` table
 - `at` → timestamp; `actor` unchanged; `trigger` → action.
 - `from_state` / `to_state` are subsumed by the optional before→after pair
   (lifecycle transitions keep using them; non-lifecycle mutations carry
-  before→after in the structured detail).
-- reason/code becomes first-class queryable detail (not buried in free-form
-  payload).
+  before→after in the structured `payload` JSON).
+- reason/code becomes first-class queryable detail as a concrete column,
+  not a JSON1 query over `payload`.
 - `severity` (workflow | diagnostic) and `request_id` are retained.
 
-The ephemeral bus event stream is unchanged in shape; audit-worthy mutations
-write the durable row and emit the bus event (durable row is authoritative).
+### Migration shape (T120)
+
+Consistent with existing schema conventions (TEXT columns, named
+`idx_audit_*` indexes; `0002_lifecycle.sql`):
+
+- Add nullable column `reason_code TEXT` — the machine-readable
+  reason/code for `refused`/`failed` outcomes; NULL for `applied`.
+  Human-readable detail stays in `payload`.
+- Add index `idx_audit_outcome` on `(outcome, reason_code)` for
+  refusal/failure queries.
+- No other table changes: `entity_type` and `trigger` have no CHECK
+  constraints, so the enum generalization is DB-free; the real surface is
+  the Rust `EntityType` enum and its generated TS union.
+
+Resulting column set: `audit_id, entity_type, entity_id, from_state,
+to_state, trigger, actor, outcome, severity, request_id, at, payload,
+reason_code`.
+
+### Severity per mutation class
+
+`severity` drives FR-132's user-meaningful filter. Assignment rule:
+user-initiated mutations are `workflow`; system-initiated ones are
+`diagnostic`.
+
+| Mutation class | Severity |
+|----------------|----------|
+| Settings changes (durable-data keys) | workflow |
+| Protection overrides/acknowledgements | workflow |
+| Equipment CRUD | workflow |
+| Source register/delete/enable/disable | workflow |
+| User-initiated rescans / root ops (incl. remap) | workflow |
+| Automatic/periodic rescans, system maintenance | diagnostic |
+
+The live event bus stream is unchanged in shape. Audit-worthy mutations
+write the `audit_log_entry` row and emit the bus event; `audit_log_entry`
+is the authoritative audit record, while the bus's durable `events` table
+is non-authoritative transient diagnostics (prunable). The resulting dual
+durable rows are accepted in v1 (spec §8.3).
 
 ## Metadata Value States
 

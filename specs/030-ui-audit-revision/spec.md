@@ -388,21 +388,27 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
   write a durable audit row — including settings changes, protection
   overrides, equipment CRUD, source enable/disable/register/delete, and
   rescans/root operations — recording the outcome including refused/failed
-  with a reason/code.
+  with a reason/code. Value-unchanged no-op writes are not mutations and
+  emit no audit row; refused and failed attempts do. Debounced/noisy
+  durable-data settings keys (e.g. the `pattern` naming key) are audited
+  once at the committed value with before→after — never per keystroke
+  (T122).
 - **FR-131**: The durable `audit_log_entry` store MUST be the single source
   of truth for audit history. Audit-worthy actions MUST write the durable
   row AND emit a live event to the bus; emitting to the bus only is
   prohibited for mutations. Any `auditId` returned to the UI MUST resolve to
-  a durable row.
+  a durable `audit_log_entry` row.
 - **FR-132**: The Activity/log panel MUST read user-meaningful events from
-  the durable audit store, and transient/internal noise from the ephemeral
+  the durable audit store, and transient/internal noise from the live event
   bus.
 - **FR-133**: The audit entry shape MUST generalize from a
   lifecycle-transition record to a generic mutation record: timestamp,
   actor, action, entity (type + id), outcome + reason, plus an optional
   before→after value pair for settings/protection changes.
 - **FR-134**: Reads, navigation, UI state changes, and transient
-  internal/periodic events MUST NOT be durably audited.
+  internal/periodic events MUST NOT be durably audited. UI-state settings
+  keys (e.g. `rememberFollowLogs`, `plansListDefaultAgeCutoffDays`) fall
+  under this exemption.
 
 **Missing-Value Semantics & Detail Panels** *(iteration 2026-07-14, grilling Q16 / #620, #619)*
 
@@ -471,7 +477,7 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
   navigating to any specific screen.
 - **SC-009**: 100% of mutation commands that return an `auditId` return one
   that resolves to a durable `audit_log_entry` row; zero mutation paths emit
-  to the bus without a durable write.
+  to the bus without a durable `audit_log_entry` write.
 - **SC-010**: An entity with missing numeric metadata never displays a
   defaulted 0 (e.g., "Gain 0", "Exposure 0s", "Size 0 KB"); 100% of
   metadata value renderings across Inbox, Sessions, Calibration, Targets,
@@ -501,7 +507,8 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
 
 **Change**: Every attempted mutation of durable state writes a durable
 `audit_log_entry` row (outcome incl. refused/failed + reason/code); the
-durable table becomes the single source of truth over the ephemeral bus;
+durable table becomes the authoritative audit record over the live event
+bus;
 the entry shape generalizes from a lifecycle-transition record to a generic
 mutation record. Decisions locked by
 `docs/development/ui-campaign-grilling-decisions-2026-07-13.md` §Q15.
@@ -1380,12 +1387,22 @@ Selecting an event shows:
 `docs/development/ui-campaign-grilling-decisions-2026-07-13.md` §Q15.)*
 
 Issue #647 is architectural, not a coverage gap. Two disjoint audit stores
-exist: an ephemeral event bus (live UI feed — settings changes, protection
-sets, equipment CRUD, `sources.set_active`, and rescans emit here only) and
-the durable `audit_log_entry` table (written only by lifecycle transitions,
-plan-apply, and project-health). A protection-set therefore returns an
-`auditId` that points at an in-memory event, not a durable row — violating
-constitution §II ("audit record for each attempted action and outcome").
+exist: the live event bus (hybrid: in-process broadcast for live UI plus a
+durable `events` topic stream — a topic+payload log with no
+outcome/refused semantics, not an audit record; settings changes,
+protection sets, equipment CRUD, `sources.set_active`, and rescans emit
+here only) and the durable `audit_log_entry` table (written only by
+lifecycle transitions, plan-apply, and project-health). A protection-set
+therefore returns an `auditId` that points at a bus event no audit read
+can resolve, not an `audit_log_entry` row — violating constitution §II
+("audit record for each attempted action and outcome").
+
+**Store roles:** `audit_log_entry` is the authoritative audit record; the
+`events` table is non-authoritative transient diagnostics and may be
+pruned. Audit-worthy mutations therefore produce two durable rows (an
+`audit_log_entry` row plus an `events` row via the bus) — accepted in v1;
+any change to `events`-table persistence is deferred to the Q9 log-panel
+iteration.
 
 **Unification (FR-130–FR-134):**
 
@@ -1398,7 +1415,7 @@ constitution §II ("audit record for each attempted action and outcome").
    Audit-worthy actions write the durable row *and* emit to the bus for
    live UI; the emit-to-bus-only pattern for mutations is eliminated. The
    Activity/log panel (Q9) reads durable audit for user-meaningful events
-   plus the ephemeral bus for transient/internal noise — making "activity
+   plus the live event bus for transient/internal noise — making "activity
    is a view over the audit" literally true, and the Q10 manifest-history
    reframe viable.
 3. **Generalized entry shape** — from a lifecycle-transition record to a
