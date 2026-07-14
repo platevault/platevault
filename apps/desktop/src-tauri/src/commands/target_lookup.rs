@@ -19,7 +19,8 @@
 //!   cache (spec 035/052).
 //! - `target.adopt` — explicit in-use commit for UI flows with no other
 //!   natural commit point (spec 052 P1 FR-004).
-//! - `target.cache.clear` — wipe + re-warm the redb resolve cache (FR-002).
+//! - `target.cache.clear` — wipe the redb resolve cache; re-warm runs as a
+//!   background task (FR-002; issue #695).
 //! - `target.resolution.settings` / `target.resolution.settings.update` — resolver settings.
 //! - `target.astro_format.batch` — batched sexagesimal RA/Dec formatting (adopt target-match).
 //!
@@ -179,8 +180,9 @@ pub async fn target_adopt(
 
 // ── target.cache.clear (spec 052 P1 FR-002) ─────────────────────────────────────
 
-/// `target.cache.clear` — wipe the redb resolve cache and re-warm it from the
-/// bundled seed + existing durable `canonical_target` rows. Never touches
+/// `target.cache.clear` — wipe the redb resolve cache and schedule its
+/// re-warm (bundled seed + existing durable `canonical_target` rows) as a
+/// background task, returning as soon as the swap is done. Never touches
 /// `canonical_target` itself (§V — the redb cache is a reproducible
 /// projection, never canonical).
 ///
@@ -188,17 +190,24 @@ pub async fn target_adopt(
 /// old redb file (e.g. a concurrent read still has it open) is reported as an
 /// internal error rather than silently leaving a stale cache in place.
 ///
+/// Fix for #695: this used to await the full re-warm (bundled seed +
+/// durable rows — up to ~14k individually fsync'd redb writes) inline,
+/// freezing the caller for minutes on a debug build. `rewarmed_count` is
+/// therefore always `0` now — "re-warm scheduled in the background, count
+/// not known synchronously" rather than "0 entries re-warmed" — kept as a
+/// response-meaning change instead of widening the contract.
+///
 /// # Errors
 ///
-/// Returns `Err(String)` if the cache file cannot be reopened/re-warmed.
+/// Returns `Err(String)` if the cache file cannot be removed/reopened.
 #[tauri::command]
 #[specta::specta]
 pub async fn target_cache_clear(
     state: State<'_, AppState>,
 ) -> Result<TargetCacheClearResponse, ContractError> {
     tracing::info!("target.cache.clear");
-    let rewarmed = crate::resolve_cache::clear_and_rewarm(&state).await?;
-    Ok(TargetCacheClearResponse { rewarmed_count: u32::try_from(rewarmed).unwrap_or(u32::MAX) })
+    crate::resolve_cache::clear_and_rewarm(&state).await?;
+    Ok(TargetCacheClearResponse { rewarmed_count: 0 })
 }
 
 // ── target.resolution.settings (spec 035, US5 — FR-015) ─────────────────────────

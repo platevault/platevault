@@ -864,7 +864,7 @@
   "settings_resolver_cache_clear_info": "The local SIMBAD lookup cache is separate from your saved targets — clearing it never deletes a target. It re-warms from the bundled seed automatically.",
   "settings_resolver_cache_clear_label": "Clear resolve cache",
   "settings_resolver_cache_clear_pending": "Clearing…",
-  "settings_resolver_cache_clear_success": "Resolve cache cleared and re-warmed with {count} entries.",
+  "settings_resolver_cache_clear_success": "Resolve cache cleared — re-warming in the background.",
   "settings_resolver_catalogues_title": "DEFAULT CATALOGUES",
   "settings_resolver_debounce_label": "Typeahead debounce (ms)",
   "settings_resolver_endpoint_label": "SIMBAD endpoint",
