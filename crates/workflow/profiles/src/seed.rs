@@ -16,8 +16,15 @@ fn pixinsight_profile() -> ToolProfile {
         id: "pixinsight",
         name: "PixInsight",
         bundle_id: Some("com.pixinsight.PixInsight"),
-        args_template: vec![ArgsToken::Folder],
-        supports_open_folder: true,
+        // PixInsight cannot open a bare folder path (bug #778): the only
+        // robust path argument is a `.xosm` project file we never generate,
+        // and running WBPP's automationMode would violate the PixInsight
+        // processing boundary (Constitution III). Launch bare instead — the
+        // user opens their own files/project inside PixInsight. `cwd` is
+        // still anchored to the project folder (R-CwdContain), which is what
+        // drives the one-time "cwd anchored" hint (supports_open_folder=false).
+        args_template: vec![],
+        supports_open_folder: false,
         detach_strategy: DetachStrategy::OpenBundleId,
         // WBPP: session/night → filter → exposure grouping (spec 049 US2 T025).
         source_view_layout: Some(DEFAULT_SOURCE_VIEW_LAYOUT),
@@ -107,9 +114,13 @@ mod tests {
     }
 
     #[test]
-    fn pixinsight_supports_open_folder() {
+    fn pixinsight_launches_bare_with_no_folder_arg() {
+        // PixInsight cannot open a bare folder path (bug #778): launch with
+        // no args and rely on `cwd` anchoring instead of {folder} (spec 011
+        // R-CwdContain, supports_open_folder=false path).
         let p = find("pixinsight").expect("pixinsight must be seeded");
-        assert!(p.supports_open_folder);
+        assert!(!p.supports_open_folder);
+        assert!(p.args_template.is_empty());
         assert_eq!(p.bundle_id, Some("com.pixinsight.PixInsight"));
     }
 

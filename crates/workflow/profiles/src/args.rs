@@ -164,11 +164,13 @@ mod tests {
     }
 
     #[test]
-    fn render_pixinsight_folder() {
+    fn render_pixinsight_bare_no_args() {
+        // #778: PixInsight can't open a bare folder path — launch bare (no
+        // args) rather than pass a broken {folder} token.
         use crate::seed;
         let profile = seed::find("pixinsight").unwrap();
         let ctx = RenderContext { folder: Some("/mnt/lib/pi_project"), file: None };
         let argv = render(&profile.args_template, &ctx);
-        assert_eq!(argv, vec!["/mnt/lib/pi_project"]);
+        assert_eq!(argv, Vec::<String>::new());
     }
 }
