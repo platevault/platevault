@@ -95,7 +95,7 @@ impl Database {
     ///
     /// Returns [`DbError::Migration`] if any migration script fails, or a
     /// database error if the reconciliation scan fails.
-    // Touched for spec 008 Q27 (migration 0064) to force `sqlx::migrate!`
+    // Touched for spec-030 Q16 (migration 0065) to force `sqlx::migrate!`
     // re-embed (project memory: stale-embed guard).
     pub async fn migrate(&self) -> DbResult<()> {
         sqlx::migrate!("./migrations").run(&self.pool).await?;

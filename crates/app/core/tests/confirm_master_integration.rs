@@ -307,7 +307,7 @@ async fn organized_master_catalogues_then_registers_at_apply() {
         "kind must be flat"
     );
     assert_eq!(masters[0].fingerprint.filter.as_deref(), Some("Ha"), "filter must be Ha");
-    assert!((masters[0].fingerprint.exposure_s - 2.0).abs() < f64::EPSILON);
+    assert!((masters[0].fingerprint.exposure_s.unwrap() - 2.0).abs() < f64::EPSILON);
 }
 
 /// US4 regression guard: non-master items still go through the plan path.

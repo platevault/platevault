@@ -734,18 +734,21 @@ async fn masters_list_from_db(
                 id: r.id.clone(),
                 kind: cal_kind,
                 fingerprint: contracts_core::calibration::CalibrationFingerprint {
-                    camera: r.fp_optic_train.unwrap_or_default(),
+                    // Q16 / FR-136: no absence-synthesizing fallbacks — pass
+                    // the row's Option straight through so unresolved
+                    // metadata renders as unresolved, not a sentinel.
+                    camera: r.fp_optic_train,
                     sensor_mode: None,
-                    exposure_s: r.fp_exposure_s.unwrap_or(0.0),
+                    exposure_s: r.fp_exposure_s,
                     temp_c: r.fp_temp_c,
-                    gain: r.fp_gain.unwrap_or(0.0),
-                    binning: r.fp_binning.unwrap_or_else(|| "1x1".to_owned()),
+                    gain: r.fp_gain,
+                    binning: r.fp_binning,
                     filter: r.fp_filter_name,
                 },
-                source_session_id: r.source_session_id.unwrap_or_else(|| r.id.clone()),
+                source_session_id: r.source_session_id,
                 created_at: r.created_at,
                 age_days,
-                size_bytes: u64::try_from(r.size_bytes).unwrap_or(0),
+                size_bytes: r.size_bytes.and_then(|b| u64::try_from(b).ok()),
                 used_by_session_ids: vec![],
                 used_by_project_ids: vec![],
             }
@@ -789,18 +792,20 @@ pub async fn masters_get(
         id: r.id.clone(),
         kind: cal_kind,
         fingerprint: contracts_core::calibration::CalibrationFingerprint {
-            camera: r.fp_optic_train.unwrap_or_default(),
+            // Q16 / FR-136: no absence-synthesizing fallbacks — pass the
+            // row's Option straight through.
+            camera: r.fp_optic_train,
             sensor_mode: None,
-            exposure_s: r.fp_exposure_s.unwrap_or(0.0),
+            exposure_s: r.fp_exposure_s,
             temp_c: r.fp_temp_c,
-            gain: r.fp_gain.unwrap_or(0.0),
-            binning: r.fp_binning.unwrap_or_else(|| "1x1".to_owned()),
+            gain: r.fp_gain,
+            binning: r.fp_binning,
             filter: r.fp_filter_name,
         },
-        source_session_id: r.source_session_id.unwrap_or_else(|| r.id.clone()),
+        source_session_id: r.source_session_id,
         created_at: r.created_at,
         age_days,
-        size_bytes: u64::try_from(r.size_bytes).unwrap_or(0),
+        size_bytes: r.size_bytes.and_then(|b| u64::try_from(b).ok()),
         used_by_session_ids,
         used_by_project_ids,
         compatible_sessions: vec![],
@@ -912,8 +917,39 @@ mod masters_tests {
         assert_eq!(masters.len(), 1, "must return exactly 1 real master from DB");
         assert_eq!(masters[0].id, "cal-t1");
         assert_eq!(masters[0].kind, contracts_core::calibration::CalibrationKind::Dark);
-        assert!((masters[0].fingerprint.gain - 100.0).abs() < f64::EPSILON);
-        assert_eq!(masters[0].fingerprint.camera, "ASI2600MM");
+        assert!((masters[0].fingerprint.gain.unwrap() - 100.0).abs() < f64::EPSILON);
+        assert_eq!(masters[0].fingerprint.camera.as_deref(), Some("ASI2600MM"));
+    }
+
+    /// T129 (Q16 / FR-136): absent fingerprint/size metadata round-trips as
+    /// `None`, never a synthesized sentinel (0.0, "", "1x1", or the master's
+    /// own id standing in for a missing source session).
+    #[tokio::test]
+    async fn masters_list_carries_absent_metadata_as_none_not_sentinels() {
+        let _guard = lock_cache_tests().await;
+        caches::invalidate_calibration_masters();
+        let db = test_db().await;
+
+        // Session with NO calibration_fingerprint row at all: every
+        // fingerprint field and size_bytes must resolve to None, and
+        // source_session_id must not fall back to the master's own id.
+        sqlx::query(
+            "INSERT INTO calibration_session (id, session_key, kind, created_at) \
+             VALUES ('cal-none', 'bias-none', 'bias', '2026-06-02T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let masters = masters_list(db.pool()).await.unwrap();
+        assert_eq!(masters.len(), 1);
+        let m = &masters[0];
+        assert_eq!(m.fingerprint.camera, None);
+        assert_eq!(m.fingerprint.gain, None);
+        assert_eq!(m.fingerprint.exposure_s, None);
+        assert_eq!(m.fingerprint.binning, None);
+        assert_eq!(m.source_session_id, None, "must never default to the master's own id");
+        assert_eq!(m.size_bytes, None, "must never default to 0");
     }
 
     /// T032 / T037: masters_list returns empty on a fresh DB (no fixtures).

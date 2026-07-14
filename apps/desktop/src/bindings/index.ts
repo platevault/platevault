@@ -2349,28 +2349,52 @@ export type CalendarSessionStub = {
 	filter: string,
 };
 
-/**  Sensor/optical fingerprint that determines calibration compatibility. */
+/**
+ *  Sensor/optical fingerprint that determines calibration compatibility.
+ * 
+ *  Every field is `Option` (Q16 / #620, FR-135/FR-136): extraction may leave
+ *  any of these unresolved, and the contract MUST carry that absence as
+ *  `null` rather than a synthesized value (empty string, fabricated `"1x1"`
+ *  binning, or a defaulted `0.0`) — the missing/real-zero distinction is
+ *  unrecoverable once a sentinel overwrites it at this hop.
+ */
 export type CalibrationFingerprint = CalibrationFingerprint_Serialize | CalibrationFingerprint_Deserialize;
 
-/**  Sensor/optical fingerprint that determines calibration compatibility. */
+/**
+ *  Sensor/optical fingerprint that determines calibration compatibility.
+ * 
+ *  Every field is `Option` (Q16 / #620, FR-135/FR-136): extraction may leave
+ *  any of these unresolved, and the contract MUST carry that absence as
+ *  `null` rather than a synthesized value (empty string, fabricated `"1x1"`
+ *  binning, or a defaulted `0.0`) — the missing/real-zero distinction is
+ *  unrecoverable once a sentinel overwrites it at this hop.
+ */
 export type CalibrationFingerprint_Deserialize = {
-	camera: string,
+	camera: string | null,
 	sensorMode: string | null,
 	exposureS: number | null,
 	tempC: number | null,
 	gain: number | null,
-	binning: string,
+	binning: string | null,
 	filter: string | null,
 };
 
-/**  Sensor/optical fingerprint that determines calibration compatibility. */
+/**
+ *  Sensor/optical fingerprint that determines calibration compatibility.
+ * 
+ *  Every field is `Option` (Q16 / #620, FR-135/FR-136): extraction may leave
+ *  any of these unresolved, and the contract MUST carry that absence as
+ *  `null` rather than a synthesized value (empty string, fabricated `"1x1"`
+ *  binning, or a defaulted `0.0`) — the missing/real-zero distinction is
+ *  unrecoverable once a sentinel overwrites it at this hop.
+ */
 export type CalibrationFingerprint_Serialize = {
-	camera: string,
+	camera?: string | null,
 	sensorMode?: string | null,
-	exposureS: number | null,
+	exposureS?: number | null,
 	tempC?: number | null,
-	gain: number | null,
-	binning: string,
+	gain?: number | null,
+	binning?: string | null,
 	filter?: string | null,
 };
 
@@ -2385,10 +2409,18 @@ export type CalibrationMaster_Deserialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Deserialize,
-	sourceSessionId: string,
+	/**
+	 *  `None` when the originating session is unresolved (Q16 / FR-136) —
+	 *  never self-referentially defaulted to this master's own id.
+	 */
+	sourceSessionId: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	/**
+	 *  `None` when file size is unresolved (Q16 / FR-136) — never a
+	 *  sentinel 0.
+	 */
+	sizeBytes: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
 };
@@ -2398,10 +2430,18 @@ export type CalibrationMaster_Serialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Serialize,
-	sourceSessionId: string,
+	/**
+	 *  `None` when the originating session is unresolved (Q16 / FR-136) —
+	 *  never self-referentially defaulted to this master's own id.
+	 */
+	sourceSessionId?: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	/**
+	 *  `None` when file size is unresolved (Q16 / FR-136) — never a
+	 *  sentinel 0.
+	 */
+	sizeBytes?: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
 };
@@ -5525,10 +5565,10 @@ export type MasterDetail_Deserialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Deserialize,
-	sourceSessionId: string,
+	sourceSessionId: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	sizeBytes: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
 	compatibleSessions: CompatibleSessionEntry[],
@@ -5542,10 +5582,10 @@ export type MasterDetail_Serialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Serialize,
-	sourceSessionId: string,
+	sourceSessionId?: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	sizeBytes?: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
 	compatibleSessions: CompatibleSessionEntry[],
