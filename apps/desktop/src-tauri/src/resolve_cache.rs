@@ -211,6 +211,50 @@ mod tests {
         assert!(warmed, "background re-warm never populated the fresh cache");
     }
 
+    /// Regression test for #818: `cache_warming` must be observably `true`
+    /// while the background re-warm is running and `false` once it settles,
+    /// so `target.search` can tell a still-warming empty result apart from a
+    /// genuine miss (batching the warm into one write transaction per phase
+    /// removed the old per-entry incremental visibility that used to mask a
+    /// query racing this window).
+    #[tokio::test]
+    async fn cache_warming_flag_is_true_during_the_warm_and_false_after() {
+        use std::sync::atomic::Ordering;
+
+        let (state, _dir) = test_state().await;
+        assert!(
+            !state.cache_warming.load(Ordering::Relaxed),
+            "flag must start false — no warm has been scheduled yet"
+        );
+
+        clear_and_rewarm(&state).await.expect("clear_and_rewarm failed");
+        // `clear_and_rewarm` sets the flag before spawning and returns before
+        // the swap task even runs (regression-tested above), so it must
+        // already read true right after the call returns.
+        assert!(
+            state.cache_warming.load(Ordering::Relaxed),
+            "flag must be true immediately after clear_and_rewarm schedules the warm"
+        );
+
+        let settled = poll_until(|| !state.cache_warming.load(Ordering::Relaxed)).await;
+        assert!(settled, "flag never flipped back to false once the warm finished");
+    }
+
+    /// Polls (bounded) rather than sleeping a fixed duration — avoids both
+    /// flakiness on a slow CI runner and a needlessly slow test on a fast one.
+    async fn poll_until(mut done: impl FnMut() -> bool) -> bool {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            if done() {
+                return true;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return false;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
     /// Polls (bounded) rather than sleeping a fixed duration — avoids both
     /// flakiness on a slow CI runner and a needlessly slow test on a fast one.
     async fn poll_until_non_empty(cache: &targeting_resolver::simbad::ResolveCache) -> bool {
