@@ -60,9 +60,64 @@ fn equipment_entity_id(id: &str) -> EntityId {
 
 /// Write a durable audit row for an equipment CRUD attempt (T124,
 /// FR-130/FR-131). `id_seed` is the item's real id on success/update/delete,
-/// or its attempted `name` on a failed `create` (no id exists yet).
+/// or its attempted `name` on a failed `create` (no id exists yet). User-
+/// initiated CRUD is `actor="user"`/`Severity::Workflow` per the data-model
+/// severity table; see [`write_equipment_system_audit`] for the
+/// system-initiated auto-detect variant.
 async fn write_equipment_audit(
     bus: &EventBus,
+    action: &str,
+    id_seed: &str,
+    outcome: Outcome,
+    reason_code: Option<&str>,
+    payload: serde_json::Value,
+) -> Result<(), ContractError> {
+    write_equipment_audit_as(
+        bus,
+        "user",
+        Severity::Workflow,
+        Source::User,
+        action,
+        id_seed,
+        outcome,
+        reason_code,
+        payload,
+    )
+    .await
+}
+
+/// System-initiated variant of [`write_equipment_audit`] for auto-detect
+/// creates (`find_or_create_*_by_alias`/`_by_name`) — `actor="system"`,
+/// `Severity::Diagnostic` per data-model.md's severity-per-mutation-class
+/// table (review round 1 #4: "system/periodic = diagnostic").
+async fn write_equipment_system_audit(
+    bus: &EventBus,
+    action: &str,
+    id_seed: &str,
+    outcome: Outcome,
+    reason_code: Option<&str>,
+    payload: serde_json::Value,
+) -> Result<(), ContractError> {
+    write_equipment_audit_as(
+        bus,
+        "system",
+        Severity::Diagnostic,
+        Source::System,
+        action,
+        id_seed,
+        outcome,
+        reason_code,
+        payload,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn write_equipment_audit_as(
+    bus: &EventBus,
+    actor: &str,
+    severity: Severity,
+    source: Source,
     action: &str,
     id_seed: &str,
     outcome: Outcome,
@@ -73,9 +128,9 @@ async fn write_equipment_audit(
         EntityType::Equipment,
         equipment_entity_id(id_seed),
         action,
-        "user",
+        actor,
         outcome,
-        Severity::Workflow,
+        severity,
         EntityId::new(),
     )
     .with_payload(payload);
@@ -85,7 +140,7 @@ async fn write_equipment_audit(
     bus.write_audit(
         entry,
         "equipment.changed",
-        Source::User,
+        source,
         serde_json::json!({"action": action, "outcome": outcome.as_str()}),
     )
     .await
@@ -240,6 +295,7 @@ pub async fn delete_camera(
 /// Returns `ContractError` on database failure.
 pub async fn find_or_create_camera_by_alias(
     pool: &SqlitePool,
+    bus: &EventBus,
     alias: &str,
 ) -> Result<Camera, ContractError> {
     if let Some(camera) = repo::find_camera_by_alias(pool, alias).await.map_err(db_to_contract)? {
@@ -248,11 +304,39 @@ pub async fn find_or_create_camera_by_alias(
 
     // Create as auto-detected — the alias becomes both the name and the sole alias.
     let req = CreateCamera { name: alias.to_owned(), aliases: vec![alias.to_owned()] };
-    let mut camera = repo::create_camera(pool, &req).await.map_err(db_to_contract)?;
+    let mut camera = match repo::create_camera(pool, &req).await {
+        Ok(camera) => camera,
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_system_audit(
+                bus,
+                "equipment.camera.create",
+                alias,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({"name": alias, "autoDetected": true}),
+            )
+            .await?;
+            return Err(err);
+        }
+    };
     camera.auto_detected = true;
 
     // Mark auto_detected in the database.
     q_calibration::mark_camera_auto_detected(pool, &camera.id).await.map_err(db_to_contract)?;
+
+    // Review round 1 #4: auto-detect creates a durable equipment row via a
+    // system-initiated mutation — audited at Severity::Diagnostic (data-model
+    // severity table), not Severity::Workflow like explicit user CRUD.
+    write_equipment_system_audit(
+        bus,
+        "equipment.camera.create",
+        &camera.id,
+        Outcome::Applied,
+        None,
+        serde_json::json!({"name": camera.name, "autoDetected": true}),
+    )
+    .await?;
 
     Ok(camera)
 }
@@ -367,6 +451,7 @@ pub async fn delete_telescope(
 /// Returns `ContractError` on database failure.
 pub async fn find_or_create_telescope_by_alias(
     pool: &SqlitePool,
+    bus: &EventBus,
     alias: &str,
 ) -> Result<Telescope, ContractError> {
     if let Some(scope) = repo::find_telescope_by_alias(pool, alias).await.map_err(db_to_contract)? {
@@ -378,10 +463,35 @@ pub async fn find_or_create_telescope_by_alias(
         aliases: vec![alias.to_owned()],
         focal_length_mm: None,
     };
-    let mut scope = repo::create_telescope(pool, &req).await.map_err(db_to_contract)?;
+    let mut scope = match repo::create_telescope(pool, &req).await {
+        Ok(scope) => scope,
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_system_audit(
+                bus,
+                "equipment.telescope.create",
+                alias,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({"name": alias, "autoDetected": true}),
+            )
+            .await?;
+            return Err(err);
+        }
+    };
     scope.auto_detected = true;
 
     q_calibration::mark_telescope_auto_detected(pool, &scope.id).await.map_err(db_to_contract)?;
+
+    write_equipment_system_audit(
+        bus,
+        "equipment.telescope.create",
+        &scope.id,
+        Outcome::Applied,
+        None,
+        serde_json::json!({"name": scope.name, "autoDetected": true}),
+    )
+    .await?;
 
     Ok(scope)
 }
@@ -598,6 +708,7 @@ pub async fn delete_filter(
 /// Returns `ContractError` on database failure.
 pub async fn find_or_create_filter_by_name(
     pool: &SqlitePool,
+    bus: &EventBus,
     name: &str,
 ) -> Result<Filter, ContractError> {
     // Try exact name match in the existing list.
@@ -608,10 +719,35 @@ pub async fn find_or_create_filter_by_name(
 
     // Create as auto-detected custom filter.
     let req = CreateFilter { name: name.to_owned(), category: FilterCategory::Custom };
-    let mut filter = repo::create_filter(pool, &req).await.map_err(db_to_contract)?;
+    let mut filter = match repo::create_filter(pool, &req).await {
+        Ok(filter) => filter,
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_system_audit(
+                bus,
+                "equipment.filter.create",
+                name,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({"name": name, "autoDetected": true}),
+            )
+            .await?;
+            return Err(err);
+        }
+    };
     filter.auto_detected = true;
 
     q_calibration::mark_filter_auto_detected(pool, &filter.id).await.map_err(db_to_contract)?;
+
+    write_equipment_system_audit(
+        bus,
+        "equipment.filter.create",
+        &filter.id,
+        Outcome::Applied,
+        None,
+        serde_json::json!({"name": filter.name, "autoDetected": true}),
+    )
+    .await?;
 
     Ok(filter)
 }
@@ -667,6 +803,28 @@ mod tests {
         assert_eq!(row.0, "equipment");
         assert_eq!(row.1, "failed");
         assert_eq!(row.2.as_deref(), Some("equipment.not_found"));
+    }
+
+    /// Review round 1 #4: `find_or_create_camera_by_alias` auto-detect create
+    /// writes a durable row at `Severity::Diagnostic` with `actor="system"`
+    /// (system-initiated), not `Severity::Workflow`/`"user"` like explicit
+    /// CRUD (data-model.md severity-per-mutation-class table).
+    #[tokio::test]
+    async fn find_or_create_camera_by_alias_writes_diagnostic_system_audit_row() {
+        let (db, bus) = setup().await;
+        let camera =
+            find_or_create_camera_by_alias(db.pool(), &bus, "ASI294MM Auto").await.unwrap();
+        assert!(camera.auto_detected);
+
+        let row: (String, String, String) = sqlx::query_as(
+            "SELECT actor, severity, outcome FROM audit_log_entry WHERE trigger = 'equipment.camera.create'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("find_or_create_camera_by_alias must write a durable audit row");
+        assert_eq!(row.0, "system");
+        assert_eq!(row.1, "diagnostic");
+        assert_eq!(row.2, "applied");
     }
 
     /// Update/delete round trip for optical trains and filters, spot-checking

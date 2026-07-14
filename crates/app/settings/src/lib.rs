@@ -775,11 +775,19 @@ pub async fn restore_defaults(
 /// keys. Returns `"value.invalid"` for type-invalid values.
 pub async fn set_source_override(
     pool: &SqlitePool,
+    bus: &EventBus,
     req: &SetSourceOverrideRequest,
 ) -> Result<SetSourceOverrideResponse, ContractError> {
     let key = &req.key;
+    // FR-130/T122 FIX (review round 1 #1): a per-source override is a durable
+    // settings mutation regardless of whether a live caller exists today —
+    // entity_id keys on (source_id, key) so a source's override history for
+    // one key correlates under a single audit entity, distinct from the
+    // global-key entity `update_setting` uses.
+    let entity_seed = format!("{}:{key}", req.source_id);
 
     if !descriptors::is_overridable(key.as_str()) {
+        write_settings_override_refusal(bus, &entity_seed, key, "key.unoverridable").await?;
         return Err(ContractError::new(
             ErrorCode::KeyUnoverridable,
             format!("key {key} cannot be overridden per source"),
@@ -789,7 +797,10 @@ pub async fn set_source_override(
     }
 
     let value = &req.value.0;
-    validate_value(key, value)?;
+    if let Err(e) = validate_value(key, value) {
+        write_settings_override_refusal(bus, &entity_seed, key, "value.invalid").await?;
+        return Err(e);
+    }
 
     repo::set_source_override(pool, &req.source_id, key, value).await.map_err(db_err)?;
 
@@ -800,7 +811,56 @@ pub async fn set_source_override(
     // global key is ever written on this path, so no further fan-out applies.
     caches::invalidate_settings_bag();
 
+    let entry = AuditLogEntry::new(
+        EntityType::Settings,
+        settings_entity_id(&entity_seed),
+        "settings.source_override.set",
+        "user",
+        Outcome::Applied,
+        Severity::Workflow,
+        EntityId::new(),
+    )
+    .with_payload(serde_json::json!({"sourceId": req.source_id, "key": key, "after": value}));
+    bus.write_audit(
+        entry,
+        TOPIC_SETTINGS_CHANGED,
+        Source::User,
+        serde_json::json!({"sourceId": req.source_id, "key": key}),
+    )
+    .await
+    .map_err(bus_err)?;
+
     Ok(SetSourceOverrideResponse { source_id: req.source_id.clone(), key: key.clone() })
+}
+
+/// Write a durable `Outcome::Refused` row for a rejected `set_source_override`
+/// attempt (FR-130, review round 1 #1).
+async fn write_settings_override_refusal(
+    bus: &EventBus,
+    entity_seed: &str,
+    key: &str,
+    reason_code: &str,
+) -> Result<(), ContractError> {
+    let entry = AuditLogEntry::new(
+        EntityType::Settings,
+        settings_entity_id(entity_seed),
+        "settings.source_override.set",
+        "user",
+        Outcome::Refused,
+        Severity::Workflow,
+        EntityId::new(),
+    )
+    .with_reason_code(reason_code.to_owned())
+    .with_payload(serde_json::json!({"key": key}));
+    bus.write_audit(
+        entry,
+        TOPIC_SETTINGS_CHANGED,
+        Source::User,
+        serde_json::json!({"key": key, "outcome": "refused", "reasonCode": reason_code}),
+    )
+    .await
+    .map_err(bus_err)?;
+    Ok(())
 }
 
 // ── resolve_setting ───────────────────────────────────────────────────────
@@ -1225,27 +1285,58 @@ mod tests {
 
     #[tokio::test]
     async fn set_source_override_happy_path() {
-        let (db, _bus) = setup().await;
+        let (db, bus) = setup().await;
         let req = SetSourceOverrideRequest {
             source_id: "src-abc".to_owned(),
             key: "hashOnScan".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!("eager")),
         };
-        let resp = set_source_override(db.pool(), &req).await.unwrap();
+        let resp = set_source_override(db.pool(), &bus, &req).await.unwrap();
         assert_eq!(resp.source_id, "src-abc");
         assert_eq!(resp.key, "hashOnScan");
     }
 
+    /// Review round 1 #1: `set_source_override`'s durable audit id resolves
+    /// to a real `audit_log_entry` row (FR-130/FR-131).
+    #[tokio::test]
+    async fn set_source_override_writes_durable_applied_audit_row() {
+        let (db, bus) = setup().await;
+        let req = SetSourceOverrideRequest {
+            source_id: "src-abc".to_owned(),
+            key: "hashOnScan".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("eager")),
+        };
+        set_source_override(db.pool(), &bus, &req).await.unwrap();
+
+        let row: (String, String) = sqlx::query_as(
+            "SELECT entity_type, outcome FROM audit_log_entry WHERE trigger = 'settings.source_override.set'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("set_source_override must write a durable audit row");
+        assert_eq!(row.0, "settings");
+        assert_eq!(row.1, "applied");
+    }
+
     #[tokio::test]
     async fn set_source_override_rejects_unoverridable_key() {
-        let (db, _bus) = setup().await;
+        let (db, bus) = setup().await;
         let req = SetSourceOverrideRequest {
             source_id: "src-abc".to_owned(),
             key: "logLevel".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!("debug")),
         };
-        let err = set_source_override(db.pool(), &req).await.unwrap_err();
+        let err = set_source_override(db.pool(), &bus, &req).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::KeyUnoverridable);
+
+        let row: (String, Option<String>) = sqlx::query_as(
+            "SELECT outcome, reason_code FROM audit_log_entry WHERE trigger = 'settings.source_override.set' AND outcome = 'refused'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("refused set_source_override must write a durable audit row");
+        assert_eq!(row.0, "refused");
+        assert_eq!(row.1.as_deref(), Some("key.unoverridable"));
     }
 
     // ── T022: resolution order ─────────────────────────────────────────
@@ -1267,7 +1358,7 @@ mod tests {
             key: "hashOnScan".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!("off")),
         };
-        set_source_override(db.pool(), &ov_req).await.unwrap();
+        set_source_override(db.pool(), &bus, &ov_req).await.unwrap();
 
         let resolved = resolve_setting(db.pool(), "hashOnScan", Some("src-1")).await.unwrap();
         assert_eq!(resolved, serde_json::json!("off"));

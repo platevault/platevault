@@ -225,7 +225,25 @@ pub async fn register_source(
         .await?;
         return Err(e);
     }
-    let resp = repo::register_source(pool, req).await.map_err(db_to_contract)?;
+    let resp = match repo::register_source(pool, req).await {
+        Ok(resp) => resp,
+        Err(e) => {
+            // FIX (review round 1 #2): the DB write was attempted (validation
+            // + duplicate check already passed) and failed — audit as
+            // `Failed`, not silently propagated.
+            let err = db_to_contract(e);
+            write_source_register_audit(
+                bus,
+                &req.path,
+                &req.path,
+                req.kind,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+            )
+            .await?;
+            return Err(err);
+        }
+    };
     // Invalidate after commit (F0 contract): a freshly registered id can't
     // already be cached, but this keeps the write site authoritative if a
     // removed root's id is ever reused.
@@ -294,6 +312,106 @@ pub async fn get_source_organization_state(
     Ok(state)
 }
 
+/// Validate every batch item, splitting into immediate `Failure` `BatchItem`s
+/// (audited `Refused`) and the still-pending `(original_index, source)`
+/// pairs the repository batch call will attempt. Extracted from
+/// `register_source_batch` to keep it under clippy's line budget.
+async fn partition_batch_sources<'a>(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    sources: &'a [RegisterSourceRequest],
+) -> Result<
+    (Vec<contracts_core::first_run::BatchItem>, Vec<(usize, &'a RegisterSourceRequest)>),
+    ContractError,
+> {
+    use contracts_core::first_run::{BatchItem, ItemStatus};
+
+    let mut items: Vec<BatchItem> = Vec::with_capacity(sources.len());
+    let mut valid_sources: Vec<(usize, &RegisterSourceRequest)> = Vec::new();
+
+    for (index, source) in sources.iter().enumerate() {
+        // Short-circuit: only check for a duplicate once the path itself is valid.
+        let validation_err = match validate_path(&source.path) {
+            Err(e) => Some(*e),
+            Ok(()) => check_duplicate(pool, &source.path, source.kind).await.err(),
+        };
+        let Some(e) = validation_err else {
+            valid_sources.push((index, source));
+            continue;
+        };
+        let code_str = error_code_str(e.code);
+        write_source_register_audit(
+            bus,
+            &source.path,
+            &source.path,
+            source.kind,
+            Outcome::Refused,
+            Some(&code_str),
+        )
+        .await?;
+        items.push(BatchItem {
+            index,
+            status: ItemStatus::Failure,
+            source_id: None,
+            error: Some(code_str),
+            error_detail: Some(JsonAny::new(serde_json::json!({ "message": e.message }))),
+        });
+    }
+
+    Ok((items, valid_sources))
+}
+
+/// Audit + map the repository batch call's per-item results back to
+/// `BatchItem`s. Extracted from `register_source_batch` to keep it under
+/// clippy's line budget; audits `Failure` items too (review round 1 #3 —
+/// these were previously dropped without a durable row).
+async fn audit_batch_results(
+    bus: &EventBus,
+    valid_sources: &[(usize, &RegisterSourceRequest)],
+    repo_items: Vec<contracts_core::first_run::BatchItem>,
+) -> Result<Vec<contracts_core::first_run::BatchItem>, ContractError> {
+    use contracts_core::first_run::{BatchItem, ItemStatus};
+
+    let mut items = Vec::with_capacity(repo_items.len());
+    for (batch_idx, repo_item) in repo_items.into_iter().enumerate() {
+        let (original_index, source) = valid_sources[batch_idx];
+        match repo_item.status {
+            ItemStatus::Success => {
+                if let Some(source_id) = &repo_item.source_id {
+                    write_source_register_audit(
+                        bus,
+                        source_id,
+                        &source.path,
+                        source.kind,
+                        Outcome::Applied,
+                        None,
+                    )
+                    .await?;
+                }
+            }
+            ItemStatus::Failure => {
+                write_source_register_audit(
+                    bus,
+                    &source.path,
+                    &source.path,
+                    source.kind,
+                    Outcome::Failed,
+                    repo_item.error.as_deref(),
+                )
+                .await?;
+            }
+        }
+        items.push(BatchItem {
+            index: original_index,
+            status: repo_item.status,
+            source_id: repo_item.source_id,
+            error: repo_item.error,
+            error_detail: repo_item.error_detail,
+        });
+    }
+    Ok(items)
+}
+
 /// Register multiple sources with per-item path validation.
 ///
 /// Items that fail validation are marked as failures in the batch response
@@ -307,88 +425,40 @@ pub async fn register_source_batch(
     bus: &EventBus,
     req: &RegisterSourceBatchRequest,
 ) -> Result<RegisterSourceBatchResponse, ContractError> {
+    use contracts_core::first_run::{BatchStatus, ItemStatus};
+
     // Pre-validate all paths and build a filtered request for the repository.
     // Items that fail validation are recorded as failures immediately.
-    use contracts_core::first_run::{BatchItem, BatchStatus, ItemStatus};
-
-    let mut items: Vec<BatchItem> = Vec::with_capacity(req.sources.len());
-    let mut valid_sources: Vec<(usize, &RegisterSourceRequest)> = Vec::new();
-
-    for (index, source) in req.sources.iter().enumerate() {
-        if let Err(e) = validate_path(&source.path) {
-            let code_str = error_code_str(e.code);
-            write_source_register_audit(
-                bus,
-                &source.path,
-                &source.path,
-                source.kind,
-                Outcome::Refused,
-                Some(&code_str),
-            )
-            .await?;
-            items.push(BatchItem {
-                index,
-                status: ItemStatus::Failure,
-                source_id: None,
-                error: Some(code_str),
-                error_detail: Some(JsonAny::new(serde_json::json!({ "message": e.message }))),
-            });
-        } else if let Err(e) = check_duplicate(pool, &source.path, source.kind).await {
-            let code_str = error_code_str(e.code);
-            write_source_register_audit(
-                bus,
-                &source.path,
-                &source.path,
-                source.kind,
-                Outcome::Refused,
-                Some(&code_str),
-            )
-            .await?;
-            items.push(BatchItem {
-                index,
-                status: ItemStatus::Failure,
-                source_id: None,
-                error: Some(code_str),
-                error_detail: Some(JsonAny::new(serde_json::json!({ "message": e.message }))),
-            });
-        } else {
-            valid_sources.push((index, source));
-        }
-    }
+    let (mut items, valid_sources) = partition_batch_sources(pool, bus, &req.sources).await?;
 
     // Register validated sources via the repository batch.
     if !valid_sources.is_empty() {
         let batch_req = RegisterSourceBatchRequest {
             sources: valid_sources.iter().map(|(_, s)| (*s).clone()).collect(),
         };
-        let batch_resp =
-            repo::register_source_batch(pool, &batch_req).await.map_err(db_to_contract)?;
-
-        // Map repository batch items back to original indices.
-        for (batch_idx, repo_item) in batch_resp.items.into_iter().enumerate() {
-            let original_index = valid_sources[batch_idx].0;
-            if repo_item.status == ItemStatus::Success {
-                if let Some(source_id) = &repo_item.source_id {
-                    let (_, source) = valid_sources[batch_idx];
+        let batch_resp = match repo::register_source_batch(pool, &batch_req).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                // FIX (review round 1 #2): a catastrophic whole-batch failure
+                // (connection loss) — every still-pending item was an
+                // attempted registration; audit each as `Failed`.
+                let err = db_to_contract(e);
+                let reason = error_code_str(err.code);
+                for (_, source) in &valid_sources {
                     write_source_register_audit(
                         bus,
-                        source_id,
+                        &source.path,
                         &source.path,
                         source.kind,
-                        Outcome::Applied,
-                        None,
+                        Outcome::Failed,
+                        Some(&reason),
                     )
                     .await?;
                 }
+                return Err(err);
             }
-            items.push(BatchItem {
-                index: original_index,
-                status: repo_item.status,
-                source_id: repo_item.source_id,
-                error: repo_item.error,
-                error_detail: repo_item.error_detail,
-            });
-        }
+        };
+        items.extend(audit_batch_results(bus, &valid_sources, batch_resp.items).await?);
     }
 
     // Sort items by original index for deterministic output.
@@ -623,7 +693,20 @@ pub async fn apply_root_remap(
         return Err(*e);
     }
 
-    repo::set_source_path(pool, root_id, new_path).await.map_err(db_to_contract)?;
+    if let Err(e) = repo::set_source_path(pool, root_id, new_path).await {
+        // FIX (review round 1 #2): the write was attempted (root exists,
+        // new_path validated) and failed — audit as `Failed`.
+        let err = db_to_contract(e);
+        write_root_op_refusal(
+            bus,
+            root_id,
+            "root.remap.apply",
+            Outcome::Failed,
+            &error_code_str(err.code),
+        )
+        .await?;
+        return Err(err);
+    }
     // Invalidate after commit (F0 contract) so the next read reloads the new path.
     caches::invalidate_library_root(root_id);
 
@@ -726,7 +809,20 @@ pub async fn set_source_active(
         }
     };
 
-    repo::set_source_active(pool, root_id, active).await.map_err(db_to_contract)?;
+    if let Err(e) = repo::set_source_active(pool, root_id, active).await {
+        // FIX (review round 1 #2): the write was attempted (root exists) and
+        // failed — audit as `Failed`.
+        let err = db_to_contract(e);
+        write_root_op_refusal(
+            bus,
+            root_id,
+            "root.active_changed",
+            Outcome::Failed,
+            &error_code_str(err.code),
+        )
+        .await?;
+        return Err(err);
+    }
 
     // Write durable audit row + live event (T125, FR-130/FR-131).
     let entry = AuditLogEntry::new(
@@ -790,7 +886,23 @@ pub async fn delete_source(
         }
     };
 
-    let counts = repo::count_root_dependents(pool, root_id).await.map_err(db_to_contract)?;
+    let counts = match repo::count_root_dependents(pool, root_id).await {
+        Ok(v) => v,
+        Err(e) => {
+            // FIX (review round 1 #2): the dependents check was attempted
+            // (root exists) and failed — audit as `Failed`.
+            let err = db_to_contract(e);
+            write_root_op_refusal(
+                bus,
+                root_id,
+                "root.deleted",
+                Outcome::Failed,
+                &error_code_str(err.code),
+            )
+            .await?;
+            return Err(err);
+        }
+    };
     if !counts.is_empty() {
         write_root_op_refusal(
             bus,
@@ -810,7 +922,20 @@ pub async fn delete_source(
         .with_details(details));
     }
 
-    repo::remove_source(pool, root_id).await.map_err(db_to_contract)?;
+    if let Err(e) = repo::remove_source(pool, root_id).await {
+        // FIX (review round 1 #2): the delete was attempted (root exists, no
+        // dependents) and failed — audit as `Failed`.
+        let err = db_to_contract(e);
+        write_root_op_refusal(
+            bus,
+            root_id,
+            "root.deleted",
+            Outcome::Failed,
+            &error_code_str(err.code),
+        )
+        .await?;
+        return Err(err);
+    }
     // Invalidate after commit: the root row (and its path) no longer exists,
     // so a still-cached path would otherwise resurface for a deleted root.
     caches::invalidate_library_root(root_id);
