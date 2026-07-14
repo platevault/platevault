@@ -493,6 +493,12 @@ fn validate_edge(entity_type: EntityType, from: &str, to: &str) -> bool {
         EntityType::Projection | EntityType::ProcessingArtifact => parse_projection(from)
             .zip(parse_projection(to))
             .is_some_and(|(f, t)| projection::is_allowed(f, t)),
+        // Spec 030 T120: Settings/Protection/Equipment are audit-only tags
+        // with no lifecycle transition table; they are never dispatched
+        // through `lifecycle.transition` (see `EntityType` doc comment).
+        EntityType::Settings | EntityType::Protection | EntityType::Equipment => unreachable!(
+            "{entity_type:?} has no lifecycle transition table; it never flows through lifecycle.transition"
+        ),
     }
 }
 
