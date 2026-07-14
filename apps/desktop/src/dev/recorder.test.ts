@@ -85,6 +85,24 @@ describe('recorder ring buffer', () => {
     expect(snap[0].payloadTruncated).toBe(false);
   });
 
+  it('normalizes a generic snake_case cmd to the dotted contract name', async () => {
+    const dispatch = wrap(makeDispatch(), true);
+    await dispatch('dev_calls_list', {});
+
+    const snap = getCallSnapshot();
+    expect(snap[0].contract).toBe('dev.calls.list');
+  });
+
+  it('normalizes lifecycle_transition_apply/_preview to the single lifecycle.transition registry name', async () => {
+    const dispatch = wrap(makeDispatch(), true);
+    await dispatch('lifecycle_transition_apply', { id: 'x' });
+    await dispatch('lifecycle_transition_preview', { id: 'x' });
+
+    const snap = getCallSnapshot();
+    expect(snap[1].contract).toBe('lifecycle.transition');
+    expect(snap[0].contract).toBe('lifecycle.transition');
+  });
+
   it('records failed call with error, does not store response', async () => {
     const dispatch = wrap(makeFailingDispatch('not_found', 'Not found'), true);
     await expect(dispatch('targets.get', { id: 'x' })).rejects.toThrow(

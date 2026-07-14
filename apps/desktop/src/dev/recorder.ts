@@ -132,20 +132,34 @@ function pushCall(call: ContractCall): void {
 // ── Contract name normalization ─────────────────────────────────────────────
 
 /**
+ * Explicit aliases for commands whose Tauri fn name has MORE segments than
+ * the registry's dotted contract name — the blanket underscore-to-dot
+ * fallback below only recovers names where the two shapes are 1:1.
+ * `lifecycle.transition` is one logical (replay-unsafe) registry operation
+ * split into two backend command variants; both must resolve to the same
+ * `ContractMeta`. Add further entries here if another such split appears.
+ */
+const CONTRACT_NAME_ALIASES: Record<string, string> = {
+  lifecycle_transition_apply: 'lifecycle.transition',
+  lifecycle_transition_preview: 'lifecycle.transition',
+};
+
+/**
  * Normalize a Tauri invoke command name to the dotted contract-registry name.
  *
  * The real dispatcher receives the Rust `#[tauri::command]` fn name
  * (snake_case, e.g. `dev_calls_list`), not the dotted operation name used in
  * `ContractMeta.name` (e.g. `dev.calls.list`) — `tauri-specta` registers
  * commands under the Rust fn name (see `apps/desktop/src-tauri/tests/bindings.rs`
- * "IPC name alignment regression"). Every current registry entry follows a
- * `namespace_operation` -> `namespace.operation` shape, so a blanket
- * underscore-to-dot replacement recovers the dotted name. Commands outside
- * the dev registry simply fail to match a `ContractMeta` afterward, same as
- * before normalization (spec 021 follow-up #736).
+ * "IPC name alignment regression"). Every current registry entry EXCEPT
+ * `lifecycle.transition` (see `CONTRACT_NAME_ALIASES`) follows a 1:1
+ * `namespace_operation` -> `namespace.operation` shape, so aliases are
+ * checked first and a blanket underscore-to-dot replacement is the fallback.
+ * Commands outside the dev registry simply fail to match a `ContractMeta`
+ * afterward, same as before normalization (spec 021 follow-up #736).
  */
 function toContractName(cmd: string): string {
-  return cmd.replace(/_/g, '.');
+  return CONTRACT_NAME_ALIASES[cmd] ?? cmd.replace(/_/g, '.');
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
