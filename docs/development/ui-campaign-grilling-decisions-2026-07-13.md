@@ -874,6 +874,50 @@ attribution. The model is physical, not textual.
 
 ---
 
+## Q28 — Onboarding an existing messy library (constitution: no forced migration; spec-003/038/006)
+
+The first-run wizard (spec-003) registers source roots; the Inbox supports
+**catalogue-in-place** (index without moving; no `to_root_id`); scan derives
+sessions; **projects are a separate user act, not auto-created from a scan**. The
+open decision is behaviour at *scale* on a real legacy library (tens of thousands
+of frames).
+
+- **Catalogue-in-place is the onboarding default — index, never move** (the
+  constitution mandates supporting existing libraries "without forcing immediate
+  migration into a single hardcoded structure").
+- **Migration is discoverable, not forced.** Onboarding clearly surfaces two
+  non-forced paths so adopting the app's layout is an obvious *choice*, not a
+  cage:
+  - **Set the existing location as an inbox** — the messy library becomes an
+    ingest source; organize in place, or move/restructure within it later via a
+    Q7 plan, at the user's pace (adopt-where-you-are).
+  - **Move data into an inbox location** — a designated inbox/staging folder the
+    app organizes *from* into the managed structure, and the drop-point for
+    ongoing acquisition (tonight's subs land there, the app files them)
+    (migrate-into-structure).
+  Restructure into the Q23 token layout is always a later, optional, **reviewable**
+  action (Q7) — never part of onboarding.
+- **Bulk auto-derivation, review *only the gaps*.** Q12's strict gate cannot mean
+  "confirm 50,000 frames one by one." Scan **samples headers** (Q8: central-rows
+  sample, not full read) and, for every frame with **complete metadata**,
+  auto-derives its session + Q27 **supergroup** + target attribution **without
+  prompting**. Only the **incomplete/ambiguous minority** (missing OBJECT/coords,
+  no `DATE-OBS`, unresolved target) enters a **review queue**, where Q12's "Apply
+  to all" batch clears them fast. The strict gate quarantines the unclear few; it
+  never blocks the library.
+- **Derive inventory/understanding, do NOT auto-create projects.** Onboarding
+  surfaces the observed structure — *"found N targets, M framings (supergroups),
+  K sessions"* — as understanding. **Projects stay a user act** (a project =
+  processing intent, not every target ever shot); the user promotes
+  framings/supergroups into projects when ready, using Q27's suggestions.
+- **Scale is handled by existing decisions**: lazy/bounded hashing (Q22 — only
+  suspected dups), header sampling (Q8), incremental rescan (new/changed only),
+  background + **progressive results**. Composes with Q22 (dedup during
+  onboarding — same sweep), Q27 (clustering + incremental attribution), and
+  §I/Q19 (nothing moved/deleted/restructured without an explicit later plan).
+
+---
+
 ## SpecKit iterate map
 
 Each decision is formalized through a SpecKit iterate when its wave is picked up:
@@ -907,6 +951,7 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q25** verified-complete trigger + output observation | **spec-011 / spec-012 / spec-009** iterate (purely manual completion, no detection; observation reframed as tracking + optional evidence; manual gate unlocks Q19 cleanup; reopen revokes + warns) |
 | **Q26** calibration reuse policy & master library | **spec-007 / spec-040** iterate (per-type reusability in Q18 rules; flats reusable + default warning w/ disable setting; detect-not-create §III; reuse tracking; master protected while any non-completed project references it) |
 | **Q27** project↔target, mosaics, supergroup layer | **spec-008 / spec-009 / spec-006** iterate (new supergroup=framing layer clustered by target+optic-train+pointing+rotation tolerance; mosaic mode = flag inheriting declared target, no panel entity, no OBJECT parsing; incremental ingestion attribution suggests routing new sessions; per-supergroup source view/manifest) |
+| **Q28** existing-library onboarding | **spec-003 / spec-038 / spec-006** iterate (catalogue-in-place default; two discoverable migration paths — set-existing-as-inbox / move-into-inbox; bulk auto-derive + review-only-gaps; inventory only, projects stay a user act; scale via sampling + lazy hash + incremental scan) |
 
 Q8's override decision is small enough to fold into the ingestion/confirm flow
 directly; the **heuristic ADU suggestion** is the part that needs a new
