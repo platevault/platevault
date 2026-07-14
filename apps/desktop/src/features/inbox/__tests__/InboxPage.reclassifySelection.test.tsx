@@ -13,7 +13,7 @@
  * this is exactly what the Real-UI e2e
  * `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm` caught.
  *
- * Two cheap unit-level checks stand in for a full-router InboxPage render
+ * Three cheap unit-level checks stand in for a full-router InboxPage render
  * (no full-router test harness exists in this codebase — InboxPage.classify
  * .test.tsx deliberately renders InboxDetail directly to avoid the OOM a
  * full page tree causes, per its own comment):
@@ -23,7 +23,13 @@
  *    response's `subItems`. Direct unit test, no rendering (mirrors the
  *    existing `mergeRescanRoots`/`normalizeConfirmError` pattern in
  *    inbox.crossRoot.test.tsx).
- * 2. `InboxDetail` calls `onReclassified` with the full v2 response
+ * 2. `resolveReclassifyHandoff` — the pure per-render decision (wait /
+ *    navigate / give up) that bounds `pendingReclassifySelectionId`'s
+ *    lifetime (review round 3): an active search/kind filter hiding the
+ *    post-split item from `filteredItems` must not gate
+ *    `useStaleSelectionCleanup` open forever — it has to give up once the
+ *    UNFILTERED list has settled without the target.
+ * 3. `InboxDetail` calls `onReclassified` with the full v2 response
  *    (including `subItems`) after a successful bulk apply — the seam
  *    InboxPage's handoff logic depends on. Proves the CONTRACT between the
  *    two components without needing a router.
@@ -130,7 +136,66 @@ describe('pickReclassifyTarget (post-split selection target, issue #755)', () =>
   });
 });
 
-// ── 2. InboxDetail → onReclassified seam contract ──────────────────────────────
+// ── 2. resolveReclassifyHandoff (bounded lifetime, review round 3) ─────────────
+
+describe('resolveReclassifyHandoff (bounded pendingReclassifySelectionId lifetime)', () => {
+  it('waits while the list query is still loading, even if already visible', async () => {
+    const { resolveReclassifyHandoff } = await import('../InboxPage');
+
+    const items = [{ inboxItemId: 'item-target' }];
+    expect(
+      resolveReclassifyHandoff(
+        'item-target',
+        items,
+        items,
+        /* listLoading */ true,
+      ),
+    ).toEqual({ action: 'wait' });
+  });
+
+  it('navigates to the filtered-list index once settled and visible', async () => {
+    const { resolveReclassifyHandoff } = await import('../InboxPage');
+
+    const items = [
+      { inboxItemId: 'item-other' },
+      { inboxItemId: 'item-target' },
+    ];
+    expect(
+      resolveReclassifyHandoff('item-target', items, items, false),
+    ).toEqual({
+      action: 'navigate',
+      idx: 1,
+    });
+  });
+
+  it('gives up once settled and the target never appears in the UNFILTERED list', async () => {
+    const { resolveReclassifyHandoff } = await import('../InboxPage');
+
+    // The exact review-round-3 scenario: an unrelated search filter must not
+    // matter here — the target is absent from `items` itself, not merely
+    // filtered out, so there is nothing left to wait for.
+    const items = [{ inboxItemId: 'item-unrelated' }];
+    const filteredItems: typeof items = [];
+    expect(
+      resolveReclassifyHandoff('item-target', items, filteredItems, false),
+    ).toEqual({ action: 'giveUp' });
+  });
+
+  it('gives up once settled when the target exists but is hidden by the active filter', async () => {
+    const { resolveReclassifyHandoff } = await import('../InboxPage');
+
+    // Present in the unfiltered list (it DID arrive) but absent from the
+    // caller-filtered list (e.g. active search text hides it) — no index to
+    // navigate to, so this must also resolve rather than wait forever.
+    const items = [{ inboxItemId: 'item-target' }];
+    const filteredItems: typeof items = [];
+    expect(
+      resolveReclassifyHandoff('item-target', items, filteredItems, false),
+    ).toEqual({ action: 'giveUp' });
+  });
+});
+
+// ── 3. InboxDetail → onReclassified seam contract ──────────────────────────────
 
 const mockInboxReclassifyV2Response: InboxReclassifyV2Response = {
   sourceGroupId: 'group-001',

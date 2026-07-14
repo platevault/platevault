@@ -112,6 +112,41 @@ export function pickReclassifyTarget(
   ).inboxItemId;
 }
 
+/** Outcome of {@link resolveReclassifyHandoff}: keep waiting, navigate, or give up. */
+export type ReclassifyHandoffDecision =
+  | { action: 'wait' }
+  | { action: 'navigate'; idx: number }
+  | { action: 'giveUp' };
+
+/**
+ * Decide what the post-split selection handoff should do THIS render (issue
+ * #755 CI fix round 3). Bounded lifetime: `pendingId` must not stay set
+ * forever just because the active search/kind filter happens to hide the
+ * post-split item — that would gate `useStaleSelectionCleanup` open
+ * indefinitely for everything else on the page.
+ *
+ * Judges "arrived" vs "genuinely not coming back" against the UNFILTERED
+ * `items` list (only once it has settled — `listLoading === false` — so a
+ * refetch already in flight isn't mistaken for "never arriving"). Once
+ * settled: absent from `items` entirely → give up (nothing will ever
+ * appear); present in `items` but absent from `filteredItems` → give up too
+ * (it exists, but the user's own filter hides it — there is no index to
+ * navigate to); present in both → navigate to its filtered-list index.
+ */
+export function resolveReclassifyHandoff(
+  pendingId: string,
+  items: Array<{ inboxItemId: string }>,
+  filteredItems: Array<{ inboxItemId: string }>,
+  listLoading: boolean,
+): ReclassifyHandoffDecision {
+  if (listLoading) return { action: 'wait' };
+  if (!items.some((it) => it.inboxItemId === pendingId)) {
+    return { action: 'giveUp' };
+  }
+  const idx = filteredItems.findIndex((it) => it.inboxItemId === pendingId);
+  return idx === -1 ? { action: 'giveUp' } : { action: 'navigate', idx };
+}
+
 /** Type-guard for the destination-root-required details payload. */
 function asRootRequiredDetails(
   d: unknown,
@@ -285,20 +320,34 @@ export function InboxPage() {
     [],
   );
 
-  // Completes the handoff once the invalidated list query has refetched and
-  // actually contains the post-split target (list.type invalidation is fired
-  // by InboxDetail's reclassify hook; this effect just waits for it to land).
+  // Completes (or abandons) the handoff once the invalidated list query has
+  // settled (list.type invalidation is fired by InboxDetail's reclassify
+  // hook). Bounded via `resolveReclassifyHandoff` — see its doc comment for
+  // why the give-up path is required (an active search filter must not be
+  // able to gate `useStaleSelectionCleanup` open forever).
   useEffect(() => {
     if (!pendingReclassifySelectionId) return;
-    const idx = filteredItems.findIndex(
-      (it) => it.inboxItemId === pendingReclassifySelectionId,
+    const decision = resolveReclassifyHandoff(
+      pendingReclassifySelectionId,
+      items,
+      filteredItems,
+      listLoading,
     );
-    if (idx === -1) return;
+    if (decision.action === 'wait') return;
     setPendingReclassifySelectionId(null);
-    if (idx !== selected) {
-      void navigate({ search: (prev) => ({ ...prev, selected: idx }) });
+    if (decision.action === 'navigate' && decision.idx !== selected) {
+      void navigate({
+        search: (prev) => ({ ...prev, selected: decision.idx }),
+      });
     }
-  }, [pendingReclassifySelectionId, filteredItems, selected, navigate]);
+  }, [
+    pendingReclassifySelectionId,
+    items,
+    filteredItems,
+    listLoading,
+    selected,
+    navigate,
+  ]);
 
   // Each item carries its own root path — use it for classify / confirm calls.
   const selectedRootPath = selectedItem?.rootAbsolutePath ?? '';
