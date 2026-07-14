@@ -114,6 +114,17 @@ local gates (compile, clippy, fmt) are clean.
 | `archive_lifecycle_apply_trash_permanent_delete` (NEW, 2026-07-05) | `archive_journeys.rs` | Journey 7 | `projects.create`, `lifecycle.transition.apply` (x3), `source.protection.set`, `artifact.watcher.attach`, `artifact.list`, `archive.plan.generate`, `plans.apply.direct`, `plans.apply.status`, `archive.list`, `archive.send_to_trash`, `settings.update`, `archive.permanently_delete` |
 | `all_top_level_screens_load` | `smoke.rs` | #21 | real routes + the shipped `AppErrorBoundary` fallback presence check |
 
+**Spec 052 (SIMBAD cache / dual-lookup / cone-search) sync — 2026-07-14.**
+Real-network paths (`target.resolve_explicit` NED/VizieR fallback,
+`target.cone_search.suggest` live SIMBAD cone search) are validated manually via
+`docs/development/windows-validation/052-simbad-live-validation.md` — CI must
+not depend on CDS/NED availability, so these stay manual-only. Offline paths
+are Layer-1 covered (`crates/app/core/tests/resolution_e2e.rs`,
+`simbad_resolution_integration.rs`); the P2UX affordance is vitest-covered
+(`TargetSearch.test.tsx`). Planned journey (not yet written):
+`resolver_cache_clear` in `settings_journeys.rs` asserting `target.cache.clear`
+succeeds offline with a seed re-warm count > 0.
+
 **Corrections to prior scaffold claims** (the original stub doc comments were
 partly aspirational, not verified against real code — corrected here per this
 task's brief: "keep it accurate to REAL current behavior, don't trust spec
