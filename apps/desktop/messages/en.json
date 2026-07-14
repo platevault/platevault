@@ -13,6 +13,7 @@
   "calibration_master_title": "Master {kind}",
   "inbox_grouping_hint": "Grouped by {dims}",
   "projects_tool_unknown": "Unknown tool",
+  "projects_toollaunches_title": "Tool Launches",
   "projects_toollaunch_label": "Launch {id}…",
   "projects_toollaunch_unattributed": "Unattributed",
   "projects_toollaunch_low_confidence": "{kind} (low confidence)",

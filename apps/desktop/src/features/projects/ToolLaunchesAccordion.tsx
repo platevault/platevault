@@ -15,6 +15,7 @@
 
 import { useCallback } from 'react';
 import { basename } from 'pathe';
+import { Section } from '@/ui';
 import { m } from '@/lib/i18n';
 import type { ArtifactSummary } from '@/bindings/index';
 import {
@@ -30,6 +31,8 @@ interface Props {
   projectId: string;
   /** Optional ordered list of launch ids (newest first) for bucket ordering. */
   launchOrder?: string[];
+  /** Whether the collapsible section starts open. Default true. */
+  defaultOpen?: boolean;
 }
 
 // ── ArtifactRow ───────────────────────────────────────────────────────────────
@@ -173,45 +176,62 @@ function ArtifactGroupSection({
 
 // ── ToolLaunchesAccordion ─────────────────────────────────────────────────────
 
-/** Renders the "Tool Launches" accordion section of the project drawer (T023). */
-export function ToolLaunchesAccordion({ projectId, launchOrder = [] }: Props) {
+/**
+ * Renders the "Tool Launches" accordion section of the project drawer
+ * (T023). Mounted in {@link ProjectBottomDetail} alongside the other
+ * secondary/operational sections (#728 — previously built and tested but
+ * never mounted anywhere, so observed artifacts were invisible to users).
+ */
+export function ToolLaunchesAccordion({
+  projectId,
+  launchOrder = [],
+  defaultOpen = true,
+}: Props) {
   const { artifacts, loading, error, reload } = useArtifacts(projectId);
   const groups = groupArtifactsByLaunch(artifacts, launchOrder);
 
   if (loading) {
     return (
-      <div className="tool-launches-loading alm-tool-launches__loading">
-        {m.projects_artifacts_loading()}
-      </div>
+      <Section title={m.projects_toollaunches_title()} defaultOpen={defaultOpen}>
+        <div className="tool-launches-loading alm-tool-launches__loading">
+          {m.projects_artifacts_loading()}
+        </div>
+      </Section>
     );
   }
 
   if (error) {
     return (
-      <div className="tool-launches-error alm-tool-launches__error">
-        {m.projects_artifacts_load_error({ error })}
-      </div>
+      <Section title={m.projects_toollaunches_title()} defaultOpen={defaultOpen}>
+        <div className="tool-launches-error alm-tool-launches__error">
+          {m.projects_artifacts_load_error({ error })}
+        </div>
+      </Section>
     );
   }
 
   if (groups.length === 0) {
     return (
-      <div className="tool-launches-empty alm-tool-launches__empty">
-        {m.projects_artifacts_empty()}
-      </div>
+      <Section title={m.projects_toollaunches_title()} defaultOpen={defaultOpen}>
+        <div className="tool-launches-empty alm-tool-launches__empty">
+          {m.projects_artifacts_empty()}
+        </div>
+      </Section>
     );
   }
 
   return (
-    <div data-testid="tool-launches-accordion">
-      {groups.map((group, idx) => (
-        <ArtifactGroupSection
-          key={group.toolLaunchId ?? `unattributed-${idx}`}
-          group={group}
-          projectId={projectId}
-          onAction={reload}
-        />
-      ))}
-    </div>
+    <Section title={m.projects_toollaunches_title()} defaultOpen={defaultOpen}>
+      <div data-testid="tool-launches-accordion">
+        {groups.map((group, idx) => (
+          <ArtifactGroupSection
+            key={group.toolLaunchId ?? `unattributed-${idx}`}
+            group={group}
+            projectId={projectId}
+            onAction={reload}
+          />
+        ))}
+      </div>
+    </Section>
   );
 }
