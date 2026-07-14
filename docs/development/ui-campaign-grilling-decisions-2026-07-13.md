@@ -367,6 +367,152 @@ btn-sm 24).
 
 ---
 
+## Q15 — Durable audit coverage (spec-030 #647)
+
+**Reframe: #647 is architectural, not a coverage gap.** Two disjoint audit
+stores exist today — an in-memory `EventBus` (feeds the Q9 Activity/log panel:
+settings changes, protection sets, equipment CRUD, `sources.set_active`, rescans
+emit **here only**) and the durable `audit_log_entry` table (written **only** by
+lifecycle transitions, plan-apply, project-health). So a protection-set returns
+an `auditId` that points at an *in-memory* event, not a durable row — violating
+constitution §II ("audit record for each attempted action and outcome").
+
+1. **Every attempted mutation of durable state or user data writes a durable
+   audit row** — generalized far beyond lifecycle+fs to **settings changes,
+   protection overrides, equipment CRUD, source enable/disable/register/delete
+   (the Q5 deletes), rescans/root ops** — each with **outcome incl.
+   refused/failed + reason/code**.
+2. **Unify the two stores.** The durable `audit_log_entry` table is the **single
+   source of truth**; audit-worthy actions write there *and* emit to the bus for
+   live UI — kill the emit-to-bus-**only** pattern for mutations. The Q9 Activity
+   panel then reads durable audit for user-meaningful events + the ephemeral bus
+   for transient/internal noise. (Makes Q9's "activity is a view over the audit"
+   literally true, and Q10's manifest-history reframe viable.)
+3. **Generalize the audit entry shape** from lifecycle-specific to a generic
+   mutation record: `timestamp, actor, action, entity(type+id), outcome+reason`
+   (constitution §II fields), plus optional before→after for settings/protection.
+
+**The line (NOT durably audited):** reads, navigation, UI state, transient
+internal/periodic events.
+
+---
+
+## Q16 — Missing-value semantics + detail-as-delta (spec-030 #620 / #619)
+
+**#620 is a data-model problem wearing a rendering costume.** Today
+`PropertyTable.tsx:42` renders missing as `—`, but the model already lost
+information: an em-dash still gets a "FITS" **source pill** (absence rendered as
+attributed data), and a metadata-less master shows **"Gain 0 · Exposure 0s ·
+Size 0 KB"** — default zeros indistinguishable from a real `Gain 0`. **Missing ≠
+zero**, and the render layer cannot recover the distinction once `0` overwrote it.
+
+**A. Missing-value semantics — fix at the model, then a shared renderer.** Three
+states must be distinguishable everywhere: **real value** (incl. real `0`),
+**unresolved/missing** (no data), **not-applicable** (field doesn't apply).
+Represent missing as `null`/`None` **end-to-end** (extraction → contract → UI) —
+**never default numerics to `0`**. Then one shared `renderValue(value, {source})`:
+- real → the value (+ source pill),
+- missing → a distinct muted **"unresolved" chip**, **no source pill**, never `0`,
+- n/a → blank / "—" without a chip.
+
+Cross-cutting (Sessions, Calibration, Targets, everywhere); it **must** start in
+the data model.
+
+**B. Detail-as-delta (#619).** A detail panel **adds** information, not echoes the
+row's columns back: **lead with what's new** — full metadata, provenance/source,
+related entities, history, actions. **Stay minimal and curated — only relevant
+data, not a dump.** A small identifying summary is fine, but lead with new info.
+
+---
+
+## Q17 — Equipment identity & aliases (spec-006 #659)
+
+Equipment (cameras/telescopes/trains/filters, migration 0007) has `name` +
+`aliases` (JSON array), and **aliases are the FITS join key**: a frame's
+`INSTRUME`/`TELESCOP` string is matched against equipment aliases to resolve
+which gear it used. It has **no uniqueness check, client or server** — duplicate
+*aliases* are corrupting (two cameras sharing alias `ZWO ASI2600MM Pro` → a
+frame's `INSTRUME` matches both → ambiguous session→equipment resolution). This
+is the same identity problem as targets (`target_alias`, migration 0031).
+
+1. **Alias uniqueness per equipment type is a hard invariant** (client *and*
+   server): an alias maps to **≤1** equipment because it's the join key.
+   **Duplicate alias → hard block** ("alias X already used by camera Y").
+   **Duplicate name → warn** (allow — two identical camera models is legitimate —
+   but flag it).
+2. **Equipment is FITS-derived, not hand-entered** (mirroring targets/SIMBAD): on
+   ingest, an unrecognized `INSTRUME`/`TELESCOP` **auto-creates or suggests**
+   equipment with that exact string as the **canonical alias**, and a **UUID
+   identity is assigned on first ingestion**. Manual entry becomes the exception
+   (renaming, grouping, adding human-friendly aliases). Feeds Q12's session
+   identity (camera is a required grouping field).
+3. **Merge path for duplicates** (existing + accidental): combine two equipment
+   records, **union their aliases**, repoint references — reuse the **target-merge**
+   pattern.
+
+Makes equipment a first-class resolved identity like targets, anchored on the
+FITS string.
+
+---
+
+## Q18 — Calibration matching tolerance (spec-040)
+
+Grounds the calibration match/reuse model's tolerance policy.
+
+- **Hard/soft criteria split** as modeled (hard = must-match dimensions; soft =
+  confidence-weighted).
+- **Exposure exact by default; scaled-dark opt-in** (lower confidence when a dark
+  is scaled to a different exposure).
+- **Dark age-penalty configurable in Settings** — **soft**: older masters →
+  lower confidence, **no hard cutoff**.
+- **Temperature tolerance ±2 °C default applied to COOLED cameras only**;
+  **uncooled = temp-agnostic** (auto-widen — sensor temperature isn't set-point
+  controlled).
+- All tolerances **per-rule tunable**.
+
+---
+
+## Q19 — Lifecycle / cleanup (spec-048 / spec-033)
+
+- **Intermediates → trash by default.**
+- **Raw subs kept & protected by default.** **Archiving** is available as an
+  **explicit user action AFTER the lifecycle gate**, **never auto-suggested**.
+- An **explicit verified-complete lifecycle transition is required** before
+  cleanup candidates are surfaced.
+
+This preserves local-first custody (§I) and reviewable mutation (§II): raw source
+material is never removed without an explicit, gated, user-initiated step.
+
+---
+
+## Q20 — Source-view generation strategy (spec-026 / spec-049)
+
+v1 supports **`symlink`, `junction`, `copy`** (hardlink refused, deferred to
+v1.x). The open decisions were the per-platform default and the Windows privilege
+problem: **symlink** is free + live but on Windows requires Admin/Developer Mode;
+**junction** needs no admin but is **directory-only** (can't link individual
+subs); **copy** works everywhere but duplicates GBs and goes stale.
+
+- **Linux/macOS → symlink** (free, live, no privilege).
+- **Windows → detect capability: file symlink if Developer Mode/Admin is
+  available, else fall back to `copy`** with a clear one-time disk-cost notice
+  ("enable Windows Developer Mode for space-free views, or we copy — uses ~N GB").
+  Prefer the live link, degrade gracefully — never silently.
+- **User-configurable** strategy. **Persistent Settings warning** while Windows
+  Developer Mode is off.
+- **Junction** reserved for rare directory-level views, and must **make clear
+  individual files are copied** (junction is dir-only).
+- **Copy = universal safety net** (always works, with the disk-cost notice).
+- **On-demand regeneration + a "stale" flag** when inventory changed since
+  generation — **never auto-regenerate**. Auto-regen risks mutating a view while
+  **PixInsight/WBPP is actively reading it** (corrupting an integration), and on
+  a copy-strategy view would silently **re-copy gigabytes** on every added sub.
+  The view is a prep artifact, regenerated right before processing anyway.
+- Gen/removal/regen are **low-stakes plans → Q7 global queue apply-now default**;
+  removed views are **never hard-deleted**.
+
+---
+
 ## SpecKit iterate map
 
 Each decision is formalized through a SpecKit iterate when its wave is picked up:
@@ -387,6 +533,12 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q12** sessions strict ingest completeness | **spec-006 / spec-033 / spec-041** iterate |
 | **Q13** id-based selection + fail-closed confirm | **spec-030** campaign (shared selection hook + gate) |
 | **Q14** design-system sizing / density / font-size | **spec-030** campaign / design-system (spec-043 tokens) |
+| **Q15** durable audit coverage | **spec-030** campaign (+ audit model crate) |
+| **Q16** missing-value semantics + detail-as-delta | **spec-030** campaign (data-model + shared renderer) |
+| **Q17** equipment identity / aliases | **spec-006** equipment-model iterate |
+| **Q18** calibration matching tolerance | **spec-040** calibration-matching iterate |
+| **Q19** lifecycle / cleanup | **spec-048 / spec-033** lifecycle iterate |
+| **Q20** source-view generation strategy | **spec-026 / spec-049** iterate |
 
 Q8's override decision is small enough to fold into the ingestion/confirm flow
 directly; the **heuristic ADU suggestion** is the part that needs a new
