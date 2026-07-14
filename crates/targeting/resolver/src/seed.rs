@@ -47,9 +47,11 @@
 //! }
 //! ```
 //!
-//! `v_mag` is optional (`#[serde(default)]`): the committed asset predates the
-//! seed-builder V-magnitude fix (spec 052 P1 T003) and will read back `None`
-//! until it is regenerated against live SIMBAD TAP (`allfluxes.V`).
+//! `v_mag` is optional (`#[serde(default)]`) since not every SIMBAD object
+//! carries `allfluxes.V` photometry (galaxies and pure nebulae are frequently
+//! `None`; see `bundled_asset_has_v_mag_coverage` for the measured
+//! per-object-type split). The committed asset was regenerated after the
+//! seed-builder V-magnitude fix (spec 052 P1 T003, #684) landed — see #696.
 //!
 //! The asset is built once, offline, by the `seed-builder` tool; see
 //! `crates/tools/seed-builder`.
@@ -475,6 +477,37 @@ mod tests {
         // Spot-check a Messier object is present.
         let has_m31 = asset.entries.iter().any(|e| e.primary_designation == "M 31");
         assert!(has_m31, "seed must include M 31");
+    }
+
+    /// Regression guard for #696: the committed asset shipped for a long
+    /// while with zero `v_mag` coverage (generated before the seed-builder
+    /// `f.V` / `allfluxes` join fix, spec 052 P1 T003, landed in #684). A
+    /// live re-run measured ~26% coverage (galaxies ~14%; double
+    /// stars/clusters/planetary nebulae 55-92%; pure emission/dark/reflection
+    /// nebulae mostly 0% — SIMBAD's `allfluxes.V` is sparse for those object
+    /// types). The 20% floor sits safely under that measured value so it
+    /// only trips on a genuine stale (all-null) regen, not routine SIMBAD
+    /// drift between rebuilds.
+    #[test]
+    #[allow(clippy::cast_precision_loss)] // counts are ~13k, far below f64's exact-integer range
+    fn bundled_asset_has_v_mag_coverage() {
+        let asset = bundled().expect("bundled seed asset must parse");
+        let with_v_mag = asset.entries.iter().filter(|e| e.v_mag.is_some()).count();
+        let coverage = with_v_mag as f64 / asset.entries.len() as f64;
+        assert!(
+            coverage > 0.20,
+            "bundled seed v_mag coverage regressed to {:.1}% ({with_v_mag}/{}) — asset looks stale, rerun seed-builder",
+            coverage * 100.0,
+            asset.entries.len()
+        );
+
+        let m31 = asset
+            .entries
+            .iter()
+            .find(|e| e.primary_designation == "M 31")
+            .expect("seed must include M 31");
+        let v_mag = m31.v_mag.expect("M 31 must carry a v_mag");
+        assert!((3.0..4.0).contains(&v_mag), "M 31 v_mag should be ~3.4, got {v_mag}");
     }
 
     /// A real Messier-only slice of the committed bundled asset (~110 objects,
