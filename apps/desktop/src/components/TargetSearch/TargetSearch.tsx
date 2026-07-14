@@ -222,6 +222,13 @@ export function TargetSearch({
   const [harderState, setHarderState] = useState<
     'idle' | 'searching' | 'no-results'
   >('idle');
+  // Whether the long-tail SIMBAD phase last reported "offline" — network
+  // unreachable OR online resolution disabled by settings (FR-015; both map
+  // onto `unresolvedReason = "offline"` in the backend contract). When true,
+  // the "search more catalogues" fallback (itself online-only) is suppressed
+  // in favour of a plain explanation (#694): otherwise the empty state
+  // renders nothing the user can act on.
+  const [resolveOffline, setResolveOffline] = useState(false);
 
   // Cancel-in-flight: a monotonic generation counter. Each query bumps `gen`;
   // only the latest generation may commit results, so a slow response from a
@@ -249,6 +256,7 @@ export function TargetSearch({
       const isCurrent = () => gen === genRef.current;
       // A new query always starts the "search more catalogues" affordance idle.
       setHarderState('idle');
+      setResolveOffline(false);
 
       if (!trimmed) {
         setSuggestions([]);
@@ -307,13 +315,19 @@ export function TargetSearch({
           setSuggestions((prev) =>
             mergeDedupe(prev, resolvedToSuggestion(resolved)),
           );
+        } else {
+          // `unresolved` (unknown / offline / resolver-disabled) is non-fatal:
+          // leave the local hits untouched and surface no error (FR-011/FR-015).
+          // Track the "offline" reason specifically (#694) so the empty state
+          // can explain itself instead of rendering nothing.
+          setResolveOffline(res.unresolvedReason === 'offline');
         }
-        // `unresolved` (unknown / offline / resolver-disabled) is non-fatal:
-        // leave the local hits untouched and surface no error (FR-011/FR-015).
       } catch {
         // Network/internal resolve failure is non-fatal for the typeahead;
-        // the local hits already render. Swallow to avoid error spam.
+        // the local hits already render. Swallow to avoid error spam, but
+        // still treat it as an "offline" outcome for the empty-state message.
         if (!isCurrent()) return;
+        setResolveOffline(true);
       } finally {
         if (isCurrent()) setResolving(false);
       }
@@ -417,16 +431,38 @@ export function TargetSearch({
 
   // "Search more catalogues" (spec 052 P2UX): true when the button is the only
   // actionable next step — both prior phases came up empty and the fallback
-  // hasn't already been fired/exhausted for this query.
+  // hasn't already been fired/exhausted for this query. Suppressed when the
+  // long-tail phase reported "offline" (#694): that fallback is itself
+  // online-only, so offering it would just fail again — the offline info
+  // line below takes over instead.
   const harderOffered =
     !loading &&
     !error &&
     !resolving &&
     suggestions.length === 0 &&
     harderState === 'idle' &&
+    !resolveOffline &&
     query.trim().length >= MIN_RESOLVE_LEN;
 
-  const showList = open && query.trim().length > 0;
+  // The offline/disabled empty-state info (#694): same gating as
+  // `harderOffered` above, but for the case it excludes.
+  const offlineNoticeOffered =
+    !loading &&
+    !error &&
+    !resolving &&
+    suggestions.length === 0 &&
+    harderState === 'idle' &&
+    resolveOffline &&
+    query.trim().length >= MIN_RESOLVE_LEN;
+
+  // Keep the popup open while the "search more catalogues" status text is
+  // live (#697): Base UI's own Enter handling can otherwise flip `open` back
+  // to false via `onOpenChange`, unmounting the status the user just
+  // triggered even though our own state (`suggestions`/`harderState`) still
+  // has something to show.
+  const showList =
+    (open || harderState === 'searching' || harderState === 'no-results') &&
+    query.trim().length > 0;
 
   // Keep the highlighted option mounted + visible during keyboard navigation.
   // The virtualizer only mounts the visible window, so an off-screen highlighted
@@ -508,6 +544,15 @@ export function TargetSearch({
             // select-the-highlighted-option handling — never both.
             if (e.key === 'Enter' && harderOffered) {
               e.preventDefault();
+              // #697: our `onKeyDown` and Base UI's own internal Enter
+              // handling are composed onto the SAME input element (Base UI's
+              // `mergeProps`), which — with zero suggestions, so no
+              // highlighted option — closes the popup ("allow form
+              // submission when no item is highlighted") after ours runs.
+              // `preventDefault()`/`stopPropagation()` can't stop a sibling
+              // handler composed this way; Base UI's merge utility exposes
+              // `preventBaseUIHandler()` on the event for exactly this.
+              e.preventBaseUIHandler();
               void handleSearchHarder();
             }
           }}
@@ -655,6 +700,18 @@ export function TargetSearch({
                       {m.cmp_target_search_search_harder()}
                     </button>
                   </div>
+                )}
+                {/*
+                 * Offline/disabled empty state (#694): the long-tail phase
+                 * couldn't even try (network down or the "Online SIMBAD
+                 * resolution" setting is off), so offering the (also online)
+                 * "search more catalogues" fallback would just fail again —
+                 * say so instead of rendering nothing.
+                 */}
+                {offlineNoticeOffered && (
+                  <Combobox.Status className="alm-target-search__status">
+                    {m.settings_resolver_online_off_info()}
+                  </Combobox.Status>
                 )}
                 {harderState === 'searching' && (
                   <Combobox.Status className="alm-target-search__status alm-target-search__status--resolving">

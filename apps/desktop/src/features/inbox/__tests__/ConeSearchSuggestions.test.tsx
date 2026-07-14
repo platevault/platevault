@@ -111,6 +111,78 @@ describe('ConeSearchSuggestions', () => {
 
     // The excluded, low-confidence candidate is still shown, not auto-selected.
     expect(screen.getByText(/Excluded by default/i)).toBeInTheDocument();
+
+    // Adaptive separation units (#699): both fixtures are sub-1° (the whole
+    // frame is <1°), so the plain "toFixed(2)° from centre" would collapse
+    // 0.02° to "0.00°" — degrees only kick in at >= 0.1°.
+    expect(screen.getByText('1.2′ from centre')).toBeInTheDocument(); // 0.02°
+    expect(screen.getByText('0.50° from centre')).toBeInTheDocument(); // 0.5°
+  });
+
+  it('steps separation units down through degrees/arcminutes/arcseconds by magnitude (#699)', async () => {
+    mockSuggest.mockResolvedValue({
+      status: 'ok',
+      data: {
+        pointing: highConfidenceResponse.pointing,
+        suggestions: [
+          {
+            candidate: {
+              canonicalTargetId: null,
+              primaryDesignation: 'M 51',
+              commonName: null,
+              objectType: 'galaxy',
+              raDeg: 10.68,
+              decDeg: 41.27,
+              magnitude: null,
+              constellation: 'And',
+            },
+            separationDeg: 0.15, // >= 0.1° -> degrees (2dp)
+            confidence: 'high',
+            preselected: true,
+            excluded: false,
+          },
+          {
+            candidate: {
+              canonicalTargetId: null,
+              primaryDesignation: 'NGC 5195',
+              commonName: null,
+              objectType: 'galaxy',
+              raDeg: 10.7,
+              decDeg: 41.3,
+              magnitude: null,
+              constellation: 'And',
+            },
+            separationDeg: 2.3 / 60, // < 0.1°, >= 1' -> arcminutes (1dp)
+            confidence: 'medium',
+            preselected: false,
+            excluded: false,
+          },
+          {
+            candidate: {
+              canonicalTargetId: null,
+              primaryDesignation: 'IC 4263',
+              commonName: null,
+              objectType: 'other',
+              raDeg: 10.71,
+              decDeg: 41.31,
+              magnitude: null,
+              constellation: 'And',
+            },
+            separationDeg: 15 / 3600, // < 1' -> arcseconds (0dp)
+            confidence: 'low',
+            preselected: false,
+            excluded: false,
+          },
+        ],
+      },
+    });
+
+    renderWithClient(<ConeSearchSuggestions framesetId="item-units" />);
+
+    await waitFor(() => expect(screen.getByText(/M 51/)).toBeInTheDocument());
+    expect(screen.getByText('0.15° from centre')).toBeInTheDocument();
+    expect(screen.getByText('2.3′ from centre')).toBeInTheDocument();
+    expect(screen.getByText('15″ from centre')).toBeInTheDocument();
   });
 
   it('renders an inert offline note, never an error, and never calls confirm', async () => {

@@ -54,6 +54,27 @@ function candidateLabel(candidate: ConeSearchCandidateTarget): string {
     : candidate.primaryDesignation;
 }
 
+/**
+ * Adaptive-unit separation label (#699): cone-search candidates live inside a
+ * single frame's field of view (well under 1°), where `toFixed(2)` degrees
+ * collapses every real separation to "0.00°". Step down to arcminutes, then
+ * arcseconds, so sub-degree separations stay legible.
+ */
+function separationLabel(degrees: number): string {
+  if (degrees >= 0.1) {
+    return m.inbox_cone_search_separation({ degrees: degrees.toFixed(2) });
+  }
+  const arcminutes = degrees * 60;
+  if (arcminutes >= 1) {
+    return m.inbox_cone_search_separation_arcmin({
+      arcminutes: arcminutes.toFixed(1),
+    });
+  }
+  return m.inbox_cone_search_separation_arcsec({
+    arcseconds: (degrees * 3600).toFixed(0),
+  });
+}
+
 export interface ConeSearchSuggestionsProps {
   /** The light-frameset's inbox item id. */
   framesetId: string;
@@ -140,9 +161,7 @@ export function ConeSearchSuggestions({
             ) : null}
             {s.separationDeg != null ? (
               <span className="alm-meta-sm">
-                {m.inbox_cone_search_separation({
-                  degrees: s.separationDeg.toFixed(2),
-                })}
+                {separationLabel(s.separationDeg)}
               </span>
             ) : null}
             <Btn

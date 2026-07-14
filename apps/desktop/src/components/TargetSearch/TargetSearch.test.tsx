@@ -60,8 +60,13 @@ vi.mock('@/api/ipc', () => ({
 import { TargetSearch } from './TargetSearch';
 import type { TargetSuggestion, ResolvedTarget } from '@/bindings/aliases';
 
-/** Build an `unresolved` resolve response (the offline / disabled default). */
-function unresolved(reason = 'offline') {
+/**
+ * Build an `unresolved` resolve response. Defaults to `"unknown"` (a generic
+ * not-found miss) so tests that don't care about the specific reason keep
+ * exercising the "search more catalogues" fallback; pass `"offline"`
+ * explicitly to simulate the network-down / resolver-disabled case (#694).
+ */
+function unresolved(reason = 'unknown') {
   return {
     contractVersion: '1.0',
     requestId: 'r',
@@ -128,7 +133,7 @@ beforeEach(() => {
   mockSearchTargets.mockReset();
   mockResolveTarget.mockReset();
   mockResolveExplicit.mockReset();
-  // Default: the long-tail resolver returns nothing (offline / not found).
+  // Default: the long-tail resolver returns a generic not-found miss.
   mockResolveTarget.mockResolvedValue(unresolved());
 });
 
@@ -720,6 +725,47 @@ describe('TargetSearch', () => {
     expect(mockResolveExplicit).toHaveBeenCalledTimes(1);
   });
 
+  it('Enter keeps the input value and the popup visible through the whole fallback (#697 regression)', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    let releaseExplicit: (() => void) | null = null;
+    mockResolveExplicit.mockImplementation(
+      () =>
+        new Promise((res) => {
+          releaseExplicit = () => res(resolved(SIMBAD_LBN));
+        }),
+    );
+
+    render(<TargetSearch onSelect={vi.fn()} />);
+    const input = screen.getByRole('combobox');
+    await typeAndFlush(input, 'lbn 552');
+    expect(input).toHaveValue('lbn 552');
+    expect(
+      screen.getByRole('button', {
+        name: 'Search more catalogues (NED/VizieR)',
+      }),
+    ).toBeInTheDocument();
+
+    // Base UI's own Enter handling must never win the race and clear/close.
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await Promise.resolve();
+    });
+    expect(input).toHaveValue('lbn 552');
+    expect(mockResolveExplicit).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Searching more catalogues…')).toBeInTheDocument();
+
+    await act(async () => {
+      releaseExplicit?.();
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    });
+    expect(input).toHaveValue('lbn 552');
+    expect(screen.getByRole('option')).toHaveTextContent('LBN 552');
+  });
+
   it('Enter does NOT fire the explicit fallback when suggestions are present — it selects the highlighted option', async () => {
     const onSelect = vi.fn();
     mockSearchTargets.mockResolvedValue({
@@ -761,6 +807,32 @@ describe('TargetSearch', () => {
     });
 
     expect(screen.getByText('Still no matching targets.')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: 'Search more catalogues (NED/VizieR)',
+      }),
+    ).toBeNull();
+  });
+
+  // ── Offline / resolver-disabled empty state (#694) ─────────────────────────
+
+  it('explains that online resolution is off instead of rendering nothing, and skips the (also online) fallback', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    mockResolveTarget.mockResolvedValue(unresolved('offline'));
+
+    render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'ugc 12588');
+
+    expect(
+      screen.getByText(
+        'Online resolution is off — only the bundled seed and local cache are used. Unknown objects are marked unresolved.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No matches in SIMBAD —')).toBeNull();
     expect(
       screen.queryByRole('button', {
         name: 'Search more catalogues (NED/VizieR)',
