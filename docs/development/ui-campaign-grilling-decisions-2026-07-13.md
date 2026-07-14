@@ -918,6 +918,75 @@ of frames).
 
 ---
 
+## Q29 — Project envelope: on-disk location & contents (spec-008/024 + Q10/Q28)
+
+The constitution's custody rule (§I) forbids **copying image files into an
+application-private store** — it does **not** forbid writing a small documentation
+sidecar next to the data. A `.marker.json` + notes touches no image file, is
+purely additive (not a destructive §II mutation), and is how self-documenting
+libraries work — and it aids portability (the marker/notes travel with the drive).
+
+- **Default: the envelope lives *alongside the data*** — at the project's
+  common-ancestor folder (same derivation as Q12's session folder):
+  `.marker.json` (identity — Q10), notes, and optionally the generated Q20
+  per-supergroup source views. Self-documenting, portable, no image-file copying.
+- **Managed, configurable location = fallback** — used only when the source is
+  **read-only**, the project's data has **no single common folder** (scattered
+  across roots), or the user explicitly wants the library left untouched.
+- **Source views (Q20) remain reviewable §II plans** (they build link/copy trees),
+  targetable alongside or in the managed location.
+
+---
+
+## Q30 — Portable contracts, versioning & long-running-op status (§V; packages/contracts)
+
+Versioning is largely solved: the contract boundary already has a **versioned
+envelope** — `ContractVersion` in `packages/contracts/schemas/envelope.schema.json`,
+a `contract.version_unsupported` error, `contractVersion` required on every
+request/response (semver contract, reject unsupported, additive-compatible). The
+gap is long-running operations.
+
+- **Long-running ops (scan, onboarding, plan-apply on 50k frames, hashing) are
+  first-class over the contract, not ad-hoc.** Model as **operation-id + typed
+  status** (`pending / running / progress% / succeeded / failed / cancelled`) with
+  **mandatory cancellation**, progress surfaced via the **event stream** (Q9
+  EventBus → Tauri events, portable to a future remote backend) — not polling.
+- **Never block the UI.** Every long-running op runs fully async and **surfaces
+  progress in the status bar** — a progress indicator sitting as a peer to the Q7
+  queued-count chip in `useStatusSummary`, with the detail in the Q9 log/activity.
+
+---
+
+## Q31 — Library portability across machines & DB relocation (§I / §V)
+
+The DB is the durable §V record and today is machine-local
+(`app_data_dir()/alm.db`, `src-tauri/src/main.rs:100`). Files travel on the drive;
+the DB (relationships, decisions, audit) does not.
+
+- **The live DB must be on local, non-synced storage.** A live SQLite DB on a
+  **network share** (SMB/NFS — unreliable locking) or a **cloud-sync folder**
+  (Dropbox/OneDrive/iCloud/Drive — rewrites the file mid-write) corrupts the WAL
+  and can destroy the irreplaceable record. So the location is **configurable
+  (default `%appdata%`)** but the app **detects network/removable/known-cloud-sync
+  paths and refuses (hard-warn at minimum)**. Snapshots (export) may go anywhere;
+  running live on a share/cloud is prohibited.
+- **Import / export supported** — a portable, version-tolerant snapshot for backup
+  and transfer (extends Q3's "Export database").
+- **Cross-machine = relocation OR import/export (both):**
+  - **Relocation / open an existing DB** at the configured local path —
+    schema-version-checked, migrations run on open, **root remap (Q5)** fixes
+    differing drive letters. (This is "ingest an existing db" — supported, it is
+    just opening a DB at a path.)
+  - **Export/import snapshot** when a direct open isn't appropriate.
+  - **DB *merge* (combining two libraries into one) is out of scope for v1** —
+    id-collision + merge semantics are their own project.
+- **Auto local backup** — because the DB is irreplaceable, ship a periodic **local**
+  snapshot, not just manual export.
+- **No multi-machine concurrent write** (SQLite single-writer) — portability is
+  move/backup, not live sync.
+
+---
+
 ## SpecKit iterate map
 
 Each decision is formalized through a SpecKit iterate when its wave is picked up:
@@ -952,6 +1021,9 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q26** calibration reuse policy & master library | **spec-007 / spec-040** iterate (per-type reusability in Q18 rules; flats reusable + default warning w/ disable setting; detect-not-create §III; reuse tracking; master protected while any non-completed project references it) |
 | **Q27** project↔target, mosaics, supergroup layer | **spec-008 / spec-009 / spec-006** iterate (new supergroup=framing layer clustered by target+optic-train+pointing+rotation tolerance; mosaic mode = flag inheriting declared target, no panel entity, no OBJECT parsing; incremental ingestion attribution suggests routing new sessions; per-supergroup source view/manifest) |
 | **Q28** existing-library onboarding | **spec-003 / spec-038 / spec-006** iterate (catalogue-in-place default; two discoverable migration paths — set-existing-as-inbox / move-into-inbox; bulk auto-derive + review-only-gaps; inventory only, projects stay a user act; scale via sampling + lazy hash + incremental scan) |
+| **Q29** project envelope on-disk | **spec-008 / spec-024** iterate (envelope alongside data at common-ancestor folder by default — marker+notes+views; managed configurable location as fallback; sidecar is not a §I custody violation) |
+| **Q30** contracts / versioning / long-running ops | **spec-021 / contracts** iterate (versioned envelope already shipped; long-running op-id + typed status + mandatory cancel via event stream; never block UI; status-bar progress) |
+| **Q31** library portability & DB relocation | **spec-018 / persistence** iterate (live DB local non-synced only — refuse network/cloud; import/export snapshot; relocation/open-existing schema-checked + Q5 remap; auto local backup; merge out of scope) |
 
 Q8's override decision is small enough to fold into the ingestion/confirm flow
 directly; the **heuristic ADU suggestion** is the part that needs a new
