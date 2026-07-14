@@ -39,6 +39,25 @@ via `VITE_USE_MOCKS=true`. Native Tauri builds required for OS file pickers.
 **Scale/Scope**: ~50 React components to modify or create, 7 feature
 directories, 11 settings panes, 1 app shell rewrite
 
+**Audit architecture (iteration 2026-07-14, Q15 / #647)**: Two disjoint
+stores exist today. The `EventBus` (`crates/audit/src/bus.rs:37-40`) is a
+hybrid tokio broadcast (live UI) + durable `events` topic stream
+(`crates/persistence/db/migrations/0003_events.sql:7`) — a topic+payload
+stream without outcome/refused semantics, not an audit record. The durable
+`audit_log_entry` table
+(`crates/persistence/db/migrations/0002_lifecycle.sql:154-167`) is
+lifecycle-transition-shaped (`crates/audit-types/src/event.rs:106+`) and is
+written only by lifecycle transitions
+(`crates/persistence/db/src/repositories/lifecycle.rs:423,511`) and the
+audit repository insert
+(`crates/persistence/db/src/repositories/audit.rs:216`). Bus-only mutation
+emitters: protection (`crates/app/core/src/protection.rs:227-228,404-419` —
+returns an `auditId` with no durable row), settings
+(`crates/app/settings/src/lib.rs:481,500,601,615,768`), source ops
+(`crates/app/core/src/first_run.rs:503,542,597`). Equipment CRUD
+(`crates/app/calibration/src/equipment.rs`) emits no audit at all. Phase G
+unifies these per FR-130–FR-134.
+
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
@@ -250,9 +269,11 @@ The implementation is organized into 6 phases, ordered by dependency:
 | **D. Inbox & Sessions** | Core review workflow + sessions | Inbox rename/rewrite, session review, calendar scroll |
 | **E. Calibration, Targets, Projects** | Remaining detail screens | Fingerprint section, coverage by train, lifecycle sidebar |
 | **F. Settings & Archive** | Configuration + archive | 11 panes, archive screen, audit log move |
+| **G. Audit Unification** *(iteration 2026-07-14, Q15 / #647)* | Durable audit coverage & store unification | Generalized audit entry model, durable writes for all bus-only mutation emitters (settings, protection, equipment, sources/roots), Activity/log panel reads durable audit + ephemeral bus |
 
 Each phase is independently testable and deployable. Phase A must come first
-as it provides the shared components used by all subsequent phases.
+as it provides the shared components used by all subsequent phases. Phase G
+depends only on existing audit plumbing and is independent of B–F.
 
 ---
 

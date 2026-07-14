@@ -221,3 +221,32 @@ Expanded from current:
 | Abell Planetary Nebulae | 86 |
 
 Each catalog has: downloaded (boolean), enabled (boolean), last_synced (date).
+
+## Audit Entry — Generalized Mutation Record
+
+*(Iteration 2026-07-14, grilling Q15 / #647.)* The durable audit entry
+generalizes from a lifecycle-transition record to a generic mutation record.
+Target shape (constitution §II fields):
+
+| Field | Meaning |
+|-------|---------|
+| timestamp | When the mutation was attempted |
+| actor | user \| system |
+| action | What was attempted (generalizes the lifecycle `trigger`) |
+| entity (type + id) | What was mutated — extends beyond the lifecycle `EntityType` enum to settings, protection, equipment, sources, and roots |
+| outcome + reason | applied \| refused \| failed, with a reason/code as first-class queryable detail |
+| before → after (optional) | Value pair for settings/protection changes |
+
+Mapping onto the existing `audit_log_entry` table
+(`crates/persistence/db/migrations/0002_lifecycle.sql`):
+
+- `at` → timestamp; `actor` unchanged; `trigger` → action.
+- `from_state` / `to_state` are subsumed by the optional before→after pair
+  (lifecycle transitions keep using them; non-lifecycle mutations carry
+  before→after in the structured detail).
+- reason/code becomes first-class queryable detail (not buried in free-form
+  payload).
+- `severity` (workflow | diagnostic) and `request_id` are retained.
+
+The ephemeral bus event stream is unchanged in shape; audit-worthy mutations
+write the durable row and emit the bus event (durable row is authoritative).

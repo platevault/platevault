@@ -244,6 +244,24 @@ testable and deployable. Paths relative to `apps/desktop/src/`.
 
 ---
 
+## Phase 10: Durable Audit Unification (Q15 / #647) — iteration 2026-07-14
+
+**Purpose**: Every attempted mutation of durable state writes a durable
+`audit_log_entry` row; the durable table is the single source of truth over
+the ephemeral bus; the entry shape generalizes to a generic mutation record
+(FR-130–FR-134, SC-009, spec §8.3).
+
+- [ ] T120 Generalize the durable audit entry model in `crates/audit-types` from lifecycle-transition shape to generic mutation record (action, generic entity type beyond the lifecycle enum, first-class reason/code, optional before→after) with a compatible migration for `audit_log_entry`
+- [ ] T121 Shared write-through helper: one path that writes the durable `audit_log_entry` row and emits the bus event, returning the durable `audit_id`
+- [ ] T122 Settings mutations write durable audit rows with before→after (`crates/app/settings/src/lib.rs` bus-only publishes)
+- [ ] T123 Protection overrides/acknowledgements write durable audit rows; returned `auditId` references the durable row (`crates/app/core/src/protection.rs`)
+- [ ] T124 Equipment CRUD writes durable audit rows (`crates/app/calibration/src/equipment.rs` — currently no audit emission at all)
+- [ ] T125 Source enable/disable/register/delete and rescans/root ops write durable audit rows (`crates/app/core/src/first_run.rs` bus-only publishes; Q5 delete-cascade audit lands here)
+- [ ] T126 Activity/log panel reads durable audit for user-meaningful events + ephemeral bus for transient/internal noise (Q9 wiring point)
+- [ ] T127 Refusal/failure coverage tests: refused and failed mutations produce durable rows with outcome + reason/code; reads/navigation/UI state produce none (FR-134)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -257,6 +275,7 @@ testable and deployable. Paths relative to `apps/desktop/src/`.
 - **Phase 7 (US5 Settings)**: Depends on Phase 2 (uses backend settings commands)
 - **Phase 8 (US6 Status Bar)**: Depends on Phase 2 (uses status.summary command)
 - **Phase 9 (Polish)**: Depends on all previous phases
+- **Phase 10 (Audit Unification)**: Depends only on existing audit plumbing (audit-types model, `audit_log_entry` table, event bus); independent of Phases 3–9. T120–T121 first; T122–T125 parallel after T121; T126–T127 last
 
 ### User Story Independence
 
@@ -301,7 +320,8 @@ After Phase 2, three parallel tracks:
 
 ## Notes
 
-- Total: 109 tasks across 9 phases
+- Total: 117 tasks across 10 phases (T120–T127 added by iteration
+  2026-07-14, durable audit unification)
 - US1 (Wizard): 9 tasks
 - US2 (Inbox): 12 tasks
 - US3 (Projects): 11 tasks
