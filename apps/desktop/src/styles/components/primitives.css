@@ -1,3 +1,13 @@
+/* === TOOLTIP ===
+ * Popup for the shared base-ui Tooltip (Tooltip.tsx). Caps width so hover
+ * help can't span the viewport; overflow-wrap guards a long unbroken token
+ * (e.g. a path) from overflowing the cap. */
+.alm-tooltip {
+  max-width: 280px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* === PILL === */
 .alm-pill {
   display: inline-flex; align-items: center;
