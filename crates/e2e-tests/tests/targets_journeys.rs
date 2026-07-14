@@ -28,7 +28,7 @@ use std::time::Duration;
 use anyhow::Context;
 use common::E2eApp;
 use serde_json::json;
-use thirtyfour::By;
+use thirtyfour::{By, WebElement};
 
 const UI_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -355,7 +355,17 @@ async fn add_target_via_ui(app: &E2eApp, query: &str) -> anyhow::Result<String> 
     let popup =
         app.find_waiting(By::Css(".alm-add-target__popup"), "the Add-target dialog popup").await?;
     let input = popup.find(By::Css(".alm-target-search__input")).await?;
-    input.send_keys(query).await?;
+
+    // #841 (dialog focus race, product fix filed + out of this branch's
+    // scope): a keystroke can land on the modal's own close (X) button
+    // instead of the search input if the dialog's mount/focus sequencing
+    // hasn't settled by the moment we type. Wait for the REAL
+    // `document.activeElement` to actually BE this input, then verify the
+    // input's live `.value` DOM property (via JS — not `outerHTML`/the
+    // `value` ATTRIBUTE, which can lag a React-controlled input's live
+    // state) holds what we just typed; retry the whole focus-wait + type
+    // once if either check fails, rather than bailing on the first race.
+    type_into_search_input(app, &input, query).await?;
 
     // Poll for a real suggestion option to render (offline seed search).
     //
@@ -414,6 +424,64 @@ async fn add_target_via_ui(app: &E2eApp, query: &str) -> anyhow::Result<String> 
         .to_owned();
     anyhow::ensure!(!id.is_empty(), "extracted an empty target id from URL: {url}");
     Ok(id)
+}
+
+/// Wait for `input` to actually hold `document.activeElement` focus, type
+/// `query` into it, then verify the input's live `.value` DOM property
+/// equals `query` — retrying the whole focus-wait + type sequence once if
+/// either check fails (#841: a keystroke can otherwise land on the dialog's
+/// own close button during its mount/focus race, rather than the search
+/// input `add_target_via_ui` just found).
+async fn type_into_search_input(
+    app: &E2eApp,
+    input: &WebElement,
+    query: &str,
+) -> anyhow::Result<()> {
+    const FOCUS_TIMEOUT: Duration = Duration::from_secs(5);
+
+    for attempt in 0..2 {
+        let deadline = tokio::time::Instant::now() + FOCUS_TIMEOUT;
+        loop {
+            let is_focused: bool = app
+                .driver
+                .execute("return arguments[0] === document.activeElement;", vec![input.to_json()?])
+                .await
+                .context("document.activeElement check failed")?
+                .convert()
+                .context("failed to deserialize the document.activeElement check result")?;
+            if is_focused {
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                anyhow::bail!(
+                    "search input never gained document.activeElement focus within \
+                     {FOCUS_TIMEOUT:?} (attempt {attempt})"
+                );
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        input.send_keys(query).await?;
+
+        let live_value: String = app
+            .driver
+            .execute("return arguments[0].value;", vec![input.to_json()?])
+            .await
+            .context("reading the search input's live .value failed")?
+            .convert()
+            .context("failed to deserialize the search input's live .value")?;
+        if live_value == query {
+            return Ok(());
+        }
+        // Landed on the wrong element or got garbled — clear whatever's
+        // there (established pattern: `E2eApp::fill_testid`) and retry once.
+        input.clear().await.ok();
+    }
+
+    anyhow::bail!(
+        "search input's live .value never matched the typed query {query:?} after 2 attempts \
+         (#841 dialog focus race)"
+    );
 }
 
 /// Test 2 (journey-09): adding the same bundled-seed target twice via the
