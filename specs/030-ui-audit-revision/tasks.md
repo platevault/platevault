@@ -262,6 +262,24 @@ the ephemeral bus; the entry shape generalizes to a generic mutation record
 
 ---
 
+## Phase 11: Missing-Value Semantics & Detail-as-Delta (Q16 / #620, #619) — iteration 2026-07-14
+
+**Purpose**: Three distinguishable value states (real / unresolved /
+not-applicable) modeled as null/None end-to-end with no numeric
+zero-defaulting, rendered through one shared renderer with
+presence-coupled source pills; detail panels add information over their
+list rows (FR-135–FR-140, SC-010–SC-011, spec §12).
+
+- [ ] T128 Make absence representable in contract DTOs: `CalibrationFingerprint.exposure_s`/`gain` (`crates/contracts/core/src/calibration.rs`) become `Option<f64>`; sweep other absence-capable non-optional numeric DTO fields; regenerate bindings and sweep DTO consumers
+- [ ] T129 Remove zero-defaulting in the application layer: `crates/app/calibration/src/matching.rs` `unwrap_or(0.0)` on exposure/gain and `unwrap_or(0)` on size; repo-wide sweep for `unwrap_or(0`/`unwrap_or_default` collapsing absent metadata; carry `Option` through to the contract
+- [ ] T130 Shared `renderValue(value, {source})` renderer + muted "unresolved" chip component: real → value + source pill; missing → unresolved chip, no source pill, never 0; n/a → blank/"—" without chip in `apps/desktop/src/components/`
+- [ ] T131 `PropertyTable` adopts the shared renderer: couple source badge to value presence (no badge when value missing), distinguish not-applicable from missing in `PropertyDef` (explicit n/a marker, not null-overload) in `apps/desktop/src/components/PropertyTable.tsx`
+- [ ] T132 Adopt the shared renderer across all metadata surfaces: Inbox review, Sessions detail, Calibration (incl. `MastersTable` meta lines/cells), Targets, Archive
+- [ ] T133 Detail-as-delta rework: audit every detail panel against its list row; lead with new information (full metadata, provenance, related entities, history, actions); trim echoed columns to a small identifying summary; keep panels curated (FR-139, FR-140)
+- [ ] T134 Tests: real 0 renders as "0" with source pill; missing numeric renders unresolved chip (never 0, no source pill); n/a renders blank/"—" without chip; contract round-trips null; each detail panel adds ≥1 non-row information class (SC-010, SC-011)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -276,6 +294,7 @@ the ephemeral bus; the entry shape generalizes to a generic mutation record
 - **Phase 8 (US6 Status Bar)**: Depends on Phase 2 (uses status.summary command)
 - **Phase 9 (Polish)**: Depends on all previous phases
 - **Phase 10 (Audit Unification)**: Depends only on existing audit plumbing (audit-types model, `audit_log_entry` table, event bus); independent of Phases 3–9. T120–T121 first; T122–T125 parallel after T121; T126–T127 last
+- **Phase 11 (Missing-Value Semantics & Detail-as-Delta)**: Depends on shipped metadata/contract plumbing and shared components (Phase 2) only; independent of Phases 3–10. T128–T129 first (model), then T130–T131 (renderer), then T132–T133 in parallel, T134 last
 
 ### User Story Independence
 
@@ -320,8 +339,9 @@ After Phase 2, three parallel tracks:
 
 ## Notes
 
-- Total: 117 tasks across 10 phases (T120–T127 added by iteration
-  2026-07-14, durable audit unification)
+- Total: 124 tasks across 11 phases (T120–T127 added by iteration
+  2026-07-14, durable audit unification; T128–T134 added by iteration
+  2026-07-14, missing-value semantics & detail-as-delta)
 - US1 (Wizard): 9 tasks
 - US2 (Inbox): 12 tasks
 - US3 (Projects): 11 tasks
