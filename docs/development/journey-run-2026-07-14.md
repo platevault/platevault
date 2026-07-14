@@ -7,7 +7,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | Journey | Verdict | Steps (P/F/PA/S) | Issues filed | Notes |
 |---------|---------|------------------|--------------|-------|
 | 1. First-run setup → data sources | PARTIAL | 11P/6F/1PA/1S | #704, #707 | 6-step wizard (Observing Site added); Project required not optional; partial-commit + remap-verify bugs; #557 infinite-render observed |
-| 2. Ingest → review/reclassify → confirm (move) | ⏳ pending | | | |
+| 2. Ingest → review/reclassify → confirm (move) | PARTIAL | 7P/6F/3PA/2S | #711, #724, #765, #766, #767 | needs-review gate works; reclassify sentinel bug #724 blocks confirm; cross-root move lands wrong #765; zero audit rows #766; plan-review overlay stuck #767 |
 | 3. Ingest → confirm (catalogue-in-place) | ⏳ pending | | | |
 | 4. Sessions review (derived) | ⏳ pending | | | |
 | 5. Project lifecycle: create → artifacts | ⏳ pending | | | |
@@ -43,3 +43,17 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **JOURNEY-DOC UPDATE:** Journey 1 (cross-ref Journey 15) must document the 6-step wizard incl. the Observing Site step, and correct "Calibration, Project outputs, and Inbox (all optional)" — Project outputs is required alongside Light frames.
 
 **App-state left for later journeys:** 5 roots registered+scanned — lights\1 (light_frames, organized), lights\2 (light_frames, unorganized), darks (calibration, unorganized), pv-projects (project, organized), inbox (inbox, unorganized); first-run complete; Inbox shows 7 pending items; site "Home Backyard" active. WARNING: known #557 Inbox infinite-render-loop reproduced live ~28min (stopped on navigate-away).
+
+### Journey 2 — Ingest → review/reclassify → confirm (move mode)
+
+**Verdict:** PARTIAL
+**Steps:** 7 PASS / 6 FAIL / 3 PARTIAL / 2 SKIPPED
+**Issues filed:** #711 (UI/backend — list-row badge disagrees with detail/inbox_classify, both directions), #724 (backend — reclassify never clears the __needs_review__ sentinel, so Confirm is permanently blocked even after full resolution), #765 (backend — cross-root inbox move silently lands under the SOURCE root, not the picked destination, yet apply reports success), #766 (backend — inbox plan-apply writes ZERO audit_log_entry rows), #767 (UI — Review-plans overlay stuck open+empty after Apply-all; Escape/X/backdrop all fail)
+
+**Dupes hit (not re-filed):** #644, #549, #550, #552, #569, #605, #606, #643, #647, #715
+
+**Key evidence:** direct IPC inbox_confirm on a fully-reclassified item (inbox_classify → single_type/dark/unclassifiedFiles:[]) still returns inbox.missing_path_attributes (root cause: confirm gates on stale group_key sentinel per test t070; reclassify() never clears it); applied move plan recorded to_root_id=lights\1 + item_state=succeeded in DB but files physically landed at C:\Temp\pv-journeys\inbox\M 51\... (root cause: ExecutorItem resolves library_root only from from_root_id, crates/app/core/src/plan_apply.rs:658); audit_log_entry had 0 rows after a real succeeded apply; needs-review gate (banner/badge/disabled-Confirm/typed-IPC-rejection) and Files-popover/FileInspector parity both PASSED with screenshots at scratchpad/shots/j2-*.png.
+
+**Doc-drift / unexpected-but-intended:** the destination-root picker (step 4) is NOT an inline modal at Confirm click — it surfaces inside the "Review plans" overlay (opened via toast + "Review plans (N)" button) after inbox.destination_root_required. JOURNEY-DOC UPDATE: Journey 2 should say the destination-root picker lives in the plan-review overlay, not at the point of Confirm.
+
+**App-state left for later journeys:** DO NOT trust m51-mixed-session list badges (still genuinely mixed; confirm rejects classification.ambiguous) or the darks-root (root) needs-review item (permanently stuck per #724 — don't try to resolve it). One clean plan applied (j2-clean-light, 2 files) but landed inside the inbox root (inbox/M 51/LUM/2025-05-03/light/, now re-detected as a NEW pending item) rather than under lights\1 — so Journey 4 will find 0 real sessions from this apply. Journey 3's ORGANIZED root lights\1 is untouched, safe for catalogue-in-place. Inbox now shows 9 folders.
