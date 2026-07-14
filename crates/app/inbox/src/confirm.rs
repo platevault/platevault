@@ -44,7 +44,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use app_core_errors::{bus_err, db_internal_ctx};
+use app_core_errors::db_internal_ctx;
 use contracts_core::error_code::ErrorCode;
 use contracts_core::{ContractError, ErrorSeverity};
 
@@ -532,20 +532,34 @@ pub async fn confirm(
     // 14. Publish `inventory.confirmed` so the guided flow's `inbox.confirm_first`
     // step can auto-advance (spec 010; discovered by the guided-events lane #722
     // — this use case previously took no EventBus at all).
+    //
+    // Best-effort: the plan, plan_items, plan-link, and inbox_item.state=plan_open
+    // are already durably committed above, so confirm() has succeeded by this
+    // point — a transient bus publish failure must not surface as a Fatal error
+    // for a confirm that already landed (mirrors plan_apply.rs's item-progress
+    // publish and the write_audit failure-semantics doc in audit/src/bus.rs).
     let confirmed_at = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
-    bus.publish(
-        TOPIC_INVENTORY_CONFIRMED,
-        Source::User,
-        InventoryConfirmed {
-            inbox_item_id: req.inbox_item_id.clone(),
-            plan_id: plan_id.clone(),
-            at: confirmed_at,
-        },
-    )
-    .await
-    .map_err(bus_err)?;
+    if let Err(e) = bus
+        .publish(
+            TOPIC_INVENTORY_CONFIRMED,
+            Source::User,
+            InventoryConfirmed {
+                inbox_item_id: req.inbox_item_id.clone(),
+                plan_id: plan_id.clone(),
+                at: confirmed_at,
+            },
+        )
+        .await
+    {
+        tracing::warn!(
+            inbox_item_id = %req.inbox_item_id,
+            plan_id = %plan_id,
+            error = %e,
+            "audit bus publish failed for inventory.confirmed"
+        );
+    }
 
     Ok(ConfirmResponse {
         plan_id,
@@ -2249,5 +2263,105 @@ mod tests {
             );
         }
         // If it succeeds, the plan was created — also valid.
+    }
+
+    // ── inventory.confirmed publish (review fix: swallow-on-failure) ─────────
+
+    #[tokio::test]
+    async fn confirm_publishes_inventory_confirmed_on_success() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        let bus = make_bus(&db);
+        let mut rx = bus.subscribe();
+
+        setup_classified_item(
+            &db,
+            "item-evt1",
+            "classified",
+            Some("light"),
+            "sig-evt1",
+            &["light_001.fits"],
+        )
+        .await;
+
+        let resp = confirm(
+            db.pool(),
+            &bus,
+            ConfirmRequest {
+                inbox_item_id: "item-evt1".to_owned(),
+                content_signature: "sig-evt1".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let envelope =
+            rx.try_recv().expect("inventory.confirmed must be published on a successful confirm");
+        assert_eq!(envelope.topic, TOPIC_INVENTORY_CONFIRMED);
+        assert_eq!(envelope.payload["inboxItemId"], "item-evt1");
+        assert_eq!(envelope.payload["planId"], resp.plan_id);
+    }
+
+    #[tokio::test]
+    async fn confirm_succeeds_even_when_publish_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_fits(
+            tmp.path(),
+            "light_001.fits",
+            "Light Frame",
+            Some("M42"),
+            Some("Ha"),
+            Some("2025-10-10T22:00:00"),
+        );
+
+        let db = test_db().await;
+        setup_classified_item(
+            &db,
+            "item-evt2",
+            "classified",
+            Some("light"),
+            "sig-evt2",
+            &["light_001.fits"],
+        )
+        .await;
+
+        // A bus backed by a pool with no `events` table: `bus.publish` fails
+        // durably (BusError::Database). confirm()'s own writes still go
+        // through the properly-migrated `db.pool()`, isolating the publish
+        // failure from confirm's transactional work.
+        let bad_pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let bad_bus = EventBus::with_pool(bad_pool);
+
+        let resp = confirm(
+            db.pool(),
+            &bad_bus,
+            ConfirmRequest {
+                inbox_item_id: "item-evt2".to_owned(),
+                content_signature: "sig-evt2".to_owned(),
+                destructive_destination: None,
+                root_absolute_path: tmp.path().to_owned(),
+                root_id: None,
+            },
+        )
+        .await
+        .expect("confirm must succeed even when the audit bus publish fails");
+
+        assert!(!resp.plan_id.is_empty(), "plan must still be created");
+
+        // The transactional work landed despite the publish failure.
+        let link = inbox_repo::get_plan_link(db.pool(), "item-evt2").await.unwrap();
+        assert!(link.is_some(), "plan link must be created despite publish failure");
     }
 }
