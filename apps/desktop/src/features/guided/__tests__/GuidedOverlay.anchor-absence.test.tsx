@@ -63,7 +63,9 @@ describe('GuidedOverlay anchor-absence (real react-joyride, FR-007)', () => {
     // react-joyride portals its overlay/spotlight onto document.body. With no
     // matching target it must never render a stuck full-page spotlight.
     expect(document.querySelectorAll('.react-joyride__overlay').length).toBe(0);
-    expect(document.querySelectorAll('.react-joyride__spotlight').length).toBe(0);
+    expect(document.querySelectorAll('.react-joyride__spotlight').length).toBe(
+      0,
+    );
   });
 
   it('does not throw across every registered step id when its anchor is absent', () => {
