@@ -368,7 +368,7 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
     let item_by_id: HashMap<&str, &ExecutorItem> =
         items.iter().map(|i| (i.id.as_str(), i)).collect();
 
-    for item in &items {
+    'items: for item in &items {
         // Skip items that are already in a terminal state (re-apply idempotency).
         if matches!(item.current_state.as_str(), "succeeded" | "skipped" | "cancelled" | "failed") {
             tracing::debug!(item_id = %item.id, state = %item.current_state, "skipping already-terminal item");
@@ -410,6 +410,18 @@ pub async fn execute_plan<C: ExecutorCallbacks>(
         // picks up a retry filed against ANY already-passed item, matching
         // this loop's "never mid-item" invariant.
         for retry_id in retry_queue.drain_all() {
+            // Check cancellation between retry items too (same "never
+            // mid-item" semantics as the forward loop above). Any retry ids
+            // already drained but not yet reached here are dropped from the
+            // queue without executing — their DB row is already `applying`
+            // (flipped eagerly by `retry_plan_item`), so the caller sweeps
+            // them via `cancel_orphaned_applying_items` after `Cancelled` is
+            // returned (fs_executor has no DB dependency to do so itself).
+            if cancel.is_cancelled() {
+                cancelled = true;
+                break 'items;
+            }
+
             let Some(retry_item) = item_by_id.get(retry_id.as_str()) else {
                 tracing::warn!(item_id = %retry_id, "retry queued for unknown item id; ignored");
                 continue;
@@ -1046,6 +1058,93 @@ mod tests {
         // The retry's prior_state reflects the DB row `retry_plan_item`
         // already transitioned to `applying` — not the original "pending".
         assert_eq!(item1_events[1].prior_state, "applying");
+    }
+
+    /// Callbacks that, on seeing `item-1` succeed, queue a retry for
+    /// `item-2` and signal cancellation in the same tick — mirroring a user
+    /// clicking Cancel right as a mid-run retry is filed (review fix for
+    /// #742's retry-drain loop).
+    #[derive(Clone)]
+    struct CancelDuringRetryDrainCallbacks {
+        events: Arc<Mutex<Vec<ItemProgressEvent>>>,
+        retry_queue: RetryQueue,
+        cancel: CancellationToken,
+    }
+
+    impl ExecutorCallbacks for CancelDuringRetryDrainCallbacks {
+        fn on_item_start(
+            &self,
+            _item_id: &str,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+            Box::pin(async {})
+        }
+
+        fn on_item_progress(
+            &self,
+            event: ItemProgressEvent,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+            let events = self.events.clone();
+            let retry_queue = self.retry_queue.clone();
+            let cancel = self.cancel.clone();
+            Box::pin(async move {
+                if event.item_id == "item-1" && event.new_state == "succeeded" {
+                    retry_queue.push("item-2");
+                    cancel.cancel();
+                }
+                events.lock().await.push(event);
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn cancellation_is_observed_between_retry_items_not_just_forward_items() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = utf8(dir.path());
+        let src1 = root.join("a.fits");
+        let dst1 = root.join("a_dst.fits");
+        let src2 = root.join("b.fits");
+        let dst2 = root.join("b_dst.fits");
+        std::fs::write(&src1, b"a").unwrap();
+        std::fs::write(&src2, b"b").unwrap();
+
+        let item1 = make_move_item("item-1", &src1, &dst1);
+        // item-2 carries `current_state: "failed"` — mirrors a pre-pause
+        // failed item a resumed run now carries forward purely for
+        // `item_by_id` lookup purposes (review fix for resume/retry item-set
+        // agreement); the forward loop skips it as already-terminal, so the
+        // ONLY path that could execute it is the retry-drain below.
+        let item2 = ExecutorItem {
+            current_state: "failed".to_owned(),
+            ..make_move_item("item-2", &src2, &dst2)
+        };
+
+        let cancel = CancellationToken::new();
+        let retry = RetryQueue::new();
+        let callbacks = CancelDuringRetryDrainCallbacks {
+            events: Arc::new(Mutex::new(Vec::new())),
+            retry_queue: retry.clone(),
+            cancel: cancel.clone(),
+        };
+        let skip = SkipSet::new();
+
+        let outcome = execute_plan(vec![item1, item2], &callbacks, &cancel, &skip, &retry).await;
+
+        match outcome {
+            ApplyOutcome::Cancelled(counts) => {
+                assert_eq!(counts.succeeded, 1, "only item-1's normal forward pass");
+            }
+            other => panic!("expected Cancelled, got {other:?}"),
+        }
+
+        // item-2's queued retry must NOT have executed: cancellation is
+        // checked between retry items too, same as forward items.
+        assert!(src2.exists(), "item-2's retry must not have run after cancel");
+        assert!(!dst2.exists());
+        let events = callbacks.events.lock().await;
+        assert!(
+            events.iter().all(|e| e.item_id != "item-2"),
+            "no progress event should have been emitted for the cancelled-out retry"
+        );
     }
 
     #[test]
