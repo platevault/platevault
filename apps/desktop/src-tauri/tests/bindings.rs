@@ -8,6 +8,13 @@
 //! `git diff --exit-code apps/desktop/src/bindings/` to catch unsynced
 //! changes to the typed command surface (spec 002 plan, research.md §9.5).
 //!
+//! `index.ts` carries no SPDX/copyright header: `tauri-specta`'s `export()`
+//! never emits one, so adding one to the committed file (as the AGPL
+//! relicense in #693 briefly did) makes the drift check above fail on every
+//! push. `specs/*/contracts/*.generated.json` is excluded from header sweeps
+//! for the same reason — a future repo-wide license-header pass MUST exclude
+//! all generated output, not just this file.
+//!
 //! Failure modes:
 //! - `Builder::export` errors: a derived `Type` for a contract DTO is broken
 //!   (most often a generic bound or a missing `#[specta(rename_all = ...)]`
