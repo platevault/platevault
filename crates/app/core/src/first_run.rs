@@ -1061,9 +1061,14 @@ mod tests {
         let pool = db.pool().clone();
         let bus = EventBus::with_pool(pool.clone());
 
+        // CI FIX: `tempfile::tempdir()` (not a hardcoded "/tmp") — mirrors
+        // `crates/app/core/tests/first_run_integration.rs`'s pattern for this
+        // same function; a Unix-only literal path fails `validate_path` on
+        // windows-latest.
+        let dir = tempfile::tempdir().expect("tempdir");
         let req = RegisterSourceRequest {
             kind: SourceKind::LightFrames,
-            path: "/tmp".to_owned(),
+            path: dir.path().to_str().expect("utf8 path").to_owned(),
             kind_subtype: None,
             scan_depth: contracts_core::first_run::ScanDepth::Recursive,
             organization_state: OrganizationState::Organized,
@@ -1089,9 +1094,12 @@ mod tests {
         let pool = db.pool().clone();
         let bus = EventBus::with_pool(pool.clone());
 
+        // CI FIX: see `register_source_writes_durable_applied_audit_row` —
+        // same "/tmp" → tempdir() Windows fix.
+        let dir = tempfile::tempdir().expect("tempdir");
         let req = RegisterSourceRequest {
             kind: SourceKind::LightFrames,
-            path: "/tmp".to_owned(),
+            path: dir.path().to_str().expect("utf8 path").to_owned(),
             kind_subtype: None,
             scan_depth: contracts_core::first_run::ScanDepth::Recursive,
             organization_state: OrganizationState::Organized,
