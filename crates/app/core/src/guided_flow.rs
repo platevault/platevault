@@ -160,7 +160,7 @@ impl From<GuidedFlowError> for ContractError {
                 false,
             ),
             GuidedFlowError::StateCorrupted => ContractError::new(
-                ErrorCode::InternalDatabase,
+                ErrorCode::StateCorrupted,
                 "guided flow state was corrupted and has been reset to Idle",
                 ErrorSeverity::Blocking,
                 false,
@@ -739,6 +739,17 @@ mod tests {
         assert!(resp.state.current_step.is_none());
         assert!(resp.state.completed_steps.is_empty());
         assert!(!resp.state.dismissed);
+    }
+
+    /// #723 / FR-010: `StateCorrupted` must serialize to the contracted
+    /// `"state_corrupted"` wire code (guided.state.get.json's closed enum),
+    /// not `"internal.database"` (which collides with `PersistenceUnavailable`).
+    #[test]
+    fn state_corrupted_maps_to_dedicated_wire_code() {
+        let err: ContractError = GuidedFlowError::StateCorrupted.into();
+        assert_eq!(err.code, ErrorCode::StateCorrupted);
+        assert_eq!(serde_json::to_string(&err.code).unwrap(), "\"state_corrupted\"");
+        assert_ne!(err.code, ErrorCode::InternalDatabase);
     }
 
     // ── T011 / T043: event-source filtering ──────────────────────────────────
