@@ -348,6 +348,8 @@
   "inbox_cone_search_confidence_low": "Low confidence",
   "inbox_cone_search_excluded": "Excluded by default",
   "inbox_cone_search_separation": "{degrees}° from centre",
+  "inbox_cone_search_separation_arcmin": "{arcminutes}′ from centre",
+  "inbox_cone_search_separation_arcsec": "{arcseconds}″ from centre",
   "inbox_cone_search_confirmed": "Confirmed as this light group's target.",
   "inbox_confirm_to_inventory": "Confirm to inventory",
   "inbox_detection_details": "Detection details",
