@@ -20,7 +20,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 11. Mistake recovery | PARTIAL | 1P/2F/0PA/1S | | plan-discard works; bulk-override has NO warning #611; calibration un-assign blocked #664
 | 12. Failure | 12. Failure & refusal handling | ⏳ pending | | | | refusal handling | PARTIAL | 0P/3F/2PA/0S | #829, #830 | SAFETY: plan approval never snapshots FS #829 (CAS check dead code); partial fail silently succeeds; refusals not surfaced at control
 | 13. Audit & activity investigation | PARTIAL | 4P/2F/3PA/0S | #831, #832, #833 | HEADLINE: 10 successful plan-applies produce ZERO durable audit rows (#766/#647); Activity shows sequences live then disappears
-| 14. Target-first project start | ⏳ pending | | | |
+| 14. Target-first project start | FAIL | 1P/3F/2PA/0S | | wizard never receives target context #612; sources gate blocks 0-select #719; created project has NO target link
 | 15. Equipment & observing-site setup | ⏳ pending | | | |
 | 16. Keyboard-first navigation & windows | ⏳ pending | | | |
 | 17. Software update & install | ⏳ pending | | | |
@@ -319,3 +319,23 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **UX/quality notes:** filed #831/#832/#833; also reproduced live (not filed) #626/#666/#668/#669/#582/#667/#803/#769/#609/#767.
 
 **App-state left for J14:** app on #/targets, no stuck dialogs, bridge connected. Inbox count 10 (2 confirm attempts failed/discarded, no net change; M51/LUM/2025-05-03/light group now blocked by stale conflict.destination_exists at C:\Temp\pv-journeys\inbox\M 51\...). Seeded catalog + confirmed M51 session (11024d3c) untouched for J14.
+
+### Journey 14 — Target-first project start
+
+**Verdict:** FAIL (first outright FAIL of the campaign)
+**Steps:** 1 PASS / 3 FAIL / 2 PARTIAL / 0 SKIPPED
+**Issues filed:** none (filed #834 then closed it as a dup of #719/#612)
+
+**Dupes hit (not re-filed):** #612 (CRUX — no target passed to the wizard at all), #719 (sources-gate blocks 0-selection creation + calibration data discarded), #327/#599 (calibration+layout mock steps), #776 (source-views mock counts)
+
+**Key evidence:**
+- Step 1 PASS: "+ New project here" clicked via JS on M51 detail (button was reachable/topmost at 1100×720 in this state — contra #816's premise here; noted, not refiled).
+- Step 2 FAIL: wizard opened with name field EMPTY (placeholder only) and summary rail showing generic "New project" — no target fact anywhere. A "From target context: <name>" chip only appears after you type a name, and editing the name to "Totally Unrelated Name XYZ" made the chip read "From target context: Totally" — it mirrors typed text, not an id. Exactly #612 (worse than #783: zero context until you type).
+- Step 3 PARTIAL: Sources step listed both M51 sessions correctly, but "target's sessions first" untestable (only M51 has sessions). "Selecting none still allows creation" FAILED — Next:calibration is disabled at 0 selected, enabled at 1+ (WizardPage.tsx:165 canAdvance case 1) — dupe #719.
+- Step 4 FAIL: created project "J14-target-first-M51" (id 3fd4e30d-…): Projects list Target column shows "—", detail header has no target. DB: canonical_target_id = NULL, vs M51's real canonical_target id bb8f3c0f-… → zero real linkage.
+- Step 5 FAIL/untestable: M51 detail "Projects (0) — No projects linked" — reverse link absent, nothing to round-trip.
+- Entry-point diff: Projects-page "+ New project" → no chip, empty name (correct baseline). Command palette verified by code only (CommandPalette.tsx:42 → /projects/new, no target param); synthetic Ctrl+K dispatch didn't open it (modifier combos forbidden via bridge).
+
+**Doc-drift:** none — the described "pre-filled editable default name + target-as-fact summary rail" behavior does not exist in the build; this is a defect (#612), not intended drift.
+
+**App-state left for J15:** created project "J14-target-first-M51" (id 3fd4e30d, Ready, PixInsight, 1 source, NO target link) now in Projects list alongside "J5 Lifecycle Test". App on #/targets, window at 1100×720. J15 (Equipment/site) is independent.
