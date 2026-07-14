@@ -18,7 +18,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 9. Targets & planning (real vs. stub) | PARTIAL | 3P/0F/2PA/0S | #815, #816 | logic correct; detail+modal overflow clips controls #815
 | 10. Settings, appearance, and i18n | PARTIAL | 8P/5F/2PA/0S | #820, #822, #823, #825, #827 | theme persists; naming/resolution/altitude dont persist; unhandled validation #825; #794 contradiction flagged
 | 11. Mistake recovery | PARTIAL | 1P/2F/0PA/1S | | plan-discard works; bulk-override has NO warning #611; calibration un-assign blocked #664
-| 12. Failure & refusal handling | ⏳ pending | | | |
+| 12. Failure | 12. Failure & refusal handling | ⏳ pending | | | | refusal handling | PARTIAL | 0P/3F/2PA/0S | #829, #830 | SAFETY: plan approval never snapshots FS #829 (CAS check dead code); partial fail silently succeeds; refusals not surfaced at control
 | 13. Audit & activity investigation | ⏳ pending | | | |
 | 14. Target-first project start | ⏳ pending | | | |
 | 15. Equipment & observing-site setup | ⏳ pending | | | |
@@ -282,3 +282,22 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **UX/quality note:** "Use in project" on Calibration master detail produces zero visible feedback when clicked (silent-failure smell; root cause = #664 upstream refusal, not filed separately — fold into #664 fix).
 
 **App-state left for J12:** project "J5 Lifecycle Test" (completed, 0 channels) already has a RECORDED refused Archive transition (audit project bf6f5e26, trigger=Archive, outcome=refused, code=plan.required "edge (project, completed→archived) requires an approved FilesystemPlan") — ready-made "transition that can't satisfy" precondition for J12. NO partial-fail plan exists yet — J12 must construct one (confirm an item, then remove/modify its source file on disk before apply). Inbox item 832eea19 now permanently classified "light" (index-only). M51 plan discarded/reverted.
+
+### Journey 12 — Failure & refusal handling: when the backend says no
+
+**Verdict:** PARTIAL
+**Steps:** 0 PASS / 3 FAIL / 2 PARTIAL / 0 SKIPPED
+**Issues filed:** #829 (backend, **SAFETY** — plan approval NEVER snapshots FS metadata; the R-FS-1 CAS staleness check is entirely DEAD CODE across all plan types; approve_plan plans.rs:319 never calls update_item_fs_snapshot; approved_mtime NULL on all 26 plan_items DB-wide → check_cas permissive-skip is universal), #830 (backend/perf — background poll queries routinely exceed the 1s slow-query threshold)
+
+**Dupes hit (not re-filed):** #600 (lifecycle refusal → zero UI feedback), #603 (empty archive plan unexplained), #742 (mid-run retry never re-executes), #749 (audit detail hidden in tooltip, no state-change column), #765, #766 (inbox plan-apply writes zero audit rows — confirmed live), #769 (per-plan Apply always fails/never approves), #803 (audit raw UUID entity)
+
+**Key evidence:**
+- Step1 (refused lifecycle): clicking Archive on J5 opens an EMPTY review dialog (0 items), NOT an inline refusal; DB audit row confirms outcome=refused code=plan.required "edge (project, completed→archived) requires an approved FilesystemPlan" — captured correctly but never surfaced at the control (dupe #600) and only visible via title= hover in Audit Log (dupe #749).
+- Step2 (empty plan): "0 items", Approve disabled, zero explanatory text (exact dupe #603).
+- Step3/4 (partial/stale): confirmed inbox group → plan 2bc2bab6 (catalogue, 2 files); DELETED one source file on disk (verified via ls); "Apply all" → plan reports state=applied itemsApplied=2 itemsFailed=0, both plan_items succeeded = **SILENT SUCCESS on a missing source**. Root cause #829 (approved_mtime NULL everywhere → CAS check universally skipped). The "stale plan refuses / partial-fail lists failures" guarantee is NOT enforced.
+- Step5 (audit): refused lifecycle transitions ARE audited (reason matches DB, hover-only); plan-apply outcomes NOT audited (0 rows for plan 2bc2bab6, confirms #766).
+- Provocations PASS (backend-verified via IPC; native pickers undrivable): disabled root then inventory_reconcile_run → calm {"code":"root.unavailable",...} AND inline Settings banner "Reconcile failed: That library root isn't available right now…" (minor: says "drive" for a user-disabled root, not filed); invalid path via roots_register → calm {"code":"path.not_exists",...}. No crash either way.
+
+**Doc-drift (JOURNEY-DOC UPDATE):** a plan-gated transition (e.g. Archive) doesn't show a bare inline refusal — it auto-opens the plan-review dialog directly (reasonable UX evolution), but the dialog gives no reason when empty (#603). Journey 12 step 1 should say "a plan-gated transition opens its review dialog directly; the dialog (not an inline label) must carry the refusal/empty-plan reason."
+
+**App-state left for J13:** an empty "Archive: J5 Lifecycle Test" plan (9d858be4, ready_for_review, 0 items) left OPEN as visible ongoing activity; archive refusal recorded TWICE in Audit Log (14:49 + 15:59 UTC); one inbox plan (2bc2bab6) applied (catalogue). NOTE one source file was deleted and NOT restored (C:\Temp\pv-journeys\lights\1\M51\LUM\2025-05-03\M 51_..._0000.fits gone; sibling ...0001.fits intact) — disposable copy, fine. Root lights\2 disabled then re-enabled (all 5 roots active). Inbox count now 10.
