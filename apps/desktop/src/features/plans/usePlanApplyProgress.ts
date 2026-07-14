@@ -206,5 +206,23 @@ export function usePlanApplyProgress() {
     [progress.runId],
   );
 
-  return { progress, run, resume, reset };
+  /**
+   * Cancel an in-flight apply run (`plan.cancel`, US3/FR-009). Only needs the
+   * plan id — the backend signals the shared `CancellationToken` for the
+   * plan's currently-registered run, no `run_id` required. The channel
+   * already streaming this run's progress will still deliver the resulting
+   * terminal `completed` event (backend-emitted for a cancelled run too), so
+   * this function does not itself flip `progress` — the reducer above
+   * self-updates from that event.
+   */
+  const cancel = useCallback(async (planId: string): Promise<boolean> => {
+    try {
+      unwrap(await commands.plansCancel(planId));
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  return { progress, run, resume, cancel, reset };
 }

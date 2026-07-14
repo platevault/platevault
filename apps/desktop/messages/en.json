@@ -389,6 +389,10 @@
   "inbox_system_trash": "System Trash",
   "inbox_unchanged_placeholder": "— unchanged —",
   "inbox_where_source_files_go": "Where should removed source files go?",
+  "inbox_confirm_destructive_label": "I confirm the destructive items below may be applied.",
+  "inbox_confirm_destructive_confirming": "Confirming…",
+  "inbox_confirm_destructive_failed": "Could not confirm the destructive items.",
+  "inbox_confirm_destructive_aria": "Confirm destructive plan items",
   "logpanel_aria_label": "Operation log",
   "logpanel_diagnostics": "Diagnostics",
   "logpanel_empty": "No log entries",
@@ -2272,6 +2276,12 @@
   "plans_review_retry_btn": "Generate retry plan",
   "plans_review_retrying": "Generating retry plan…",
   "plans_review_retry_created_toast": "Retry plan created — review it before applying.",
+  "plans_review_cancel_run_btn": "Cancel apply",
+  "plans_review_cancelling": "Cancelling…",
+  "plans_review_cancel_failed": "Could not cancel the run.",
+  "plans_review_confirm_destructive_label": "I confirm these items may be deleted.",
+  "plans_review_confirm_destructive_confirming": "Confirming…",
+  "plans_review_confirm_destructive_failed": "Could not confirm the destructive items.",
   "projects_cleanup_group_meta": [
     {
       "declarations": [

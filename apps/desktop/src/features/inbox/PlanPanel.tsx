@@ -18,6 +18,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banner, Btn } from '@/ui';
+import { commands } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import { errMessage } from '@/lib/errors';
 import type { PlanApplyProgress } from '@/features/plans/usePlanApplyProgress';
 import type { InboxOpenPlan, InboxPlanAction } from './store';
 import { m } from '@/lib/i18n';
@@ -495,6 +498,51 @@ export function PlanPanel({
     [plans],
   );
 
+  // Destructive-confirm gate (FR-003, D9, issue #741): `destructive_confirmed`
+  // had no writer anywhere, so every plan with a trash/delete item was
+  // permanently refused at apply time. Plan-level (not per-item —
+  // `InboxPlanAction` carries no item id), matching the destructive-destination
+  // control above. Tracked by plan id rather than a single boolean so newly
+  // arrived destructive plans are not mistaken for already-confirmed ones.
+  const [confirmedPlanIds, setConfirmedPlanIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [confirmingDestructive, setConfirmingDestructive] = useState(false);
+  const [confirmDestructiveError, setConfirmDestructiveError] = useState<
+    string | null
+  >(null);
+
+  const destructivePlanIds = useMemo(
+    () =>
+      plans
+        .filter((p) => p.actions.some((a) => a.requiresDestructiveConfirm))
+        .map((p) => p.planId),
+    [plans],
+  );
+  const allDestructiveConfirmed = destructivePlanIds.every((id) =>
+    confirmedPlanIds.has(id),
+  );
+
+  const handleConfirmDestructive = useCallback(async () => {
+    if (confirmingDestructive) return;
+    const pending = destructivePlanIds.filter(
+      (id) => !confirmedPlanIds.has(id),
+    );
+    if (pending.length === 0) return;
+    setConfirmingDestructive(true);
+    setConfirmDestructiveError(null);
+    try {
+      await Promise.all(
+        pending.map(async (id) => unwrap(await commands.plansConfirmDestructive(id))),
+      );
+      setConfirmedPlanIds((prev) => new Set([...prev, ...pending]));
+    } catch (e) {
+      setConfirmDestructiveError(errMessage(e));
+    } finally {
+      setConfirmingDestructive(false);
+    }
+  }, [confirmingDestructive, destructivePlanIds, confirmedPlanIds]);
+
   const selectedArray = useMemo(() => [...selected], [selected]);
   const anySelectedStale = false; // selection set never contains stale plans by construction
   const allSelectableSelected =
@@ -578,8 +626,12 @@ export function PlanPanel({
   }
 
   const applySelectedDisabled =
-    busy || selectedArray.length === 0 || anySelectedStale;
-  const applyAllDisabled = busy || plans.length === 0;
+    busy ||
+    selectedArray.length === 0 ||
+    anySelectedStale ||
+    !allDestructiveConfirmed;
+  const applyAllDisabled =
+    busy || plans.length === 0 || !allDestructiveConfirmed;
 
   return (
     <div className="alm-plan-panel" data-testid="plan-panel">
@@ -870,7 +922,12 @@ export function PlanPanel({
                       variant="ghost"
                       size="sm"
                       onClick={() => onApplyOne(plan.planId)}
-                      disabled={busy || plan.stale}
+                      disabled={
+                        busy ||
+                        plan.stale ||
+                        (plan.actions.some((a) => a.requiresDestructiveConfirm) &&
+                          !confirmedPlanIds.has(plan.planId))
+                      }
                       data-testid={`plan-apply-one-${plan.inboxItemId}`}
                       aria-label={m.inbox_apply_plan_live_aria({
                         name: plan.itemName,
@@ -1063,6 +1120,29 @@ export function PlanPanel({
               <span>{m.inbox_system_trash()}</span>
             </label>
           </div>
+
+          {/* Destructive-confirm gate (FR-003, D9, issue #741): destructive
+              items (trash/delete) were previously refused permanently at
+              apply time — `destructive_confirmed` had no writer. Plan-level
+              (not per-item — `InboxPlanAction` carries no item id). */}
+          <label className="alm-plan-panel__dest-label">
+            <input
+              type="checkbox"
+              checked={allDestructiveConfirmed}
+              disabled={confirmingDestructive || allDestructiveConfirmed}
+              onChange={() => void handleConfirmDestructive()}
+              aria-label={m.inbox_confirm_destructive_aria()}
+              data-testid="plan-destructive-confirm"
+            />
+            <span>
+              {confirmingDestructive
+                ? m.inbox_confirm_destructive_confirming()
+                : m.inbox_confirm_destructive_label()}
+            </span>
+          </label>
+          {confirmDestructiveError !== null && (
+            <Banner variant="danger">{confirmDestructiveError}</Banner>
+          )}
         </div>
       )}
     </div>
