@@ -6,6 +6,10 @@ change_request: "Formalize grilling decision Q15 (docs/development/ui-campaign-g
 scope: "Feature-wide (new requirement block: durable audit coverage & store unification)"
 ---
 
+> **Superseded by the 2026-07-14 critique fix round** — see spec.md §8.3
+> (store roles), FR-130/131/134, tasks.md T125. Historical record; content
+> below reflects the pre-fix state.
+
 ## Change Summary
 
 Add durable-audit coverage and store-unification requirements (grilling Q15,

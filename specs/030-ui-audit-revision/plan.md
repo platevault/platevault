@@ -277,7 +277,7 @@ Phase 1 artifacts (data-model.md, contracts/) will document:
 
 ### Implementation Phases
 
-The implementation is organized into 6 phases, ordered by dependency:
+The implementation is organized into 8 phases (A–H), ordered by dependency:
 
 | Phase | Scope | Key Deliverables |
 |-------|-------|-----------------|
@@ -287,7 +287,7 @@ The implementation is organized into 6 phases, ordered by dependency:
 | **D. Inbox & Sessions** | Core review workflow + sessions | Inbox rename/rewrite, session review, calendar scroll |
 | **E. Calibration, Targets, Projects** | Remaining detail screens | Fingerprint section, coverage by train, lifecycle sidebar |
 | **F. Settings & Archive** | Configuration + archive | 11 panes, archive screen, audit log move |
-| **G. Audit Unification** *(iteration 2026-07-14, Q15 / #647)* | Durable audit coverage & store unification | Generalized audit entry model, durable writes for all bus-only mutation emitters (settings, protection, equipment, sources/roots), Activity/log panel reads durable audit + ephemeral bus |
+| **G. Audit Unification** *(iteration 2026-07-14, Q15 / #647)* | Durable audit coverage & store unification | Generalized audit entry model, durable writes for all bus-only mutation emitters (settings, protection, equipment, sources/roots), Activity/log panel reads durable audit + live event bus |
 | **H. Missing-Value Semantics & Detail-as-Delta** *(iteration 2026-07-14, Q16 / #620, #619)* | Three-state value model + shared renderer + detail-panel content model | Contract/model optionality sweep (no sentinel zeros), shared `renderValue` renderer with unresolved chip and presence-coupled source pills, adoption across all metadata surfaces, detail panels reworked to lead with non-row information |
 
 Each phase is independently testable and deployable. Phase A must come first

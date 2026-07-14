@@ -142,7 +142,8 @@ ones tightens:
 
 - Any mutation command that returns an `auditId` MUST return one that
   resolves to a durable `audit_log_entry` row (previously some ids pointed
-  at bus-only in-memory events, e.g. protection set/acknowledge).
+  at bus-only events — a topic stream no audit read resolves — e.g.
+  protection set/acknowledge).
 - Audit read/list commands keep their shape; their coverage expands to all
   durable-state mutations (settings changes, protection overrides, equipment
   CRUD, source enable/disable/register/delete, rescans/root ops), each with
