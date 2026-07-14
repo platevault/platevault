@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-
-# Copyright (C) 2024-2026 Sjors Robroek
-# SPDX-License-Identifier: AGPL-3.0-only
-
 """orchestrate: forensic run ledger (JSONL, stdlib-only).
 
 Append-only audit trail for a multi-agent run. The script owns the write path so

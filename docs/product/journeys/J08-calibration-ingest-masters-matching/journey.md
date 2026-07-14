@@ -1,3 +1,7 @@
+> **MIGRATED (pilot):** current truth now lives at
+> `docs/journeys/J08-calibration-ingest-masters-matching/journey.md`. This
+> file and its deltas are frozen legacy history.
+
 ## Journey 8 — Calibration: ingest cal frames → masters → matching
 
 **Goal:** get calibration master frames (darks/flats/bias) into the library

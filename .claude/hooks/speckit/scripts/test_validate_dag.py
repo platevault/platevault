@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-
-# Copyright (C) 2024-2026 Sjors Robroek
-# SPDX-License-Identifier: AGPL-3.0-only
-
 """Tests for validate-dag.py parse_graph + cycle detection.
 
 Phase-1 audit remediation: the blocked_by array capture must be line-tolerant.

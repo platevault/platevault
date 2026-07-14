@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-
-# Copyright (C) 2024-2026 Sjors Robroek
-# SPDX-License-Identifier: AGPL-3.0-only
-
 """Self-tests for ledger.py (stdlib unittest, no deps)."""
 import json
 import os

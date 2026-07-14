@@ -1,8 +1,4 @@
 #!/usr/bin/env npx tsx
-
-// Copyright (C) 2024-2026 Sjors Robroek
-// SPDX-License-Identifier: AGPL-3.0-only
-
 /**
  * snapshot.ts — Production-grade Puppeteer-based full-page HTML snapshot
  *
