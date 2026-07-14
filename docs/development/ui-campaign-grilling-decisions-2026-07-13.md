@@ -702,6 +702,53 @@ and a v1 token vocabulary of **target / filter / date / frame_type** — all
 
 ---
 
+## Q24 — Cross-platform path safety & portability (constitution product constraints; §II)
+
+Much of this is **already built and constitution-compliant, so it is not
+re-decided**: `crates/safe-filename` (extracted, publishable `v0.1.0`, spec-050)
+sanitizes each path segment to the **Windows-restrictive ruleset on all
+platforms** (NFC normalization; strip C0/C1 controls, format, bidi overrides;
+Windows reserved chars → `_`; trim trailing whitespace/dots; **reserved
+device-name rejection** CON/PRN/AUX/NUL/COM1–9/LPT1–9 case-insensitive on every
+OS; `..` path-traversal rejection; Unicode-confusables / mixed-script detection).
+Symlink/junction traversal is **refused by default** (reparse-aware `lstat`,
+never `canonicalize`; `crates/fs/pathsafe`, `path_gate.rs`) with an explicit
+opt-in, and roots are modeled separately from relative paths (remap foundation,
+Q5). Sanitizing to the lowest common denominator **always** (portable across
+drives/OSes) is therefore the shipped behavior — not an open decision.
+
+`safe-filename` is deliberately **per-segment**, so the open items are the
+whole-path and collision concerns it can't see:
+
+- **Long path (>260 on Windows) = hard block.** A generated destination whose
+  cumulative length exceeds the OS limit is **refused at plan-build** and surfaced
+  in the reviewable plan for the user to shorten (pattern or a segment). **No
+  silent extended-length (`\\?\`) escape hatch** — extended-length paths are a
+  footgun for the downstream tools this product serves (PixInsight/WBPP and others
+  frequently mishandle them), so refusing to generate an un-processable path keeps
+  the library both writable *and* usable.
+- **Case-insensitive collision folds into Q23's detector.** Two destinations
+  differing only in case (`Ha/` vs `HA/`) collide on Windows / default macOS but
+  not on Linux. The Q23 pre-move collision check **case-normalizes on
+  case-insensitive targets** so a library built on Linux never silently clobbers
+  on Windows.
+- **`safe-filename` rejections surface as plan-level fixes.** When it *rejects*
+  (a value that is a reserved device name, contains confusables, or path
+  traversal) rather than substituting, that error is **surfaced in the reviewable
+  plan for the user to fix** (e.g. rename a target literally named `NUL`) — never
+  a silent apply-time failure (Q23 error-not-fabricate).
+
+**Note — metadata conflict/confidence was assessed and is *not* a separate
+question.** It is already covered by the per-field `ProvenancedValue` priority
+ordering (`reviewed > inferred > observed > generated > planned > applied`,
+`crates/domain/core/src/lifecycle/provenance.rs`) plus Q12 (strict — no
+folder/filename inference; header or user only), Q16 (missing ≠ fabricated), and
+the confidence already carried by derived values (Q8 classification, Q18
+calibration matching). User-reviewed wins over header; header beats inference;
+within-file keyword precedence is deterministic.
+
+---
+
 ## SpecKit iterate map
 
 Each decision is formalized through a SpecKit iterate when its wave is picked up:
@@ -731,6 +778,7 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q21** target recommendation / planner | **spec-044 / spec-047** iterate (differentiated LRGB defaults, band suitability, hour columns + fingerprint, Coverage/Balanced, pill retirement, Plan mode) |
 | **Q22** duplicate detection & hashing | **spec-006 / spec-041** iterate (header-identity suspects + bounded auto-hash confirm; inbox pre-ingest + library review; user-driven resolution) |
 | **Q23** naming & path generation | **spec-015 / spec-025** iterate (folders-only preserve-basename; pre-move collision options in the reviewable plan; no fallback — resolver errors + pattern validates guaranteed tokens) |
+| **Q24** cross-platform path safety | **spec-025 / spec-015** iterate (long-path >260 hard-block in plan; case-insensitive collision in Q23 detector; safe-filename rejections surfaced as plan fixes; per-segment LCD sanitization already shipped via `safe-filename`) |
 
 Q8's override decision is small enough to fold into the ingestion/confirm flow
 directly; the **heuristic ADU suggestion** is the part that needs a new
