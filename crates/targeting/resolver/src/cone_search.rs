@@ -164,6 +164,62 @@ pub fn dedup_candidates(candidates: Vec<ConeCandidate>) -> Vec<ConeCandidate> {
         .collect()
 }
 
+/// Select up to `limit` in-field candidate indices for the suggestion
+/// response (spec 052 P3; issue #698 — "distance-ordered top-N fetch can
+/// drop the actual target").
+///
+/// A dense in-galaxy field routinely returns far more default-excluded
+/// point sources (stars, radio/X-ray detections) *and* bare `Niche`-tier
+/// substructure catalogue entries (HII knots, molecular-cloud complexes,
+/// embedded clusters with no recognised catalogue prefix or common name)
+/// nearer to the query centre than the actual, independently-catalogued
+/// target — live SIMBAD data around M 51 shows 1000+ such entries within
+/// 0.02 deg. A plain nearest-first cut silently drops the real target before
+/// the user ever sees it, even though [`prominence_tier`]/[`is_default_excluded`]
+/// correctly rank it once considered — the defeat happens at truncation, not
+/// ranking. Order candidates by (not-excluded first, then prominence tier
+/// descending, then separation ascending) before truncating, so excluded/
+/// niche clutter can never crowd out a higher-tier candidate regardless of
+/// its raw separation; then guarantee `primary` — [`primary_index`]'s own
+/// nearest-to-centre, prominence-tie-broken pick (OQ-1, unchanged by this
+/// function) — survives the cut even in the residual case where `limit`
+/// non-excluded, equal-or-higher-tier candidates all sit nearer to centre
+/// than it.
+///
+/// This only changes *which* candidates make the cut, never their relative
+/// order for display — callers re-sort the returned subset by separation for
+/// that (nearest-first display, FR-013, is unaffected).
+#[must_use]
+pub fn select_for_display(
+    candidates: &[ConeCandidate],
+    in_field: &[usize],
+    primary: Option<usize>,
+    limit: usize,
+) -> Vec<usize> {
+    let mut ranked: Vec<usize> = in_field.to_vec();
+    let rank_key = |i: usize| {
+        let identity = &candidates[i].identity;
+        (is_default_excluded(identity), std::cmp::Reverse(prominence_tier(identity)))
+    };
+    ranked.sort_by(|&a, &b| {
+        rank_key(a).cmp(&rank_key(b)).then_with(|| {
+            candidates[a]
+                .separation_deg
+                .partial_cmp(&candidates[b].separation_deg)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    });
+    if ranked.len() > limit {
+        if let Some(pos) = primary.and_then(|p| ranked.iter().position(|&i| i == p)) {
+            if pos >= limit {
+                ranked.swap(limit - 1, pos);
+            }
+        }
+        ranked.truncate(limit);
+    }
+    ranked
+}
+
 /// Whether `a` and `b` are the same physical object (OQ-1 dedup key).
 fn same_object(a: &ResolvedIdentity, b: &ResolvedIdentity) -> bool {
     if let (Some(x), Some(y)) = (a.simbad_oid, b.simbad_oid) {
@@ -330,5 +386,107 @@ mod tests {
             candidate(identity(Some(2), "M 110", None, ObjectType::Galaxy, "G", &["M 110"]), 0.6);
         let out = dedup_candidates(vec![m31, m110]);
         assert_eq!(out.len(), 2);
+    }
+
+    // ── select_for_display (#698) ─────────────────────────────────────────────
+
+    // Every niche entry sits nearer to centre than the galaxy (0.000_833).
+    const NICHE_SEPARATIONS_DEG: [f64; 8] =
+        [0.0001, 0.00011, 0.00012, 0.00013, 0.00014, 0.00015, 0.00016, 0.00017];
+
+    #[test]
+    fn prominent_galaxy_survives_a_dense_niche_field_that_outnumbers_the_response_limit() {
+        // Reproduces #698's M 51 shape: 8 in-galaxy niche catalogue entries
+        // (HII knots etc. — no recognised catalogue prefix or common name,
+        // so they land in `ProminenceTier::Niche`) all nearer to the query
+        // centre than the actual, Messier-catalogued galaxy. A plain
+        // nearest-first truncate(8) would show only the 8 niche entries and
+        // drop the galaxy entirely, exactly as reported live.
+        let galaxy = identity(
+            Some(1),
+            "M 51",
+            None,
+            ObjectType::Galaxy,
+            "Sy2", // SIMBAD classifies M 51's nucleus as a Seyfert 2, not "G"
+            &["M 51", "NGC 5194"],
+        );
+        let mut candidates = vec![candidate(galaxy, 0.000_833)];
+        for (n, sep) in NICHE_SEPARATIONS_DEG.into_iter().enumerate() {
+            let designation = format!("[HL2008] {n}");
+            let niche = identity(
+                Some(100 + i64::try_from(n).unwrap()),
+                &designation,
+                None,
+                ObjectType::EmissionNebula,
+                "HII",
+                &[&designation],
+            );
+            candidates.push(candidate(niche, sep));
+        }
+
+        let in_field: Vec<usize> = (0..candidates.len()).collect();
+        // `primary` mirrors what `app_core_inbox::cone_search::primary_index`
+        // would compute in production (separation-first among non-excluded
+        // candidates, prominence only tie-breaking — OQ-1, unchanged by this
+        // fix): the nearest niche knot, not the galaxy. This proves the
+        // display-selection fix does not depend on the primary pick being
+        // "correct" — the galaxy must show up in the suggestion list
+        // regardless of what gets marked primary/preselected.
+        let primary = Some(1);
+
+        let selected = select_for_display(&candidates, &in_field, primary, 8);
+        assert_eq!(selected.len(), 8);
+        assert!(
+            selected.contains(&0),
+            "the Messier-catalogued galaxy must survive the response-limit cut"
+        );
+    }
+
+    #[test]
+    fn homogeneous_tier_field_keeps_nearest_first_order_unchanged() {
+        // When every in-field candidate shares the same prominence tier
+        // (the common case — no notable object nearby), selection must not
+        // change today's nearest-first behaviour.
+        let candidates = vec![
+            candidate(identity(None, "HD 1", None, ObjectType::Other, "*", &["HD 1"]), 0.3),
+            candidate(identity(None, "HD 2", None, ObjectType::Other, "*", &["HD 2"]), 0.1),
+            candidate(identity(None, "HD 3", None, ObjectType::Other, "*", &["HD 3"]), 0.2),
+        ];
+        let in_field = vec![0, 1, 2];
+        let selected = select_for_display(&candidates, &in_field, None, 2);
+        assert_eq!(
+            selected,
+            vec![1, 2],
+            "nearest two by separation, same as a plain sort+truncate"
+        );
+    }
+
+    #[test]
+    fn primary_is_restored_even_when_pushed_past_the_limit_by_equal_tier_neighbours() {
+        // Residual case documented on `select_for_display`: all three
+        // candidates are non-excluded and share the same (Niche) tier, so
+        // tier-bucketing alone cannot protect `primary` from the two nearer
+        // neighbours — only the explicit swap-in guarantee does.
+        let candidates = vec![
+            candidate(
+                identity(None, "Niche A", None, ObjectType::EmissionNebula, "HII", &[]),
+                0.01,
+            ),
+            candidate(
+                identity(None, "Niche B", None, ObjectType::EmissionNebula, "HII", &[]),
+                0.02,
+            ),
+            candidate(
+                identity(None, "Niche C (primary)", None, ObjectType::EmissionNebula, "HII", &[]),
+                0.5,
+            ),
+        ];
+        let in_field = vec![0, 1, 2];
+        let selected = select_for_display(&candidates, &in_field, Some(2), 2);
+        assert_eq!(selected.len(), 2);
+        assert!(
+            selected.contains(&2),
+            "the resolved primary must survive truncation even among same-tier neighbours"
+        );
     }
 }
