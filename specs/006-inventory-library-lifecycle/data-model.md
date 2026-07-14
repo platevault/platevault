@@ -127,6 +127,18 @@ For calibration sessions, the required reviewed fields are `kind`,
 `exposure`, and the equipment match key (camera + binning + set_temp at
 minimum); `target` is N/A and renders as em-dash.
 
+### Framing membership (Q27, cross-spec delta — owned by spec 008)
+
+A light session may be a member of **at most one framing** (spec 008's Q27
+framing layer: `project → framing → session → frames`). The `Framing` entity,
+the tolerance-based clustering (target + optic-train + pointing + rotation), and
+the membership store are **owned by spec 008**; this projection references
+sessions by id and does **not** add a framing field or change any
+`InventorySession` state. The Q27 incremental ingestion-attribution pass runs at
+the Inbox confirm gate as the same pre-ingest sweep as Q22 and consumes the
+pointing/rotation grouping attributes the strict ingest gate already requires
+for lights.
+
 ### Lifecycle
 
 No new lifecycle. State transitions delegate to spec 002's

@@ -18,6 +18,21 @@
 > "Show ignored") are implemented against the 043-redesigned **Sessions** surface;
 > the FR-010 route is `/sessions?reviewFilter=ignored`. See `pending-iteration.md`.
 
+> **AMENDED (2026-07-14) by the Q27 framing-layer iteration on
+> [Spec 008 — Project Create, Onboard, And Edit](../008-project-create-onboard-edit/spec.md).**
+> Spec 008 introduces a **framing layer** (`project → framing → session →
+> frames`). Cross-spec delta for this spec: (1) a light **session may be a
+> member of at most one framing** (a project sub-structure; membership is owned
+> by spec 008, referenced by session id — no new field on the InventorySession
+> projection is required); (2) the framing **clustering** groups a project's
+> light sessions by target + optic-train + pointing + rotation within a tunable
+> tolerance and consumes the grouping attributes the strict ingest gate already
+> requires (pointing/rotation for lights); (3) the Q27 **incremental
+> ingestion-attribution** pass runs at the Inbox confirm gate as the **same
+> pre-ingest sweep as Q22** (one pass = duplicate detection + framing/project
+> attribution), producing ranked, user-picked suggestions — never an auto-merge.
+> No InventorySession state or projection shape changes. See the Iterations log.
+
 > **See Spec 030**: UI implementation of this feature must follow
 > [Spec 030 — UI Audit & Revision](../030-ui-audit-revision/spec.md)
 > for layout, navigation, and component patterns.
@@ -167,3 +182,19 @@ treat the mockup as the visual and interaction contract. The Rust port keeps
 hook signatures (`useInventorySources`, `setSessionReviewState`,
 `getInventorySources`) intact so the component tree under
 `apps/desktop/src/features/inventory/` is not touched by the migration.
+
+## Iterations
+
+### Iteration 2026-07-14: Framing-layer session membership (Q27, cross-spec delta)
+
+**Change**: Spec 008's Q27 framing layer references light sessions as **framing
+members** (`project → framing → session → frames`). A light session belongs to
+at most one framing; membership and the `Framing` entity are owned by spec 008.
+The framing clustering consumes the target + optic-train + pointing + rotation
+grouping attributes the strict ingest gate already requires, and the Q27
+incremental attribution pass runs at the Inbox confirm gate as the **same
+pre-ingest sweep as Q22**. No `InventorySession` state, projection shape, or
+contract changes here — the delta is a documented reference from spec 008.
+**Scope**: Cross-spec delta (documentation only; no new FR/entity in this spec).
+**Artifacts updated**: spec.md (amendment note + log), data-model.md (framing-
+membership reference note).

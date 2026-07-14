@@ -364,3 +364,66 @@ use-case-side only.
 - Downstream features (calibration matching, channel inference, manifests) all
   assume source metadata is reviewed; an unreviewed session would produce
   silent inference errors.
+
+## R11. Framing Layer, Mosaics, And Incremental Attribution (Q27)
+
+### Question
+
+How does a project relate to its light sessions across filters, nights, and
+mosaic panels, and how are new sessions attributed to the right integration
+unit — without relying on unreliable `OBJECT`/panel-name strings?
+
+### Decision
+
+**Introduce a framing layer**: `project → framing → session → frames`. A
+**framing** is the set of light sessions sharing target + optic-train +
+pointing + rotation within a tunable **tolerance** — the co-registerable
+integration unit spanning all filters and nights of one pointing. Clustering is
+**suggested and user-adjustable** (merge/split/reassign), never authoritative.
+One target per project holds; a normal project is usually one framing.
+
+**Mosaic mode is a minimal project flag**, not a panel entity: a mosaic project
+holds multiple framings that all inherit the project's declared target, and
+per-frame OBJECT/coordinate resolution is suppressed. **No OBJECT/panel-name
+string parsing anywhere** — panels are detected by the same physical
+pointing+rotation clustering.
+
+**Incremental ingestion attribution** runs at the Inbox confirm gate as the
+**same pre-ingest sweep as Q22** (one pass does duplicate detection *and*
+framing/project attribution), suggesting add-to-framing / new-framing /
+flag-optic-difference / new-project — ranked by framing match, user picks,
+suggest-never-auto-merge. A completed-project match offers add + reopen (Q25
+revoke/warn).
+
+### Rationale
+
+- **Physical, not textual.** NINA's mosaic mode names each panel its own Target
+  `[Base] Panel [N]` → the `OBJECT` keyword, with a different offset pointing
+  AND rotation per panel, and it is user-overridable and vendor-specific
+  (ASIAIR/SGP/APT/Ekos differ). So OBJECT strings, per-panel coordinates, and
+  rotation are all unreliable for attribution — only the physical acquisition
+  geometry (target + optic-train + pointing + rotation) is dependable.
+  Reference: NINA Framing Assistant docs
+  (`https://nighttime-imaging.eu/docs/master/site/tabs/framing/`).
+- **Tolerance, not exact key.** Rotation drifts a few degrees night to night and
+  pointing is FOV-relative; an exact match key would fragment one real framing
+  into many. A tunable tolerance (sensible default) is the honest grouping key.
+- **Suggest-never-auto-merge.** Mirrors the Q22 (duplicate) and Q26
+  (calibration) postures: the app assists, the user decides. Every merge is a
+  reviewable, user-driven action (§II).
+- **§III boundary.** The app groups and prepares framings — a Q20 source view
+  and a Q10 manifest per framing — but never stitches, registers, or integrates.
+  Integration is PixInsight/WBPP's job.
+
+### Alternatives considered
+
+- **Per-panel entity + OBJECT parsing**: rejected — vendor-variant, user-
+  overridable, and brittle; reintroduces exactly the ambiguity the physical
+  model removes.
+- **Exact pointing/rotation key**: rejected — fragments a single framing across
+  nights.
+- **Auto-merge on match**: rejected — violates reviewable mutation (§II);
+  attribution is a ranked suggestion only.
+- **Framing as a project-per-panel**: rejected — breaks the one-target-per-
+  project rule for mosaics and multiplies project bookkeeping; the flag +
+  multiple framings is the minimal model.

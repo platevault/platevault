@@ -211,6 +211,50 @@ counterparts (contract-backed, audited) are tracked separately.
   `channels.rs`); vitest tests for re-infer and dismiss in
   `EditProjectPane.test.tsx`; Rust use-case test `reinfer_clears_drift_flag`.
 
+## Phase F — Framing Layer (Q27)
+
+Additive layer between the `Project` aggregate and spec-006 sessions
+(`project → framing → session → frames`). Does not invalidate any completed
+task above. Cross-spec deltas land in spec-009 (reopen-on-match) and spec-006
+(session→framing membership).
+
+- [ ] F-Framing-1. `[US5]` Add the `framing` table + `framing_session` join +
+  `project.is_mosaic` column (backward-compatible migration, default false) in
+  `crates/persistence/db`. Add the `Framing` entity per `data-model.md` in
+  `crates/domain/core/src/project/` (or `crates/sessions/`). (FR-013/FR-016/FR-017)
+- [ ] F-Framing-2. `[US5]` Tolerance-based clustering in `crates/sessions/`:
+  group a project's light sessions by target + optic-train + pointing + rotation
+  within a tunable tolerance; emit a **suggested** clustering. Unit-test the
+  collapse (multi-night/multi-filter → one framing) and the split (pointing
+  beyond tolerance → distinct framings). (FR-013/FR-014/FR-015)
+- [ ] F-Framing-3. `[US5]` `framing.merge` / `framing.split` / `framing.reassign`
+  use cases in `crates/app/core/` + contracts + bindings; flip
+  `Framing.clustering` to `user_adjusted`; membership-only mutation (no
+  filesystem); emit audit events. (FR-015)
+- [ ] F-Framing-4. `[US6]` Mosaic-mode flag on `project.create` / `project.update`
+  (`is_mosaic`); when set, framings inherit the project's declared target and
+  per-frame OBJECT/coordinate resolution is suppressed. No panel entity, no
+  OBJECT/panel-name string parsing. (FR-017/FR-018)
+- [ ] F-Framing-5. `[US7]` Inbox-confirm attribution pass composed with the Q22
+  pre-ingest sweep in `crates/app/inbox/src/confirm.rs`: match each new light
+  session against existing framings/projects; return ranked
+  `IngestionAttributionCandidate`s (add-to-framing / new-framing /
+  flag-optic-difference / new-project). Suggest-never-auto-merge; user picks.
+  (FR-019/FR-020)
+- [ ] F-Framing-6. `[US7]` Completed-project attribution match → add + reopen via
+  the spec-009 `completed → processing` edge with the Q25 raw-subs-archived
+  reopen warning. (FR-020)
+- [ ] F-Framing-7. `[US5]` Per-framing source view (Q20) + per-framing manifest
+  (Q10) wiring as reproducible projections; assert §III — the app groups and
+  prepares but never stitches/integrates. (FR-021)
+- [ ] F-Framing-8. `[P]` Layer-1 tests: multi-night/multi-filter collapse into
+  one framing; merge/split/reassign persistence + `user_adjusted`; mosaic
+  multi-framing inherit target with no OBJECT parsing; attribution ranking +
+  user-pick-only apply; completed-project add+reopen.
+- [ ] F-Framing-9. Quickstart + Windows-E2E scenario (tauri MCP) for the framing
+  grouping + attribution flow; update
+  `specs/037-e2e-integration-testing/contracts/coverage-matrix.md`.
+
 ## Cross-Cutting
 
 - [x] X-1. Update steering index entry for `specs/008-` once tasks land.
@@ -261,6 +305,15 @@ US1-5: spec 003 shipped; CreateProjectDialog still hasn't picked up the source
 picker — deferred as net-new UI scope, not a spec-003 blocker anymore.
 US3-4, US1b-1..US1b-5 (remove/add-source UI): DONE (WP-008-C) — see ticked items above.
 US2-3 depends on spec 004 (native filesystem controls) — backend ready, UI deferred.
+
+Phase F (framing layer, Q27):
+F-Framing-1 ─► F-Framing-2 ─► F-Framing-3 (adjustment) 
+                          └─► F-Framing-5 ─► F-Framing-6 (attribution + reopen)
+F-Framing-1 ─► F-Framing-4 (mosaic flag)
+F-Framing-2 ─► F-Framing-7 (per-framing view/manifest)
+F-Framing-8 (tests) follows F-Framing-3/4/6/7; F-Framing-9 (E2E) last.
+F-Framing-5 composes with the Q22 pre-ingest sweep (spec 006/041) and consumes
+Q12's required pointing/rotation grouping attributes.
 ```
 
 ## Out of Scope
