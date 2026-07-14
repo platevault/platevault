@@ -3,18 +3,25 @@
 
 //! Sanity timing: warming the redb resolve cache from the bundled seed must
 //! not regress to something absurd (spec 052 P1 D2/D4 retargeted this from a
-//! single-transaction `SQLite` load to per-identity `simbad_resolver::Cache`
-//! upserts — see the module doc in `targeting_resolver::seed`).
+//! single-transaction `SQLite` load to `simbad_resolver::Cache` upserts — see
+//! the module doc in `targeting_resolver::seed`).
 //!
-//! Each [`simbad_resolver::Cache::upsert`] call is its own fsync'd redb write
-//! transaction (the crate has no batch-upsert primitive today), so the FULL
-//! ~14k-object popular seed legitimately takes on the order of tens of
-//! seconds — that is why production warms it in a background task at app
-//! startup rather than blocking the UI (`apps/desktop/src-tauri/src/lib.rs`).
-//! This test times a real Messier-only slice (~110 objects, matching
-//! `targeting_resolver::seed`'s own test fixture) as a fast, still-real-data
-//! regression guard against a *worse* per-entry cost (e.g. an accidental
-//! read-then-write-then-read round trip per upsert).
+//! `targeting_resolver::seed::warm_cache` goes through the crate's private
+//! `chunked_upsert_batch` helper (one
+//! [`simbad_resolver::Cache::upsert_batch`] write transaction per
+//! ~1000-entry chunk — spec 052 P4/#695, chunked by the #818 follow-up so a
+//! `target.search` racing the warm sees each chunk's rows as soon as that
+//! chunk commits, rather than nothing until the whole seed does) rather than
+//! one transaction per entry. Measured on this Messier-only slice (87
+//! objects, well under one chunk, debug build): ~147ms per-entry-transaction
+//! vs. ~96ms batched — a real but modest win at this small scale, since
+//! `simbad-resolver` 0.3.1 fixed an O(n²) dedup-by-`simbad_oid` scan
+//! (nightwatch-astro/simbad-resolver#25) that used to dominate over the
+//! saved fsyncs. This test only times a small real-data slice, not the full
+//! ~13k-object seed (production warms that in a background task rather than
+//! blocking the UI — `apps/desktop/src-tauri/src/lib.rs`), as a fast,
+//! still-real-data regression guard against a *worse* per-entry cost (e.g.
+//! an accidental read-then-write-then-read round trip per upsert).
 
 use std::time::Instant;
 

@@ -16,16 +16,35 @@
 //! Windows (sharing violation), surfaced as an error rather than silently
 //! leaving a stale cache in place.
 //!
-//! The re-warm (bundled seed + durable `canonical_target` rows — up to ~14k
-//! individually fsync'd redb writes) runs as a **background task** spawned
-//! right after the swap, mirroring the startup warm in `lib.rs` (issue #695:
-//! awaiting it inline froze the `target.cache.clear` IPC call — and, because
-//! the write lock used to stay held for the whole warm, every other resolve
-//! cache reader too — for minutes on a debug build). The background task
-//! never takes `AppState::resolve_cache`'s lock; it is handed the fresh
-//! cache's own handle (cloned out before the swap, so it keeps warming the
-//! same underlying store regardless of what `AppState::resolve_cache` is
-//! swapped to next).
+//! The re-warm (bundled seed + durable `canonical_target` rows, chunked into
+//! ~1000-entry `Cache::upsert_batch` write transactions per phase since spec
+//! 052 P4/#695 + #818 follow-up, `Eventual`-durability since #818's second
+//! follow-up — see [`targeting_resolver::simbad::ResolveCache::open`]) runs
+//! as a **background task** spawned right after the swap, mirroring the
+//! startup warm in `lib.rs` (issue #695: awaiting it inline froze the
+//! `target.cache.clear` IPC call — and, because the write lock used to stay
+//! held for the whole warm, every other resolve cache reader too — for
+//! minutes on a debug build). The background task never takes
+//! `AppState::resolve_cache`'s lock; it is handed the fresh cache's own
+//! handle (cloned out before the swap, so it keeps warming the same
+//! underlying store regardless of what `AppState::resolve_cache` is swapped
+//! to next), plus a second clone of the whole [`ResolveCache`] (not just its
+//! erased `.cache()`) to call [`ResolveCache::flush`] on once both phases
+//! finish — the one fsync that persists every `Eventual` chunk.
+//!
+//! Chunking each phase's warm means nothing in a given chunk is visible to a
+//! reader until THAT chunk's transaction commits (no more per-entry partial
+//! visibility, but no more one-giant-atomic-transaction either) — a
+//! `target.search` query racing this window can get a legitimate-looking
+//! empty result for an object the seed does contain simply because its
+//! chunk hasn't committed yet (issue #818). A
+//! [`crate::commands::lifecycle::CacheWarmingGuard`] set true before this
+//! spawn and moved into the task (so a panic mid-warm still clears it) makes
+//! `AppState::cache_warming` true for the spawn's whole duration, so
+//! `target.search` can surface that in-flight state and the frontend can
+//! retry instead of freezing on a stale empty result.
+//!
+//! [`ResolveCache`]: targeting_resolver::simbad::ResolveCache
 
 use contracts_core::ContractError;
 
@@ -100,12 +119,21 @@ pub async fn clear_and_rewarm(state: &AppState) -> Result<(), ContractError> {
     // one; the stale task keeps writing into the now-unlinked file (wasted,
     // harmless) or — on Windows — the delete surfaces its own sharing-
     // violation error rather than corrupting anything.
+    let warm_handle = fresh.clone();
     let warm_cache = fresh.cache();
     let warm_pool = state.repo.pool().clone();
     *guard = fresh;
     drop(guard);
 
+    // #818: flip on before spawning so a `target.search` racing this warm
+    // sees `cache_warming = true` and knows to retry rather than treat an
+    // empty result as settled. `CacheWarmingGuard` (not a bare sequential
+    // store) so a panic mid-warm still clears it — see its doc comment.
+    let warm_guard =
+        crate::commands::lifecycle::CacheWarmingGuard::start(state.cache_warming.clone());
+
     tokio::spawn(async move {
+        let _warm_guard = warm_guard;
         let namespace = simbad_resolver::identity::namespace(NAMESPACE_SEED);
         match targeting_resolver::seed::warm_bundled_on_first_run(&warm_cache, &namespace).await {
             Ok(Some(count)) => {
@@ -132,6 +160,12 @@ pub async fn clear_and_rewarm(state: &AppState) -> Result<(), ContractError> {
             Err(e) => tracing::warn!(
                 "failed to re-warm resolve cache from canonical_target after cache clear: {e}"
             ),
+        }
+        // #818 follow-up: persists every `Eventual` chunk from both phases
+        // above in one fsync (redb commits are cumulative) — see the
+        // matching comment in `lib.rs`'s startup warm.
+        if let Err(e) = warm_handle.flush().await {
+            tracing::warn!("failed to flush resolve cache after cache-clear re-warm: {e}");
         }
     });
 
@@ -160,7 +194,8 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let cache_path = dir.path().join("resolve-cache.redb");
         let cache = open_or_in_memory(&cache_path);
-        (AppState::new(repo, bus, cache, cache_path), dir)
+        let cache_warming = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        (AppState::new(repo, bus, cache, cache_path, cache_warming), dir)
     }
 
     /// Regression test for #695: `clear_and_rewarm` must return as soon as
@@ -192,10 +227,71 @@ mod tests {
         assert!(warmed, "background re-warm never populated the fresh cache");
     }
 
+    /// Bounded-poll deadline for [`poll_until`]/[`poll_until_non_empty`]
+    /// against a REAL, file-backed warm (`test_state` opens a real temp-dir
+    /// redb file, not an in-memory store) — the full bundled seed, chunked
+    /// into ~14 `Cache::upsert_batch` write transactions (#818 follow-up),
+    /// each a real fsync. A tighter (10s) deadline here was previously
+    /// observed to fail ONLY on Windows CI (macOS/Linux always passed):
+    /// Windows fsync is well documented as markedly slower than Linux/macOS,
+    /// especially on a virtualized CI runner, so a real (not stuck) warm can
+    /// legitimately still be running past 10s there. This is generous enough
+    /// to absorb that without masking an actual stuck task (a genuinely
+    /// hung/panicked warm still fails the assertion, just after a longer
+    /// wait) — reasoned through the `CacheWarmingGuard` Drop path (an
+    /// unconditional store, no early-return/`?` to skip — see its doc
+    /// comment) and tokio's task scheduling (both platform-independent), so
+    /// a real leak would misbehave identically on every OS, not Windows-only.
+    const WARM_SETTLE_DEADLINE: Duration = Duration::from_mins(1);
+
+    /// Regression test for #818: `cache_warming` must be observably `true`
+    /// while the background re-warm is running and `false` once it settles,
+    /// so `target.search` can tell a still-warming empty result apart from a
+    /// genuine miss (batching the warm into one write transaction per phase
+    /// removed the old per-entry incremental visibility that used to mask a
+    /// query racing this window).
+    #[tokio::test]
+    async fn cache_warming_flag_is_true_during_the_warm_and_false_after() {
+        use std::sync::atomic::Ordering;
+
+        let (state, _dir) = test_state().await;
+        assert!(
+            !state.cache_warming.load(Ordering::Relaxed),
+            "flag must start false — no warm has been scheduled yet"
+        );
+
+        clear_and_rewarm(&state).await.expect("clear_and_rewarm failed");
+        // `clear_and_rewarm` sets the flag before spawning and returns before
+        // the swap task even runs (regression-tested above), so it must
+        // already read true right after the call returns.
+        assert!(
+            state.cache_warming.load(Ordering::Relaxed),
+            "flag must be true immediately after clear_and_rewarm schedules the warm"
+        );
+
+        let settled = poll_until(|| !state.cache_warming.load(Ordering::Relaxed)).await;
+        assert!(settled, "flag never flipped back to false once the warm finished");
+    }
+
+    /// Polls (bounded) rather than sleeping a fixed duration — avoids both
+    /// flakiness on a slow CI runner and a needlessly slow test on a fast one.
+    async fn poll_until(mut done: impl FnMut() -> bool) -> bool {
+        let deadline = tokio::time::Instant::now() + WARM_SETTLE_DEADLINE;
+        loop {
+            if done() {
+                return true;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return false;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
     /// Polls (bounded) rather than sleeping a fixed duration — avoids both
     /// flakiness on a slow CI runner and a needlessly slow test on a fast one.
     async fn poll_until_non_empty(cache: &targeting_resolver::simbad::ResolveCache) -> bool {
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let deadline = tokio::time::Instant::now() + WARM_SETTLE_DEADLINE;
         loop {
             if !cache.cache().list().await.expect("cache list failed").is_empty() {
                 return true;

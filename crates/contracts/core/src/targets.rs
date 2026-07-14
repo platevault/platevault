@@ -505,6 +505,17 @@ pub struct TargetSearchResponse {
     pub contract_version: String,
     pub request_id: String,
     pub suggestions: Vec<TargetSuggestion>,
+    /// Whether the shared resolve cache is still running its background
+    /// seed/durable-row re-warm (startup, or after `target.cache.clear`) —
+    /// issue #818: a query that lands mid-warm can get a legitimate-looking
+    /// empty result for an object the seed does contain, simply because it
+    /// hasn't committed yet. `true` tells the caller a retry may still find
+    /// it; `false` means whatever `suggestions` holds is the settled answer.
+    /// Always `false` from this pure use case directly (its own unit tests
+    /// exercise no `AppState`) — the `target.search` Tauri command sets the
+    /// real value from the live warm flag after calling `search`.
+    #[serde(default)]
+    pub cache_warming: bool,
 }
 
 // ── target.resolve ────────────────────────────────────────────────────────────

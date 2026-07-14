@@ -31,7 +31,7 @@ workflow_artifacts = { path = "../../workflow/artifacts" }
 workflow_profiles = { path = "../../workflow/profiles" }
 # spec 052 P1: project_create::create threads the shared redb resolve cache
 # through to app_core_projects::project_setup::create for in-use promotion.
-simbad-resolver = "0.2.0"
+simbad-resolver = "0.3.0"
 # In-memory caching layer (F0 foundation).
 app_core_cache = { path = "../cache" }
 camino = { workspace = true }

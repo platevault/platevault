@@ -1093,15 +1093,36 @@ pub fn run_app(
 
     // spec 052 P1 (D2/T012): warm the shared redb resolve cache from the
     // bundled seed + existing durable canonical_target rows, in the
-    // background — each cache entry is its own fsync'd write transaction, so
-    // warming the full ~14k-object popular seed synchronously would freeze
-    // startup for many seconds. First-run-guarded (`warm_bundled_on_first_run`
-    // no-ops once already warmed); failure degrades to seed+cache typeahead
-    // simply being emptier until the next launch, never blocks the UI.
+    // background — each phase is one `Cache::upsert_batch` write transaction
+    // (spec 052 P4/#695), so warming the full ~13k-object popular seed
+    // synchronously would still freeze startup for a noticeable moment.
+    // First-run-guarded (`warm_bundled_on_first_run` no-ops once already
+    // warmed); failure degrades to seed+cache typeahead simply being emptier
+    // until the next launch, never blocks the UI.
+    //
+    // `cache_warming` (shared with the managed `AppState` below) is set true
+    // for the duration via a `CacheWarmingGuard` (not a bare sequential
+    // store — a panic mid-warm must still clear it, see its doc comment):
+    // batching a whole phase into one transaction means no row is visible to
+    // a reader until that phase commits, so a `target.search` query landing
+    // in this window can get a legitimate-looking empty result for a seed
+    // object that just hasn't committed yet — the flag lets `target.search`
+    // tell the frontend to retry instead of freezing on that stale answer
+    // (issue #818).
+    let cache_warming = Arc::new(std::sync::atomic::AtomicBool::new(false));
     {
+        // Cloned (cheap — an `Arc` handle, see `ResolveCache`'s doc comment),
+        // not moved: `resolve_cache` itself is still needed below to build
+        // `AppState`. `warm_handle` keeps the CONCRETE type so `.flush()` is
+        // reachable after the warm; `warm_cache` (its `.cache()`) is the
+        // erased `Cache` trait object the warm functions themselves take.
+        let warm_handle = resolve_cache.clone();
         let warm_cache = resolve_cache.cache();
         let warm_pool = pool.clone();
+        let warm_guard =
+            crate::commands::lifecycle::CacheWarmingGuard::start(cache_warming.clone());
         tokio::spawn(async move {
+            let _warm_guard = warm_guard;
             let namespace = simbad_resolver::identity::namespace("astro-plan.targets");
             match targeting_resolver::seed::warm_bundled_on_first_run(&warm_cache, &namespace).await
             {
@@ -1123,6 +1144,15 @@ pub fn run_app(
                 }
                 Ok(_) => {}
                 Err(e) => tracing::warn!("failed to warm resolve cache from canonical_target: {e}"),
+            }
+            // #818 follow-up: both phases above write `Eventual` (fsync-free)
+            // chunks; this is the one fsync that persists all of them (redb
+            // commits are cumulative) — the bundled-seed phase's own warm-
+            // complete sentinel write is ALSO durable on its own (single-item
+            // upsert), but the canonical_target phase has no such capstone,
+            // so this explicit flush is what actually protects it.
+            if let Err(e) = warm_handle.flush().await {
+                tracing::warn!("failed to flush resolve cache after startup warm: {e}");
             }
         });
     }
@@ -1148,7 +1178,7 @@ pub fn run_app(
     app.manage(pool.clone());
 
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    let state = AppState::new(repo, bus, resolve_cache, resolve_cache_path);
+    let state = AppState::new(repo, bus, resolve_cache, resolve_cache_path, cache_warming);
 
     app.manage(state);
 

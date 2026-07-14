@@ -881,6 +881,8 @@ export async function mockInvoke(
         contractVersion: '1.0',
         requestId: crypto.randomUUID(),
         suggestions,
+        // Mock mode never warms a real resolve cache — always settled.
+        cacheWarming: false,
       } satisfies TargetSearchResponse_Serialize;
     }
     case 'target_resolve': {

@@ -75,18 +75,32 @@ pub struct ResolveCache(simbad_resolver::Store);
 
 impl ResolveCache {
     /// Open (creating if missing) the durable, file-backed resolve cache at
-    /// `path`.
+    /// `path`, with the store's bulk-batch writes configured `Eventual`
+    /// (`simbad-resolver` 0.3.2's [`simbad_resolver::BatchDurability`] —
+    /// skips the fsync per [`simbad_resolver::Cache::upsert_batch`]
+    /// transaction; [`Self::flush`] does one fsync at the end persisting
+    /// every chunk, since redb commits are cumulative). Single-item
+    /// [`simbad_resolver::Cache::upsert`] calls (e.g. an in-flight resolve
+    /// while a chunked seed warm is running) stay durable regardless — this
+    /// setting only relaxes the *bulk seed/backfill warm* path
+    /// (`crate::seed`), matching the app's own chunk size
+    /// (`crate::seed::WARM_CHUNK_SIZE`'s ~13-chunk bundled seed warm going
+    /// from ~13 fsyncs to 1).
     ///
     /// # Errors
     ///
     /// Returns [`ResolveError::Network`] if the redb file cannot be opened or
     /// its tables cannot be initialised.
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, ResolveError> {
-        simbad_resolver::Store::open(path).map(Self).map_err(|e| from_cache_error(&e))
+        simbad_resolver::Store::open_with(path, simbad_resolver::BatchDurability::Eventual)
+            .map(Self)
+            .map_err(|e| from_cache_error(&e))
     }
 
     /// An ephemeral, in-memory resolve cache (nothing persisted) — for tests
-    /// and offline-only construction.
+    /// and offline-only construction. Always `Durable` (the crate has no
+    /// `Eventual` in-memory variant — there is no "reopen after a crash"
+    /// scenario for a store with nothing on disk to begin with).
     ///
     /// # Errors
     ///
@@ -101,6 +115,25 @@ impl ResolveCache {
     #[must_use]
     pub fn cache(&self) -> impl simbad_resolver::Cache + 'static {
         self.0.cache()
+    }
+
+    /// Force one fully durable commit, persisting every `Eventual` bulk-warm
+    /// chunk written since [`Self::open`] (redb commits are cumulative — see
+    /// [`simbad_resolver::RedbCache::flush`]). Call once after the LAST
+    /// warm/backfill phase of a startup or `target.cache.clear` re-warm —
+    /// don't rely on the cache closing naturally to persist those chunks, as
+    /// it stays open for the rest of the process's lifetime. A cheap,
+    /// safe-to-call no-op if nothing `Eventual` was written this session
+    /// (e.g. every phase short-circuited on its own gate).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ResolveError::Network`] if the (empty) commit fails.
+    pub async fn flush(&self) -> Result<(), ResolveError> {
+        // `Store::cache()` returns the CONCRETE `RedbCache` (unlike
+        // `Self::cache()` above, which erases it to `impl Cache` — `flush`
+        // is redb-specific, not part of the portable `Cache` trait).
+        self.0.cache().flush().await.map_err(|e| from_cache_error(&e))
     }
 }
 

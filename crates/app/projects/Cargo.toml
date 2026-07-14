@@ -23,7 +23,7 @@ fs_inventory = { path = "../../fs/inventory" }
 patterns = { path = "../../patterns" }
 persistence_db = { path = "../../persistence/db" }
 project_structure = { path = "../../project/structure" }
-simbad-resolver = "0.2.0"
+simbad-resolver = "0.3.0"
 workflow_profiles = { path = "../../workflow/profiles" }
 serde_json.workspace = true
 sqlx.workspace = true

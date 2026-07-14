@@ -188,6 +188,107 @@ describe('TargetSearch', () => {
     );
   });
 
+  // ── #818: retry a Phase-1 miss while the backend reports a cache warm ──────
+
+  it('retries the local search while the backend reports the resolve cache still warming', async () => {
+    let call = 0;
+    mockSearchTargets.mockImplementation(() => {
+      call += 1;
+      // First answer lands mid-warm: legitimately empty, warm still running.
+      if (call === 1) {
+        return {
+          contractVersion: '1.0',
+          requestId: 'r',
+          suggestions: [],
+          cacheWarming: true,
+        };
+      }
+      // The warm has since committed: the object is there after all.
+      return {
+        contractVersion: '1.0',
+        requestId: 'r',
+        suggestions: [M31],
+        cacheWarming: false,
+      };
+    });
+
+    render(<TargetSearch onSelect={vi.fn()} />);
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: { value: 'm31' },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300); // debounce
+      await Promise.resolve();
+    });
+
+    expect(mockSearchTargets).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('option')).toBeNull();
+
+    // The retry interval (250ms, mirroring WARM_RETRY_INTERVAL_MS).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(mockSearchTargets).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('option')).toHaveTextContent('M 31');
+  });
+
+  it('never retries an ordinary (non-warming) miss', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+      cacheWarming: false,
+    });
+
+    render(<TargetSearch onSelect={vi.fn()} />);
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: { value: 'zzz' },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    // Advancing well past one retry interval must not trigger a second call:
+    // a settled empty answer is final, not a warm to wait out.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(mockSearchTargets).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives up retrying once the warm-retry budget elapses, keeping the empty result', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+      cacheWarming: true, // never settles within this test
+    });
+
+    render(<TargetSearch onSelect={vi.fn()} />);
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: { value: 'm31' },
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+      await Promise.resolve();
+    });
+    // Advance past the retry budget (30000ms, mirroring WARM_RETRY_BUDGET_MS).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_200);
+    });
+
+    expect(screen.queryByRole('option')).toBeNull();
+    // Bounded: the retry loop must stop polling once the budget is spent,
+    // not keep firing target.search forever.
+    const callsAtBudget = mockSearchTargets.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(mockSearchTargets).toHaveBeenCalledTimes(callsAtBudget);
+  });
+
   it('renders designation, common name, and type/source badges', async () => {
     mockSearchTargets.mockResolvedValue({
       contractVersion: '1.0',

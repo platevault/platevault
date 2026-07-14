@@ -141,6 +141,9 @@ pub async fn search(
     let suggestions: Vec<TargetSuggestion> = hits
         .into_iter()
         .map(targeting_resolver::simbad::from_crate_search_hit)
+        // The warm-complete sentinel (#818 follow-up) lives in this same
+        // cache — it must never surface as a typeahead suggestion.
+        .filter(|hit| !targeting_resolver::seed::is_warm_sentinel(hit.target.simbad_oid))
         .filter(|hit| matches_catalog_filter(&hit.target, catalog_filter))
         .map(hit_to_suggestion)
         .filter(|s| type_filter.is_empty() || type_filter.contains(&s.object_type))
@@ -151,6 +154,10 @@ pub async fn search(
         contract_version: req.contract_version.clone(),
         request_id: req.request_id.clone(),
         suggestions,
+        // Always false here — this pure use case takes no `AppState`, so it
+        // cannot know about a live warm. The `target.search` Tauri command
+        // wrapper overwrites this from the real flag (#818).
+        cache_warming: false,
     })
 }
 
@@ -236,6 +243,39 @@ mod tests {
         assert_eq!(s.source, TargetSource::Seed);
         assert_eq!(s.matched_alias.as_deref(), Some("M 31"));
         assert!(!s.target_id.is_empty());
+    }
+
+    /// #818 follow-up: the warm-complete sentinel (`simbad_oid = -1`, the
+    /// crate has no metadata table separate from this same cache) must never
+    /// surface as a typeahead suggestion, even for a query that would
+    /// otherwise match it (a substring of its designation/alias).
+    #[tokio::test]
+    async fn search_excludes_the_warm_complete_sentinel() {
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let sentinel = CrateResolvedIdentity {
+            simbad_oid: Some(-1),
+            primary_designation: "ALM SEED WARM SENTINEL".to_owned(),
+            common_name: Some("2026-07-14T00:00:00Z".to_owned()),
+            object_type: CrateObjectType::Other,
+            otype_raw: String::new(),
+            ra_deg: 0.0,
+            dec_deg: 0.0,
+            v_mag: None,
+            aliases: vec![CrateResolvedAlias::new(
+                "ALM SEED WARM SENTINEL",
+                CrateAliasKind::Designation,
+            )],
+            source: CrateTargetSource::Seed,
+        };
+        cache.upsert(&sentinel, &ns()).await.unwrap();
+
+        let resp = search(&cache, &req("SENTINEL")).await.unwrap();
+        assert!(
+            resp.suggestions.is_empty(),
+            "the warm-complete sentinel must never surface as a typeahead suggestion, got {:?}",
+            resp.suggestions
+        );
     }
 
     #[tokio::test]
