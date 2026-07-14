@@ -9,7 +9,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 1. First-run setup → data sources | PARTIAL | 11P/6F/1PA/1S | #704, #707 | 6-step wizard (Observing Site added); Project required not optional; partial-commit + remap-verify bugs; #557 infinite-render observed |
 | 2. Ingest → review/reclassify → confirm (move) | PARTIAL | 7P/6F/3PA/2S | #711, #724, #765, #766, #767 | needs-review gate works; reclassify sentinel bug #724 blocks confirm; cross-root move lands wrong #765; zero audit rows #766; plan-review overlay stuck #767 |
 | 3. Ingest → confirm (catalogue-in-place) | PARTIAL | 3P/1F/1PA/0S | #768, #769 | catalogue plan structure valid; destination-root picker shown wrongly #768; approval-token missing #769 blocks apply; zero audit rows #766 reproduces |
-| 4. Sessions review (derived) | ⏳ pending | | | |
+| 4. Sessions review (derived) | PARTIAL | 6P/6F/1PA/2S | #770, #771, #772, #773 | filter/camera dropdowns + grouping work; unresolved values indistinguishable #770; detail Escape fails #771; no calibration field #772; no notes field #773; sessionKey parse bug #564 |
 | 5. Project lifecycle: create → artifacts | ⏳ pending | | | |
 | 6. Cleanup: scan → review → apply | ⏳ pending | | | |
 | 7. Archive → delete from archive | ⏳ pending | | | |
@@ -74,3 +74,17 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 - Catalogue plan's destructive-destination control observed ABSENT (spec-compliant per the T&V bullet which allows absent-or-inert), though narrative step 3 implies "present" — minor narrative mismatch, not a defect.
 
 **App-state left for later journeys:** app idle on #/sessions with 1 real session (id 11024d3c…, session_key "M 51|LUM|1x1|100|2025-05-03", root=lights\1, 2 frames, canonical_target resolved) — J4 can inspect it directly. J2's move produced NO session (landed nowhere per #765). Inbox still shows 10 items incl. the untouched poisoned ones (m51-mixed-session, darks-root needs-review).
+
+### Journey 4 — Sessions review (derived groupings, live membership)
+
+**Verdict:** PARTIAL
+**Steps:** 6 PASS / 6 FAIL / 1 PARTIAL / 2 SKIPPED
+**Issues filed:** #770 (UI — detail panel labels unresolved values with "FITS" source, indistinguishable from confirmed-empty), #771 (UI — Sessions detail panel doesn't close on Escape, only ✕), #772 (backend — Sessions detail never shows calibration linkage; InventorySession DTO lacks the field), #773 (UI/backend — no notes field anywhere on Sessions; journey-defined coverage failure)
+
+**Dupes hit (not re-filed):** #564 (root cause confirmed: acquisition_session.session_key stored pipe-delimited at crates/sessions/src/key.rs:66 but parsed as JSON at crates/app/core/src/sessions.rs:220-252, silently dropping filter/binning/gain/night for every real session), #654 (indistinguishable "Session — date" rows), #567, #651 (Show in File Explorer reveals source root not session folder; InventorySession has no per-session path field)
+
+**Key evidence:** live session 11024d3c-0f4d-4bb1-ad45-fdb55a989fb8 (M51/LUM, 2 frames) — sessions_list/sessions_get IPC both return sessionKey:{target:"M 51",filter:"",binning:"",gain:"",night:""}; detail shows Target=— (FITS); rescan via inbox_scan_folder re-confirmed same folder, session count stayed 1 (no dup); NO Confirm/Re-open/Reject/Ignore/review-pill controls anywhere (DOM+button scan); sort headers show working aria-sort; group-by + "Grouped by Target" footer hint live. Shots j4-01..03.
+
+**Doc-drift / unexpected-but-intended:** JOURNEY-DOC UPDATE — PR #415 is MERGED (not open): filter/camera dropdowns, group+secondary sort, aria-sort on every header, and the "Grouped by X" footer hint are all live and working; Journey 4's "Known gaps (2026-07-04)" section is stale and should be removed. Also SessionsPage.tsx:14 documents the frame-type filter is intentionally removed (sessions are light frames; calibration lives on its own page) — journey text should clarify this rather than expecting a literal frame-type row.
+
+**App-state left for later journeys:** app idle on #/sessions, no row selected, filters reset. Session 11024d3c… (M51, LUM, 2 frames, canonical_target resolved) is real, confirmed, attachable (projectIds:[]) — ready for Journey 5 to attach a project. Project-chip-navigation bullet SKIPPED (no project linked yet). Empty-before-apply step SKIPPED (no DB reset), inferred consistent from J2 (no session) vs J3 (session exists).
