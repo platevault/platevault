@@ -820,7 +820,7 @@ builds them. So the pool + matching exist; the open decision is the reuse
 
 ---
 
-## Q27 — Project ↔ target cardinality, mosaics, and the supergroup layer (spec-008/009/035 + §III)
+## Q27 — Project ↔ target cardinality, mosaics, and the framing layer (spec-008/009/035 + §III)
 
 A project (and session, migration 0046) carries a single nullable
 `canonical_target_id`; there is **no mosaic/panel concept**. Research on NINA's
@@ -833,31 +833,31 @@ attribution. The model is physical, not textual.
 
 - **No `OBJECT`/panel-name string parsing anywhere** — vendor-variant and
   user-overridable.
-- **Introduce a supergroup (framing) layer:** `project → supergroup → session →
-  frames`. A **supergroup = one framing** = the light sessions sharing
+- **Introduce a framing layer:** `project → framing → session →
+  frames`. A **framing** = the light sessions sharing
   **target + optic-train + pointing + rotation within tolerance**, across filters
   *and* nights — i.e. the co-registerable integration unit (all L/R/G/B/Ha for one
   framing). Rotation drift is a **tolerance** parameter (FOV-relative pointing, a
   few degrees rotation; sensible default, tunable), never an exact key. Clustering
   is **suggested and user-adjustable** (merge/split/reassign) — assist, not
   authoritative (posture of Q22/Q26).
-- **One target per project holds.** A normal project is usually **one supergroup**
+- **One target per project holds.** A normal project is usually **one framing**
   (one framing, many filters/nights). A multi-target *night* → multiple projects,
   sessions attributed per-target (0046).
 - **Mosaic mode = a minimal project flag**, not a panel entity: a mosaic project
-  has **multiple supergroups (panels)** that **all inherit the project's declared
+  has **multiple framings (panels)** that **all inherit the project's declared
   target**, and **per-frame OBJECT/coordinate resolution is suppressed** (panels
   point away from the target center, so deriving per-panel would mis-resolve). The
-  only job of the flag is "inherit declared target across supergroups; don't
+  only job of the flag is "inherit declared target across framings; don't
   resolve per-frame." No string parsing, no panel table — panels are just the
-  supergroups of a mosaic project, detected by the same pointing+rotation
+  framings of a mosaic project, detected by the same pointing+rotation
   clustering.
 - **Incremental ingestion attribution (the payoff).** At the Inbox confirm gate,
-  each new light session is matched against existing supergroups/projects by
+  each new light session is matched against existing framings/projects by
   **target + optic-train + pointing+rotation (tolerance)** and the app *suggests*:
-  - same target + optic-train + same framing → **add to the existing supergroup**
+  - same target + optic-train + same framing → **add to the existing framing**
     (multi-night data flows in; a mosaic's night-2 panel-3 subs match panel-3);
-  - same target + optic-train + different framing → **add as a new supergroup**
+  - same target + optic-train + different framing → **add as a new framing**
     (a new mosaic panel);
   - same target + different optic-train → suggest the project but **flag the optic
     difference**;
@@ -869,8 +869,8 @@ attribution. The model is physical, not textual.
   and honors **Q25** (matching a completed project → suggest add + reopen, with
   the reopen revoke/warn).
 - **§III boundary holds** — the app groups and prepares framings (a **Q20 source
-  view per supergroup**, one WBPP-ready folder per framing; the **Q10 manifest**
-  is per-supergroup) but **never stitches or integrates**.
+  view per framing**, one WBPP-ready folder per framing; the **Q10 manifest**
+  is per-framing) but **never stitches or integrates**.
 
 ---
 
@@ -900,16 +900,16 @@ of frames).
 - **Bulk auto-derivation, review *only the gaps*.** Q12's strict gate cannot mean
   "confirm 50,000 frames one by one." Scan **samples headers** (Q8: central-rows
   sample, not full read) and, for every frame with **complete metadata**,
-  auto-derives its session + Q27 **supergroup** + target attribution **without
+  auto-derives its session + Q27 **framing** + target attribution **without
   prompting**. Only the **incomplete/ambiguous minority** (missing OBJECT/coords,
   no `DATE-OBS`, unresolved target) enters a **review queue**, where Q12's "Apply
   to all" batch clears them fast. The strict gate quarantines the unclear few; it
   never blocks the library.
 - **Derive inventory/understanding, do NOT auto-create projects.** Onboarding
-  surfaces the observed structure — *"found N targets, M framings (supergroups),
+  surfaces the observed structure — *"found N targets, M framings (framings),
   K sessions"* — as understanding. **Projects stay a user act** (a project =
   processing intent, not every target ever shot); the user promotes
-  framings/supergroups into projects when ready, using Q27's suggestions.
+  framings/framings into projects when ready, using Q27's suggestions.
 - **Scale is handled by existing decisions**: lazy/bounded hashing (Q22 — only
   suspected dups), header sampling (Q8), incremental rescan (new/changed only),
   background + **progressive results**. Composes with Q22 (dedup during
@@ -929,7 +929,7 @@ libraries work — and it aids portability (the marker/notes travel with the dri
 - **Default: the envelope lives *alongside the data*** — at the project's
   common-ancestor folder (same derivation as Q12's session folder):
   `.marker.json` (identity — Q10), notes, and optionally the generated Q20
-  per-supergroup source views. Self-documenting, portable, no image-file copying.
+  per-framing source views. Self-documenting, portable, no image-file copying.
 - **Managed, configurable location = fallback** — used only when the source is
   **read-only**, the project's data has **no single common folder** (scattered
   across roots), or the user explicitly wants the library left untouched.
@@ -1039,7 +1039,7 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q24** cross-platform path safety | **spec-025 / spec-015** iterate (long-path >260 hard-block in plan; case-insensitive collision in Q23 detector; safe-filename rejections surfaced as plan fixes; per-segment LCD sanitization already shipped via `safe-filename`) |
 | **Q25** verified-complete trigger + output observation | **spec-011 / spec-012 / spec-009** iterate (purely manual completion, no detection; observation reframed as tracking + optional evidence; manual gate unlocks Q19 cleanup; reopen revokes + warns) |
 | **Q26** calibration reuse policy & master library | **spec-007 / spec-040** iterate (per-type reusability in Q18 rules; flats reusable + default warning w/ disable setting; detect-not-create §III; reuse tracking; master protected while any non-completed project references it) |
-| **Q27** project↔target, mosaics, supergroup layer | **spec-008 / spec-009 / spec-006** iterate (new supergroup=framing layer clustered by target+optic-train+pointing+rotation tolerance; mosaic mode = flag inheriting declared target, no panel entity, no OBJECT parsing; incremental ingestion attribution suggests routing new sessions; per-supergroup source view/manifest) |
+| **Q27** project↔target, mosaics, framing layer | **spec-008 / spec-009 / spec-006** iterate (new framing layer clustered by target+optic-train+pointing+rotation tolerance; mosaic mode = flag inheriting declared target, no panel entity, no OBJECT parsing; incremental ingestion attribution suggests routing new sessions; per-framing source view/manifest) |
 | **Q28** existing-library onboarding | **spec-003 / spec-038 / spec-006** iterate (catalogue-in-place default; two discoverable migration paths — set-existing-as-inbox / move-into-inbox; bulk auto-derive + review-only-gaps; inventory only, projects stay a user act; scale via sampling + lazy hash + incremental scan) |
 | **Q29** project envelope on-disk | **spec-008 / spec-024** iterate (envelope alongside data at common-ancestor folder by default — marker+notes+views; managed configurable location as fallback; sidecar is not a §I custody violation) |
 | **Q30** contracts / versioning / long-running ops | **spec-021 / contracts** iterate (versioned envelope already shipped; long-running op-id + typed status + mandatory cancel via event stream; never block UI; status-bar progress) |
