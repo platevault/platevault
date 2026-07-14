@@ -234,8 +234,14 @@ pub async fn suggest(
     pool: &SqlitePool,
     resolver: &SimbadResolver,
     frameset_id: &str,
-    _reason: ConeSearchReason,
+    reason: ConeSearchReason,
 ) -> Result<ConeSearchSuggestResponse, ContractError> {
+    // #702: annotate every suggest run with its trigger (FR-017) so ingest
+    // vs. on-demand ("Re-check") runs are distinguishable in logs — the
+    // field carried no other observable effect before this (dead contract
+    // field).
+    tracing::debug!(frameset_id, reason = ?reason, "cone_search.suggest");
+
     repo::get_inbox_item(pool, frameset_id)
         .await
         .map_err(|_| not_found(format!("frameset not found: {frameset_id}")))?;
