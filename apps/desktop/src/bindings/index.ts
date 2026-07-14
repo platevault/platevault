@@ -345,8 +345,9 @@ export const commands = {
 	 */
 	targetAdopt: (req: TargetAdoptRequest) => typedError<TargetAdoptResponse, ContractError_Serialize>(__TAURI_INVOKE("target_adopt", { req })),
 	/**
-	 *  `target.cache.clear` — wipe the redb resolve cache and re-warm it from the
-	 *  bundled seed + existing durable `canonical_target` rows. Never touches
+	 *  `target.cache.clear` — wipe the redb resolve cache and schedule its
+	 *  re-warm (bundled seed + existing durable `canonical_target` rows) as a
+	 *  background task, returning as soon as the swap is done. Never touches
 	 *  `canonical_target` itself (§V — the redb cache is a reproducible
 	 *  projection, never canonical).
 	 * 
@@ -354,9 +355,16 @@ export const commands = {
 	 *  old redb file (e.g. a concurrent read still has it open) is reported as an
 	 *  internal error rather than silently leaving a stale cache in place.
 	 * 
+	 *  Fix for #695: this used to await the full re-warm (bundled seed +
+	 *  durable rows — up to ~14k individually fsync'd redb writes) inline,
+	 *  freezing the caller for minutes on a debug build. `rewarmed_count` is
+	 *  therefore always `0` now — "re-warm scheduled in the background, count
+	 *  not known synchronously" rather than "0 entries re-warmed" — kept as a
+	 *  response-meaning change instead of widening the contract.
+	 * 
 	 *  # Errors
 	 * 
-	 *  Returns `Err(String)` if the cache file cannot be reopened/re-warmed.
+	 *  Returns `Err(String)` if the cache file cannot be removed/reopened.
 	 */
 	targetCacheClear: () => typedError<TargetCacheClearResponse, ContractError_Serialize>(__TAURI_INVOKE("target_cache_clear")),
 	/**
