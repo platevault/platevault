@@ -448,6 +448,7 @@ fn _roots_list_compiles_check() {
 async fn roots_register_via_use_case() {
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
 
     // Path must be absolute on the host OS (validate_path rejects POSIX-style
     // paths on Windows).
@@ -464,7 +465,7 @@ async fn roots_register_via_use_case() {
         organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
 
-    let resp = app_core::first_run::register_source(db.pool(), &req).await;
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req).await;
     assert!(resp.is_ok(), "register_source failed: {resp:?}");
     let resp = resp.unwrap();
     assert_eq!(resp.kind, contracts_core::first_run::SourceKind::LightFrames);
@@ -484,6 +485,7 @@ fn _roots_remap_compiles_check() {
 async fn roots_remap_via_use_case() {
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
+    let bus = EventBus::with_pool(db.pool().clone());
 
     // Paths must be absolute on the host OS (validate_path rejects POSIX-style
     // paths on Windows).
@@ -499,7 +501,7 @@ async fn roots_remap_via_use_case() {
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
-    let resp = app_core::first_run::register_source(db.pool(), &req)
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source failed");
 
@@ -529,7 +531,7 @@ async fn roots_remap_apply_via_use_case() {
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
-    let resp = app_core::first_run::register_source(db.pool(), &req)
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source failed");
 
@@ -576,7 +578,7 @@ async fn sources_set_active_via_use_case() {
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
-    let resp = app_core::first_run::register_source(db.pool(), &req)
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source failed");
 
@@ -610,7 +612,7 @@ async fn roots_delete_via_use_case_blocks_on_dependents() {
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         organization_state: contracts_core::first_run::OrganizationState::Unorganized,
     };
-    let resp = app_core::first_run::register_source(db.pool(), &req)
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source failed");
 
@@ -658,7 +660,7 @@ async fn roots_delete_via_use_case_succeeds_without_dependents() {
         scan_depth: contracts_core::first_run::ScanDepth::Recursive,
         organization_state: contracts_core::first_run::OrganizationState::Organized,
     };
-    let resp = app_core::first_run::register_source(db.pool(), &req)
+    let resp = app_core::first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source failed");
 

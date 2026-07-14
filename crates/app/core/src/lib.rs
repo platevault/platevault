@@ -60,6 +60,9 @@ pub use targets::{
 // and may reference the extracted domain crates as `crate::errors`,
 // `crate::lifecycle`, etc. via the re-exports above.
 pub mod archive_generator;
+/// Deterministic `entity_id` derivation for audit rows keyed by a plain
+/// string (source id, attempted path) rather than a real UUID (T123/T125).
+mod audit_ids;
 /// Process-global in-memory cache statics for `app_core`-owned domain types
 /// (in-memory caching layer, F0 foundation): `library_root` path lookups and
 /// `source_protection_state`/defaults. See each accessor's doc comment for

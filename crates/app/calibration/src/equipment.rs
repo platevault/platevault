@@ -7,12 +7,17 @@
 //! Includes `find_or_create_by_alias` for auto-detection workflows where
 //! equipment seen in FITS headers is created on demand.
 
+use audit::bus::EventBus;
+use audit::event_bus::Source;
+use audit::{AuditLogEntry, Outcome, Severity};
 use contracts_core::equipment::{
     Camera, CreateCamera, CreateFilter, CreateOpticalTrain, CreateTelescope, Filter,
     FilterCategory, OpticalTrain, Telescope, UpdateCamera, UpdateFilter, UpdateOpticalTrain,
     UpdateTelescope,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use domain_core::ids::EntityId;
+use domain_core::lifecycle::data_asset::EntityType;
 use persistence_db::repositories::equipment as repo;
 use persistence_db::repositories::q_calibration;
 use sqlx::SqlitePool;
@@ -28,6 +33,98 @@ fn db_to_contract(e: persistence_db::DbError) -> ContractError {
         ContractError::new(ErrorCode::EquipmentDuplicate, msg, ErrorSeverity::Warning, false)
     } else {
         ContractError::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Fatal, true)
+    }
+}
+
+/// Render an `ErrorCode` as its dotted wire string, for use as an audit
+/// `reason_code`.
+fn error_code_str(code: ErrorCode) -> String {
+    serde_json::to_string(&code)
+        .map_or_else(|_| "internal.error".to_owned(), |s| s.trim_matches('"').to_owned())
+}
+
+/// Deterministic `entity_id` for an equipment audit row: parses `id` as a
+/// real UUID when possible (every persisted camera/telescope/train/filter id
+/// is one), falling back to a stable UUIDv5 derivation for attempted-but-not-
+/// yet-created items (e.g. a failed `create` has no id) so repeated attempts
+/// with the same name still correlate under one `entity_id`.
+fn equipment_entity_id(id: &str) -> EntityId {
+    uuid::Uuid::parse_str(id).map_or_else(
+        |_| {
+            let ns = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, b"astro-plan.audit.equipment");
+            EntityId::from_uuid(uuid::Uuid::new_v5(&ns, id.as_bytes()))
+        },
+        EntityId::from_uuid,
+    )
+}
+
+/// Write a durable audit row for an equipment CRUD attempt (T124,
+/// FR-130/FR-131). `id_seed` is the item's real id on success/update/delete,
+/// or its attempted `name` on a failed `create` (no id exists yet).
+async fn write_equipment_audit(
+    bus: &EventBus,
+    action: &str,
+    id_seed: &str,
+    outcome: Outcome,
+    reason_code: Option<&str>,
+    payload: serde_json::Value,
+) -> Result<(), ContractError> {
+    let mut entry = AuditLogEntry::new(
+        EntityType::Equipment,
+        equipment_entity_id(id_seed),
+        action,
+        "user",
+        outcome,
+        Severity::Workflow,
+        EntityId::new(),
+    )
+    .with_payload(payload);
+    if let Some(code) = reason_code {
+        entry = entry.with_reason_code(code.to_owned());
+    }
+    bus.write_audit(
+        entry,
+        "equipment.changed",
+        Source::User,
+        serde_json::json!({"action": action, "outcome": outcome.as_str()}),
+    )
+    .await
+    .map_err(|e| {
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
+    })?;
+    Ok(())
+}
+
+/// Shared `delete_*` tail: audits `result` (already run against the repo)
+/// as `Applied`/`Failed`, then returns it as a `ContractError` result. All
+/// four equipment kinds share the same `(pool, id) -> DbResult<()>` delete
+/// shape, so this is the one place that maps outcome → audit row for all of
+/// them (T124).
+async fn delete_equipment(
+    bus: &EventBus,
+    action: &str,
+    id: &str,
+    result: Result<(), persistence_db::DbError>,
+) -> Result<(), ContractError> {
+    match result {
+        Ok(()) => {
+            write_equipment_audit(bus, action, id, Outcome::Applied, None, serde_json::json!({}))
+                .await?;
+            Ok(())
+        }
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_audit(
+                bus,
+                action,
+                id,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({}),
+            )
+            .await?;
+            Err(err)
+        }
     }
 }
 
@@ -47,8 +144,38 @@ pub async fn list_cameras(pool: &SqlitePool) -> Result<Vec<Camera>, ContractErro
 /// # Errors
 ///
 /// Returns `ContractError` on duplicate or database failure.
-pub async fn create_camera(pool: &SqlitePool, req: &CreateCamera) -> Result<Camera, ContractError> {
-    repo::create_camera(pool, req).await.map_err(db_to_contract)
+pub async fn create_camera(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    req: &CreateCamera,
+) -> Result<Camera, ContractError> {
+    match repo::create_camera(pool, req).await {
+        Ok(camera) => {
+            write_equipment_audit(
+                bus,
+                "equipment.camera.create",
+                &camera.id,
+                Outcome::Applied,
+                None,
+                serde_json::json!({"name": camera.name}),
+            )
+            .await?;
+            Ok(camera)
+        }
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_audit(
+                bus,
+                "equipment.camera.create",
+                &req.name,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({"name": req.name}),
+            )
+            .await?;
+            Err(err)
+        }
+    }
 }
 
 /// Update an existing camera.
@@ -56,8 +183,38 @@ pub async fn create_camera(pool: &SqlitePool, req: &CreateCamera) -> Result<Came
 /// # Errors
 ///
 /// Returns `ContractError` if the camera is not found.
-pub async fn update_camera(pool: &SqlitePool, req: &UpdateCamera) -> Result<Camera, ContractError> {
-    repo::update_camera(pool, req).await.map_err(db_to_contract)
+pub async fn update_camera(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    req: &UpdateCamera,
+) -> Result<Camera, ContractError> {
+    match repo::update_camera(pool, req).await {
+        Ok(camera) => {
+            write_equipment_audit(
+                bus,
+                "equipment.camera.update",
+                &camera.id,
+                Outcome::Applied,
+                None,
+                serde_json::json!({"name": camera.name}),
+            )
+            .await?;
+            Ok(camera)
+        }
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_audit(
+                bus,
+                "equipment.camera.update",
+                &req.id,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({"name": req.name}),
+            )
+            .await?;
+            Err(err)
+        }
+    }
 }
 
 /// Delete a camera by ID.
@@ -65,8 +222,12 @@ pub async fn update_camera(pool: &SqlitePool, req: &UpdateCamera) -> Result<Came
 /// # Errors
 ///
 /// Returns `ContractError` if the camera is not found.
-pub async fn delete_camera(pool: &SqlitePool, id: &str) -> Result<(), ContractError> {
-    repo::delete_camera(pool, id).await.map_err(db_to_contract)
+pub async fn delete_camera(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    id: &str,
+) -> Result<(), ContractError> {
+    delete_equipment(bus, "equipment.camera.delete", id, repo::delete_camera(pool, id).await).await
 }
 
 /// Find a camera by alias, or create one if not found.
@@ -114,9 +275,36 @@ pub async fn list_telescopes(pool: &SqlitePool) -> Result<Vec<Telescope>, Contra
 /// Returns `ContractError` on duplicate or database failure.
 pub async fn create_telescope(
     pool: &SqlitePool,
+    bus: &EventBus,
     req: &CreateTelescope,
 ) -> Result<Telescope, ContractError> {
-    repo::create_telescope(pool, req).await.map_err(db_to_contract)
+    match repo::create_telescope(pool, req).await {
+        Ok(scope) => {
+            write_equipment_audit(
+                bus,
+                "equipment.telescope.create",
+                &scope.id,
+                Outcome::Applied,
+                None,
+                serde_json::json!({"name": scope.name}),
+            )
+            .await?;
+            Ok(scope)
+        }
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_audit(
+                bus,
+                "equipment.telescope.create",
+                &req.name,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({"name": req.name}),
+            )
+            .await?;
+            Err(err)
+        }
+    }
 }
 
 /// Update an existing telescope.
@@ -126,9 +314,36 @@ pub async fn create_telescope(
 /// Returns `ContractError` if the telescope is not found.
 pub async fn update_telescope(
     pool: &SqlitePool,
+    bus: &EventBus,
     req: &UpdateTelescope,
 ) -> Result<Telescope, ContractError> {
-    repo::update_telescope(pool, req).await.map_err(db_to_contract)
+    match repo::update_telescope(pool, req).await {
+        Ok(scope) => {
+            write_equipment_audit(
+                bus,
+                "equipment.telescope.update",
+                &scope.id,
+                Outcome::Applied,
+                None,
+                serde_json::json!({"name": scope.name}),
+            )
+            .await?;
+            Ok(scope)
+        }
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_audit(
+                bus,
+                "equipment.telescope.update",
+                &req.id,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({"name": req.name}),
+            )
+            .await?;
+            Err(err)
+        }
+    }
 }
 
 /// Delete a telescope by ID.
@@ -136,8 +351,13 @@ pub async fn update_telescope(
 /// # Errors
 ///
 /// Returns `ContractError` if the telescope is not found.
-pub async fn delete_telescope(pool: &SqlitePool, id: &str) -> Result<(), ContractError> {
-    repo::delete_telescope(pool, id).await.map_err(db_to_contract)
+pub async fn delete_telescope(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    id: &str,
+) -> Result<(), ContractError> {
+    delete_equipment(bus, "equipment.telescope.delete", id, repo::delete_telescope(pool, id).await)
+        .await
 }
 
 /// Find a telescope by alias, or create one if not found.
@@ -184,9 +404,36 @@ pub async fn list_optical_trains(pool: &SqlitePool) -> Result<Vec<OpticalTrain>,
 /// Returns `ContractError` on database failure.
 pub async fn create_optical_train(
     pool: &SqlitePool,
+    bus: &EventBus,
     req: &CreateOpticalTrain,
 ) -> Result<OpticalTrain, ContractError> {
-    repo::create_optical_train(pool, req).await.map_err(db_to_contract)
+    match repo::create_optical_train(pool, req).await {
+        Ok(train) => {
+            write_equipment_audit(
+                bus,
+                "equipment.train.create",
+                &train.id,
+                Outcome::Applied,
+                None,
+                serde_json::json!({"name": train.name}),
+            )
+            .await?;
+            Ok(train)
+        }
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_audit(
+                bus,
+                "equipment.train.create",
+                &req.name,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({"name": req.name}),
+            )
+            .await?;
+            Err(err)
+        }
+    }
 }
 
 /// Update an existing optical train.
@@ -196,9 +443,36 @@ pub async fn create_optical_train(
 /// Returns `ContractError` if the optical train is not found.
 pub async fn update_optical_train(
     pool: &SqlitePool,
+    bus: &EventBus,
     req: &UpdateOpticalTrain,
 ) -> Result<OpticalTrain, ContractError> {
-    repo::update_optical_train(pool, req).await.map_err(db_to_contract)
+    match repo::update_optical_train(pool, req).await {
+        Ok(train) => {
+            write_equipment_audit(
+                bus,
+                "equipment.train.update",
+                &train.id,
+                Outcome::Applied,
+                None,
+                serde_json::json!({"name": train.name}),
+            )
+            .await?;
+            Ok(train)
+        }
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_audit(
+                bus,
+                "equipment.train.update",
+                &req.id,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({}),
+            )
+            .await?;
+            Err(err)
+        }
+    }
 }
 
 /// Delete an optical train by ID.
@@ -206,8 +480,13 @@ pub async fn update_optical_train(
 /// # Errors
 ///
 /// Returns `ContractError` if the optical train is not found.
-pub async fn delete_optical_train(pool: &SqlitePool, id: &str) -> Result<(), ContractError> {
-    repo::delete_optical_train(pool, id).await.map_err(db_to_contract)
+pub async fn delete_optical_train(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    id: &str,
+) -> Result<(), ContractError> {
+    delete_equipment(bus, "equipment.train.delete", id, repo::delete_optical_train(pool, id).await)
+        .await
 }
 
 // ── Filter use cases ───────────────────────────────────────────────────────
@@ -226,8 +505,38 @@ pub async fn list_filters(pool: &SqlitePool) -> Result<Vec<Filter>, ContractErro
 /// # Errors
 ///
 /// Returns `ContractError` on duplicate name or database failure.
-pub async fn create_filter(pool: &SqlitePool, req: &CreateFilter) -> Result<Filter, ContractError> {
-    repo::create_filter(pool, req).await.map_err(db_to_contract)
+pub async fn create_filter(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    req: &CreateFilter,
+) -> Result<Filter, ContractError> {
+    match repo::create_filter(pool, req).await {
+        Ok(filter) => {
+            write_equipment_audit(
+                bus,
+                "equipment.filter.create",
+                &filter.id,
+                Outcome::Applied,
+                None,
+                serde_json::json!({"name": filter.name}),
+            )
+            .await?;
+            Ok(filter)
+        }
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_audit(
+                bus,
+                "equipment.filter.create",
+                &req.name,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({"name": req.name}),
+            )
+            .await?;
+            Err(err)
+        }
+    }
 }
 
 /// Update an existing filter.
@@ -235,8 +544,38 @@ pub async fn create_filter(pool: &SqlitePool, req: &CreateFilter) -> Result<Filt
 /// # Errors
 ///
 /// Returns `ContractError` if the filter is not found.
-pub async fn update_filter(pool: &SqlitePool, req: &UpdateFilter) -> Result<Filter, ContractError> {
-    repo::update_filter(pool, req).await.map_err(db_to_contract)
+pub async fn update_filter(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    req: &UpdateFilter,
+) -> Result<Filter, ContractError> {
+    match repo::update_filter(pool, req).await {
+        Ok(filter) => {
+            write_equipment_audit(
+                bus,
+                "equipment.filter.update",
+                &filter.id,
+                Outcome::Applied,
+                None,
+                serde_json::json!({"name": filter.name}),
+            )
+            .await?;
+            Ok(filter)
+        }
+        Err(e) => {
+            let err = db_to_contract(e);
+            write_equipment_audit(
+                bus,
+                "equipment.filter.update",
+                &req.id,
+                Outcome::Failed,
+                Some(&error_code_str(err.code)),
+                serde_json::json!({"name": req.name}),
+            )
+            .await?;
+            Err(err)
+        }
+    }
 }
 
 /// Delete a filter by ID.
@@ -244,8 +583,12 @@ pub async fn update_filter(pool: &SqlitePool, req: &UpdateFilter) -> Result<Filt
 /// # Errors
 ///
 /// Returns `ContractError` if the filter is not found.
-pub async fn delete_filter(pool: &SqlitePool, id: &str) -> Result<(), ContractError> {
-    repo::delete_filter(pool, id).await.map_err(db_to_contract)
+pub async fn delete_filter(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    id: &str,
+) -> Result<(), ContractError> {
+    delete_equipment(bus, "equipment.filter.delete", id, repo::delete_filter(pool, id).await).await
 }
 
 /// Find a filter by exact name match, or create one as auto-detected custom.
@@ -271,4 +614,111 @@ pub async fn find_or_create_filter_by_name(
     q_calibration::mark_filter_auto_detected(pool, &filter.id).await.map_err(db_to_contract)?;
 
     Ok(filter)
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use persistence_db::Database;
+
+    async fn setup() -> (Database, EventBus) {
+        let db = Database::in_memory().await.expect("in-memory DB");
+        db.migrate().await.expect("migrations");
+        let bus = EventBus::with_pool(db.pool().clone());
+        (db, bus)
+    }
+
+    /// T124/SC-009: `create_camera` writes a durable `Outcome::Applied`
+    /// `audit_log_entry` row tagged `EntityType::Equipment` (previously no
+    /// audit emission at all).
+    #[tokio::test]
+    async fn create_camera_writes_durable_applied_audit_row() {
+        let (db, bus) = setup().await;
+        let req = CreateCamera { name: "ZWO ASI2600MM".to_owned(), aliases: vec![] };
+        let camera = create_camera(db.pool(), &bus, &req).await.unwrap();
+
+        let row: (String, String) = sqlx::query_as(
+            "SELECT entity_type, outcome FROM audit_log_entry WHERE trigger = 'equipment.camera.create'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("create_camera must write a durable audit row");
+        assert_eq!(row.0, "equipment");
+        assert_eq!(row.1, "applied");
+        assert!(!camera.id.is_empty());
+    }
+
+    /// T127 "equipment failed": deleting a nonexistent camera writes a
+    /// durable `Outcome::Failed` row with a reason_code (FR-130).
+    #[tokio::test]
+    async fn delete_camera_missing_writes_durable_failed_row() {
+        let (db, bus) = setup().await;
+        let err = delete_camera(db.pool(), &bus, "does-not-exist").await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::EquipmentNotFound);
+
+        let row: (String, String, Option<String>) = sqlx::query_as(
+            "SELECT entity_type, outcome, reason_code FROM audit_log_entry WHERE trigger = 'equipment.camera.delete'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("failed delete_camera must write a durable audit row");
+        assert_eq!(row.0, "equipment");
+        assert_eq!(row.1, "failed");
+        assert_eq!(row.2.as_deref(), Some("equipment.not_found"));
+    }
+
+    /// Update/delete round trip for optical trains and filters, spot-checking
+    /// that every equipment kind (not just cameras) writes durable rows.
+    #[tokio::test]
+    async fn optical_train_and_filter_crud_write_durable_rows() {
+        let (db, bus) = setup().await;
+
+        let train = create_optical_train(
+            db.pool(),
+            &bus,
+            &CreateOpticalTrain {
+                name: "Main rig".to_owned(),
+                telescope_id: None,
+                camera_id: None,
+                focal_length_mm: 800,
+            },
+        )
+        .await
+        .unwrap();
+        delete_optical_train(db.pool(), &bus, &train.id).await.unwrap();
+
+        // "Custom-Ha-7nm"/"Custom-Ha-3nm": migration 0007 seeds standard names
+        // ("Ha", "SII", "L", ...); avoid colliding with the seeded rows.
+        let filter = create_filter(
+            db.pool(),
+            &bus,
+            &CreateFilter {
+                name: "Custom-Ha-7nm".to_owned(),
+                category: FilterCategory::Narrowband,
+            },
+        )
+        .await
+        .unwrap();
+        update_filter(
+            db.pool(),
+            &bus,
+            &UpdateFilter {
+                id: filter.id.clone(),
+                name: "Custom-Ha-3nm".to_owned(),
+                category: FilterCategory::Narrowband,
+            },
+        )
+        .await
+        .unwrap();
+
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM audit_log_entry WHERE entity_type = 'equipment' AND outcome = 'applied'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(count.0, 4, "create+delete train and create+update filter = 4 applied rows");
+    }
 }

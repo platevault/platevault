@@ -2146,6 +2146,7 @@ mod tests {
 
         let reg = crate::first_run::register_source(
             db.pool(),
+            &bus,
             &RegisterSourceRequest {
                 kind: SourceKind::Project,
                 path: "/tmp".to_owned(),

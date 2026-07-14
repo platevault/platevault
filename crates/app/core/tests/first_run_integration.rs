@@ -25,7 +25,7 @@ use tempfile::tempdir;
 
 #[tokio::test]
 async fn register_source_persists_and_reads_back() {
-    let (db, _repo, _bus) = support::setup().await;
+    let (db, _repo, bus) = support::setup().await;
 
     let dir = tempdir().expect("tempdir");
     let path = dir.path().to_str().expect("utf8 path").to_owned();
@@ -38,7 +38,7 @@ async fn register_source_persists_and_reads_back() {
         organization_state: OrganizationState::Organized,
     };
 
-    let resp = first_run::register_source(db.pool(), &req)
+    let resp = first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect("register_source should succeed for a valid temp dir");
 
@@ -59,7 +59,7 @@ async fn register_source_persists_and_reads_back() {
 
 #[tokio::test]
 async fn register_source_rejects_duplicate_same_kind() {
-    let (db, _repo, _bus) = support::setup().await;
+    let (db, _repo, bus) = support::setup().await;
 
     let dir = tempdir().expect("tempdir");
     let path = dir.path().to_str().expect("utf8 path").to_owned();
@@ -73,10 +73,10 @@ async fn register_source_rejects_duplicate_same_kind() {
     };
 
     // First registration must succeed.
-    first_run::register_source(db.pool(), &req).await.expect("first register should succeed");
+    first_run::register_source(db.pool(), &bus, &req).await.expect("first register should succeed");
 
     // Second registration of the same path + kind must fail.
-    let err = first_run::register_source(db.pool(), &req)
+    let err = first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect_err("duplicate registration must be rejected");
 
@@ -94,7 +94,7 @@ async fn register_source_rejects_duplicate_same_kind() {
 
 #[tokio::test]
 async fn register_source_rejects_nonexistent_path() {
-    let (db, _repo, _bus) = support::setup().await;
+    let (db, _repo, bus) = support::setup().await;
 
     let req = RegisterSourceRequest {
         kind: SourceKind::Calibration,
@@ -105,7 +105,7 @@ async fn register_source_rejects_nonexistent_path() {
         organization_state: OrganizationState::Organized,
     };
 
-    let err = first_run::register_source(db.pool(), &req)
+    let err = first_run::register_source(db.pool(), &bus, &req)
         .await
         .expect_err("register with non-existent path must fail");
 
@@ -120,7 +120,7 @@ async fn register_source_rejects_nonexistent_path() {
 
 #[tokio::test]
 async fn seed_source_protection_sets_protected_for_non_inbox() {
-    let (db, _repo, _bus) = support::setup().await;
+    let (db, _repo, bus) = support::setup().await;
 
     let dir = tempdir().expect("tempdir");
     let path = dir.path().to_str().expect("utf8 path").to_owned();
@@ -133,7 +133,8 @@ async fn seed_source_protection_sets_protected_for_non_inbox() {
         scan_depth: ScanDepth::Recursive,
         organization_state: OrganizationState::Organized,
     };
-    let resp = first_run::register_source(db.pool(), &req).await.expect("register should succeed");
+    let resp =
+        first_run::register_source(db.pool(), &bus, &req).await.expect("register should succeed");
 
     // Seed the default protection for this (non-inbox) source.
     protection::seed_source_protection(db.pool(), &resp.source_id, "light_frames")

@@ -136,7 +136,7 @@ pub async fn roots_register(
     let req =
         RegisterSourceRequest { kind, path, kind_subtype: None, scan_depth, organization_state };
 
-    app_core::first_run::register_source(state.repo.pool(), &req).await
+    app_core::first_run::register_source(state.repo.pool(), &state.bus, &req).await
 }
 
 /// `sources.set_organization_state` — change a source's organization state
