@@ -233,6 +233,22 @@ pub enum ErrorCode {
     #[serde(rename = "project.read_only")]
     ProjectReadOnly,
 
+    // ── Framing (spec 008 Q27, F-Framing-3) ────────────────────────────────────
+    #[serde(rename = "framing.not_found")]
+    FramingNotFound,
+    #[serde(rename = "framing.project_mismatch")]
+    FramingProjectMismatch,
+    #[serde(rename = "framing.merge.requires_two")]
+    FramingMergeRequiresTwo,
+    #[serde(rename = "framing.split.empty_selection")]
+    FramingSplitEmptySelection,
+    #[serde(rename = "framing.split.invalid_session")]
+    FramingSplitInvalidSession,
+    #[serde(rename = "framing.split.would_empty_source")]
+    FramingSplitWouldEmptySource,
+    #[serde(rename = "framing.reassign.empty_selection")]
+    FramingReassignEmptySelection,
+
     // ── View ────────────────────────────────────────────────────────────────
     #[serde(rename = "view.mixed_kind")]
     ViewMixedKind,

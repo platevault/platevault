@@ -37,6 +37,8 @@ pub struct ProjectRow {
     pub blocked_reason_kind: Option<String>,
     /// FR-020: free-form blocked reason note (migration 0037).
     pub blocked_reason_note: Option<String>,
+    /// Mosaic-mode flag (Q27 FR-017, migration 0064). Default false.
+    pub is_mosaic: bool,
 }
 
 /// Flat row from the `project_sources` table.
@@ -75,6 +77,8 @@ pub struct InsertProject<'a> {
     /// Optional spec-035 `canonical_target` id (additive; nullable). Coexists
     /// with the legacy spec-013 `target_id` column.
     pub canonical_target_id: Option<&'a str>,
+    /// Mosaic-mode flag (Q27 FR-017), default false.
+    pub is_mosaic: bool,
 }
 
 /// Data required to insert a project source link.
@@ -106,6 +110,7 @@ type ProjectRowTuple = (
     String,
     Option<String>,
     Option<String>,
+    i64,
 );
 
 // ── projects CRUD ─────────────────────────────────────────────────────────────
@@ -135,8 +140,8 @@ async fn insert_project_conn(
 ) -> DbResult<String> {
     let now = Timestamp::now_iso();
     sqlx::query(
-        "INSERT INTO projects (id, name, tool, lifecycle, path, notes, canonical_target_id, channel_drift, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+        "INSERT INTO projects (id, name, tool, lifecycle, path, notes, canonical_target_id, channel_drift, is_mosaic, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
     )
     .bind(data.id)
     .bind(data.name)
@@ -145,6 +150,7 @@ async fn insert_project_conn(
     .bind(data.path)
     .bind(data.notes)
     .bind(data.canonical_target_id)
+    .bind(data.is_mosaic)
     .bind(&now)
     .bind(&now)
     .execute(&mut *conn)
@@ -161,7 +167,7 @@ async fn insert_project_conn(
 pub async fn get_project(pool: &SqlitePool, id: &str) -> DbResult<ProjectRow> {
     let row: Option<ProjectRowTuple> = sqlx::query_as(
         "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at,
-                blocked_reason_kind, blocked_reason_note
+                blocked_reason_kind, blocked_reason_note, is_mosaic
          FROM projects WHERE id = ?",
     )
     .bind(id)
@@ -180,6 +186,7 @@ pub async fn get_project(pool: &SqlitePool, id: &str) -> DbResult<ProjectRow> {
         updated_at,
         blocked_reason_kind,
         blocked_reason_note,
+        is_mosaic,
     ) = row.ok_or_else(|| DbError::NotFound(format!("project {id}")))?;
 
     Ok(ProjectRow {
@@ -194,6 +201,7 @@ pub async fn get_project(pool: &SqlitePool, id: &str) -> DbResult<ProjectRow> {
         updated_at,
         blocked_reason_kind,
         blocked_reason_note,
+        is_mosaic: is_mosaic != 0,
     })
 }
 
@@ -299,7 +307,7 @@ pub async fn set_project_canonical_target_id(
 pub async fn list_projects(pool: &SqlitePool) -> DbResult<Vec<ProjectRow>> {
     let rows: Vec<ProjectRowTuple> = sqlx::query_as(
         "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at,
-                blocked_reason_kind, blocked_reason_note
+                blocked_reason_kind, blocked_reason_note, is_mosaic
          FROM projects ORDER BY updated_at DESC",
     )
     .fetch_all(pool)
@@ -320,6 +328,7 @@ pub async fn list_projects(pool: &SqlitePool) -> DbResult<Vec<ProjectRow>> {
                 updated_at,
                 blocked_reason_kind,
                 blocked_reason_note,
+                is_mosaic,
             )| {
                 ProjectRow {
                     id,
@@ -333,6 +342,7 @@ pub async fn list_projects(pool: &SqlitePool) -> DbResult<Vec<ProjectRow>> {
                     updated_at,
                     blocked_reason_kind,
                     blocked_reason_note,
+                    is_mosaic: is_mosaic != 0,
                 }
             },
         )
@@ -396,8 +406,9 @@ pub async fn path_exists(
     Ok(row.map(|(id,)| id))
 }
 
-/// Update whitelisted metadata fields on a project (name, tool, notes).
-/// Always bumps `updated_at`. Returns the new `updated_at` timestamp.
+/// Update whitelisted metadata fields on a project (name, tool, notes,
+/// is_mosaic). Always bumps `updated_at`. Returns the new `updated_at`
+/// timestamp.
 ///
 /// # Errors
 ///
@@ -408,6 +419,7 @@ pub async fn update_project_fields(
     name: Option<&str>,
     tool: Option<&str>,
     notes: Option<&str>,
+    is_mosaic: Option<bool>,
 ) -> DbResult<String> {
     // Build a dynamic update; at least one field must be supplied (enforced by caller).
     let now = Timestamp::now_iso();
@@ -416,15 +428,19 @@ pub async fn update_project_fields(
     let new_name = name.unwrap_or(&current.name);
     let new_tool = tool.unwrap_or(&current.tool);
     let new_notes: Option<&str> = notes.or(current.notes.as_deref());
+    let new_is_mosaic = is_mosaic.unwrap_or(current.is_mosaic);
 
-    sqlx::query("UPDATE projects SET name = ?, tool = ?, notes = ?, updated_at = ? WHERE id = ?")
-        .bind(new_name)
-        .bind(new_tool)
-        .bind(new_notes)
-        .bind(&now)
-        .bind(id)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "UPDATE projects SET name = ?, tool = ?, notes = ?, is_mosaic = ?, updated_at = ? WHERE id = ?",
+    )
+    .bind(new_name)
+    .bind(new_tool)
+    .bind(new_notes)
+    .bind(new_is_mosaic)
+    .bind(&now)
+    .bind(id)
+    .execute(pool)
+    .await?;
 
     Ok(now)
 }
@@ -956,6 +972,7 @@ mod tests {
             path: "projects/NGC7000_NB",
             notes: None,
             canonical_target_id: None,
+            is_mosaic: false,
         }
     }
 
@@ -984,6 +1001,7 @@ mod tests {
                 path: "projects/M31_LRGB",
                 notes: Some("test notes"),
                 canonical_target_id: None,
+                is_mosaic: false,
             },
         )
         .await
@@ -1006,9 +1024,18 @@ mod tests {
     async fn update_project_fields_changes_name() {
         let db = setup().await;
         insert_project(db.pool(), &project_a("p1")).await.unwrap();
-        update_project_fields(db.pool(), "p1", Some("M31 LRGB"), None, None).await.unwrap();
+        update_project_fields(db.pool(), "p1", Some("M31 LRGB"), None, None, None).await.unwrap();
         let row = get_project(db.pool(), "p1").await.unwrap();
         assert_eq!(row.name, "M31 LRGB");
+    }
+
+    #[tokio::test]
+    async fn update_project_fields_changes_is_mosaic() {
+        let db = setup().await;
+        insert_project(db.pool(), &project_a("p1")).await.unwrap();
+        update_project_fields(db.pool(), "p1", None, None, None, Some(true)).await.unwrap();
+        let row = get_project(db.pool(), "p1").await.unwrap();
+        assert!(row.is_mosaic);
     }
 
     #[tokio::test]

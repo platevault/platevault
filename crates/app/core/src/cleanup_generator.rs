@@ -648,6 +648,7 @@ mod tests {
                 path: "projects/M31_LRGB",
                 notes: None,
                 canonical_target_id: None,
+                is_mosaic: false,
             },
         )
         .await

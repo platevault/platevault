@@ -205,6 +205,7 @@ mod tests {
                 path: &format!("projects/{id}"),
                 notes: None,
                 canonical_target_id: None,
+                is_mosaic: false,
             },
         )
         .await

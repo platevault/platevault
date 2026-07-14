@@ -492,6 +492,7 @@ pub async fn create(
         path: &project_path,
         notes: req.notes.as_deref(),
         canonical_target_id: req.canonical_target_id.as_deref(),
+        is_mosaic: req.is_mosaic,
     };
 
     // Link initial sources (best-effort: if a source is not found in a future
@@ -605,6 +606,7 @@ pub async fn create(
             "tool": req.tool.as_db_str(),
             "lifecycle": final_lifecycle,
             "sourceCount": source_rows.len(),
+            "isMosaic": req.is_mosaic,
         }),
     )
     .await
@@ -616,6 +618,7 @@ pub async fn create(
 
     Ok(ProjectCreateResult {
         project_id,
+        is_mosaic: req.is_mosaic,
         lifecycle: final_lifecycle,
         plan_id: Some(plan_id),
         channels: channel_dtos,
@@ -673,8 +676,9 @@ pub async fn update(
     let name_changing = req.name.as_deref().is_some_and(|n| n != row.name);
     let tool_changing = req.tool.is_some_and(|t| t.as_db_str() != row.tool);
     let notes_changing = req.notes.as_deref().is_some_and(|n| row.notes.as_deref() != Some(n));
+    let is_mosaic_changing = req.is_mosaic.is_some_and(|m| m != row.is_mosaic);
 
-    if !name_changing && !tool_changing && !notes_changing {
+    if !name_changing && !tool_changing && !notes_changing && !is_mosaic_changing {
         return Err(ContractError::new(
             ErrorCode::NoOp,
             "No fields were changed.",
@@ -713,6 +717,7 @@ pub async fn update(
         req.name.as_deref(),
         new_tool_str.as_deref(),
         req.notes.as_deref(),
+        req.is_mosaic,
     )
     .await
     .map_err(db_err)?;
@@ -726,6 +731,9 @@ pub async fn update(
     }
     if notes_changing {
         fields_updated.push("notes".to_owned());
+    }
+    if is_mosaic_changing {
+        fields_updated.push("isMosaic".to_owned());
     }
 
     let audit_id = new_id();
@@ -1105,6 +1113,7 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<ProjectSummaryDto>, ContractE
             updated_at: row.updated_at,
             blocked_reason_kind: row.blocked_reason_kind,
             blocked_reason_note: row.blocked_reason_note,
+            is_mosaic: row.is_mosaic,
         });
     }
     Ok(dtos)
@@ -1156,6 +1165,7 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<ProjectDetailDto, Contra
         canonical_target,
         blocked_reason_kind: row.blocked_reason_kind,
         blocked_reason_note: row.blocked_reason_note,
+        is_mosaic: row.is_mosaic,
     })
 }
 
@@ -1268,6 +1278,7 @@ mod tests {
             initial_sources: vec![],
             notes: None,
             canonical_target_id: None,
+            is_mosaic: false,
         }
     }
 
@@ -1406,6 +1417,7 @@ mod tests {
             name: Some("New Name".to_owned()),
             tool: None,
             notes: None,
+            is_mosaic: None,
         };
         let result = update(&pool, &bus, &update_req).await.unwrap();
         assert!(result.fields_updated.contains(&"name".to_owned()));
@@ -1426,6 +1438,7 @@ mod tests {
             name: Some("New Name".to_owned()),
             tool: None,
             notes: None,
+            is_mosaic: None,
         };
         let err = update(&pool, &bus, &update_req).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::LifecycleReadOnly);

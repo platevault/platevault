@@ -17,6 +17,18 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+/// `skip_serializing_if` predicate for the `is_mosaic` fields below: omit the
+/// key when `false` (the backward-compatible default), matching the
+/// `Option`/`Vec` skip-when-empty idiom used elsewhere in this crate. Keeps
+/// every existing fixture/mock that predates the Q27 mosaic flag structurally
+/// compatible with the specta-generated `_Serialize` union arm instead of
+/// forcing it onto the stricter `_Deserialize` arm (which requires every
+/// non-`skip_serializing_if` field, including unrelated ones).
+#[allow(clippy::trivially_copy_pass_by_ref)] // required signature for skip_serializing_if
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 // ── Shared sub-types ──────────────────────────────────────────────────────────
 
 /// Role of a linked source within a project (spec 008 data-model.md §`ProjectSource`).
@@ -147,6 +159,11 @@ pub struct ProjectSummaryDto {
     /// FR-020: free-form note for the blocked reason.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked_reason_note: Option<String>,
+    /// Mosaic-mode flag (Q27 FR-017), default false. When true, the project
+    /// may hold multiple framings (panels) that all inherit the project's
+    /// declared target.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_mosaic: bool,
 }
 
 /// A project detail (sources + channels included).
@@ -177,6 +194,11 @@ pub struct ProjectDetailDto {
     /// FR-020: free-form note for the blocked reason.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked_reason_note: Option<String>,
+    /// Mosaic-mode flag (Q27 FR-017), default false. When true, every framing
+    /// derived for this project inherits the declared target and per-frame
+    /// OBJECT/coordinate resolution is suppressed. There is no panel entity.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_mosaic: bool,
 }
 
 /// A project's associated spec-035 canonical target, resolved for display on the
@@ -226,6 +248,9 @@ pub struct ProjectCreateRequest {
     /// decision). Existing callers omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canonical_target_id: Option<String>,
+    /// Mosaic-mode flag (Q27 FR-017), default false. Existing callers omit it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_mosaic: bool,
 }
 
 /// Successful result from `projects.create`.
@@ -233,6 +258,8 @@ pub struct ProjectCreateRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectCreateResult {
     pub project_id: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_mosaic: bool,
     /// Initial lifecycle state. `"setup_incomplete"` when the project has no sources at create time;
     /// may auto-transition to `"ready"` when sources are provided in the create request (FR-008).
     pub lifecycle: String,
@@ -272,6 +299,9 @@ pub struct ProjectUpdateRequest {
     pub tool: Option<ProjectTool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// Mosaic-mode flag (Q27 FR-017). Omitted means "leave unchanged".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_mosaic: Option<bool>,
 }
 
 /// Successful result from `projects.update`.

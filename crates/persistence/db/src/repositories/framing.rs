@@ -141,6 +141,41 @@ pub async fn list_framings_by_project(
     Ok(rows)
 }
 
+/// Update a framing's `clustering` provenance. F-Framing-3's merge/split/
+/// reassign use cases call this to flip a touched framing to
+/// `"user_adjusted"` (FR-015) — never called with `"suggested"` by any
+/// current caller, since re-derivation (F-Framing-2) never demotes a
+/// framing back. Returns the new `updated_at` timestamp.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn update_framing_clustering(
+    pool: &SqlitePool,
+    id: &str,
+    clustering: &str,
+) -> DbResult<String> {
+    let now = Timestamp::now_iso();
+    sqlx::query("UPDATE framing SET clustering = ?, updated_at = ? WHERE id = ?")
+        .bind(clustering)
+        .bind(&now)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(now)
+}
+
+/// Delete a framing row. Cascades to its `framing_session` memberships via
+/// migration 0064's `ON DELETE CASCADE`. Used by `framing.merge`
+/// (F-Framing-3) to remove framings whose sessions were folded into the
+/// survivor. No-op (not an error) when the id does not exist.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn delete_framing(pool: &SqlitePool, id: &str) -> DbResult<()> {
+    sqlx::query("DELETE FROM framing WHERE id = ?").bind(id).execute(pool).await?;
+    Ok(())
+}
+
 // ── framing_session membership ───────────────────────────────────────────────
 
 /// Add a light session to a framing's membership.
@@ -427,6 +462,43 @@ mod tests {
             matches!(err, DbError::Database(_)),
             "UNIQUE(session_id) must reject a second framing"
         );
+    }
+
+    // ── update_framing_clustering / delete_framing (F-Framing-3) ────────────────
+
+    #[tokio::test]
+    async fn update_framing_clustering_flips_to_user_adjusted() {
+        let db = setup().await;
+        insert_project(db.pool(), "proj-c").await;
+        insert_framing(db.pool(), &insert_data("framing-c", "proj-c")).await.unwrap();
+
+        update_framing_clustering(db.pool(), "framing-c", "user_adjusted").await.unwrap();
+
+        let row = get_framing(db.pool(), "framing-c").await.unwrap();
+        assert_eq!(row.clustering, "user_adjusted");
+    }
+
+    #[tokio::test]
+    async fn delete_framing_cascades_memberships() {
+        let db = setup().await;
+        insert_project(db.pool(), "proj-d").await;
+        insert_acquisition_session(db.pool(), "sess-d").await;
+        insert_framing(db.pool(), &insert_data("framing-d", "proj-d")).await.unwrap();
+        add_session_to_framing(db.pool(), "framing-d", "sess-d").await.unwrap();
+
+        delete_framing(db.pool(), "framing-d").await.unwrap();
+
+        assert!(matches!(
+            get_framing(db.pool(), "framing-d").await.unwrap_err(),
+            DbError::NotFound(_)
+        ));
+        assert_eq!(get_framing_id_for_session(db.pool(), "sess-d").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn delete_framing_missing_id_is_not_an_error() {
+        let db = setup().await;
+        delete_framing(db.pool(), "no-such-framing").await.unwrap();
     }
 
     // ── acquisition_session durable geometry (Q16 null semantics) ──────────────
