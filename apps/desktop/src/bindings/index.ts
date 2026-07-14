@@ -580,7 +580,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err` with the contract error code on database failure.
 	 */
-	archiveList: () => typedError<ArchiveListResponse, ContractError_Serialize>(__TAURI_INVOKE("archive_list")),
+	archiveList: () => typedError<ArchiveListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("archive_list")),
 	/**
 	 *  `archive.plan.generate` — build a reviewable whole-project archive plan
 	 *  (spec 017 US2/WP-B). Creates a `ready_for_review` plan; performs NO
@@ -1926,7 +1926,10 @@ export type AppPreferences = {
 };
 
 /**  One archived entity row for the Archive page (C5 design: projects only). */
-export type ArchiveEntry = {
+export type ArchiveEntry = ArchiveEntry_Serialize | ArchiveEntry_Deserialize;
+
+/**  One archived entity row for the Archive page (C5 design: projects only). */
+export type ArchiveEntry_Deserialize = {
 	/**  Archived entity id (a project id in the current design). */
 	id: string,
 	/**  Display name (project name). */
@@ -1938,12 +1941,53 @@ export type ArchiveEntry = {
 	entityType: string,
 	/**  When the entity reached the `archived` lifecycle state (ISO-8601). */
 	archivedAt: string,
-	/**  Human-readable reason (the archive plan title when available). */
-	reason: string,
+	/**
+	 *  Human-readable reason (the archive plan title). `None` when the owning
+	 *  plan row no longer exists (spec-030 Q16 / FR-136 — never an empty-string
+	 *  sentinel standing in for absence).
+	 */
+	reason: string | null,
 	/**  The entity's original on-disk location (project-relative library path). */
 	originalPath: string,
-	/**  Bytes moved into the app-managed archive by the owning plan. */
-	sizeBytes: number,
+	/**
+	 *  Bytes moved into the app-managed archive by the owning plan. `None`
+	 *  when unresolved (spec-030 Q16 / FR-136 — never a sentinel 0, "Size 0 KB").
+	 */
+	sizeBytes: number | null,
+	/**
+	 *  Plan that archived this entity. Drives the management operations
+	 *  (`archive.send_to_trash` / `archive.permanently_delete`). `None` only
+	 *  for legacy rows archived before this column existed.
+	 */
+	archivedViaPlanId: string | null,
+};
+
+/**  One archived entity row for the Archive page (C5 design: projects only). */
+export type ArchiveEntry_Serialize = {
+	/**  Archived entity id (a project id in the current design). */
+	id: string,
+	/**  Display name (project name). */
+	name: string,
+	/**
+	 *  Entity kind. Always `"project"` today (D7/D14: no session/master/target
+	 *  tabs until a real archival model for them is designed).
+	 */
+	entityType: string,
+	/**  When the entity reached the `archived` lifecycle state (ISO-8601). */
+	archivedAt: string,
+	/**
+	 *  Human-readable reason (the archive plan title). `None` when the owning
+	 *  plan row no longer exists (spec-030 Q16 / FR-136 — never an empty-string
+	 *  sentinel standing in for absence).
+	 */
+	reason?: string | null,
+	/**  The entity's original on-disk location (project-relative library path). */
+	originalPath: string,
+	/**
+	 *  Bytes moved into the app-managed archive by the owning plan. `None`
+	 *  when unresolved (spec-030 Q16 / FR-136 — never a sentinel 0, "Size 0 KB").
+	 */
+	sizeBytes?: number | null,
 	/**
 	 *  Plan that archived this entity. Drives the management operations
 	 *  (`archive.send_to_trash` / `archive.permanently_delete`). `None` only
@@ -1953,8 +1997,16 @@ export type ArchiveEntry = {
 };
 
 /**  Response for `archive.list` — every project currently in `archived`. */
-export type ArchiveListResponse = {
-	entries: ArchiveEntry[],
+export type ArchiveListResponse = ArchiveListResponse_Serialize | ArchiveListResponse_Deserialize;
+
+/**  Response for `archive.list` — every project currently in `archived`. */
+export type ArchiveListResponse_Deserialize = {
+	entries: ArchiveEntry_Deserialize[],
+};
+
+/**  Response for `archive.list` — every project currently in `archived`. */
+export type ArchiveListResponse_Serialize = {
+	entries: ArchiveEntry_Serialize[],
 };
 
 /**  Response for `archive.permanently_delete`. */

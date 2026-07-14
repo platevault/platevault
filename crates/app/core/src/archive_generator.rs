@@ -168,9 +168,12 @@ pub async fn list_archived(pool: &SqlitePool) -> Result<ArchiveListResponse, Con
             name: r.name,
             entity_type: "project".to_owned(),
             archived_at: r.archived_at,
-            reason: r.plan_title.unwrap_or_default(),
+            // Q16 / FR-136: no absence-synthesizing fallbacks — pass the
+            // row's Option straight through (a deleted owning plan leaves
+            // both genuinely unresolved, not an empty string / zero).
+            reason: r.plan_title,
             original_path: r.path,
-            size_bytes: r.archived_bytes.unwrap_or(0),
+            size_bytes: r.archived_bytes,
             archived_via_plan_id: r.archived_via_plan_id,
         })
         .collect();
@@ -355,6 +358,12 @@ mod tests {
         assert_eq!(entry.entity_type, "project");
         assert_eq!(entry.archived_via_plan_id.as_deref(), Some("plan-xyz"));
         assert_eq!(entry.original_path, "projects/p-arch");
+        // T134 (Q16 / FR-136): "plan-xyz" was never inserted into `plans`, so
+        // the LEFT JOIN leaves plan_title/total_bytes_required NULL — reason
+        // and size_bytes must round-trip as None, never an empty-string /
+        // zero sentinel standing in for the deleted plan's data.
+        assert_eq!(entry.reason, None, "must never default to an empty-string sentinel");
+        assert_eq!(entry.size_bytes, None, "must never default to a 0 sentinel");
     }
 
     #[tokio::test]
