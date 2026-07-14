@@ -749,6 +749,40 @@ within-file keyword precedence is deterministic.
 
 ---
 
+## Q25 — "Verified-complete" trigger & output observation → cleanup gate (spec-011 / spec-012 + §III; completes Q19)
+
+The machinery exists: the project lifecycle is
+`SetupIncomplete → Ready → Processing → Completed → Archived` (with reopen
+`Completed → Processing`), and `crates/workflow/artifacts` (spec-012) already
+**observes outputs without processing** (§III-clean) — a rule-driven classifier
+with **confidence**, PixInsight/Siril default rules, a stable-size watcher,
+tool-launch **attribution by app-clock window**, and **path→project**
+longest-prefix mapping. The open decision is what flips **"verified-complete"**,
+the gate Q19's cleanup depends on.
+
+- **Completion / verification is purely manual** — an explicit user action, with
+  **no completion detection or suggestion**. Workflows vary too widely to detect
+  reliably, and an output *existing* says nothing about whether the user has
+  *verified* it (a user may produce several candidate finals). The app cannot
+  assess image quality (§III boundary), so it never guesses "done."
+- **Output observation is retained for its §III jobs, reframed as evidence, not a
+  trigger.** `workflow/artifacts` continuously **tracks/documents observed outputs
+  and links them to the project** (source→output provenance — the constitution's
+  "document source usage, track outputs"), and at the **manual** verified-complete
+  moment it may **show the observed outputs as optional attachable evidence** —
+  surfaced, never asserted, never a prompt to complete.
+- **Low-confidence / ambiguous attribution → surfaced for confirmation** (which
+  project / which tool launch), never a silent mis-link — for the tracking/linking
+  purpose (§II + confidence-carrying, like Q16).
+- **Manual verified-complete is the gate that unlocks Q19 cleanup candidates**
+  (intermediates→trash, raw subs kept-unless-archived) via the reviewable plan
+  (Q7) — this closes the Q19 loop.
+- **Reopen (`Completed → Processing`) revokes cleanup-eligibility** and **warns if
+  raw subs were already archived/cleaned** (degraded reopen). Q19's "raw kept &
+  protected by default" is what keeps reopen safe.
+
+---
+
 ## SpecKit iterate map
 
 Each decision is formalized through a SpecKit iterate when its wave is picked up:
@@ -779,6 +813,7 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q22** duplicate detection & hashing | **spec-006 / spec-041** iterate (header-identity suspects + bounded auto-hash confirm; inbox pre-ingest + library review; user-driven resolution) |
 | **Q23** naming & path generation | **spec-015 / spec-025** iterate (folders-only preserve-basename; pre-move collision options in the reviewable plan; no fallback — resolver errors + pattern validates guaranteed tokens) |
 | **Q24** cross-platform path safety | **spec-025 / spec-015** iterate (long-path >260 hard-block in plan; case-insensitive collision in Q23 detector; safe-filename rejections surfaced as plan fixes; per-segment LCD sanitization already shipped via `safe-filename`) |
+| **Q25** verified-complete trigger + output observation | **spec-011 / spec-012 / spec-009** iterate (purely manual completion, no detection; observation reframed as tracking + optional evidence; manual gate unlocks Q19 cleanup; reopen revokes + warns) |
 
 Q8's override decision is small enough to fold into the ingestion/confirm flow
 directly; the **heuristic ADU suggestion** is the part that needs a new
