@@ -10,7 +10,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 2. Ingest → review/reclassify → confirm (move) | PARTIAL | 7P/6F/3PA/2S | #711, #724, #765, #766, #767 | needs-review gate works; reclassify sentinel bug #724 blocks confirm; cross-root move lands wrong #765; zero audit rows #766; plan-review overlay stuck #767 |
 | 3. Ingest → confirm (catalogue-in-place) | PARTIAL | 3P/1F/1PA/0S | #768, #769 | catalogue plan structure valid; destination-root picker shown wrongly #768; approval-token missing #769 blocks apply; zero audit rows #766 reproduces |
 | 4. Sessions review (derived) | PARTIAL | 6P/6F/1PA/2S | #770, #771, #772, #773 | filter/camera dropdowns + grouping work; unresolved values indistinguishable #770; detail Escape fails #771; no calibration field #772; no notes field #773; sessionKey parse bug #564 |
-| 5. Project lifecycle: create → artifacts | ⏳ pending | | | |
+| 5. Project lifecycle: create → artifacts | PARTIAL | 2P/0F/4PA/0S | #775, #776, #778, #780 | create+mkdir+lifecycle work; integration always 0s #775; manifests never generated #665; artifact tracking broken #780; tool workdir \\?\ path fails #778 |
 | 6. Cleanup: scan → review → apply | ⏳ pending | | | |
 | 7. Archive → delete from archive | ⏳ pending | | | |
 | 8. Calibration: ingest → masters → matching | ⏳ pending | | | |
@@ -88,3 +88,19 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Doc-drift / unexpected-but-intended:** JOURNEY-DOC UPDATE — PR #415 is MERGED (not open): filter/camera dropdowns, group+secondary sort, aria-sort on every header, and the "Grouped by X" footer hint are all live and working; Journey 4's "Known gaps (2026-07-04)" section is stale and should be removed. Also SessionsPage.tsx:14 documents the frame-type filter is intentionally removed (sessions are light frames; calibration lives on its own page) — journey text should clarify this rather than expecting a literal frame-type row.
 
 **App-state left for later journeys:** app idle on #/sessions, no row selected, filters reset. Session 11024d3c… (M51, LUM, 2 frames, canonical_target resolved) is real, confirmed, attachable (projectIds:[]) — ready for Journey 5 to attach a project. Project-chip-navigation bullet SKIPPED (no project linked yet). Empty-before-apply step SKIPPED (no DB reset), inferred consistent from J2 (no session) vs J3 (session exists).
+
+### Journey 5 — Project lifecycle: create → attach sources → manifests/notes → tool launch → artifacts
+
+**Verdict:** PARTIAL
+**Steps:** 2 PASS / 0 FAIL / 4 PARTIAL / 0 SKIPPED (step-3 "real numbers" effectively FAIL via known dupes)
+**Issues filed:** #775 (backend — session/project integration time always 0s; sessions.rs:78 hardcoded stub), #776 (backend/UI — wizard step 4 Source-views hardcoded scope/items), #778 (backend — tool launch passes Windows \\?\ verbatim workdir → PixInsight "no file found"), #780 (backend — output/ artifacts lost on reopen; reconcile non-recursive vs live watcher recursive)
+
+**Dupes hit (not re-filed):** #612 (fabricated "From target context" chip), #327 + #599 (wizard steps 3/6 mock calibration/review data), #663 (Sources table raw session UUID + dash cols), #665 (manifests never generated), #660 (Edit pane full-window overlay)
+
+**Key evidence:** Create PASS — project bf6f5e26-… , mkdir plan c81e8913 auto-applied 7/7, real folders on disk under C:\Temp\pv-projects\j5-lifecycle-test, plan_apply_events + audit row present (NOT the #766 zero-audit case; project-create path writes durable events). Duplicate-name block PASS (bounced to Step 1, inline "A project with this name already exists.", case-insensitive, no dupe row). Notes PASS (autosave ~5s, counter 60/16384, cap guard). Source Views Generate PASS (reviewable plan d093373a ready_for_review, 0 applied; Cancel left 0 plans). Lifecycle stepper PASS incl. reverse (Re-open completed→processing). Tool-launch happy path PASS (contained cwd, tool_launches row + audit, lifecycle untouched). FAILs: integration 0s (#775); 0 channels/raw UUID sources (#663); 0 manifests after create+source+lifecycle (#665); \\?\ workdir breaks PixInsight (#778); while-closed artifact lost + existing falsely marked missing on reopen (#780).
+
+**Doc-drift / unexpected-but-intended:** JOURNEY-DOC UPDATE — duplicate-name error fires at Create-time (bounces to Step 1 w/ inline field error), NOT "immediately as you type" as the journey states; correct step 1 wording. "From target context: J5" chip is fabricated from the typed name (already bug #612).
+
+**Untested (noted, not defects):** last-source-guard inline-confirm (code exists EditProjectPane.tsx:338-365 but unreachable — Remove is lifecycle-locked in processing/completed, only 1 session); archived-state edit refusal (no archived project yet); tool-launch containment-refusal + OS-spawn-failure (couldn't misconfigure); Save-draft→resume + exact 1100×720 stepper (skipped for budget).
+
+**App-state left for later journeys:** app idle on #/projects with "J5 Lifecycle Test" (id bf6f5e26-…) selected, lifecycle=completed, 1 attached source (M51 session 11024d3c…), tool=PixInsight, path C:\Temp\pv-projects\j5-lifecycle-test. On-disk outputs for J6/J7: output\J5_integration_master.xisf (recorded artifact, now state=missing per #780) and output\J5_final_closed.fits (on disk, unrecorded per #780). Detail shows Archive + Re-open ready for J7.
