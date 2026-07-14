@@ -43,9 +43,10 @@ pub struct AppState {
     pub resolve_cache_path: std::path::PathBuf,
     /// True while a bundled-seed/durable-row re-warm of `resolve_cache` is
     /// running in the background (the startup warm in `lib.rs`, or the one
-    /// `commands::resolve_cache::clear_and_rewarm` schedules). Set true
-    /// immediately before each warm is spawned and false when it finishes;
-    /// `target.search` surfaces the value so a caller whose query landed
+    /// `commands::resolve_cache::clear_and_rewarm` schedules). Set true and
+    /// cleared by a [`CacheWarmingGuard`] held for the warm task's whole
+    /// scope, never a bare sequential store, so a panic mid-warm still clears
+    /// it; `target.search` surfaces the value so a caller whose query landed
     /// mid-warm can tell a still-settling empty result apart from a genuine
     /// miss (issue #818). Two overlapping warms (startup racing an
     /// almost-immediate cache-clear) can make the flag go false slightly
@@ -70,6 +71,78 @@ impl AppState {
             resolve_cache_path,
             cache_warming,
         }
+    }
+}
+
+/// RAII guard that flips [`AppState::cache_warming`] back to `false` on
+/// **any** scope exit — normal return *or* unwind from a panic inside the
+/// warm task (issue #818 review). A bare sequential
+/// `flag.store(false, ...)` after both warm phases is skipped if either
+/// panics, since the unwind jumps past it; the flag then sticks `true` for
+/// the rest of the process, and every later `target.search` pays the full
+/// retry budget (`TargetSearch.tsx`) for a warm that will never finish.
+///
+/// [`CacheWarmingGuard::start`] sets the flag `true` and returns the guard in
+/// one call (mirroring `plan_apply::check_overlap_and_register` + its
+/// `ActiveRunGuard`) so the flag is visible to a concurrent `target.search`
+/// the instant the caller schedules the warm — the guard itself is then
+/// moved into the spawned task, so its `Drop` runs exactly once, whichever
+/// way that task ends. Shared by both warm sites (`lib.rs`'s startup warm and
+/// `resolve_cache.rs`'s `clear_and_rewarm`) instead of duplicating the
+/// set/clear pair at each.
+pub struct CacheWarmingGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl CacheWarmingGuard {
+    /// Set `flag` true and return the guard that will clear it on drop.
+    #[must_use]
+    pub fn start(flag: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self {
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        Self(flag)
+    }
+}
+
+impl Drop for CacheWarmingGuard {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[cfg(test)]
+mod cache_warming_guard_tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    use super::CacheWarmingGuard;
+
+    #[test]
+    fn start_sets_true_and_normal_drop_clears_it() {
+        let flag = Arc::new(AtomicBool::new(false));
+        {
+            let _guard = CacheWarmingGuard::start(flag.clone());
+            assert!(flag.load(Ordering::Relaxed), "flag must be true while the guard is held");
+        } // guard drops here
+        assert!(!flag.load(Ordering::Relaxed), "guard Drop must clear the flag on normal exit");
+    }
+
+    /// Regression for the #818 review finding: a panic inside the warm task
+    /// (after the guard is constructed) must still clear the flag, mirroring
+    /// `plan_apply::active_run_guard_removes_entry_when_scope_panics`.
+    #[test]
+    fn panic_after_start_still_clears_the_flag() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let flag_for_scope = flag.clone();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            // Guard is owned by this scope, mirroring
+            // `tokio::spawn(async move { let _guard = ...; warm().await })`.
+            let _guard = CacheWarmingGuard::start(flag_for_scope);
+            panic!("warm task panicked mid-warm");
+        }));
+
+        assert!(result.is_err(), "the scope must have panicked");
+        assert!(
+            !flag.load(Ordering::Relaxed),
+            "guard Drop must clear the flag even when the scope unwinds from a panic"
+        );
     }
 }
 

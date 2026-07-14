@@ -1101,19 +1101,22 @@ pub fn run_app(
     // until the next launch, never blocks the UI.
     //
     // `cache_warming` (shared with the managed `AppState` below) is set true
-    // for the duration: batching a whole phase into one transaction means no
-    // row is visible to a reader until that phase commits, so a `target.search`
-    // query landing in this window can get a legitimate-looking empty result
-    // for a seed object that just hasn't committed yet — the flag lets
-    // `target.search` tell the frontend to retry instead of freezing on that
-    // stale answer (issue #818).
+    // for the duration via a `CacheWarmingGuard` (not a bare sequential
+    // store — a panic mid-warm must still clear it, see its doc comment):
+    // batching a whole phase into one transaction means no row is visible to
+    // a reader until that phase commits, so a `target.search` query landing
+    // in this window can get a legitimate-looking empty result for a seed
+    // object that just hasn't committed yet — the flag lets `target.search`
+    // tell the frontend to retry instead of freezing on that stale answer
+    // (issue #818).
     let cache_warming = Arc::new(std::sync::atomic::AtomicBool::new(false));
     {
         let warm_cache = resolve_cache.cache();
         let warm_pool = pool.clone();
-        let cache_warming = cache_warming.clone();
-        cache_warming.store(true, std::sync::atomic::Ordering::Relaxed);
+        let warm_guard =
+            crate::commands::lifecycle::CacheWarmingGuard::start(cache_warming.clone());
         tokio::spawn(async move {
+            let _warm_guard = warm_guard;
             let namespace = simbad_resolver::identity::namespace("astro-plan.targets");
             match targeting_resolver::seed::warm_bundled_on_first_run(&warm_cache, &namespace).await
             {
@@ -1136,7 +1139,6 @@ pub fn run_app(
                 Ok(_) => {}
                 Err(e) => tracing::warn!("failed to warm resolve cache from canonical_target: {e}"),
             }
-            cache_warming.store(false, std::sync::atomic::Ordering::Relaxed);
         });
     }
 

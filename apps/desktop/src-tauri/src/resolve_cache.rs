@@ -32,10 +32,12 @@
 //! to a reader until that whole phase commits (no more per-entry partial
 //! visibility) — a `target.search` query racing this window can get a
 //! legitimate-looking empty result for an object the seed does contain
-//! simply because it hasn't committed yet (issue #818). `AppState::
-//! cache_warming` is set true before this spawn and false once both phases
-//! finish so `target.search` can surface that in-flight state and the
-//! frontend can retry instead of freezing on a stale empty result.
+//! simply because it hasn't committed yet (issue #818). A
+//! [`crate::commands::lifecycle::CacheWarmingGuard`] set true before this
+//! spawn and moved into the task (so a panic mid-warm still clears it) makes
+//! `AppState::cache_warming` true for the spawn's whole duration, so
+//! `target.search` can surface that in-flight state and the frontend can
+//! retry instead of freezing on a stale empty result.
 
 use contracts_core::ContractError;
 
@@ -117,12 +119,13 @@ pub async fn clear_and_rewarm(state: &AppState) -> Result<(), ContractError> {
 
     // #818: flip on before spawning so a `target.search` racing this warm
     // sees `cache_warming = true` and knows to retry rather than treat an
-    // empty result as settled. Flipped off unconditionally once the warm
-    // attempt (both phases, success or failure) is over.
-    let cache_warming = state.cache_warming.clone();
-    cache_warming.store(true, std::sync::atomic::Ordering::Relaxed);
+    // empty result as settled. `CacheWarmingGuard` (not a bare sequential
+    // store) so a panic mid-warm still clears it — see its doc comment.
+    let warm_guard =
+        crate::commands::lifecycle::CacheWarmingGuard::start(state.cache_warming.clone());
 
     tokio::spawn(async move {
+        let _warm_guard = warm_guard;
         let namespace = simbad_resolver::identity::namespace(NAMESPACE_SEED);
         match targeting_resolver::seed::warm_bundled_on_first_run(&warm_cache, &namespace).await {
             Ok(Some(count)) => {
@@ -150,7 +153,6 @@ pub async fn clear_and_rewarm(state: &AppState) -> Result<(), ContractError> {
                 "failed to re-warm resolve cache from canonical_target after cache clear: {e}"
             ),
         }
-        cache_warming.store(false, std::sync::atomic::Ordering::Relaxed);
     });
 
     Ok(())
