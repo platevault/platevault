@@ -629,6 +629,79 @@ surface as a "recommendation."
 
 ---
 
+## Q22 — Duplicate detection & hashing policy (constitution §I custody; spec-006 / spec-041)
+
+The messy-library premise means the same physical sub copied into two folders (or
+ingested from two roots) must be catchable. Today frame identity is **path-based**
+(`UNIQUE(root_id, relative_path, group_key)`, migration 0049) — rescanning the same
+path won't duplicate a row, but the **same sub at a different path is invisible**.
+A **lazy** `ContentHash` (SHA-256) already exists (`crates/domain/core/src/ids.rs:103`,
+*"populated only when a workflow demands it"*), honoring the constitution's
+"hashing optional/lazy."
+
+- **Duplicate key = header identity, not hashing.** `DATE-OBS` (full timestamp
+  `YYYY-MM-DDTHH:MM:SS`, `crates/metadata/core/src/lib.rs:234`) + camera
+  (`INSTRUME`) + exposure + frame-type is effectively unique per sub, computed
+  from **already-extracted metadata — zero extra I/O**. This narrows to
+  *suspected* duplicates.
+- **Confirm by bounded auto-hash.** Auto-hash **only the suspected subset** (reuse
+  the lazy `ContentHash`) to verify content-equality, then flag — bounded lazy
+  hashing, **never eager, never whole-library**. **Cap auto-hash on large
+  identical-header clusters** (likely a legitimate calibration sequence) → fall
+  back to on-request confirm. (Most cameras write per-frame `DATE-OBS`, so a
+  sequence separates naturally and never collides.)
+- **Scope = anything anywhere** — any content-identical frame at any different
+  path, same root or not.
+- **Two surfaces, one engine.** (1) **Inbox pre-ingestion check** — new wiring in
+  `crates/app/inbox/src/confirm.rs`: each incoming sub's header identity is
+  checked against existing inventory, suspected matches auto-hash-confirmed, and
+  duplicates surfaced **in the confirm gate** (composes with Q12 strict gate, Q13
+  fail-closed, Q1 feedback). (2) **Library-wide duplicates review** for what's
+  already in.
+- **Default action.** On a **move** ingest, a confirmed duplicate is **excluded
+  from the move by default** (one-click "import anyway"). On
+  **catalogue-in-place**, flag-but-allow (a second known copy may be intentional).
+- **Resolution is always user-driven** (§I/§II): flag only; the user routes extras
+  to archive/trash via the Q7 plan queue (Q19: archiving is a user action, never
+  auto-suggested). **No silent dedup, no auto-delete.**
+
+---
+
+## Q23 — Naming & path generation (spec-015; §IV research-led, §II reviewable)
+
+Spec-015 (token-pattern builder + resolver/validator/preview) is implemented, with
+per-frame-type default patterns (`crates/patterns/src/per_type.rs`, e.g.
+`{target}/{filter}/{date}/light/`, `flats/{filter}/{date}/`, `masters/flats/{filter}/`)
+and a v1 token vocabulary of **target / filter / date / frame_type** — all
+**directory** segments.
+
+- **Folders only; preserve the original filename.** v1 places files into a
+  generated folder tree and **never renames the file itself**. Capture-software
+  basenames (NINA/ASIAIR/SharpCap) carry information and users recognize them;
+  renaming is invasive on user-owned material (§I) and can destroy name-embedded
+  metadata. A filename-*rename* pattern stays a research-gated future option.
+- **Pre-move collision detection, surfaced in the reviewable plan.** At
+  **plan-build time** the resolver knows every destination path, so it checks
+  both **within-batch** (two frames → same path) and **against what's already on
+  disk** (planner path-gating, `crates/fs/executor/src/ops/path_gate.rs`). Each
+  collision is shown **in the plan-review overlay (Q7) before apply**, with
+  per-item options:
+  - content-identical → folds into **Q22** (duplicate → skip),
+  - content differs → **flag with skip / rename-with-suffix / pick-a-name** —
+    **never a silent overwrite, never a silent suffix** (§II).
+- **No fallback — the resolver errors on a missing token.** Q12's strict ingest
+  gate makes token completeness an **invariant**, and the path tokens *are* the
+  required ingest set, so any catalogued frame already carries them — downstream
+  generation (archive, restructure, source views) never legitimately hits a
+  missing token either. On a genuinely missing token the resolver **errors**
+  (naming the token, routing the user to complete it — §II reviewable, Q16
+  no-fabrication), never silently substitutes. **The pattern builder validates
+  that a pattern references only guaranteed-present tokens** (a custom `{gain}`
+  pattern warns unless gain is in the required set), so no pattern can ever need a
+  fallback.
+
+---
+
 ## SpecKit iterate map
 
 Each decision is formalized through a SpecKit iterate when its wave is picked up:
@@ -656,6 +729,8 @@ Each decision is formalized through a SpecKit iterate when its wave is picked up
 | **Q19** lifecycle / cleanup | **spec-048 / spec-033** lifecycle iterate |
 | **Q20** source-view generation strategy | **spec-026 / spec-049** iterate |
 | **Q21** target recommendation / planner | **spec-044 / spec-047** iterate (differentiated LRGB defaults, band suitability, hour columns + fingerprint, Coverage/Balanced, pill retirement, Plan mode) |
+| **Q22** duplicate detection & hashing | **spec-006 / spec-041** iterate (header-identity suspects + bounded auto-hash confirm; inbox pre-ingest + library review; user-driven resolution) |
+| **Q23** naming & path generation | **spec-015 / spec-025** iterate (folders-only preserve-basename; pre-move collision options in the reviewable plan; no fallback — resolver errors + pattern validates guaranteed tokens) |
 
 Q8's override decision is small enough to fold into the ingestion/confirm flow
 directly; the **heuristic ADU suggestion** is the part that needs a new
