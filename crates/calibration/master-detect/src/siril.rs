@@ -39,7 +39,13 @@ impl MasterDetector for SirilDetector {
         let is_master = input.stack_count.is_some_and(|n| n > 1)
             || path_looks_like_master(input.file_name, input.rel_path);
 
-        Some(MasterDetection { frame_type, is_master, detector: self.id() })
+        // A present STACKCNT/NCOMBINE value is decisive header evidence
+        // regardless of its verdict (>1 confirms stacking, <=1 confirms it is
+        // a plain sub) — it must not be shadowed by another detector's
+        // naming-only guess (issue #753).
+        let stack_count_evidence = input.stack_count.is_some();
+
+        Some(MasterDetection { frame_type, is_master, detector: self.id(), stack_count_evidence })
     }
 }
 
@@ -69,6 +75,7 @@ mod tests {
         assert_eq!(result.frame_type, FrameType::Dark);
         assert!(result.is_master);
         assert_eq!(result.detector, "siril");
+        assert!(result.stack_count_evidence, "a present STACKCNT must be decisive header evidence");
     }
 
     /// Siril FITS master: IMAGETYP="FLAT" + STACKCNT=20 → Flat + is_master=true
@@ -87,6 +94,7 @@ mod tests {
         let result = SirilDetector.detect(&inp).unwrap();
         assert_eq!(result.frame_type, FrameType::Dark);
         assert!(result.is_master);
+        assert!(!result.stack_count_evidence, "naming-only match must not claim header evidence");
     }
 
     /// Siril master via "master" in file name, no STACKCNT.
@@ -125,6 +133,7 @@ mod tests {
         let inp = input(Some("DARK"), Some(1), "dark_001.fit", "calibration/darks/");
         let result = SirilDetector.detect(&inp).unwrap();
         assert!(!result.is_master);
+        assert!(result.stack_count_evidence, "STACKCNT=1 is still a decisive header read");
     }
 
     /// Missing IMAGETYP → None.
