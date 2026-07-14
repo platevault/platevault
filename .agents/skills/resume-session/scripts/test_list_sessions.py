@@ -1,6 +1,3 @@
-# Copyright (C) 2024-2026 Sjors Robroek
-# SPDX-License-Identifier: AGPL-3.0-only
-
 """Tests for list-sessions.py adversarial-input handling.
 
 Run with:  uv run --with pytest pytest test_list_sessions.py
@@ -224,6 +221,50 @@ def test_sessions_tagged_with_worktree(tmp_path, monkeypatch, capsys):
     assert "sib123" in out
 
 
+def test_branch_label_uses_recorded_not_current(tmp_path, monkeypatch, capsys):
+    """A session must be labeled with the branch it worked on (transcript), and
+    note drift when the worktree has since switched branches."""
+    monkeypatch.setattr(lst, "list_worktrees", lambda project: [
+        {"path": "/repo/main", "head": "h1", "branch": "chore/other",
+         "detached": False, "is_main": True},
+    ])
+    monkeypatch.setattr(lst, "commit_info", lambda wts, project: {"h1": (1.0, "c")})
+    monkeypatch.setattr(lst, "is_dirty", lambda path: False)
+
+    def fake_collect_claude(project):
+        return [{"agent": "claude", "session_id": "drift01", "title": "t",
+                 "goal": "", "last": "", "branch": "feature/worked-on",
+                 "last_ts": 2.0, "turns": 3, "path": "x.jsonl"}]
+
+    monkeypatch.setattr(lst, "collect_claude", fake_collect_claude)
+    monkeypatch.setattr(lst, "collect_codex", lambda wts: [])
+    monkeypatch.setattr(sys, "argv", ["list-sessions.py", "--project", "/repo/main"])
+    assert lst.main() == 0
+    out = capsys.readouterr().out
+    # The recorded branch is shown, with a drift note to the worktree's current one.
+    assert "feature/worked-on → worktree now on chore/other" in out
+
+
+def test_branch_label_no_drift_note_when_aligned(tmp_path, monkeypatch, capsys):
+    """When the worktree is still on the session's branch, show a plain label."""
+    monkeypatch.setattr(lst, "list_worktrees", lambda project: [
+        {"path": "/repo/main", "head": "h1", "branch": "feature/same",
+         "detached": False, "is_main": True},
+    ])
+    monkeypatch.setattr(lst, "commit_info", lambda wts, project: {"h1": (1.0, "c")})
+    monkeypatch.setattr(lst, "is_dirty", lambda path: False)
+    monkeypatch.setattr(lst, "collect_claude", lambda project: [
+        {"agent": "claude", "session_id": "aligned1", "title": "t", "goal": "",
+         "last": "", "branch": "feature/same", "last_ts": 2.0, "turns": 3,
+         "path": "x.jsonl"}])
+    monkeypatch.setattr(lst, "collect_codex", lambda wts: [])
+    monkeypatch.setattr(sys, "argv", ["list-sessions.py", "--project", "/repo/main"])
+    assert lst.main() == 0
+    out = capsys.readouterr().out
+    assert "[feature/same]" in out
+    assert "→ worktree now on" not in out
+
+
 def test_no_worktrees_flag_scans_only_project(tmp_path, monkeypatch, capsys):
     """--no-worktrees must not call list_worktrees; scans the project alone."""
     def boom(project):
@@ -236,3 +277,22 @@ def test_no_worktrees_flag_scans_only_project(tmp_path, monkeypatch, capsys):
     rc = lst.main()
     assert rc == 0
     assert "No prior sessions" in capsys.readouterr().out
+
+
+# --- encode_project: every non-alphanumeric char maps to '-' -----------------
+# Regression: Claude encodes a project path by replacing every non-alphanumeric
+# character with '-'. Encoding only '/' and '.' missed spaces and underscores, so
+# a repo path like ".../OneDrive - vxsan.com/.../_skill_src/..." resolved to a
+# transcript dir that did not exist and the tool reported "No prior sessions".
+
+@pytest.mark.parametrize(
+    "path, expected",
+    [
+        ("/repo/main", "-repo-main"),
+        ("/home/u/.config/fish", "-home-u--config-fish"),
+        ("/a/OneDrive - vxsan.com/b", "-a-OneDrive---vxsan-com-b"),
+        ("/a/Finance tracking/_skill_src/x", "-a-Finance-tracking--skill-src-x"),
+    ],
+)
+def test_encode_project_replaces_all_non_alphanumeric(path, expected):
+    assert lst.encode_project(path) == expected
