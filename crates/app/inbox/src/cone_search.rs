@@ -30,7 +30,7 @@ use target_match::{rank, Constraint, SkyObject};
 use targeting::coords;
 use targeting::{Angle, Equatorial};
 use targeting_resolver::cone_search::{
-    dedup_candidates, is_default_excluded, prominence_tier, ConeCandidate,
+    dedup_candidates, is_default_excluded, prominence_tier, select_for_display, ConeCandidate,
 };
 use targeting_resolver::simbad::SimbadResolver;
 
@@ -39,7 +39,23 @@ pub const DEFAULT_RADIUS_DEG: f64 = 1.0;
 
 /// Candidates fetched from SIMBAD before local dedup/ranking — wider than the
 /// response top-N so ranking/exclusion have real choices to work with.
-const FETCH_LIMIT: usize = 20;
+///
+/// Deliberately modest, not "wide enough to never lose the target" (issue
+/// #698): live SIMBAD data around a dense field like M 51 returns 1000+
+/// catalogued objects within 0.02 deg, so no fetch width short of thousands
+/// could *guarantee* a niche-crowded target survives this stage — and each
+/// unit of `FETCH_LIMIT` costs one extra `enrich_position_match` TAP
+/// round-trip (`suggest`'s per-candidate alias/common-name lookup), so
+/// raising it much further trades interactive latency for a guarantee it
+/// still can't deliver. The real fix for #698 is
+/// `targeting_resolver::cone_search::select_for_display`, which stops
+/// default-excluded/niche-tier clutter from crowding a prominent survivor out
+/// of the *response* window once fetched; this bump (20 → 40) only shrinks
+/// the residual "fell off the raw fetch entirely" window documented there.
+/// Excluding niche/excluded otypes at the TAP query itself (the more
+/// complete fix) would need a query-shape change in the external
+/// `simbad-resolver` crate — out of this crate's scope, left as a follow-up.
+const FETCH_LIMIT: usize = 40;
 
 /// How many ranked suggestions [`suggest`] actually returns.
 const RESPONSE_LIMIT: usize = 8;
@@ -255,8 +271,16 @@ pub async fn suggest(
     let in_field = in_field_indices(&candidates, field, &pointing);
     let primary = primary_index(&candidates, &in_field);
 
-    let mut suggestions = Vec::with_capacity(in_field.len());
-    for i in in_field {
+    // #698: pick which candidates make the response window BEFORE assembling
+    // them — `select_for_display` keeps default-excluded/niche-tier clutter
+    // from crowding a prominent survivor out of the fixed-size response, and
+    // guarantees `primary` isn't silently dropped. Also avoids wasted
+    // cache-warm/DB lookups (`assemble_suggestion`) for candidates that would
+    // only be truncated away afterwards.
+    let display = select_for_display(&candidates, &in_field, primary, RESPONSE_LIMIT);
+
+    let mut suggestions = Vec::with_capacity(display.len());
+    for i in display {
         suggestions.push(
             assemble_suggestion(
                 pool,
@@ -268,10 +292,11 @@ pub async fn suggest(
             .await,
         );
     }
+    // Display order stays nearest-first (FR-013) — `select_for_display` only
+    // decided which candidates survive, not their order.
     suggestions.sort_by(|a, b| {
         a.separation_deg.partial_cmp(&b.separation_deg).unwrap_or(std::cmp::Ordering::Equal)
     });
-    suggestions.truncate(RESPONSE_LIMIT);
 
     Ok(ConeSearchSuggestResponse {
         pointing: ConeSearchPointing {
