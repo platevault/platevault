@@ -35,9 +35,14 @@ impl MasterDetector for SirilDetector {
         let imagetyp = input.imagetyp?;
         let frame_type = parse_frame_type(imagetyp)?;
 
-        // Master detection: STACKCNT > 1 OR path / name contains _stacked / master.
-        let is_master = input.stack_count.is_some_and(|n| n > 1)
-            || path_looks_like_master(input.file_name, input.rel_path);
+        // Master detection: a present STACKCNT/NCOMBINE is authoritative and
+        // decides is_master on its own (>1 = stacked, <=1 = not) — the naming
+        // heuristic must not override a decisive header count. Only fall
+        // back to the naming heuristic when no header count is available.
+        let is_master = match input.stack_count {
+            Some(n) => n > 1,
+            None => path_looks_like_master(input.file_name, input.rel_path),
+        };
 
         // A present STACKCNT/NCOMBINE value is decisive header evidence
         // regardless of its verdict (>1 confirms stacking, <=1 confirms it is
@@ -134,6 +139,17 @@ mod tests {
         let result = SirilDetector.detect(&inp).unwrap();
         assert!(!result.is_master);
         assert!(result.stack_count_evidence, "STACKCNT=1 is still a decisive header read");
+    }
+
+    /// STACKCNT=1 is authoritative even when the file name/path also carries
+    /// a "master"/"_stacked" naming convention — a decisive header count
+    /// must not be overridden by the naming heuristic (review fix for #753).
+    #[test]
+    fn siril_stackcnt_one_overrides_master_naming() {
+        let inp = input(Some("DARK"), Some(1), "dark_master_stacked.fit", "calibration/");
+        let result = SirilDetector.detect(&inp).unwrap();
+        assert!(!result.is_master, "STACKCNT=1 must win over a 'master'/'_stacked' file name");
+        assert!(result.stack_count_evidence);
     }
 
     /// Missing IMAGETYP → None.
