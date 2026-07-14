@@ -151,6 +151,10 @@ pub async fn search(
         contract_version: req.contract_version.clone(),
         request_id: req.request_id.clone(),
         suggestions,
+        // Always false here — this pure use case takes no `AppState`, so it
+        // cannot know about a live warm. The `target.search` Tauri command
+        // wrapper overwrites this from the real flag (#818).
+        cache_warming: false,
     })
 }
 

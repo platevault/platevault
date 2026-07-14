@@ -155,7 +155,11 @@ pub async fn target_search(
 ) -> Result<TargetSearchResponse, ContractError> {
     tracing::debug!("target.search query={:?} limit={}", req.query, req.limit);
     let cache = state.resolve_cache.read().await.clone();
-    app_core::target_search::search(&cache.cache(), &req).await
+    let mut resp = app_core::target_search::search(&cache.cache(), &req).await?;
+    // #818: the pure use case always answers `false`; only this wrapper has
+    // the live `AppState` flag a background re-warm sets/clears.
+    resp.cache_warming = state.cache_warming.load(std::sync::atomic::Ordering::Relaxed);
+    Ok(resp)
 }
 
 // ── target.adopt (spec 052 P1 FR-004) ───────────────────────────────────────────

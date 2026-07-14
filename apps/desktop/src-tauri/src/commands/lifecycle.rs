@@ -41,6 +41,17 @@ pub struct AppState {
     /// Filesystem path backing `resolve_cache`, needed by
     /// `target.cache.clear` to delete + reopen the redb file.
     pub resolve_cache_path: std::path::PathBuf,
+    /// True while a bundled-seed/durable-row re-warm of `resolve_cache` is
+    /// running in the background (the startup warm in `lib.rs`, or the one
+    /// `commands::resolve_cache::clear_and_rewarm` schedules). Set true
+    /// immediately before each warm is spawned and false when it finishes;
+    /// `target.search` surfaces the value so a caller whose query landed
+    /// mid-warm can tell a still-settling empty result apart from a genuine
+    /// miss (issue #818). Two overlapping warms (startup racing an
+    /// almost-immediate cache-clear) can make the flag go false slightly
+    /// early, when the first of the two finishes — an accepted, rare
+    /// edge case, not a full per-warm reference count.
+    pub cache_warming: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AppState {
@@ -50,12 +61,14 @@ impl AppState {
         bus: EventBus,
         resolve_cache: targeting_resolver::simbad::ResolveCache,
         resolve_cache_path: std::path::PathBuf,
+        cache_warming: std::sync::Arc<std::sync::atomic::AtomicBool>,
     ) -> Self {
         Self {
             repo,
             bus,
             resolve_cache: tokio::sync::RwLock::new(resolve_cache),
             resolve_cache_path,
+            cache_warming,
         }
     }
 }

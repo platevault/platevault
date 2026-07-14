@@ -35,6 +35,17 @@
  * the current query's results. (Tauri `invoke` exposes no AbortSignal, so this
  * generation guard is the cancel mechanism — no AbortController is involved.)
  *
+ * Empty-while-warming retry (spec 052 P4/#818): the shared resolve cache's
+ * background seed/durable-row re-warm (startup, or after a cache clear) is
+ * one write transaction per phase, so nothing in it is visible to a reader
+ * until that whole phase commits. A Phase-1 query landing in that window can
+ * come back with zero suggestions for an object the seed does contain,
+ * simply because it hasn't committed yet — `target.search`'s `cacheWarming`
+ * flag says so, and Phase 1 retries on a short interval (bounded budget)
+ * until either a suggestion appears or the backend reports the warm has
+ * settled. An ordinary (non-warming) miss never enters this loop, so it pays
+ * no extra latency.
+ *
  * Selecting a suggestion (mouse or keyboard) invokes `onSelect(suggestion)`,
  * exposing the canonical `targetId` so the caller can associate it.
  *
@@ -93,6 +104,23 @@ const DEFAULT_LIMIT = 20;
 const MIN_RESOLVE_LEN = 3;
 /** Estimated suggestion-row height (px) for the virtualizer. */
 const OPTION_ESTIMATE = 44;
+/**
+ * Bounds for the empty-result-while-warming retry (#818): `target.search`
+ * reports `cacheWarming = true` while the shared resolve cache's background
+ * seed/durable-row re-warm is still running (batched into one write
+ * transaction per phase since spec 052 P4 — nothing is visible to a reader
+ * until that whole phase commits). A query that lands in this window and
+ * comes back empty is retried on this interval until either a suggestion
+ * appears, the backend reports the warm has settled (`cacheWarming` flips to
+ * `false`), or this budget runs out — never on an ordinary (non-warming)
+ * miss, so the common case pays no extra latency.
+ */
+const WARM_RETRY_INTERVAL_MS = 250;
+const WARM_RETRY_BUDGET_MS = 5000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -271,16 +299,34 @@ export function TargetSearch({
 
       // ── Phase 1: local seed + cache (instant) ──────────────────────────────
       try {
-        const res = unwrap(
-          await commands.targetSearch({
-            contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
-            requestId: crypto.randomUUID(),
-            query: trimmed,
-            catalogFilter: effectiveCatalogFilter,
-            typeFilter: effectiveTypeFilter,
-            limit,
-          }),
-        );
+        const doSearch = async () =>
+          unwrap(
+            await commands.targetSearch({
+              contractVersion: TARGET_SEARCH_CONTRACT_VERSION,
+              requestId: crypto.randomUUID(),
+              query: trimmed,
+              catalogFilter: effectiveCatalogFilter,
+              typeFilter: effectiveTypeFilter,
+              limit,
+            }),
+          );
+        let res = await doSearch();
+        // #818: an empty result while the backend is still warming the
+        // shared resolve cache isn't necessarily the settled answer — retry
+        // until a suggestion shows up, the backend reports the warm has
+        // finished, or the budget runs out. A no-warm miss (the overwhelming
+        // common case) never enters this loop.
+        const retryDeadline = Date.now() + WARM_RETRY_BUDGET_MS;
+        while (
+          isCurrent() &&
+          res.cacheWarming &&
+          res.suggestions.length === 0 &&
+          Date.now() < retryDeadline
+        ) {
+          await sleep(WARM_RETRY_INTERVAL_MS);
+          if (!isCurrent()) return;
+          res = await doSearch();
+        }
         if (!isCurrent()) return; // superseded — drop stale result
         setSuggestions(res.suggestions);
       } catch {

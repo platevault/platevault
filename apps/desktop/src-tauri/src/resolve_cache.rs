@@ -16,16 +16,26 @@
 //! Windows (sharing violation), surfaced as an error rather than silently
 //! leaving a stale cache in place.
 //!
-//! The re-warm (bundled seed + durable `canonical_target` rows — up to ~14k
-//! individually fsync'd redb writes) runs as a **background task** spawned
-//! right after the swap, mirroring the startup warm in `lib.rs` (issue #695:
-//! awaiting it inline froze the `target.cache.clear` IPC call — and, because
-//! the write lock used to stay held for the whole warm, every other resolve
-//! cache reader too — for minutes on a debug build). The background task
-//! never takes `AppState::resolve_cache`'s lock; it is handed the fresh
-//! cache's own handle (cloned out before the swap, so it keeps warming the
-//! same underlying store regardless of what `AppState::resolve_cache` is
-//! swapped to next).
+//! The re-warm (bundled seed + durable `canonical_target` rows, batched into
+//! one `Cache::upsert_batch` write transaction per phase since spec 052
+//! P4/#695) runs as a **background task** spawned right after the swap,
+//! mirroring the startup warm in `lib.rs` (issue #695: awaiting it inline
+//! froze the `target.cache.clear` IPC call — and, because the write lock
+//! used to stay held for the whole warm, every other resolve cache reader
+//! too — for minutes on a debug build). The background task never takes
+//! `AppState::resolve_cache`'s lock; it is handed the fresh cache's own
+//! handle (cloned out before the swap, so it keeps warming the same
+//! underlying store regardless of what `AppState::resolve_cache` is swapped
+//! to next).
+//!
+//! Batching each phase's warm into one transaction means nothing is visible
+//! to a reader until that whole phase commits (no more per-entry partial
+//! visibility) — a `target.search` query racing this window can get a
+//! legitimate-looking empty result for an object the seed does contain
+//! simply because it hasn't committed yet (issue #818). `AppState::
+//! cache_warming` is set true before this spawn and false once both phases
+//! finish so `target.search` can surface that in-flight state and the
+//! frontend can retry instead of freezing on a stale empty result.
 
 use contracts_core::ContractError;
 
@@ -105,6 +115,13 @@ pub async fn clear_and_rewarm(state: &AppState) -> Result<(), ContractError> {
     *guard = fresh;
     drop(guard);
 
+    // #818: flip on before spawning so a `target.search` racing this warm
+    // sees `cache_warming = true` and knows to retry rather than treat an
+    // empty result as settled. Flipped off unconditionally once the warm
+    // attempt (both phases, success or failure) is over.
+    let cache_warming = state.cache_warming.clone();
+    cache_warming.store(true, std::sync::atomic::Ordering::Relaxed);
+
     tokio::spawn(async move {
         let namespace = simbad_resolver::identity::namespace(NAMESPACE_SEED);
         match targeting_resolver::seed::warm_bundled_on_first_run(&warm_cache, &namespace).await {
@@ -133,6 +150,7 @@ pub async fn clear_and_rewarm(state: &AppState) -> Result<(), ContractError> {
                 "failed to re-warm resolve cache from canonical_target after cache clear: {e}"
             ),
         }
+        cache_warming.store(false, std::sync::atomic::Ordering::Relaxed);
     });
 
     Ok(())
@@ -160,7 +178,8 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let cache_path = dir.path().join("resolve-cache.redb");
         let cache = open_or_in_memory(&cache_path);
-        (AppState::new(repo, bus, cache, cache_path), dir)
+        let cache_warming = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        (AppState::new(repo, bus, cache, cache_path, cache_warming), dir)
     }
 
     /// Regression test for #695: `clear_and_rewarm` must return as soon as
