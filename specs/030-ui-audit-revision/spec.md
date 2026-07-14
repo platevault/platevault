@@ -382,6 +382,28 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
 - **FR-123**: Status bar MUST NOT show directory paths, "Idle" text, or "Last
   scan" timestamps.
 
+**Durable Audit Coverage** *(iteration 2026-07-14, grilling Q15 / #647)*
+
+- **FR-130**: Every attempted mutation of durable state or user data MUST
+  write a durable audit row — including settings changes, protection
+  overrides, equipment CRUD, source enable/disable/register/delete, and
+  rescans/root operations — recording the outcome including refused/failed
+  with a reason/code.
+- **FR-131**: The durable `audit_log_entry` store MUST be the single source
+  of truth for audit history. Audit-worthy actions MUST write the durable
+  row AND emit a live event to the bus; emitting to the bus only is
+  prohibited for mutations. Any `auditId` returned to the UI MUST resolve to
+  a durable row.
+- **FR-132**: The Activity/log panel MUST read user-meaningful events from
+  the durable audit store, and transient/internal noise from the ephemeral
+  bus.
+- **FR-133**: The audit entry shape MUST generalize from a
+  lifecycle-transition record to a generic mutation record: timestamp,
+  actor, action, entity (type + id), outcome + reason, plus an optional
+  before→after value pair for settings/protection changes.
+- **FR-134**: Reads, navigation, UI state changes, and transient
+  internal/periodic events MUST NOT be durably audited.
+
 ### Key Entities
 
 - **Inbox Session**: Auto-detected grouping of FITS frames awaiting user
@@ -421,6 +443,9 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
   hiding frequently used workflows.
 - **SC-008**: Storage health warnings are visible at a glance without
   navigating to any specific screen.
+- **SC-009**: 100% of mutation commands that return an `auditId` return one
+  that resolves to a durable `audit_log_entry` row; zero mutation paths emit
+  to the bus without a durable write.
 
 ## Assumptions
 
@@ -435,6 +460,24 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
 - NINA is the only observing plan format needed for v1.
 - DeepSkyStacker support is deferred to a future spec.
 - Planetary/lunar tools are deferred to a future spec.
+
+## Iterations
+
+### Iteration 2026-07-14: Durable audit coverage & unification (Q15 / #647)
+
+**Change**: Every attempted mutation of durable state writes a durable
+`audit_log_entry` row (outcome incl. refused/failed + reason/code); the
+durable table becomes the single source of truth over the ephemeral bus;
+the entry shape generalizes from a lifecycle-transition record to a generic
+mutation record. Decisions locked by
+`docs/development/ui-campaign-grilling-decisions-2026-07-13.md` §Q15.
+**Scope**: Feature-wide (new requirement block)
+**Artifacts updated**: spec.md (FR-130–FR-134, SC-009, §8.3), plan.md
+(phase G, technical context), tasks.md (Phase 10, T120–T127),
+data-model.md (generalized audit entry), contracts/commands.md (audit
+semantics)
+**Tasks added**: T120–T127
+**Iteration record**: `iteration-2026-07-14-applied.md`
 
 ---
 
@@ -1280,6 +1323,41 @@ Selecting an event shows:
 - Top-level nav item (moved to Settings)
 - Right panel (entity context merged into main content)
 - Plan detail links (plan summary shown inline)
+
+### 8.3 Durable Coverage & Unification (Q15 / #647)
+
+*(Added by iteration 2026-07-14; decisions locked by
+`docs/development/ui-campaign-grilling-decisions-2026-07-13.md` §Q15.)*
+
+Issue #647 is architectural, not a coverage gap. Two disjoint audit stores
+exist: an ephemeral event bus (live UI feed — settings changes, protection
+sets, equipment CRUD, `sources.set_active`, and rescans emit here only) and
+the durable `audit_log_entry` table (written only by lifecycle transitions,
+plan-apply, and project-health). A protection-set therefore returns an
+`auditId` that points at an in-memory event, not a durable row — violating
+constitution §II ("audit record for each attempted action and outcome").
+
+**Unification (FR-130–FR-134):**
+
+1. **Coverage** — every attempted mutation of durable state or user data
+   writes a durable audit row: settings changes, protection overrides,
+   equipment CRUD, source enable/disable/register/delete (the Q5 delete
+   cascade), rescans/root operations. Each row records the outcome,
+   including refused/failed with a reason/code.
+2. **Single source of truth** — the durable `audit_log_entry` table.
+   Audit-worthy actions write the durable row *and* emit to the bus for
+   live UI; the emit-to-bus-only pattern for mutations is eliminated. The
+   Activity/log panel (Q9) reads durable audit for user-meaningful events
+   plus the ephemeral bus for transient/internal noise — making "activity
+   is a view over the audit" literally true, and the Q10 manifest-history
+   reframe viable.
+3. **Generalized entry shape** — from a lifecycle-transition record to a
+   generic mutation record: timestamp, actor, action, entity (type + id),
+   outcome + reason, plus an optional before→after pair for
+   settings/protection changes.
+
+**The line (NOT durably audited):** reads, navigation, UI state, transient
+internal/periodic events.
 
 ---
 
