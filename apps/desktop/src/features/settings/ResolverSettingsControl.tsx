@@ -90,18 +90,16 @@ export function ResolverSettingsControl({
 
   // spec 052 P1 (FR-002): manual "clear resolve cache" action — wipes the
   // shared redb typeahead/search cache and re-warms it; never touches saved
-  // targets (canonical_target).
+  // targets (canonical_target). The re-warm itself runs in the background
+  // (issue #695 — it used to freeze this button for minutes), so the success
+  // copy can no longer report a synchronous count.
   const handleClearCache = useCallback(async () => {
     setClearingCache(true);
     setCacheClearMessage(null);
     setCacheClearError(null);
     try {
-      const resp = await clearResolveCache();
-      setCacheClearMessage(
-        m.settings_resolver_cache_clear_success({
-          count: resp.rewarmedCount,
-        }),
-      );
+      await clearResolveCache();
+      setCacheClearMessage(m.settings_resolver_cache_clear_success());
     } catch (e) {
       setCacheClearError(
         m.settings_resolver_cache_clear_error({

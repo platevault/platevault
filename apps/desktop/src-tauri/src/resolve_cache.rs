@@ -8,13 +8,24 @@
 //!
 //! `simbad_resolver::Cache` exposes no delete-all primitive, so "clear" is
 //! file-level: drop every handle to the old redb `Database`, delete the file,
-//! reopen, re-warm. [`AppState::resolve_cache`]'s write lock ensures no new
-//! reader starts mid-swap; a reader that already cloned the handle just
-//! before the swap keeps working against the (now-orphaned) old file until it
-//! finishes, which is why the old handle is dropped before the file delete —
-//! a concurrent straggler can still transiently make the delete fail on
+//! reopen. [`AppState::resolve_cache`]'s write lock ensures no new reader
+//! starts mid-swap; a reader that already cloned the handle just before the
+//! swap keeps working against the (now-orphaned) old file until it finishes,
+//! which is why the old handle is dropped before the file delete — a
+//! concurrent straggler can still transiently make the delete fail on
 //! Windows (sharing violation), surfaced as an error rather than silently
 //! leaving a stale cache in place.
+//!
+//! The re-warm (bundled seed + durable `canonical_target` rows — up to ~14k
+//! individually fsync'd redb writes) runs as a **background task** spawned
+//! right after the swap, mirroring the startup warm in `lib.rs` (issue #695:
+//! awaiting it inline froze the `target.cache.clear` IPC call — and, because
+//! the write lock used to stay held for the whole warm, every other resolve
+//! cache reader too — for minutes on a debug build). The background task
+//! never takes `AppState::resolve_cache`'s lock; it is handed the fresh
+//! cache's own handle (cloned out before the swap, so it keeps warming the
+//! same underlying store regardless of what `AppState::resolve_cache` is
+//! swapped to next).
 
 use contracts_core::ContractError;
 
@@ -48,14 +59,19 @@ pub fn open_or_in_memory(path: &std::path::Path) -> targeting_resolver::simbad::
     })
 }
 
-/// Clear and re-warm the shared resolve cache. Returns the number of entries
-/// the fresh cache was re-warmed with (bundled seed + durable rows).
+/// Clear the shared resolve cache and schedule its re-warm (bundled seed +
+/// durable rows) as a background task. Returns as soon as the fresh, empty
+/// cache is swapped in — the caller (the `target.cache.clear` IPC command)
+/// no longer waits for the re-warm to finish (issue #695).
 ///
 /// # Errors
 ///
 /// Returns [`ContractError`] (`internal.database`) if the old file cannot be
-/// removed or the fresh cache cannot be opened/warmed.
-pub async fn clear_and_rewarm(state: &AppState) -> Result<usize, ContractError> {
+/// removed or the fresh cache cannot be opened. A failure in the background
+/// re-warm itself is only logged (`tracing::warn!`) — the cache is already
+/// swapped in and usable (just emptier until the warm catches up), which
+/// matches how startup already degrades on a warm failure.
+pub async fn clear_and_rewarm(state: &AppState) -> Result<(), ContractError> {
     let mut guard = state.resolve_cache.write().await;
 
     // Drop every handle this process holds on the old file BEFORE touching
@@ -73,18 +89,121 @@ pub async fn clear_and_rewarm(state: &AppState) -> Result<usize, ContractError> 
 
     let fresh = targeting_resolver::simbad::ResolveCache::open(&state.resolve_cache_path)
         .map_err(|e| ContractError::internal(e.to_string()))?;
-    let namespace = simbad_resolver::identity::namespace(NAMESPACE_SEED);
-    let cache = fresh.cache();
 
-    let seed_count = targeting_resolver::seed::warm_bundled_on_first_run(&cache, &namespace)
-        .await
-        .map_err(|e| ContractError::internal(e.to_string()))?
-        .unwrap_or(0);
-    let durable_count =
-        targeting_resolver::seed::warm_from_canonical_target(&cache, state.repo.pool(), &namespace)
-            .await
-            .map_err(|e| ContractError::internal(e.to_string()))?;
-
+    // Clone the fresh cache's own handle (cheap — an `Arc` over the redb
+    // `Database`, see `ResolveCache::cache`) for the background warm BEFORE
+    // moving `fresh` into the guard, then release the write lock immediately
+    // — the warm never needs it, exactly like the startup warm in `lib.rs`
+    // never takes it at all. A `target.cache.clear` that lands mid-warm
+    // takes this same write lock (uncontended, since it's already released),
+    // deletes the file this task is still writing into, and reopens a new
+    // one; the stale task keeps writing into the now-unlinked file (wasted,
+    // harmless) or — on Windows — the delete surfaces its own sharing-
+    // violation error rather than corrupting anything.
+    let warm_cache = fresh.cache();
+    let warm_pool = state.repo.pool().clone();
     *guard = fresh;
-    Ok(seed_count + durable_count)
+    drop(guard);
+
+    tokio::spawn(async move {
+        let namespace = simbad_resolver::identity::namespace(NAMESPACE_SEED);
+        match targeting_resolver::seed::warm_bundled_on_first_run(&warm_cache, &namespace).await {
+            Ok(Some(count)) => {
+                tracing::info!("re-warmed {count} bundled target seed entries after cache clear");
+            }
+            Ok(None) => tracing::debug!(
+                "resolve cache clear: bundled seed already warmed (unexpected on a freshly cleared cache)"
+            ),
+            Err(e) => {
+                tracing::warn!("failed to re-warm bundled target seed after cache clear: {e}");
+            }
+        }
+        match targeting_resolver::seed::warm_from_canonical_target(
+            &warm_cache,
+            &warm_pool,
+            &namespace,
+        )
+        .await
+        {
+            Ok(count) if count > 0 => {
+                tracing::info!("re-warmed {count} durable canonical_target rows after cache clear");
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!(
+                "failed to re-warm resolve cache from canonical_target after cache clear: {e}"
+            ),
+        }
+    });
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use audit::bus::EventBus;
+    use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
+    use persistence_db::Database;
+    use simbad_resolver::Cache as _;
+
+    use super::*;
+
+    async fn test_state() -> (AppState, tempfile::TempDir) {
+        let db = Database::in_memory().await.expect("in-memory database");
+        db.migrate().await.expect("run migrations");
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+        let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let cache_path = dir.path().join("resolve-cache.redb");
+        let cache = open_or_in_memory(&cache_path);
+        (AppState::new(repo, bus, cache, cache_path), dir)
+    }
+
+    /// Regression test for #695: `clear_and_rewarm` must return as soon as
+    /// the swap is done, without awaiting the seed/durable re-warm inline.
+    /// A generous deadline (the real bundled warm is the ~12-minute-on-a-
+    /// debug-build bug; a correct implementation returns in well under a
+    /// second even against the full bundled seed).
+    #[tokio::test]
+    async fn clear_and_rewarm_returns_before_the_warm_completes() {
+        let (state, _dir) = test_state().await;
+
+        let outcome = tokio::time::timeout(Duration::from_secs(2), clear_and_rewarm(&state)).await;
+
+        assert!(outcome.is_ok(), "clear_and_rewarm did not return promptly");
+        outcome.unwrap().expect("clear_and_rewarm failed");
+    }
+
+    /// The background task scheduled by `clear_and_rewarm` must actually
+    /// warm the fresh cache (bundled seed) — "returns fast" must not mean
+    /// "never warms".
+    #[tokio::test]
+    async fn clear_and_rewarm_warms_the_fresh_cache_in_the_background() {
+        let (state, _dir) = test_state().await;
+
+        clear_and_rewarm(&state).await.expect("clear_and_rewarm failed");
+
+        let cache = state.resolve_cache.read().await.clone();
+        let warmed = poll_until_non_empty(&cache).await;
+        assert!(warmed, "background re-warm never populated the fresh cache");
+    }
+
+    /// Polls (bounded) rather than sleeping a fixed duration — avoids both
+    /// flakiness on a slow CI runner and a needlessly slow test on a fast one.
+    async fn poll_until_non_empty(cache: &targeting_resolver::simbad::ResolveCache) -> bool {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            if !cache.cache().list().await.expect("cache list failed").is_empty() {
+                return true;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return false;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
 }
