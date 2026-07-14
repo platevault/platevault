@@ -44,7 +44,10 @@ thiserror.workspace = true
 time = { workspace = true }
 tokio.workspace = true
 tracing = { workspace = true }
-uuid = { workspace = true }
+# "v5" beyond the workspace default ("v4"): deterministic audit `entity_id`
+# derivation for protection/source/root mutations (T123/T125, spec 030
+# FR-133), same pattern as `crates/targeting/Cargo.toml`.
+uuid = { version = "1", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
 app_core_cache = { path = "../cache" }

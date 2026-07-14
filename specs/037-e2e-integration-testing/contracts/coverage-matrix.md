@@ -33,7 +33,7 @@ Layer-2 smoke journey; **—** = covered implicitly via screen-load smoke.
 | 19 | Settings / configuration model | ✅ | ✅ | persist + reload |
 | 20 | Bottom log viewer | ✅ | ✅ | log stream render |
 | 21 | Router & URL state | n/a | ✅ | **all top-level screens load** (FR-007) |
-| 22 | Audit event model (cross-cutting) | ✅ | via #18 | bus + stale propagation |
+| 22 | Audit event model (cross-cutting) | ✅ | via #18 | bus + stale propagation; **spec 030 Q15/#647 (T122–T125, 2026-07-14)**: settings/protection/equipment/source+root mutations now write durable `audit_log_entry` rows (previously bus-only for protection/source/root, no audit at all for equipment) — see the Q15 row below |
 
 **Required round-trip proof (FR-008)**: areas #1, #7, #12/#14 each round-trip a
 UI value through the real backend.
@@ -62,6 +62,7 @@ failed, **0 ignored** (no faked/skipped passes).
 | #17/#18/#22 | `crates/app/core/tests/plan_apply_audit_integration.rs` | ✓ (mutation+audit) |
 | #19/#20 | `crates/app/core/tests/settings_logs_integration.rs` | ✓ |
 | #21 | — (Layer-2 only, by design) | see US3 |
+| #22 Q15 durable-audit sweep (spec 030 T122–T127, 2026-07-14) | in-crate `#[cfg(test)]` mods: `crates/app/settings/src/lib.rs`, `crates/app/core/src/protection.rs`, `crates/app/core/src/first_run.rs`, `crates/app/calibration/src/equipment.rs` | applied+refused/failed rows resolve to real `audit_log_entry` (SC-009); ≥1 refused/failed test per consumer (settings, protection, equipment, source/root) |
 
 Shared harness: `crates/app/core/tests/support/mod.rs` (T005).
 **Implementation note**: research D2's `wiremock` boundary stub was superseded by

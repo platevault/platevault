@@ -230,7 +230,7 @@ pub async fn settings_source_override_set(
         request.source_id,
         request.key
     );
-    app_core::settings::set_source_override(state.repo.pool(), &request).await
+    app_core::settings::set_source_override(state.repo.pool(), &state.bus, &request).await
 }
 
 /// `settings.overridable-keys` — return the list of stable settings keys that

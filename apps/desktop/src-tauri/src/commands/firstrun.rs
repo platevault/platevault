@@ -90,5 +90,6 @@ pub async fn roots_register_batch(
         .collect();
     let enforced_request = RegisterSourceBatchRequest { sources: enforced_sources };
 
-    app_core::first_run::register_source_batch(state.repo.pool(), &enforced_request).await
+    app_core::first_run::register_source_batch(state.repo.pool(), &state.bus, &enforced_request)
+        .await
 }

@@ -24,12 +24,15 @@ use audit::event_bus::{
     TOPIC_PROTECTION_DEFAULT_CHANGED, TOPIC_SETTINGS_CHANGED, TOPIC_SETTINGS_REPAIR,
     TOPIC_SETTINGS_SNAPSHOT,
 };
+use audit::{AuditLogEntry, Outcome, Severity};
 use contracts_core::settings::{
     RestoreDefaultsRequest, RestoreDefaultsResponse, RestoreDefaultsStatus,
     SetSourceOverrideRequest, SetSourceOverrideResponse, SettingsGetResponse, SettingsState,
     SettingsUpdateRequest, SettingsUpdateResponse, SettingsUpdateStatus,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use domain_core::ids::EntityId;
+use domain_core::lifecycle::data_asset::EntityType;
 use persistence_db::repositories::settings as repo;
 use persistence_db::repositories::source_protection as protection_repo;
 use serde_json::Value;
@@ -62,6 +65,41 @@ const GLOBAL_PROTECTION_DEFAULT_KEYS: [&str; 3] =
 #[must_use]
 pub fn is_global_protection_default_key(key: &str) -> bool {
     GLOBAL_PROTECTION_DEFAULT_KEYS.contains(&key)
+}
+
+// ── Durable-data noisy keys (spec 030 FR-130, Q15/#647, T122) ───────────────
+//
+// `descriptors::DESCRIPTORS[].noisy` conflates two different concerns:
+// UI-state keys (`rememberFollowLogs`, `plansListDefaultAgeCutoffDays`) that
+// FR-134 exempts from durable audit entirely, and durable-data keys whose
+// writes are debounced/frequent (`pattern`) but still get a single durable
+// row at the committed value, before→after (FR-130). This is the same
+// named-exception-list shape as `GLOBAL_PROTECTION_DEFAULT_KEYS` above, kept
+// separate from the descriptor table rather than adding a 36th field to every
+// one of its 35 literals for a single-member set.
+const NOISY_AUDITED_KEYS: [&str; 1] = ["pattern"];
+
+/// Whether a `noisy` key still gets a durable audit row at its committed
+/// value (`pattern`), vs. being fully exempt as UI state (FR-134).
+#[must_use]
+fn is_noisy_audited_key(key: &str) -> bool {
+    NOISY_AUDITED_KEYS.contains(&key)
+}
+
+// ── Audit entity identity (spec 030 FR-133, T122) ───────────────────────────
+
+/// Deterministic UUIDv5 `entity_id` for a settings key.
+///
+/// Settings keys have no natural UUID identity; deriving one from the key
+/// name (stable across every write) lets `audit_log_entry` reads correlate
+/// the full history of one key under a single `entity_id`, the same way a
+/// real entity's rows are correlated by its persisted id.
+fn settings_entity_id(key: &str) -> EntityId {
+    static NAMESPACE: std::sync::OnceLock<uuid::Uuid> = std::sync::OnceLock::new();
+    let ns = NAMESPACE.get_or_init(|| {
+        uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, b"astro-plan.audit.settings")
+    });
+    EntityId::from_uuid(uuid::Uuid::new_v5(ns, key.as_bytes()))
 }
 
 // ── Settings descriptor table (US11 T144) ────────────────────────────────
@@ -404,9 +442,11 @@ pub async fn update_setting(
     req: &SettingsUpdateRequest,
 ) -> Result<SettingsUpdateResponse, ContractError> {
     let key = &req.key;
+    let is_protection_default = is_global_protection_default_key(key);
 
     // 1. Validate key.
     if !is_valid_key(key) {
+        write_settings_refusal(bus, is_protection_default, key, "key.unknown").await?;
         return Err(ContractError::new(
             ErrorCode::KeyUnknown,
             format!("unknown settings key: {key}"),
@@ -417,9 +457,10 @@ pub async fn update_setting(
 
     // 2. Validate value.
     let new_value = &req.value.0;
-    validate_value(key, new_value)?;
-
-    let is_protection_default = is_global_protection_default_key(key);
+    if let Err(e) = validate_value(key, new_value) {
+        write_settings_refusal(bus, is_protection_default, key, "value.invalid").await?;
+        return Err(e);
+    }
 
     // 3. Load current stored value (or default). Global protection-default
     // keys read/write the dedicated `protection_defaults` table (T-005).
@@ -468,48 +509,35 @@ pub async fn update_setting(
         app_core_cache::invalidate_protection_defaults();
     }
 
-    // 6. Emit audit event. Global protection-default keys ALWAYS emit
+    // 6. Emit durable audit row + live event (FR-130/FR-131, T122). Global
+    // protection-default keys ALWAYS audit under `EntityType::Protection` via
     // `protection.default.changed` (T-004), overriding the noisy-key
     // no-audit policy — `protectedCategories` is `noisy` for the generic
     // `settings.changed` topic but is a named exception here (spec 016
     // plan.md E-016-3: "MUST emit `protection.default.changed` whenever it is
-    // updated").
+    // updated"). Non-protection noisy keys audit only when in
+    // `NOISY_AUDITED_KEYS` (durable-data, e.g. `pattern`); the rest
+    // (`rememberFollowLogs`, `plansListDefaultAgeCutoffDays`) are UI state and
+    // stay fully exempt (FR-134).
     let is_noisy = descriptors::is_noisy(key.as_str());
-    let audit_id = if is_protection_default {
-        let at = Timestamp::now_iso();
-        let evt_id = uuid::Uuid::new_v4().to_string();
-        bus.publish(
-            TOPIC_PROTECTION_DEFAULT_CHANGED,
-            Source::User,
-            ProtectionDefaultChanged {
-                scope: GLOBAL_PROTECTION_DEFAULT_SCOPE.to_owned(),
-                key: key.clone(),
-                old: Some(prior_value.clone()),
-                new: new_value.clone(),
-                changed_at: at,
-            },
-        )
-        .await
-        .map_err(bus_err)?;
-        Some(evt_id)
-    } else if is_noisy {
+    let audit_id = if !is_protection_default && is_noisy && !is_noisy_audited_key(key.as_str()) {
         None
     } else {
-        let at = Timestamp::now_iso();
-        let evt_id = uuid::Uuid::new_v4().to_string();
-        bus.publish(
-            TOPIC_SETTINGS_CHANGED,
-            Source::User,
-            SettingsChanged {
-                key: key.clone(),
-                prior_value: prior_value.clone(),
-                new_value: new_value.clone(),
-                at,
-            },
+        let action = if is_protection_default {
+            "settings.protection_default.update"
+        } else {
+            "settings.update"
+        };
+        let id = write_settings_applied_audit(
+            bus,
+            is_protection_default,
+            action,
+            key,
+            &prior_value,
+            new_value,
         )
-        .await
-        .map_err(bus_err)?;
-        Some(evt_id)
+        .await?;
+        Some(id.as_uuid().to_string())
     };
 
     Ok(SettingsUpdateResponse {
@@ -519,6 +547,108 @@ pub async fn update_setting(
         new_value: contracts_core::JsonAny::from(new_value.clone()),
         audit_id,
     })
+}
+
+/// Write a durable `Outcome::Applied` audit row + live event for an accepted
+/// settings write (T122). Shared by `update_setting`'s success path and
+/// `restore_defaults`'s per-key loop — both pick `EntityType`/topic/payload
+/// the same way based on `is_protection_default` (protection-default keys
+/// audit under `EntityType::Protection` via `protection.default.changed`,
+/// spec 016 T-004; everything else audits under `EntityType::Settings` via
+/// `settings.changed`).
+async fn write_settings_applied_audit(
+    bus: &EventBus,
+    is_protection_default: bool,
+    action: &str,
+    key: &str,
+    prior_value: &Value,
+    new_value: &Value,
+) -> Result<domain_core::ids::AuditId, ContractError> {
+    let entity_type =
+        if is_protection_default { EntityType::Protection } else { EntityType::Settings };
+    let entry = AuditLogEntry::new(
+        entity_type,
+        settings_entity_id(key),
+        action,
+        "user",
+        Outcome::Applied,
+        Severity::Workflow,
+        EntityId::new(),
+    )
+    .with_payload(serde_json::json!({"key": key, "before": prior_value, "after": new_value}));
+    let at = Timestamp::now_iso();
+
+    if is_protection_default {
+        bus.write_audit(
+            entry,
+            TOPIC_PROTECTION_DEFAULT_CHANGED,
+            Source::User,
+            ProtectionDefaultChanged {
+                scope: GLOBAL_PROTECTION_DEFAULT_SCOPE.to_owned(),
+                key: key.to_owned(),
+                old: Some(prior_value.clone()),
+                new: new_value.clone(),
+                changed_at: at,
+            },
+        )
+        .await
+        .map_err(bus_err)
+    } else {
+        bus.write_audit(
+            entry,
+            TOPIC_SETTINGS_CHANGED,
+            Source::User,
+            SettingsChanged {
+                key: key.to_owned(),
+                prior_value: prior_value.clone(),
+                new_value: new_value.clone(),
+                at,
+            },
+        )
+        .await
+        .map_err(bus_err)
+    }
+}
+
+/// Write a durable `Outcome::Refused` audit row for a rejected `settings.update`
+/// attempt (FR-130/FR-134, T127) before returning the validation error to the
+/// caller. No before/after pair — validation is rejected before any read.
+/// `is_protection_default` picks the same `EntityType` the applied path would
+/// have used, so a refused global-protection-default write (e.g. `T123`'s
+/// "protection refused" coverage) is tagged `EntityType::Protection`, not
+/// `EntityType::Settings`.
+async fn write_settings_refusal(
+    bus: &EventBus,
+    is_protection_default: bool,
+    key: &str,
+    reason_code: &str,
+) -> Result<(), ContractError> {
+    let entity_type =
+        if is_protection_default { EntityType::Protection } else { EntityType::Settings };
+    let entry = AuditLogEntry::new(
+        entity_type,
+        settings_entity_id(key),
+        "settings.update",
+        "user",
+        Outcome::Refused,
+        Severity::Workflow,
+        EntityId::new(),
+    )
+    .with_reason_code(reason_code.to_owned())
+    .with_payload(serde_json::json!({"key": key}));
+    bus.write_audit(
+        entry,
+        TOPIC_SETTINGS_CHANGED,
+        Source::User,
+        serde_json::json!({
+            "key": key,
+            "outcome": "refused",
+            "reasonCode": reason_code,
+        }),
+    )
+    .await
+    .map_err(bus_err)?;
+    Ok(())
 }
 
 // ── restore_defaults ──────────────────────────────────────────────────────
@@ -593,38 +723,17 @@ pub async fn restore_defaults(
             repo::set_raw(pool, key, &default_val).await.map_err(db_err)?;
         }
 
-        // Emit audit event (even for noisy keys — restore is an explicit action).
-        // Global protection-default keys emit `protection.default.changed`
-        // (T-004) instead of the generic `settings.changed` topic.
-        let at = Timestamp::now_iso();
-        if is_protection_default {
-            bus.publish(
-                TOPIC_PROTECTION_DEFAULT_CHANGED,
-                Source::User,
-                ProtectionDefaultChanged {
-                    scope: GLOBAL_PROTECTION_DEFAULT_SCOPE.to_owned(),
-                    key: key.clone(),
-                    old: Some(current_val),
-                    new: default_val,
-                    changed_at: at,
-                },
-            )
-            .await
-            .map_err(bus_err)?;
-        } else {
-            bus.publish(
-                TOPIC_SETTINGS_CHANGED,
-                Source::User,
-                SettingsChanged {
-                    key: key.clone(),
-                    prior_value: current_val,
-                    new_value: default_val,
-                    at,
-                },
-            )
-            .await
-            .map_err(bus_err)?;
-        }
+        // Write durable audit row + live event (even for noisy keys — restore
+        // is an explicit action, FR-130).
+        write_settings_applied_audit(
+            bus,
+            is_protection_default,
+            "settings.restore_defaults",
+            key,
+            &current_val,
+            &default_val,
+        )
+        .await?;
 
         restored.push(key.clone());
         if is_protection_default {
@@ -666,11 +775,19 @@ pub async fn restore_defaults(
 /// keys. Returns `"value.invalid"` for type-invalid values.
 pub async fn set_source_override(
     pool: &SqlitePool,
+    bus: &EventBus,
     req: &SetSourceOverrideRequest,
 ) -> Result<SetSourceOverrideResponse, ContractError> {
     let key = &req.key;
+    // FR-130/T122 FIX (review round 1 #1): a per-source override is a durable
+    // settings mutation regardless of whether a live caller exists today —
+    // entity_id keys on (source_id, key) so a source's override history for
+    // one key correlates under a single audit entity, distinct from the
+    // global-key entity `update_setting` uses.
+    let entity_seed = format!("{}:{key}", req.source_id);
 
     if !descriptors::is_overridable(key.as_str()) {
+        write_settings_override_refusal(bus, &entity_seed, key, "key.unoverridable").await?;
         return Err(ContractError::new(
             ErrorCode::KeyUnoverridable,
             format!("key {key} cannot be overridden per source"),
@@ -680,7 +797,10 @@ pub async fn set_source_override(
     }
 
     let value = &req.value.0;
-    validate_value(key, value)?;
+    if let Err(e) = validate_value(key, value) {
+        write_settings_override_refusal(bus, &entity_seed, key, "value.invalid").await?;
+        return Err(e);
+    }
 
     repo::set_source_override(pool, &req.source_id, key, value).await.map_err(db_err)?;
 
@@ -691,7 +811,56 @@ pub async fn set_source_override(
     // global key is ever written on this path, so no further fan-out applies.
     caches::invalidate_settings_bag();
 
+    let entry = AuditLogEntry::new(
+        EntityType::Settings,
+        settings_entity_id(&entity_seed),
+        "settings.source_override.set",
+        "user",
+        Outcome::Applied,
+        Severity::Workflow,
+        EntityId::new(),
+    )
+    .with_payload(serde_json::json!({"sourceId": req.source_id, "key": key, "after": value}));
+    bus.write_audit(
+        entry,
+        TOPIC_SETTINGS_CHANGED,
+        Source::User,
+        serde_json::json!({"sourceId": req.source_id, "key": key}),
+    )
+    .await
+    .map_err(bus_err)?;
+
     Ok(SetSourceOverrideResponse { source_id: req.source_id.clone(), key: key.clone() })
+}
+
+/// Write a durable `Outcome::Refused` row for a rejected `set_source_override`
+/// attempt (FR-130, review round 1 #1).
+async fn write_settings_override_refusal(
+    bus: &EventBus,
+    entity_seed: &str,
+    key: &str,
+    reason_code: &str,
+) -> Result<(), ContractError> {
+    let entry = AuditLogEntry::new(
+        EntityType::Settings,
+        settings_entity_id(entity_seed),
+        "settings.source_override.set",
+        "user",
+        Outcome::Refused,
+        Severity::Workflow,
+        EntityId::new(),
+    )
+    .with_reason_code(reason_code.to_owned())
+    .with_payload(serde_json::json!({"key": key}));
+    bus.write_audit(
+        entry,
+        TOPIC_SETTINGS_CHANGED,
+        Source::User,
+        serde_json::json!({"key": key, "outcome": "refused", "reasonCode": reason_code}),
+    )
+    .await
+    .map_err(bus_err)?;
+    Ok(())
 }
 
 // ── resolve_setting ───────────────────────────────────────────────────────
@@ -933,6 +1102,67 @@ mod tests {
         assert!(resp.audit_id.is_some());
     }
 
+    /// FR-131/SC-009 (T122): the returned `audit_id` must resolve to a real
+    /// durable `audit_log_entry` row, not just a bus-only event id.
+    #[tokio::test]
+    async fn update_setting_audit_id_resolves_to_durable_row() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "logLevel".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("debug")),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        let audit_id = resp.audit_id.expect("non-noisy key must return an audit_id");
+
+        let row: (String, String) =
+            sqlx::query_as("SELECT entity_type, outcome FROM audit_log_entry WHERE audit_id = ?")
+                .bind(&audit_id)
+                .fetch_one(db.pool())
+                .await
+                .expect("audit_id must resolve to a durable audit_log_entry row");
+        assert_eq!(row.0, "settings");
+        assert_eq!(row.1, "applied");
+    }
+
+    /// FR-130 (T122): `pattern` is `noisy` (debounced) but is a durable-data
+    /// key — it must still audit at its committed value, unlike a UI-state
+    /// noisy key (see `update_setting_noisy_key_no_audit_id`).
+    #[tokio::test]
+    async fn update_setting_noisy_audited_key_pattern_gets_audit_id() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "pattern".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!([{
+                "type": "literal", "value": "changed"
+            }])),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Success);
+        assert!(resp.audit_id.is_some(), "durable-data noisy key `pattern` must still be audited");
+    }
+
+    /// T127: a refused `settings.update` (unknown key) writes a durable
+    /// `Outcome::Refused` row with a reason_code, per FR-130/FR-134.
+    #[tokio::test]
+    async fn update_setting_refused_unknown_key_writes_durable_row() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "notARealKey".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("whatever")),
+        };
+        let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::KeyUnknown);
+
+        let row: (String, Option<String>) = sqlx::query_as(
+            "SELECT outcome, reason_code FROM audit_log_entry WHERE entity_type = 'settings' AND outcome = 'refused'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("refused settings.update must write a durable audit row");
+        assert_eq!(row.0, "refused");
+        assert_eq!(row.1.as_deref(), Some("key.unknown"));
+    }
+
     /// Theme durability round trip (theme-settings-db): `settings.update`
     /// persists the choice to the real settings table, and `resolve_setting`
     /// — the same lookup `settings_get` uses — reads it back, proving the DB
@@ -1055,27 +1285,58 @@ mod tests {
 
     #[tokio::test]
     async fn set_source_override_happy_path() {
-        let (db, _bus) = setup().await;
+        let (db, bus) = setup().await;
         let req = SetSourceOverrideRequest {
             source_id: "src-abc".to_owned(),
             key: "hashOnScan".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!("eager")),
         };
-        let resp = set_source_override(db.pool(), &req).await.unwrap();
+        let resp = set_source_override(db.pool(), &bus, &req).await.unwrap();
         assert_eq!(resp.source_id, "src-abc");
         assert_eq!(resp.key, "hashOnScan");
     }
 
+    /// Review round 1 #1: `set_source_override`'s durable audit id resolves
+    /// to a real `audit_log_entry` row (FR-130/FR-131).
+    #[tokio::test]
+    async fn set_source_override_writes_durable_applied_audit_row() {
+        let (db, bus) = setup().await;
+        let req = SetSourceOverrideRequest {
+            source_id: "src-abc".to_owned(),
+            key: "hashOnScan".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!("eager")),
+        };
+        set_source_override(db.pool(), &bus, &req).await.unwrap();
+
+        let row: (String, String) = sqlx::query_as(
+            "SELECT entity_type, outcome FROM audit_log_entry WHERE trigger = 'settings.source_override.set'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("set_source_override must write a durable audit row");
+        assert_eq!(row.0, "settings");
+        assert_eq!(row.1, "applied");
+    }
+
     #[tokio::test]
     async fn set_source_override_rejects_unoverridable_key() {
-        let (db, _bus) = setup().await;
+        let (db, bus) = setup().await;
         let req = SetSourceOverrideRequest {
             source_id: "src-abc".to_owned(),
             key: "logLevel".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!("debug")),
         };
-        let err = set_source_override(db.pool(), &req).await.unwrap_err();
+        let err = set_source_override(db.pool(), &bus, &req).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::KeyUnoverridable);
+
+        let row: (String, Option<String>) = sqlx::query_as(
+            "SELECT outcome, reason_code FROM audit_log_entry WHERE trigger = 'settings.source_override.set' AND outcome = 'refused'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("refused set_source_override must write a durable audit row");
+        assert_eq!(row.0, "refused");
+        assert_eq!(row.1.as_deref(), Some("key.unoverridable"));
     }
 
     // ── T022: resolution order ─────────────────────────────────────────
@@ -1097,7 +1358,7 @@ mod tests {
             key: "hashOnScan".to_owned(),
             value: contracts_core::JsonAny::from(serde_json::json!("off")),
         };
-        set_source_override(db.pool(), &ov_req).await.unwrap();
+        set_source_override(db.pool(), &bus, &ov_req).await.unwrap();
 
         let resolved = resolve_setting(db.pool(), "hashOnScan", Some("src-1")).await.unwrap();
         assert_eq!(resolved, serde_json::json!("off"));

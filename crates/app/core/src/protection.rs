@@ -17,7 +17,10 @@
 use app_core_cache::ProtectionDefaultsSnapshot;
 use audit::bus::EventBus;
 use audit::event_bus::{ProtectionPlanAcknowledged, ProtectionSourceSet, Source};
-use audit::{TOPIC_PROTECTION_PLAN_ACKNOWLEDGED, TOPIC_PROTECTION_SOURCE_SET};
+use audit::{
+    AuditLogEntry, Outcome, Severity, TOPIC_PROTECTION_PLAN_ACKNOWLEDGED,
+    TOPIC_PROTECTION_SOURCE_SET,
+};
 use camino::Utf8Path;
 use contracts_core::protection::{
     NonBlockingSummary, PlanProtectionCheckRequest, PlanProtectionCheckResponse, ProtectedPlanItem,
@@ -25,12 +28,14 @@ use contracts_core::protection::{
     SourceProtectionSetRequest, SourceProtectionSetResponse,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use domain_core::lifecycle::data_asset::EntityType;
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::settings as settings_repo;
 use persistence_db::repositories::source_protection as prot_repo;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 
+use crate::audit_ids::deterministic_entity_id;
 use crate::caches;
 
 // ── Error helpers ─────────────────────────────────────────────────────────
@@ -39,7 +44,7 @@ use crate::caches;
 // `DbError::NotFound` to the recoverable `Blocking`/`retryable=false`
 // classification instead of the previous blanket `Fatal` (L2 divergence fix).
 use crate::errors::{bus_err, db_err};
-use domain_core::ids::{new_id, Timestamp};
+use domain_core::ids::{EntityId, Timestamp};
 
 // ── Global settings helpers ───────────────────────────────────────────────
 
@@ -222,23 +227,40 @@ pub async fn set_source_protection(
     // Invalidate after commit (F0 contract) so the next get re-resolves.
     caches::invalidate_source_protection_state(&req.source_id);
 
-    // Emit audit event (T016).
+    // Write durable audit row + live event (T016, T123: FR-130/FR-131).
     let at = Timestamp::now_iso();
-    let audit_id = new_id();
-    bus.publish(
-        TOPIC_PROTECTION_SOURCE_SET,
-        Source::User,
-        ProtectionSourceSet {
-            source_id: req.source_id.clone(),
-            prior_level: prior_level.as_str().to_owned(),
-            new_level: level_str.to_owned(),
-            prior_categories: prior_cats.clone(),
-            new_categories: req.categories.clone(),
-            at,
-        },
+    let entry = AuditLogEntry::new(
+        EntityType::Protection,
+        deterministic_entity_id("protection.source", &req.source_id),
+        "protection.source.set",
+        "user",
+        Outcome::Applied,
+        Severity::Workflow,
+        EntityId::new(),
     )
-    .await
-    .map_err(bus_err)?;
+    .with_payload(serde_json::json!({
+        "sourceId": req.source_id,
+        "before": {"level": prior_level.as_str(), "blockPermanentDelete": prior_bpd, "categories": prior_cats},
+        "after": {"level": level_str, "blockPermanentDelete": req.block_permanent_delete, "categories": req.categories},
+    }));
+    let audit_id = bus
+        .write_audit(
+            entry,
+            TOPIC_PROTECTION_SOURCE_SET,
+            Source::User,
+            ProtectionSourceSet {
+                source_id: req.source_id.clone(),
+                prior_level: prior_level.as_str().to_owned(),
+                new_level: level_str.to_owned(),
+                prior_categories: prior_cats.clone(),
+                new_categories: req.categories.clone(),
+                at,
+            },
+        )
+        .await
+        .map_err(bus_err)?
+        .as_uuid()
+        .to_string();
 
     Ok(SourceProtectionSetResponse {
         source_id: req.source_id.clone(),
@@ -401,21 +423,37 @@ pub async fn acknowledge_protected_item(
     reason: &str,
 ) -> Result<String, ContractError> {
     let at = Timestamp::now_iso();
-    let audit_id = new_id();
-    bus.publish(
-        TOPIC_PROTECTION_PLAN_ACKNOWLEDGED,
-        Source::User,
-        ProtectionPlanAcknowledged {
-            plan_id: plan_id.to_owned(),
-            item_id: item_id.to_owned(),
-            source_id: source_id.map(str::to_owned),
-            resolved_level: resolved_level.to_owned(),
-            reason: reason.to_owned(),
-            at,
-        },
+    let entry = AuditLogEntry::new(
+        EntityType::Protection,
+        deterministic_entity_id("protection.plan_item", &format!("{plan_id}:{item_id}")),
+        "protection.plan.acknowledged",
+        "user",
+        Outcome::Applied,
+        Severity::Workflow,
+        EntityId::new(),
     )
-    .await
-    .map_err(bus_err)?;
+    .with_payload(serde_json::json!({
+        "planId": plan_id, "itemId": item_id, "sourceId": source_id,
+        "resolvedLevel": resolved_level, "reason": reason,
+    }));
+    let audit_id = bus
+        .write_audit(
+            entry,
+            TOPIC_PROTECTION_PLAN_ACKNOWLEDGED,
+            Source::User,
+            ProtectionPlanAcknowledged {
+                plan_id: plan_id.to_owned(),
+                item_id: item_id.to_owned(),
+                source_id: source_id.map(str::to_owned),
+                resolved_level: resolved_level.to_owned(),
+                reason: reason.to_owned(),
+                at,
+            },
+        )
+        .await
+        .map_err(bus_err)?
+        .as_uuid()
+        .to_string();
     Ok(audit_id)
 }
 
@@ -914,6 +952,58 @@ mod tests {
         let resp = set_source_protection(db.pool(), &bus, &set_req).await.unwrap();
         assert_eq!(resp.new_level, ProtectionLevel::Unprotected);
         assert!(!resp.audit_id.is_empty());
+    }
+
+    /// FR-131/SC-009 (T123): `set_source_protection`'s returned `audit_id`
+    /// must resolve to a real durable `audit_log_entry` row (previously
+    /// bus-only), tagged `EntityType::Protection`.
+    #[tokio::test]
+    async fn set_protection_audit_id_resolves_to_durable_row() {
+        let (db, bus, _lock) = setup().await;
+        let set_req = SourceProtectionSetRequest {
+            source_id: "src-003".to_owned(),
+            level: ProtectionLevel::Protected,
+            block_permanent_delete: Some(true),
+            categories: None,
+        };
+        let resp = set_source_protection(db.pool(), &bus, &set_req).await.unwrap();
+
+        let row: (String, String) =
+            sqlx::query_as("SELECT entity_type, outcome FROM audit_log_entry WHERE audit_id = ?")
+                .bind(&resp.audit_id)
+                .fetch_one(db.pool())
+                .await
+                .expect("audit_id must resolve to a durable audit_log_entry row");
+        assert_eq!(row.0, "protection");
+        assert_eq!(row.1, "applied");
+    }
+
+    /// T127: a refused protection-default mutation (`defaultProtection` set to
+    /// an unrecognised level) writes a durable `Outcome::Refused` row tagged
+    /// `EntityType::Protection` with a reason_code, per FR-130.
+    #[tokio::test]
+    async fn set_global_protection_default_refused_writes_durable_row() {
+        let (db, bus, _lock) = setup().await;
+
+        let err = super::set_global_protection_default(
+            db.pool(),
+            &bus,
+            "global",
+            "defaultProtection",
+            serde_json::json!("locked"), // not one of protected/normal/unprotected
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
+
+        let row: (String, Option<String>) = sqlx::query_as(
+            "SELECT outcome, reason_code FROM audit_log_entry WHERE entity_type = 'protection' AND outcome = 'refused'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("refused protection-default write must write a durable audit row");
+        assert_eq!(row.0, "refused");
+        assert_eq!(row.1.as_deref(), Some("value.invalid"));
     }
 
     #[tokio::test]
