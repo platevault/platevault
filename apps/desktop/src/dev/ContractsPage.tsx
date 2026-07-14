@@ -14,13 +14,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { commands } from '@/bindings/index';
-import { unwrap } from '@/api/ipc';
+import { unwrap, invoke } from '@/api/ipc';
 import type { ContractMeta, ContractCall } from '@/bindings/index';
 import { PageShell } from '@/components';
 import { ContractList } from './ContractList';
 import { CallList } from './CallList';
 import { SchemaViewer } from './SchemaViewer';
 import { pickDirectory } from '@/shared/native/picker';
+import { getCallSnapshot, subscribeRecorder } from './recorder';
 
 // ── Disabled stub ─────────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ function DevModeDisabledStub() {
 export function ContractsPage() {
   const [devMode, setDevMode] = useState<boolean | null>(null);
   const [contracts, setContracts] = useState<ContractMeta[]>([]);
-  const [calls, setCalls] = useState<ContractCall[]>([]);
+  const [calls, setCalls] = useState<ContractCall[]>(() => getCallSnapshot());
   const [selectedContract, setSelectedContract] = useState<ContractMeta | null>(
     null,
   );
@@ -85,20 +86,40 @@ export function ContractsPage() {
       .catch((e: unknown) => setError(String(e)));
   }, []);
 
-  const loadCalls = useCallback(() => {
-    commands
-      .devCallsList({ requestId: null, limit: null })
-      .then(unwrap)
-      .then((resp) => setCalls(resp.calls))
-      .catch((e: unknown) => setError(String(e)));
+  // Recent calls are read live from the JS-side recording proxy buffer
+  // (`recorder.ts`), which is populated in real time as the wrapped
+  // dispatcher records each call (spec 021 follow-up #736). This is the
+  // same buffer the recorder already exercises in its own tests; there is
+  // no backend round trip in the render path, so the list updates instantly
+  // (no manual refresh required).
+  const refreshCalls = useCallback(() => {
+    setCalls(getCallSnapshot());
   }, []);
 
   useEffect(() => {
-    if (devMode === true) {
-      loadContracts();
-      loadCalls();
+    if (devMode !== true) return;
+    loadContracts();
+    // `calls` is seeded from getCallSnapshot() at mount (useState initializer
+    // above); this only subscribes for subsequent live updates, so there is
+    // no synchronous setState call in the effect body itself.
+    return subscribeRecorder(refreshCalls);
+  }, [devMode, loadContracts, refreshCalls]);
+
+  const handleReplay = useCallback(async (call: ContractCall) => {
+    // Replay is only reachable from a `replaySafe` call row (CallList
+    // disables the button otherwise). Re-dispatches through the raw Tauri
+    // invoke name (dotted contract name -> snake_case fn name) with the
+    // exact (already-redacted) recorded request. The recording proxy is
+    // still installed, so this produces a brand-new `ContractCall` entry
+    // rather than mutating the original (spec 021 plan.md "Replay").
+    const cmd = call.contract.replace(/\./g, '_');
+    try {
+      await invoke(cmd, call.request as Record<string, unknown> | undefined);
+    } catch {
+      // The outcome (including errors) is captured as a new ContractCall by
+      // the recording proxy itself; nothing further to surface here.
     }
-  }, [devMode, loadContracts, loadCalls]);
+  }, []);
 
   const handleViewSchema = useCallback((contract: ContractMeta) => {
     setSelectedContract(contract);
@@ -181,7 +202,7 @@ export function ContractsPage() {
             <button
               type="button"
               className="alm-btn alm-btn--sm"
-              onClick={loadCalls}
+              onClick={refreshCalls}
               aria-label="Refresh calls"
             >
               Refresh calls
@@ -225,6 +246,7 @@ export function ContractsPage() {
             calls={calls}
             contracts={contracts}
             onViewSchema={handleViewSchemaForCall}
+            onReplay={handleReplay}
           />
         </section>
 

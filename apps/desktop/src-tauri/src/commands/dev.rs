@@ -10,8 +10,10 @@
 //! Commands:
 //! - `dev.contracts.list` — enumerate all registered contracts
 //! - `dev.calls.list`     — return the most recent N calls from the ring buffer
+//! - `dev.calls.push`     — record a call captured by the JS recording proxy
 //! - `dev.export`         — dump registry + calls to a JSON file
 
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use contracts_core::dev::{
@@ -76,6 +78,54 @@ impl CallBuffer {
     }
 }
 
+// ── Schema path resolution ────────────────────────────────────────────────────
+//
+// `app_core::dev_contracts::list_contracts` intentionally leaves `schema_path`
+// empty (its doc comment says the frontend computes it, but no such
+// computation exists client-side — the schema files live on disk and only
+// the Rust process knows where its own source checkout is). This table fills
+// in the subset of registry contracts whose JSON Schema file location is
+// currently known. Contracts without a discoverable schema file (most of the
+// non-dev registry — no schema was ever authored for them) legitimately keep
+// an empty path and render `schema.missing` (spec 021 follow-up #736).
+
+/// `(contract name, path relative to the repo root)` for every contract with
+/// a known schema file on disk.
+const KNOWN_SCHEMA_PATHS: &[(&str, &str)] = &[
+    (
+        "lifecycle.transition",
+        "specs/002-data-lifecycle-state-model/contracts/lifecycle.transition.json",
+    ),
+    ("provenance.read", "specs/002-data-lifecycle-state-model/contracts/provenance.read.json"),
+    ("settings.get", "specs/018-settings-configuration-model/contracts/settings.get.json"),
+    ("settings.update", "specs/018-settings-configuration-model/contracts/settings.update.json"),
+    ("dev.contracts.list", "packages/contracts/dev/dev.contracts.list.json"),
+    ("dev.calls.list", "packages/contracts/dev/dev.calls.list.json"),
+    ("dev.export", "packages/contracts/dev/dev.export.json"),
+];
+
+/// Repo root, resolved from this crate's manifest dir (`apps/desktop/src-tauri`)
+/// at compile time. Three levels up: `src-tauri` -> `desktop` -> `apps` -> root.
+fn repo_root() -> PathBuf {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let joined = manifest_dir.join("../../..");
+    std::fs::canonicalize(&joined).unwrap_or(joined)
+}
+
+/// Fill in `schema_path` for contracts present in [`KNOWN_SCHEMA_PATHS`].
+fn attach_schema_paths(mut resp: DevContractsListResponse) -> DevContractsListResponse {
+    let root = repo_root();
+    for contract in &mut resp.contracts {
+        for (name, rel) in KNOWN_SCHEMA_PATHS {
+            if *name == contract.name {
+                contract.schema_path = root.join(rel).to_string_lossy().into_owned();
+                break;
+            }
+        }
+    }
+    resp
+}
+
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
 /// `dev.contracts.list` — list all registered contracts (spec 021 US1).
@@ -93,10 +143,39 @@ pub async fn dev_contracts_list(
     let pool = state.repo.pool();
     let dev_mode = app_core::settings::resolve_setting(pool, "devMode", None)
         .await
-        .map(|v| v.as_bool().unwrap_or(false))
-        .unwrap_or(false);
+        .is_ok_and(|v| v.as_bool().unwrap_or(false));
 
-    app_core::dev_contracts::list_contracts(dev_mode, request)
+    app_core::dev_contracts::list_contracts(dev_mode, request).map(attach_schema_paths)
+}
+
+/// `dev.calls.push` — record a call captured by the JS-side recording proxy
+/// (spec 021 US2 / follow-up #736) into the shared ring buffer, so
+/// `dev.calls.list` and `dev.export` observe live calls too. The frontend
+/// recorder (`apps/desktop/src/dev/recorder.ts`) keeps its own buffer for
+/// instant, reactive rendering; this is a best-effort mirror for backend
+/// consumers (export). The call is already redacted client-side before this
+/// is invoked.
+///
+/// # Errors
+/// Returns `Err(String)` when `devMode` is disabled.
+#[tauri::command]
+#[specta::specta]
+pub async fn dev_calls_push(
+    state: State<'_, AppState>,
+    buffer: State<'_, CallBuffer>,
+    call: ContractCall,
+) -> Result<(), ContractError> {
+    let pool = state.repo.pool();
+    let dev_mode = app_core::settings::resolve_setting(pool, "devMode", None)
+        .await
+        .is_ok_and(|v| v.as_bool().unwrap_or(false));
+
+    if !dev_mode {
+        return Err(ContractError::internal("dev_mode.disabled: Developer mode is disabled."));
+    }
+
+    buffer.push(call);
+    Ok(())
 }
 
 /// `dev.calls.list` — return recent recorded calls (spec 021 US2).
@@ -115,11 +194,9 @@ pub async fn dev_calls_list(
     let pool = state.repo.pool();
     let dev_mode = app_core::settings::resolve_setting(pool, "devMode", None)
         .await
-        .map(|v| v.as_bool().unwrap_or(false))
-        .unwrap_or(false);
+        .is_ok_and(|v| v.as_bool().unwrap_or(false));
 
-    let limit =
-        request.limit.map(|n| (n as usize).clamp(1, CALL_BUFFER_CAP)).unwrap_or(CALL_BUFFER_CAP);
+    let limit = request.limit.map_or(CALL_BUFFER_CAP, |n| (n as usize).clamp(1, CALL_BUFFER_CAP));
 
     let calls = buffer.snapshot(limit);
 
@@ -143,8 +220,7 @@ pub async fn dev_export(
     let pool = state.repo.pool();
     let dev_mode = app_core::settings::resolve_setting(pool, "devMode", None)
         .await
-        .map(|v| v.as_bool().unwrap_or(false))
-        .unwrap_or(false);
+        .is_ok_and(|v| v.as_bool().unwrap_or(false));
 
     if !dev_mode {
         return Err(ContractError::internal("dev_mode.disabled: Developer mode is disabled."));
@@ -156,8 +232,8 @@ pub async fn dev_export(
 
     // Snapshot calls.
     let calls = buffer.snapshot(CALL_BUFFER_CAP);
-    let call_count = calls.len() as u32;
-    let contract_count = contracts_resp.contracts.len() as u32;
+    let call_count = u32::try_from(calls.len()).unwrap_or(u32::MAX);
+    let contract_count = u32::try_from(contracts_resp.contracts.len()).unwrap_or(u32::MAX);
 
     // Build export payload.
     let export = serde_json::json!({
@@ -204,8 +280,7 @@ pub async fn dev_schema_get(
     let pool = state.repo.pool();
     let dev_mode = app_core::settings::resolve_setting(pool, "devMode", None)
         .await
-        .map(|v| v.as_bool().unwrap_or(false))
-        .unwrap_or(false);
+        .is_ok_and(|v| v.as_bool().unwrap_or(false));
 
     if !dev_mode {
         return Err(ContractError::internal("dev_mode.disabled: Developer mode is disabled."));
@@ -291,5 +366,53 @@ mod tests {
         let buf = CallBuffer::new();
         assert_eq!(buf.snapshot(10).len(), 0);
         assert_eq!(buf.dropped(), 0);
+    }
+
+    // ── attach_schema_paths (#736) ────────────────────────────────────────────
+
+    use contracts_core::dev::{ContractMeta, DevContractsListResponse};
+
+    use super::attach_schema_paths;
+
+    fn make_meta(name: &str) -> ContractMeta {
+        ContractMeta {
+            name: name.to_owned(),
+            version: "1.0.0".to_owned(),
+            schema_path: String::new(),
+            direction: "ui-to-core".to_owned(),
+            replay_safe: true,
+            sensitive_fields: vec![],
+            ts_hash: None,
+            rust_hash: None,
+            mismatch: None,
+        }
+    }
+
+    #[test]
+    fn attach_schema_paths_fills_known_contracts_with_absolute_existing_path() {
+        let resp = DevContractsListResponse {
+            contracts: vec![make_meta("dev.contracts.list"), make_meta("settings.get")],
+        };
+        let resp = attach_schema_paths(resp);
+
+        for contract in &resp.contracts {
+            assert!(!contract.schema_path.is_empty(), "{} should get a path", contract.name);
+            let path = std::path::Path::new(&contract.schema_path);
+            assert!(path.is_absolute(), "{} path should be absolute", contract.name);
+            assert!(
+                path.exists(),
+                "{} schema file should exist at {}",
+                contract.name,
+                contract.schema_path
+            );
+        }
+    }
+
+    #[test]
+    fn attach_schema_paths_leaves_unknown_contracts_empty() {
+        let resp = DevContractsListResponse { contracts: vec![make_meta("sessions.list")] };
+        let resp = attach_schema_paths(resp);
+
+        assert_eq!(resp.contracts[0].schema_path, "");
     }
 }

@@ -129,6 +129,25 @@ function pushCall(call: ContractCall): void {
   notify();
 }
 
+// ── Contract name normalization ─────────────────────────────────────────────
+
+/**
+ * Normalize a Tauri invoke command name to the dotted contract-registry name.
+ *
+ * The real dispatcher receives the Rust `#[tauri::command]` fn name
+ * (snake_case, e.g. `dev_calls_list`), not the dotted operation name used in
+ * `ContractMeta.name` (e.g. `dev.calls.list`) — `tauri-specta` registers
+ * commands under the Rust fn name (see `apps/desktop/src-tauri/tests/bindings.rs`
+ * "IPC name alignment regression"). Every current registry entry follows a
+ * `namespace_operation` -> `namespace.operation` shape, so a blanket
+ * underscore-to-dot replacement recovers the dotted name. Commands outside
+ * the dev registry simply fail to match a `ContractMeta` afterward, same as
+ * before normalization (spec 021 follow-up #736).
+ */
+function toContractName(cmd: string): string {
+  return cmd.replace(/_/g, '.');
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /** Subscribe to buffer changes. Returns an unsubscribe function. */
@@ -197,7 +216,8 @@ export function wrap(
     const startedAt = new Date().toISOString();
     const t0 = performance.now();
 
-    const sensitiveFields = sensitiveByContract.get(cmd) ?? [];
+    const contract = toContractName(cmd);
+    const sensitiveFields = sensitiveByContract.get(contract) ?? [];
     const rawRequest = args ?? {};
     const redactedRequest = redactPayload(rawRequest, sensitiveFields);
     const { value: storedRequest, truncated: reqTruncated } =
@@ -230,9 +250,9 @@ export function wrap(
 
     const durationMs = performance.now() - t0;
 
-    pushCall({
+    const record: ContractCall = {
       id,
-      contract: cmd,
+      contract,
       contractVersion: '1.0.0',
       request: storedRequest,
       response,
@@ -240,7 +260,18 @@ export function wrap(
       startedAt,
       durationMs,
       payloadTruncated: reqTruncated || resTruncated,
-    });
+    };
+    pushCall(record);
+
+    // Best-effort mirror into the backend ring buffer so `dev.export` also
+    // observes live calls (spec 021 follow-up #736). Uses the raw dispatcher
+    // captured above — NOT `recordingDispatch` itself — so this forwarding
+    // call is never recorded (would otherwise recurse). Failures (e.g. the
+    // command not yet available, or `devMode` racing off) are swallowed:
+    // the JS-side buffer above is the source of truth for the UI.
+    if (cmd !== 'dev_calls_push') {
+      void dispatch('dev_calls_push', { call: record }).catch(() => {});
+    }
 
     if (error)
       throw Object.assign(new Error(error.message), { code: error.code });
