@@ -17,7 +17,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 8. Calibration: ingest → masters → matching | PARTIAL | 2P/1F/2PA/0S | | masters register+ingest work; fingerprint extraction fails #620; matching blocked #664; tolerances dont persist #639; 0 audit #766 |
 | 9. Targets & planning (real vs. stub) | PARTIAL | 3P/0F/2PA/0S | #815, #816 | logic correct; detail+modal overflow clips controls #815
 | 10. Settings, appearance, and i18n | PARTIAL | 8P/5F/2PA/0S | #820, #822, #823, #825, #827 | theme persists; naming/resolution/altitude dont persist; unhandled validation #825; #794 contradiction flagged
-| 11. Mistake recovery | ⏳ pending | | | |
+| 11. Mistake recovery | PARTIAL | 1P/2F/0PA/1S | | plan-discard works; bulk-override has NO warning #611; calibration un-assign blocked #664
 | 12. Failure & refusal handling | ⏳ pending | | | |
 | 13. Audit & activity investigation | ⏳ pending | | | |
 | 14. Target-first project start | ⏳ pending | | | |
@@ -266,3 +266,19 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Doc-drift (JOURNEY-DOC UPDATE):** app has 13 panes, not the doc's "12"; the doc's pane list omits Target Resolution + Source Views and mislabels "Catalogs"/"General" (actually "Target Resolution"/"Appearance"). Update step 1's pane list.
 
 **App-state left for J11:** Inbox has 10 folders (Dark 1, Light 5, Mixed 4 — plenty of heterogeneous items for mistake-recovery). Calibration has 3 masters (NO assignment made — and note #664 blocks assignment app-wide, so J11's un-assign step may be untestable). All settings J10 changed were restored. Bridge connected.
+
+### Journey 11 — Mistake recovery: undo a wrong classification or assignment
+
+**Verdict:** PARTIAL
+**Steps:** 1 PASS / 2 FAIL / 0 PARTIAL / 1 SKIPPED (blocked by #664)
+**Issues filed:** none (added corroborating evidence comment to existing #611)
+
+**Dupes hit (not re-filed):** #611 (heterogeneous bulk override has NO warning + NO reset-to-detected UI — backend already models detected-vs-override, only UI missing), #664 (calibration assign blocked app-wide)
+
+**Key evidence:** Inbox item 832eea19 (2 unclassified files) bulk-overridden to "light" with ZERO warning/confirm (handleBulkApply in InboxDetail.tsx has no heterogeneity check); DB inbox_classification_evidence.frame_type=NULL, manual_override='light'; no provenance pill/reset control in DOM (hasReset:false) — posted as evidence on #611. Plan-discard round-trip PASS: M51/LUM/2025-05-03 classified→plan→"Discard" (toast "Plan discarded. Item is available for re-confirmation."), DOM reverted to classified, DB plans.state='discarded'+discarded_at, item never moved. Calibration un-assign untestable: calibration_match_suggest returns match.observer_location_missing (#664) so no assignment can be created to un-assign; all 3 masters "USED BY: None".
+
+**Doc-drift (JOURNEY-DOC UPDATE):** the bulk-override grid only renders for classType `unclassified` (files with unreadable/absent frame-type evidence), NOT for `classification.type==='mixed'` folders (which offer only "Confirm to inventory" split plan, no per-file override grid). Journey 11 wording should say "folders with unreadable/absent frame-type evidence" rather than "differing detected types".
+
+**UX/quality note:** "Use in project" on Calibration master detail produces zero visible feedback when clicked (silent-failure smell; root cause = #664 upstream refusal, not filed separately — fold into #664 fix).
+
+**App-state left for J12:** project "J5 Lifecycle Test" (completed, 0 channels) already has a RECORDED refused Archive transition (audit project bf6f5e26, trigger=Archive, outcome=refused, code=plan.required "edge (project, completed→archived) requires an approved FilesystemPlan") — ready-made "transition that can't satisfy" precondition for J12. NO partial-fail plan exists yet — J12 must construct one (confirm an item, then remove/modify its source file on disk before apply). Inbox item 832eea19 now permanently classified "light" (index-only). M51 plan discarded/reverted.
