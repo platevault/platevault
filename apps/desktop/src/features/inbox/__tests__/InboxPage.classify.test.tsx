@@ -46,13 +46,18 @@ function render(ui: ReactElement) {
 const {
   mockInboxClassify,
   mockInboxConfirm,
-  mockInboxReclassify,
+  mockInboxReclassifyV2,
+  mockInboxPropertyRegistry,
   mockInboxScanFolder,
   mockAddToast,
 } = vi.hoisted(() => ({
   mockInboxClassify: vi.fn(),
   mockInboxConfirm: vi.fn(),
-  mockInboxReclassify: vi.fn(),
+  mockInboxReclassifyV2: vi.fn(),
+  mockInboxPropertyRegistry: vi.fn().mockResolvedValue({
+    status: 'ok',
+    data: [],
+  }),
   mockInboxScanFolder: vi.fn(),
   mockAddToast: vi.fn(),
 }));
@@ -61,7 +66,8 @@ vi.mock('@/bindings/index', () => ({
   commands: {
     inboxClassify: mockInboxClassify,
     inboxConfirm: mockInboxConfirm,
-    inboxReclassify: mockInboxReclassify,
+    inboxReclassifyV2: mockInboxReclassifyV2,
+    inboxPropertyRegistry: mockInboxPropertyRegistry,
     inboxScanFolder: mockInboxScanFolder,
   },
 }));
@@ -201,14 +207,13 @@ describe('InboxDetail', () => {
     ).toBeInTheDocument();
   });
 
-  it('fires reclassify with correct payload when override applied', async () => {
-    mockInboxReclassify.mockResolvedValue({
+  it('fires reclassify_v2 with correct payload when override applied', async () => {
+    mockInboxReclassifyV2.mockResolvedValue({
       status: 'ok',
       data: {
-        inboxItemId: 'item-001',
-        updatedType: 'mixed',
-        remainingUnclassified: 0,
-        appliedCount: 1,
+        sourceGroupId: 'item-001',
+        subItems: [],
+        needsReviewCount: 0,
       },
     });
 
@@ -230,9 +235,12 @@ describe('InboxDetail', () => {
     fireEvent.click(applyBtn);
 
     await waitFor(() => {
-      expect(mockInboxReclassify).toHaveBeenCalledWith({
+      expect(mockInboxReclassifyV2).toHaveBeenCalledWith({
         inboxItemId: 'item-001',
-        overrides: [{ filePath: 'mystery.fits', frameType: 'dark' }],
+        overrides: [
+          { filePath: 'mystery.fits', properties: { frameType: 'dark' } },
+        ],
+        bulk: [],
       });
     });
   });

@@ -24,11 +24,17 @@
  */
 
 import { Popover } from '@base-ui-components/react/popover';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { commands } from '@/bindings/index';
 import type {
   InboxFileMetadata_Serialize as InboxFileMetadata,
   InboxItemSummary,
+  PropertyRegistryEntry_Serialize as PropertyRegistryEntry,
 } from '@/bindings/index';
+import { unwrap } from '@/api/ipc';
+import { ipcArgs } from '@/lib/ipc-args';
+import { queryKeys } from '@/data/queryKeys';
 import type { PropertyDef } from '@/components';
 import { DetailPanel, PropertyTable } from '@/components';
 import { errMessage } from '@/lib/errors';
@@ -36,8 +42,66 @@ import { m } from '@/lib/i18n';
 import type { PillVariant } from '@/ui';
 import { Banner, Btn, Pill, Section, Table } from '@/ui';
 import type { InboxClassifyResponse } from './store';
-import { useInboxReclassify } from './store';
 import { ConeSearchSuggestions } from './ConeSearchSuggestions';
+
+// ── reclassify_v2 (spec 041 R-13/T068, issue #755) ────────────────────────────
+//
+// Field-agnostic + bulk reclassify. Lives here (not `./store`) so this file's
+// scope stays self-contained; the v1 `useInboxReclassify` hook in `./store`
+// is untouched for other/legacy callers.
+
+interface ReclassifyV2Args {
+  /** Per-file property overrides (frameType correction, R-13). */
+  overrides?: Array<{ filePath: string; properties: Record<string, unknown> }>;
+  /** Bulk "set all" entries applied to a subset of files. */
+  bulk?: Array<{ property: string; value: unknown; filePaths?: string[] }>;
+}
+
+/** Returns a `reclassify_v2` callback + loading state, scoped to one inbox item. */
+function useInboxReclassifyV2(inboxItemId: string) {
+  const queryClient = useQueryClient();
+  const [loading, setLoading] = useState(false);
+
+  const reclassifyV2 = useCallback(
+    async (args: ReclassifyV2Args) => {
+      setLoading(true);
+      try {
+        const result = unwrap(
+          await commands.inboxReclassifyV2(
+            ipcArgs<typeof commands.inboxReclassifyV2>({
+              inboxItemId,
+              overrides: args.overrides ?? [],
+              bulk: args.bulk ?? [],
+            }),
+          ),
+        );
+        // v2 re-splits the source group into sub-items (R-14), so the item
+        // list itself may have changed shape, not just this item's evidence.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inbox.list('all'),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: [queryKeys.inbox.list('all')[0], 'classify'],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inbox.metadata(inboxItemId),
+        });
+        return result;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [inboxItemId, queryClient],
+  );
+
+  return { reclassifyV2, loading };
+}
+
+/** "exposureS" → "exposure S" (best-effort label for a registry key with no i18n entry). */
+function humanizeKey(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -254,7 +318,7 @@ export function InboxDetail({
   selectedRootId,
   onSelectRoot,
 }: InboxDetailProps) {
-  const { reclassify, loading: reclassifyLoading } = useInboxReclassify(
+  const { reclassifyV2, loading: reclassifyLoading } = useInboxReclassifyV2(
     item.inboxItemId,
   );
 
@@ -267,13 +331,26 @@ export function InboxDetail({
   // T027: multi-select + bulk override state.
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [bulkFrameType, setBulkFrameType] = useState('');
-  const [bulkFilter, setBulkFilter] = useState('');
-  const [bulkExposureS, setBulkExposureS] = useState('');
-  const [bulkBinning, setBulkBinning] = useState('');
+  // Field-agnostic bulk values (spec 041 R-13/US11, issue #755): any
+  // overridable property from `inbox.property_registry` keyed by its
+  // registry `key` (e.g. "filter", "exposureS", "gain", "temperatureC").
+  const [bulkPropValues, setBulkPropValues] = useState<Record<string, string>>(
+    {},
+  );
   const [bulkError, setBulkError] = useState<string | null>(null);
 
   // Files popover: which row is "inspected" inside the popover.
   const [inspectedIdx, setInspectedIdx] = useState<number | null>(null);
+
+  // Property registry (FR-044) — drives the generic bulk editor below.
+  // Static per app session, so fetched lazily (only once the bulk editor can
+  // actually be shown) and cached indefinitely.
+  const { data: propertyRegistry } = useQuery<PropertyRegistryEntry[]>({
+    queryKey: ['inbox', 'propertyRegistry'],
+    queryFn: async () => unwrap(await commands.inboxPropertyRegistry()),
+    enabled: selectedFiles.size > 0,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
 
   const handleOverrideChange = (filePath: string, frameType: string) => {
     setPendingOverrides((prev) => ({ ...prev, [filePath]: frameType }));
@@ -283,13 +360,13 @@ export function InboxDetail({
     const overrides = Object.entries(pendingOverrides).map(
       ([filePath, frameType]) => ({
         filePath,
-        frameType,
+        properties: { frameType },
       }),
     );
     if (overrides.length === 0) return;
     setApplyError(null);
     try {
-      await reclassify(overrides);
+      await reclassifyV2({ overrides });
       setPendingOverrides({});
     } catch (err) {
       setApplyError(errMessage(err));
@@ -314,33 +391,36 @@ export function InboxDetail({
     else setSelectedFiles(new Set(unclassifiedFiles));
   };
 
+  const handleBulkPropChange = (key: string, value: string) => {
+    setBulkPropValues((prev) => ({ ...prev, [key]: value }));
+  };
+
   const handleBulkApply = async () => {
     if (selectedFiles.size === 0) return;
-    const overrides = Array.from(selectedFiles).map((filePath) => {
-      const override: {
-        filePath: string;
-        frameType?: string | null;
-        filter?: string | null;
-        exposureS?: number | null;
-        binning?: string | null;
-      } = { filePath };
-      if (bulkFrameType !== '') override.frameType = bulkFrameType;
-      if (bulkFilter !== '') override.filter = bulkFilter;
-      if (bulkExposureS !== '') {
-        const n = parseFloat(bulkExposureS);
-        if (!Number.isNaN(n)) override.exposureS = n;
-      }
-      if (bulkBinning !== '') override.binning = bulkBinning;
-      return override;
-    });
+    const filePaths = Array.from(selectedFiles);
+    const bulk: Array<{
+      property: string;
+      value: unknown;
+      filePaths: string[];
+    }> = [];
+    if (bulkFrameType !== '') {
+      bulk.push({ property: 'frameType', value: bulkFrameType, filePaths });
+    }
+    for (const [key, raw] of Object.entries(bulkPropValues)) {
+      if (raw === '') continue;
+      const entry = propertyRegistry?.find((e) => e.key === key);
+      const isNumeric = entry?.kind === 'number' || entry?.kind === 'integer';
+      const value = isNumeric ? Number(raw) : raw;
+      if (isNumeric && Number.isNaN(value)) continue;
+      bulk.push({ property: key, value, filePaths });
+    }
+    if (bulk.length === 0) return;
     setBulkError(null);
     try {
-      await reclassify(overrides);
+      await reclassifyV2({ bulk });
       setSelectedFiles(new Set());
       setBulkFrameType('');
-      setBulkFilter('');
-      setBulkExposureS('');
-      setBulkBinning('');
+      setBulkPropValues({});
     } catch (err) {
       setBulkError(err instanceof Error ? err.message : String(err));
     }
@@ -364,6 +444,44 @@ export function InboxDetail({
     applicableCategory && destinationRoots
       ? destinationRoots.filter((r) => r.category === applicableCategory)
       : (destinationRoots ?? []);
+
+  // Generic bulk-editable properties (FR-044/US11, issue #755): every
+  // overridable registry entry other than frameType (which keeps its own
+  // enum select above), narrowed to the ones applicable to this item's frame
+  // type. Unknown/mixed frame type (itemFrameType == null) shows all of them.
+  const genericBulkFields = (propertyRegistry ?? []).filter((e) => {
+    if (e.key === 'frameType' || !e.overridable) return false;
+    if (!itemFrameType) return true;
+    return e.appliesTo.includes(itemFrameType);
+  });
+
+  // Reuse existing translated labels/placeholders for the well-known keys;
+  // any other registry key falls back to `humanizeKey` in the render loop.
+  const KNOWN_BULK_FIELD_LABELS: Record<
+    string,
+    { label: string; placeholder?: string; testid: string }
+  > = {
+    filter: {
+      label: m.common_filter(),
+      placeholder: m.inbox_filter_placeholder(),
+      testid: 'bulk-filter',
+    },
+    exposureS: {
+      label: m.inbox_exposure_label(),
+      placeholder: m.inbox_exposure_placeholder(),
+      testid: 'bulk-exposure-s',
+    },
+    binning: {
+      label: m.settings_calmatch_binning(),
+      placeholder: m.inbox_binning_placeholder(),
+      testid: 'bulk-binning',
+    },
+    gain: { label: m.inbox_col_gain(), testid: 'bulk-gain' },
+    temperatureC: {
+      label: m.settings_calmatch_sensor_temp(),
+      testid: 'bulk-temperature-c',
+    },
+  };
 
   // ── Unclassified ("Needs review") table ───────────────────────────────────
 
@@ -843,66 +961,55 @@ export function InboxDetail({
                     </select>
                   </div>
 
-                  <div className="alm-inbox-detail__bulk-field">
-                    {}
-                    <label
-                      htmlFor="bulk-filter"
-                      className="alm-inbox-detail__bulk-label"
-                    >
-                      {m.common_filter()}
-                    </label>
-                    <input
-                      id="bulk-filter"
-                      type="text"
-                      value={bulkFilter}
-                      onChange={(e) => setBulkFilter(e.target.value)}
-                      placeholder={m.inbox_filter_placeholder()}
-                      aria-label={m.inbox_bulk_filter_aria()}
-                      data-testid="bulk-filter"
-                      className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
-                    />
-                  </div>
-
-                  <div className="alm-inbox-detail__bulk-field">
-                    {}
-                    <label
-                      htmlFor="bulk-exposure"
-                      className="alm-inbox-detail__bulk-label"
-                    >
-                      {m.inbox_exposure_label()}
-                    </label>
-                    <input
-                      id="bulk-exposure"
-                      type="number"
-                      value={bulkExposureS}
-                      onChange={(e) => setBulkExposureS(e.target.value)}
-                      placeholder={m.inbox_exposure_placeholder()}
-                      aria-label={m.inbox_bulk_exposure_aria()}
-                      data-testid="bulk-exposure-s"
-                      className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
-                      min={0}
-                    />
-                  </div>
-
-                  <div className="alm-inbox-detail__bulk-field">
-                    {}
-                    <label
-                      htmlFor="bulk-binning"
-                      className="alm-inbox-detail__bulk-label"
-                    >
-                      {m.settings_calmatch_binning()}
-                    </label>
-                    <input
-                      id="bulk-binning"
-                      type="text"
-                      value={bulkBinning}
-                      onChange={(e) => setBulkBinning(e.target.value)}
-                      placeholder={m.inbox_binning_placeholder()}
-                      aria-label={m.inbox_bulk_binning_aria()}
-                      data-testid="bulk-binning"
-                      className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
-                    />
-                  </div>
+                  {/* Field-agnostic bulk properties (FR-044/US11, issue #755):
+                      every OTHER overridable registry property applicable to
+                      this item's frame type — filter/exposureS/binning/gain/
+                      temperatureC/etc, whichever the registry returns. Known
+                      keys reuse their existing translated label; unrecognised
+                      future registry keys fall back to a humanized label so
+                      new properties are reachable without a UI change. */}
+                  {genericBulkFields.map((field) => {
+                    const known = KNOWN_BULK_FIELD_LABELS[field.key];
+                    const label =
+                      known?.label ??
+                      humanizeKey(field.key) +
+                        (field.unit ? ` (${field.unit})` : '');
+                    const testid = known?.testid ?? `bulk-prop-${field.key}`;
+                    const inputType =
+                      field.kind === 'number' || field.kind === 'integer'
+                        ? 'number'
+                        : 'text';
+                    return (
+                      <div
+                        className="alm-inbox-detail__bulk-field"
+                        key={field.key}
+                      >
+                        {}
+                        <label
+                          htmlFor={testid}
+                          className="alm-inbox-detail__bulk-label"
+                          title={field.validation ?? undefined}
+                        >
+                          {label}
+                        </label>
+                        <input
+                          id={testid}
+                          type={inputType}
+                          value={bulkPropValues[field.key] ?? ''}
+                          onChange={(e) =>
+                            handleBulkPropChange(field.key, e.target.value)
+                          }
+                          placeholder={
+                            known?.placeholder ??
+                            m.inbox_unchanged_placeholder()
+                          }
+                          aria-label={label}
+                          data-testid={testid}
+                          className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
+                        />
+                      </div>
+                    );
+                  })}
 
                   <button
                     type="button"

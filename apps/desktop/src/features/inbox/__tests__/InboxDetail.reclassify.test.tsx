@@ -5,19 +5,27 @@
 /**
  * T028 — Vitest tests for multi-select bulk reclassify overrides (T027 UI).
  *
+ * Migrated to `reclassify_v2` (spec 041 R-13/T068, issue #755): InboxDetail no
+ * longer calls the fixed-4-field v1 `inbox.reclassify`. Bulk edits now build
+ * one `InboxReclassifyBulk` entry per filled field (frameType + any
+ * registry-driven property), each carrying `filePaths` = the selection; the
+ * single-file "Needs review" flow sends one `InboxReclassifyFileOverride`
+ * per file with a `properties` map.
+ *
  * Tests:
- * 1. Selecting multiple files + applying a bulk override calls `reclassify`
- *    with one override per selected file carrying only the chosen fields
- *    (e.g. frameType="dark" + filter="Ha"), omitting unset fields.
+ * 1. Selecting multiple files + applying a bulk override calls
+ *    `inboxReclassifyV2` with one `bulk` entry per filled field, each scoped
+ *    to the selected file paths.
  * 2. Selecting none disables / no-ops the bulk apply button (it is only
  *    rendered when >=1 file is selected, so the button is absent).
  * 3. Bulk apply clears selection and input fields on success.
- * 4. Per-file single override flow (existing behaviour) still calls reclassify
- *    correctly — regression guard.
+ * 4. Per-file single override flow (existing behaviour) still calls
+ *    `inboxReclassifyV2` correctly — regression guard.
  *
  * Mocking pattern mirrors InboxDetail.test.tsx:
- * - Mock '@/bindings/index' (commands.inboxReclassify vi.fn()) so the real
- *   store hook picks it up; classifyStore.invalidateAll() is harmless in jsdom.
+ * - Mock '@/bindings/index' (commands.inboxReclassifyV2 / inboxPropertyRegistry
+ *   vi.fn()) so the component's local `useInboxReclassifyV2` hook picks them
+ *   up; queryClient invalidation is harmless in jsdom.
  * - Render InboxDetail directly with fixture props — no InboxPage wrapper
  *   (avoids OOM from the full page tree).
  */
@@ -31,8 +39,8 @@ import {
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// InboxDetail uses the TanStack-Query-backed `useInboxReclassify` hook (spec 042),
-// so every render must be wrapped in a QueryClientProvider.
+// InboxDetail uses TanStack-Query-backed hooks (spec 042 / issue #755), so
+// every render must be wrapped in a QueryClientProvider.
 function render(ui: React.ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -45,18 +53,48 @@ function render(ui: React.ReactElement) {
 import type {
   InboxItemSummary_Serialize as InboxItemSummary,
   InboxClassifyResponse_Serialize as InboxClassifyResponse,
+  PropertyRegistryEntry_Serialize as PropertyRegistryEntry,
 } from '@/bindings';
 
 import { InboxDetail } from '../InboxDetail';
 
-// ── Mock reclassify command ───────────────────────────────────────────────────
+// ── Mock reclassify_v2 + property registry commands ───────────────────────────
 
-const mockInboxReclassify = vi.fn().mockResolvedValue({
-  inboxItemId: 'item-001',
-  updatedType: 'unclassified',
-  frameType: null,
-  remainingUnclassified: 2,
+const mockInboxReclassifyV2 = vi.fn().mockResolvedValue({
+  sourceGroupId: 'item-001',
+  subItems: [],
+  needsReviewCount: 2,
 });
+
+const mockPropertyRegistry: PropertyRegistryEntry[] = [
+  {
+    key: 'filter',
+    kind: 'string',
+    unit: null,
+    sourceHeaders: ['FILTER'],
+    overridable: true,
+    appliesTo: ['light', 'flat'],
+    validation: null,
+  },
+  {
+    key: 'exposureS',
+    kind: 'number',
+    unit: 's',
+    sourceHeaders: ['EXPTIME'],
+    overridable: true,
+    appliesTo: ['light', 'dark', 'flat'],
+    validation: null,
+  },
+  {
+    key: 'binning',
+    kind: 'string',
+    unit: null,
+    sourceHeaders: ['XBINNING'],
+    overridable: true,
+    appliesTo: ['light', 'dark', 'bias', 'flat', 'dark_flat'],
+    validation: null,
+  },
+];
 
 vi.mock('@/bindings/index', async (importOriginal) => {
   const mod = await importOriginal<typeof import('@/bindings/index')>();
@@ -64,9 +102,13 @@ vi.mock('@/bindings/index', async (importOriginal) => {
     ...mod,
     commands: {
       ...mod.commands,
-      inboxReclassify: async (...args: unknown[]) => ({
+      inboxReclassifyV2: async (...args: unknown[]) => ({
         status: 'ok',
-        data: await mockInboxReclassify(...args),
+        data: await mockInboxReclassifyV2(...args),
+      }),
+      inboxPropertyRegistry: () => ({
+        status: 'ok',
+        data: mockPropertyRegistry,
       }),
     },
   };
@@ -119,20 +161,19 @@ type ClassProp = Parameters<typeof InboxDetail>[0]['classification'];
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
+describe('InboxDetail — T027/T028/#755: multi-select bulk reclassify (v2)', () => {
   beforeEach(() => {
-    mockInboxReclassify.mockClear();
-    mockInboxReclassify.mockResolvedValue({
-      inboxItemId: 'item-001',
-      updatedType: 'unclassified',
-      frameType: null,
-      remainingUnclassified: 2,
+    mockInboxReclassifyV2.mockClear();
+    mockInboxReclassifyV2.mockResolvedValue({
+      sourceGroupId: 'item-001',
+      subItems: [],
+      needsReviewCount: 2,
     });
   });
 
   // ── Test 1: select multiple files + apply bulk override ──────────────────
 
-  it('calls reclassify with one override per selected file carrying only filled fields', async () => {
+  it('calls inboxReclassifyV2 with one bulk entry per filled field, scoped to selected files', async () => {
     render(
       <InboxDetail
         item={sampleItem as unknown as ItemProp}
@@ -149,9 +190,10 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     const cbB = screen.getByTestId('reclassify-select-1');
     fireEvent.click(cbB);
 
-    // Bulk controls should now be visible
+    // Bulk controls should now be visible (registry-driven fields render once
+    // `inboxPropertyRegistry` resolves)
     const bulkFrameType = screen.getByTestId('bulk-frame-type');
-    const bulkFilter = screen.getByTestId('bulk-filter');
+    const bulkFilter = await screen.findByTestId('bulk-filter');
 
     // Set frame type to "dark", filter to "Ha" — leave exposure + binning empty
     fireEvent.change(bulkFrameType, { target: { value: 'dark' } });
@@ -161,33 +203,33 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     const applyBtn = screen.getByTestId('bulk-apply-btn');
     fireEvent.click(applyBtn);
 
-    await waitFor(() => expect(mockInboxReclassify).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
 
-    const callArg = mockInboxReclassify.mock.calls[0][0] as {
+    const callArg = mockInboxReclassifyV2.mock.calls[0][0] as {
       inboxItemId: string;
-      overrides: Array<{
-        filePath: string;
-        frameType?: string;
-        filter?: string;
-        exposureS?: number;
-        binning?: string;
-      }>;
+      overrides: unknown[];
+      bulk: Array<{ property: string; value: unknown; filePaths: string[] }>;
     };
 
     expect(callArg.inboxItemId).toBe('item-001');
-    expect(callArg.overrides).toHaveLength(2);
+    expect(callArg.overrides).toEqual([]);
+    expect(callArg.bulk).toHaveLength(2);
 
-    // Both overrides must carry frameType + filter; exposureS + binning must be absent
-    for (const ov of callArg.overrides) {
-      expect(ov.frameType).toBe('dark');
-      expect(ov.filter).toBe('Ha');
-      expect(ov).not.toHaveProperty('exposureS');
-      expect(ov).not.toHaveProperty('binning');
-    }
-
-    // Both files must be present (order may vary)
-    const paths = callArg.overrides.map((o) => o.filePath).sort();
-    expect(paths).toEqual(['file_A.fits', 'file_B.fits']);
+    const byProperty = Object.fromEntries(
+      callArg.bulk.map((b) => [b.property, b]),
+    );
+    expect(byProperty.frameType.value).toBe('dark');
+    expect(byProperty.frameType.filePaths.slice().sort()).toEqual([
+      'file_A.fits',
+      'file_B.fits',
+    ]);
+    expect(byProperty.filter.value).toBe('Ha');
+    expect(byProperty.filter.filePaths.slice().sort()).toEqual([
+      'file_A.fits',
+      'file_B.fits',
+    ]);
+    expect(byProperty.exposureS).toBeUndefined();
+    expect(byProperty.binning).toBeUndefined();
   });
 
   // ── Test 2: no selection → bulk apply button absent ──────────────────────
@@ -242,9 +284,9 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     ).toBe(false);
   });
 
-  // ── Test 4: only selected files appear in overrides ───────────────────────
+  // ── Test 4: only selected files appear in the bulk filePaths ──────────────
 
-  it('only includes selected files in the bulk override, not unselected ones', async () => {
+  it('only includes selected files in the bulk filePaths, not unselected ones', async () => {
     render(
       <InboxDetail
         item={sampleItem as unknown as ItemProp}
@@ -263,14 +305,15 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
 
     fireEvent.click(screen.getByTestId('bulk-apply-btn'));
 
-    await waitFor(() => expect(mockInboxReclassify).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
 
-    const callArg = mockInboxReclassify.mock.calls[0][0] as {
-      overrides: Array<{ filePath: string }>;
+    const callArg = mockInboxReclassifyV2.mock.calls[0][0] as {
+      bulk: Array<{ property: string; filePaths: string[] }>;
     };
 
-    expect(callArg.overrides).toHaveLength(1);
-    expect(callArg.overrides[0].filePath).toBe('frame_0001.fits');
+    expect(callArg.bulk).toHaveLength(1);
+    expect(callArg.bulk[0].property).toBe('frameType');
+    expect(callArg.bulk[0].filePaths).toEqual(['frame_0001.fits']);
   });
 
   // ── Test 5: select-all / deselect-all affordance ─────────────────────────
@@ -293,15 +336,15 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     });
     fireEvent.click(screen.getByTestId('bulk-apply-btn'));
 
-    await waitFor(() => expect(mockInboxReclassify).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
 
-    const callArg = mockInboxReclassify.mock.calls[0][0] as {
-      overrides: Array<{ filePath: string }>;
+    const callArg = mockInboxReclassifyV2.mock.calls[0][0] as {
+      bulk: Array<{ property: string; filePaths: string[] }>;
     };
 
-    // All three unclassified files should appear
-    expect(callArg.overrides).toHaveLength(3);
-    const paths = callArg.overrides.map((o) => o.filePath).sort();
+    // All three unclassified files should appear in the frameType bulk entry
+    expect(callArg.bulk).toHaveLength(1);
+    const paths = callArg.bulk[0].filePaths.slice().sort();
     expect(paths).toEqual([
       'frame_0001.fits',
       'frame_0002.fits',
@@ -309,9 +352,9 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     ]);
   });
 
-  // ── Test 6: exposureS included as number when filled in ──────────────────
+  // ── Test 6: exposureS included as number and binning as string when filled ─
 
-  it('includes exposureS as a number and binning as string when filled', async () => {
+  it('includes exposureS as a number and binning as string in the bulk entries', async () => {
     render(
       <InboxDetail
         item={sampleItem as unknown as ItemProp}
@@ -322,28 +365,32 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
 
     fireEvent.click(screen.getByTestId('reclassify-select-0'));
 
-    fireEvent.change(screen.getByTestId('bulk-exposure-s'), {
-      target: { value: '300' },
-    });
-    fireEvent.change(screen.getByTestId('bulk-binning'), {
-      target: { value: '2x2' },
-    });
+    const bulkExposure = await screen.findByTestId('bulk-exposure-s');
+    const bulkBinning = screen.getByTestId('bulk-binning');
+
+    fireEvent.change(bulkExposure, { target: { value: '300' } });
+    fireEvent.change(bulkBinning, { target: { value: '2x2' } });
 
     fireEvent.click(screen.getByTestId('bulk-apply-btn'));
 
-    await waitFor(() => expect(mockInboxReclassify).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
 
-    const callArg = mockInboxReclassify.mock.calls[0][0] as {
-      overrides: Array<{ exposureS?: number; binning?: string }>;
+    const callArg = mockInboxReclassifyV2.mock.calls[0][0] as {
+      bulk: Array<{ property: string; value: unknown; filePaths: string[] }>;
     };
 
-    expect(callArg.overrides[0].exposureS).toBe(300);
-    expect(callArg.overrides[0].binning).toBe('2x2');
+    const byProperty = Object.fromEntries(
+      callArg.bulk.map((b) => [b.property, b]),
+    );
+    expect(byProperty.exposureS.value).toBe(300);
+    expect(byProperty.exposureS.filePaths).toEqual(['file_A.fits']);
+    expect(byProperty.binning.value).toBe('2x2');
+    expect(byProperty.binning.filePaths).toEqual(['file_A.fits']);
   });
 
   // ── Test 7: regression — single-file per-row override still works ─────────
 
-  it('regression: single-file per-row frame type override calls reclassify with frameType only', async () => {
+  it('regression: single-file per-row frame type override calls inboxReclassifyV2 with a properties map', async () => {
     render(
       <InboxDetail
         item={sampleItem as unknown as ItemProp}
@@ -360,18 +407,23 @@ describe('InboxDetail — T027/T028: multi-select bulk reclassify', () => {
     const applyBtn = screen.getByLabelText('Apply manual overrides');
     fireEvent.click(applyBtn);
 
-    await waitFor(() => expect(mockInboxReclassify).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
 
-    const callArg = mockInboxReclassify.mock.calls[0][0] as {
+    const callArg = mockInboxReclassifyV2.mock.calls[0][0] as {
       inboxItemId: string;
-      overrides: Array<{ filePath: string; frameType: string }>;
+      overrides: Array<{
+        filePath: string;
+        properties: Record<string, unknown>;
+      }>;
+      bulk: unknown[];
     };
 
     expect(callArg.inboxItemId).toBe('item-001');
+    expect(callArg.bulk).toEqual([]);
     expect(callArg.overrides).toHaveLength(1);
     expect(callArg.overrides[0]).toEqual({
       filePath: 'file_A.fits',
-      frameType: 'light',
+      properties: { frameType: 'light' },
     });
   });
 });
