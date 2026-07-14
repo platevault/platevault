@@ -985,6 +985,26 @@ the DB (relationships, decisions, audit) does not.
 - **No multi-machine concurrent write** (SQLite single-writer) — portability is
   move/backup, not live sync.
 
+### Q29–Q31 addendum — portability & cancellation, v1 scope
+
+Deeper edges, all scoped minimal for v1:
+
+- **Root auto-reconnect deferred (A).** New-machine root remap stays **manual
+  (Q5)** in v1 — no root-UUID scan-and-suggest. (A fingerprint/auto-detect
+  reconnect is a post-v1 enhancement.)
+- **Minimal project-UUID marker only (B).** The on-disk envelope marker carries
+  **just a project UUID** (re-association anchor) alongside the notes (Q29);
+  **no per-project self-contained snapshot** in v1 — that would reintroduce Q10's
+  stale-sync problem. Whole-DB **export/import (Q31)** is the portability
+  mechanism; a data-only move (no DB) remains a **lossy rescan-rebuild**
+  re-associated by the UUID marker (decisions/audit not reconstructed).
+- **No rollback (C).** Cancelling a long-running plan-apply (Q30) → **partial-apply
+  + resumable** (idempotent re-apply skips terminal items — the executor already
+  does this: `run.rs` `partially_applied` + `pause_run`/`resume_run`). **No
+  auto-rollback and no optional reverse-plan in v1** — undoing applied moves is
+  itself a risky §I mutation; a reversal, if ever wanted, is a new reviewable
+  plan. This is the standing answer to the **#575 resume-executor gap**.
+
 ---
 
 ## SpecKit iterate map
