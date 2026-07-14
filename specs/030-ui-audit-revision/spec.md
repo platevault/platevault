@@ -242,7 +242,9 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
 - **FR-031**: Each inbox session MUST show OBJECT (or TYPE for calibration),
   DATE, FILTER, and optionally total integration time in the list.
 - **FR-032**: Session detail MUST show a unified property table with per-field
-  source indicator (auto-detected / manual / missing) and confirm checkbox.
+  source indicator (FITS / User / Inferred / Default — the FR-137 pill set;
+  a missing value is a value state per FR-135, not a source) and confirm
+  checkbox.
 - **FR-033**: Auto-detected properties MUST be visually highlighted.
 - **FR-034**: Conflicting properties within a session MUST show an inline
   conflict indicator and a banner stating the session should be split.
@@ -422,9 +424,13 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
   fields MUST NEVER default to 0 (or any other sentinel) to stand in for
   absence; contract DTO fields whose values can be absent MUST be nullable.
 - **FR-137**: One shared value renderer MUST be used everywhere metadata
-  values are displayed — `renderValue(value, {source})`: real value → the
-  value plus its source pill; unresolved → a distinct muted "unresolved"
-  chip, never 0; not-applicable → blank/"—" without any chip.
+  field values are displayed — `renderValue(value, {source, applicability})`,
+  where applicability comes from the field-applicability matrix
+  (data-model.md), never inferred from data absence: real value → the value
+  plus its source pill; unresolved → a distinct muted "unresolved" chip,
+  never 0; not-applicable → blank/"—" without any chip. Composed
+  identifying strings (list meta lines, titles) MUST omit missing tokens
+  entirely — no chip, no sentinel.
 - **FR-138**: Source/provenance indicators MUST only appear for present
   values. Absence MUST NOT be attributed to a source (no "FITS" pill on a
   missing value).
@@ -480,9 +486,10 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
   to the bus without a durable `audit_log_entry` write.
 - **SC-010**: An entity with missing numeric metadata never displays a
   defaulted 0 (e.g., "Gain 0", "Exposure 0s", "Size 0 KB"); 100% of
-  metadata value renderings across Inbox, Sessions, Calibration, Targets,
-  and Archive go through the shared renderer and are distinguishable as
-  real / unresolved / not-applicable.
+  field-value renderings (table cells, property rows, meta lines) across
+  Inbox, Sessions, Calibration, Targets, Projects, and Archive go through
+  the shared renderer and are distinguishable as real / unresolved /
+  not-applicable; composed identifying strings omit missing tokens.
 - **SC-011**: Every detail panel presents at least one information class
   (full metadata, provenance, related entities, history, or actions) that
   is not present in its list row.
@@ -663,7 +670,7 @@ A single unified table (not split across columns). Each row shows:
 |--------|---------|
 | Field name | Property label |
 | Value | Current value (editable inline) |
-| Source | Badge: auto-detected / manual / missing |
+| Source | Badge: FITS / User / Inferred / Default (FR-137 pill set; a missing value renders as the unresolved chip per FR-137 — "missing" is not a source state) |
 | Confirmed | Checkbox — user marks field as verified |
 
 **Fields:**
@@ -1810,7 +1817,15 @@ Three states MUST be distinguishable everywhere a metadata value appears
 | Not-applicable | The field does not apply to this entity | Filter on a dark; set-temp on flats/bias (§2.2) |
 
 Not-applicable is determined by the entity/frame-type model (which fields
-apply to which entity kind), never inferred from data absence.
+apply to which entity kind), never inferred from data absence. The
+authoritative per-entity × per-field applicability matrix lives in
+data-model.md ("Metadata Value States").
+
+A "Default" source pill denotes a modeled/configured fallback recorded
+with its provenance in the data model (e.g., the configured default filter
+"L" for OSC frames, §9.4). Values synthesized during DTO mapping (e.g., a
+fabricated "1x1" binning) are never Default — they are prohibited
+sentinels under FR-136.
 
 **End-to-end null rule (FR-136)**: missing is represented as null/None at
 every hop — extraction → persistence → application layer → contract → UI.
@@ -1825,9 +1840,11 @@ UI null-checks are dead code.
 
 ### 12.2 One Shared Renderer
 
-One shared `renderValue(value, {source})` is the single rendering path for
-metadata values (FR-137), across Inbox, Sessions, Calibration, Targets,
-Archive — everywhere:
+One shared `renderValue(value, {source, applicability})` is the single
+rendering path for metadata field values (FR-137), across Inbox, Sessions,
+Calibration, Targets, Projects, Archive — everywhere. The `applicability`
+input comes from the field-applicability matrix (data-model.md); the
+renderer cannot derive not-applicable from `value` + `source` alone:
 
 | State | Rendering |
 |-------|-----------|
@@ -1837,6 +1854,13 @@ Archive — everywhere:
 
 Source/provenance pills couple to value presence (FR-138): absence is
 never attributed to a source.
+
+Composed identifying strings (list meta lines, card titles, header
+subtitles) cannot host a chip; they omit missing tokens entirely — no
+sentinel, no placeholder — as the calibration list meta line already does
+(`CalibrationPage.tsx:114-115` filters absent tokens before joining).
+SC-010's 100% scope covers field-value renderings: table cells, property
+rows, and meta lines.
 
 ### 12.3 Detail-as-Delta (#619)
 
