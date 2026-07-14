@@ -120,3 +120,41 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Doc-drift / unexpected-but-intended:** Step 5 Naming preview uses a fixed example token (NGC7000) intentionally (StepLayout.tsx:20/47) — not a bug; distinguish from the genuinely-mock steps 3/6 (#599).
 
 **Note:** A COMPREHENSIVE whole-app UX/design review (per-view impeccable analysts + cross-app synthesis) is now running as a follow-on; a consolidated "Comprehensive UX review" report block will arrive for its own section. App left clean, no mutations.
+
+### Comprehensive UX/design review (per-view + cross-app, /impeccable-driven)
+
+**Method:** Phase A live capture (all views, multi-viewport screenshots+DOM+console, non-destructive) → 7 parallel per-view impeccable analysts (inbox, sessions, calibration, targets, projects, settings, shell/archive/setup), each invoking /impeccable + frontend-design skills, reading captures + component/token source → Phase C cross-app synthesizer → Verify pass against the exact app build (commit 7e522c16).
+
+**Verify outcome:** ALL 23 new issues reproduce at the exact build; 0 false-positives; 0 already-fixed-by-#530. (First 5 analysts read source ~12 commits stale, missing #530 + AGPL line-shifts — verify corrected 9 file:line refs via comments, confirmed 8 exact. No bad issues resulted.)
+
+**New issues filed (23), by view:**
+
+| View | Issue | Category |
+|------|-------|----------|
+| Inbox | #789 | raw unrounded float exposure |
+| Inbox | #791 | status-bar "Mixed" bucket ≠ mixed-folder concept, misleads triage |
+| Sessions | #798 | list "Integration" col shows raw exposure not total |
+| Sessions | #800 | SessionFrameInventory hand-rolls settings class vs sibling's shared Section |
+| Sessions | #801 | raw backend protection string in Pill |
+| Calibration | #788 | Camera & Instrument group-by are identical dimension |
+| Targets | #792 | Opposition col = detail "Best date": same value two labels + truncation clip |
+| Targets | #796 | raw catalog cross-IDs unlabeled in header vs badged below |
+| Projects | #790 | orphaned Edit-pane Notes field never displayed → user silently loses input |
+| Projects | #793 | non-pluralized "1 sources" |
+| Projects | #795 | dead "Save draft" button |
+| Settings | #799 | pane selection not URL-synced → root of dead deep-links #735/#626 |
+| Settings | #802 | RestoreDefaults missing on 3 panes |
+| Settings | #803 | Audit Log raw UUID entity |
+| Shell | #794 | Warm Clay theme not applying on nav |
+| Shell | #797 | Sidebar nav lacks :focus-visible |
+| Cross-app | #808 | static-plural i18n — StatusBar+Targets+Projects; ICU plural convention already exists, unused |
+| Cross-app | #809 | raw entity-id→name; no shared resolver; Projects/Audit-log/Calibration |
+| Cross-app | #810 | --alm-focus-ring token misused as outline-color in 3 selectors → focus rings silently never render |
+| Cross-app | #811 | FITS formatter consolidation — lib/format.ts never absorbed exposure/temp/gain |
+| Cross-app | #812 | EmptyState.action prop unused app-wide |
+| Cross-app | #813 | .alm-session-detail2 JSX hand-copied into 4 files instead of a component |
+| New (quick pass) | #783 | "From target context" label fabricated from first word of typed project name |
+
+**Ruled out after source check (not filed):** unstyled-overlay beyond palette (ConfirmOverlay now wraps Modal — commented #640 for live re-verify); notes-fragmentation is Projects-only; no list/detail label drift beyond Targets.
+
+**Design-system health:** Shared-component adoption is broadly STRONG (ListPageLayout/DetailPanel/PropertyTable/Table/SortHeader/Modal/FilterToolbar reused, token-only CSS, few clones). Standout gaps: CommandPalette fully unstyled (#581 dupe), and the cross-app consistency issues above.
