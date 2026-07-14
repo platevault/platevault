@@ -10,8 +10,10 @@
 //! calibration master and what base frame type it carries.
 //!
 //! The public entry point is [`detect_master`]: it runs each registered
-//! detector in order and returns the first match (first-wins). Callers that
-//! only need the result do not need to know about individual detectors.
+//! detector in order. A detector whose determination rests on authoritative
+//! header evidence (`STACKCNT`/`NCOMBINE`) wins regardless of registry order;
+//! otherwise the first `Some` result wins. Callers that only need the result
+//! do not need to know about individual detectors.
 //!
 //! Adding support for a new capture/processing tool requires only:
 //! 1. Implementing `MasterDetector` in a new module.
@@ -59,6 +61,16 @@ pub struct MasterDetection {
     pub is_master: bool,
     /// Identifier of the detector that produced this result (provenance).
     pub detector: &'static str,
+    /// Whether `is_master` was determined from an authoritative header
+    /// integration count (`STACKCNT`/`NCOMBINE`) rather than from a file
+    /// name or path naming convention.
+    ///
+    /// Header counts are hard facts read from the FITS/XISF header; naming
+    /// conventions are inference and can be wrong (renamed files, generic
+    /// tool defaults). [`detect_master`] lets decisive header evidence from
+    /// any registered detector outrank a naming-only (or no-evidence) match
+    /// returned by an earlier detector in the registry (issue #753).
+    pub stack_count_evidence: bool,
 }
 
 /// Trait implemented by each per-tool detector.
@@ -76,25 +88,37 @@ pub trait MasterDetector: Send + Sync {
 
 /// Return the ordered list of registered detectors.
 ///
-/// Detectors are tried in order; the first `Some` result wins. Add new
-/// detectors at the end to keep the existing priority unchanged.
+/// Detectors are tried in order; absent decisive header evidence (see
+/// [`detect_master`]), the first `Some` result wins. Add new detectors at the
+/// end to keep the existing priority unchanged.
 #[must_use]
 pub fn detectors() -> Vec<Box<dyn MasterDetector>> {
     vec![Box::new(PixInsightDetector), Box::new(SirilDetector)]
 }
 
-/// Run all registered detectors in priority order and return the first match.
+/// Run all registered detectors and return the strongest match.
+///
+/// A result backed by decisive header evidence
+/// (`MasterDetection::stack_count_evidence`) wins immediately, even if a
+/// weaker (naming-convention or no-evidence) result was already produced by
+/// an earlier detector in the registry — header facts must not be shadowed by
+/// registry ordering (issue #753). When no detector reports header evidence,
+/// the first `Some` result wins, preserving prior behaviour.
 ///
 /// Returns `None` only when no detector could determine even the base frame
 /// type from the supplied input.
 #[must_use]
 pub fn detect_master(input: &DetectInput<'_>) -> Option<MasterDetection> {
+    let mut fallback = None;
     for detector in detectors() {
         if let Some(result) = detector.detect(input) {
-            return Some(result);
+            if result.stack_count_evidence {
+                return Some(result);
+            }
+            fallback.get_or_insert(result);
         }
     }
-    None
+    fallback
 }
 
 // ── Shared base-frame-type parser ─────────────────────────────────────────────
@@ -210,5 +234,75 @@ mod tests {
     fn path_looks_like_master_negative() {
         assert!(!path_looks_like_master("dark_001.fit", "calibration/darks/"));
         assert!(!path_looks_like_master("light_001.fits", "lights/"));
+    }
+
+    // ── Registry-level tests (detect_master) ─────────────────────────────────
+    //
+    // These exercise the full registry, not a single detector, and
+    // deliberately avoid "master"/"_stacked" in fixture names so the naming
+    // heuristic cannot mask a registry-ordering bug (issue #753).
+
+    /// Issue #753 counter-example (spec 040 SC-001 scenario 2): a Siril
+    /// master renamed away from any "master"/"_stacked" convention must
+    /// still be detected via STACKCNT, even though PixInsightDetector runs
+    /// first in the registry and would otherwise win with a false negative.
+    #[test]
+    fn detect_master_prefers_stackcnt_evidence_over_earlier_registry_entry() {
+        let input = DetectInput {
+            imagetyp: Some("DARK"),
+            stack_count: Some(30),
+            file_name: "dark_030.fits",
+            rel_path: "calibration/darks/",
+        };
+        let result = detect_master(&input).unwrap();
+        assert_eq!(result.frame_type, FrameType::Dark);
+        assert!(result.is_master, "STACKCNT=30 must win even without 'master' in the name/path");
+        assert_eq!(result.detector, "siril");
+    }
+
+    /// A decisive STACKCNT=1 (definitely not stacked) must also win over an
+    /// earlier detector's naming-based positive guess. The `IMAGETYP` text
+    /// itself says "Master Dark" (PixInsight's naming convention) but
+    /// neither the file name nor path carries a "master"/"_stacked" signal,
+    /// isolating the registry-ordering decision from Siril's own path
+    /// heuristic.
+    #[test]
+    fn detect_master_prefers_stackcnt_negative_over_earlier_naming_positive() {
+        let input = DetectInput {
+            imagetyp: Some("Master Dark"),
+            stack_count: Some(1),
+            file_name: "dark_001.fits",
+            rel_path: "calibration/darks/",
+        };
+        let result = detect_master(&input).unwrap();
+        assert!(!result.is_master, "decisive STACKCNT=1 must override a naming-only positive");
+        assert_eq!(result.detector, "siril");
+    }
+
+    /// With no header evidence from any detector, first-registered
+    /// (PixInsight) still wins — preserves prior behaviour.
+    #[test]
+    fn detect_master_falls_back_to_first_match_without_header_evidence() {
+        let input = DetectInput {
+            imagetyp: Some("Master Dark"),
+            stack_count: None,
+            file_name: "masterDark.xisf",
+            rel_path: "masterDarks/",
+        };
+        let result = detect_master(&input).unwrap();
+        assert!(result.is_master);
+        assert_eq!(result.detector, "pixinsight");
+    }
+
+    /// No detector can determine anything → None.
+    #[test]
+    fn detect_master_returns_none_when_no_detector_matches() {
+        let input = DetectInput {
+            imagetyp: None,
+            stack_count: None,
+            file_name: "readme.txt",
+            rel_path: "",
+        };
+        assert!(detect_master(&input).is_none());
     }
 }
