@@ -30,6 +30,8 @@
 use std::path::PathBuf;
 
 use app_core_targets::metadata_cache::cached_extract;
+use audit::bus::EventBus;
+use audit::event_bus::{InventoryConfirmed, Source, TOPIC_INVENTORY_CONFIRMED};
 use contracts_core::first_run::{OrganizationState, SourceKind};
 use contracts_core::settings::PatternPart as ContractPatternPart;
 use metadata_core::v1_normalization_table;
@@ -42,7 +44,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
-use app_core_errors::db_internal_ctx;
+use app_core_errors::{bus_err, db_internal_ctx};
 use contracts_core::error_code::ErrorCode;
 use contracts_core::{ContractError, ErrorSeverity};
 
@@ -110,6 +112,7 @@ pub struct ResolvedDestination {
 #[allow(clippy::too_many_lines)]
 pub async fn confirm(
     pool: &SqlitePool,
+    bus: &EventBus,
     req: ConfirmRequest,
 ) -> Result<ConfirmResponse, ContractError> {
     // 1. Load item
@@ -526,6 +529,24 @@ pub async fn confirm(
 
     inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open").await.ok();
 
+    // 14. Publish `inventory.confirmed` so the guided flow's `inbox.confirm_first`
+    // step can auto-advance (spec 010; discovered by the guided-events lane #722
+    // — this use case previously took no EventBus at all).
+    let confirmed_at = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    bus.publish(
+        TOPIC_INVENTORY_CONFIRMED,
+        Source::User,
+        InventoryConfirmed {
+            inbox_item_id: req.inbox_item_id.clone(),
+            plan_id: plan_id.clone(),
+            at: confirmed_at,
+        },
+    )
+    .await
+    .map_err(bus_err)?;
+
     Ok(ConfirmResponse {
         plan_id,
         plan_state: "ready_for_review".to_owned(),
@@ -778,11 +799,16 @@ pub(crate) fn build_metadata_bundle(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use audit::bus::EventBus;
     use persistence_db::repositories::inbox::{
         InsertEvidence, InsertInboxItem, UpsertClassification,
     };
     use persistence_db::Database;
     use std::io::Write;
+
+    fn make_bus(db: &Database) -> EventBus {
+        EventBus::with_pool(db.pool().clone())
+    }
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();
@@ -1004,6 +1030,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         setup_classified_item(
             &db,
             "item-c1",
@@ -1016,6 +1044,7 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-c1".to_owned(),
                 content_signature: "sig-abc".to_owned(),
@@ -1065,6 +1094,7 @@ mod tests {
             // Fresh DB per case: setup_classified_item hardcodes the
             // (root_id, relative_path) key, so it supports one item per DB.
             let db = test_db().await;
+            let bus = make_bus(&db);
             setup_classified_item(
                 &db,
                 "item-dd",
@@ -1077,6 +1107,7 @@ mod tests {
 
             let resp = confirm(
                 db.pool(),
+                &bus,
                 ConfirmRequest {
                     inbox_item_id: "item-dd".to_owned(),
                     content_signature: "sig-dd".to_owned(),
@@ -1148,6 +1179,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         let item_id = "item-mixed-split";
         let sig = "sig-mixed";
 
@@ -1206,6 +1239,7 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: item_id.to_owned(),
                 content_signature: sig.to_owned(),
@@ -1308,6 +1342,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         setup_typed_item(
             &db,
             "item-single",
@@ -1322,6 +1358,7 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-single".to_owned(),
                 content_signature: "sig-single".to_owned(),
@@ -1346,6 +1383,8 @@ mod tests {
         write_fits(tmp.path(), "frame_000.fits", "Light Frame", None, None, None);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         setup_classified_item(
             &db,
             "item-stale",
@@ -1358,6 +1397,7 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-stale".to_owned(),
                 content_signature: "sig-OLD".to_owned(),
@@ -1385,6 +1425,8 @@ mod tests {
         write_fits(tmp.path(), "frame_000.fits", "Light Frame", None, None, None);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         setup_classified_item(
             &db,
             "item-ambig",
@@ -1397,6 +1439,7 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-ambig".to_owned(),
                 content_signature: "sig-x".to_owned(),
@@ -1432,6 +1475,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         setup_classified_item(
             &db,
             "item-dup",
@@ -1445,6 +1490,7 @@ mod tests {
         // First confirm
         confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-dup".to_owned(),
                 content_signature: "sig-dup".to_owned(),
@@ -1459,6 +1505,7 @@ mod tests {
         // Second confirm should fail
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-dup".to_owned(),
                 content_signature: "sig-dup".to_owned(),
@@ -1504,6 +1551,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_org_state(&db, "root-1", "light_frames", "organized").await;
         setup_classified_item(
             &db,
@@ -1517,6 +1566,7 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-org".to_owned(),
                 content_signature: "sig-org".to_owned(),
@@ -1559,6 +1609,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         // Non-inbox unorganized source → in-place move under its own root (no
         // destination-root selection). Inbox-source routing is covered by the
         // dedicated US8 tests below.
@@ -1575,6 +1627,7 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-unorg".to_owned(),
                 content_signature: "sig-unorg".to_owned(),
@@ -1619,6 +1672,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         // No registered_sources row inserted for root-1.
         setup_classified_item(
             &db,
@@ -1632,6 +1687,7 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-absent".to_owned(),
                 content_signature: "sig-absent".to_owned(),
@@ -1687,6 +1743,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib/lights", "unorganized").await;
         setup_classified_item(
             &db,
@@ -1700,6 +1758,7 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-np".to_owned(),
                 content_signature: "sig-np".to_owned(),
@@ -1737,6 +1796,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
         register_source_full(&db, "root-lights", "light_frames", "/lib/lights", "unorganized")
             .await;
@@ -1753,6 +1814,7 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-1cand".to_owned(),
                 content_signature: "sig-1c".to_owned(),
@@ -1792,6 +1854,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
         register_source_full(&db, "root-lib-a", "light_frames", "/a", "unorganized").await;
         register_source_full(&db, "root-lib-b", "light_frames", "/b", "unorganized").await;
@@ -1814,17 +1878,17 @@ mod tests {
         };
 
         // Absent selection → blocking error listing both candidates.
-        let err = confirm(db.pool(), mk(None)).await.unwrap_err();
+        let err = confirm(db.pool(), &bus, mk(None)).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::InboxDestinationRootRequired);
         let candidates = err.details.0.get("candidates").and_then(|c| c.as_array()).unwrap();
         assert_eq!(candidates.len(), 2, "both library roots offered as candidates");
 
         // Invalid selection (an id that is not a candidate) → rejected.
-        let err = confirm(db.pool(), mk(Some("root-inbox".to_owned()))).await.unwrap_err();
+        let err = confirm(db.pool(), &bus, mk(Some("root-inbox".to_owned()))).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::InboxInvalidDestinationRoot);
 
         // Valid selection → plan lands under the chosen root.
-        let resp = confirm(db.pool(), mk(Some("root-lib-b".to_owned()))).await.unwrap();
+        let resp = confirm(db.pool(), &bus, mk(Some("root-lib-b".to_owned()))).await.unwrap();
         assert_eq!(resp.destinations.len(), 1);
         assert_eq!(resp.destinations[0].to_root_id, "root-lib-b");
     }
@@ -1844,6 +1908,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-inbox", "inbox", "/inbox", "unorganized").await;
         // Only a calibration root exists; a light has no light_frames destination.
         register_source_full(&db, "root-cal", "calibration", "/cal", "unorganized").await;
@@ -1859,6 +1925,7 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-0cand".to_owned(),
                 content_signature: "sig-0c".to_owned(),
@@ -1886,6 +1953,8 @@ mod tests {
         write_fits_exp(tmp.path(), "dark.fits", "Dark Frame", None, None, None, 300.0);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-1", "calibration", "/cal", "unorganized").await;
         setup_classified_item(
             &db,
@@ -1899,6 +1968,7 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-cal-dark".to_owned(),
                 content_signature: "sig-cal-dark".to_owned(),
@@ -1927,6 +1997,8 @@ mod tests {
         write_fits_exp(tmp.path(), "master_flat.fits", "Flat Frame", None, Some("Ha"), None, 5.0);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-2", "calibration", "/cal", "unorganized").await;
         inbox_repo::insert_inbox_item(
             db.pool(),
@@ -1973,6 +2045,7 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-cal-master".to_owned(),
                 content_signature: "sig-cal-master".to_owned(),
@@ -2001,6 +2074,8 @@ mod tests {
         write_fits(tmp.path(), "light_001.fits", "Light Frame", Some("M42"), Some("Ha"), None);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
         setup_classified_item(
             &db,
@@ -2014,6 +2089,7 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-gate".to_owned(),
                 content_signature: "sig-gate".to_owned(),
@@ -2046,6 +2122,8 @@ mod tests {
         write_fits(tmp.path(), "light_001.fits", "Light Frame", Some("M42"), Some("Ha"), None);
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
 
         // Insert the inbox item with group_key = SENTINEL_NEEDS_REVIEW directly.
@@ -2089,6 +2167,7 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: item_id.to_owned(),
                 content_signature: sig.to_owned(),
@@ -2129,6 +2208,8 @@ mod tests {
         );
 
         let db = test_db().await;
+
+        let bus = make_bus(&db);
         register_source_full(&db, "root-1", "light_frames", "/lib", "unorganized").await;
         setup_classified_item(
             &db,
@@ -2144,6 +2225,7 @@ mod tests {
         // not SENTINEL_NEEDS_REVIEW) must pass the sentinel gate.
         let result = confirm(
             db.pool(),
+            &bus,
             ConfirmRequest {
                 inbox_item_id: "item-t070-ok".to_owned(),
                 content_signature: "sig-t070-ok".to_owned(),
