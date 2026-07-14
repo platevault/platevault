@@ -302,17 +302,75 @@ field carries one of three modeled states (FR-135):
 types → nullable contract DTO fields → `null` in the UI. No hop may
 substitute a sentinel (0, empty string, epoch date) for absence.
 
-Known offender to fix first: `CalibrationFingerprint.exposure_s` / `gain`
-are non-optional `f64` in the contract
-(`crates/contracts/core/src/calibration.rs:96,99`), forcing the app layer
-to collapse the nullable persistence row
-(`crates/persistence/db/src/repositories/q_calibration.rs:93-94`) with
-`unwrap_or(0.0)` (`crates/app/calibration/src/matching.rs:739,741,794,796`)
-even though the extraction model is already `Option`-typed
-(`crates/metadata/core/src/lib.rs:221,223`). These fields become nullable;
-a repo-wide sweep covers other absence-capable non-optional numerics
-(e.g., size fields defaulted via `unwrap_or(0)`).
+Known offenders to fix first:
 
-Not-applicable examples from the existing field model: filter on darks and
-bias, set temperature on flats and bias (spec §2.2), `{object}` on
-calibration frames (spec §9.5).
+1. **Fingerprint gain/exposure** — `CalibrationFingerprint.exposure_s` /
+   `gain` are non-optional `f64` in the contract
+   (`crates/contracts/core/src/calibration.rs:96,99`), forcing the app
+   layer to collapse the nullable persistence row
+   (`crates/persistence/db/src/repositories/q_calibration.rs:93-94`) with
+   `unwrap_or(0.0)`
+   (`crates/app/calibration/src/matching.rs:739,741,794,796`) even though
+   the extraction model is already `Option`-typed
+   (`crates/metadata/core/src/lib.rs:221,223`). These fields become
+   nullable.
+2. **Master size** — the zero lives in SQL, not the mapping layer:
+   `calibration_master_view` hardcodes `0 AS size_bytes`
+   (`crates/persistence/db/migrations/0041_calibration_fingerprint_indices.sql:51`,
+   with a comment admitting no size column exists), flowing through the
+   non-nullable row field
+   (`crates/persistence/db/src/repositories/q_calibration.rs:92`
+   `size_bytes: i64`) into the non-optional contract fields
+   (`crates/contracts/core/src/calibration.rs` `CalibrationMaster.size_bytes`
+   / `MasterDetail.size_bytes: u64`). The `unwrap_or(0)` at
+   `matching.rs:748,803` is only a sign-conversion fallback — removing it
+   changes nothing. Fix requires a **view-redefinition migration** (emit
+   NULL or a computed size), `Option<i64>` on the row, and nullable
+   `size_bytes` on both contract structs. Migration version: claim the
+   next free number at implementation-merge time; reviewer duplicate-checks
+   version numbers (same rule as Q15/Q27 iterations).
+3. **String and identity sentinels at the same mapping sites** — FR-136
+   prohibits any absence-synthesizing fallback, not just numeric zeros:
+   fabricated binning `"1x1"` (`matching.rs:742,797`), empty-string camera
+   (`:737,792`), self-referential `source_session_id` defaulted to the
+   master's own id (`:745,800`), and `COALESCE` variants in SQL. The
+   repo-wide sweep targets any `unwrap_or*`/`COALESCE` that synthesizes a
+   value for absent metadata, numeric or string.
+
+### Field-Applicability Matrix
+
+The authoritative per-entity × per-field applicability source (FR-135,
+FR-137's `applicability` input). Derived from spec §2.2 (Inbox property
+table field visibility) and §4.2 (calibration matching fingerprint),
+extended to masters; T131/T132 read applicability from here, never infer
+it from data absence. ✓ = applicable (a missing value renders as
+unresolved); — = not-applicable (blank/"—", no chip).
+
+| Field | Light | Dark | Flat | Bias |
+|-------|-------|------|------|------|
+| Target / Object | ✓ | — | — | — |
+| Frame type | ✓ | ✓ | ✓ | ✓ |
+| Filter | ✓ | — | ✓ | — |
+| Date / Night | ✓ | ✓ | ✓ | ✓ |
+| Camera | ✓ | ✓ | ✓ | ✓ |
+| Telescope / Optical train | ✓ | — | ✓ | — |
+| Focal length | ✓ | — | ✓ | — |
+| Exposure time | ✓ | ✓ | ✓ | — |
+| Gain | ✓ | ✓ | ✓ | ✓ |
+| Offset | ✓ | ✓ | ✓ | ✓ |
+| Binning | ✓ | ✓ | ✓ | ✓ |
+| Sensor mode | ✓ | ✓ | ✓ | ✓ |
+| Set temperature | ✓ | ✓ | — | — |
+| Observer / Location | ✓ | — | — | — |
+| Timezone | ✓ | — | — | — |
+
+Columns apply to both sub-frame sets and masters of each calibration kind.
+Masters additionally carry the provenance fields of spec §4.2 (file hash,
+created date, created-in tool, source session, age, size) — applicable to
+all master kinds. Surfaces that render these entities inherit the matrix:
+Sessions detail = Light column; Calibration detail = the entity's kind
+column; Targets renders target-identity fields (spec §5.4, always
+applicable) plus session rows per the Light column; Projects and Archive
+render whatever entity kind an item is, using that kind's column.
+`{object}` on calibration naming patterns (spec §9.5) follows the
+Target/Object row.

@@ -153,12 +153,16 @@ ones tightens:
 
 ## Missing-Value Semantics (iteration 2026-07-14, Q16 / #620)
 
-No new commands are required by this iteration, but DTO shapes tighten:
+No new commands are required by this iteration. DTO shapes loosen —
+fields that could never be null become nullable (a compatible, widening
+change for consumers):
 
 - Any DTO field whose value can be absent at extraction MUST be declared
-  nullable. First fix: `CalibrationFingerprint.exposureS` / `gain`
-  (currently non-optional `number`, forcing the backend to substitute 0
-  for missing metadata).
+  nullable. First fixes: `CalibrationFingerprint.exposureS` / `gain` and
+  `CalibrationMaster.sizeBytes` / `MasterDetail.sizeBytes` (currently
+  non-optional `number`, forcing the backend to substitute 0 for missing
+  metadata — the size zero originates in the SQL view, see
+  data-model.md).
 - Returning a sentinel value (0, empty string) in place of a missing value
   is prohibited — missing crosses the boundary as `null`.
 - UIs distinguish unresolved from not-applicable from the model

@@ -6,6 +6,19 @@ change_request: "Formalize grilling decision Q16 (docs/development/ui-campaign-g
 scope: "Feature-wide (new requirement block: missing-value semantics + detail-panel content model)"
 ---
 
+> **Fix round (2026-07-14, critique gate on PR #781)**: size zero-collapse
+> re-attributed to the SQL view chain
+> (`0041_calibration_fingerprint_indices.sql:51` → `q_calibration.rs:92` →
+> non-optional `size_bytes: u64`) with a view-redefinition migration added
+> to T129; authoritative field-applicability matrix added to data-model.md;
+> T129 sweep broadened to string/identity sentinels; renderer signature
+> gained an `applicability` input and SC-010 was scoped to field-value
+> renderings with a composed-string omit rule; §2.2/FR-032 badge vocabulary
+> aligned to the FR-137 pill set; Projects added to the surface list;
+> Phase-H independence conditioned on shipped panels; Default-pill
+> semantics defined in §12.1; contracts wording corrected to loosening;
+> chip copy flagged for i18n; matching-regression test added to T134.
+
 ## Change Summary
 
 Add missing-value-semantics and detail-as-delta requirements (grilling Q16,

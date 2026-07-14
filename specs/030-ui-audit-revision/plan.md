@@ -66,9 +66,15 @@ lost mid-path today. Extraction preserves it
 `fp_gain`/`fp_exposure_s: Option<f64>`), but the application layer
 collapses missing to 0
 (`crates/app/calibration/src/matching.rs:739,741,794,796` —
-`unwrap_or(0.0)`; size at `:748,803`) and the contract cannot carry
-absence (`crates/contracts/core/src/calibration.rs:96,99` —
-`exposure_s`/`gain` non-optional `f64`). UI null-checks are therefore dead
+`unwrap_or(0.0)`) and the contract cannot carry absence
+(`crates/contracts/core/src/calibration.rs:96,99` — `exposure_s`/`gain`
+non-optional `f64`). Master size is zeroed one layer deeper: the SQL view
+hardcodes `0 AS size_bytes`
+(`crates/persistence/db/migrations/0041_calibration_fingerprint_indices.sql:51`)
+through a non-nullable row (`q_calibration.rs:92`) into non-optional
+`CalibrationMaster`/`MasterDetail.size_bytes: u64`; `matching.rs:748,803`
+is only a sign-conversion fallback, so fixing size requires a
+view-redefinition migration (see data-model.md). UI null-checks are therefore dead
 code (`apps/desktop/src/features/calibration/MastersTable.tsx:116,126`),
 and the shared `PropertyTable` renders `null` as `—` for both missing and
 not-applicable while showing the source badge regardless of value presence
@@ -294,7 +300,9 @@ Each phase is independently testable and deployable. Phase A must come first
 as it provides the shared components used by all subsequent phases. Phase G
 depends only on existing audit plumbing and is independent of B–F. Phase H
 depends on the shipped metadata/contract plumbing and the shared components
-from Phase A only, and is independent of B–G.
+from Phase A only, and is independent of B–G *as applied to the shipped
+UI*: T133 reworks detail panels that Phases D/E build, so if any B–F panel
+work is still in flight, T133 lands after it.
 
 ---
 
