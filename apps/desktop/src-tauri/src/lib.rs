@@ -1027,6 +1027,9 @@ pub fn run_app(
     //  - spec 019: log forwarder → pushes audit + diagnostic entries to the
     //    webview `log:entry` channel. Forward at the most permissive level; the
     //    client filters by level.
+    //  - spec 010 (#722): guided-flow event forwarder → re-emits
+    //    inventory.confirmed/project.created/tool.launch as named events so
+    //    `eventBridge.ts` can advance the coach on real domain completions.
     app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
     crate::commands::log::start_log_forwarder(
         app.handle().clone(),
@@ -1034,6 +1037,7 @@ pub fn run_app(
         contracts_core::log::LogLevel::Debug,
         pool.clone(),
     );
+    crate::commands::guided::start_guided_event_forwarder(app.handle().clone(), &bus);
     // spec 024: manifest auto-generation on workflow-run completion.
     // The JoinHandle is intentionally dropped — the task runs independently.
     drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));
