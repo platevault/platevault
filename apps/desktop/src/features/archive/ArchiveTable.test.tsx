@@ -15,7 +15,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { ArchiveTable, DEFAULT_ARCHIVE_SORT } from './ArchiveTable';
 import type { ArchiveEntry } from '@/bindings/index';
 
-function makeEntry(overrides: Partial<ArchiveEntry> & { id: string }): ArchiveEntry {
+function makeEntry(
+  overrides: Partial<ArchiveEntry> & { id: string },
+): ArchiveEntry {
   return {
     name: 'NGC 7000 · HOO (v1)',
     entityType: 'project',

@@ -54,7 +54,9 @@ describe('PropertyTable — spec-030 Q16 (#620, #619)', () => {
   });
 
   it('4. default applicability (omitted) treats null as unresolved, not blank', () => {
-    const props: PropertyDef[] = [{ key: 'camera', label: 'Camera', value: null }];
+    const props: PropertyDef[] = [
+      { key: 'camera', label: 'Camera', value: null },
+    ];
     render(<PropertyTable mode="view" properties={props} />);
     expect(screen.getByTestId('unresolved-chip')).toBeDefined();
   });

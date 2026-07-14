@@ -139,7 +139,9 @@ function tempCell(m: CalibrationMaster): ReactNode {
 
 /** Gain applies to every master kind. */
 function gainCell(m: CalibrationMaster): ReactNode {
-  return renderValue(m.fingerprint?.gain ?? null, { applicability: 'applicable' });
+  return renderValue(m.fingerprint?.gain ?? null, {
+    applicability: 'applicable',
+  });
 }
 
 /** Binning applies to every master kind. */
@@ -153,7 +155,9 @@ function binningCell(m: CalibrationMaster): ReactNode {
 
 /** Camera applies to every master kind. */
 function cameraCell(m: CalibrationMaster): ReactNode {
-  return renderValue(m.fingerprint?.camera ?? null, { applicability: 'applicable' });
+  return renderValue(m.fingerprint?.camera ?? null, {
+    applicability: 'applicable',
+  });
 }
 
 /**

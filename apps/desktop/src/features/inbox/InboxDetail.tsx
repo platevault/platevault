@@ -119,13 +119,18 @@ function FileInspector({ file }: { file: InboxFileMetadata | null }) {
     [
       {
         label: m.inbox_field_instrument(),
-        value: renderValue(file.instrume ?? null, { applicability: 'applicable' }),
+        value: renderValue(file.instrume ?? null, {
+          applicability: 'applicable',
+        }),
         testid: 'inspector-instrume',
       },
       {
         label: m.inbox_field_telescope(),
         value: renderValue(file.telescop ?? null, {
-          applicability: fieldApplicability(file.frameTypeEffective, 'telescope'),
+          applicability: fieldApplicability(
+            file.frameTypeEffective,
+            'telescope',
+          ),
         }),
         testid: 'inspector-telescop',
       },
@@ -141,12 +146,16 @@ function FileInspector({ file }: { file: InboxFileMetadata | null }) {
       },
       {
         label: m.inbox_field_stack_count(),
-        value: renderValue(file.stackCount ?? null, { applicability: 'applicable' }),
+        value: renderValue(file.stackCount ?? null, {
+          applicability: 'applicable',
+        }),
         testid: 'inspector-stackcount',
       },
       {
         label: m.inbox_field_raw_imagetyp(),
-        value: renderValue(file.imageTyp ?? null, { applicability: 'applicable' }),
+        value: renderValue(file.imageTyp ?? null, {
+          applicability: 'applicable',
+        }),
         testid: 'inspector-imagetyp',
       },
     ];
@@ -428,7 +437,9 @@ export function InboxDetail({
       // doesn't apply to THIS row's type renders blank while a genuinely
       // missing-but-applicable value renders the unresolved chip — never the
       // same dash for both.
-      type: renderValue(f.frameTypeEffective ?? null, { applicability: 'applicable' }),
+      type: renderValue(f.frameTypeEffective ?? null, {
+        applicability: 'applicable',
+      }),
       filter: renderValue(f.filter ?? null, {
         applicability: fieldApplicability(f.frameTypeEffective, 'filter'),
       }),
@@ -539,7 +550,8 @@ export function InboxDetail({
     {
       key: 'temp',
       label: m.settings_calmatch_sensor_temp(),
-      value: repFile?.temperatureC != null ? `${repFile.temperatureC} °C` : null,
+      value:
+        repFile?.temperatureC != null ? `${repFile.temperatureC} °C` : null,
       source: 'fits',
       applicability: fieldApplicability(itemFrameType, 'setTemp'),
     },

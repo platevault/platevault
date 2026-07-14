@@ -261,7 +261,9 @@ describe('MastersTable (spec 043 §4)', () => {
     });
     render(<MastersTable {...baseProps} masters={[flat]} />);
     const row = screen.getByTestId('master-row-flat-noflt');
-    expect(within(row).getAllByTestId('unresolved-chip').length).toBeGreaterThan(0);
+    expect(
+      within(row).getAllByTestId('unresolved-chip').length,
+    ).toBeGreaterThan(0);
   });
 
   it('13. exposure on a bias master (not-applicable) renders blank, never the unresolved chip', () => {

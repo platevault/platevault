@@ -28,7 +28,9 @@ vi.mock('@/bindings/index', () => ({
   },
 }));
 
-function makeMaster(overrides: Partial<CalibrationMaster> = {}): CalibrationMaster {
+function makeMaster(
+  overrides: Partial<CalibrationMaster> = {},
+): CalibrationMaster {
   return {
     id: MASTER_ID,
     kind: 'bias',
@@ -53,7 +55,10 @@ beforeEach(() => {
     status: 'ok',
     data: { usedBySessionIds: [], compatibleSessions: [] },
   } as never);
-  vi.mocked(commands.sessionsList).mockResolvedValue({ status: 'ok', data: [] } as never);
+  vi.mocked(commands.sessionsList).mockResolvedValue({
+    status: 'ok',
+    data: [],
+  } as never);
   vi.mocked(commands.calibrationMatchSuggest).mockResolvedValue({
     status: 'ok',
     data: undefined,
@@ -85,7 +90,12 @@ describe('MasterDetail — missing-value semantics (Q16 / #620)', () => {
       <MasterDetail
         master={makeMaster({
           kind: 'dark',
-          fingerprint: { camera: 'ASI2600MM', exposureS: 300, binning: '1x1', gain: null },
+          fingerprint: {
+            camera: 'ASI2600MM',
+            exposureS: 300,
+            binning: '1x1',
+            gain: null,
+          },
         })}
         prefillSuggestion={false}
         agingThresholdDays={365}

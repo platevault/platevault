@@ -27,13 +27,21 @@ import {
 
 describe('RenderValue — spec-030 Q16 (#620, #619)', () => {
   it('1. real 0 renders as "0" with its source pill', () => {
-    render(<div>{renderValue(0, { source: 'fits', applicability: 'applicable' })}</div>);
+    render(
+      <div>
+        {renderValue(0, { source: 'fits', applicability: 'applicable' })}
+      </div>,
+    );
     expect(screen.getByText('0')).toBeDefined();
     expect(screen.getByText('FITS')).toBeDefined();
   });
 
   it('2. missing-but-applicable numeric value renders the unresolved chip, never "0"', () => {
-    render(<div>{renderValue(null, { source: 'fits', applicability: 'applicable' })}</div>);
+    render(
+      <div>
+        {renderValue(null, { source: 'fits', applicability: 'applicable' })}
+      </div>,
+    );
     expect(screen.queryByText('0')).toBeNull();
     expect(screen.getByTestId('unresolved-chip')).toBeDefined();
     // No source pill on a missing value (FR-138).
@@ -47,7 +55,9 @@ describe('RenderValue — spec-030 Q16 (#620, #619)', () => {
   });
 
   it('4. a real value (non-zero) with no source never renders a pill', () => {
-    render(<div>{renderValue('ASI2600MM', { applicability: 'applicable' })}</div>);
+    render(
+      <div>{renderValue('ASI2600MM', { applicability: 'applicable' })}</div>,
+    );
     expect(screen.getByText('ASI2600MM')).toBeDefined();
     expect(screen.queryByText('FITS')).toBeNull();
   });
@@ -64,15 +74,17 @@ describe('RenderValue — spec-030 Q16 (#620, #619)', () => {
   });
 
   it('6. renderValueOnly omits the source pill entirely (value-only slot)', () => {
-    render(
-      <div>{renderValueOnly(100, { applicability: 'applicable' })}</div>,
-    );
+    render(<div>{renderValueOnly(100, { applicability: 'applicable' })}</div>);
     expect(screen.getByText('100')).toBeDefined();
     expect(screen.queryByText('FITS')).toBeNull();
   });
 
   it('7. a custom format function applies only to real values', () => {
-    render(<div>{renderValue(300, { applicability: 'applicable' }, (v) => `${v}s`)}</div>);
+    render(
+      <div>
+        {renderValue(300, { applicability: 'applicable' }, (v) => `${v}s`)}
+      </div>,
+    );
     expect(screen.getByText('300s')).toBeDefined();
   });
 });

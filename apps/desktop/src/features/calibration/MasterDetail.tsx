@@ -235,7 +235,11 @@ export function MasterDetail({
   // absent field renders the unresolved chip instead of silently vanishing.
   const fingerprintProps: PropertyDef[] = [
     { key: 'kind', label: m.calibration_fp_kind(), value: kindStr },
-    { key: 'camera', label: m.settings_calmatch_camera(), value: fp.camera ?? null },
+    {
+      key: 'camera',
+      label: m.settings_calmatch_camera(),
+      value: fp.camera ?? null,
+    },
     { key: 'gain', label: m.settings_calmatch_gain(), value: fp.gain ?? null },
     {
       key: 'exposure',
@@ -260,7 +264,11 @@ export function MasterDetail({
       label: m.calibration_fp_sensor_mode(),
       value: fp.sensorMode ?? null,
     },
-    { key: 'binning', label: m.settings_calmatch_binning(), value: fp.binning ?? null },
+    {
+      key: 'binning',
+      label: m.settings_calmatch_binning(),
+      value: fp.binning ?? null,
+    },
     {
       key: 'size',
       label: m.settings_advanced_db_size(),
