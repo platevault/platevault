@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * revealInventoryPath command-wiring test — spec 006 FR-007 (T411).
  *

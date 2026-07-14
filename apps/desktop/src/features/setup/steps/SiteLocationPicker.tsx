@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Observing Site step: interactive map picker (spec 044 journey-1, issue #491).
 //
 // The numeric lat/long fields on `StepSite` remain the source of truth —

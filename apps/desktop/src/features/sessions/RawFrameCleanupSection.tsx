@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Raw sub-frame cleanup review (spec 048 US3 T031 frontend) — the
  * session-scoped counterpart to the project-level `CleanupSection`

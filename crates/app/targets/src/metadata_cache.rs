@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Cached FITS/XISF header extraction (in-memory caching layer, F0/W-FITS).
 //!
 //! Lives in `app_core_targets` (not `app_core`): the current

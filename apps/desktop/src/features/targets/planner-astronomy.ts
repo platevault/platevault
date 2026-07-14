@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * planner-astronomy.ts — real per-night observability engine (spec 044 Track B, US1 T009).
  *

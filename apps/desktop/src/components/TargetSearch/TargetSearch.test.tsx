@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * TargetSearch tests — spec 035 US1 (T013) + US3 long-tail SIMBAD (T022/T023).

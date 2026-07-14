@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Guided first-project-flow Tauri commands (spec 010).
 //!
 //! Thin passthroughs to `app_core::guided_flow` use cases.

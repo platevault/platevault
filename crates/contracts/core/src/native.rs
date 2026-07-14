@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Native filesystem control contract DTOs (spec 004).
 //!
 //! Covers `native.directory.pick`, `native.file.pick`, and `native.reveal`

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared per-frame `file_record` writer (spec 048 T002).
 //!
 //! Light-frame ingest ([`crate::ingest_sessions`]) and calibration-frame apply

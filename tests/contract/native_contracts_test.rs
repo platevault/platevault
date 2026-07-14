@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Contract conformance tests for spec 004 native filesystem controls.
 //!
 //! Verifies that Rust DTOs serialize/deserialize to match the JSON Schema

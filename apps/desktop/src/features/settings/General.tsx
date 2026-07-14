@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Appearance settings — theme, font size, display density.
 // Theme is applied live via the appearance runtime (data/theme.ts): swatch
 // cards re-scope the token layer with `data-theme` so each preview shows its

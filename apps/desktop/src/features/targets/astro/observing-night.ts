@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * observing-night.ts — the "tonight" anchor for the planner (spec 047, plan D1).
  *

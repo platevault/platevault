@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Free-fn repository queries for `crates/app/projects` (db-boundary-zero
 //! drain). These don't fit the existing `projects` / `prepared_source_views`
 //! repositories' query shapes exactly, so they live here rather than being

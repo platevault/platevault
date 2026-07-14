@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! User Story 1 — Safe filesystem plan application (spec 033, T008–T014).
 //!
 //! These are the **acceptance tests** for FR-001 through FR-007. They were

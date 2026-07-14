@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { Tooltip as BaseTooltip } from '@base-ui-components/react/tooltip';
 

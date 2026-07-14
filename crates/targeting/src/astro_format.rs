@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Sexagesimal RA/Dec display formatting.
 //!
 //! Thin wrapper over `skymath::Equatorial::ra_sexagesimal`/`dec_sexagesimal`,

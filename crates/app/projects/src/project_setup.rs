@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project create/update/source/channel use cases (spec 008 F-3).
 //!
 //! Entry points:

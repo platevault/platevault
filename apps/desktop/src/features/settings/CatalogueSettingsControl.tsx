@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Default planner catalogues control (task #82).
 //
 // Lets the user pick which catalogues are enabled by default in the Targets →

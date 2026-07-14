@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
 import clsx from "clsx";
 

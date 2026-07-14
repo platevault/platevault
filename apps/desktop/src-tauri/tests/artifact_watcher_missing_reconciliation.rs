@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Real-backend integration test: a file that disappears while a project is
 //! detached is discovered `missing` by the on-attach reconciliation pass
 //! (spec 012 T005/T010, FR-009).

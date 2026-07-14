@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Free-function query repository for calibration matching (spec 007) and
 //! equipment auto-detect flags (spec 030), migrated out of
 //! `app_calibration::matching` / `app_calibration::equipment`

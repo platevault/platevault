@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Structural pattern validator (spec 015 T3.5).
 //!
 //! `validate(pattern, registry) -> ValidateResult` checks the pattern

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Inbox use cases for spec 005 (Inbox Mixed-Folder Split).
 //!
 //! # Modules

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // First-run wizard: "Scan" step (spec 038).
 //
 // Registers sources (via flushToDB), then runs inbox_scan_folder +

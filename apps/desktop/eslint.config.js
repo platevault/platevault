@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // @ts-check
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';

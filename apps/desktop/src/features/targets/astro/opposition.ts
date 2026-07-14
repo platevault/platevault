@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * opposition.ts — next opposition-like (midnight-culmination) date (spec 047,
  * plan D6, FR-014).

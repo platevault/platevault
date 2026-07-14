@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project domain module (spec 008 F-2).
 //!
 //! Pure domain logic: channel inference, channel merge, per-channel integration

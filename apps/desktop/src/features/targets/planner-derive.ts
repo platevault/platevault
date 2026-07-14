@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * planner-derive.ts — pure derivations over cached night observability (spec 044 US1 T010).
  *

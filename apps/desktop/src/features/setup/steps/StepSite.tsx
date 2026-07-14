@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // First-run wizard: "Observing Site" step (spec 044 Track B, US6 T016).
 //
 // Captures a default+active observing site (name/lat/lon/timezone required,

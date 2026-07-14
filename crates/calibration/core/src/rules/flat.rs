@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Flat frame matching rule (spec 007 US2, FR-004, FR-008, FR-009).
 #![allow(
     clippy::collapsible_match,

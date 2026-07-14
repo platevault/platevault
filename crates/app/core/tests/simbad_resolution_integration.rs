@@ -1,4 +1,8 @@
 #![allow(clippy::doc_markdown)]
+
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Layer-1 integration tests for the `target.resolve` use case (spec 035, #14).
 //!
 //! Uses a `FakeResolver` (offline, deterministic, no network, no SIMBAD calls)

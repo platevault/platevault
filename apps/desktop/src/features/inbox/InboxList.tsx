@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * InboxList — the inbox detection list, rendered with the shared `Table`
  * construct (same as Sessions / Calibration) so font, row height, headers, and

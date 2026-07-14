@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * SchemaViewer — pretty-prints a JSON Schema file and allows copy to clipboard
  * (spec 021 US3).

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * altitude-scale.ts — shared altitude/night-hour scale helpers (spec 044
  * Track B, T035). ONE domain definition + `@visx/scale` factory used by both

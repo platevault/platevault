@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * PageTopBar — shared pinned top band for list/detail pages (spec 043, task #62).
  *

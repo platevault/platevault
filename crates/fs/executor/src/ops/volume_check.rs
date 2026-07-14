@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Proactive volume/disk-space probes for pause-condition re-validation
 //! (R-Pause-1 resume, spec 025 T049/T050).
 //!

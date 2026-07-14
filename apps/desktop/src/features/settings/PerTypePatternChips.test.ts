@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Unit tests for the per-type destination pattern parse/serialize utilities
  * introduced in spec 041 (chip-based editor iteration).

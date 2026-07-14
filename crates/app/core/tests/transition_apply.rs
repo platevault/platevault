@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! T029 — integration tests for `transition_use_case::apply_transition`
 //! against a real `SqliteLifecycleRepository` + migrations.
 //!

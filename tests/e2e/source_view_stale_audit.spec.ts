@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Playwright mock-mode: spec 026 US3/US4 — stale-detection sweep badge +
  * broken-reference detail (T014/T015/T016) and the view audit-history

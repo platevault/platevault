@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Target contract DTOs for the Tauri IPC surface.
 //!
 //! ## Spec 029 legacy types (kept for spec-029 stub commands `targets.list`/`targets.get`)

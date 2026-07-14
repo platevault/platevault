@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Gen-3 target management Tauri commands (spec 036 / spec 023 US2-US4).
 //!
 //! ## Commands

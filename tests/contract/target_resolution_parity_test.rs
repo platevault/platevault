@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Contract parity tests for spec 035 SIMBAD target resolution (T009).
 //!
 //! Verifies that Rust DTOs in `contracts_core::targets` serialize/deserialize

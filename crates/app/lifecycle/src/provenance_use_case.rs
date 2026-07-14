@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `read_provenance` use case (spec 002, T021a).
 //!
 //! Loads provenance entries for an asset from the persistence layer and

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Integration tests for the materialised ledger view + `list_assets_ledger`.
 //!
 //! Boots an in-memory `SQLite` pool, runs all migrations, inserts seed rows

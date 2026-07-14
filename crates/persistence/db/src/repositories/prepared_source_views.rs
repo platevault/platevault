@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for prepared source views (spec 026).
 //!
 //! Operates on the `prepared_source_views` and `prepared_source_view_items`

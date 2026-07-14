@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * TargetDetailV2 — spec 036 gen-3 detail pane for a single canonical target.
  *

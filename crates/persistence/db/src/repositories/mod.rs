@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository trait definitions for spec 002 lifecycle, spec 003 first-run,
 //! spec 005 inbox, spec 006 inventory, spec 007 calibration assignments,
 //! spec 008 projects, spec 018 settings,

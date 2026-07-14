@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Inbox Tauri commands (spec 005, spec 041).
 //!
 //! Provides `inbox.classify`, `inbox.confirm`, `inbox.reclassify`,

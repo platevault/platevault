@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `target.cache.clear` support (spec 052 P1 FR-002): wipe the shared redb
 //! resolve cache and re-warm it from the bundled seed + existing durable
 //! `canonical_target` rows. Never touches `canonical_target` itself — the

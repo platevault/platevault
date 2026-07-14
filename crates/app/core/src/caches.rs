@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `app_core`-owned cache statics (in-memory caching layer, F0 foundation).
 //!
 //! Each cache is a module-local process-global `OnceLock`, mirroring the

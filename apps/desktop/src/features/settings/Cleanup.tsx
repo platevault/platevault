@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 018 — owned keys: blockPermanentDelete, defaultProtection,
 // protectedCategories. Loads from settings.get('cleanup') on mount and
 // auto-saves via the save() prop on change.

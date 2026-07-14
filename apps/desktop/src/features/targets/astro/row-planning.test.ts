@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, it, expect } from 'vitest';
 import { deriveRowMoonPlanning, UNKNOWN_ROW_PLANNING } from './row-planning';
 import type { ObservingNight } from './moon-state';

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Filesystem watcher service for inbox folders.
 //!
 //! Watches inbox directories for file additions, deletions, and moves using

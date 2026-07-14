@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Reparse-aware link/junction detection + safe directory/file walking,
 //! shared by `fs_inventory` and `fs_executor` (duplication-and-abstraction
 //! audit T1-a).

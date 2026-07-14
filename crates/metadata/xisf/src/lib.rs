@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! XISF metadata extraction adapter (spec 005 T006), built on the
 //! `xisf-header` crate.
 //!

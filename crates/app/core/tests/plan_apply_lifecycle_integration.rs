@@ -1,4 +1,8 @@
 #![allow(clippy::doc_markdown)]
+
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Cross-crate integration tests for spec 025 filesystem plan application
 //! lifecycle: multi-item apply, partial failure, and the CAS race guard.
 //!

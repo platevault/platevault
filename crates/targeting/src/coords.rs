@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Coordinate-based nearest-neighbour target resolution (spec 041 R-17/R-18).
 //!
 //! This module is the **pure** kernel behind `inbox.target_recommendations`: it

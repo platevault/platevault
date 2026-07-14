@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 049 US4: `sourceview.verify` — read-only pre-processing check that
 //! every link in a generated (or spec-026-produced) source view still
 //! resolves to a present canonical source.

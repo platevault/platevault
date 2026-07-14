@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /// <reference types="@testing-library/jest-dom" />
 /**
  * ProjectBottomDetail manifests + notes wiring tests — spec 024 T1.7 / T3.4 / T4.2.

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { WizardShell } from '@/ui/WizardShell';

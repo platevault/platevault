@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository query functions for the spec-035/048 light-frame ingest
 //! pipeline (`app_core_targets::frame_writer` / `ingest_resolution` /
 //! `ingest_sessions`).

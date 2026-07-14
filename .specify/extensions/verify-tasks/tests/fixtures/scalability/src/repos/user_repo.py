@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """User repository — T006, T010."""
 from typing import Optional, Dict
 from models.user import User

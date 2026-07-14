@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Global search use case (spec 023 + spec 033, T039, FR-015).
 //!
 //! `search_global` performs a real cross-entity query over:

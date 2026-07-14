@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 030 cleanup policy + spec 017 cleanup candidate commands.
 //!
 //! Two-step cleanup flow (D11):

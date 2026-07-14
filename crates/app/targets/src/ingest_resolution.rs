@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Async ingest target-resolution queue (spec 035, US4 — group ingested images
 //! by resolved target).
 //!

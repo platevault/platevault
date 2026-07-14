@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for the guided first-project-flow state (spec 010, T003).
 //!
 //! Operates on the `guided_flow_state` singleton table from migration 0030.

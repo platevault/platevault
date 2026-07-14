@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Static Caldwell → NGC/IC (or other) designation map.
 //!
 //! Caldwell is **not** a SIMBAD designation (research.md R2): SIMBAD does not

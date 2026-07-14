@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Integration tests for the settings v1→v2 migration harness
 //! (spec 018 US5, T029).
 //!

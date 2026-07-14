@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tests for lint.py — x-lint override mechanism and core rules.
 
 Run: pytest packages/write-agentic/.apm/skills/write-agentic/scripts/test_lint.py

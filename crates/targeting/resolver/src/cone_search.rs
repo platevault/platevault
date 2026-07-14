@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Cone-search candidate ranking (spec 052 P3, D9 + OQ-1/OQ-2 — see
 //! `specs/052-simbad-caching-dual-lookup-cone-search/research.md`).
 //!

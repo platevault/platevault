@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Migration 0060 integration tests (project path root-anchor fix).
 //!
 //! Migrations run before any rows exist in these tests, so the data fix is

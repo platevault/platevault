@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Canonical `(entity_type, from, to) → action_critical_fields[]` table
 //! (spec 002 FR-009/FR-010, T050).
 //!

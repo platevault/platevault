@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Filesystem watcher abstraction (spec 012 T003/T004).
 //!
 //! The real OS-level watcher is injected via the `FsWatcher` trait so that

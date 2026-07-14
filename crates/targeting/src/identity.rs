@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Deterministic UUIDv5 generation for `Target.id` (research.md R6, T011-eq).
 //!
 //! The derivation is:

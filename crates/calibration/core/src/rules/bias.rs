@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Bias frame matching rule (spec 007 US3, FR-005).
 #![allow(clippy::collapsible_match, clippy::single_match_else, clippy::must_use_candidate)]
 //!

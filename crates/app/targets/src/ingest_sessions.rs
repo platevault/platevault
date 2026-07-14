@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Ingest light frames → acquisition sessions grouped by capture identity
 //! (spec 035 US4, FR-016).
 //!

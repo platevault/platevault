@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Compare-and-swap (CAS) check for per-item FS revalidation (R-FS-1).
 //!
 //! Before each item mutation the executor checks that the source file's

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 052 P1 T005 — SC-001: repeat search/resolve of a cached object issues
 //! zero network calls, even across a process restart (drop + rebuild the
 //! facade pointed at the same redb file).

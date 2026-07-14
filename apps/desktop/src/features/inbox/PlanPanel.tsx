@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * PlanPanel — aggregate plan surface for the Inbox review screen.
  *
@@ -324,7 +327,7 @@ function buildGroupSummary(
     const dest = absoluteByFromPath?.[a.fromPath] ?? a.destinationPreview;
     const frameType = frameTypeLabel(a, dest, itemFrameType);
     const destDir = destinationDir(dest);
-    const key = `${frameType} ${destDir}`;
+    const key = `${frameType}${destDir}`;
     const existing = buckets.get(key);
     if (existing) existing.count += 1;
     else buckets.set(key, { count: 1, frameType, destinationFull: destDir });

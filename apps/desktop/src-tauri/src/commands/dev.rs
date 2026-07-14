@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Developer Contract Diagnostics Tauri commands (spec 021).
 //!
 //! **Compile-time gated**: this entire module is only compiled when the

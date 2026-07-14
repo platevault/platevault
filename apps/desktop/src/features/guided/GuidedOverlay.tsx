@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * GuidedOverlay — controlled react-joyride coach overlay (spec 010, FR-011, spec 033 T030).
  *

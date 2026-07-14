@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Failure taxonomy for plan item apply operations (spec 025, research R3).
 //!
 //! Maps raw `std::io::Error` and domain conditions to structured

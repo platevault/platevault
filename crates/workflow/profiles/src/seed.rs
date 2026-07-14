@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Seeded processing-tool profiles (spec 011 T002).
 //!
 //! Includes PixInsight and Siril with per-OS bundle IDs (R-BundleId) and

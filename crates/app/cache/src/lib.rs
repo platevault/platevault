@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared in-process caching primitives for `app_core_*` crates (spec 051).
 //!
 //! This crate is a **thin wrapper around `moka`**

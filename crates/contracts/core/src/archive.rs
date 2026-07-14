@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Archive management contract DTOs (spec 017 US2/US6, C5 reconciliation).
 //!
 //! The Archive surface lists projects whose lifecycle has reached `archived`

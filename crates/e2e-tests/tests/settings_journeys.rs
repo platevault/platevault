@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journeys — Settings auto-save + theme persistence
 //! (batch #11 of the coverage-matrix "Batched plan", Journey 10). Promotes
 //! two of `docs/development/windows-journeys/journey-10-settings-appearance-i18n.md`'s

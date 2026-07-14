@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * useFavourites.test.ts — unit tests for the database-backed favourite/star
  * store (spec 051 US2).

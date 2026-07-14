@@ -1,3 +1,6 @@
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """
 File-based key-value store — T007.
 FileStore is imported and used by src/app.py.

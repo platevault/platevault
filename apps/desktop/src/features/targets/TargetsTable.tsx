@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * TargetsTable — spec 043 shared list-page adoption (task #73), refined #82,
  * VIRTUALIZED + planning columns (#84/#85), spec 044 mock columns.

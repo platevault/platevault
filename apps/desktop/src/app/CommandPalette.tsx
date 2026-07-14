@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { useState, useEffect, useCallback } from 'react';
 import { m } from '@/lib/i18n';
 import { Dialog } from '@base-ui-components/react/dialog';

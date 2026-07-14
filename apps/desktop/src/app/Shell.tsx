@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Shell -- main application shell with sidebar, main content area, status bar.
  * Route hybrid layout: Inbox and Projects get their own right sidebar

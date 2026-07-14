@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Target resolution module (spec 035: SIMBAD Target Resolution).
 //!
 //! Resolves astronomical target identities on demand against SIMBAD, backed by

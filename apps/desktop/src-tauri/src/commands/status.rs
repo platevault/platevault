@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 030 status summary command (T023).
 //!
 //! Returns a `StatusSummary` DTO populated from the database.

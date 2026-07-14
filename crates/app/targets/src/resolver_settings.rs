@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Resolver settings get/update use case for spec 035 (US5, FR-015).
 //!
 //! Reads and writes the singleton `resolver_settings` row (id = 1, seeded by

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared target DTO mapping helpers (US11 T143).
 //!
 //! Single home for the cache-domain → contract-DTO conversions that were

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! LifecycleRepository — async trait for spec 002 lifecycle operations.
 
 use std::collections::HashMap;

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (C) 2024-2026 Sjors Robroek
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Emit the most recent context of one agent session, newest turn first.
 
 Reads a Claude Code or Codex transcript and renders a small, filtered window of

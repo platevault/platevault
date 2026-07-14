@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * moon-state.ts — nightly Moon state via astronomy-engine (spec 047, plan D2).
  *

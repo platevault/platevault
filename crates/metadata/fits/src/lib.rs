@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Pure-Rust FITS header reader (spec 005 T005), built on the `fits-header` crate.
 //!
 //! # FITS Header Format

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Playwright mock-e2e: Calibration masters + matching (Journey 8 of the E2E
  * revalidation, Phase B / Batch 4). Specs 040 (per-tool MasterDetector →

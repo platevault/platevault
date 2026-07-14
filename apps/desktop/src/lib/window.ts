@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Spec 020 — Router & URL State (desktop rescope), US4 multi-window.
 //
 // Open the current route + search in a NEW, independent desktop window. A fully

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Settings.noContracts — verifies API Contracts is absent from Settings under
  * any devMode state (spec 021 T030, FR-001).

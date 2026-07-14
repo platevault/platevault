@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ESLint rule: alm/no-user-string (spec 046, FR-001 / FR-012 / SC-001 / SC-002).
  *

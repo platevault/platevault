@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * site-store.ts — settings-backed observing-site store (spec 044 Track B, US1/US3).
  *

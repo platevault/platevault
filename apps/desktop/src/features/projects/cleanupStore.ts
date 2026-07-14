@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Cleanup-plan store (spec 017 WP-E) — TanStack mutation hooks over the
  * two-step cleanup flow (D11):

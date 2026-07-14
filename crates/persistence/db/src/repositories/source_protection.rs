@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository for per-source protection overrides (spec 016 US2–US4, migration 0026).
 //!
 //! The `source_protection_state` table stores an explicit level override and

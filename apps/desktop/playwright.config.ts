@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

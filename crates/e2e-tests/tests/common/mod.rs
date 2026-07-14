@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared harness for spec 037 Layer-2 real-UI E2E journeys.
 //!
 //! All journeys are real (WP-C) but `#[ignore]`d: they need the

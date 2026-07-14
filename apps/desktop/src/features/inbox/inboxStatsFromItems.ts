@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Reconciled inbox stats derived from the SAME item list the header and footer
  * count from (spec: stats-strip reconciliation).

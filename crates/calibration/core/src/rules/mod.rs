@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Per-type matching rules for the calibration engine.
 pub mod bias;
 pub mod dark;

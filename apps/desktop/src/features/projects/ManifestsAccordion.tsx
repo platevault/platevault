@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ManifestsAccordion — spec 024 T1.7 / T2.2 / T2.3 / T3.4.
  *

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! E2E integration test for the spec-035/052 resolution flow.
 //!
 //! Exercises the full chain across components that are unit-tested in isolation,

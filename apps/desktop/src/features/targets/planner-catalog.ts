@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * planner-catalog.ts — Allowed-catalog filter for the Target Planner (task #40, spec 043 §4).
  *

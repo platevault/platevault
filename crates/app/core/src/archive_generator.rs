@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 017 US2 (WP-B) whole-project archive plan generator + archive listing.
 //!
 //! ## Generator (`generate`)

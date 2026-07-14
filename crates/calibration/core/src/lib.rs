@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Calibration matching engine (spec 007).
 //!
 //! Pure domain crate — no filesystem reads, no header parsing, no persistence.

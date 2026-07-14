@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Path-set overlap comparison for the cross-plan concurrency guard
 //! (spec 025 FR-017 / R-Concur-1, T007).
 //!

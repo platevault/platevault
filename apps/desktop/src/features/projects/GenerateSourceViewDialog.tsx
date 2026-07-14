@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * GenerateSourceViewDialog — spec 049 US1 minimal generation dialog, extended
  * for US2 T029 (FR-004a/FR-004c).

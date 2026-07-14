@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * altitude-settings.test.ts — unit tests for the usable-altitude threshold
  * adapter (spec 044 Track B, T012b).

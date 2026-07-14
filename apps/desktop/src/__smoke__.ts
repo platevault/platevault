@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Compile-time smoke test: imports every page component, shared primitive,
  * and verifies the router exports all expected routes.

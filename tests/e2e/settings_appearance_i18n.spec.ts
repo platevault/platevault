@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Journey 10 — Settings config model, appearance/themes, layout convention,
  * i18n, and the bottom log viewer (mock-mode Playwright).

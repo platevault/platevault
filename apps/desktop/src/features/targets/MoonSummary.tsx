@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * MoonSummary — tonight's Moon at a glance for the planner bar (spec 047 US1).
  *

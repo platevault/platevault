@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * User-facing error messages, keyed by the generated `ErrorCode` union and
  * resolved through the message catalog (spec 046 US2).

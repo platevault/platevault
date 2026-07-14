@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Free-fn repository queries backing `app_core::frame_inventory`,
 //! `app_core::search`, and `app_core::sessions` (db-boundary-zero drain).
 //!

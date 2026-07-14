@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Spec 020 — Router & URL State (desktop rescope).
 //
 // Single home for typed URL search-param parsing. Pure functions (no React) so

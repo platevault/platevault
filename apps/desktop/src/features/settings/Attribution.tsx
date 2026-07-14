@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Data sources & attribution notice (spec 035, T036 / FR-012).
 import { m } from '@/lib/i18n';
 //

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository query functions for the spec-051 target favourites surface.
 //!
 //! Replaces the `localStorage`-only favourites stub in

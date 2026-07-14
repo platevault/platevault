@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Project-create orchestration: create + mkdir-only scaffolding auto-apply.
 //!
 //! Lives in `app_core` (not `app_core_projects`) because it orchestrates

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Bundled-seed loader: warms the persistent redb resolve cache at first run
 //! (spec 035 T016/R3; retargeted to redb by spec 052 P1 D2/D4/T012).
 //!

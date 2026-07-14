@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Args-template renderer (spec 011 T001, R3).
 //!
 //! Renders a `&[ArgsToken]` against a substitution context, returning a

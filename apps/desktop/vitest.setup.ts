@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Vitest setup — wires jest-dom matchers and ensures `isTauriRuntime()`
  * resolves to `false` by default so the dev-mode mock path is exercised

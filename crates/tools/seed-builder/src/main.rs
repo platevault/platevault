@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! One-time offline seed builder for spec 035 (SIMBAD Target Resolution, T015).
 //!
 //! Queries the SIMBAD TAP sync endpoint (CDS) and emits the bundled seed asset

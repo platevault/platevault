@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * InboxPage — classify / confirm workflow on the Inbox's OWN 3-zone layout.
  *

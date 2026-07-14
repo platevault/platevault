@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Video file detection for the Inbox `video` lane (spec 005 T-VideoDetect).
 //!
 //! This crate performs extension-based detection only. No pixel or container

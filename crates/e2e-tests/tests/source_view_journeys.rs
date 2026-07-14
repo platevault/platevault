@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journey: source-view generation (spec 049).
 //!
 //! Real backend REAL: `roots.register`, `inbox.scan.folder`,

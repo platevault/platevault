@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journeys — Inbox (batch #6 of the coverage-matrix
 //! "Batched plan"): the UI-level gate + reclassify + confirm/apply surface
 //! that `journeys.rs`'s `plan_review_apply_with_audit` proves only through

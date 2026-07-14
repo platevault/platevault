@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Cross-platform file move primitive (spec 025, research R1).
 //!
 //! Strategy:

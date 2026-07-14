@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for the projects store (spec 008).
 //!
 //! Operates on the `projects`, `project_sources`, and `project_channels`

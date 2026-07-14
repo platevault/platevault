@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Rust DTOs mirroring `specs/002-data-lifecycle-state-model/contracts/lifecycle.transition.json`.
 //!
 //! Contract version: 2.0.0.

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for `calibration_assignment` table (spec 007, T006/T026).
 //!
 //! Operates on the `calibration_assignment` table from migration 0022.

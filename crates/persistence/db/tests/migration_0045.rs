@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Migration 0045 integration tests (spec 041, T003).
 #![allow(clippy::doc_markdown)]
 //!

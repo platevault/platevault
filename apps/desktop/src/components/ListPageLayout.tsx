@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * ListPageLayout — standard list-page scaffold (spec 043, tasks #62/#73/#86/#89/#104).
  *

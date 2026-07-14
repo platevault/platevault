@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 export { Pill } from './Pill';
 export type { PillProps, PillVariant } from './Pill';
 export { Btn } from './Btn';

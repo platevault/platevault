@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! `target.cone_search.suggest` / `target.cone_search.confirm` use case
 //! (spec 052 P3, US3; see
 //! `specs/052-simbad-caching-dual-lookup-cone-search/{spec,data-model,contracts/operations}.md`).

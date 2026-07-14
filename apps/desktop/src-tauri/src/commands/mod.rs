@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Tauri command surface.
 //!
 //! `lifecycle` exposes the spec 002 surface as native Tauri 2 commands wired

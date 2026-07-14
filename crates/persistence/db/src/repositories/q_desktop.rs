@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Desktop Tauri command repository (db-boundary-zero drain).
 //!
 //! Backs `apps/desktop/src-tauri/src/commands/inbox.rs`,

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Repository methods for plan apply runs and events (spec 025).
 //!
 //! Operates on the `plan_apply_runs` and `plan_apply_events` tables from

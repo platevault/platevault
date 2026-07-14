@@ -1,4 +1,8 @@
 #![allow(clippy::doc_markdown)]
+
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Shared real-backend integration-test harness — feature 037 (T005).
 //!
 //! Real SQLite + real migrations + a wired `SqliteLifecycleRepository` and

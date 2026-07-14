@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Stored settings domain types (spec 042 T254).
 //!
 //! These types are the durable, on-disk representation of the v1 settings bag

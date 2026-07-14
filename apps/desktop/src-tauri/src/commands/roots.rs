@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Root/scan/equipment commands exposed to the Tauri webview.
 //!
 //! `roots.register`, `roots.list`, `roots.remap`, and `roots.remap.apply`

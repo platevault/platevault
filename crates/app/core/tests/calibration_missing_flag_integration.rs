@@ -1,4 +1,8 @@
 #![allow(clippy::doc_markdown)]
+
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Layer-1 integration tests for calibration match "missing" awareness —
 //! spec 048 US5 (FR-024/025, T037).
 //!

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 015 — Token Pattern Builder: backend-wired resolver, validator, preview.
 // spec 018 — pattern + autoApplyPattern keys persisted via settings transport.
 // spec 041 (T051, FR-026b) — per-frame-type destination patterns.

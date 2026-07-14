@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Processing tool and workflow profile types, seeds, and platform-specific
 //! launch helpers (spec 011 T001/T002/T008/T015).
 //!

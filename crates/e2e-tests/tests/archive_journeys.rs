@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Spec 037 Layer-2 real-UI journey: whole-project archive -> trash ->
 //! permanent delete (coverage-matrix Journey 7, "Archive lifecycle + trash +
 //! permanent delete" — previously **zero automated coverage at any layer**).

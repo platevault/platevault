@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 //! Artifact filesystem watcher service (spec 012, FR-009, spec 033 T028).
 //!
 //! Watches registered library-root paths for new or modified files.  Uses

@@ -1,3 +1,6 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // spec 016 US3 — plan protection gating UI (T024).
 //
 // Renders the protection-affected items for a plan before execution proceeds.
