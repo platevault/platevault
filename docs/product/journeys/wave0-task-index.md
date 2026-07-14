@@ -4,8 +4,8 @@ One row per Wave-0 grilling task (Q15 T120–T127, Q16 T128–T134, Q27 F-Framin
 
 | Task | Title | Status | Grill | Impacted journeys / note |
 |------|-------|--------|-------|--------------------------|
-| T120 | Generalize audit entry model + migration (reason_code) | merged-spec | Q15 | _none_ — no journey impact — infra/schema. Indirect risk: audit row shape change could regress Audit Log rendering (J13) and lifecycle audit (J5/J7). |
-| T121 | Shared audit write-through helper (durable row + bus emit) | merged-spec | Q15 | _none_ — no journey impact — infra. Indirect risk: every audited mutation now double-writes; a helper defect would silently drop durable rows (J13 completeness). |
+| T120 | Generalize audit entry model + migration (reason_code) | implemented (PR #805, e55b9b36) | Q15 | _none_ — no journey impact — infra/schema. Indirect risk: audit row shape change could regress Audit Log rendering (J13) and lifecycle audit (J5/J7). |
+| T121 | Shared audit write-through helper (durable row + bus emit) | implemented (PR #805, e55b9b36) | Q15 | _none_ — no journey impact — infra. Indirect risk: every audited mutation now double-writes; a helper defect would silently drop durable rows (J13 completeness). |
 | T122 | Settings mutations write durable audit rows (before→after) | merged-spec | Q15 | [J8](J08-calibration-ingest-masters-matching/deltas/2026-07-14-q15-t122.md), [J10](J10-settings-appearance-i18n/deltas/2026-07-14-q15-t122.md), [J13](J13-audit-activity-investigation/deltas/2026-07-14-q15-t122.md) |
 | T123 | Protection overrides/acknowledgements write durable audit rows | merged-spec | Q15 | [J1](J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t123.md), [J6](J06-cleanup-scan-review-apply/deltas/2026-07-14-q15-t123.md), [J7](J07-archive-delete/deltas/2026-07-14-q15-t123.md), [J13](J13-audit-activity-investigation/deltas/2026-07-14-q15-t123.md) |
 | T124 | Equipment CRUD writes durable audit rows | merged-spec | Q15 | [J13](J13-audit-activity-investigation/deltas/2026-07-14-q15-t124.md), [J15](J15-equipment-observing-site-setup/deltas/2026-07-14-q15-t124.md) |
