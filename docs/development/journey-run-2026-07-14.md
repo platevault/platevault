@@ -13,7 +13,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 5. Project lifecycle: create → artifacts | PARTIAL | 2P/0F/4PA/0S | #775, #776, #778, #780 | create+mkdir+lifecycle work; integration always 0s #775; manifests never generated #665; artifact tracking broken #780; tool workdir \\?\ path fails #778 |
 | J1-5 UX diff-check | PASS | 6P/0F | #783 | 6 surfaces audited; Inbox render-loop recovers; Sessions/Projects/Edit surfaces clean except documented dupes |
 | 6. Cleanup: scan → review → apply | PARTIAL | 2P/1F/1PA/0S | #804, #806, #807 | scan/UI fully works; protected-item ack cosmetic #807; default-protected fails apply unconditionally; zero audit #766 reproduces |
-| 7. Archive → delete from archive | ⏳ pending | | | |
+| 7. Archive → delete from archive | PARTIAL | 2P/0F/2PA/3S | | plan-generation wired; archive page clean; 0-item plan from #780; empty plan no reason #603 |
 | 8. Calibration: ingest → masters → matching | ⏳ pending | | | |
 | 9. Targets & planning (real vs. stub) | ⏳ pending | | | |
 | 10. Settings, appearance, and i18n | ⏳ pending | | | |
@@ -179,3 +179,22 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Key evidence:** wizard-test.db plans 408d2bb0… (succeeded), 936ea14b… (failed), 151f994b… (discarded); shots j6-01..12; backend log UPDATE processing_artifacts SET state='missing' at 11:41:57.
 
 **App-state left for J7:** project restored to lifecycle=completed, cleanup_policy=all-Keep, defaultProtection=protected (pre-J6 defaults). Output folder has extra harmless test files + one .astro-plan-archive/408d2bb0…/ from the successful apply (fine on C:\Temp copy). Journey 7 precondition (completed project) intact.
+
+### Journey 7 — Archive → (delete from archive)
+
+**Verdict:** PARTIAL
+**Steps:** 2 PASS / 0 FAIL / 2 PARTIAL / 3 SKIPPED (blocked by #780)
+**Issues filed:** none (all findings were dupes)
+
+**Dupes hit (not re-filed):** #603 (empty archive plan gives no reason), #732 (send-to-trash/permanently-delete are audit-only stubs), #629 (Archive detail dup/missing outcome+actor), #664 (raw match.observer_location_missing leak), #663 (bare source UUID vs Sessions names), #780 (non-recursive reconcile = root cause of the empty plan; added comment tying archive-plan-generation to it as a new downstream consequence)
+
+**Key evidence:**
+- Archive refusal PASS: toast "A filesystem plan is required before this transition. Create or approve a plan first." then UI auto-calls archive.plan.generate and opens the Review overlay — DB plan 33a1f975 created_at matches click; source ProjectDetail.tsx:250-327 handleGenerateArchivePlan.
+- Plan review modal: "0 items · Archive folder", Approve&apply disabled with zero explanatory text (dupe #603). Root cause: all 7 processing_artifacts rows state=missing while files verifiably present on disk (#780 non-recursive on-attach reconcile).
+- Archive page empty state clean/well-styled ("No archived projects yet"). Settings>Cleanup "Block permanent delete" present, ON by default, tooltip explains routing through archive/trash. Console clean throughout. Shots j7-01..07.
+
+**UX/quality notes:** none newly filed (bare-UUID #663, raw reason-code #664 both already tracked).
+
+**Doc-drift:** JOURNEY-DOC UPDATE — Journey 7 Known-gap #1 ("no shipped UI button that generates an archive plan yet", user-journeys.md:626-630) is now FALSE: the project-detail Archive button refuses server-side then auto-generates the plan + opens the review overlay in ONE click (no backend IPC needed). Doc should say the UI path is wired; backend-only access no longer required.
+
+**App-state left for J8:** archive plan 33a1f975 discarded (state=discarded, 0 items); project bf6f5e26 lifecycle unchanged=completed; nothing moved/trashed/deleted (apply/lifecycle-flip/read-only-edit/trash/permanent-delete steps UNTESTABLE — 0-item plan from #780, not a new defect). App idle on #/projects, bridge connected. J8 (Calibration) independent + unaffected.
