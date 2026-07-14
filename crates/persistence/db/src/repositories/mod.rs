@@ -8,6 +8,9 @@
 //! spec 016 source protection, spec 024 manifests/notes,
 //! spec 026 prepared source views, and spec 010 guided flow.
 //!
+//! Spec 008 Q27 framing layer (`framing`/`framing_session` +
+//! `acquisition_session` clustering-key geometry) lives in `framing`.
+//!
 //! Spec 013/023 gen-2 target repository (`targets`) removed by spec 036.
 //! Spec 023 US2/US3/US4 target history + notes queries live in `targets`.
 //! Spec 051 US2 target favourites queries live in `target_favourites`.
@@ -19,6 +22,7 @@ pub mod calibration_tolerances;
 pub mod equipment;
 pub mod events;
 pub mod first_run;
+pub mod framing;
 pub mod guided_flow;
 pub mod inbox;
 pub mod inventory;

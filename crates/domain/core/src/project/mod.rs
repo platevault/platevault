@@ -9,4 +9,5 @@
 
 pub mod channel_map;
 pub mod channels;
+pub mod framing;
 pub mod validate;
