@@ -149,3 +149,17 @@ ones tightens:
   outcome `applied | refused | failed` plus a reason/code.
 - Reads, navigation, UI state, and transient internal/periodic events are
   not durably audited and MUST NOT appear in audit read results.
+
+## Missing-Value Semantics (iteration 2026-07-14, Q16 / #620)
+
+No new commands are required by this iteration, but DTO shapes tighten:
+
+- Any DTO field whose value can be absent at extraction MUST be declared
+  nullable. First fix: `CalibrationFingerprint.exposureS` / `gain`
+  (currently non-optional `number`, forcing the backend to substitute 0
+  for missing metadata).
+- Returning a sentinel value (0, empty string) in place of a missing value
+  is prohibited — missing crosses the boundary as `null`.
+- UIs distinguish unresolved from not-applicable from the model
+  (entity/frame-type field applicability), never by inspecting rendered
+  strings.

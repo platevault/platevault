@@ -404,6 +404,32 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
 - **FR-134**: Reads, navigation, UI state changes, and transient
   internal/periodic events MUST NOT be durably audited.
 
+**Missing-Value Semantics & Detail Panels** *(iteration 2026-07-14, grilling Q16 / #620, #619)*
+
+- **FR-135**: Every displayed metadata field MUST be distinguishable in one
+  of three states everywhere it renders: a real value (including a real 0),
+  unresolved/missing (no data), or not-applicable (the field does not apply
+  to the entity). The three states MUST be modeled, not inferred at render
+  time.
+- **FR-136**: Missing values MUST be represented as null/None end-to-end —
+  extraction → persistence → application layer → contract → UI. Numeric
+  fields MUST NEVER default to 0 (or any other sentinel) to stand in for
+  absence; contract DTO fields whose values can be absent MUST be nullable.
+- **FR-137**: One shared value renderer MUST be used everywhere metadata
+  values are displayed — `renderValue(value, {source})`: real value → the
+  value plus its source pill; unresolved → a distinct muted "unresolved"
+  chip, never 0; not-applicable → blank/"—" without any chip.
+- **FR-138**: Source/provenance indicators MUST only appear for present
+  values. Absence MUST NOT be attributed to a source (no "FITS" pill on a
+  missing value).
+- **FR-139**: Detail panels MUST add information beyond the selected row's
+  list columns — full metadata, provenance/source, related entities,
+  history, and actions — and MUST lead with what is new. A small
+  identifying summary of the row is permitted but MUST NOT dominate the
+  panel.
+- **FR-140**: Detail panels MUST stay minimal and curated — only relevant
+  data for the entity, not a raw dump of every available field.
+
 ### Key Entities
 
 - **Inbox Session**: Auto-detected grouping of FITS frames awaiting user
@@ -446,6 +472,14 @@ cleanup available, and storage health. Verify sidebar footer shows root health.
 - **SC-009**: 100% of mutation commands that return an `auditId` return one
   that resolves to a durable `audit_log_entry` row; zero mutation paths emit
   to the bus without a durable write.
+- **SC-010**: An entity with missing numeric metadata never displays a
+  defaulted 0 (e.g., "Gain 0", "Exposure 0s", "Size 0 KB"); 100% of
+  metadata value renderings across Inbox, Sessions, Calibration, Targets,
+  and Archive go through the shared renderer and are distinguishable as
+  real / unresolved / not-applicable.
+- **SC-011**: Every detail panel presents at least one information class
+  (full metadata, provenance, related entities, history, or actions) that
+  is not present in its list row.
 
 ## Assumptions
 
@@ -478,6 +512,22 @@ data-model.md (generalized audit entry), contracts/commands.md (audit
 semantics)
 **Tasks added**: T120–T127
 **Iteration record**: `iteration-2026-07-14-applied.md`
+
+### Iteration 2026-07-14: Missing-value semantics & detail-as-delta (Q16 / #620, #619)
+
+**Change**: Three distinguishable value states (real / unresolved /
+not-applicable) modeled as null/None end-to-end with no numeric
+zero-defaulting, rendered through one shared renderer with source pills
+only on present values; detail panels reframed to add information over
+their list rows. Decisions locked by
+`docs/development/ui-campaign-grilling-decisions-2026-07-13.md` §Q16.
+**Scope**: Feature-wide (new requirement block)
+**Artifacts updated**: spec.md (FR-135–FR-140, SC-010–SC-011, §12),
+plan.md (phase H, technical context), tasks.md (Phase 11, T128–T134),
+data-model.md (metadata value states), contracts/commands.md
+(missing-value semantics)
+**Tasks added**: T128–T134
+**Iteration record**: `iteration-2026-07-14-q16-applied.md`
 
 ---
 
@@ -1715,5 +1765,72 @@ Below the main navigation list.
   - Some offline: amber dot, "NAS-Astro offline" (names the specific offline root)
   - All offline: red dot, "All roots offline"
 - Clickable → navigates to Data Sources settings
+
+---
+
+## 12. Missing-Value Semantics & Detail-as-Delta (Q16 / #620, #619)
+
+*(Added by iteration 2026-07-14; decisions locked by
+`docs/development/ui-campaign-grilling-decisions-2026-07-13.md` §Q16.)*
+
+### 12.1 Three Value States, Fixed at the Model
+
+Issue #620 is a data-model problem wearing a rendering costume. The shared
+property renderer displays missing values as an em-dash, but by then the
+model has already lost information: the em-dash still receives a "FITS"
+source pill (absence rendered as attributed data), and a metadata-less
+calibration master shows "Gain 0 · Exposure 0s · Size 0 KB" — default
+zeros indistinguishable from a real Gain 0. Missing ≠ zero, and the render
+layer cannot recover the distinction once 0 overwrote it.
+
+Three states MUST be distinguishable everywhere a metadata value appears
+(FR-135):
+
+| State | Meaning | Example |
+|-------|---------|---------|
+| Real value | Data exists — including a real `0` | Gain 0 measured from the FITS header |
+| Unresolved / missing | The field applies but no data exists | Master without gain metadata |
+| Not-applicable | The field does not apply to this entity | Filter on a dark; set-temp on flats/bias (§2.2) |
+
+Not-applicable is determined by the entity/frame-type model (which fields
+apply to which entity kind), never inferred from data absence.
+
+**End-to-end null rule (FR-136)**: missing is represented as null/None at
+every hop — extraction → persistence → application layer → contract → UI.
+Defaulting a numeric to 0 (or any sentinel) at any hop is prohibited.
+Contract DTO fields whose values can be absent at extraction are nullable.
+The failure chain this repairs, concretely: the extraction model is
+`Option`-typed and the persistence row keeps nullable fingerprint fields,
+but the application layer collapses them (`unwrap_or(0.0)` on
+exposure/gain in calibration matching) and the contract cannot carry
+absence (`CalibrationFingerprint.exposure_s`/`gain` are non-optional), so
+UI null-checks are dead code.
+
+### 12.2 One Shared Renderer
+
+One shared `renderValue(value, {source})` is the single rendering path for
+metadata values (FR-137), across Inbox, Sessions, Calibration, Targets,
+Archive — everywhere:
+
+| State | Rendering |
+|-------|-----------|
+| Real value | The value, plus its source pill (FITS / User / Inferred / Default) |
+| Unresolved | A distinct muted "unresolved" chip — no source pill, never 0 |
+| Not-applicable | Blank / "—" without any chip |
+
+Source/provenance pills couple to value presence (FR-138): absence is
+never attributed to a source.
+
+### 12.3 Detail-as-Delta (#619)
+
+A detail panel adds information; it does not echo the row's columns back
+(FR-139, FR-140):
+
+- **Lead with what's new**: full metadata, provenance/source, related
+  entities, history, actions.
+- **Stay minimal and curated** — only relevant data for the entity, not a
+  dump of every available field.
+- A small identifying summary of the selected row is fine, but it must not
+  dominate the panel.
 
 ---

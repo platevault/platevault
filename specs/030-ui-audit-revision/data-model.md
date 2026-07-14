@@ -250,3 +250,33 @@ Mapping onto the existing `audit_log_entry` table
 
 The ephemeral bus event stream is unchanged in shape; audit-worthy mutations
 write the durable row and emit the bus event (durable row is authoritative).
+
+## Metadata Value States
+
+*(Iteration 2026-07-14, grilling Q16 / #620.)* Every displayed metadata
+field carries one of three modeled states (FR-135):
+
+| State | Model representation |
+|-------|---------------------|
+| Real value (incl. real 0) | The value itself |
+| Unresolved / missing | null/None — end-to-end, never a sentinel 0 |
+| Not-applicable | Determined by the entity/frame-type model (which fields apply to which entity kind), never inferred from data absence |
+
+**Null end-to-end rule (FR-136)**: nullable DB columns → `Option` app-layer
+types → nullable contract DTO fields → `null` in the UI. No hop may
+substitute a sentinel (0, empty string, epoch date) for absence.
+
+Known offender to fix first: `CalibrationFingerprint.exposure_s` / `gain`
+are non-optional `f64` in the contract
+(`crates/contracts/core/src/calibration.rs:96,99`), forcing the app layer
+to collapse the nullable persistence row
+(`crates/persistence/db/src/repositories/q_calibration.rs:93-94`) with
+`unwrap_or(0.0)` (`crates/app/calibration/src/matching.rs:739,741,794,796`)
+even though the extraction model is already `Option`-typed
+(`crates/metadata/core/src/lib.rs:221,223`). These fields become nullable;
+a repo-wide sweep covers other absence-capable non-optional numerics
+(e.g., size fields defaulted via `unwrap_or(0)`).
+
+Not-applicable examples from the existing field model: filter on darks and
+bias, set temperature on flats and bias (spec §2.2), `{object}` on
+calibration frames (spec §9.5).
