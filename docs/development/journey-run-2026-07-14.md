@@ -19,7 +19,7 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 | 10. Settings, appearance, and i18n | PARTIAL | 8P/5F/2PA/0S | #820, #822, #823, #825, #827 | theme persists; naming/resolution/altitude dont persist; unhandled validation #825; #794 contradiction flagged
 | 11. Mistake recovery | PARTIAL | 1P/2F/0PA/1S | | plan-discard works; bulk-override has NO warning #611; calibration un-assign blocked #664
 | 12. Failure | 12. Failure & refusal handling | ⏳ pending | | | | refusal handling | PARTIAL | 0P/3F/2PA/0S | #829, #830 | SAFETY: plan approval never snapshots FS #829 (CAS check dead code); partial fail silently succeeds; refusals not surfaced at control
-| 13. Audit & activity investigation | ⏳ pending | | | |
+| 13. Audit & activity investigation | PARTIAL | 4P/2F/3PA/0S | #831, #832, #833 | HEADLINE: 10 successful plan-applies produce ZERO durable audit rows (#766/#647); Activity shows sequences live then disappears
 | 14. Target-first project start | ⏳ pending | | | |
 | 15. Equipment & observing-site setup | ⏳ pending | | | |
 | 16. Keyboard-first navigation & windows | ⏳ pending | | | |
@@ -301,3 +301,21 @@ Driven against the real Windows dev app via the Tauri MCP bridge, origin/main @ 
 **Doc-drift (JOURNEY-DOC UPDATE):** a plan-gated transition (e.g. Archive) doesn't show a bare inline refusal — it auto-opens the plan-review dialog directly (reasonable UX evolution), but the dialog gives no reason when empty (#603). Journey 12 step 1 should say "a plan-gated transition opens its review dialog directly; the dialog (not an inline label) must carry the refusal/empty-plan reason."
 
 **App-state left for J13:** an empty "Archive: J5 Lifecycle Test" plan (9d858be4, ready_for_review, 0 items) left OPEN as visible ongoing activity; archive refusal recorded TWICE in Audit Log (14:49 + 15:59 UTC); one inbox plan (2bc2bab6) applied (catalogue). NOTE one source file was deleted and NOT restored (C:\Temp\pv-journeys\lights\1\M51\LUM\2025-05-03\M 51_..._0000.fits gone; sibling ...0001.fits intact) — disposable copy, fine. Root lights\2 disabled then re-enabled (all 5 roots active). Inbox count now 10.
+
+### Journey 13 — Audit & activity investigation: "what happened to my files?"
+
+**Verdict:** PARTIAL
+**Steps:** 4 PASS / 2 FAIL / 3 PARTIAL / 0 SKIPPED
+**Issues filed:** #831 (UI — Audit Log rows have zero cross-link affordance), #832 (UI — Activity Follow re-enable doesn't scroll to newest row), #833 (UI/backend — Project detail History section shows only Created/Updated, no lifecycle transitions/outcomes/actor)
+
+**HEADLINE:** audit_log_entry has exactly 12 rows total (all workflow/target.adopted), while plans/plan_apply_runs show 8 successfully-applied plans + 2 fresh attempts — NONE of the 10 produced a durable audit row. This is #766/#647 reproduced at scale: the Activity stream shows full plan.approved→applying.started→item.progress→applying.completed sequences LIVE, then the rows disappear and never persist to audit_log_entry. The constitution's audit guarantee (every attempted action + outcome) is violated at the plan-apply layer.
+
+**Dupes hit (not re-filed):** #766 + #647 (durable audit gaps — headline), #769/#609 (per-row Apply always fails), #767 (Review-plans overlay stuck empty), #626 (LogPanel cross-links broken — plan link → #/sessions, reproduced live), #803 (raw UUID entity), #666 (category/source filter logic exists, no UI), #668 (housekeeping floods 500-row buffer — 941/1156 events = target.resolve_batch.completed), #669 (filtered-empty vs truly-empty — Error chip → "No log entries"), #582 (severity filter exact-level not floor), #667 (Activity export dialog titled "Export Audit Log", wrong surface)
+
+**Key evidence:** PASSES: entity search (bf6f5e26 → 11/12 rows), all-excluding date range (2030 → "No matching audit events." 0 events, UNAMBIGUOUS), pagination (12 events, page 1 of 2, Next/Prev), panel collapse + Escape both close correctly.
+
+**Doc-drift:** none — inbox confirm flow (detection groups → Confirm to inventory → Review plans destination-root picker → per-item Apply) matches the app; the journey's "perform a plan apply" undersells how many known-broken paths (#769, #767) sit in front of a successful apply.
+
+**UX/quality notes:** filed #831/#832/#833; also reproduced live (not filed) #626/#666/#668/#669/#582/#667/#803/#769/#609/#767.
+
+**App-state left for J14:** app on #/targets, no stuck dialogs, bridge connected. Inbox count 10 (2 confirm attempts failed/discarded, no net change; M51/LUM/2025-05-03/light group now blocked by stale conflict.destination_exists at C:\Temp\pv-journeys\inbox\M 51\...). Seeded catalog + confirmed M51 session (11024d3c) untouched for J14.
