@@ -30,6 +30,7 @@ import { commands } from '@/bindings/index';
 import type {
   InboxFileMetadata_Serialize as InboxFileMetadata,
   InboxItemSummary,
+  InboxReclassifyV2Response_Serialize as InboxReclassifyV2Response,
   PropertyRegistryEntry_Serialize as PropertyRegistryEntry,
 } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
@@ -302,6 +303,16 @@ export interface InboxDetailProps {
   selectedRootId?: string | null;
   /** Called when the user picks a destination root ("" = auto). */
   onSelectRoot?: (rootId: string) => void;
+  /**
+   * Called with the raw `inbox.reclassify_v2` response after EITHER the
+   * per-file or bulk override flow succeeds. `reclassify_v2` operates at
+   * source-group scope and re-splits the group into new single-type
+   * sub-items (R-14, issue #755) — the CURRENTLY selected `item.inboxItemId`
+   * may cease to exist. The caller (InboxPage) owns selection and is
+   * responsible for moving it to the correct post-split item once the
+   * refetched list contains it; this component does not track selection.
+   */
+  onReclassified?: (response: InboxReclassifyV2Response) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -317,6 +328,7 @@ export function InboxDetail({
   destinationRoots,
   selectedRootId,
   onSelectRoot,
+  onReclassified,
 }: InboxDetailProps) {
   const { reclassifyV2, loading: reclassifyLoading } = useInboxReclassifyV2(
     item.inboxItemId,
@@ -366,8 +378,9 @@ export function InboxDetail({
     if (overrides.length === 0) return;
     setApplyError(null);
     try {
-      await reclassifyV2({ overrides });
+      const result = await reclassifyV2({ overrides });
       setPendingOverrides({});
+      onReclassified?.(result);
     } catch (err) {
       setApplyError(errMessage(err));
     }
@@ -417,10 +430,11 @@ export function InboxDetail({
     if (bulk.length === 0) return;
     setBulkError(null);
     try {
-      await reclassifyV2({ bulk });
+      const result = await reclassifyV2({ bulk });
       setSelectedFiles(new Set());
       setBulkFrameType('');
       setBulkPropValues({});
+      onReclassified?.(result);
     } catch (err) {
       setBulkError(err instanceof Error ? err.message : String(err));
     }
