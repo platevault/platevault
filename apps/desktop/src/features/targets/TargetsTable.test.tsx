@@ -542,3 +542,70 @@ describe('TargetsTable — needs-coordinates state (#757)', () => {
     }
   });
 });
+
+// ── #579: Visible discriminates by altitude even with no dark window ─────────
+//
+// At lat 52 there is no astronomical darkness for months (summer). The Visible
+// column used to collapse EVERY target to a single not-visible state on such a
+// night. It must instead vary by altitude: a zenith/circumpolar target reads
+// visible — with a persistent, distinct "twilight" state disclosing that there
+// is no astronomical darkness (a plain "tonight" dot would overpromise) —
+// while a never-riser reads low.
+describe('TargetsTable — Visible on a no-dark-window summer night (#579)', () => {
+  beforeEach(() => {
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+  });
+
+  it('a zenith target reads twilight-visible while a never-riser reads low — not both the same', () => {
+    vi.useFakeTimers();
+    // Mid-July at 52°N: no astronomical dark window exists all night.
+    vi.setSystemTime(new Date('2026-07-15T21:00:00Z'));
+    try {
+      renderTable({
+        targets: [
+          coordItem('ZENITH', 270, 52), // transits near the zenith
+          coordItem('NEVER', 0, -80), // never rises at 52°N
+        ],
+      });
+      const table = screen.getByRole('table');
+      const zenithRow = within(table)
+        .getByText('ZENITH')
+        .closest('tr') as HTMLTableRowElement;
+      const neverRow = within(table)
+        .getByText('NEVER')
+        .closest('tr') as HTMLTableRowElement;
+      // Discrimination: the two extremes render DIFFERENT visibility states.
+      // The visible one is the twilight state — an at-a-glance, persistent
+      // no-dark-window disclosure, never the plain "tonight" dot.
+      expect(
+        zenithRow.querySelector('.alm-targets-vis--twilight'),
+      ).not.toBeNull();
+      expect(zenithRow.querySelector('.alm-targets-vis--yes')).toBeNull();
+      expect(within(zenithRow).getByText('twilight')).toBeInTheDocument();
+      expect(neverRow.querySelector('.alm-targets-vis--no')).not.toBeNull();
+      expect(neverRow.querySelector('.alm-targets-vis--twilight')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a normal dark night still renders the plain "tonight" state, not twilight', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-15T20:00:00Z'));
+    try {
+      renderTable({ targets: [coordItem('HIGH', 90, 52)] });
+      const table = screen.getByRole('table');
+      const row = within(table)
+        .getByText('HIGH')
+        .closest('tr') as HTMLTableRowElement;
+      expect(row.querySelector('.alm-targets-vis--yes')).not.toBeNull();
+      expect(row.querySelector('.alm-targets-vis--twilight')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -1190,6 +1190,7 @@
   "targets_table_target_count": "{count} targets",
   "targets_table_visible_low": "low",
   "targets_table_visible_tonight": "tonight",
+  "targets_table_visible_twilight": "twilight",
   "ui_dir_picker_choose": "Choose folder…",
   "ui_dir_picker_error": "Couldn’t open the folder picker.",
   "ui_toast_dismiss_aria": "Dismiss notification",
