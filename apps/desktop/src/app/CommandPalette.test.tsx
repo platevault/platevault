@@ -28,10 +28,18 @@
  * Tests 7-10 import PAGES directly from CommandPalette.tsx (not a
  * hand-copied array) so a route rename/removal in production is actually
  * caught here.
+ *
+ * `buildTargetResults` tests (#581) exercise the client-side target matcher
+ * against the REAL `matchesSearch`/`normalizeDesig` from TargetsPage.tsx (the
+ * same import target-search.test.ts already uses as its source of truth) so a
+ * regression in either the palette's wiring or the shared matcher is caught
+ * here, not just at `/targets`.
  */
 
 import { describe, it, expect } from 'vitest';
-import { PAGES } from './CommandPalette';
+import { PAGES, buildTargetResults } from './CommandPalette';
+import { matchesSearch, normalizeDesig } from '@/features/targets/TargetsPage';
+import type { TargetListItem } from '@/bindings/index';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
