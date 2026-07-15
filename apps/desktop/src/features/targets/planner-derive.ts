@@ -66,7 +66,12 @@ export interface BestImagingDate {
 export interface DerivedObservability {
   /** Peak altitude across the night (= transit altitude), degrees. */
   maxAltDeg: number;
-  /** True when any dark-window sample reaches the usable altitude (FR-005). */
+  /**
+   * True when the target reaches the usable altitude anywhere in the
+   * observable window — the astronomical dark window when one exists, else the
+   * whole night (#579: discriminate by altitude even when there is no
+   * astronomical darkness, rather than collapsing every target to not-visible).
+   */
   visibleTonight: boolean;
   /** Minutes of dark window with altitude ≥ usable (band-free — FR-005). */
   totalImagingMinutes: number;
@@ -214,15 +219,34 @@ export function deriveObservability(
   // Imaging time counts only samples inside the dark window that clear the
   // usable altitude. No dark window (high-lat summer) → zero imaging (FR-017).
   let usableSamples = 0;
-  let visibleTonight = false;
   const dark = night.darkWindow;
   if (dark) {
     for (const s of night.samples) {
       if (s.tMs < dark.startMs || s.tMs > dark.endMs) continue;
-      if (s.altDeg >= usableAltitudeDeg) {
-        usableSamples += 1;
-        visibleTonight = true;
-      }
+      if (s.altDeg >= usableAltitudeDeg) usableSamples += 1;
+    }
+  }
+
+  // Visibility (#579) discriminates by ALTITUDE over the observable window,
+  // which is the astronomical dark window when one exists, else the whole
+  // night. At high latitude there is no astronomical darkness for months
+  // (e.g. lat 52 in summer), but a high/circumpolar target is still observable
+  // in twilight and MUST NOT read identically to a target that never rises —
+  // gating visibility solely on the dark window collapsed the whole "Visible"
+  // column to a single non-discriminating value. Winter behaviour is
+  // unchanged: the dark window is present, so the observable window is the
+  // same span the prior dark-only loop used. Imaging time above stays
+  // dark-gated (FR-017); only the visibility flag falls back.
+  const observable = dark ?? {
+    startMs: night.nightStartMs,
+    endMs: night.nightEndMs,
+  };
+  let visibleTonight = false;
+  for (const s of night.samples) {
+    if (s.tMs < observable.startMs || s.tMs > observable.endMs) continue;
+    if (s.altDeg >= usableAltitudeDeg) {
+      visibleTonight = true;
+      break;
     }
   }
 

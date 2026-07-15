@@ -329,7 +329,7 @@
 .alm-targets-col--maxalt { width: 7%; }
 
 /* Sparkline: fixed narrow column (SVG is 64px wide, cell adds padding). */
-.alm-targets-col--spark { width: 7%; }
+.alm-targets-col--spark { width: 9%; } /* #580: widened for the enlarged sparkline */
 
 /* Visible: "●tonight" / "○low" indicator. */
 .alm-targets-col--visible { width: 8.5%; }
@@ -743,14 +743,44 @@
 /* task 5: add readable spacing between filter badges (was alm-sp-1 = 4px). */
 .alm-filter-badges { gap: var(--alm-sp-2); }
 
-/* ── task 19: sparkline size + time-axis ───────────────────────────────────
- * Make the sparkline shorter vertically (from 18 px → 14 px) and a touch
- * wider (from 64 px → 72 px) so the bottom time-axis ticks have headroom.
- * The SVG viewBox is updated in AltitudeSparkline.tsx to match. */
+/* ── task 19 / #580: sparkline size + time-axis ────────────────────────────
+ * #580: the row sparkline was too small to read. Enlarged from 72×22 → 96×34
+ * (wider curve, taller body) with twilight shading, an area fill, and a
+ * transit/max-altitude marker. The SVG viewBox (96×28) is set in
+ * AltitudeSparkline.tsx; CSS renders it at a legible pixel size. */
 
 .alm-targets-spark {
-  width: 72px;
-  height: 22px; /* taller than before to fit axis ticks below the curve */
+  width: 96px;
+  height: 34px; /* taller so the enlarged curve + axis ticks are readable */
+}
+
+/* #580: soft area fill under the curve — usable/low tinted via the state
+ * modifier classes below. */
+.alm-targets-spark__area {
+  fill: var(--alm-text-muted);
+  opacity: 0.1;
+  stroke: none;
+}
+.alm-targets-spark--usable .alm-targets-spark__area {
+  fill: var(--alm-accent);
+  opacity: 0.14;
+}
+
+/* #580: twilight (not-dark) shading either side of the astronomical dark
+ * window — the same twilight the detail-pane graph marks. */
+.alm-targets-spark__twilight {
+  fill: var(--alm-text-faint);
+  opacity: 0.12;
+  stroke: none;
+}
+
+/* #580: transit / max-altitude dot marker. */
+.alm-targets-spark__peak {
+  fill: var(--alm-text-muted);
+  stroke: none;
+}
+.alm-targets-spark--usable .alm-targets-spark__peak {
+  fill: var(--alm-accent);
 }
 
 /* task 19: axis tick lines (bottom of sparkline viewBox). */

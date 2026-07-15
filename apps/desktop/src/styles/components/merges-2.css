@@ -302,7 +302,7 @@
 
 /* Sparkline column: fixed-ish narrow column, vertically centered. */
 .alm-targets-cell--spark {
-  width: 76px;
+  width: 100px; /* #580: widened for the enlarged sparkline */
   padding-top: var(--alm-sp-1);
   padding-bottom: var(--alm-sp-1);
 }

@@ -542,3 +542,46 @@ describe('TargetsTable — needs-coordinates state (#757)', () => {
     }
   });
 });
+
+// ── #579: Visible discriminates by altitude even with no dark window ─────────
+//
+// At lat 52 there is no astronomical darkness for months (summer). The Visible
+// column used to collapse EVERY target to a single not-visible state on such a
+// night. It must instead vary by altitude: a zenith/circumpolar target reads
+// visible, a never-riser reads low.
+describe('TargetsTable — Visible on a no-dark-window summer night (#579)', () => {
+  beforeEach(() => {
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+  });
+
+  it('a zenith target reads visible while a never-riser reads low — not both the same', () => {
+    vi.useFakeTimers();
+    // Mid-July at 52°N: no astronomical dark window exists all night.
+    vi.setSystemTime(new Date('2026-07-15T21:00:00Z'));
+    try {
+      renderTable({
+        targets: [
+          coordItem('ZENITH', 270, 52), // transits near the zenith
+          coordItem('NEVER', 0, -80), // never rises at 52°N
+        ],
+      });
+      const table = screen.getByRole('table');
+      const zenithRow = within(table)
+        .getByText('ZENITH')
+        .closest('tr') as HTMLTableRowElement;
+      const neverRow = within(table)
+        .getByText('NEVER')
+        .closest('tr') as HTMLTableRowElement;
+      // Discrimination: the two extremes render DIFFERENT visibility states.
+      expect(zenithRow.querySelector('.alm-targets-vis--yes')).not.toBeNull();
+      expect(neverRow.querySelector('.alm-targets-vis--no')).not.toBeNull();
+      expect(neverRow.querySelector('.alm-targets-vis--yes')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

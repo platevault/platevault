@@ -199,9 +199,12 @@ function compareTargetRows(
       break;
     case 'visible':
       // Primary: visible flag (true > false). Secondary: hours above threshold.
+      // Tertiary: peak altitude — the only key that still discriminates on a
+      // no-dark-window night (#579), where hoursAboveUsable is 0 for every row.
       cmp =
         Number(altA.visibleTonight) - Number(altB.visibleTonight) ||
-        altA.hoursAboveUsable - altB.hoursAboveUsable;
+        altA.hoursAboveUsable - altB.hoursAboveUsable ||
+        altA.maxAltDeg - altB.maxAltDeg;
       break;
     case 'opposition': {
       // Real next-opposition date (US4). Unknowns (no coordinates / no site)
@@ -1121,13 +1124,18 @@ export function TargetsTable({
                       />
                     )}
                   </td>
-                  {/* Visible-tonight indicator (peaks above usable alt).
+                  {/* Visible-tonight indicator, discriminating by ALTITUDE.
                       #757: no catalogued coordinates is a distinct
                       un-plannable state, checked first — it must never look
                       like a genuinely low/not-visible target (FR-024).
-                      US4/T033: a site/date with no qualifying dark window
-                      (FR-017) discloses that explicitly instead of implying
-                      the target is simply too low. */}
+                      #579: the visible/low split follows `visibleTonight`
+                      (does the target clear the usable altitude tonight),
+                      which now discriminates even on a no-dark-window night
+                      (high-lat summer) instead of collapsing every row to a
+                      single "no dark window" state. When there is no
+                      astronomical darkness the tooltip discloses it (FR-017 —
+                      imaging time is genuinely zero) without hiding the
+                      altitude distinction. */}
                   <td className="alm-targets-cell--center">
                     {alt.needsCoordinates ? (
                       <span
@@ -1139,24 +1147,18 @@ export function TargetsTable({
                           {m.targets_table_needs_coordinates()}
                         </span>
                       </span>
-                    ) : alt.noDarkWindow ? (
-                      <span
-                        className="alm-targets-vis alm-targets-vis--no"
-                        title={m.targets_table_no_dark_window_title()}
-                      >
-                        ○
-                        <span className="alm-targets-vis__label">
-                          {m.targets_table_no_dark_window()}
-                        </span>
-                      </span>
                     ) : alt.visibleTonight ? (
                       <span
                         className="alm-targets-vis alm-targets-vis--yes"
-                        title={m.targets_table_visible_reaches_title({
-                          deg: Math.round(alt.maxAltDeg),
-                          hours: alt.hoursAboveUsable.toFixed(1),
-                          threshold: usableAltDeg,
-                        })}
+                        title={
+                          alt.noDarkWindow
+                            ? m.targets_table_no_dark_window_title()
+                            : m.targets_table_visible_reaches_title({
+                                deg: Math.round(alt.maxAltDeg),
+                                hours: alt.hoursAboveUsable.toFixed(1),
+                                threshold: usableAltDeg,
+                              })
+                        }
                       >
                         ●
                         <span className="alm-targets-vis__label">
@@ -1166,10 +1168,14 @@ export function TargetsTable({
                     ) : (
                       <span
                         className="alm-targets-vis alm-targets-vis--no"
-                        title={m.targets_table_visible_peaks_title({
-                          deg: Math.round(alt.maxAltDeg),
-                          threshold: usableAltDeg,
-                        })}
+                        title={
+                          alt.noDarkWindow
+                            ? m.targets_table_no_dark_window_title()
+                            : m.targets_table_visible_peaks_title({
+                                deg: Math.round(alt.maxAltDeg),
+                                threshold: usableAltDeg,
+                              })
+                        }
                       >
                         ○
                         <span className="alm-targets-vis__label">
