@@ -571,4 +571,63 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
     fireEvent.click(cancelBtn);
     await waitFor(() => expect(mockPlansCancel).toHaveBeenCalledWith('plan-1'));
   });
+
+  // FR-003 (issue #733): reason/linked entity were present on the DTO but
+  // never rendered in the item table.
+  it("renders each item's reason and linked entity (FR-003, issue #733)", async () => {
+    mockPlansGet.mockResolvedValue(
+      ok(
+        plan({
+          items: [
+            item({ reason: 'intermediate artifact', linked: 'project-42' }),
+            item({ id: 'item-1', index: 1, name: 'raw_002.fits' }),
+          ],
+        }),
+      ),
+    );
+    renderOverlay();
+    expect(await screen.findAllByText('intermediate artifact')).toHaveLength(2);
+    expect(screen.getByText('project-42')).toBeInTheDocument();
+    // Second item has no linked entity — rendered as "None", not blank.
+    const unlinkedRow = screen.getByTestId('plan-review-item-1');
+    expect(unlinkedRow).toHaveTextContent('None');
+  });
+
+  // FR-011 (issue #733): a plan reopened from a prior session has no
+  // session-local `finalState` — the footer must key off the persisted
+  // `plan.state` instead of always rendering the pre-apply pair (which the
+  // backend refuses with `plan.invalid_state` on a terminal plan).
+  it.each([
+    ['applied', 'Close'],
+    ['failed', 'Generate retry plan'],
+    ['partially_applied', 'Generate retry plan'],
+    ['cancelled', 'Generate retry plan'],
+  ] as const)('renders the persisted %s plan.state footer on reopen, without a session apply (issue #733)', async (state, expectedAction) => {
+    mockPlansGet.mockResolvedValue(ok(plan({ state })));
+    renderOverlay();
+
+    await screen.findByText('light_001.xisf');
+    expect(screen.getByText(expectedAction)).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('plan-review-approve-apply'),
+    ).not.toBeInTheDocument();
+    if (expectedAction !== 'Close') {
+      expect(screen.getByText('Close')).toBeInTheDocument();
+    }
+  });
+
+  it('retries a reopened cancelled plan\'s cancelled items, not "failed" (issue #733)', async () => {
+    mockPlansGet.mockResolvedValue(ok(plan({ state: 'cancelled' })));
+    mockPlansRetry.mockResolvedValue(
+      ok({ newPlanId: 'plan-2', parentPlanId: 'plan-1', itemsTotal: 1 }),
+    );
+    const onRetryCreated = vi.fn();
+    renderOverlay({ onRetryCreated });
+
+    fireEvent.click(await screen.findByTestId('plan-review-retry'));
+    await waitFor(() =>
+      expect(mockPlansRetry).toHaveBeenCalledWith('plan-1', 'cancelled'),
+    );
+    await waitFor(() => expect(onRetryCreated).toHaveBeenCalledWith('plan-2'));
+  });
 });

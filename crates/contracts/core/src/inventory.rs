@@ -20,6 +20,8 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+use crate::sessions::SessionCalibrationMatch;
+
 // ── FrameType ────────────────────────────────────────────────────────────────
 
 /// Frame type for an inventory session.
@@ -127,6 +129,25 @@ pub struct InventorySession {
     pub provenance: Option<InventoryProvenanceSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linked: Option<InventoryLinkedRefs>,
+    /// The session's frame folder, relative to its source root
+    /// (`source_id`'s `current_path`). The reveal action joins the root path
+    /// with this so it opens the session's actual frame folder instead of the
+    /// library root (#567). `None` when no frame `file_record` resolves a
+    /// path (legacy/unscanned sessions) — the UI then falls back to the root.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relative_path: Option<String>,
+    /// User-editable free-text notes (#773). `None` when never set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    /// Calibration masters assigned to this session (`calibration_assignment`
+    /// rows), reusing the same DTO the (frontend-unused) `sessions_get`
+    /// contract already carries. Empty for calibration sessions (dark/flat/
+    /// bias) — assignment links a light session to its calibration masters,
+    /// never the reverse — and for a light session with no assignment yet;
+    /// the UI renders both as an explicit "no calibration match" state
+    /// rather than omitting the section (#772).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calibration_matches: Vec<SessionCalibrationMatch>,
 }
 
 // ── InventorySource ──────────────────────────────────────────────────────────
@@ -176,4 +197,25 @@ pub struct InventoryListResponse {
     pub request_id: String,
     pub generated_at: String,
     pub sources: Vec<InventorySource>,
+}
+
+// ── inventory.session.notes.update request / response (#773) ───────────────────
+
+/// Request for `inventory.session.notes.update`. Mirrors the
+/// `target.note.update` shape (spec 023 US4) — empty/whitespace-only `notes`
+/// clears the field (stores NULL).
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionNotesUpdateRequest {
+    pub session_id: String,
+    pub notes: String,
+}
+
+/// Response for `inventory.session.notes.update`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionNotesUpdateResult {
+    /// Notes after the update, or `null` when cleared.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
 }

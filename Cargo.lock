@@ -1643,6 +1643,7 @@ dependencies = [
  "tempfile",
  "thirtyfour",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

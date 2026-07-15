@@ -95,6 +95,11 @@ beforeEach(() => {
   });
 });
 
+/** Issue #562: per-source actions live inside the kebab (⋯) menu now. */
+function openKebab() {
+  fireEvent.click(screen.getByRole('button', { name: /Source actions/i }));
+}
+
 describe('DataSources — Reconcile', () => {
   it('calls inventory_reconcile_run with the root id and invalidates both the sessions and inventory queries on completion', async () => {
     mockRootsList.mockResolvedValue({ status: 'ok', data: [makeRoot()] });
@@ -115,7 +120,8 @@ describe('DataSources — Reconcile', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Reconcile$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Reconcile$/i }));
 
     await waitFor(() => {
       expect(mockReconcileRun).toHaveBeenCalledWith({
@@ -149,11 +155,14 @@ describe('DataSources — Reconcile', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Reconcile$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Reconcile$/i }));
 
+    // The kebab menu stays open across a Reconcile click (unlike other
+    // items) so the disabled/relabeled state remains visible.
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: /Reconciling/i }),
+        screen.getByRole('menuitem', { name: /Reconciling/i }),
       ).toBeDisabled();
     });
 
@@ -171,12 +180,12 @@ describe('DataSources — Reconcile', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: /^Reconcile$/i }),
+        screen.getByRole('menuitem', { name: /^Reconcile$/i }),
       ).not.toBeDisabled();
     });
   });
 
-  it('does not show a Reconcile button for project/inbox roots (no file_record rows to diff)', async () => {
+  it('does not show a Reconcile menu item for project/inbox roots (no file_record rows to diff)', async () => {
     mockRootsList.mockResolvedValue({
       status: 'ok',
       data: [
@@ -193,8 +202,9 @@ describe('DataSources — Reconcile', () => {
       screen.getByText('/astro/projects', { selector: 'code' }),
     );
 
+    openKebab();
     expect(
-      screen.queryByRole('button', { name: /^Reconcile$/i }),
+      screen.queryByRole('menuitem', { name: /^Reconcile$/i }),
     ).not.toBeInTheDocument();
   });
 });

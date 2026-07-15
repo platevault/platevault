@@ -95,6 +95,12 @@ pub enum ErrorCode {
     PathCollision,
     #[serde(rename = "path.invalid")]
     PathInvalid,
+    /// `roots.register`/`roots.register.batch`: a candidate root path is a
+    /// parent of, or nested within, an already-registered root (issue #501).
+    /// Cross-cutting across categories — an inbox root inside a light-frames
+    /// root is still an overlap.
+    #[serde(rename = "path.overlaps_existing")]
+    PathOverlapsExisting,
 
     // ── Inbox ───────────────────────────────────────────────────────────────
     #[serde(rename = "inbox.item.not_found")]
@@ -204,6 +210,20 @@ pub enum ErrorCode {
     // ── Archive ──────────────────────────────────────────────────────────────
     #[serde(rename = "archive.empty")]
     ArchiveEmpty,
+    /// OS trash unavailable or failed for every item in an
+    /// `archive.send_to_trash` run (spec 017 US6, spec 025 `FailureCode::OsTrashUnavailable`).
+    #[serde(rename = "os_trash.unavailable")]
+    OsTrashUnavailable,
+    /// OS trash denied permission for every item in an
+    /// `archive.send_to_trash` run.
+    #[serde(rename = "os_trash.permission.denied")]
+    OsTrashPermissionDenied,
+    /// Non-permission delete failure (e.g. the file vanished mid-run, its
+    /// volume went unavailable, or the destination disk filled) for every
+    /// item in an `archive.permanently_delete` run. Permission failures use
+    /// the more specific `path.permission_denied`.
+    #[serde(rename = "archive.delete_failed")]
+    ArchiveDeleteFailed,
 
     // ── Confirm ──────────────────────────────────────────────────────────────
     #[serde(rename = "confirm.text.mismatch")]
@@ -297,6 +317,10 @@ pub enum ErrorCode {
     /// root; deletion is blocked rather than cascade-nullified.
     #[serde(rename = "root.has_dependents")]
     RootHasDependents,
+    /// `roots.remap.apply` (issue #707): the two-step Verify → Apply flow
+    /// requires a successful Verify before Apply may mutate the root's path.
+    #[serde(rename = "remap.not_verified")]
+    RemapNotVerified,
 
     // ── Tool ────────────────────────────────────────────────────────────────
     #[serde(rename = "tool.locked")]

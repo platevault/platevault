@@ -3,9 +3,21 @@
 
 // spec 003 (roots/sources) — wired to real backend via listRoots/registerRoot.
 // Redesigned to match platevault-settings-menu.html data pane (authoritative mock).
-import { useState, useEffect, useCallback } from 'react';
+//
+// Issue #562: per-source actions consolidated into a kebab (⋯) menu and the
+// card decluttered — one path/pill/kebab row + one humanized meta row. The
+// former detached bottom "Per-source setting override" panel (source picker +
+// key/value selects covering followSymlinks/hashOnScan/defaultProtection) is
+// folded into each card's contextual "Edit protection…" panel. Issue #563:
+// that bottom panel let `defaultProtection` be set through a second write
+// path (`settings.source_override.set`) that `source.protection.get` never
+// reads back — a real dual-source-of-truth. Removing it and routing
+// protection level exclusively through `SourceProtectionOverride`
+// (`source.protection.set`/`get`) removes that inconsistency at the root.
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Btn, Pill } from '@/ui';
 import { DirPicker } from '@/ui/DirPicker';
+import { formatDistanceToNow } from 'date-fns';
 import {
   listRoots,
   registerRoot,
@@ -28,6 +40,9 @@ import { SourceProtectionOverride } from './SourceProtectionOverride';
 import { RemapRootDialog } from './RemapRootDialog';
 import { ConfirmOverlay } from '@/components';
 import { RootDetectionConfig } from '@/features/inventory/RootDetectionConfig';
+import { revealInOs } from '@/shared/native/reveal';
+import { revealLabel } from '@/lib/reveal-label';
+import { addToast } from '@/shared/toast';
 
 const SOURCES_KEYS = [
   'followSymlinks',
@@ -37,7 +52,6 @@ const SOURCES_KEYS = [
 
 // Fallback list used before the backend responds or if the call fails.
 const OVERRIDABLE_KEYS_FALLBACK = ['hashOnScan', 'followSymlinks'] as const;
-type OverridableKey = string;
 
 interface DataSourcesProps {
   save: (scope: string, values: Record<string, unknown>) => void;
@@ -112,38 +126,6 @@ export function DataSources({ save: _save }: DataSourcesProps) {
         // Keep fallback list on failure.
       });
   }, []);
-
-  // ── Per-source override (T025) ────────────────────────────────────────────
-  const [overrideSourceId, setOverrideSourceId] = useState('');
-  const [overrideKey, setOverrideKey] = useState<OverridableKey>('hashOnScan');
-  const [overrideValue, setOverrideValue] = useState('true');
-  const [overrideError, setOverrideError] = useState<string | null>(null);
-  const [overrideApplying, setOverrideApplying] = useState(false);
-
-  const handleOverrideApply = async () => {
-    if (!overrideSourceId) return;
-    setOverrideApplying(true);
-    setOverrideError(null);
-    try {
-      // Value arrives as string from the text input; cast to boolean when the
-      // key is a known boolean flag, otherwise pass as string.
-      const coerced: unknown =
-        overrideValue === 'true'
-          ? true
-          : overrideValue === 'false'
-            ? false
-            : overrideValue;
-      await settingsSourceOverrideSet({
-        sourceId: overrideSourceId,
-        key: overrideKey,
-        value: coerced,
-      });
-    } catch (err: unknown) {
-      setOverrideError(errMessage(err));
-    } finally {
-      setOverrideApplying(false);
-    }
-  };
 
   const loadRoots = useCallback(() => {
     setLoading(true);
@@ -405,6 +387,7 @@ export function DataSources({ save: _save }: DataSourcesProps) {
                 togglingActive={togglingActiveId === root.id}
                 onDelete={requestDelete}
                 deleting={deletingId === root.id}
+                overridableKeys={overridableKeys}
               />
             ))}
           </div>
@@ -461,94 +444,6 @@ export function DataSources({ save: _save }: DataSourcesProps) {
       >
         {deleteError && <span className="alm-field-error">{deleteError}</span>}
       </ConfirmOverlay>
-
-      {/* Per-source setting override (spec 018 T025) */}
-      {roots.length > 0 && (
-        <div
-          className="alm-settings__group"
-          data-testid="source-override-panel"
-        >
-          <div className="alm-settings__group-title">
-            {m.settings_datasources_source_override_title()}
-          </div>
-          <div className="alm-settings__row">
-            <div className="alm-settings__row-label">
-              {m.settings_datasources_source_override_source_aria()}
-            </div>
-            <div className="alm-settings__row-content">
-              <select
-                className="alm-select"
-                value={overrideSourceId}
-                onChange={(e) => setOverrideSourceId(e.target.value)}
-                aria-label={m.settings_datasources_source_override_source_aria()}
-              >
-                <option value="">
-                  {m.settings_datasources_select_source()}
-                </option>
-                {roots.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.path}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="alm-settings__row">
-            <div className="alm-settings__row-label">
-              {m.settings_datasources_source_override_key_aria()}
-            </div>
-            <div className="alm-settings__row-content">
-              <select
-                className="alm-select"
-                value={overrideKey}
-                onChange={(e) => setOverrideKey(e.target.value)}
-                aria-label={m.settings_datasources_source_override_key_aria()}
-              >
-                {overridableKeys.map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="alm-settings__row">
-            <div className="alm-settings__row-label">
-              {m.settings_datasources_source_override_value_aria()}
-            </div>
-            <div className="alm-settings__row-content">
-              <select
-                className="alm-select"
-                value={overrideValue}
-                onChange={(e) => setOverrideValue(e.target.value)}
-                aria-label={m.settings_datasources_source_override_value_aria()}
-              >
-                <option value="true">{m.common_true()}</option>
-                <option value="false">{m.common_false()}</option>
-              </select>
-            </div>
-          </div>
-          {overrideError && (
-            <div className="alm-data-sources__add-error">
-              {m.settings_datasources_source_override_error({
-                error: overrideError,
-              })}
-            </div>
-          )}
-          <div className="alm-settings__row">
-            <div className="alm-settings__row-label" />
-            <div className="alm-settings__row-content">
-              <Btn
-                size="sm"
-                onClick={() => void handleOverrideApply()}
-                disabled={!overrideSourceId || overrideApplying}
-              >
-                {m.settings_datasources_source_override_apply()}
-              </Btn>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
@@ -570,6 +465,8 @@ interface RootCardProps {
   togglingActive: boolean;
   onDelete: (root: LibraryRoot) => void;
   deleting: boolean;
+  /** Overridable scan-setting keys (T025), shared across every card. */
+  overridableKeys: string[];
 }
 
 function RootCard({
@@ -583,8 +480,33 @@ function RootCard({
   togglingActive,
   onDelete,
   deleting,
+  overridableKeys,
 }: RootCardProps) {
   const isOffline = !root.online;
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editProtectionOpen, setEditProtectionOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close the kebab menu on outside click or Escape — standard menu UX; no
+  // shared close-on-outside helper exists yet in this codebase (single
+  // consumer today), so this stays a small inline effect rather than a new
+  // abstraction (YAGNI).
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpen]);
 
   const metaParts: string[] = [];
   if (root.fileCount != null && root.fileCount > 0) {
@@ -596,9 +518,36 @@ function RootCard({
     );
   }
   if (root.lastScanned) {
-    metaParts.push(m.settings_datasources_scanned({ date: root.lastScanned }));
+    // Issue #562: humanize the raw ISO timestamp ("2 days ago" instead of
+    // "2026-07-11T09:42:02.2555817Z"). Falls back to the raw value if the
+    // stored timestamp somehow fails to parse.
+    let humanized = root.lastScanned;
+    try {
+      humanized = formatDistanceToNow(new Date(root.lastScanned), {
+        addSuffix: true,
+      });
+    } catch {
+      // keep raw fallback
+    }
+    metaParts.push(m.settings_datasources_scanned({ date: humanized }));
   }
   const meta = metaParts.join(' · ');
+
+  const handleReveal = async () => {
+    setMenuOpen(false);
+    try {
+      await revealInOs(root.path, {
+        entityKind: 'registered_source',
+        entityId: root.id,
+      });
+    } catch (err: unknown) {
+      addToast({
+        message:
+          typeof err === 'string' ? err : m.sessions_toast_reveal_error(),
+        variant: 'error',
+      });
+    }
+  };
 
   return (
     <div
@@ -608,12 +557,18 @@ function RootCard({
         (root.active ? '' : ' alm-data-sources__root-card--disabled')
       }
     >
-      {/* Left: path + offline/disabled pills + meta */}
+      {/* Row 1: path + compact protection pill + offline/disabled pills.
+          Row 2: humanized meta line. */}
       <div className="alm-data-sources__root-info">
         <div className="alm-data-sources__root-path-row">
           <code className="alm-mono alm-data-sources__root-path">
             {root.path}
           </code>
+          <SourceProtectionOverride
+            sourceId={root.id}
+            open={editProtectionOpen}
+            onOpenChange={setEditProtectionOpen}
+          />
           {isOffline && (
             <Pill variant="warn" className="alm-data-sources__offline-pill">
               {m.nav_roots_offline_suffix()}
@@ -626,7 +581,12 @@ function RootCard({
           )}
         </div>
         {meta && <div className="alm-data-sources__root-meta">{meta}</div>}
-        <SourceProtectionOverride sourceId={root.id} />
+        {editProtectionOpen && (
+          <SourceOverridePanel
+            sourceId={root.id}
+            overridableKeys={overridableKeys}
+          />
+        )}
         {/* spec 048 US4: per-root detection config only applies to roots that
             carry `file_record` rows (raw/calibration). */}
         {RECONCILABLE_CATEGORIES.includes(root.category) && (
@@ -634,51 +594,231 @@ function RootCard({
         )}
       </div>
 
-      {/* Right: action buttons */}
-      <div className="alm-data-sources__root-actions">
-        {!isOffline && (
-          <Btn size="sm" onClick={() => onRescan(root)} disabled={rescanning}>
-            {rescanning ? m.common_rescanning() : m.common_rescan()}
-          </Btn>
-        )}
-        {!isOffline && RECONCILABLE_CATEGORIES.includes(root.category) && (
-          <Btn
-            size="sm"
-            data-testid={`reconcile-now-${root.id}`}
-            onClick={() => onReconcile(root)}
-            disabled={reconciling}
-          >
-            {reconciling ? m.common_reconciling() : m.common_reconcile()}
-          </Btn>
-        )}
-        {!isOffline && (
-          <Btn
-            size="sm"
-            onClick={() => onToggleActive(root)}
-            disabled={togglingActive}
-          >
-            {root.active
-              ? togglingActive
-                ? m.common_disabling()
-                : m.settings_datasources_disable()
-              : togglingActive
-                ? m.common_enabling()
-                : m.settings_datasources_enable()}
-          </Btn>
-        )}
-        <Btn size="sm" onClick={() => onRemap(root)}>
-          {m.settings_datasources_remap()}
+      {/* Right: kebab (⋯) menu — issue #562 consolidates every per-source
+          action here instead of a scattered button row. */}
+      <div className="alm-data-sources__root-actions" ref={menuRef}>
+        <Btn
+          size="sm"
+          variant="ghost"
+          className="alm-data-sources__kebab-btn"
+          aria-label={m.settings_datasources_actions_aria()}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((v) => !v)}
+        >
+          ⋯
         </Btn>
-        {isOffline && (
-          <Btn
-            size="sm"
-            variant="danger"
-            onClick={() => onDelete(root)}
-            disabled={deleting}
-          >
-            {deleting ? m.common_deleting() : m.settings_datasources_delete()}
-          </Btn>
+        {menuOpen && (
+          <div className="alm-data-sources__kebab-menu" role="menu">
+            {!isOffline && (
+              <button
+                type="button"
+                role="menuitem"
+                className="alm-data-sources__kebab-item"
+                disabled={rescanning}
+                // Stays open while in flight (unlike the other items) so the
+                // disabled/relabeled "Rescanning…" state remains visible —
+                // a background action, not a navigation to a dialog/panel.
+                onClick={() => onRescan(root)}
+              >
+                {rescanning ? m.common_rescanning() : m.common_rescan()}
+              </button>
+            )}
+            {!isOffline && RECONCILABLE_CATEGORIES.includes(root.category) && (
+              <button
+                type="button"
+                role="menuitem"
+                className="alm-data-sources__kebab-item"
+                data-testid={`reconcile-now-${root.id}`}
+                disabled={reconciling}
+                onClick={() => onReconcile(root)}
+              >
+                {reconciling ? m.common_reconciling() : m.common_reconcile()}
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className="alm-data-sources__kebab-item"
+              onClick={() => {
+                setMenuOpen(false);
+                onRemap(root);
+              }}
+            >
+              {m.settings_datasources_remap()}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="alm-data-sources__kebab-item"
+              onClick={() => {
+                setMenuOpen(false);
+                setEditProtectionOpen(true);
+              }}
+            >
+              {m.settings_datasources_edit_protection()}
+            </button>
+            {!isOffline && (
+              <button
+                type="button"
+                role="menuitem"
+                className="alm-data-sources__kebab-item"
+                disabled={togglingActive}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onToggleActive(root);
+                }}
+              >
+                {root.active
+                  ? togglingActive
+                    ? m.common_disabling()
+                    : m.settings_datasources_disable()
+                  : togglingActive
+                    ? m.common_enabling()
+                    : m.settings_datasources_enable()}
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className="alm-data-sources__kebab-item"
+              onClick={() => void handleReveal()}
+            >
+              {revealLabel()}
+            </button>
+            {/* #559: Delete was only reachable for offline roots before this
+                fix — the backend already blocks it server-side when the
+                source has dependents (has_dependents), surfaced in the
+                confirm dialog below. */}
+            <button
+              type="button"
+              role="menuitem"
+              className="alm-data-sources__kebab-item alm-data-sources__kebab-item--danger"
+              disabled={deleting}
+              onClick={() => {
+                setMenuOpen(false);
+                onDelete(root);
+              }}
+            >
+              {deleting ? m.common_deleting() : m.settings_datasources_delete()}
+            </button>
+          </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+interface SourceOverridePanelProps {
+  sourceId: string;
+  overridableKeys: string[];
+}
+
+/**
+ * Contextual scan-setting override editor (issue #562) — folds the former
+ * detached bottom "Per-source setting override" panel into the per-card
+ * "Edit protection…" panel. No source picker needed (the source is already
+ * known from context), and `defaultProtection` is excluded here: protection
+ * level is set exclusively via `SourceProtectionOverride` (`source.protection.set`)
+ * so there is exactly one write path for it (issue #563).
+ */
+function SourceOverridePanel({
+  sourceId,
+  overridableKeys,
+}: SourceOverridePanelProps) {
+  const scanKeys = overridableKeys.filter((k) => k !== 'defaultProtection');
+  const [key, setKey] = useState<string>(scanKeys[0] ?? 'hashOnScan');
+  const [value, setValue] = useState('true');
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  if (scanKeys.length === 0) return null;
+
+  const handleApply = async () => {
+    setApplying(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const coerced: unknown =
+        value === 'true' ? true : value === 'false' ? false : value;
+      await settingsSourceOverrideSet({ sourceId, key, value: coerced });
+      setSaved(true);
+    } catch (err: unknown) {
+      setError(errMessage(err));
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  return (
+    <div
+      className="alm-settings__group"
+      data-testid={`source-override-panel-${sourceId}`}
+    >
+      <div className="alm-settings__group-title">
+        {m.settings_datasources_source_override_title()}
+      </div>
+      <div className="alm-settings__row">
+        <div className="alm-settings__row-label">
+          {m.settings_datasources_source_override_key_aria()}
+        </div>
+        <div className="alm-settings__row-content">
+          <select
+            className="alm-select"
+            value={key}
+            onChange={(e) => {
+              setKey(e.target.value);
+              setSaved(false);
+            }}
+            aria-label={m.settings_datasources_source_override_key_aria()}
+          >
+            {scanKeys.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="alm-settings__row">
+        <div className="alm-settings__row-label">
+          {m.settings_datasources_source_override_value_aria()}
+        </div>
+        <div className="alm-settings__row-content">
+          <select
+            className="alm-select"
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setSaved(false);
+            }}
+            aria-label={m.settings_datasources_source_override_value_aria()}
+          >
+            <option value="true">{m.common_true()}</option>
+            <option value="false">{m.common_false()}</option>
+          </select>
+        </div>
+      </div>
+      {error && (
+        <div className="alm-data-sources__add-error">
+          {m.settings_datasources_source_override_error({ error })}
+        </div>
+      )}
+      <div className="alm-settings__row">
+        <div className="alm-settings__row-label" />
+        <div className="alm-settings__row-content">
+          <Btn size="sm" onClick={() => void handleApply()} disabled={applying}>
+            {applying
+              ? m.common_saving()
+              : m.settings_datasources_source_override_apply()}
+          </Btn>
+          {saved && (
+            <span className="alm-source-protect__status">
+              {m.common_saved()}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

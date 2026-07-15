@@ -112,14 +112,6 @@
   gap: var(--alm-sp-1);
 }
 
-/* View-mode row: badge + inherit pill + Override button */
-.alm-source-protect__view-row {
-  display: flex;
-  align-items: center;
-  gap: var(--alm-sp-2);
-  flex-wrap: wrap;
-}
-
 /* Hint text under view/edit row */
 .alm-source-protect__hint {
   font-size: var(--alm-text-xs);
@@ -277,12 +269,15 @@
   margin: 0 0 var(--alm-sp-2) 0;
 }
 
-/* Root card — two-column grid: info (1fr) | actions (auto) */
+/* Root card — two-column grid: info (1fr) | kebab menu (auto). `align-items:
+   start` (not `center`) so the kebab trigger stays pinned to the top row
+   when the info column grows (meta line, expanded "Edit protection…" panel,
+   detection config). */
 .alm-data-sources__root-card {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: var(--alm-sp-2);
-  align-items: center;
+  align-items: start;
   border: 1px solid var(--alm-border);
   border-radius: var(--alm-radius-md);
   padding: var(--alm-sp-3) var(--alm-sp-4);
@@ -340,11 +335,60 @@
   color: var(--alm-text-muted);
 }
 
-/* Right column: action button cluster */
+/* Right column: kebab (⋯) menu anchor (issue #562 — every per-source action
+   lives in this one overflow menu instead of a scattered button row). */
 .alm-data-sources__root-actions {
-  display: flex;
-  gap: var(--alm-sp-1);
+  position: relative;
   flex-shrink: 0;
+}
+
+.alm-data-sources__kebab-btn {
+  font-size: var(--alm-text-md);
+  line-height: 1;
+  padding-inline: var(--alm-sp-2);
+}
+
+.alm-data-sources__kebab-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  margin-top: var(--alm-sp-1);
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--alm-sp-1);
+  border: 1px solid var(--alm-border);
+  border-radius: var(--alm-radius-md);
+  background: var(--alm-surface-raised);
+  box-shadow: var(--alm-shadow-sm);
+}
+
+.alm-data-sources__kebab-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--alm-sp-2);
+  border: none;
+  border-radius: var(--alm-radius-sm);
+  background: transparent;
+  color: var(--alm-text);
+  font-size: var(--alm-text-sm);
+  cursor: pointer;
+}
+
+.alm-data-sources__kebab-item:hover,
+.alm-data-sources__kebab-item:focus-visible {
+  background: var(--alm-bg3);
+}
+
+.alm-data-sources__kebab-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.alm-data-sources__kebab-item--danger {
+  color: var(--alm-danger);
 }
 
 /* === SETTINGS DATA SOURCES — REMAP DIALOG (P6a) === */

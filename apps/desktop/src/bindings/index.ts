@@ -1578,6 +1578,15 @@ export const commands = {
 	 */
 	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_list", { req })),
 	/**
+	 *  `inventory.session.notes.update` — write post-hoc notes for an inventory
+	 *  session. Empty/whitespace-only `notes` clears the field.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` (mapped to `ContractError::internal`) on
+	 *  `session.not_found`, `note.content_too_large`, or a database error.
+	 */
+	inventorySessionNotesUpdate: (req: SessionNotesUpdateRequest) => typedError<SessionNotesUpdateResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_session_notes_update", { req })),
+	/**
 	 *  `inventory.frame.list` — list per-frame inventory entries for a session
 	 *  or root.
 	 * 
@@ -3430,7 +3439,14 @@ export type Equipment = {
  *  );
  *  ```
  */
-export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
+export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabled" | "equipment.duplicate" | "equipment.not_found" | "internal.database" | "internal.audit" | "internal.data" | "firstrun.incomplete" | "path.already_registered" | "path.already_registered.different_kind" | "path.not_directory" | "path.not_exists" | "path.permission_denied" | "path.reserved_name" | "path.traversal" | "path.collision" | "path.invalid" | 
+/**
+ *  `roots.register`/`roots.register.batch`: a candidate root path is a
+ *  parent of, or nested within, an already-registered root (issue #501).
+ *  Cross-cutting across categories — an inbox root inside a light-frames
+ *  root is still an overlap.
+ */
+"path.overlaps_existing" | "inbox.item.not_found" | "inbox.has.open.plan" | "inbox.item.no_plan" | "inbox.no_destination_root" | "inbox.destination_root_required" | "inbox.invalid_destination_root" | "inbox.missing_path_attributes" | "metadata.unreadable" | "classification.ambiguous" | "classification.stale" | "pattern.unset" | "pattern.empty" | "pattern.invalid" | "pattern.invalid.unicode" | "token.unknown" | "file.not_found" | "note.content_too_large" | "session.not_found" | "session.mixed_state" | "operation.handler_duplicate" | "operation.not_found" | 
 /**  Plan approval is outstanding (sent as `ContractError`, not `TransitionError`). */
 "plan.approval_required" | "plan.approval.stale" | 
 /**
@@ -3451,13 +3467,35 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  */
 "volume.still.unavailable" | 
 /**  `plan.resume` re-validated and the destination volume is still full. */
-"disk.still.full" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "framing.not_found" | "framing.project_mismatch" | "framing.merge.requires_two" | "framing.merge.duplicate_id" | "framing.split.empty_selection" | "framing.split.invalid_session" | "framing.split.would_empty_source" | "framing.reassign.empty_selection" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
+"disk.still.full" | "archive.empty" | 
+/**
+ *  OS trash unavailable or failed for every item in an
+ *  `archive.send_to_trash` run (spec 017 US6, spec 025 `FailureCode::OsTrashUnavailable`).
+ */
+"os_trash.unavailable" | 
+/**
+ *  OS trash denied permission for every item in an
+ *  `archive.send_to_trash` run.
+ */
+"os_trash.permission.denied" | 
+/**
+ *  Non-permission delete failure (e.g. the file vanished mid-run, its
+ *  volume went unavailable, or the destination disk filled) for every
+ *  item in an `archive.permanently_delete` run. Permission failures use
+ *  the more specific `path.permission_denied`.
+ */
+"archive.delete_failed" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "framing.not_found" | "framing.project_mismatch" | "framing.merge.requires_two" | "framing.merge.duplicate_id" | "framing.split.empty_selection" | "framing.split.invalid_session" | "framing.split.would_empty_source" | "framing.reassign.empty_selection" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
 /**
  *  Returned by `roots.delete` (P6b, decision D8) when dependent records
  *  (inbox items, plan items, file records, sessions) still reference the
  *  root; deletion is blocked rather than cascade-nullified.
  */
-"root.has_dependents" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
+"root.has_dependents" | 
+/**
+ *  `roots.remap.apply` (issue #707): the two-step Verify → Apply flow
+ *  requires a successful Verify before Apply may mutate the root's path.
+ */
+"remap.not_verified" | "tool.locked" | "tool.unknown" | "resolver.endpoint_invalid" | "key.unknown" | "key.unoverridable" | "value.invalid" | 
 /**  Used in `ContractError` tests in lib.rs; also may appear via plan-apply. */
 "filesystem.destination_exists" | 
 /**
@@ -5472,6 +5510,26 @@ export type InventorySession_Deserialize = {
 	capturedOn: string | null,
 	provenance: InventoryProvenanceSummary_Deserialize | null,
 	linked: InventoryLinkedRefs_Deserialize | null,
+	/**
+	 *  The session's frame folder, relative to its source root
+	 *  (`source_id`'s `current_path`). The reveal action joins the root path
+	 *  with this so it opens the session's actual frame folder instead of the
+	 *  library root (#567). `None` when no frame `file_record` resolves a
+	 *  path (legacy/unscanned sessions) — the UI then falls back to the root.
+	 */
+	relativePath: string | null,
+	/**  User-editable free-text notes (#773). `None` when never set. */
+	notes: string | null,
+	/**
+	 *  Calibration masters assigned to this session (`calibration_assignment`
+	 *  rows), reusing the same DTO the (frontend-unused) `sessions_get`
+	 *  contract already carries. Empty for calibration sessions (dark/flat/
+	 *  bias) — assignment links a light session to its calibration masters,
+	 *  never the reverse — and for a light session with no assignment yet;
+	 *  the UI renders both as an explicit "no calibration match" state
+	 *  rather than omitting the section (#772).
+	 */
+	calibrationMatches?: SessionCalibrationMatch[],
 };
 
 /**
@@ -5497,6 +5555,26 @@ export type InventorySession_Serialize = {
 	capturedOn?: string | null,
 	provenance?: InventoryProvenanceSummary_Serialize | null,
 	linked?: InventoryLinkedRefs_Serialize | null,
+	/**
+	 *  The session's frame folder, relative to its source root
+	 *  (`source_id`'s `current_path`). The reveal action joins the root path
+	 *  with this so it opens the session's actual frame folder instead of the
+	 *  library root (#567). `None` when no frame `file_record` resolves a
+	 *  path (legacy/unscanned sessions) — the UI then falls back to the root.
+	 */
+	relativePath?: string | null,
+	/**  User-editable free-text notes (#773). `None` when never set. */
+	notes?: string | null,
+	/**
+	 *  Calibration masters assigned to this session (`calibration_assignment`
+	 *  rows), reusing the same DTO the (frontend-unused) `sessions_get`
+	 *  contract already carries. Empty for calibration sessions (dark/flat/
+	 *  bias) — assignment links a light session to its calibration masters,
+	 *  never the reverse — and for a light session with no assignment yet;
+	 *  the UI renders both as an explicit "no calibration match" state
+	 *  rather than omitting the section (#772).
+	 */
+	calibrationMatches?: SessionCalibrationMatch[],
 };
 
 /**
@@ -8154,6 +8232,31 @@ export type SessionKey = {
 	gain: string,
 	/**  ISO date of the observing night (local sunset date). */
 	night: string,
+};
+
+/**
+ *  Request for `inventory.session.notes.update`. Mirrors the
+ *  `target.note.update` shape (spec 023 US4) — empty/whitespace-only `notes`
+ *  clears the field (stores NULL).
+ */
+export type SessionNotesUpdateRequest = {
+	sessionId: string,
+	notes: string,
+};
+
+/**  Response for `inventory.session.notes.update`. */
+export type SessionNotesUpdateResult = SessionNotesUpdateResult_Serialize | SessionNotesUpdateResult_Deserialize;
+
+/**  Response for `inventory.session.notes.update`. */
+export type SessionNotesUpdateResult_Deserialize = {
+	/**  Notes after the update, or `null` when cleared. */
+	notes: string | null,
+};
+
+/**  Response for `inventory.session.notes.update`. */
+export type SessionNotesUpdateResult_Serialize = {
+	/**  Notes after the update, or `null` when cleared. */
+	notes?: string | null,
 };
 
 /**  Wrapper for `sessions.split` return value. */

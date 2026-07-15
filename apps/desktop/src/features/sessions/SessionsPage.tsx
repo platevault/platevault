@@ -43,7 +43,7 @@ import { SessionDetail } from './SessionDetail';
 import { useInventorySources, type InventoryFilters } from './store';
 import { addToast } from '@/shared/toast';
 import { m } from '@/lib/i18n';
-import { revealInventoryPath } from './revealInventory';
+import { revealInventoryPath, resolveRevealPath } from './revealInventory';
 import type { InventorySource } from '@/bindings/index';
 
 /**
@@ -151,12 +151,19 @@ export function SessionsPage() {
   const selectedSession =
     selected != null ? allSessions.find((s) => s.id === selected) : undefined;
 
-  // Resolve the selected session's owning source path for the Reveal action
-  // (FR-007) — sessions carry only `sourceId`; the path lives on the source.
-  const selectedSourcePath =
+  // Resolve the selected session's owning source root for the Reveal action
+  // (FR-007) — sessions carry only `sourceId`; the root path lives on the
+  // source. The reveal target then joins the root with the session's own frame
+  // folder (`relativePath`, #567) so it opens that session's folder rather than
+  // the shared library root; it falls back to the root when relativePath is null.
+  const selectedSourceRoot =
     selectedSession != null
       ? response?.sources.find((src) => src.id === selectedSession.sourceId)
           ?.path
+      : undefined;
+  const revealTarget =
+    selectedSession != null && selectedSourceRoot != null
+      ? resolveRevealPath(selectedSourceRoot, selectedSession.relativePath)
       : undefined;
 
   // Clear stale selection when the session disappears after a filter change.
@@ -185,20 +192,20 @@ export function SessionsPage() {
     );
   }, []);
 
-  // Reveal the session's source location in the OS file browser (FR-007).
+  // Reveal the session's frame folder in the OS file browser (FR-007, #567).
   const handleReveal = useCallback(async () => {
-    if (!selected || !selectedSourcePath) return;
+    if (!selected || !revealTarget) return;
     try {
       await revealInventoryPath({
-        path: selectedSourcePath,
+        path: revealTarget,
         sessionId: selected,
       });
     } catch {
       addToast({ message: m.sessions_toast_reveal_error(), variant: 'error' });
     }
-  }, [selected, selectedSourcePath]);
+  }, [selected, revealTarget]);
 
-  const revealVisible = selectedSourcePath != null;
+  const revealVisible = revealTarget != null;
 
   // Top-bar convention (task #80): NO title + NO summary (the left nav names
   // the page; the count/metadata lives in the bottom status bar) and NO sort
