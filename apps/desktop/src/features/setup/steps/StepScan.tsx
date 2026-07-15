@@ -334,7 +334,16 @@ export function StepScan({
 }: StepScanProps) {
   const [sourceStates, setSourceStates] = useState<SourceScanState[]>(() =>
     sources
-      .filter((s) => s.path)
+      // Issue #704: only scan folders this flush actually registered. An
+      // already-registered folder (restart flow) has no fresh rootId here;
+      // scanning it with the path-as-rootId fallback fails the
+      // registered_sources JOIN and would insert orphaned inbox_items, so it
+      // is skipped — its content is already ingested under its real root.
+      .filter((s) => {
+        if (!s.path) return false;
+        const row = flushResult.results.find((r) => r.path === s.path);
+        return row?.success ?? false;
+      })
       .map((s) => ({
         source: s,
         rootId: getRootId(flushResult, s.path),

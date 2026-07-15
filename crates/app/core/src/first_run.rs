@@ -37,10 +37,6 @@ use crate::audit_ids::deterministic_entity_id;
 use crate::caches;
 use crate::errors::bus_err;
 
-/// Maximum number of previously-recorded relative paths sampled by
-/// `remap_root` to preview whether they resolve under a candidate new path.
-const REMAP_SAMPLE_LIMIT: i64 = 5;
-
 // ── Path validation ─────────────────────────────────────────────────────────
 
 /// Validate that the given path exists, is a directory, and is readable.
@@ -109,10 +105,13 @@ async fn check_duplicate(
 
     if let Some(source) = matches.first() {
         if source.kind == kind {
+            // Issue #501: registering the exact same path a second time cannot
+            // proceed — this must hard-stop like `path.not_exists` /
+            // `path.not_directory`, not be a bypassable `Warning`.
             return Err(ContractError::new(
                 ErrorCode::PathAlreadyRegistered,
                 format!("Path is already registered as {kind:?}: {path}"),
-                ErrorSeverity::Warning,
+                ErrorSeverity::Blocking,
                 false,
             ));
         }
@@ -130,10 +129,54 @@ async fn check_duplicate(
     Ok(())
 }
 
+/// Check whether a candidate root path overlaps (is a parent of, or is nested
+/// within) any already-registered root, or any path already accepted earlier
+/// in the same batch request (`extra_paths`, still unpersisted). Cross-cutting
+/// across categories: an inbox root inside a light-frames root is still an
+/// overlap (issue #501, rules 3/4). Exact-path equality is left to
+/// [`check_duplicate`], which already covers it with a more specific error.
+async fn check_overlap(
+    pool: &SqlitePool,
+    path: &str,
+    extra_paths: &[String],
+) -> Result<(), ContractError> {
+    let candidate = std::path::Path::new(path);
+    let existing = repo::list_sources(pool).await.map_err(db_to_contract)?;
+
+    for other in
+        existing.iter().map(|s| s.path.as_str()).chain(extra_paths.iter().map(String::as_str))
+    {
+        if other == path {
+            continue;
+        }
+        let other_path = std::path::Path::new(other);
+        let (relationship, conflicting) = if other_path.starts_with(candidate) {
+            ("parent", other)
+        } else if candidate.starts_with(other_path) {
+            ("child", other)
+        } else {
+            continue;
+        };
+        return Err(ContractError::new(
+            ErrorCode::PathOverlapsExisting,
+            format!("Path overlaps an already-registered root ({relationship}): {conflicting}"),
+            ErrorSeverity::Blocking,
+            false,
+        )
+        .with_details(
+            serde_json::json!({"conflictingPath": conflicting, "relationship": relationship}),
+        ));
+    }
+
+    Ok(())
+}
+
 fn db_to_contract(e: persistence_db::DbError) -> ContractError {
     let msg = e.to_string();
     if msg.contains("UNIQUE constraint failed") {
-        ContractError::new(ErrorCode::PathAlreadyRegistered, msg, ErrorSeverity::Warning, false)
+        // Same code as `check_duplicate`'s same-kind branch above — keep
+        // severity consistent (issue #501).
+        ContractError::new(ErrorCode::PathAlreadyRegistered, msg, ErrorSeverity::Blocking, false)
     } else {
         // Delegate the non-UNIQUE fallback to the canonical mapper (T1-c) so
         // `NotFound` is classified `Blocking`/non-retryable instead of the
@@ -214,6 +257,18 @@ pub async fn register_source(
         return Err(*e);
     }
     if let Err(e) = check_duplicate(pool, &req.path, req.kind).await {
+        write_source_register_audit(
+            bus,
+            &req.path,
+            &req.path,
+            req.kind,
+            Outcome::Refused,
+            Some(&error_code_str(e.code)),
+        )
+        .await?;
+        return Err(e);
+    }
+    if let Err(e) = check_overlap(pool, &req.path, &[]).await {
         write_source_register_audit(
             bus,
             &req.path,
@@ -328,14 +383,23 @@ async fn partition_batch_sources<'a>(
 
     let mut items: Vec<BatchItem> = Vec::with_capacity(sources.len());
     let mut valid_sources: Vec<(usize, &RegisterSourceRequest)> = Vec::new();
+    // Paths already accepted earlier in this same batch (not yet persisted),
+    // so overlap is caught candidate-vs-candidate too, not only against
+    // already-persisted roots (issue #501).
+    let mut accepted_paths: Vec<String> = Vec::new();
 
     for (index, source) in sources.iter().enumerate() {
-        // Short-circuit: only check for a duplicate once the path itself is valid.
+        // Short-circuit: only check for a duplicate/overlap once the path
+        // itself is valid, and only check overlap once it's not a duplicate.
         let validation_err = match validate_path(&source.path) {
             Err(e) => Some(*e),
-            Ok(()) => check_duplicate(pool, &source.path, source.kind).await.err(),
+            Ok(()) => match check_duplicate(pool, &source.path, source.kind).await {
+                Err(e) => Some(e),
+                Ok(()) => check_overlap(pool, &source.path, &accepted_paths).await.err(),
+            },
         };
         let Some(e) = validation_err else {
+            accepted_paths.push(source.path.clone());
             valid_sources.push((index, source));
             continue;
         };
@@ -593,16 +657,21 @@ async fn get_root_or_not_found(
 /// Preview a root path remap (`roots.remap`, P6a).
 ///
 /// Validates that `new_path` exists, is a directory, and is readable, then
-/// samples up to [`REMAP_SAMPLE_LIMIT`] relative paths previously recorded for
-/// `root_id` (via `file_record`) and reports whether each resolves under
+/// checks EVERY relative path previously recorded for `root_id` (via
+/// `file_record` and pending `inbox_items` — see
+/// [`repo::relative_paths_for_root`]) and reports whether each resolves under
 /// `new_path`. Does NOT mutate anything — call [`apply_root_remap`] after
 /// review.
 ///
-/// Roots with no `file_record` rows (calibration/project roots, or raw roots
-/// registered directly without an inbox ingest) report zero samples;
-/// `all_verified` then reflects only `new_path`'s own validity. There is no
-/// generic per-root file inventory in the current schema to sample from more
-/// broadly.
+/// Exhaustive by design (issue #560): a bounded sample let files outside it
+/// go unverified, and checking `file_record` alone let a root that was only
+/// ever scanned into the Inbox report a vacuous "all verified" from zero
+/// samples, unlocking Apply against a path that held none of its real
+/// content. Roots with no recorded rows in either table (calibration/project
+/// roots, or raw roots registered directly without ever receiving an inbox
+/// scan) report zero samples — `all_verified` then reflects only
+/// `new_path`'s own validity, which is correct: there is nothing recorded to
+/// silently orphan.
 ///
 /// # Errors
 ///
@@ -619,9 +688,8 @@ pub async fn remap_root(
 
     validate_path(new_path).map_err(|e| *e)?;
 
-    let relative_paths = repo::sample_relative_paths(pool, root_id, REMAP_SAMPLE_LIMIT)
-        .await
-        .map_err(db_to_contract)?;
+    let relative_paths =
+        repo::relative_paths_for_root(pool, root_id).await.map_err(db_to_contract)?;
 
     let new_root = std::path::Path::new(new_path);
     let samples: Vec<RemapSample> = relative_paths
@@ -691,6 +759,28 @@ pub async fn apply_root_remap(
         )
         .await?;
         return Err(*e);
+    }
+
+    // Issue #707: `verified` must actually gate the mutation, not just ride
+    // along as audit metadata — the whole point of the two-step Verify →
+    // Apply flow (constitution §II) is that Apply is refused without a prior
+    // successful Verify. Checked independently of any UI-side disabled state
+    // since this is reachable directly over IPC.
+    if !verified {
+        write_root_op_refusal(
+            bus,
+            root_id,
+            "root.remap.apply",
+            Outcome::Refused,
+            "remap.not_verified",
+        )
+        .await?;
+        return Err(ContractError::new(
+            ErrorCode::RemapNotVerified,
+            "remap must be verified before it can be applied",
+            ErrorSeverity::Blocking,
+            false,
+        ));
     }
 
     if let Err(e) = repo::set_source_path(pool, root_id, new_path).await {
@@ -1016,6 +1106,9 @@ mod tests {
 
         let err = check_duplicate(&pool, "/tmp", SourceKind::LightFrames).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PathAlreadyRegistered);
+        // Issue #501: an exact duplicate must hard-stop registration, not be
+        // a bypassable `Warning`.
+        assert_eq!(err.severity, ErrorSeverity::Blocking);
     }
 
     #[tokio::test]
@@ -1035,6 +1128,112 @@ mod tests {
 
         let err = check_duplicate(&pool, "/tmp", SourceKind::Project).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PathAlreadyRegisteredDifferentKind);
+    }
+
+    // ── Issue #501: overlapping root registration ────────────────────────────
+
+    #[tokio::test]
+    async fn register_source_rejects_nested_child_root() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let parent = tempfile::tempdir().expect("tempdir");
+        let child = parent.path().join("nested");
+        std::fs::create_dir(&child).unwrap();
+
+        let parent_req = RegisterSourceRequest {
+            kind: SourceKind::LightFrames,
+            path: parent.path().to_str().unwrap().to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        register_source(&pool, &bus, &parent_req).await.unwrap();
+
+        // A root nested inside an already-registered root — even under a
+        // DIFFERENT category — must be rejected (cross-cutting overlap).
+        let child_req = RegisterSourceRequest {
+            kind: SourceKind::Inbox,
+            path: child.to_str().unwrap().to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Unorganized,
+        };
+        let err = register_source(&pool, &bus, &child_req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::PathOverlapsExisting);
+    }
+
+    #[tokio::test]
+    async fn register_source_rejects_parent_of_existing_root() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let parent = tempfile::tempdir().expect("tempdir");
+        let child = parent.path().join("nested");
+        std::fs::create_dir(&child).unwrap();
+
+        let child_req = RegisterSourceRequest {
+            kind: SourceKind::LightFrames,
+            path: child.to_str().unwrap().to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        register_source(&pool, &bus, &child_req).await.unwrap();
+
+        // The parent of an already-registered root must also be rejected.
+        let parent_req = RegisterSourceRequest {
+            kind: SourceKind::LightFrames,
+            path: parent.path().to_str().unwrap().to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        let err = register_source(&pool, &bus, &parent_req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::PathOverlapsExisting);
+    }
+
+    #[tokio::test]
+    async fn register_source_batch_rejects_intra_batch_overlap() {
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let parent = tempfile::tempdir().expect("tempdir");
+        let child = parent.path().join("nested");
+        std::fs::create_dir(&child).unwrap();
+
+        // Neither path is registered yet — the overlap must still be caught
+        // candidate-vs-candidate within the SAME batch request.
+        let req = contracts_core::first_run::RegisterSourceBatchRequest {
+            sources: vec![
+                RegisterSourceRequest {
+                    kind: SourceKind::LightFrames,
+                    path: parent.path().to_str().unwrap().to_owned(),
+                    kind_subtype: None,
+                    scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+                    organization_state: OrganizationState::Organized,
+                },
+                RegisterSourceRequest {
+                    kind: SourceKind::Inbox,
+                    path: child.to_str().unwrap().to_owned(),
+                    kind_subtype: None,
+                    scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+                    organization_state: OrganizationState::Unorganized,
+                },
+            ],
+        };
+
+        let resp = register_source_batch(&pool, &bus, &req).await.unwrap();
+        assert_eq!(resp.status, contracts_core::first_run::BatchStatus::Partial);
+        assert_eq!(resp.items[0].status, contracts_core::first_run::ItemStatus::Success);
+        assert_eq!(resp.items[1].status, contracts_core::first_run::ItemStatus::Failure);
+        assert_eq!(resp.items[1].error.as_deref(), Some("path.overlaps_existing"));
     }
 
     /// T1-c: `db_to_contract`'s fallback arm now delegates to the canonical
@@ -1282,6 +1481,97 @@ mod tests {
         assert!(row.0.contains(&resp.source_id));
         assert!(row.0.contains("/tmp"));
         assert!(row.0.contains("/var/tmp"));
+    }
+
+    /// Issue #707: `verified: false` must refuse the mutation, not merely be
+    /// recorded as audit metadata — this is the core of the bug report.
+    #[tokio::test]
+    async fn apply_root_remap_rejects_when_not_verified() {
+        if !cfg!(unix) {
+            return;
+        }
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+        let bus = EventBus::with_pool(pool.clone());
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::Calibration,
+            path: "/tmp".to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        };
+        let resp = repo::register_source(&pool, &req).await.unwrap();
+
+        let err = apply_root_remap(&pool, &bus, &resp.source_id, "/var/tmp", false)
+            .await
+            .expect_err("apply with verified: false must be refused");
+        assert_eq!(err.code, ErrorCode::RemapNotVerified);
+        assert_eq!(err.severity, ErrorSeverity::Blocking);
+
+        // The stored path must be untouched.
+        let (_, path) =
+            repo::get_source_kind_and_path(&pool, &resp.source_id).await.unwrap().unwrap();
+        assert_eq!(path, "/tmp");
+
+        let row: (String, String) = sqlx::query_as(
+            "SELECT outcome, reason_code FROM audit_log_entry WHERE trigger = 'root.remap.apply' AND outcome = 'refused'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("refused apply_root_remap must write a durable audit row");
+        assert_eq!(row.0, "refused");
+        assert_eq!(row.1, "remap.not_verified");
+    }
+
+    /// Issue #560: a root only scanned into the Inbox (no `file_record` rows,
+    /// but real `inbox_items` rows) must NOT report `all_verified: true` from
+    /// a vacuous empty sample when its actual content isn't found at the new
+    /// path.
+    #[tokio::test]
+    async fn remap_root_checks_inbox_items_not_just_file_record() {
+        use persistence_db::repositories::inbox::{insert_inbox_item, InsertInboxItem};
+
+        let db = persistence_db::Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        let pool = db.pool().clone();
+
+        let req = RegisterSourceRequest {
+            kind: SourceKind::Inbox,
+            path: "/tmp".to_owned(),
+            kind_subtype: None,
+            scan_depth: contracts_core::first_run::ScanDepth::Recursive,
+            organization_state: OrganizationState::Unorganized,
+        };
+        let resp = repo::register_source(&pool, &req).await.unwrap();
+
+        insert_inbox_item(
+            &pool,
+            &InsertInboxItem {
+                id: "item-1",
+                root_id: &resp.source_id,
+                relative_path: "M31/lights",
+                file_count: 7,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+
+        // A brand-new, genuinely empty candidate directory — none of the
+        // root's recorded content lives there.
+        let new_dir = tempfile::tempdir().expect("tempdir");
+        let preview =
+            remap_root(&pool, &resp.source_id, new_dir.path().to_str().unwrap()).await.unwrap();
+
+        assert_eq!(preview.samples.len(), 1, "the inbox item must be sampled");
+        assert!(!preview.samples[0].found);
+        assert!(
+            !preview.all_verified,
+            "must not vacuously report all_verified against an empty candidate path"
+        );
     }
 
     // ── P6b: root active toggle ────────────────────────────────────────────────

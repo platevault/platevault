@@ -61,6 +61,13 @@ export interface FlushRowResult {
   success: boolean;
   /** The registered root's id (present on successful rows); used to scan the source. */
   rootId?: string;
+  /**
+   * True when the row "failed" only because the path was already registered
+   * (issue #704). The restart flow pre-fills already-registered folders, so
+   * re-confirming them is the desired end state, not a user-facing failure —
+   * the wizard treats these as benign no-ops rather than blocking failures.
+   */
+  alreadyRegistered?: boolean;
   error?: string;
 }
 
@@ -301,6 +308,10 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         kind: item.kind as SourceKind,
         path: item.path,
         success: false,
+        // Issue #704: an exact-path duplicate is not a genuine failure in the
+        // restart flow — flag it so the wizard advances instead of blocking.
+        alreadyRegistered:
+          item.error === 'path.already_registered' || undefined,
         error: message,
       };
     });
