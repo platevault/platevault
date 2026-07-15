@@ -250,6 +250,69 @@ interface TargetGroup {
   }>;
 }
 
+// ── Per-target row cache (#573) ─────────────────────────────────────────────
+//
+// The full-catalogue sort/group pass below (up to ~13k rows) is the
+// unbackgrounded synchronous work that froze the app on open (#573): each
+// row runs astronomy-engine altitude sampling (rowAltitudeFor) + Moon
+// planning (deriveRowMoonPlanning), which is not free at catalogue scale
+// (see rowAltitudeFor's doc — "a real perf cliff... a Layer-2 CI timeout
+// against the full ~13k-entry bundled seed catalogue"). Re-running that for
+// every target on every render (every sort/filter/group/reveal-chunk change)
+// is wasted work when the astronomy INPUTS (site/date/night/threshold/
+// guidance params) haven't changed for a given target. `rowCache` memoizes
+// per target id, gated by `genKey` (all astronomy inputs); TargetsPage's
+// incremental reveal (growing the `targets` array in chunks) then only pays
+// for the newly-revealed delta each step instead of recomputing the whole
+// set, since previously-seen ids hit the cache.
+interface RowCacheEntry {
+  genKey: string;
+  alt: RowAltitude;
+  moon: RowMoonPlanning;
+}
+
+/** Generation key gating `rowCache`: changes whenever any astronomy input does. */
+function rowCacheGenKey(
+  usableAltDeg: number,
+  site: ObserverSite | null,
+  dateMs: number,
+  night: ObservingNight | null,
+  guidanceParams: MoonAvoidanceParams,
+): string {
+  return `${usableAltDeg}|${site?.id ?? ''}|${dateMs}|${night?.nightKey ?? ''}|${JSON.stringify(guidanceParams)}`;
+}
+
+/**
+ * Look up (or compute + cache) a target's full-catalogue-pass altitude/moon
+ * values. `includeMoonGeometry` is always `false` here — same contract as
+ * the call sites this replaces.
+ */
+function getCachedRow(
+  cache: Map<string, RowCacheEntry>,
+  t: TargetListItem,
+  genKey: string,
+  usableAltDeg: number,
+  site: ObserverSite | null,
+  dateMs: number,
+  guidanceParams: MoonAvoidanceParams,
+  night: ObservingNight | null,
+): { alt: RowAltitude; moon: RowMoonPlanning } {
+  const cached = cache.get(t.id);
+  if (cached && cached.genKey === genKey) return cached;
+  const alt = rowAltitudeFor(
+    t,
+    usableAltDeg,
+    site,
+    dateMs,
+    guidanceParams,
+    false,
+  );
+  const moon = deriveRowMoonPlanning(t, night, guidanceParams);
+  const entry: RowCacheEntry = { genKey, alt, moon };
+  cache.set(t.id, entry);
+  return entry;
+}
+
 /**
  * Group targets by the selected key, compute altitude + moon planning for each,
  * sort within groups, then order groups by their first (sorted) row.
@@ -263,6 +326,8 @@ function groupTargets(
   night: ObservingNight | null,
   guidanceParams: MoonAvoidanceParams,
   dateMs: number,
+  cache: Map<string, RowCacheEntry>,
+  genKey: string,
 ): TargetGroup[] {
   const byKey = new Map<
     string,
@@ -270,18 +335,16 @@ function groupTargets(
   >();
   for (const t of targets) {
     const key = groupHeadlineOf(t, groupBy);
-    // includeMoonGeometry=false: this pass runs over the FULL (possibly
-    // ~13k-entry) catalogue for sort/group — the Moon time-series is only
-    // computed per visible row at render time (see the row-render loop).
-    const alt = rowAltitudeFor(
+    const { alt, moon } = getCachedRow(
+      cache,
       t,
+      genKey,
       usableAltDeg,
       site,
       dateMs,
       guidanceParams,
-      false,
+      night,
     );
-    const moon = deriveRowMoonPlanning(t, night, guidanceParams);
     const bucket = byKey.get(key);
     if (bucket) bucket.push({ target: t, alt, moon });
     else byKey.set(key, [{ target: t, alt, moon }]);
@@ -357,6 +420,9 @@ type FlatRow =
 function buildTargetAccessors(
   night: ObservingNight | null,
   guidanceParams: MoonAvoidanceParams,
+  // #573 perf: reuse the moon planning already computed by the cached
+  // full-catalogue pass (moonMap) instead of re-deriving it per target.
+  moonLookup?: (t: TargetListItem) => RowMoonPlanning,
 ): Readonly<Record<string, DimensionAccessor<TargetListItem>>> {
   return {
     constellation: (t) =>
@@ -369,11 +435,9 @@ function buildTargetAccessors(
     // Applicable filters: group by the target's REAL derived recommendation
     // category (broadband-ok / narrowband-only / avoid-tonight / unknown).
     filters: (t) => {
-      const { recommendation } = deriveRowMoonPlanning(
-        t,
-        night,
-        guidanceParams,
-      );
+      const { recommendation } = moonLookup
+        ? moonLookup(t)
+        : deriveRowMoonPlanning(t, night, guidanceParams);
       return recommendationLabel(recommendation);
     },
   };
@@ -585,6 +649,13 @@ export function TargetsTable({
   // a different date recomputes the whole table (SC-004).
   const dateMs = usePlannerDateMs();
 
+  // #573 perf: per-target-id cache for the full-catalogue astronomy pass
+  // below, persisted across renders for this component instance (a ref, not
+  // state — it never needs to trigger a re-render itself). See the
+  // `getCachedRow`/`rowCacheGenKey` doc above.
+  const rowCacheRef = useRef<Map<string, RowCacheEntry>>(new Map());
+  const genKey = rowCacheGenKey(usableAltDeg, site, dateMs, night, guidanceParams);
+
   // Grouping + sorting + per-row altitude are all derived here so a filter
   // or sort change does one O(n) pass off the render hot path, not per-row work
   // inside the virtualized render loop. usableAltDeg + site are included in the
@@ -599,20 +670,20 @@ export function TargetsTable({
   const flatRows = useMemo(() => {
     if (useMultiGroup) {
       // Pre-compute altitude + moon planning for all items (needed for sort +
-      // display). includeMoonGeometry=false: full-catalogue pass, see the
-      // legacy-path comment below for why.
-      const withAlt = targets.map((t) => ({
-        target: t,
-        alt: rowAltitudeFor(
+      // display), reusing the per-id cache (#573) — see getCachedRow's doc.
+      const withAlt = targets.map((t) => {
+        const { alt, moon } = getCachedRow(
+          rowCacheRef.current,
           t,
+          genKey,
           usableAltDeg,
           site,
           dateMs,
           guidanceParams,
-          false,
-        ),
-        moon: deriveRowMoonPlanning(t, night, guidanceParams),
-      }));
+          night,
+        );
+        return { target: t, alt, moon };
+      });
       // Sort the flat list first.
       const sortedWithAlt = [...withAlt].sort((a, b) =>
         compareTargetRows(
@@ -629,11 +700,16 @@ export function TargetsTable({
       const altMap = new Map(sortedWithAlt.map((r) => [r.target.id, r.alt]));
       const moonMap = new Map(sortedWithAlt.map((r) => [r.target.id, r.moon]));
 
-      // Build the group tree using shared engine.
+      // Build the group tree using shared engine. moonMap reuse (#573):
+      // avoids re-deriving moon planning already computed above.
       const tree = groupByDimensions(
         sorted,
         dims!,
-        buildTargetAccessors(night, guidanceParams),
+        buildTargetAccessors(
+          night,
+          guidanceParams,
+          (t) => moonMap.get(t.id) ?? UNKNOWN_ROW_PLANNING,
+        ),
       );
       // Flatten with collapse state, then map to our FlatRow shape.
       const visRows = flattenVisibleGroups(tree, collapsed);
@@ -681,19 +757,29 @@ export function TargetsTable({
         night,
         guidanceParams,
         dateMs,
+        rowCacheRef.current,
+        genKey,
       );
       return flattenGroups(groups);
     }
     // Default: no grouping selected → FLAT sorted list (no group headers).
-    // includeMoonGeometry=false: this is a full-catalogue pass (potentially
-    // ~13k rows pre-filter/pre-windowing) needed only for sort — the real
-    // Moon time-series is computed per visible row at render time instead
+    // Full-catalogue pass (potentially ~13k rows pre-filter/pre-windowing)
+    // needed only for sort, reusing the per-id cache (#573) — the real Moon
+    // time-series is still computed per visible row at render time instead
     // (a real Layer-2 CI perf regression otherwise: see rowAltitudeFor's doc).
-    const withAlt = targets.map((t) => ({
-      target: t,
-      alt: rowAltitudeFor(t, usableAltDeg, site, dateMs, guidanceParams, false),
-      moon: deriveRowMoonPlanning(t, night, guidanceParams),
-    }));
+    const withAlt = targets.map((t) => {
+      const { alt, moon } = getCachedRow(
+        rowCacheRef.current,
+        t,
+        genKey,
+        usableAltDeg,
+        site,
+        dateMs,
+        guidanceParams,
+        night,
+      );
+      return { target: t, alt, moon };
+    });
     const sortedWithAlt = [...withAlt].sort((a, b) =>
       compareTargetRows(a.target, a.alt, a.moon, b.target, b.alt, b.moon, sort),
     );
@@ -719,6 +805,7 @@ export function TargetsTable({
     useMultiGroup,
     dims,
     collapsed,
+    genKey,
   ]);
 
   const virtualizer = useVirtualizer({
@@ -1197,3 +1284,10 @@ export function TargetsTable({
     </div>
   );
 }
+
+// ── Test-only exports (#573) ────────────────────────────────────────────────
+//
+// Direct unit-testable access to the row cache contract (getCachedRow +
+// rowCacheGenKey), mirroring the `__setObservingStateForTest` convention in
+// site-store.ts. Not used by any non-test caller.
+export const __testExports = { getCachedRow, rowCacheGenKey };
