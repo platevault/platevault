@@ -161,9 +161,19 @@ export function RemapRootDialog({
             variant={verification.allVerified ? 'info' : 'warn'}
             className="alm-remap-dialog__banner"
           >
-            {verification.allVerified
-              ? m.settings_datasources_remap_all_verified()
-              : m.settings_datasources_remap_not_all_verified()}
+            {/* Issue #560: report the exhaustive matched/total counts (no more
+                "sample" wording), and distinguish the zero-recorded-items case
+                so an empty verification never reads as a vacuous "all found". */}
+            {verification.samples.length === 0
+              ? m.settings_datasources_remap_no_items()
+              : verification.allVerified
+                ? m.settings_datasources_remap_all_verified_count({
+                    total: verification.samples.length,
+                  })
+                : m.settings_datasources_remap_not_all_verified_count({
+                    matched: verification.samples.filter((s) => s.found).length,
+                    total: verification.samples.length,
+                  })}
           </Banner>
           <ul className="alm-remap-dialog__samples">
             {verification.samples.map((sample) => (

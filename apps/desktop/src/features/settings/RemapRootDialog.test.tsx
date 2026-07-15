@@ -134,7 +134,7 @@ describe('RemapRootDialog', () => {
     });
     expect(mockRemap).toHaveBeenCalledWith('root-1', '/mnt/new/raw');
     expect(
-      screen.getByText(/All sample files were found/i),
+      screen.getByText(/All 2 recorded items were found/i),
     ).toBeInTheDocument();
   });
 
@@ -162,7 +162,7 @@ describe('RemapRootDialog', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/Some sample files were not found/i),
+        screen.getByText(/0 of 1 recorded items were found/i),
       ).toBeInTheDocument();
     });
     expect(screen.getByText('Not found')).toBeInTheDocument();
