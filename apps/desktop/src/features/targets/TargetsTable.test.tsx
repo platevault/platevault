@@ -9,13 +9,15 @@
  * Under jsdom there is no layout, so the virtualizer reports zero height and the
  * table falls back to rendering every row (the page/tests rely on all rows being
  * present; windowing is a runtime-only perf optimization). These tests assert:
- *  - the planning columns replaced Constellation/Magnitude (Max alt · Tonight
- *    sparkline · Visible · Sessions kept; Designation + Type kept);
- *  - spec 044 mock columns present: Lunar dist, Filters, Imaging time;
+ *  - the planning columns replaced Constellation/Magnitude (Max alt ·
+ *    Sessions kept; Designation + Type kept); the sparkline and
+ *    visible-tonight columns are REMOVED (iteration 2026-07-15, FR-007);
+ *  - spec 044 columns present: Lunar dist, Filters, Imaging time;
  *  - rows render inside a real <table> with group headers preserved;
  *  - selecting a row fires onSelect;
  *  - sort headers call onSort for all sortable columns;
- *  - usableAltDeg prop changes affect visible-tonight text;
+ *  - usableAltDeg prop changes affect imaging-time tooltip text;
+ *  - zero imaging time carries a reason glyph (FR-030);
  *  - filter badges render broadband and/or narrowband bands.
  */
 
@@ -88,9 +90,9 @@ describe('TargetsTable (#84/#85)', () => {
   it('renders the planning columns and drops Constellation/Magnitude', () => {
     renderTable();
     expect(screen.getByText('Max alt')).toBeInTheDocument();
-    expect(screen.getByText('Tonight')).toBeInTheDocument();
-    expect(screen.getByText('Visible')).toBeInTheDocument();
-    // Opposition column: MOCK placeholder until backend ephemeris (#58) lands.
+    // Iteration 2026-07-15 (FR-007): sparkline + visible columns removed.
+    expect(screen.queryByText('Tonight')).not.toBeInTheDocument();
+    expect(screen.queryByText('Visible')).not.toBeInTheDocument();
     expect(screen.getByText('Opposition')).toBeInTheDocument();
     expect(screen.getByText('Sessions')).toBeInTheDocument();
     expect(screen.getByText('Designation')).toBeInTheDocument();
@@ -124,18 +126,16 @@ describe('TargetsTable (#84/#85)', () => {
     expect(within(table).getByText('NGC')).toBeInTheDocument();
   });
 
-  it('renders a max-altitude value and a sparkline per target row', () => {
+  it('renders a max-altitude value per target row, and NO sparkline (FR-007)', () => {
     renderTable();
     // Degree-suffixed max altitude appears (rounded integer + °) — may also
     // match lunar distance values so just confirm at least 2 are present.
     expect(screen.getAllByText(/^\d+°$/).length).toBeGreaterThanOrEqual(2);
-    // One sparkline SVG per target row (role=img with an accessible label).
+    // Iteration 2026-07-15: the per-row altitude sparkline is hard-removed —
+    // the detail panel's altitude graph is the canonical altitude view.
     expect(
-      screen.getByLabelText('Altitude tonight for NGC 7000'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByLabelText('Altitude tonight for M 31'),
-    ).toBeInTheDocument();
+      screen.queryByLabelText('Altitude tonight for NGC 7000'),
+    ).not.toBeInTheDocument();
   });
 
   it('renders the guidance unknown state when no observing night is provided', () => {
@@ -183,7 +183,6 @@ describe('TargetsTable (#84/#85)', () => {
     // task #5: aria-labels use the abbreviated header text.
     const sortCases: [string, string][] = [
       ['Sort by Max alt', 'maxAlt'],
-      ['Sort by Visible', 'visible'],
       ['Sort by Lunar', 'lunarDist'],
       ['Sort by Img time', 'imagingTime'],
     ];
@@ -194,13 +193,26 @@ describe('TargetsTable (#84/#85)', () => {
     }
   });
 
-  it('reflects usableAltDeg in visible-tonight tooltip text', () => {
-    // Force a target that we know is visible at 30° but possibly not at 89°.
-    // We just verify that the threshold value appears in the tooltip text.
-    renderTable({ usableAltDeg: 42 });
-    // At least one tooltip should reference the custom threshold.
-    const spans = document.querySelectorAll('[title*="42°"]');
-    expect(spans.length).toBeGreaterThanOrEqual(1);
+  it('reflects usableAltDeg in the imaging-time tooltip text', () => {
+    // Needs a real site + a winter night: the imaging-time tooltip only
+    // references the threshold for the non-zero and altitude-reason states
+    // (the darkness reason is threshold-independent).
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-15T20:00:00Z'));
+    try {
+      renderTable({ usableAltDeg: 42 });
+      // At least one tooltip should reference the custom threshold.
+      const spans = document.querySelectorAll('[title*="42°"]');
+      expect(spans.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      vi.useRealTimers();
+      __setObservingStateForTest({});
+    }
   });
 
   it('shows the empty message when there are no targets and not loading', () => {
@@ -279,10 +291,35 @@ describe('TargetsTable — no-site prompt (US6/T015/T018)', () => {
     vi.setSystemTime(new Date('2026-01-15T20:00:00Z'));
     try {
       renderTable({ targets: [circumpolar] });
-      // A circumpolar target is visible-tonight (real astronomy, not the
-      // needsSite degrade state).
-      expect(document.querySelector('.alm-targets-vis--yes')).not.toBeNull();
-      expect(document.querySelector('.alm-targets-vis--no')).toBeNull();
+      // A circumpolar target on a winter night has real non-zero imaging
+      // time: the cell shows an "Nh"/"NhMm" value and NO warning glyph
+      // (FR-030 only marks zero values; not the needsSite degrade state).
+      expect(screen.getAllByText(/^\d+h(\d+m)?$/).length).toBeGreaterThan(0);
+      expect(document.querySelector('.alm-imgtime-glyph--warn')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('zero imaging time carries a reason glyph (FR-030/SC-015): high-lat summer darkness', () => {
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+    // Mid-June at 52°N never reaches astronomical twilight → no dark window →
+    // zero imaging with reason 'darkness' (FR-029) → ☀ warning glyph.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-20T22:00:00Z'));
+    try {
+      renderTable();
+      const glyphs = document.querySelectorAll('.alm-imgtime-glyph--warn');
+      expect(glyphs.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('☀').length).toBeGreaterThanOrEqual(1);
+      // The glyph exposes the reason as its accessible name + tooltip.
+      expect(
+        document.querySelectorAll('[title*="never gets dark"]').length,
+      ).toBeGreaterThanOrEqual(1);
     } finally {
       vi.useRealTimers();
     }

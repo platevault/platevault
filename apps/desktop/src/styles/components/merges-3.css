@@ -313,29 +313,31 @@
   /* Floor so every column stays at least as wide as its content. Below this the
      scroll container (.alm-targets-table__scroll, overflow-x:auto) scrolls
      horizontally instead of squeezing/clipping the last columns. The column
-     percentages below are tuned so each fits its content at this width. */
-  min-width: 1180px;
+     percentages below are tuned so each fits its content at this width.
+     Iteration 2026-07-15 (FR-032/SC-016): with the sparkline and visible
+     columns removed the surviving set fits without horizontal scroll in a
+     1100×720 window. */
+  min-width: 1000px;
 }
 
 /* Designation: widest column, but not so wide it starves the Filters column
-   (which holds up to 7 band badges). Tuned down from 50% so filter badges fit
-   on a single line and rows stay one row tall. */
-.alm-targets-col--designation { width: 16%; }
+   (which holds up to 7 band badges). Widened after the sparkline/visible
+   column removal (iteration 2026-07-15). */
+.alm-targets-col--designation { width: 20%; }
 
 /* Type pill: "open cluster" is the longest label at ~10ch; header is "Type". */
-.alm-targets-col--type { width: 11.5%; }
+.alm-targets-col--type { width: 10.5%; }
 
 /* Max alt: "Max alt" header + "90°" value — short numeric. */
 .alm-targets-col--maxalt { width: 7%; }
 
-/* Sparkline: fixed narrow column (SVG is 64px wide, cell adds padding). */
-.alm-targets-col--spark { width: 7%; }
+/* Sparkline + Visible columns removed (iteration 2026-07-15, FR-007): the
+   detail panel's altitude graph is the canonical altitude view and the
+   visible-tonight state folded into the imaging-time why-glyph. */
 
-/* Visible: "●tonight" / "○low" indicator. */
-.alm-targets-col--visible { width: 8.5%; }
-
-/* Opposition: date stub "—" for now; leave room for "Jan 2026" once live. */
-.alm-targets-col--opposition { width: 9%; }
+/* Opposition: widest real value is "14 Apr · in 9 months" — sized to render
+   it unclipped (FR-032, fixes the stub-width clipping). */
+.alm-targets-col--opposition { width: 15%; }
 
 /* Sessions: numeric stub "—". */
 .alm-targets-col--sessions { width: 8%; }
@@ -349,10 +351,17 @@
 
 /* === spec 044: Lunar dist, Filters, Imaging time columns + filter badges === */
 
-/* Column widths (task 044) — fixed layout prevents per-page shift. */
+/* Column widths (task 044; re-sized iteration 2026-07-15 FR-032) — fixed
+   layout prevents per-page shift. Imaging time fits "2h10m" + why-glyph. */
 .alm-targets-col--lunardist { width: 6%; }
-.alm-targets-col--filters   { width: 15%; }
-.alm-targets-col--imagingtime { width: 7.5%; }
+.alm-targets-col--filters   { width: 18%; }
+.alm-targets-col--imagingtime { width: 10%; }
+
+/* Imaging-time why-glyph (iteration 2026-07-15): warning tint for the
+   zero-reason glyph (FR-030), faint tint for the actionable-Moon marker on
+   non-zero values (FR-031). */
+.alm-imgtime-glyph--warn { color: var(--alm-warn); }
+.alm-imgtime-glyph--muted { color: var(--alm-text-faint); }
 
 /* Lunar dist cell: tabular numeric, muted (mock value). */
 .alm-targets-cell--lunardist {

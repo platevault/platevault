@@ -510,11 +510,11 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
       **moon-is-actionable-limiter** boolean (some band's moon-viable window strictly smaller than
       dark ∩ uptime, FR-031). Unit tests incl. the #817 repro fixture (52.09°N, 2026-07-14, M31) and a
       simultaneous-blockers precedence case.
-- [ ] T041 Table why-glyph + column consolidation (`TargetsTable.tsx`, depends T040): remove the altitude
+- [x] T041 Table why-glyph + column consolidation (`TargetsTable.tsx`, depends T040): remove the altitude
       sparkline column (hard removal) and the visible-tonight column; imaging-time cell renders ☀/▲/☾
       glyph + reason tooltip for zero values (FR-030) and the muted actionable-☾ with affected-band
       tooltip for non-zero values (FR-031). Stay within the existing sort/group engine (see phase note).
-- [ ] T042 Column right-sizing (`merges-3.css:323-355`, depends T041): content-driven widths for the
+- [x] T042 Column right-sizing (`merges-3.css:323-355`, depends T041): content-driven widths for the
       survivor columns; Opposition renders "14 Apr · in 9 months" unclipped (#792, FR-032); imaging time
       fits "2h10m" + glyph; verify no clipping at 1100×720 (SC-016).
 - [ ] T043 [P] Computation-context label (FR-033): always-visible single-line "Computed for: `<site>`

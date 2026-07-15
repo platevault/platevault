@@ -9,8 +9,11 @@
  * content of the Targets page's `ListPageLayout`; TargetDetailV2 lives in the
  * detail pane.
  *
- * Columns (spec 044): Designation · Type · Max alt · (sparkline) · Visible
- * tonight · Opposition · Lunar dist · Filters · Imaging time · Sessions.
+ * Columns (spec 044, iteration 2026-07-15 FR-007): Designation · Type ·
+ * Max alt · Opposition · Lunar dist · Filters · Imaging time · Sessions.
+ * The per-row altitude sparkline and visible-tonight columns are removed —
+ * the detail panel's altitude graph is the canonical altitude view, and
+ * visibility is folded into the imaging-time glyph (FR-030/FR-031).
  *
  * Task #84 — VIRTUALIZATION (padding-spacer pattern):
  *   The Planner catalogue is large; rendering every row synchronously blocks the
@@ -93,8 +96,8 @@ import {
   DEFAULT_MOON_AVOIDANCE,
   type MoonAvoidanceParams,
 } from './astro/moon-avoidance';
+import type { ZeroImagingReason } from './planner-derive';
 import { formatOppositionDate, oppositionRelative } from './astro/opposition';
-import { AltitudeSparkline } from './AltitudeSparkline';
 import { GuidanceCell } from './GuidanceCell';
 import { recommendationLabel } from './FilterBadges';
 import { m } from '@/lib/i18n';
@@ -116,7 +119,6 @@ import { useCollapsibleGroups } from '@/lib/use-grouping';
  *
  * Spec 044/047 additions, sortable:
  *   - maxAlt: sorts by peak altitude tonight (Track B placeholder)
- *   - visible: sorts by visibleTonight flag then hoursAboveUsable
  *   - opposition: sorts by real days-to-next-opposition, soonest first;
  *     unknown coordinates always sort last regardless of direction (spec 047 US4)
  *   - lunarDist: sorts by real target↔Moon separation; unknowns sort last
@@ -128,7 +130,6 @@ export type TargetSortCol =
   | 'designation'
   | 'type'
   | 'maxAlt'
-  | 'visible'
   | 'opposition'
   | 'lunarDist'
   | 'imagingTime'
@@ -195,12 +196,6 @@ function compareTargetRows(
       break;
     case 'maxAlt':
       cmp = altA.maxAltDeg - altB.maxAltDeg;
-      break;
-    case 'visible':
-      // Primary: visible flag (true > false). Secondary: hours above threshold.
-      cmp =
-        Number(altA.visibleTonight) - Number(altB.visibleTonight) ||
-        altA.hoursAboveUsable - altB.hoursAboveUsable;
       break;
     case 'opposition': {
       // Real next-opposition date (US4). Unknowns (no coordinates / no site)
@@ -433,18 +428,6 @@ const COLUMNS: Array<{
     title: () => m.targets_table_max_alt_title(),
   },
   {
-    key: 'spark',
-    label: () => m.targets_col_tonight(),
-    className: 'alm-targets-cell--spark',
-  },
-  {
-    key: 'visible',
-    label: () => m.targets_col_visible(),
-    sort: 'visible',
-    className: 'alm-targets-cell--center',
-    title: () => m.targets_col_visible_title(),
-  },
-  {
     key: 'opposition',
     label: () => m.targets_col_opposition(),
     sort: 'opposition',
@@ -484,6 +467,120 @@ const COLUMNS: Array<{
 
 // COL_COUNT is derived from COLUMNS so adding/removing a column stays in sync.
 const COL_COUNT = COLUMNS.length;
+
+// ── Imaging-time cell (iteration 2026-07-15, FR-030/FR-031/FR-032) ──────────
+
+/** "2h10m"-style imaging duration; whole hours drop the minute part (FR-032). */
+function formatImagingHours(hours: number): string {
+  const totalMin = Math.round(hours * 60);
+  const h = Math.floor(totalMin / 60);
+  const min = totalMin % 60;
+  return min === 0
+    ? m.targets_imgtime_h({ h })
+    : m.targets_imgtime_hm({ h, min });
+}
+
+const ZERO_REASON_GLYPH: Record<ZeroImagingReason, string> = {
+  darkness: '☀',
+  altitude: '▲',
+  moon: '☾',
+};
+
+/**
+ * Imaging-time value + why-glyph. Zero values always carry a warning glyph
+ * with the FR-029 reason (FR-030 — no bare 0 is reachable, SC-015); the
+ * 'moon' reason shows the geometric window it invalidates. Non-zero values
+ * carry a muted ☾ naming the affected bands only when the Moon actionably
+ * shortens some band's window (FR-031); a purely darkness/altitude-capped
+ * value shows no glyph.
+ */
+function ImagingTimeCell({
+  alt,
+  threshold,
+}: {
+  alt: RowAltitude;
+  threshold: number;
+}) {
+  // Degrade states (no coordinates / no site): no astronomy was attempted,
+  // so there is no reason to state — matches the row's other '—' cells.
+  if (alt.needsCoordinates || alt.needsSite) {
+    return (
+      <span
+        className="alm-targets-cell--muted"
+        title={m.targets_col_img_time_title()}
+      >
+        —
+      </span>
+    );
+  }
+
+  const reason = alt.zeroImagingReason;
+  if (reason !== null) {
+    const title =
+      reason === 'darkness'
+        ? m.targets_imgtime_zero_darkness_title()
+        : reason === 'altitude'
+          ? m.targets_imgtime_zero_altitude_title({ threshold })
+          : m.targets_imgtime_zero_moon_title();
+    return (
+      <span title={title}>
+        {alt.hoursAboveUsable > 0
+          ? formatImagingHours(alt.hoursAboveUsable)
+          : '—'}{' '}
+        <span
+          role="img"
+          aria-label={title}
+          className="alm-imgtime-glyph alm-imgtime-glyph--warn"
+        >
+          {ZERO_REASON_GLYPH[reason]}
+        </span>
+      </span>
+    );
+  }
+
+  if (alt.hoursAboveUsable <= 0) {
+    // Unreachable once astronomy ran (zero always carries a reason, SC-015),
+    // but never render a bare 0.
+    return (
+      <span
+        className="alm-targets-cell--muted"
+        title={m.targets_col_img_time_title()}
+      >
+        —
+      </span>
+    );
+  }
+
+  const limitedTitle =
+    alt.moonLimitedBands.length > 0
+      ? m.targets_imgtime_moon_limited_title({
+          bands: alt.moonLimitedBands.join(' · '),
+        })
+      : null;
+  return (
+    <span
+      title={m.targets_table_hours_above_title({
+        hours: alt.hoursAboveUsable.toFixed(1),
+        threshold,
+      })}
+    >
+      {formatImagingHours(alt.hoursAboveUsable)}
+      {limitedTitle !== null && (
+        <>
+          {' '}
+          <span
+            role="img"
+            aria-label={limitedTitle}
+            title={limitedTitle}
+            className="alm-imgtime-glyph alm-imgtime-glyph--muted"
+          >
+            ☾
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
 
 /** Estimated row height (px) for the virtualizer's first measurement pass. */
 const ROW_ESTIMATE = 36;
@@ -813,8 +910,6 @@ export function TargetsTable({
             <col className="alm-targets-col--designation" />
             <col className="alm-targets-col--type" />
             <col className="alm-targets-col--maxalt" />
-            <col className="alm-targets-col--spark" />
-            <col className="alm-targets-col--visible" />
             <col className="alm-targets-col--opposition" />
             {/* task #5: lunardist widened to 80px (wave2 CSS block). */}
             <col className="alm-targets-col--lunardist" />
@@ -1002,59 +1097,6 @@ export function TargetsTable({
                       {Math.round(alt.maxAltDeg)}°
                     </span>
                   </td>
-                  {/* Real inline altitude sparkline for the night (spec 044 Track B). */}
-                  <td className="alm-targets-cell--spark">
-                    <AltitudeSparkline
-                      alt={alt}
-                      label={m.targets_table_alt_sparkline_aria({
-                        label: t.effectiveLabel,
-                      })}
-                    />
-                  </td>
-                  {/* Visible-tonight indicator (peaks above usable alt).
-                      US4/T033: a site/date with no qualifying dark window
-                      (FR-017) discloses that explicitly instead of implying
-                      the target is simply too low. */}
-                  <td className="alm-targets-cell--center">
-                    {alt.noDarkWindow ? (
-                      <span
-                        className="alm-targets-vis alm-targets-vis--no"
-                        title={m.targets_table_no_dark_window_title()}
-                      >
-                        ○
-                        <span className="alm-targets-vis__label">
-                          {m.targets_table_no_dark_window()}
-                        </span>
-                      </span>
-                    ) : alt.visibleTonight ? (
-                      <span
-                        className="alm-targets-vis alm-targets-vis--yes"
-                        title={m.targets_table_visible_reaches_title({
-                          deg: Math.round(alt.maxAltDeg),
-                          hours: alt.hoursAboveUsable.toFixed(1),
-                          threshold: usableAltDeg,
-                        })}
-                      >
-                        ●
-                        <span className="alm-targets-vis__label">
-                          {m.targets_table_visible_tonight()}
-                        </span>
-                      </span>
-                    ) : (
-                      <span
-                        className="alm-targets-vis alm-targets-vis--no"
-                        title={m.targets_table_visible_peaks_title({
-                          deg: Math.round(alt.maxAltDeg),
-                          threshold: usableAltDeg,
-                        })}
-                      >
-                        ○
-                        <span className="alm-targets-vis__label">
-                          {m.targets_table_visible_low()}
-                        </span>
-                      </span>
-                    )}
-                  </td>
                   {/* Real next-opposition date (spec 047 US4). Unknown
                       coordinates / no site → explicit "—", never a date. */}
                   <td className="alm-targets-cell--opposition">
@@ -1123,20 +1165,16 @@ export function TargetsTable({
                       }
                     />
                   </td>
-                  {/* MOCK (spec 044): hours above the usable-altitude threshold. */}
+                  {/* Imaging time (dark ∩ uptime) + why-glyph (iteration
+                      2026-07-15). Zero values carry a ☀/▲/☾ warning glyph
+                      with the FR-029 reason (FR-030, SC-015); non-zero values
+                      carry a muted ☾ only when the Moon actionably shortens
+                      some band's window (FR-031). Reason facts come from
+                      `altMoon` — the per-rendered-row pass that includes Moon
+                      geometry — so 'moon' is never inferred from the cheap
+                      geometry-free catalogue pass. */}
                   <td className="alm-targets-cell--num">
-                    <span
-                      title={m.targets_table_hours_above_title({
-                        hours: alt.hoursAboveUsable.toFixed(1),
-                        threshold: usableAltDeg,
-                      })}
-                    >
-                      {alt.hoursAboveUsable > 0
-                        ? m.targets_hours_above({
-                            hours: alt.hoursAboveUsable.toFixed(1),
-                          })
-                        : '—'}
-                    </span>
+                    <ImagingTimeCell alt={altMoon} threshold={usableAltDeg} />
                   </td>
                   {/* MOCK (#57): linked-session count not on TargetListItem yet. */}
                   <td className="alm-targets-cell--num">
