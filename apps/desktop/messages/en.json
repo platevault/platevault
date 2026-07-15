@@ -171,7 +171,6 @@
   "cmp_target_search_all_types": "All types",
   "cmp_target_search_catalogue_label": "Catalogue",
   "cmp_target_search_filters_aria": "Search filters",
-  "cmp_target_search_no_results": "No matching targets.",
   "cmp_target_search_no_results_hint": "No matches in SIMBAD —",
   "cmp_target_search_search_harder": "Search more catalogues (NED/VizieR)",
   "cmp_target_search_search_harder_no_results": "Still no matching targets.",
