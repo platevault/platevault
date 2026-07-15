@@ -363,6 +363,27 @@
 .alm-imgtime-glyph--warn { color: var(--alm-warn); }
 .alm-imgtime-glyph--muted { color: var(--alm-text-faint); }
 
+/* Computation-context label (iteration 2026-07-15, FR-033): one compact
+   always-visible line in the planner toolbar; must stay single-line even in
+   the crowded 1100×720 layout, so the site name is allowed to ellipsize. */
+.alm-planner-computed-for {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
+  font-size: var(--alm-text-xs);
+  color: var(--alm-text-muted);
+  white-space: nowrap;
+  min-width: 0;
+}
+.alm-planner-computed-for__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40ch;
+}
+.alm-planner-computed-for__change {
+  color: var(--alm-accent);
+}
+
 /* Lunar dist cell: tabular numeric, muted (mock value). */
 .alm-targets-cell--lunardist {
   font-variant-numeric: tabular-nums;

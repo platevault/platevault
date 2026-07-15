@@ -74,6 +74,7 @@ import { computeObservingNight, type ObservingNight } from './astro/moon-state';
 import { useObserverSiteExists } from './site-gate';
 import { MoonSummary } from './MoonSummary';
 import { PlannerDatePicker } from './PlannerDatePicker';
+import { PlannerComputedFor } from './PlannerComputedFor';
 import { useGuidanceParams, loadGuidanceParams } from './guidance-settings';
 import { deriveRowMoonPlanning } from './astro/row-planning';
 import { recommendationLabel } from './FilterBadges';
@@ -438,6 +439,9 @@ export function TargetsPage() {
         // action, gated behind a default observing site (D7). Until a site
         // exists the slot shows the set-up-your-site prompt.
         <>
+          {/* FR-033/T043: always-visible computation-context label — the one
+              place disclosing site/twilight/threshold behind every number. */}
+          <PlannerComputedFor usableAltDeg={usableAltDeg} />
           {/* US2/T024: plan an arbitrary future night — every table/detail
               computation reads this chosen date (SC-004). */}
           <PlannerDatePicker />

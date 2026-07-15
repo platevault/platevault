@@ -1848,6 +1848,8 @@
   "targets_imgtime_zero_altitude_title": "No imaging time — the target never clears {threshold}° during darkness",
   "targets_imgtime_zero_moon_title": "No Moon-viable imaging time — the Moon blocks every filter band tonight; see the detail panel for per-band windows",
   "targets_imgtime_moon_limited_title": "Moon shortens tonight's imaging window for: {bands}",
+  "targets_computed_for": "Computed for: {site} {lat} · {twilight} · ≥{threshold}°",
+  "targets_computed_for_change": "change",
   "sessions_dim_month": "Month",
   "sessions_dim_target": "Target",
   "sessions_dim_camera": "Camera",

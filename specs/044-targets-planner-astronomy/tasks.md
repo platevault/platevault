@@ -517,7 +517,7 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
 - [x] T042 Column right-sizing (`merges-3.css:323-355`, depends T041): content-driven widths for the
       survivor columns; Opposition renders "14 Apr · in 9 months" unclipped (#792, FR-032); imaging time
       fits "2h10m" + glyph; verify no clipping at 1100×720 (SC-016).
-- [ ] T043 [P] Computation-context label (FR-033): always-visible single-line "Computed for: `<site>`
+- [x] T043 [P] Computation-context label (FR-033): always-visible single-line "Computed for: `<site>`
       `<lat>`°N · `<twilight>` · ≥`<N>`° · change" in the planner toolbar; "change" opens the existing
       site-switch/settings surface; verify against the crowded-toolbar layout at 1100×720.
 - [ ] T044 Detail-graph agreement + overlays (`TargetDetailV2.tsx:140-243`, depends T040): render the
