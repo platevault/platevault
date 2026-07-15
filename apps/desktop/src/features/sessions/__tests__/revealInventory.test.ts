@@ -91,13 +91,23 @@ describe('resolveRevealPath (#567)', () => {
     );
   });
 
-  it('joins with the native separator for a Windows root', () => {
+  it('rewrites the forward-slash relativePath the scanner emits to backslash for a Windows root', () => {
+    // Real backend shape: root is native backslash (folder picker), while
+    // relativePath is ALWAYS forward-slash (scan.rs normalization) — the join
+    // must produce a fully-backslash path or the Windows select-item shell
+    // call rejects it.
     expect(
       resolveRevealPath(
         'D:\\Astrophotography\\SessionMatrix',
-        'Lights\\M 51\\2025-05-03\\L',
+        'Lights/M 51/2025-05-03/L',
       ),
     ).toBe('D:\\Astrophotography\\SessionMatrix\\Lights\\M 51\\2025-05-03\\L');
+  });
+
+  it('joins a UNC root with the native separator', () => {
+    expect(resolveRevealPath('\\\\nas\\astro\\lib', 'Lights/M 31')).toBe(
+      '\\\\nas\\astro\\lib\\Lights\\M 31',
+    );
   });
 
   it('collapses a trailing root separator and a leading relative separator', () => {
