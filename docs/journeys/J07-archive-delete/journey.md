@@ -1,8 +1,8 @@
 ---
 id: J07
 title: Archive a completed project, then trash or permanently delete it
-version: 1
-status: active
+version: 2
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [archive, projects, plans, audit]
@@ -11,10 +11,13 @@ trace:
   - pre-migration docs/product/journeys/J07-archive-delete/journey.md @ 66026463
   - deltas/2026-07-14-jval-docdrift.md (folded — verified in apps/desktop/src/features/projects/ProjectDetail.tsx)
   - deltas/2026-07-14-q15-t123.md (folded — verified in crates/app/core/src/protection.rs)
+  - deltas/2026-07-14-q16-t132.md (folded — verified in apps/desktop/src/features/archive/ArchiveTable.tsx, ArchiveDetail.tsx)
   - specs/016-source-protection-defaults/spec.md (FR-004, SC-003)
-  - specs/030-ui-audit-revision/spec.md (FR-090, FR-130–FR-134)
+  - specs/030-ui-audit-revision/spec.md (FR-090, FR-130–FR-134, FR-135–FR-140)
   - e2e-agentic-test/017-cleanup-archive-review-plans/archive-lifecycle/scenario.md (D7/D14/D15/D24)
-  - PR #401, PR #415, PR #826
+  - docs/development/journey-run-2026-07-14.md (Journey 7 section — live-app validation, build 7e522c16)
+  - PR #401, PR #415, PR #826, PR #849
+  - issue #732 (send-to-trash / permanently-delete are audit-only stubs, open)
 ---
 
 ## Goal
@@ -81,34 +84,76 @@ user typing the literal word `DELETE`.
   size, and archived timestamp, reflecting only real archived projects.
 - **Expect (negative):** No placeholder/fixture rows ever appear on this
   page.
+- **Expect (negative):** A missing reason or size is never rendered as a
+  fabricated value (e.g. a bare `0`) — it renders through the shared
+  `renderValue()` as a distinct unresolved state; absence is only ever used
+  as the lowest sort key, never as the displayed value.
+- **Trace:** apps/desktop/src/features/archive/ArchiveTable.tsx (`renderValue`,
+  `compareEntries`); PR #849; specs/030-ui-audit-revision/spec.md
+  FR-135–FR-138.
 
 ### S5 — View archived project detail and its audit history {#S5}
 - **Do:** Select the archived row.
-- **Expect:** The detail pane shows archived-at, reason, entity type, size,
-  and original path, plus a dated, human-readable audit-history table for
-  this project (durable `audit_log_entry` history, not the live event bus).
+- **Expect:** The detail pane header shows the project name (title), its
+  entity type (pill), and its original path (subtitle, or a stated
+  fallback when there is no path), plus a dated, human-readable
+  audit-history table (timestamp + detail text) for this project (durable
+  `audit_log_entry` history, not the live event bus). Archived-at, reason,
+  and size are intentionally not repeated in the detail pane — they live
+  only on the Archive row (S4); a former duplicate "Details" table
+  repeating those fields was removed.
 - **Expect (negative):** The audit-history table is not simply a repeat of
   the row's own list columns.
+- **Trace:** apps/desktop/src/features/archive/ArchiveDetail.tsx; PR #849
+  (dropped the duplicate Details table per decision T133, "detail-as-delta
+  audit"); specs/030-ui-audit-revision/spec.md FR-139–FR-140. Corrects the
+  prior migrated claim that archived-at/reason/size/entity-type/path all
+  appear in the detail pane — that table was removed by #849 (merged
+  2026-07-14T20:01Z).
 
 ### S6 — Send archived files to the OS trash {#S6}
 - **Do:** With the archived project selected, choose "Send to trash".
-- **Expect:** The plan's archived files move to the OS Recycle Bin/Trash; a
-  durable audit row is recorded; the row reflects the new state.
-- **Expect (negative):** Files are not permanently removed by this action —
-  they remain recoverable from the OS trash.
+- **Expect:** A durable audit row is recorded and the row's control state
+  updates as if the send succeeded.
+- **Expect (negative):** As currently shipped, this action performs **no
+  filesystem work at all** — the archived files stay exactly where they
+  are on disk (the app-managed archive path), not the OS Recycle Bin/Trash.
+  `send_archive_to_trash`'s own doc comment states filesystem execution is
+  "deferred to spec 025" and only records the audit event; there is no
+  `trash`/delete call anywhere in that function. This is a false-success
+  surface: the UI and audit log report a completed action that did not
+  happen (open issue #732, spec-017 FR-017). Do not rely on this action to
+  reclaim disk space or to actually relocate files today.
+- **Trace:** crates/app/core/src/plans.rs (`send_archive_to_trash`, doc
+  comment + body, lines ~654-660); issue #732 (open); confirmed live by the
+  2026-07-14 validation run (docs/development/journey-run-2026-07-14.md,
+  Journey 7 — dupes hit list; note the S6/S7 apply chain itself was blocked
+  there by a 0-item plan, #780, so this stub was found by code inspection
+  and the run-052fix sweep, not by a live click-through in that run).
 
 ### S7 — Permanently delete archived files {#S7}
 - **Do:** Choose "Delete permanently"; a confirmation dialog requires typing
   the literal word `DELETE`.
 - **Expect:** The confirm control stays disabled until the typed text is an
-  exact, case-sensitive match for `DELETE`; confirming deletes the files
-  with no OS-trash recovery path.
+  exact, case-sensitive match for `DELETE` (`ArchivePage.tsx` gates the
+  button on `confirmInput !== 'DELETE'`; the backend independently rejects
+  a mismatched `confirm_text` with `confirm.text.mismatch`); confirming
+  records a durable audit row claiming the items were deleted.
 - **Expect (negative):** A half-typed or wrong-case entry leaves the confirm
   control disabled; Cancel leaves every file untouched.
 - **Expect (negative):** When "Block permanent delete" is enabled in
   Cleanup/Protection settings, the deletion is refused server-side
   (`plan.blocked_by_protection`) and no file is removed.
-- **Trace:** crates/app/core/src/plans.rs (`permanently_delete_archive`).
+- **Expect (negative):** As currently shipped, even a successful confirm
+  performs **no filesystem deletion** — same stub condition as S6:
+  `permanently_delete_archive` emits the `ArchivePermanentlyDeleted` audit
+  event and returns success, but never calls a delete/remove API; the
+  archived files remain on disk with no attempted removal, contradicting
+  the "no OS-trash recovery path" framing the confirm dialog implies (open
+  issue #732, spec-017 FR-017).
+- **Trace:** crates/app/core/src/plans.rs (`permanently_delete_archive`,
+  lines ~706-778); apps/desktop/src/features/archive/ArchivePage.tsx
+  (`DELETE_CONFIRM_TEXT`, delete modal); issue #732 (open).
 
 ### S8 — Reveal archived files {#S8}
 - **Do:** Choose the platform-native reveal control ("Show in File
@@ -149,5 +194,12 @@ user typing the literal word `DELETE`.
 
 ## Delta log
 
-(empty — this is the initial FORMAT migration; the pre-migration narrative
-lived in git history and in `deltas/`, not in a Δ-log window.)
+- **Δ2** 2026-07-14 · S4, S5 · behavior-change
+  Archive adopts the shared value renderer: missing size/reason never
+  render as a fabricated value (S4). The detail pane drops its duplicate
+  "Details" table (archived-at/reason/size/type/path all already shown on
+  the row or in the header) in favor of a minimal header plus the audit
+  history, per the detail-panel-adds-new-information rule (S5).
+  Evidence: PR #849 (merged 2026-07-14T20:01Z),
+  specs/030-ui-audit-revision/spec.md FR-135–FR-140 (Wave-0 Q16, decision
+  T133) · by: journey-scribe (intent-gated)

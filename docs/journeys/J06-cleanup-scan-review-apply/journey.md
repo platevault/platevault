@@ -2,17 +2,23 @@
 id: J06
 title: Reclaim disk space from processing outputs and raw sub-frames without losing anything protected
 version: 1
-status: active
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [cleanup, projects, sessions, plans]
 interfaces: [desktop-ui]
 trace:
-  - docs/product/journeys/J06-cleanup-scan-review-apply/journey.md @ 66026463
+  - pre-migration journey.md @ git 66026463
   - deltas/2026-07-14-jval-docdrift.md (folded — PR #413 status verified)
+  - deltas/2026-07-14-q15-t123.md (superseded by current code — see G2)
   - spec-017 WP-E (project-level cleanup review flow)
   - spec-048 US3 (session-scoped raw sub-frame cleanup)
   - spec-025 FR-004 (destructive-confirm apply gate)
+  - docs/development/journey-run-2026-07-14.md (Journey 6 section — live-app
+    validation, build 7e522c16; project-level flow only, S5/S6 not exercised)
+  - docs/development/windows-journeys/journey-06-cleanup-scan-apply.md
+  - PR #413 (merged 2026-07-04 — scan/review/generate cleanup UI)
+  - issue #741, issue #807, issue #766, issue #780, issue #806 (all open)
 ---
 
 ## Goal
@@ -64,13 +70,23 @@ protected ever touched without an acknowledged, reviewed step.
 - **Do:** Open the review overlay that follows plan generation.
 - **Expect:** Every item in the plan is listed 1:1 with the generated plan;
   if any protected item is included, its protection must be explicitly
-  acknowledged (per item) before "Approve & apply" becomes clickable; an
-  empty plan (nothing selected) cannot be approved and the overlay states why
-  it is empty; choosing "Discard" leaves disk untouched and returns cleanly.
+  acknowledged (per item) before "Approve & apply" becomes clickable;
+  "Approve & apply" is also disabled whenever the plan holds zero items;
+  choosing "Discard" leaves disk untouched and returns cleanly.
 - **Expect (negative):** "Approve & apply" stays disabled while any protected
-  item's acknowledgement is outstanding.
-- **Trace:** `apps/desktop/src/features/plans/PlanReviewOverlay.tsx`,
-  `apps/desktop/src/features/plans/PlanProtectionGate.tsx`
+  item's acknowledgement is outstanding, or while the plan holds zero items —
+  in both cases the overlay shows no explanatory text, only the disabled
+  control (no "this plan is empty" or similar message). A zero-item plan
+  cannot actually be produced by either flow in the first place: the project
+  flow's Generate control does not render unless S1's scan found candidates,
+  and the session flow's Generate (S6) is disabled while no frame is
+  selected — so this overlay state is unreachable via the documented S1–S4 /
+  S5–S6 path; the server-side rejection is defense-in-depth only.
+- **Trace:** `apps/desktop/src/features/plans/PlanReviewOverlay.tsx:293`
+  (Approve & apply `disabled={... || plan.itemsTotal === 0}`, no message
+  rendered for that case), `crates/app/core/src/plans.rs:341-349` (server
+  rejects approving a zero-item plan with `PlanItemsEmpty`, not reachable via
+  the shipped UI), `apps/desktop/src/features/plans/PlanProtectionGate.tsx`
 
 ### S4 — Approve and apply {#S4}
 - **Do:** Click "Approve & apply" on a plan whose destination is Archive and
@@ -114,8 +130,12 @@ protected ever touched without an acknowledged, reviewed step.
   offers those items as candidates (S2–S4).
 - SC3: Any plan containing a protected item cannot reach "Approve & apply"
   enabled without an explicit per-item acknowledgement (S3).
-- SC4: An empty plan (zero candidates selected) is refused before apply, with
-  a stated reason, in both the project and session flows (S3, S6).
+- SC4: A plan can never reach an enabled "Approve & apply" with zero items:
+  the project flow's Generate control cannot exist without at least one
+  candidate (S1 gates it) and the session flow's Generate is disabled while
+  no frame is selected (S6); approving a zero-item plan is separately
+  rejected server-side as defense-in-depth. No step surfaces an explanatory
+  reason to the user for this (S1–S3, S5–S6).
 - SC5: A session raw-frame scan preselects only non-protected frames and
   offers no selection control on protected frames (S5).
 

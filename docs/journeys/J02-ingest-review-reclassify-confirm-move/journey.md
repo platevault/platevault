@@ -2,13 +2,13 @@
 id: J02
 title: Move newly-arrived frames from an inbox drop folder into the library
 version: 1
-status: active
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
-surfaces: [inbox, plans, audit]
+surfaces: [inbox-confirm, plans, audit]
 interfaces: [desktop-ui]
 trace:
-  - docs/product/journeys/J02-ingest-review-reclassify-confirm-move/journey.md @ 66026463
+  - pre-migration journey.md @ git 42c596d6
   - deltas/2026-07-14-jval-docdrift.md
   - e2e-agentic-test/041-inbox-plan-surface/mixed-folder-single-type-subitems/scenario.md
   - e2e-agentic-test/041-inbox-plan-surface/missing-mandatory-gate/scenario.md
@@ -54,14 +54,26 @@ explicit, reviewed plan, and the action is visible in the audit history.
 - **Expect:** The detail shows the same per-file metadata (frame type,
   filter, exposure, binning, gain, temperature, target, date) that the
   needs-review gate (S3) computes over; the file count shown on the list
-  row and the file count shown in the detail agree. The detail continues
-  to track the item the user selected even if the user changes the search
-  text or an active filter afterward. The item's source folder can be
-  revealed in the OS file manager from the detail.
+  row and the file count shown in the detail agree. Each field is
+  distinguishable as real data (with a source pill), an unresolved
+  missing-but-applicable value (chip, no source pill), or a not-applicable
+  value (blank/"—", no chip) — never a bare `0`/blank standing in for a
+  missing value (`apps/desktop/src/components/RenderValue.tsx`,
+  `InboxDetail.tsx` field wiring). The detail continues to track the item
+  the user selected even if the user changes the search text or an active
+  filter afterward.
 - **Expect (negative):** Changing search or filter text never silently
   re-targets the open detail panel to a different item. If per-file
   metadata fails to load, the detail shows an explicit error state rather
-  than an empty or stale one, and Confirm stays disabled.
+  than an empty or stale one, and Confirm stays disabled. The source
+  folder is NOT revealable from this detail today — `nativeReveal` is
+  wired only into the Sessions feature, not Inbox; corrected from the
+  legacy doc's unconditional reveal claim.
+- **Trace:** `apps/desktop/src/components/RenderValue.tsx`,
+  `apps/desktop/src/features/inbox/InboxDetail.tsx` (renderer wiring);
+  `apps/desktop/src/features/sessions/revealInventory.ts` (reveal is
+  Sessions-only — no `nativeReveal` call anywhere under
+  `features/inbox/`).
 
 ### S3 — Resolve missing metadata via bulk reclassify {#S3}
 - **Do:** For an item flagged as needing review (missing a mandatory
@@ -71,17 +83,29 @@ explicit, reviewed plan, and the action is visible in the audit history.
   binning) in one action.
 - **Expect:** The needs-review item shows a banner naming exactly what is
   missing, and affected rows carry a "needs `<attribute>`" badge; Confirm
-  is disabled while unresolved. Applying a value to a selection that
-  shares one detected type applies cleanly; a selection spanning different
-  detected types warns before overwriting. Once every file in the item has
-  the missing value, the item re-partitions into a clean single-type item
-  and Confirm re-enables automatically. The override is visible with its
-  provenance and a reset path, and it survives a later rescan.
+  is disabled while unresolved. Applying a value to a selection of
+  affected (missing-value) files applies to the whole selection in one
+  call, reported as an applied count. Once every file in the item has the
+  missing value, the item re-partitions into a clean single-type item and
+  Confirm re-enables automatically. The override is visible with its
+  provenance (a source pill distinguishing it from a FITS-derived value)
+  and a reset path, and it survives a later rescan.
 - **Expect (negative):** Resolving a missing value never rewrites the
   source file's bytes — only PlateVault's own index changes. Attempting to
   confirm an unresolved item is rejected independently of the UI: a direct
   confirm request against that item fails with a typed
   `inbox.missing_path_attributes` error.
+- **Trace:** Removed the legacy claim "a selection spanning different
+  detected types warns before overwriting" — no corroborating warning UI
+  or backend check found (`InboxDetail.tsx` `handleBulkApply`/
+  `handleSelectAll`, `crates/app/inbox/src/reclassify.rs`, and the
+  `reclassify-field-agnostic` e2e scenario all apply uniformly with no
+  type-mismatch check); carried unverified from the legacy doc's
+  validation checklist into an unconditional Expect by the migration.
+  "Reset path" is UNVERIFIED (not corrected): a backend primitive exists
+  (`set_manual_override_reset_stale`,
+  `crates/persistence/db/src/repositories/q_inbox.rs`) but no UI control
+  invoking it was located — see report.
 
 ### S4 — Choose a destination library root, when more than one applies {#S4}
 - **Do:** If more than one registered library root can receive the item's
@@ -89,11 +113,18 @@ explicit, reviewed plan, and the action is visible in the audit history.
   Auto).
 - **Expect:** With exactly one valid root, the picker is not shown and
   that root is used automatically. With two or more valid roots, the
-  control lists them distinguishably (two roots sharing a folder name are
-  still told apart) and defaults to Auto. The choice arms only the
-  selected item — selecting a different item returns the control to Auto
-  for that item, and the value shown always equals the root a confirm
-  would actually use.
+  control lists each as `<folder name> · <category>` and defaults to
+  Auto. The choice arms only the selected item — selecting a different
+  item returns the control to Auto for that item, and the value shown
+  always equals the root a confirm would actually use.
+- **Expect (negative — corrected):** Two registered roots that share the
+  same last path segment (e.g. `D:\Astro\library` and `E:\Backup\library`)
+  are NOT told apart in the picker — the option label is
+  `basename(path) · category` only, with no path-disambiguation logic
+  (`apps/desktop/src/features/inbox/InboxDetail.tsx`, destination-root
+  `<select>` around the `applicableRoots.map` block). The legacy/migrated
+  claim that same-named roots "are still told apart" is corrected; treat
+  this as a candidate product gap (see report).
 
 ### S5 — Confirm a classified item into a plan {#S5}
 - **Do:** Confirm a fully-classified (not needs-review) item.
@@ -110,24 +141,47 @@ explicit, reviewed plan, and the action is visible in the audit history.
 ### S6 — Review the plan before anything touches disk {#S6}
 - **Do:** Open the plan review surface (e.g. via a "Review plans (N)"
   control) for one or more planned items.
-- **Expect:** Every plan item shows its action, its source and destination
-  path in full, and any protection status. Closing the review (Escape or
-  Discard) causes no mutation. A pending destination-root choice from S5
-  is resolvable from inside this surface.
+- **Expect:** Every plan item shows its action and its source and
+  destination path in full. Closing the review (Escape or Discard) causes
+  no mutation. A pending destination-root choice from S5 is resolvable
+  from inside this surface.
 - **Expect (negative):** Nothing under the inbox or the destination root
   changes as a result of opening or discarding this review.
+- **Trace (correction):** dropped "any protection status" — the Inbox
+  move-plan review surface is `PlanApprovalOverlay`/`PlanPanel.tsx`
+  (`apps/desktop/src/features/inbox/`), which has no protection-status
+  rendering at all. The generic `PlanReviewOverlay`
+  (`apps/desktop/src/features/plans/PlanReviewOverlay.tsx`) that DOES
+  gate on protection (spec-016 `PlanProtectionGate`) explicitly documents
+  itself as NOT used by Inbox: "Feature-specific bulk surfaces (the
+  inbox multi-plan PlanApprovalOverlay) predate it and remain separate."
+  Protection is a source/archive-plan concept (spec-016); it does not
+  currently apply to inbox move-mode plans.
 
 ### S7 — Apply the plan {#S7}
 - **Do:** Apply one plan item, or apply all reviewed plan items.
-- **Expect:** Each item reports its own outcome; a failed item is
-  identifiable by name with a reason. Files move to the path resolved from
-  the per-frame-type folder pattern (e.g. `{target}/{filter}/{date}/light/`).
-  On success, an explicit signal names the result with a path to it (e.g.
-  "View session").
+- **Expect:** Applying reports an aggregate outcome (a toast naming the
+  applied count and, when any item failed, the failed count) for both
+  single-item and apply-all/apply-selected flows. Files move to the path
+  resolved from the per-frame-type folder pattern (e.g.
+  `{target}/{filter}/{date}/light/`).
 - **Expect (negative):** A plan whose source file changed on disk since it
   was confirmed refuses to apply rather than silently applying an outdated
   action list. A destination collision is refused rather than silently
   overwritten.
+- **Trace (correction):** the backend apply response
+  (`InboxPlanApplyResult { inboxItemId, planId, state, error }`) carries a
+  per-item error, but no inbox UI code renders it per item — only an
+  aggregate count reaches the user
+  (`apps/desktop/src/features/inbox/InboxPage.tsx`
+  `handleApplySelected`/`handleApplyAll`). Corrected from "a failed item
+  is identifiable by name with a reason." Also dropped the unverified
+  "View session" post-apply link claim — no such affordance found in
+  `PlanPanel.tsx`/`PlanApprovalOverlay.tsx`/`usePlanApplyProgress.ts` or
+  the message catalog. Stale-source refusal is confirmed via the executor
+  CAS check (`crates/fs/executor/src/run.rs::check_cas`); destination
+  collision refusal is confirmed via `ErrorCode::PathCollision` +
+  "never overwrite silently" (`crates/fs/executor/src/run.rs`).
 
 ### S8 — Verify the applied outcome {#S8}
 - **Do:** Return to the inbox queue and to the audit history after an
@@ -147,7 +201,9 @@ explicit, reviewed plan, and the action is visible in the audit history.
   `inbox.missing_path_attributes` rejection) — S3.
 - SC3: Every file present in the inbox before S1 is, by the end of S7,
   either present at its resolved destination path under a registered
-  library root, or still queued with a named reason it was not moved.
+  library root, or still queued, with the backend apply response
+  recording a per-item failure reason even though the current UI only
+  surfaces an aggregate applied/failed count (S7).
 - SC4: Every successful apply in S7 and every refused destination
   collision in S7 has a matching row in the audit history (S8).
 - SC5: A plan whose source file changed after confirm is refused at apply

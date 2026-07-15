@@ -90,26 +90,32 @@ validation. Agent judgment bridges anything unmapped.
 
 | path glob | surfaces |
 |---|---|
-| `apps/desktop/src/features/setup/**` | setup |
-| `apps/desktop/src/features/settings/**` | settings, equipment, observing-sites |
-| `apps/desktop/src/app/**` | shell, activity |
-| `apps/desktop/src/features/inbox/**` | inbox |
+| `apps/desktop/src/features/setup/**` | setup, data-sources |
+| `apps/desktop/src/features/inventory/**` | data-sources |
+| `apps/desktop/src/features/inbox/**` | inbox-confirm |
 | `apps/desktop/src/features/sessions/**` | sessions |
 | `apps/desktop/src/features/projects/**` | projects |
+| `apps/desktop/src/features/guided/**` | projects |
 | `apps/desktop/src/features/targets/**` | targets |
+| `apps/desktop/src/features/targets/observing-sites/**` | observing-sites |
 | `apps/desktop/src/features/calibration/**` | calibration |
-| `apps/desktop/src/features/cleanup/**` | cleanup |
 | `apps/desktop/src/features/archive/**` | archive |
-| `apps/desktop/src/features/audit/**` | audit |
-| `crates/fs/planner/**` | plans |
+| `apps/desktop/src/features/plans/**` | plans |
+| `apps/desktop/src/features/settings/**` | settings |
+| `apps/desktop/src/features/settings/Cleanup*` | cleanup |
+| `apps/desktop/src/features/settings/AuditLog*` | audit |
+| `apps/desktop/src/features/settings/Equipment*` | equipment |
+| `apps/desktop/src/app/**` | shell, activity |
+| `crates/fs/executor/**` | plans |
+| `crates/fs/inventory/**` | data-sources |
 | `crates/calibration/**` | calibration |
 | `crates/targeting/**` | targets |
 | `crates/audit/**` | audit |
 
-(The `apps/desktop/src` feature layout is indicative — validators should
-trust the repo over this table and propose corrections. Only surfaces used
-by migrated journeys are authoritative; names for not-yet-migrated areas
-are proposals for `journey-write` to confirm.)
+(Globs verified against the tree 2026-07-15; the Cleanup/AuditLog/Equipment
+pages live as files inside `features/settings/`, so those rows are
+file-prefix globs that refine the broader `settings` row. Validators should
+still trust the repo over this table and propose corrections.)
 
 ## Intent-evidence sources
 
@@ -131,9 +137,8 @@ Legacy journey history (pre-migration) lives under
 `docs/product/journeys/JNN-slug/` — baseline narratives plus per-task
 `deltas/*.md`, and the pre-format Wave-0 rerun sheets
 (`wave0-rerun-plan.md`, `wave0-task-index.md`). Those files are frozen;
-this directory is where current truth now lives for migrated journeys. Not
-every journey has been migrated yet — check `INDEX.md` here first, fall
-back to `docs/product/user-journeys.md` for anything not yet migrated.
+this directory is where current truth now lives: all seventeen journeys
+(J01–J17) are migrated and listed in `INDEX.md`.
 
 Cross-cutting validator rules (user-mandated):
 
