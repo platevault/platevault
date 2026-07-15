@@ -366,7 +366,16 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
     );
 
     // Bulk reclassify: select the one needs-review file, set frame type ->
-    // light, apply. Real inputs, real `inbox.reclassify` round-trip.
+    // light PLUS exposureS, apply. Real inputs, real `inbox.reclassify_v2`
+    // round-trip.
+    //
+    // `exposureS` is a hard mandatory key for light frames alongside target
+    // and filter (spec 041 R-14/FR-047, `classify::mandatory_set_for`) — the
+    // fixture's OBJECT/FILTER headers satisfy target/filter, but it carries no
+    // EXPTIME header, so setting frameType alone still routes the file to the
+    // needs-review sentinel bucket instead of a resolved `light` sub-item.
+    // The generic bulk-property editor (issue #755/R-13, `genericBulkFields`
+    // in `InboxDetail.tsx`) is exactly how a real user fills this gap.
     //
     // Both controls are CONTROLLED React inputs on a pane that re-renders as
     // its classification/metadata queries land, and `handleBulkApply`
@@ -376,6 +385,7 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
     // churn until it does.
     app.click_testid("reclassify-select-all").await?;
     app.select_testid("bulk-frame-type", "light").await?;
+    app.fill_testid("bulk-exposure-s", "300").await?;
     app.click_testid("bulk-apply-btn").await?;
 
     // The store invalidates the classify query cache on success (`store.ts`);

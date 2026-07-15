@@ -1362,11 +1362,7 @@ mod tests {
         let fits_path = root.path().join("ambiguous_001.fits");
         {
             let mut data = vec![b' '; 2880];
-            let cards = [
-                "IMAGETYP= 'Frame Unknown'",
-                "OBJECT  = 'M42'",
-                "FILTER  = 'Ha'",
-            ];
+            let cards = ["IMAGETYP= 'Frame Unknown'", "OBJECT  = 'M42'", "FILTER  = 'Ha'"];
             for (i, c) in cards.iter().enumerate() {
                 let card = format!("{c:<80}");
                 data[i * 80..i * 80 + 80].copy_from_slice(card.as_bytes());
