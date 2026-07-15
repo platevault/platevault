@@ -95,9 +95,10 @@ function isThemeChoice(v: unknown): v is ThemeChoice {
  * jsdom (vitest) doesn't reliably resolve stylesheet-declared custom
  * properties through computed style, which would make scaling non-
  * deterministic under test. Keep these in sync with tokens.css if its base
- * `--alm-sp-*` / `--alm-text-*` values ever change.
+ * `--alm-sp-*` / `--alm-text-*` values ever change — `theme.tokens-drift.test.ts`
+ * asserts these tables match the parsed tokens.css `:root` values.
  */
-const SPACING_BASE_PX: Record<string, number> = {
+export const SPACING_BASE_PX: Record<string, number> = {
   '--alm-sp-0': 2,
   '--alm-sp-1': 4,
   '--alm-sp-2': 8,
@@ -108,7 +109,7 @@ const SPACING_BASE_PX: Record<string, number> = {
   '--alm-sp-7': 48,
 };
 
-const TEXT_SCALE_BASE_PX: Record<string, number> = {
+export const TEXT_SCALE_BASE_PX: Record<string, number> = {
   '--alm-text-2xs': 10,
   '--alm-text-xs': 11,
   '--alm-text-sm': 12,

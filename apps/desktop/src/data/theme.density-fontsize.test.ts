@@ -19,9 +19,8 @@ type IpcOutcome =
 
 const isTauriMock = vi.fn<() => boolean>();
 const settingsGetMock = vi.fn<(scope: string) => Promise<IpcOutcome>>();
-const settingsUpdateMock = vi.fn<
-  (scope: string, values: unknown) => Promise<IpcOutcome>
->();
+const settingsUpdateMock =
+  vi.fn<(scope: string, values: unknown) => Promise<IpcOutcome>>();
 
 vi.mock('@tauri-apps/api/core', () => ({
   isTauri: () => isTauriMock(),
@@ -77,9 +76,9 @@ describe('applyDensity — spacing tokens (app-wide, not just row height)', () =
     expect(
       document.documentElement.classList.contains('density-spacious'),
     ).toBe(true);
-    expect(
-      document.documentElement.classList.contains('density-compact'),
-    ).toBe(false);
+    expect(document.documentElement.classList.contains('density-compact')).toBe(
+      false,
+    );
   });
 
   it('clears the override for comfortable (falls back to the tokens.css base)', async () => {

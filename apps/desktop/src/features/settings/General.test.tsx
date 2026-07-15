@@ -34,12 +34,12 @@ describe('General — density', () => {
     const select = screen.getByDisplayValue('Comfortable (32px row)');
     fireEvent.change(select, { target: { value: 'compact' } });
 
-    expect(
-      document.documentElement.style.getPropertyValue('--alm-sp-2'),
-    ).toBe('6.00px');
-    expect(
-      document.documentElement.classList.contains('density-compact'),
-    ).toBe(true);
+    expect(document.documentElement.style.getPropertyValue('--alm-sp-2')).toBe(
+      '6.00px',
+    );
+    expect(document.documentElement.classList.contains('density-compact')).toBe(
+      true,
+    );
   });
 });
 
