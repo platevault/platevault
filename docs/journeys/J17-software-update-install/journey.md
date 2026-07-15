@@ -117,25 +117,10 @@ previously running install completely untouched.
   repeat prompt for that release (S4).
 
 ## Known gaps
-- G1: The running app version number is never displayed anywhere in
-  Settings → Advanced, or elsewhere in the UI, independent of update state
-  — confirmed via `Advanced.tsx` and the message catalog; `getVersion()` is
-  available but unused. Open issue: #845.
-- G2: A failed background update check is not surfaced as its own state;
-  the UI falls back to the same "up to date" text as a genuine no-update
-  result (confirmed in `check_for_app_update`, which only logs on `Err` and
-  emits no frontend event). No issue currently tracks this distinctly from
-  #845.
-- G3: In-repo test coverage for tamper/unsigned-artifact rejection
-  (SC-009) is still missing even though the real minisign keypair and
-  signing pipeline now exist in this repo; surviving code comments still
-  describe the pubkey as a placeholder. Open issue: #762.
-- G4: There is no staged "download/verify now, restart later" flow —
-  Install & Restart is one atomic action. A user cannot verify an update
-  and defer the actual restart to a more convenient moment. (The
-  pre-migration doc described a staged/decline flow; current code and
-  spec 051 US10 do not implement or require one.)
-- G5: No automated scenario/e2e coverage exists yet for this journey
-  (carried from the pre-migration doc, which flagged the same gap).
+- G1: (dissolved 2026-07-15) — tracked as issue #845; running app version never displayed.
+- G2: (dissolved 2026-07-15) — tracked as issue #873; failed update check not surfaced distinctly.
+- G3: (dissolved 2026-07-15) — tracked as issue #762; missing tamper/unsigned-artifact test coverage.
+- G4: (dissolved 2026-07-15) — tracked as issue #888; owner decided: build staged flow.
+- G5: (dissolved 2026-07-15) — tracked as issue #881; validation-campaign coverage tracker.
 
 ## Delta log

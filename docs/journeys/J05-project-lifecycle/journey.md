@@ -140,11 +140,7 @@ safe-by-construction or was explicitly reviewed.
 ## Known gaps
 - G1: Rejecting an unconfirmed session as a project source is enforced by
   the backend but has no dedicated UI path to trigger it today (carried
-  from legacy doc).
-- G2: The flagship `CreateProjectDialog` component (polished per-field
-  error mapping) is built and tested but not mounted by the router — the
-  real `/projects/new` flow goes through the step wizard (`WizardPage`)
-  instead. This is a product decision, not a defect, but affects where to
-  look for the "other" creation UI (carried from legacy doc).
+  from legacy doc). (accepted by user, 2026-07-15)
+- G2: (dissolved 2026-07-15) — tracked as issue #887 (also #719); dialog-vs-wizard design review.
 
 ## Delta log

@@ -193,23 +193,14 @@ the view carries no leftover review-state controls.
 
 ## Known gaps
 
-- G1: Session notes/annotation editing is not implemented — there is no
-  notes field on the session DTO or in the Sessions UI (carried from
-  legacy doc; verified absent by inspection of
-  `apps/desktop/src/bindings/index.ts` and
-  `apps/desktop/src/features/sessions/`; also filed live as open bug #773,
-  2026-07-14). Its absence remains a coverage gap for this journey until it
-  ships.
+- G1: (dissolved 2026-07-15) — tracked as issue #773; session notes editing.
 - G2: (retired) — the prior G2 ("PropertyTable source badge on missing
   values, unmerged fix on `impl/q16-missing-value`") is stale. PR #849
   (merged) adopted the shared `RenderValue`/`PropertyTable` renderer on
   Sessions detail, coupling the source badge to value presence
   (`PropertyTable.tsx:201`); see S4. Retired per the id-stability rule
   (never renumbered, never reused) rather than deleted.
-- G3: Library-root connectivity edge cases for a session's backing source
-  (missing/disabled/reconnect_required) are out of scope for this
-  journey — covered by first-run-setup / library-root management
-  journeys.
+- G3: (dissolved 2026-07-15) — tracked as issue #889; was wrongly scoped out, now tracked (connectivity state).
 
 ## Delta log
 

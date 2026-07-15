@@ -147,57 +147,14 @@ operable, and observable using only the keyboard, from any page.
 
 ## Known gaps
 
-- G1: Inbox has no keyboard shortcuts at all (no confirm/reject/skip
-  accelerators, no J/K row navigation) — the shared `useHotkeys` hook only
-  has bindings left for the command palette and the log panel; an
-  "Inbox ActionSidebar" binding referenced in that hook's own comment was
-  orphaned when `ActionSidebar` was deleted, with no replacement. Tracked
-  as GitHub issue #747 (open).
-- G2: The primary Sidebar nav links (`apps/desktop/src/app/Sidebar.tsx`,
-  `.alm-sidebar__item`) have no `:focus-visible` rule at all, unlike other
-  interactive elements in the app that follow the `--alm-focus-ring`
-  convention — Tab-focus on the main nav has no reliable visible
-  indicator. Tracked as GitHub issue #797 (open).
-- G3: List-page detail panels do not close on Escape at all. Root cause is
-  the shared `ListPageLayout` component itself
-  (`apps/desktop/src/components/ListPageLayout.tsx`): its `onCloseDetail`
-  handler is wired only to the ✕ button's `onClick`, with no keydown
-  listener — this affects every page built on `ListPageLayout` (Sessions,
-  Calibration, Targets, Projects, Inbox, Archive), not only Sessions as
-  the tracking issue's title implies. Tracked as GitHub issue #771 (open).
-- G4: The Activity log panel's expand/collapse state does not persist
-  across restart (plain `useState`, no preference wiring), unlike the
-  sidebar's collapse state which does persist. Tracked as GitHub issue
-  #842 (open).
-- G5: The shared `Modal` component wraps base-ui's Dialog in controlled
-  mode without a registered `Dialog.Trigger`, so focus does not return to
-  the control that opened an overlay once it closes. Tracked as GitHub
-  issue #844 (open).
-- G6: The command palette (Ctrl+K) renders unstyled — no `.alm-palette*`
-  CSS rule exists anywhere in the app (confirmed by a repo-wide grep and a
-  2026-07-12 live-app sweep), so it appears as plain document-flow markup
-  rather than a floating overlay. A follow-up investigation on the same
-  issue confirmed the underlying interaction is *not* broken: backend
-  `searchGlobal`, entity navigation/selection, "New project", and "Open
-  view in new window" all work correctly — only the styling is missing.
-  Separately, the Pages group's `PAGES` list
-  (`apps/desktop/src/app/CommandPalette.tsx:18-30`) still includes three
-  routes — `/review`, `/plans`, `/audit` — that don't exist in the route
-  tree (`apps/desktop/src/app/router.tsx`); selecting them hits the
-  router's `defaultNotFoundComponent` and silently redirects to `/`.
-  Tracked as GitHub issues #581 (styling, open) and #617 (dead routes,
-  open).
-- G7: The `--alm-focus-ring` token is misapplied as an `outline-color`
-  (invalid CSS) on three specific selectors (Targets guidance cell,
-  Calibration session popover, Inbox files trigger), so no focus ring
-  renders on those elements despite following the naming convention.
-  Tracked as GitHub issue #810 (open).
-- G8: Two overlays outside the shared `Modal` component don't reliably
-  trap focus or close on Escape: the Projects Edit pane (renders full-window
-  with no dialog chrome, no Escape, no focus trap — issue #660, open) and
-  the Inbox plan-review overlay, which can get stuck open with an empty
-  body — Escape/✕/backdrop all fail — after "Apply all" empties its plan
-  list (issue #767, open).
+- G1: (dissolved 2026-07-15) — tracked as issue #747; Inbox has no keyboard shortcuts.
+- G2: (dissolved 2026-07-15) — tracked as issue #797; Sidebar nav links lack focus-visible.
+- G3: (dissolved 2026-07-15) — tracked as issue #771; list-page detail panels don't close on Escape.
+- G4: (dissolved 2026-07-15) — tracked as issue #842; Activity log expand/collapse doesn't persist.
+- G5: (dissolved 2026-07-15) — tracked as issue #844; Modal doesn't return focus on close.
+- G6: (dissolved 2026-07-15) — tracked as issues #581 and #617; command palette unstyled, dead routes.
+- G7: (dissolved 2026-07-15) — tracked as issue #810; focus-ring token misapplied on three selectors.
+- G8: (dissolved 2026-07-15) — tracked as issues #660 and #767; two overlays don't trap focus/Escape.
 
 ## Delta log
 

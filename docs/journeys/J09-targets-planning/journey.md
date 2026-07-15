@@ -149,22 +149,9 @@ configured) real per-site astronomy for tonight.
 
 ## Known gaps
 
-- G1: The Sessions column always renders as a dash; session-linkage to the
-  planner is not implemented yet.
-- G2: A target with an active observing site but unresolved/missing
-  coordinates (e.g. a manually-added target never matched to a catalog
-  entry) crashes the detail panel's altitude graph instead of rendering an
-  explicit "needs coordinates" state, and the table itself renders such a
-  target indistinguishably from a genuinely low-altitude one (no label,
-  pill, or tooltip). Open issues #757, #758 as of 2026-07-15 — no linked PR
-  found for either; a branch named `fix/target-detail-coords-moon` exists in
-  the repo but contains no commits beyond `origin/main`'s tip, so no
-  in-progress fix could be verified.
-- G3: On a night with no qualifying dark window, the altitude graph still
-  paints the usable-altitude fill under the curve while omitting twilight
-  shading, so the graph visually implies imaging time even though the
-  computed Image time correctly reads 0 — a rendering contradiction, not a
-  calculation error. Open issue #817.
+- G1: (dissolved 2026-07-15) — tracked as issue #877; Sessions column always renders as a dash.
+- G2: (dissolved 2026-07-15) — tracked as issues #757 and #758; unresolved coordinates crash the altitude graph.
+- G3: (dissolved 2026-07-15) — tracked as issue #817; dark-window fill implies imaging time at zero.
 
 ## Delta log
 
