@@ -143,7 +143,8 @@ async fn check_overlap(
     let candidate = std::path::Path::new(path);
     let existing = repo::list_sources(pool).await.map_err(db_to_contract)?;
 
-    for other in existing.iter().map(|s| s.path.as_str()).chain(extra_paths.iter().map(String::as_str))
+    for other in
+        existing.iter().map(|s| s.path.as_str()).chain(extra_paths.iter().map(String::as_str))
     {
         if other == path {
             continue;
@@ -687,7 +688,8 @@ pub async fn remap_root(
 
     validate_path(new_path).map_err(|e| *e)?;
 
-    let relative_paths = repo::relative_paths_for_root(pool, root_id).await.map_err(db_to_contract)?;
+    let relative_paths =
+        repo::relative_paths_for_root(pool, root_id).await.map_err(db_to_contract)?;
 
     let new_root = std::path::Path::new(new_path);
     let samples: Vec<RemapSample> = relative_paths
@@ -1561,9 +1563,8 @@ mod tests {
         // A brand-new, genuinely empty candidate directory — none of the
         // root's recorded content lives there.
         let new_dir = tempfile::tempdir().expect("tempdir");
-        let preview = remap_root(&pool, &resp.source_id, new_dir.path().to_str().unwrap())
-            .await
-            .unwrap();
+        let preview =
+            remap_root(&pool, &resp.source_id, new_dir.path().to_str().unwrap()).await.unwrap();
 
         assert_eq!(preview.samples.len(), 1, "the inbox item must be sampled");
         assert!(!preview.samples[0].found);
