@@ -236,7 +236,10 @@ type SessionKeyFields =
 /// for every real catalogue-ingested session (every `Sessions` page row
 /// showed a generic "Session — <date>" label with blank fields).
 fn parse_session_key_fields(key: &str) -> SessionKeyFields {
-    if key.trim_start().starts_with('{') {
+    // Both branches parse raw; empty→None normalization is applied uniformly
+    // below (matching `sessions::parse_session_key`'s `non_empty` pass) so a
+    // legacy JSON `""` and a blank pipe segment mean the same absent field.
+    let (target, filter, binning, gain, night) = if key.trim_start().starts_with('{') {
         let v: serde_json::Value = serde_json::from_str(key).unwrap_or(serde_json::Value::Null);
         let str_field = |k: &str| v.get(k).and_then(|x| x.as_str()).map(ToOwned::to_owned);
         (
@@ -247,16 +250,11 @@ fn parse_session_key_fields(key: &str) -> SessionKeyFields {
             str_field("night"),
         )
     } else {
-        let non_empty = |s: &str| if s.is_empty() { None } else { Some(s.to_owned()) };
-        let mut parts = key.splitn(5, '|');
-        (
-            parts.next().and_then(non_empty),
-            parts.next().and_then(non_empty),
-            parts.next().and_then(non_empty),
-            parts.next().and_then(non_empty),
-            parts.next().and_then(non_empty),
-        )
-    }
+        let mut parts = key.splitn(5, '|').map(ToOwned::to_owned);
+        (parts.next(), parts.next(), parts.next(), parts.next(), parts.next())
+    };
+    let non_empty = |s: Option<String>| s.filter(|s| !s.is_empty());
+    (non_empty(target), non_empty(filter), non_empty(binning), non_empty(gain), non_empty(night))
 }
 
 /// The session's target: the linked `target_name` when present, otherwise the
@@ -508,6 +506,17 @@ mod tests {
         assert!(filter.is_none());
     }
 
+    #[test]
+    fn parse_session_key_fields_json_empty_strings_become_none_like_pipe_form() {
+        let (target, filter, binning, gain, night) =
+            parse_session_key_fields(r#"{"target":"M 51","filter":"","gain":""}"#);
+        assert_eq!(target.as_deref(), Some("M 51"));
+        assert!(filter.is_none(), "JSON \"\" must normalize like a blank pipe segment");
+        assert!(binning.is_none());
+        assert!(gain.is_none());
+        assert!(night.is_none());
+    }
+
     // ── list() session_key wiring + notes + calibration matches ──────────────
 
     async fn setup() -> persistence_db::Database {
@@ -650,6 +659,48 @@ mod tests {
         assert_eq!(frame_folder("a/b/c.fits").as_deref(), Some("a/b"));
         assert_eq!(frame_folder("a\\b\\c.fits").as_deref(), Some("a\\b"));
         assert!(frame_folder("c.fits").is_none());
+    }
+
+    /// Documents the first-frame-folder heuristic: when a session's frames
+    /// span multiple folders, `relativePath` is the FIRST frame's folder —
+    /// good enough for the reveal action (#567), which needs one anchor
+    /// folder, not a spanning set.
+    #[tokio::test]
+    async fn list_relative_folder_uses_first_frame_when_frames_span_folders() {
+        let db = setup().await;
+        let pool = db.pool();
+        sqlx::query(
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-mf', 'Lib', 'local', '/lib', 'active', '2026-07-14T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO file_record \
+                (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+             VALUES \
+                ('mf1', 'root-mf', 'night1\\M 42\\light_001.fits', 100, '2026-07-14T00:00:00Z', \
+                 'observed', '2026-07-14T00:00:00Z', '2026-07-14T00:00:00Z'), \
+                ('mf2', 'root-mf', 'night2/M 42/light_002.fits', 100, '2026-07-14T00:00:00Z', \
+                 'observed', '2026-07-14T00:00:00Z', '2026-07-14T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, root_id, frame_ids, created_at) \
+             VALUES ('acq-mf', 'M 42|Ha|1x1|100|2026-01-01', 'root-mf', '[\"mf1\",\"mf2\"]', \
+                     '2026-07-14T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let sources = list(pool, None).await.unwrap();
+        let session = &sources[0].sessions[0];
+        // First frame wins (mf1, a Windows-style path) — mf2's folder is ignored.
+        assert_eq!(session.relative_path.as_deref(), Some("night1\\M 42"));
     }
 
     // ── update_session_notes (#773) ───────────────────────────────────────────
