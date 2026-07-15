@@ -37,6 +37,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'path.traversal': m.err_path_traversal,
   'path.collision': m.err_path_collision,
   'path.invalid': m.err_path_invalid,
+  'path.overlaps_existing': m.err_path_overlaps_existing,
   'inbox.item.not_found': m.err_inbox_item_not_found,
   'inbox.has.open.plan': m.err_inbox_has_open_plan,
   'inbox.item.no_plan': m.err_inbox_item_no_plan,
@@ -110,6 +111,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   // Guided first-project flow (spec 010 FR-010, #723).
   state_corrupted: m.err_state_corrupted,
   'root.has_dependents': m.err_root_has_dependents,
+  'remap.not_verified': m.err_remap_not_verified,
   'tool.locked': m.err_tool_locked,
   'tool.unknown': m.err_tool_unknown,
   'resolver.endpoint_invalid': m.err_resolver_endpoint_invalid,

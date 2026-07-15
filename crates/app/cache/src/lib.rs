@@ -46,6 +46,7 @@
 //!   construction (exactly one `Arc<T>` slot) — no capacity/TTL knobs needed.
 
 use std::hash::Hash;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 
@@ -359,6 +360,26 @@ pub struct ProtectionDefaultsSnapshot {
 
 static PROTECTION_DEFAULTS: OnceLock<SnapshotCache<ProtectionDefaultsSnapshot>> = OnceLock::new();
 
+/// Monotonic generation counter for the protection defaults, bumped by every
+/// [`invalidate_protection_defaults`] call.
+///
+/// Downstream caches that embed values *derived from* the defaults (e.g.
+/// `app_core`'s per-source resolved-protection cache, whose entries inherit
+/// level/`block_permanent_delete`/categories from the globals — issue #563)
+/// cannot be invalidated from here without a dependency cycle
+/// (`app_core_settings` writes the defaults but must not depend on
+/// `app_core`). Instead they tag entries with the epoch they were resolved
+/// under and treat an epoch mismatch as a miss.
+static PROTECTION_DEFAULTS_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// Return the current protection-defaults epoch. Capture this *before*
+/// reading the defaults a derived value will embed, so a concurrent defaults
+/// change marks the derived entry stale rather than fresh.
+#[must_use]
+pub fn protection_defaults_epoch() -> u64 {
+    PROTECTION_DEFAULTS_EPOCH.load(Ordering::Acquire)
+}
+
 /// Return the process-global protection-defaults snapshot cache.
 pub fn protection_defaults() -> &'static SnapshotCache<ProtectionDefaultsSnapshot> {
     PROTECTION_DEFAULTS.get_or_init(SnapshotCache::new)
@@ -377,6 +398,7 @@ pub fn store_protection_defaults(value: Arc<ProtectionDefaultsSnapshot>) {
 /// (`app_core_settings::update_setting` / `restore_defaults`).
 pub fn invalidate_protection_defaults() {
     protection_defaults().invalidate();
+    PROTECTION_DEFAULTS_EPOCH.fetch_add(1, Ordering::AcqRel);
 }
 
 #[cfg(test)]
@@ -537,6 +559,16 @@ mod tests {
     fn snapshot_cache_default_is_empty() {
         let cache: SnapshotCache<u32> = SnapshotCache::default();
         assert_eq!(cache.load(), None);
+    }
+
+    #[test]
+    fn protection_defaults_invalidate_bumps_epoch() {
+        let before = super::protection_defaults_epoch();
+        invalidate_protection_defaults();
+        assert!(
+            super::protection_defaults_epoch() > before,
+            "every invalidation must advance the epoch so derived caches see a miss"
+        );
     }
 
     #[test]

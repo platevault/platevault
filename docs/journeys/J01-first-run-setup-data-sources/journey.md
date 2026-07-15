@@ -1,175 +1,209 @@
 ---
 id: J01
-title: Go from an empty install to a scanned, manageable library
+title: Register data source folders and keep them current
 version: 1
-status: active
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
-surfaces: [setup, settings]
+surfaces: [setup, data-sources]
 interfaces: [desktop-ui]
-trace:
-  - docs/product/journeys/J01-first-run-setup-data-sources/journey.md @ 66026463
-  - docs/journeys/J01-first-run-setup-data-sources/journey.md pilot @ 71e88aae (S12 grafted)
-  - deltas/2026-07-14-jval-docdrift.md (PR #686)
-  - deltas/2026-07-14-q15-t123.md (PR #826, spec-030 FR-130-134)
-  - deltas/2026-07-14-q15-t125.md (PR #826, spec-030 FR-130-134)
+trace: [docs/product/journeys/J01-first-run-setup-data-sources/journey.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-jval-docdrift.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t123.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t125.md, docs/development/journey-run-2026-07-14.md, PR-440, PR-686, PR-404, PR-405, PR-826, issue-647, spec-030 FR-130-FR-134]
 ---
 
 ## Goal
-A user with a fresh install (or an empty database) registers the folders that
-hold their library — light frames, calibration frames, project outputs, an
-optional inbox drop zone, and an optional home observing site — and ends up
-with every folder scanned and the app landed on the Inbox. "Done" for setup
-means: the completion flag is set (relaunch skips the wizard), every
-registered folder reached a terminal scan state, and the folders are visible
-and manageable afterward from Settings → Data Sources (rescan, remap, disable,
-delete) without ever moving or deleting a file on disk.
+An astrophotographer takes a fresh PlateVault install from an empty database
+to a configured library — light, calibration, project-output, and inbox
+folders registered, a processing tool pointed at, and an observing site set —
+then keeps those data sources current over time (rescan, remap a moved
+drive, disable/re-enable, retire an offline one) without ever risking an
+unreviewed filesystem mutation. Done means: setup is marked complete and
+skipped on every later relaunch, and every data-source lifecycle action
+produces both a visible answer-back and a durable audit record.
 
 ## Preconditions
-- P1: Empty database — first launch, or after **Settings → Advanced →
-  Restart first-run setup** (a confirm-gated control, distinct from the
-  separate "Restart guided flow" button that resets the first-project tour).
+- P1: Empty database (first launch), or the user has chosen **Settings →
+  Advanced → Restart first-run setup** and confirmed (a confirm-gated
+  control distinct from the guided-tour "Restart guided flow" button).
+- P2 (for S9–S14 only): setup has already been completed with at least one
+  registered source.
 
 ## Steps
-
 ### S1 — Open the setup wizard {#S1}
-- **Do:** Launch the app for the first time, or trigger "Restart first-run
-  setup" from Settings → Advanced.
-- **Expect:** The app opens a 6-step wizard ("Step 1 of 6"): Source Folders,
-  Processing Tools, Configuration, Observing Site, Confirm, Scan.
-- **Expect:** If this is a restart, folders registered in a prior run are
-  pre-filled into the working buffer.
-- **Expect (negative):** A restart does not delete any previously registered
-  folder or its history.
+- **Do:** Launch the app for the first time, or trigger a first-run restart
+  (P1) and confirm.
+- **Expect:** The app opens a 6-step wizard: Source Folders, Processing
+  Tools, Configuration, Observing Site, Confirm, Scan. On a restart, all
+  previously registered folders are pre-filled.
+- **Expect (negative):** A first-run restart never deletes previously
+  registered folders.
+- **Trace:** PR-440 (Observing Site step introduced as part of spec 030's
+  wizard rewrite, making the wizard 6 steps), PR-686 (map picker added to
+  that step).
 
-### S2 — Register source folders {#S2}
-- **Do:** On Step 1 (Source Folders), add one or more folders under each of
-  four categories: Light frames, Calibration, Project outputs, Inbox. For
-  every non-inbox folder, choose whether it is **organized** (already sorted
-  into a structure the app should respect) or **unorganized** (the app should
-  propose where files belong). Inbox has no such choice — it is always
-  unorganized.
-- **Expect:** Light frames and Project outputs are required categories;
-  Calibration and Inbox remain optional. Continue to the next step is
-  disabled while either required category has zero folders.
-- **Expect:** Adding an empty path, a duplicate path already registered under
-  the same category, or a path already registered under a different
-  category is rejected inline at add time, with a distinct reason shown for
-  each case.
+### S2 — Add source folders (Step: Source Folders) {#S2}
+- **Do:** For each folder category — Light frames, Calibration, Project
+  outputs, Inbox — add zero or more folders via the native OS picker,
+  choosing **organized** or **unorganized** for each (Inbox has no such
+  choice; it is unorganized by definition).
+- **Expect:** Light frames AND Project outputs are required categories — the
+  wizard blocks progress past this step while either is empty; Calibration
+  and Inbox stay optional. At add time, an empty path, a path already
+  registered under the same category, and a path already registered under a
+  different category are each rejected inline with a distinct reason.
+- **Expect:** A path that doesn't exist, isn't a directory, or isn't
+  readable is accepted into the working buffer at add time (there is no
+  client-side check for these) and is only rejected when actually
+  registered — batched at S6 (Confirm), where a failing entry surfaces as
+  part of a batch-failure message rather than an inline per-row error at add
+  time.
 - **Expect (negative):** Nothing is registered with the backend at this
-  point — this step is a local working buffer the user can still edit or
-  remove entries from.
+  point — this is a working buffer the user can still edit; no source
+  registration call fires until S6 (Confirm).
+- **Trace:** `apps/desktop/src/features/setup/sources-store.ts`
+  `REQUIRED_KINDS`, `validatePath` (empty/same-kind/cross-kind checks only);
+  `crates/app/core/src/first_run.rs` `check_path`/`check_duplicate`
+  (existence, directory, permission, duplicate checks — backend-only).
 
-### S3 — Configure processing tools and defaults {#S3}
-- **Do:** On Step 2 (Processing Tools), optionally point at PixInsight/WBPP or
-  another supported tool. On Step 3 (Configuration), optionally set the
-  default source-protection level (protected/normal/unprotected) and other
-  first-run defaults.
-- **Expect:** Both steps can be skipped or left at their defaults; Continue
-  is never blocked by them.
+### S3 — Point at a processing tool (Step: Processing Tools) {#S3}
+- **Do:** Select PixInsight/WBPP (or another supported tool), or skip.
+- **Expect:** The step accepts skip or default with no error and carries the
+  choice (or its absence) into S6's summary.
 
-### S4 — Set an optional observing site {#S4}
-- **Do:** On Step 4 (Observing Site), optionally use the map picker or type
-  Name / Latitude / Longitude / Elevation / Timezone.
-- **Expect:** The step can be left entirely blank; Continue is not blocked by
-  an empty site.
-- **Expect:** If any of name/latitude/longitude is filled in, the other two
-  become required and latitude/longitude must be in range before Continue is
-  enabled.
-- **Trace:** spec 044 Track B, US6 T016.
+### S4 — Configure basic settings (Step: Configuration) {#S4}
+- **Do:** Confirm or adjust basic configuration — including the default
+  source-protection level (protected / normal / unprotected) applied to
+  newly registered sources — or skip.
+- **Expect:** The step accepts skip or default with no error; leaving the
+  protection level untouched keeps it at "protected".
+- **Trace:** `apps/desktop/src/features/setup/steps/StepCatalogs.tsx`
+  `DefaultProtectionControl`.
 
-### S5 — Confirm and register {#S5}
-- **Do:** On Step 5 (Confirm), review the summary — folder paths grouped by
-  category with each one's scan depth, enabled processing tools with their
-  configured path, and a "what happens next" note — then advance.
-- **Expect:** Advancing from Confirm is what registers every source folder
-  with the backend for the first time and moves to the Scan step.
-- **Expect:** If any folder fails to register, the wizard shows the failure
-  reason and does not silently drop it or advance past Confirm.
-- **Expect (negative):** Nothing is registered by any step before Confirm.
+### S5 — Register an observing site (Step: Observing Site) {#S5}
+- **Do:** Use the map picker or manual entry to set Name / Latitude /
+  Longitude / Elevation / Timezone.
+- **Expect:** The step can be left entirely blank; Continue is not blocked
+  while any of Name, Latitude, or Longitude is empty. Once all three are
+  filled, Continue blocks until Latitude is in [-90, 90], Longitude is in
+  [-180, 180], and Elevation (if given) parses as a number.
+- **Expect:** Values entered here carry into S6's summary and, on Finish
+  (S8), are saved as both the default and the active observing site with a
+  fixed astronomical-twilight/0°-horizon default (changeable later in
+  Settings → Target Planner, which also exposes twilight and horizon —
+  fields this wizard step does not).
+- **Trace:** PR-440, PR-686;
+  `apps/desktop/src/features/setup/steps/StepSite.tsx`
+  (`siteStepHasSite`, `siteStepError`);
+  `apps/desktop/src/features/setup/SetupWizard.tsx` (`canProceed` for the
+  Site step).
 
-### S6 — Scan and finish {#S6}
-- **Do:** Wait for Step 6 (Scan) to process every registered folder, then
-  select Finish.
-- **Expect:** Each registered source reaches a terminal scan state (including
-  "0 items" for an empty folder); Finish stays disabled until every source is
-  terminal.
-- **Expect:** Finishing marks first-run setup complete and lands on the
-  Inbox.
-- **Expect (negative):** Relaunching the app after Finish does not reopen the
-  setup wizard.
+### S6 — Confirm sources (Step: Confirm) {#S6}
+- **Do:** Review the summary of every category added across S2–S5, then
+  proceed.
+- **Expect:** The summary states, per folder, category, organization state,
+  and scan depth; it also lists enabled processing tools with their
+  configured path and a "what happens next" note. Proceeding here is what
+  actually registers every source with the backend and starts scanning.
+- **Expect:** If any folder fails to register, the wizard shows a
+  batch-failure message and does not advance to Scan.
+- **Expect (negative):** No scan starts before the user leaves this step.
+- **Trace:** `apps/desktop/src/features/setup/steps/StepConfirm.tsx`;
+  `apps/desktop/src/features/setup/SetupWizard.tsx` `handleEnterScan`.
 
-### S7 — Rescan a registered folder {#S7}
-- **Do:** From Settings → Data Sources, trigger Rescan on a folder's card.
-- **Expect:** The card shows an explicit started → finished signal and any
-  item-count delta at the control, not only in a log.
-- **Expect:** The rescan writes a durable audit row; an automatic/periodic
-  rescan (not user-triggered) writes a diagnostic-severity row instead of a
-  workflow-severity one.
-- **Trace:** spec-030 FR-130–FR-134 (PR #826).
+### S7 — Scan registered folders (Step: Scan) {#S7}
+- **Do:** Wait for every registered folder to scan.
+- **Expect:** Each source reaches a terminal state, including "0 items" for
+  an empty folder.
+- **Expect (negative):** Finish never enables while any source is still
+  scanning.
 
-### S8 — Remap a folder whose drive moved {#S8}
-- **Do:** On a folder's card, choose Remap, paste the new path, select
-  Verify, review the sampled files, then select Apply remap.
-- **Expect:** Verify samples relative paths at the new location without
-  mutating anything, and reports per-sample found/not-found.
-- **Expect:** Apply remap is disabled until Verify has produced a result for
-  the current path; editing the path after a Verify invalidates that result
-  and forces a fresh Verify before Apply is enabled again.
-- **Expect:** Applying re-points the stored path only; a durable audit row
-  records the old and new path.
-- **Expect (negative):** Verifying or applying a remap never moves, copies,
-  or deletes any file on disk.
+### S8 — Finish setup {#S8}
+- **Do:** Click Finish.
+- **Expect:** Setup is marked complete and the app lands on the Inbox. The
+  completion flag persists — fully quitting and relaunching the app goes
+  straight to Inbox, never back to `/setup`.
 
-### S9 — Disable and re-enable a folder {#S9}
-- **Do:** Disable a folder's card, then re-enable it.
-- **Expect:** The state visibly flips at the control and persists across a
-  reload; a disabled source is excluded from scan/ingest while its prior
-  history stays visible.
-- **Expect:** Both the disable and the re-enable write a durable audit row
-  with before→after state.
-- **Expect (negative):** Re-enabling a source requires no confirmation
-  dialog (only disabling registered history is what's guarded elsewhere).
+### S9 — Rescan a data source {#S9}
+- **Do:** From Settings → Data Sources, click Rescan on a registered card.
+- **Expect:** The scan re-runs without re-prompting for a path, with an
+  explicit started→finished signal and a count delta at the control. A
+  user-initiated rescan writes a durable, workflow-severity audit row.
+- **Expect (negative):** An automatic/periodic rescan writes only a
+  diagnostic-severity audit row, never a workflow one.
+- **Trace:** issue-647, spec-030 FR-130-FR-134, PR-826.
 
-### S10 — Delete an offline folder {#S10}
-- **Do:** On an offline source's card, choose Delete.
-- **Expect:** The un-registration succeeds only for offline sources and only
-  when no other record still depends on that root; when dependents exist,
-  the button is blocked with the reason shown.
-- **Expect:** A successful delete writes a durable audit row.
-- **Expect (negative):** Delete never touches the files on disk — it only
-  removes the app's registration record.
+### S10 — Remap a data source {#S10}
+- **Do:** Click Remap, paste a different valid existing path, click Verify,
+  then — only if Verify succeeds — click Apply remap.
+- **Expect:** Verify samples files at the new path with no file movement;
+  Apply remap persists the new path in PlateVault's own record and writes a
+  durable audit row recording old→new path.
+- **Expect:** Editing the path after a Verify invalidates that result — Apply
+  remap becomes unavailable again until a fresh Verify runs against the
+  edited path.
+- **Expect (negative):** Verify on an empty or nonexistent path never
+  reports success; Apply remap is not clickable before a successful Verify;
+  no file on disk moves at any point, regardless of outcome.
+- **Trace:** issue-647, spec-030 FR-130-FR-134, PR-826;
+  `apps/desktop/src/features/settings/RemapRootDialog.tsx`.
 
-### S11 — Set and remove a per-source protection override {#S11}
-- **Do:** On a folder's card, set a protection override, confirm it is
-  listed, then remove it.
-- **Expect:** Setting the override is visible at the control and confirmed
-  by a backend readback; removing it returns the control to the inherited
-  default.
-- **Expect:** Both the set and the remove write a durable audit row whose
-  returned audit id resolves to an entry in the Audit Log.
-- **Expect (negative):** Merely viewing the Data Sources pane produces no
-  audit row.
-- **Trace:** spec-030 FR-130–FR-134 (PR #826).
+### S11 — Disable / re-enable a data source {#S11}
+- **Do:** Click Disable on a source card, confirm; click Enable on the same
+  card to re-enable.
+- **Expect:** The state visibly flips and persists across reload; a disabled
+  source drops out of scan/ingest; each transition writes a durable audit
+  row with before→after state.
+- **Expect (negative):** Disabling requires a confirm step (it stops a
+  source from being scanned/ingested, so it is confirm-gated); re-enabling
+  is restorative and applies immediately with no confirm step; disabling
+  never hides the source's prior history.
+- **Trace:** PR-404; issue-647, spec-030 FR-130-FR-134, PR-826;
+  `apps/desktop/src/features/settings/DataSources.tsx` (disable/enable
+  handlers), `DataSources.disable-delete.test.tsx`.
 
-### S12 — Reveal a source folder in the OS file manager {#S12}
+### S12 — Delete (un-register) an offline data source {#S12}
+- **Do:** Click Delete on a source that is currently offline.
+- **Expect:** A confirm appears; confirming un-registers the source and
+  writes a durable audit row. If the source has dependent records
+  (sessions/projects), Delete is blocked/disabled with an explanatory
+  message instead.
+- **Expect (negative):** Delete never removes files from disk; it never
+  succeeds while dependent records exist; the Delete control is not offered
+  at all on a source card while that source is online.
+- **Trace:** PR-404; issue-647, spec-030 FR-130-FR-134, PR-826;
+  `DataSources.disable-delete.test.tsx`.
+
+### S13 — Set / remove a per-source protection override {#S13}
+- **Do:** Set a protection override on a source, confirm it is listed, then
+  remove it.
+- **Expect:** The change is visible in the pane and confirmed by a backend
+  readback; each of set and remove writes a durable audit row with a
+  resolvable `auditId`; "Restore defaults" states which settings it resets
+  and every one of them is visible somewhere in the pane.
+- **Expect (negative):** Merely opening or reading the Data Sources pane
+  produces no audit row.
+- **Trace:** issue-647, spec-030 FR-130-FR-134, PR-826.
+
+### S14 — Reveal a source folder in the OS file manager {#S14}
 - **Do:** Click the "Show in File Explorer" (or platform-equivalent) control
   on a source card.
 - **Expect:** The OS-native file manager opens at exactly that folder, not a
   parent directory.
 
 ## Success criteria
-- SC1: From an empty database, a user with at least one Light-frames folder
-  and one Project-outputs folder reaches Finish and lands on the Inbox
-  (S1–S6) without any step silently registering a folder before S5.
-- SC2: Every registered folder's Data Sources card supports Rescan, Remap
-  (verify-then-apply), Disable/Enable, and — once offline and dependent-free
-  — Delete, each producing an explicit success/failure signal at the control
-  (S7–S10).
-- SC3: Every source lifecycle action in S7–S11 (register, rescan, remap,
-  enable/disable, delete, protection override) resolves to a durable
-  `audit_log_entry` row, not only a live bus event.
+- SC1: S1–S8 complete once per install; after S8, relaunching the app never
+  re-shows `/setup`.
+- SC2: Each of S9–S13 produces both a visible answer-back at its control and
+  a durable audit row; S10 and S12 leave zero filesystem mutation beyond
+  PlateVault's own registration state.
+- SC3: Required-category gating holds at S2 — Light frames and Project
+  outputs block progress when empty; Calibration and Inbox never do.
 
 ## Known gaps
+<!-- - G1: <step or environment that cannot be validated, and why> -->
 
 ## Delta log
+<!-- Window since last_reviewed. Format:
+- **Δ<version>** <date> · <step ids> · behavior-change
+  <what changed, user-visibly>
+  Evidence: <PR/spec/commit refs> · by: <author>
+-->

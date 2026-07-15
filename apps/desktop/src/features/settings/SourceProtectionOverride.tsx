@@ -3,14 +3,16 @@
 
 // spec 016 US2 — per-source protection override control (T015).
 //
-// Renders a protection badge + override control for a specific source UUID.
-// When `sourceId` is provided, loads the current effective protection and
-// allows the user to change the level. When no per-source override exists the
-// component shows "Inherits global default" as an inheritance badge.
+// Renders a compact protection pill for a specific source UUID plus, when
+// `open` is true, the level-select editor. The caller (a kebab "Edit
+// protection…" item) fully controls when the editor is shown — this
+// component owns no trigger button of its own (issue #562: the standalone
+// "Override" button + duplicate "Inherits global default" pill + repeated
+// hint sentence were decluttered into a single pill; hovering it still
+// surfaces the hint via `title`).
 //
-// Used wherever a source UUID is available — wired into the DataSources
-// settings pane (one control per registered root, keyed by root.id) and
-// available for project detail source rows.
+// Used wherever a source UUID is available — currently only the DataSources
+// settings pane (one control per registered root, keyed by root.id).
 
 import { useEffect, useState, useCallback } from 'react';
 import { Pill, Btn } from '@/ui';
@@ -23,6 +25,10 @@ interface SourceProtectionOverrideProps {
   sourceId: string;
   /** Optional callback after a successful override save. */
   onSaved?: (newLevel: ProtectionLevel) => void;
+  /** Whether the level-select editor is shown (controlled by the caller). */
+  open: boolean;
+  /** Invoked with `false` after Save/Cancel to close the editor. */
+  onOpenChange: (open: boolean) => void;
 }
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'saving' | 'error';
@@ -58,11 +64,12 @@ function levelHint(level: ProtectionLevel, inherits: boolean): string {
 export function SourceProtectionOverride({
   sourceId,
   onSaved,
+  open,
+  onOpenChange,
 }: SourceProtectionOverrideProps) {
   const [loadState, setLoadState] = useState<LoadState>('idle');
   const [level, setLevel] = useState<ProtectionLevel>('protected');
   const [inheritsDefault, setInheritsDefault] = useState(true);
-  const [editing, setEditing] = useState(false);
   const [pendingLevel, setPendingLevel] =
     useState<ProtectionLevel>('protected');
   const [errorMsg, setErrorMsg] = useState('');
@@ -85,6 +92,13 @@ export function SourceProtectionOverride({
     load();
   }, [load]);
 
+  // Re-sync the pending selection to the current level each time the editor
+  // opens, so a prior cancel never leaks a stale selection into the next
+  // edit session.
+  useEffect(() => {
+    if (open) setPendingLevel(level);
+  }, [open, level]);
+
   const handleSave = () => {
     setLoadState('saving');
     sourceProtectionSet({
@@ -94,9 +108,9 @@ export function SourceProtectionOverride({
       .then(() => {
         setLevel(pendingLevel);
         setInheritsDefault(false);
-        setEditing(false);
         setLoadState('ready');
         onSaved?.(pendingLevel);
+        onOpenChange(false);
       })
       .catch((err: unknown) => {
         setErrorMsg(typeof err === 'string' ? err : m.common_save_failed());
@@ -106,8 +120,8 @@ export function SourceProtectionOverride({
 
   const handleCancel = () => {
     setPendingLevel(level);
-    setEditing(false);
     setErrorMsg('');
+    onOpenChange(false);
   };
 
   if (loadState === 'loading' || loadState === 'idle') {
@@ -116,7 +130,7 @@ export function SourceProtectionOverride({
     );
   }
 
-  if (loadState === 'error' && !editing) {
+  if (loadState === 'error' && !open) {
     return (
       <span className="alm-source-protect__status">
         {errorMsg || m.settings_protection_load_error()}
@@ -126,22 +140,14 @@ export function SourceProtectionOverride({
 
   return (
     <div className="alm-source-protect__root">
-      {!editing ? (
-        <div className="alm-source-protect__view-row">
-          <Pill variant={LEVEL_VARIANT[level]}>{LEVEL_LABEL[level]()}</Pill>
-          {inheritsDefault && (
-            <Pill variant="neutral">
-              {m.settings_source_protect_inherits()}
-            </Pill>
-          )}
-          <Btn size="sm" variant="ghost" onClick={() => setEditing(true)}>
-            {m.common_override()}
-          </Btn>
-          <div className="alm-source-protect__hint">
-            {levelHint(level, inheritsDefault)}
-          </div>
-        </div>
-      ) : (
+      <Pill
+        variant={LEVEL_VARIANT[level]}
+        title={levelHint(level, inheritsDefault)}
+      >
+        {LEVEL_LABEL[level]()}
+      </Pill>
+
+      {open && (
         <div className="alm-source-protect__edit-col">
           <div className="alm-source-protect__edit-row">
             {}

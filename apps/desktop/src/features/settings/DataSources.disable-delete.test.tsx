@@ -3,18 +3,24 @@
 
 /// <reference types="@testing-library/jest-dom" />
 /**
- * DataSources "Disable/Enable" + "Delete" flow tests (P6b).
+ * DataSources "Disable/Enable" + "Delete" flow tests (P6b; issue #562 kebab
+ * consolidation; issue #559 always-reachable Delete).
  *
- * Both buttons used to be `console.log` stubs (`sources.set_active` and
+ * Both actions used to be `console.log` stubs (`sources.set_active` and
  * `roots.delete` were unwired). Verifies:
  *
- * 1. Clicking "Disable" opens a confirm dialog; confirming calls
- *    `sources.set_active` with `active: false` and reloads the roots list.
+ * 1. Clicking "Disable" (kebab item) opens a confirm dialog; confirming
+ *    calls `sources.set_active` with `active: false` and reloads the roots
+ *    list.
  * 2. Clicking "Enable" (a disabled root) calls `sources.set_active` with
  *    `active: true` immediately — no confirm dialog for the restorative action.
- * 3. Clicking "Delete" (only shown for offline roots) opens a confirm dialog;
- *    confirming calls `roots.delete` and reloads the roots list.
- * 4. Decision D8: when `roots.delete` is blocked by the backend
+ * 3. Clicking "Delete" opens a confirm dialog; confirming calls
+ *    `roots.delete` and reloads the roots list.
+ * 4. Issue #559: Delete is reachable for BOTH online and offline roots (it
+ *    used to be hidden unless the root was already offline, making the
+ *    backend `roots_delete` command unreachable from the UI in the common
+ *    case).
+ * 5. Decision D8: when `roots.delete` is blocked by the backend
  *    (`root.has_dependents`), the confirm dialog stays open and surfaces the
  *    catalog-mapped block reason instead of silently closing.
  */
@@ -104,6 +110,11 @@ beforeEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+/** Issue #562: per-source actions live inside the kebab (⋯) menu now. */
+function openKebab() {
+  fireEvent.click(screen.getByRole('button', { name: /Source actions/i }));
+}
+
 describe('DataSources — Disable/Enable', () => {
   it('opens a confirm dialog and calls sources.set_active(false) on confirm', async () => {
     mockRootsList
@@ -114,7 +125,8 @@ describe('DataSources — Disable/Enable', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Disable$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Disable$/i }));
 
     const dialog = await screen.findByRole('dialog');
     await act(async () => {
@@ -138,7 +150,8 @@ describe('DataSources — Disable/Enable', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Enable$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Enable$/i }));
 
     await waitFor(() => {
       expect(mockSetActive).toHaveBeenCalledWith('root-1', true);
@@ -169,7 +182,8 @@ describe('DataSources — Delete', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Delete$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Delete$/i }));
 
     const dialog = await screen.findByRole('dialog');
     await act(async () => {
@@ -186,15 +200,32 @@ describe('DataSources — Delete', () => {
     });
   });
 
-  it('does not show a Delete button for an online root', async () => {
-    mockRootsList.mockResolvedValue(ok([makeRoot({ online: true })]));
+  // Issue #559: Delete used to be hidden for online roots, making the
+  // backend `roots_delete` command unreachable from the UI in the common
+  // case. It is now always in the kebab menu regardless of online status.
+  it('shows a Delete menu item for an online root too', async () => {
+    mockRootsList
+      .mockResolvedValueOnce(ok([makeRoot({ online: true })]))
+      .mockResolvedValueOnce(ok([]));
+    mockDelete.mockResolvedValue(ok(null));
 
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    expect(
-      screen.queryByRole('button', { name: /^Delete$/i }),
-    ).not.toBeInTheDocument();
+    openKebab();
+    const deleteItem = screen.getByRole('menuitem', { name: /^Delete$/i });
+    expect(deleteItem).toBeInTheDocument();
+
+    fireEvent.click(deleteItem);
+    const dialog = await screen.findByRole('dialog');
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /^Delete$/i }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockDelete).toHaveBeenCalledWith('root-1');
   });
 
   it('D8: keeps the dialog open and surfaces the block reason when root.has_dependents', async () => {
@@ -218,7 +249,8 @@ describe('DataSources — Delete', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Delete$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Delete$/i }));
 
     const dialog = await screen.findByRole('dialog');
     await act(async () => {

@@ -2,7 +2,7 @@
 id: J16
 title: Drive PlateVault end to end without a pointer
 version: 1
-status: active
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [shell]
@@ -16,10 +16,15 @@ trace:
   - issue #771 (Sessions detail panel does not close on Escape, open)
   - issue #842 (Log panel expand state does not persist across restart, open)
   - issue #844 (Modal overlays do not return focus to the invoking control, open)
-  - issue #581 (Command palette matching/keyboard-nav report, open)
+  - issue #581 (Command palette unstyled — no .alm-palette* CSS anywhere; search/nav/click
+    confirmed functional in a 2026-07-12 follow-up, open)
+  - issue #617 (Command palette Pages group lists 3 dead routes: /review, /plans, /audit, open)
   - issue #810 (--alm-focus-ring token misused as outline-color on 3 selectors, open)
   - issue #660 (Projects Edit pane overlay has no dialog chrome/Escape/focus-trap, open)
   - issue #767 (Plan-review overlay can get stuck open after Apply all, open)
+  - docs/development/journey-run-2026-07-14.md (Journey 16 section — real Windows-app
+    validation: row traversal PASS, Escape-close FAIL, new-window PASS, sidebar-persist
+    PASS, log-panel-persist FAIL; bridge cannot drive Tab/native-button keyboard activation)
   - e2e-agentic-test/043-ui-redesign-platevault/global-search-command-palette/scenario.md
   - e2e-agentic-test/043-ui-redesign-platevault/a11y-keyboard-and-aria-sort/scenario.md
 ---
@@ -45,12 +50,17 @@ operable, and observable using only the keyboard, from any page.
 ### S1 — Open the command palette from anywhere {#S1}
 - **Do:** Press Ctrl+K (Cmd+K on macOS) from any page; type to filter; press
   Enter on a highlighted entry; press Escape.
-- **Expect:** The palette opens as a styled overlay (not raw document-flow
-  content) showing Pages and Actions groups; after a short pause, typing
-  a query that matches a target/session/project adds a Results group sourced
-  from the backend search; Enter on the highlighted item navigates to a page,
-  jumps to the matched entity, or runs the action (e.g. "Open in new
-  window" — see S2); Escape closes the palette without navigating.
+- **Expect:** By design the palette opens as a styled floating overlay;
+  today it renders unstyled — plain document-flow markup, with no
+  `.alm-palette*` CSS rule defined anywhere in the app (Known gap G6) —
+  but the underlying interaction works: it shows Pages and Actions groups;
+  after a short pause (200ms debounce), typing a query that matches a
+  target/session/project adds a Results group sourced from the backend
+  search; Enter on the highlighted item navigates to a page, jumps to the
+  matched entity, or runs the action (e.g. "Open in new window" — see S2);
+  Escape closes the palette without navigating. Three of the eight Pages
+  entries (`/review`, `/plans`, `/audit`) are dead routes that silently
+  redirect to the app root instead of navigating (Known gap G6).
 - **Expect (negative):** Pressing Ctrl/Cmd+K again while the palette is open
   closes it rather than opening a second instance.
 - **Trace:** `apps/desktop/src/app/CommandPalette.tsx` (cmdk + base-ui
@@ -82,10 +92,16 @@ operable, and observable using only the keyboard, from any page.
 
 ### S4 — Close a list page's detail panel by keyboard {#S4}
 - **Do:** With a row's detail panel open, press Escape.
-- **Expect:** The detail panel closes and focus returns to the list.
+- **Expect:** By design, the detail panel closes and focus returns to the
+  list. Today Escape does nothing on any `ListPageLayout`-based list page
+  (Sessions, Calibration, Targets, Projects, Inbox, Archive) — the shared
+  layout wires its close handler only to the panel's ✕ button `onClick`,
+  with no keydown listener; only the ✕ closes the panel. Carried as Known
+  gap G3, not claimed as working.
 - **Expect (negative):** Escape never mutates the selected record or
-  triggers any state transition — it only dismisses the panel.
-- **Trace:** Known gap G3 (confirmed broken on at least one list page).
+  triggers any state transition — it only dismisses the panel (when
+  dismissal is available).
+- **Trace:** `apps/desktop/src/components/ListPageLayout.tsx`; Known gap G3.
 
 ### S5 — Layout choices persist across restart {#S5}
 - **Do:** Collapse the sidebar and expand the Activity log panel, then
@@ -114,8 +130,10 @@ operable, and observable using only the keyboard, from any page.
 
 ## Success criteria
 
-- SC1: Ctrl/Cmd+K opens the palette from every page, and every route listed
-  in its Pages group resolves to an existing route (S1).
+- SC1: Ctrl/Cmd+K opens the palette from every page; 5 of the 8 routes
+  listed in its Pages group resolve to an existing route today — the
+  remaining 3 (`/review`, `/plans`, `/audit`) are dead links tracked as
+  Known gap G6 (S1).
 - SC2: 100% of rows on a list page are reachable via ArrowUp/ArrowDown and
   activatable via Enter/Space without a pointer (S3).
 - SC3: Sidebar collapse/expand state matches its pre-restart value 100% of
@@ -129,44 +147,14 @@ operable, and observable using only the keyboard, from any page.
 
 ## Known gaps
 
-- G1: Inbox has no keyboard shortcuts at all (no confirm/reject/skip
-  accelerators, no J/K row navigation) — the shared `useHotkeys` hook only
-  has bindings left for the command palette and the log panel; an
-  "Inbox ActionSidebar" binding referenced in that hook's own comment was
-  orphaned when `ActionSidebar` was deleted, with no replacement. Tracked
-  as GitHub issue #747 (open).
-- G2: The primary Sidebar nav links (`apps/desktop/src/app/Sidebar.tsx`,
-  `.alm-sidebar__item`) have no `:focus-visible` rule at all, unlike other
-  interactive elements in the app that follow the `--alm-focus-ring`
-  convention — Tab-focus on the main nav has no reliable visible
-  indicator. Tracked as GitHub issue #797 (open).
-- G3: List-page detail panels do not reliably close on Escape — confirmed
-  on the Sessions page, where only the ✕ button closes the panel. Tracked
-  as GitHub issue #771 (open).
-- G4: The Activity log panel's expand/collapse state does not persist
-  across restart (plain `useState`, no preference wiring), unlike the
-  sidebar's collapse state which does persist. Tracked as GitHub issue
-  #842 (open).
-- G5: The shared `Modal` component wraps base-ui's Dialog in controlled
-  mode without a registered `Dialog.Trigger`, so focus does not return to
-  the control that opened an overlay once it closes. Tracked as GitHub
-  issue #844 (open).
-- G6: An open, unresolved report describes the command palette as
-  unstyled with broken search matching (a single-letter query returns
-  results but a specific catalogue-id query returns none) and
-  non-functional keyboard navigation/clicks. No merged fix evidence found;
-  carried as-is rather than corrected. Tracked as GitHub issue #581 (open).
-- G7: The `--alm-focus-ring` token is misapplied as an `outline-color`
-  (invalid CSS) on three specific selectors (Targets guidance cell,
-  Calibration session popover, Inbox files trigger), so no focus ring
-  renders on those elements despite following the naming convention.
-  Tracked as GitHub issue #810 (open).
-- G8: Two overlays outside the shared `Modal` component don't reliably
-  trap focus or close on Escape: the Projects Edit pane (renders full-window
-  with no dialog chrome, no Escape, no focus trap — issue #660, open) and
-  the Inbox plan-review overlay, which can get stuck open with an empty
-  body — Escape/✕/backdrop all fail — after "Apply all" empties its plan
-  list (issue #767, open).
+- G1: (dissolved 2026-07-15) — tracked as issue #747; Inbox has no keyboard shortcuts.
+- G2: (dissolved 2026-07-15) — tracked as issue #797; Sidebar nav links lack focus-visible.
+- G3: (dissolved 2026-07-15) — tracked as issue #771; list-page detail panels don't close on Escape.
+- G4: (dissolved 2026-07-15) — tracked as issue #842; Activity log expand/collapse doesn't persist.
+- G5: (dissolved 2026-07-15) — tracked as issue #844; Modal doesn't return focus on close.
+- G6: (dissolved 2026-07-15) — tracked as issues #581 and #617; command palette unstyled, dead routes.
+- G7: (dissolved 2026-07-15) — tracked as issue #810; focus-ring token misapplied on three selectors.
+- G8: (dissolved 2026-07-15) — tracked as issues #660 and #767; two overlays don't trap focus/Escape.
 
 ## Delta log
 

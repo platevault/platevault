@@ -2,13 +2,13 @@
 id: J03
 title: Catalogue an already-organized folder without moving files
 version: 1
-status: active
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
-surfaces: [inbox, setup, sessions]
+surfaces: [inbox-confirm, plans, sessions, audit]
 interfaces: [desktop-ui]
 trace:
-  - docs/product/journeys/J03-ingest-confirm-catalogue-in-place/journey.md @ 66026463
+  - pre-migration journey.md @ git 42c596d68b621a46e54e647fdb7c48716fdb68c1
   - docs/product/journeys/J03-ingest-confirm-catalogue-in-place/deltas/2026-07-14-jval-docdrift.md
 ---
 
@@ -23,9 +23,16 @@ hashes on disk are byte-for-byte unchanged from before confirm.
 
 ## Preconditions
 
-- P1: A library root is registered with organization state **organized**
-  (chosen explicitly during setup or when registering the source), and it
-  contains files that are not yet in PlateVault's index.
+- P1: A library root is registered with organization state **organized** —
+  either chosen explicitly on the setup wizard's per-root Organized/
+  Unorganized control (including when the wizard is reopened via
+  Settings → Advanced → "Restart setup wizard", which prefills the same
+  control for already-registered roots), or by registering a new non-inbox
+  root via Settings → Data Sources' "Add" flow, which has no
+  organization-state picker and defaults every non-inbox category to
+  organized automatically (inbox-category roots always default to
+  unorganized). The root contains files that are not yet in PlateVault's
+  index.
 - P2: The organized root's new files have been surfaced into the Inbox
   queue — for an **inbox-category** root this happens via Inbox's own
   "Rescan all roots"; for a non-inbox organized root, the user has run

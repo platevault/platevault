@@ -440,10 +440,41 @@ describe('TargetSearch', () => {
       suggestions: [NO_SECONDARY],
     });
     render(<TargetSearch onSelect={vi.fn()} />);
-    await typeAndFlush(screen.getByRole('combobox'), 'ic'); // 2 chars < 3
+    await typeAndFlush(screen.getByRole('combobox'), 'i'); // 1 char < 2
 
     expect(mockSearchTargets).toHaveBeenCalled();
     expect(mockResolveTarget).not.toHaveBeenCalled();
+  });
+
+  // ── #843: MIN_RESOLVE_LEN=2 lets legitimate 2-char designations through ────
+
+  it('fires the long-tail resolve for a 2-char query like "M1"', async () => {
+    mockSearchTargets.mockResolvedValue({
+      contractVersion: '1.0',
+      requestId: 'r',
+      suggestions: [],
+    });
+    mockResolveTarget.mockResolvedValue(
+      resolved({
+        targetId: 'tgt-m1',
+        simbadOid: 1,
+        primaryDesignation: 'M 1',
+        commonName: 'Crab Nebula',
+        objectType: 'supernova_remnant',
+        raDeg: 83.6,
+        decDeg: 22.0,
+        aliases: ['M 1'],
+        source: 'resolved',
+      }),
+    );
+
+    render(<TargetSearch onSelect={vi.fn()} />);
+    await typeAndFlush(screen.getByRole('combobox'), 'M1');
+
+    expect(mockResolveTarget).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'M1' }),
+    );
+    expect(screen.getByRole('option')).toHaveTextContent('M 1');
   });
 
   it('treats unresolved (offline / disabled) as non-fatal — no error, local hits stay', async () => {
@@ -743,16 +774,19 @@ describe('TargetSearch', () => {
     expect(screen.queryByText('No matching targets.')).toBeNull();
   });
 
-  it('shows the plain no-matches message below the resolve minimum length (no fallback offered yet)', async () => {
+  it('shows a "keep typing" hint (not "no matching targets") below the resolve minimum length (#843)', async () => {
     mockSearchTargets.mockResolvedValue({
       contractVersion: '1.0',
       requestId: 'r',
       suggestions: [],
     });
     render(<TargetSearch onSelect={vi.fn()} />);
-    await typeAndFlush(screen.getByRole('combobox'), 'ic'); // 2 chars < 3
+    await typeAndFlush(screen.getByRole('combobox'), 'i'); // 1 char < 2
 
-    expect(screen.getByText('No matching targets.')).toBeInTheDocument();
+    // No search for Phase 2 has actually run yet below the threshold, so
+    // claiming a miss ("No matching targets.") would be misleading.
+    expect(screen.getByText('Keep typing to search…')).toBeInTheDocument();
+    expect(screen.queryByText('No matching targets.')).toBeNull();
     expect(
       screen.queryByRole('button', {
         name: 'Search more catalogues (NED/VizieR)',

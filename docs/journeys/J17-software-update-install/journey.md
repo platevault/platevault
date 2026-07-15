@@ -2,16 +2,17 @@
 id: J17
 title: Learn about, install, and restart into a signed software update
 version: 1
-status: active
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [settings]
 interfaces: [desktop-ui]
 trace:
-  - docs/product/journeys/J17-software-update-install/journey.md @ 66026463
+  - pre-migration journey.md @ git 42c596d6
   - specs/051-tauri-shell-integration/spec.md US10 (FR-029..FR-032, SC-009)
   - GitHub #845 (open — running version never displayed)
   - GitHub #762 (open — tamper-rejection test coverage gap)
+  - docs/development/journey-run-2026-07-14.md (2026-07-14 Windows validation pass)
 ---
 
 ## Goal
@@ -24,15 +25,32 @@ failure branch (unreachable feed, bad signature, bad download) leaves the
 previously running install completely untouched.
 
 ## Preconditions
-- P1: A bundled/packaged PlateVault build. The updater plugin reports itself
-  unavailable in an unbundled dev run, and the frontend subscription/install
-  path is a no-op in mock mode (`VITE_USE_MOCKS=true`) — neither exercises
-  this journey.
+- P1: A PlateVault build with the updater plugin registered. The frontend
+  subscription/install path is a no-op in mock mode (`VITE_USE_MOCKS=true`)
+  — that mode cannot exercise any part of this journey. The passive check
+  (S1) does not require an installed/packaged build: the 2026-07-14 Windows
+  validation run exercised it against an unbundled `run-dev-mcp.bat` dev
+  build and observed `window.__TAURI__.updater.check()` completing normally
+  (docs/development/journey-run-2026-07-14.md). Actually completing an
+  install-and-relaunch (S2) is expected to need a genuinely installed build,
+  since `downloadAndInstall()`/`relaunch()` replace the running executable —
+  that specific requirement was not exercised live in that run (no update
+  was available to install).
 - P2: The configured update endpoint (GitHub Releases `latest.json`) is
-  reachable, or deliberately unreachable to exercise the failure branch.
+  reachable at startup. An endpoint that is unreachable from the app's very
+  first check is indistinguishable from a genuine "up to date" result (see
+  S1 Expect (negative); `check_for_app_update` only logs on error and emits
+  no frontend event either way) — it does not by itself exercise a visible
+  failure branch. To exercise S3's network-failure branch, the endpoint
+  must go unreachable after the startup check has already surfaced an
+  available update and before the user clicks Install (the install action
+  re-checks live before downloading).
 - P3: For S2, a genuinely newer release signed with the app's release
-  keypair is published at that endpoint; for the negative branch in S3, a
-  tampered or unsigned artifact is placed there instead.
+  keypair is published at that endpoint; for the signature-failure branch
+  in S3, a tampered or unsigned artifact is placed there instead (the
+  startup check must still detect *an* update so the Install control
+  renders — the tampering is only caught during the install-time
+  download/verify).
 
 ## Steps
 ### S1 — Learn the update state {#S1}
@@ -64,8 +82,11 @@ previously running install completely untouched.
   unchanged, and no partial install is left on disk.
 
 ### S3 — Recover from a failed check or failed install {#S3}
-- **Do:** Attempt to install while the update endpoint is unreachable, or
-  with a tampered/unsigned artifact at the endpoint.
+- **Do:** With "Update available" shown, choose Install & Restart after the
+  update endpoint has gone unreachable since detection (network-failure
+  branch), or while a tampered/unsigned artifact is now present at the
+  endpoint (signature-failure branch) — the Install click re-runs the check
+  live before downloading, so either failure surfaces at that point.
 - **Expect:** The failure is reported inline in the Software Update section
   as "Update failed: {message}", carrying the specific underlying error
   rather than a bare generic phrase; the Install action stays available to
@@ -96,25 +117,10 @@ previously running install completely untouched.
   repeat prompt for that release (S4).
 
 ## Known gaps
-- G1: The running app version number is never displayed anywhere in
-  Settings → Advanced, or elsewhere in the UI, independent of update state
-  — confirmed via `Advanced.tsx` and the message catalog; `getVersion()` is
-  available but unused. Open issue: #845.
-- G2: A failed background update check is not surfaced as its own state;
-  the UI falls back to the same "up to date" text as a genuine no-update
-  result (confirmed in `check_for_app_update`, which only logs on `Err` and
-  emits no frontend event). No issue currently tracks this distinctly from
-  #845.
-- G3: In-repo test coverage for tamper/unsigned-artifact rejection
-  (SC-009) is still missing even though the real minisign keypair and
-  signing pipeline now exist in this repo; surviving code comments still
-  describe the pubkey as a placeholder. Open issue: #762.
-- G4: There is no staged "download/verify now, restart later" flow —
-  Install & Restart is one atomic action. A user cannot verify an update
-  and defer the actual restart to a more convenient moment. (The
-  pre-migration doc described a staged/decline flow; current code and
-  spec 051 US10 do not implement or require one.)
-- G5: No automated scenario/e2e coverage exists yet for this journey
-  (carried from the pre-migration doc, which flagged the same gap).
+- G1: (dissolved 2026-07-15) — tracked as issue #845; running app version never displayed.
+- G2: (dissolved 2026-07-15) — tracked as issue #873; failed update check not surfaced distinctly.
+- G3: (dissolved 2026-07-15) — tracked as issue #762; missing tamper/unsigned-artifact test coverage.
+- G4: (dissolved 2026-07-15) — tracked as issue #888; owner decided: build staged flow.
+- G5: (dissolved 2026-07-15) — tracked as issue #881; validation-campaign coverage tracker.
 
 ## Delta log

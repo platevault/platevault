@@ -137,6 +137,11 @@ pub async fn get_source_protection(
     pool: &SqlitePool,
     req: &SourceProtectionGetRequest,
 ) -> Result<SourceProtectionGetResponse, ContractError> {
+    // Capture the defaults epoch BEFORE loading the globals a resolved
+    // response will embed: if a defaults change lands mid-resolve, the entry
+    // is tagged with the pre-change epoch and the next get re-resolves
+    // instead of serving the stale mix (issue #563).
+    let defaults_epoch = app_core_cache::protection_defaults_epoch();
     let global = load_global_protection(pool).await?;
 
     match &req.source_id {
@@ -151,8 +156,13 @@ pub async fn get_source_protection(
             })
         }
         Some(source_id) => {
-            if let Some(cached) = caches::source_protection_state().get(source_id) {
-                return Ok(cached);
+            // An epoch mismatch means the global defaults changed since this
+            // entry was resolved — treat it as a miss (see `caches.rs` for
+            // why the entry embeds default-derived values).
+            if let Some((epoch, cached)) = caches::source_protection_state().get(source_id) {
+                if epoch == defaults_epoch {
+                    return Ok(cached);
+                }
             }
 
             let resolved = prot_repo::resolve_protection(
@@ -173,7 +183,8 @@ pub async fn get_source_protection(
                 categories: resolved.categories,
                 inherits_default: resolved.inherits_default,
             };
-            caches::source_protection_state().insert(source_id.clone(), response.clone());
+            caches::source_protection_state()
+                .insert(source_id.clone(), (defaults_epoch, response.clone()));
             Ok(response)
         }
     }
@@ -876,6 +887,41 @@ mod tests {
         assert_eq!(resp.level, ProtectionLevel::Normal);
         assert!(!resp.block_permanent_delete);
         assert!(!resp.inherits_default);
+    }
+
+    /// Issue #563 regression: the per-source resolved cache embeds values
+    /// inherited from the global defaults, and nothing could invalidate it on
+    /// a defaults change (`app_core_settings` can't reach it without a
+    /// dependency cycle) — so `source.protection.get` kept answering with the
+    /// pre-change level forever. The defaults-epoch tag makes such entries
+    /// miss instead.
+    #[tokio::test]
+    async fn global_default_change_invalidates_cached_inherited_get() {
+        let (db, bus, _lock) = setup().await;
+        let get_req = SourceProtectionGetRequest { source_id: Some("src-563".to_owned()) };
+
+        // Prime the per-source cache with the inherited default (protected).
+        let first = get_source_protection(db.pool(), &get_req).await.unwrap();
+        assert_eq!(first.level, ProtectionLevel::Protected);
+        assert!(first.inherits_default);
+
+        super::set_global_protection_default(
+            db.pool(),
+            &bus,
+            "global",
+            "defaultProtection",
+            serde_json::json!("unprotected"),
+        )
+        .await
+        .unwrap();
+
+        let second = get_source_protection(db.pool(), &get_req).await.unwrap();
+        assert_eq!(
+            second.level,
+            ProtectionLevel::Unprotected,
+            "get must re-resolve after a global-defaults change, not serve the stale cache"
+        );
+        assert!(second.inherits_default);
     }
 
     #[tokio::test]
