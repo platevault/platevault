@@ -139,6 +139,8 @@ function makeDetail(overrides?: {
     alias: string;
     kind: 'designation' | 'common_name' | 'user';
   }>;
+  raDeg?: number | null;
+  decDeg?: number | null;
 }) {
   const displayAlias = overrides?.displayAlias ?? null;
   const primaryDesignation = 'NGC 7000';
@@ -148,8 +150,11 @@ function makeDetail(overrides?: {
     displayAlias: displayAlias ?? undefined,
     effectiveLabel: displayAlias ?? primaryDesignation,
     objectType: 'emission_nebula',
-    raDeg: 314.75,
-    decDeg: 44.37,
+    // `??` would treat an explicit `raDeg: null` override (the #757 fixture)
+    // the same as "not provided" and silently fall back to the default —
+    // check for presence instead so `null` is preserved.
+    raDeg: overrides?.raDeg !== undefined ? overrides.raDeg : 314.75,
+    decDeg: overrides?.decDeg !== undefined ? overrides.decDeg : 44.37,
     simbadOid: 2_222_222,
     source: 'resolved',
     aliases: overrides?.aliases ?? [
@@ -769,5 +774,71 @@ describe('TargetDetailV2 — no-site prompt (US6/T015/T018)', () => {
       // Real max-alt stat renders once a site is active.
       expect(screen.getByText(/^Max alt/)).toBeInTheDocument();
     });
+  });
+});
+
+// ── #757: null-coordinates crash + distinct un-plannable state ─────────────────
+// ── #758: FR-020 Moon-separation trio rendered in the detail pane ──────────────
+
+const SITE_744 = {
+  id: 'site-744',
+  name: 'Test Site',
+  latitudeDeg: 52.37,
+  longitudeDeg: 4.9,
+  elevationM: 0,
+  timezone: 'Europe/Amsterdam',
+  twilight: 'astronomical' as const,
+  minHorizonAltDeg: 0,
+};
+
+describe('TargetDetailV2 — needs-coordinates degrade + Moon-separation trio (#757/#758)', () => {
+  beforeEach(async () => {
+    const { __setObservingStateForTest } = await import(
+      './observing-sites/site-store'
+    );
+    __setObservingStateForTest({
+      sites: [SITE_744],
+      activeSiteId: SITE_744.id,
+      defaultSiteId: SITE_744.id,
+    });
+  });
+
+  it('33. (#757) renders a distinct "needs coordinates" banner instead of crashing when a site is active and the target has no RA/Dec', async () => {
+    mockGetTargetDetail.mockResolvedValue(
+      ok(makeDetail({ raDeg: null, decDeg: null })),
+    );
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          /has no catalogued coordinates yet.*altitude, visibility, and imaging time can't be computed/i,
+        ),
+      ).toBeInTheDocument(),
+    );
+    // Not the no-site banner, and no fabricated tonight stats.
+    expect(
+      screen.queryByText(/Add an observing site.*see tonight's real altitude/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Max alt/)).not.toBeInTheDocument();
+  });
+
+  it('34. (#758) renders the Moon-separation trio (at transit / min over dark / dark midpoint) once tonight is available', async () => {
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+
+    await waitFor(() =>
+      expect(screen.getByText('Moon separation')).toBeInTheDocument(),
+    );
+    for (const label of [
+      'At transit',
+      'Min over dark window',
+      'At dark midpoint',
+    ]) {
+      const row = screen.getByText(label).closest('[role="row"]');
+      expect(row).not.toBeNull();
+      // Each figure is either a whole-degree value or the explicit
+      // "Moon not up" state — never blank/fabricated (FR-020).
+      expect(row?.textContent).toMatch(/\d+°|Moon not up/);
+    }
   });
 });

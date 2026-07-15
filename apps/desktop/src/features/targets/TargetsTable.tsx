@@ -76,6 +76,7 @@ import { Link } from '@tanstack/react-router';
 import type { TargetListItem, TargetObjectType } from '@/bindings/index';
 import { Pill, Banner, Skeleton, tableIndent } from '@/ui';
 import { SortHeader, ariaSortFor } from '@/components';
+import { UnresolvedChip } from '@/components/RenderValue';
 import { objectTypeLabel } from '@/components/TargetSearch/objectType';
 import { catalogueOf, catalogueLabel } from './planner-catalog';
 import {
@@ -996,27 +997,56 @@ export function TargetsTable({
                   <td>
                     <Pill variant="ghost">{formatType(t.objectType)}</Pill>
                   </td>
-                  {/* Real peak altitude tonight (spec 044 Track B ephemeris). */}
+                  {/* Real peak altitude tonight (spec 044 Track B ephemeris).
+                      #757: no catalogued coordinates → the shared unresolved
+                      chip, never a fabricated 0°. */}
                   <td className="alm-targets-cell--num">
-                    <span title={m.targets_table_max_alt_title()}>
-                      {Math.round(alt.maxAltDeg)}°
-                    </span>
+                    {alt.needsCoordinates ? (
+                      <span title={m.targets_table_needs_coordinates_title()}>
+                        <UnresolvedChip />
+                      </span>
+                    ) : (
+                      <span title={m.targets_table_max_alt_title()}>
+                        {Math.round(alt.maxAltDeg)}°
+                      </span>
+                    )}
                   </td>
-                  {/* Real inline altitude sparkline for the night (spec 044 Track B). */}
+                  {/* Real inline altitude sparkline for the night (spec 044
+                      Track B). #757: no coordinates → the unresolved chip
+                      instead of a blank, ambiguous-looking curve. */}
                   <td className="alm-targets-cell--spark">
-                    <AltitudeSparkline
-                      alt={alt}
-                      label={m.targets_table_alt_sparkline_aria({
-                        label: t.effectiveLabel,
-                      })}
-                    />
+                    {alt.needsCoordinates ? (
+                      <span title={m.targets_table_needs_coordinates_title()}>
+                        <UnresolvedChip />
+                      </span>
+                    ) : (
+                      <AltitudeSparkline
+                        alt={alt}
+                        label={m.targets_table_alt_sparkline_aria({
+                          label: t.effectiveLabel,
+                        })}
+                      />
+                    )}
                   </td>
                   {/* Visible-tonight indicator (peaks above usable alt).
+                      #757: no catalogued coordinates is a distinct
+                      un-plannable state, checked first — it must never look
+                      like a genuinely low/not-visible target (FR-024).
                       US4/T033: a site/date with no qualifying dark window
                       (FR-017) discloses that explicitly instead of implying
                       the target is simply too low. */}
                   <td className="alm-targets-cell--center">
-                    {alt.noDarkWindow ? (
+                    {alt.needsCoordinates ? (
+                      <span
+                        className="alm-targets-vis alm-targets-vis--no"
+                        title={m.targets_table_needs_coordinates_title()}
+                      >
+                        ◌
+                        <span className="alm-targets-vis__label">
+                          {m.targets_table_needs_coordinates()}
+                        </span>
+                      </span>
+                    ) : alt.noDarkWindow ? (
                       <span
                         className="alm-targets-vis alm-targets-vis--no"
                         title={m.targets_table_no_dark_window_title()}
