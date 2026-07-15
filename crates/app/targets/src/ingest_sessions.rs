@@ -252,12 +252,21 @@ async fn ingest_light_frame(
     // fields missing from this frame's header fill in only where the
     // session's existing snapshot is also missing (never regress a known
     // value to NULL because a later frame's header happened to omit it).
-    backfill_session_geometry(pool, &session_id, &meta).await?;
+    //
+    // Logged, never propagated (module docs: "one bad file cannot abort the
+    // whole ingest") — a `?` here would abort `ingest_light_frames`'s loop
+    // for every remaining frame in the plan, not just this one.
+    if let Err(e) = backfill_session_geometry(pool, &session_id, &meta).await {
+        tracing::warn!(session_id, "ingest: failed to backfill session geometry: {e:?}");
+    }
 
     // F-Framing-10: bind this session to the attribution pick recorded on
     // the confirming plan, if any — the earliest point a real session id
-    // exists to add as a framing member.
-    bind_chosen_framing(pool, plan_id, &session_id).await?;
+    // exists to add as a framing member. Logged, never propagated (same
+    // reasoning as above).
+    if let Err(e) = bind_chosen_framing(pool, plan_id, &session_id).await {
+        tracing::warn!(plan_id, session_id, "ingest: failed to bind chosen framing: {e:?}");
+    }
 
     Ok(FrameOutcome::Ingested)
 }

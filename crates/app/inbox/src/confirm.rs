@@ -259,14 +259,38 @@ pub async fn confirm(
     }
 
     // `item_geometry` is also consumed by the apply-path below once the plan
-    // (and its id) exists — computed once here rather than twice.
+    // (and its id) exists — computed once here rather than twice. The
+    // attribution pass is a suggestion surface (FR-019/FR-020): a query
+    // failure here must degrade to "no candidates" rather than abort
+    // confirm() — missing/absent geometry is the ordinary, expected case
+    // (Q16 NULL-geometry exclusion), never a reason to block plan creation,
+    // and an unexpected transient failure computing suggestions is not a
+    // reason to lose the user's confirm either. Only an explicit
+    // `chosenAttribution` pick that itself requires geometry (the apply-path
+    // below) is allowed to fail the request.
     let item_geometry = if is_light_item {
-        Some(attribution::compute_item_geometry(pool, &req.inbox_item_id).await?)
+        match attribution::compute_item_geometry(pool, &req.inbox_item_id).await {
+            Ok(geometry) => Some(geometry),
+            Err(e) => {
+                tracing::warn!(
+                    inbox_item_id = %req.inbox_item_id,
+                    "confirm: attribution geometry computation failed, degrading to no \
+                     candidates: {e:?}"
+                );
+                Some(attribution::ItemGeometry::default())
+            }
+        }
     } else {
         None
     };
     let attribution_candidates = match &item_geometry {
-        Some(geometry) => attribution::compute_candidates(pool, geometry).await?,
+        Some(geometry) => attribution::compute_candidates(pool, geometry).await.unwrap_or_else(|e| {
+            tracing::warn!(
+                inbox_item_id = %req.inbox_item_id,
+                "confirm: attribution candidate ranking failed, degrading to no candidates: {e:?}"
+            );
+            Vec::new()
+        }),
         None => Vec::new(),
     };
 

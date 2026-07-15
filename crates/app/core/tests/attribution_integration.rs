@@ -232,3 +232,115 @@ async fn chosen_framing_pick_materializes_as_session_membership_once_the_plan_ap
     let geo = framing_repo::get_session_geometry(pool, session_id).await.unwrap();
     assert!(geo.is_some(), "get_session_geometry must find the row (even with NULL fields)");
 }
+
+/// Repro attempt for the #898 CI red (`reconcile_drops_externally_deleted_
+/// frame_from_real_ui_count`, `crates/e2e-tests/tests/inventory_journeys.rs`)
+/// — the REAL `inbox.classify` -> REAL `inbox.confirm` (no chosenAttribution,
+/// matching that journey's invoke payload) -> catalogue-in-place apply ->
+/// real plan-apply-completed event -> real ingest, for TWO geometry-less
+/// light frames (only IMAGETYP/OBJECT/FILTER/DATE-OBS, no TELESCOP/INSTRUME/
+/// FOCALLEN/RA/DEC/rotator) sharing one capture identity, exactly mirroring
+/// that journey's fixture and organization state (an `organized`
+/// `registered_sources` row, so catalogue-in-place, not move).
+#[tokio::test]
+async fn geometry_less_two_frame_catalogue_in_place_confirm_forms_one_session() {
+    let (db, _repo, bus) = support::setup().await;
+    let pool = db.pool();
+    let tmp = tempfile::tempdir().unwrap();
+
+    write_fits(tmp.path(), "light_m33_001.fits", "Light Frame", Some("M 33"));
+    write_fits(tmp.path(), "light_m33_002.fits", "Light Frame", Some("M 33"));
+
+    // `roots.register` (organized default per the journey's module docs) —
+    // mirrored as a real `registered_sources` row with `organization_state`
+    // set explicitly, matching the real `roots_register` command's default.
+    let root_id = "root-sc008-repro";
+    sqlx::query(
+        "INSERT INTO registered_sources
+            (id, kind, path, scan_depth, organization_state, created_at, created_via)
+         VALUES (?, 'light_frames', ?, 'recursive', 'organized', '2026-01-01T00:00:00Z', 'first_run')",
+    )
+    .bind(root_id)
+    .bind(tmp.path().to_string_lossy().to_string())
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let inbox_item_id = "item-sc008-repro";
+    sqlx::query(
+        "INSERT INTO inbox_items \
+         (id, root_id, relative_path, group_key, discovered_at, last_scanned_at, state, lane) \
+         VALUES (?, ?, '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', \
+                 'pending_classification', 'fits')",
+    )
+    .bind(inbox_item_id)
+    .bind(root_id)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let classify_resp = app_core::inbox::classify::classify(
+        pool,
+        app_core::inbox::classify::ClassifyRequest {
+            inbox_item_id: inbox_item_id.to_owned(),
+            root_absolute_path: tmp.path().to_path_buf(),
+            force_rescan: false,
+        },
+    )
+    .await
+    .expect("real classify() must succeed on a folder of geometry-less light frames");
+    assert_eq!(classify_resp.classification_type, "single_type");
+
+    let confirm_resp = app_core::inbox::confirm::confirm(
+        pool,
+        &bus,
+        app_core::inbox::confirm::ConfirmRequest {
+            inbox_item_id: inbox_item_id.to_owned(),
+            content_signature: classify_resp.content_signature,
+            destructive_destination: None,
+            root_absolute_path: tmp.path().to_path_buf(),
+            root_id: None,
+            // Matches the journey's real invoke payload exactly — no
+            // chosenAttribution key at all.
+            chosen_attribution: None,
+        },
+    )
+    .await
+    .expect(
+        "real confirm() must succeed for a geometry-less light item with no chosenAttribution \
+         (NULL-geometry sessions are excluded from attribution matching, never rejected)",
+    );
+    assert_eq!(confirm_resp.items_total, 2);
+    assert!(
+        confirm_resp.attribution_candidates.len() == 1
+            && confirm_resp.attribution_candidates[0].kind
+                == contracts_core::framing::IngestionAttributionKind::NewProject,
+        "geometry-less item must degrade to the new_project fallback candidate only: {:?}",
+        confirm_resp.attribution_candidates
+    );
+    assert!(confirm_resp.attribution_applied.is_none());
+
+    sqlx::query("UPDATE plans SET state = 'applied' WHERE id = ?")
+        .bind(&confirm_resp.plan_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE plan_items SET item_state = 'succeeded' WHERE plan_id = ?")
+        .bind(&confirm_resp.plan_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+    app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
+    publish_applied(&bus, &confirm_resp.plan_id).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    let sessions: Vec<(String, String)> =
+        sqlx::query_as("SELECT id, frame_ids FROM acquisition_session")
+            .fetch_all(pool)
+            .await
+            .unwrap();
+    assert_eq!(sessions.len(), 1, "both M 33 frames must group into ONE session: {sessions:?}");
+    let frames: Vec<String> = serde_json::from_str(&sessions[0].1).unwrap();
+    assert_eq!(frames.len(), 2, "both frames must be present in the session's frame_ids");
+}
