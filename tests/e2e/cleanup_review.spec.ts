@@ -158,6 +158,17 @@ test.describe("cleanup review (spec 017 WP-E / Journey 6)", () => {
     await expect(approveBtn).toBeDisabled();
 
     await overlay.getByRole("button", { name: "Acknowledge" }).click();
+
+    // ── 9b. Destructive-confirm gate (FR-003, D9, issue #741): the shared
+    //        plan fixture carries `delete` items, so approval also stays
+    //        locked behind an explicit destructive-confirm checkbox ───────────
+    // `.click()` (not `.check()`) — the checkbox's `onChange` awaits a mock
+    // IPC round-trip before flipping `checked`, and `.check()`'s single
+    // post-click snapshot races that async update.
+    await overlay.getByTestId("plan-review-confirm-destructive").click();
+    await expect(
+      overlay.getByTestId("plan-review-confirm-destructive"),
+    ).toBeChecked({ timeout: 5_000 });
     await expect(approveBtn).toBeEnabled({ timeout: 5_000 });
 
     // ── 10. Approve & apply → plans.approve → plans.apply, live progress ────
