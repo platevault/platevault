@@ -131,35 +131,9 @@ mistake — no orphaned plan, no leftover file, no stuck classification.
   calibration type) pair, and it is the newly assigned master.
 
 ## Known gaps
-- G1: there is no "reset to detected" action anywhere in the reclassify
-  path — `set_overrides`/`set_manual_override` only ever write a new
-  override value (`COALESCE(?, manual_override)`); no code path sets
-  `manual_override` back to `NULL`. This is moot for the S1/S2 scenario
-  (needs-review files carry no scanner-detected value to fall back to), but
-  means a file the scanner *did* successfully classify has no UI path to
-  correct it at all — reclassify's per-file/bulk override controls are
-  wired only for the needs-review table
-  (`apps/desktop/src/features/inbox/InboxDetail.tsx`), not for already
-  `single_type` items, even though the backend's `reclassify_v2` accepts a
-  `frameType` correction for any file (`crates/app/inbox/src/reclassify.rs`).
-- G2: there is no calibration-master "un-assign" action — only reassignment
-  (replacing one master with another for the same session + calibration
-  type) is possible. A user who wants a session to have *no* assigned
-  master for a type again has no path to that state.
-- G3: the legacy pre-migration doc described a "heterogeneous bulk override"
-  warning gate. That gate does not exist today, and — contrary to an earlier
-  draft of this entry — the scenario it guards against is NOT moot: the
-  bulk-override table (`unclassifiedFiles`) holds every file the scanner
-  could not detect *any* frame type for, which does not mean those files
-  share a true type — a folder can (and in practice does) mix undetected
-  bias/dark/flat files together. Multi-selecting across such a mix and
-  submitting one frame type is accepted silently, with no warning and no
-  undo (S2). Live-reproduced on 2026-07-14: bulk-overriding 5 mixed
-  calibration files to "light" succeeded with zero warning/confirm
-  (`docs/development/journey-run-2026-07-14.md`, Journey 11 section).
-  Tracked as GitHub issue #611 (open, P1, "Bulk frame-type override has no
-  heterogeneity warning and no undo") — the same issue also covers G1's
-  missing reset-to-detected control.
+- G1: (dissolved 2026-07-15) — tracked as issue #611; no reset-to-detected action in reclassify.
+- G2: (dissolved 2026-07-15) — tracked as issue #875; no master un-assign.
+- G3: (dissolved 2026-07-15) — tracked as issue #611; bulk override has no heterogeneity warning.
 
 ## Delta log
 (none — first migrated version)

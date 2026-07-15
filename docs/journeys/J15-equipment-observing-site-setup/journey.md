@@ -182,28 +182,14 @@ imaging time) reflects a real location instead of the no-site placeholder.
 
 ## Known gaps
 
-- G1: Registered camera/telescope/optical-train/filter data is not
-  consumed anywhere else in the product today. Sessions inventory rows
-  hardcode `camera: None` (`crates/app/core/src/inventory.rs:243`);
-  calibration match candidates display the raw fingerprint string, not a
-  resolved equipment name (`crates/app/calibration/src/matching.rs:740,797`);
-  the alias-based auto-detect helpers `find_or_create_camera_by_alias` /
-  `find_or_create_telescope_by_alias` (`crates/app/calibration/src/equipment.rs`)
-  have no caller anywhere in the ingest pipeline; and the Target Planner's
-  astronomy code never reads camera/telescope/optical-train data.
-  Registering equipment today builds a named, audited inventory in
-  Settings — it does not yet drive friendly names or matching elsewhere,
-  contrary to the pre-migration doc's description. Out of scope for this
-  journey until that wiring ships.
-- G2: Only `filters.name` has a database uniqueness constraint
-  (`crates/persistence/db/migrations/0007_equipment.sql:49`); cameras,
-  telescopes, optical trains, and observing sites accept duplicate names
-  silently — no client or server check exists for them.
+- G1: (dissolved 2026-07-15) — tracked as issue #879; registered equipment not consumed elsewhere.
+- G2: (dissolved 2026-07-15) — tracked as issue #659; no duplicate-name check for most equipment.
 - G3: The Equipment → Filters category (narrowband/broadband/dual-band/
   other/custom, per registered filter) is not read by the per-band
   moon-avoidance table; that table's seven bands (L/R/G/B/Ha/SII/OIII,
   `apps/desktop/src/features/targets/astro/moon-avoidance.ts`) are a fixed
   built-in taxonomy, unrelated to the user's registered filter list.
+  (accepted by user, 2026-07-15)
 
 ## Delta log
 
