@@ -1,7 +1,7 @@
 ---
 id: J06
 title: Reclaim disk space from processing outputs and raw sub-frames without losing anything protected
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -19,6 +19,7 @@ trace:
   - docs/development/windows-journeys/journey-06-cleanup-scan-apply.md
   - PR #413 (merged 2026-07-04 — scan/review/generate cleanup UI)
   - issue #741, issue #807, issue #766, issue #780, issue #806 (all open)
+  - PR #894 (fixes #563)
 ---
 
 ## Goal
@@ -107,9 +108,20 @@ protected ever touched without an acknowledged, reviewed step.
 - **Expect:** A read-only preview lists individual light/dark/flat/bias
   frames with type, size, and protection state; non-protected frames are
   preselected; protected frames show no selection control; the reclaimable
-  total reflects only the currently selected frames.
+  total reflects only the currently selected frames. A per-root protection
+  override set on a source (Settings → Data Sources) now actually governs
+  this classification for the frames it owns: a root marked "Unprotected"
+  correctly preselects its session-attributed frames as non-protected,
+  rather than the override being silently ignored in favor of the global
+  default.
 - **Expect (negative):** No file is moved or altered by scanning.
-- **Trace:** `apps/desktop/src/features/sessions/RawFrameCleanupSection.tsx`
+- **Trace:** `apps/desktop/src/features/sessions/RawFrameCleanupSection.tsx`;
+  `crates/app/core/src/cleanup_generator.rs` `frame_protection_source` (PR
+  #894 fixes #563 — a per-root override previously never reached
+  session-attributed frames because resolution was keyed under the session
+  id, which has no shipped override surface, and silently fell back to the
+  global default; it is now keyed under the root when no per-session
+  override row exists).
 
 ### S6 — Select frames and generate a session cleanup plan {#S6}
 - **Do:** Adjust the frame selection if needed, choose Archive or System
@@ -152,3 +164,10 @@ protected ever touched without an acknowledged, reviewed step.
   deltas/2026-07-14-jval-docdrift.md).
 
 ## Delta log
+
+- **Δ2** 2026-07-15 · S5 · behavior-change
+  A per-root protection override now actually governs cleanup
+  classification for the session-attributed raw frames it owns; previously
+  the override was cosmetic there (resolution was keyed under the session
+  id, found no override row, and silently inherited the global default).
+  Evidence: PR #894 (fixes #563) · by: journey-scribe (intent-gated)

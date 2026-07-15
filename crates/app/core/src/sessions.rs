@@ -14,8 +14,9 @@
 //!
 //! # Architecture
 //!
-//! `acquisition_session` stores: id, session_key (JSON), frame_ids (JSON array),
-//! target_id, observer_location (JSON), created_at.
+//! `acquisition_session` stores: id, session_key (pipe-delimited
+//! `target|filter|binning|gain|night`, see `parse_session_key`), frame_ids
+//! (JSON array), target_id, observer_location (JSON), created_at.
 //! `acquisition_fingerprint` stores per-session metadata dimensions for
 //! calibration matching (gain, filter, binning, optic_train, etc.).
 //!
@@ -215,44 +216,66 @@ async fn load_fingerprint(pool: &SqlitePool, id: &str) -> Result<Option<Fingerpr
     }))
 }
 
-/// Parse `SessionKey` from the stored JSON session_key string.
+/// Parse `SessionKey` from the stored `session_key` string.
 ///
-/// The JSON object may contain `target`, `filter`, `binning`, `gain`, `night`
-/// keys. Missing fields are supplemented from the fingerprint row, then
-/// defaulted to empty string when absent from both.
-fn parse_session_key(json: &str, fp: Option<&Fingerprint>) -> SessionKey {
-    let v: serde_json::Value = serde_json::from_str(json).unwrap_or(serde_json::Value::Null);
+/// The real/production format (written by `crate::ingest_sessions::
+/// derive_session_key` via `sessions::session_key`, spec 035 US4) is the
+/// stable pipe-delimited tuple `target|filter|binning|gain|night` — see
+/// `crates/sessions/src/key.rs`; `app_core_projects::source_view_generate::
+/// session_night` already relies on this same shape. A handful of
+/// pre-035/test-only call sites still write a JSON object
+/// (`{"target":...,"filter":...}`); both are accepted so neither format
+/// regresses. Missing/blank fields are supplemented from the fingerprint row
+/// (legacy spec-006 path), then defaulted to empty string when absent from
+/// both.
+fn parse_session_key(key: &str, fp: Option<&Fingerprint>) -> SessionKey {
+    let (target, filter, binning, gain, night) = if key.trim_start().starts_with('{') {
+        parse_session_key_json_fields(key)
+    } else {
+        parse_session_key_delimited_fields(key)
+    };
 
-    let str_field =
-        |key: &str| v.get(key).and_then(|x| x.as_str()).map(ToOwned::to_owned).unwrap_or_default();
-
-    let target = str_field("target");
-    let filter = v
-        .get("filter")
-        .and_then(|x| x.as_str())
-        .map(ToOwned::to_owned)
-        .or_else(|| fp.and_then(|f| f.filter_name.clone()))
-        .unwrap_or_default();
-    let binning = v
-        .get("binning")
-        .and_then(|x| x.as_str())
-        .map(ToOwned::to_owned)
-        .or_else(|| fp.and_then(|f| f.binning.clone()))
-        .unwrap_or_default();
-    let gain = v
-        .get("gain")
-        .and_then(|x| x.as_str())
-        .map(ToOwned::to_owned)
+    let filter =
+        non_empty(filter).or_else(|| fp.and_then(|f| f.filter_name.clone())).unwrap_or_default();
+    let binning =
+        non_empty(binning).or_else(|| fp.and_then(|f| f.binning.clone())).unwrap_or_default();
+    let gain = non_empty(gain)
         .or_else(|| fp.and_then(|f| f.gain).map(|n| n.to_string()))
         .unwrap_or_default();
-    let night = v
-        .get("night")
-        .and_then(|x| x.as_str())
-        .map(ToOwned::to_owned)
+    let night = non_empty(night)
         .or_else(|| fp.and_then(|f| f.observing_night_date.clone()))
         .unwrap_or_default();
 
-    SessionKey { target, filter, binning, gain, night }
+    SessionKey { target: target.unwrap_or_default(), filter, binning, gain, night }
+}
+
+type SessionKeyFields =
+    (Option<String>, Option<String>, Option<String>, Option<String>, Option<String>);
+
+/// Split the real pipe-delimited `target|filter|binning|gain|night` form.
+fn parse_session_key_delimited_fields(key: &str) -> SessionKeyFields {
+    let mut parts = key.splitn(5, '|').map(ToOwned::to_owned);
+    (parts.next(), parts.next(), parts.next(), parts.next(), parts.next())
+}
+
+/// Parse the legacy JSON-object form (`{"target":...}`), pre-035/test-only.
+fn parse_session_key_json_fields(json: &str) -> SessionKeyFields {
+    let v: serde_json::Value = serde_json::from_str(json).unwrap_or(serde_json::Value::Null);
+    let str_field = |key: &str| v.get(key).and_then(|x| x.as_str()).map(ToOwned::to_owned);
+    (
+        str_field("target"),
+        str_field("filter"),
+        str_field("binning"),
+        str_field("gain"),
+        str_field("night"),
+    )
+}
+
+/// `None` for an absent or blank field, so downstream `or_else` fallbacks
+/// (fingerprint) kick in for empty pipe-segments the same way they do for a
+/// missing JSON key.
+fn non_empty(s: Option<String>) -> Option<String> {
+    s.filter(|s| !s.is_empty())
 }
 
 /// Active `(frame_count, total_size_bytes)` for a session's `frame_ids` JSON
@@ -385,8 +408,44 @@ mod tests {
 
     #[test]
     fn parse_session_key_handles_invalid_json() {
-        let sk = parse_session_key("not-json", None);
+        // A `{`-prefixed value that fails to parse as JSON still degrades to
+        // empty fields rather than panicking.
+        let sk = parse_session_key("{not-json", None);
         assert_eq!(sk.target, "");
         assert_eq!(sk.filter, "");
+    }
+
+    /// Real production format (spec 035 US4): `sessions::session_key` writes
+    /// a stable pipe-delimited string, not JSON — see `ingest_sessions::
+    /// derive_session_key`. This was the root cause of #564: sessions from
+    /// catalogue-ingest had every field but `target` come back empty because
+    /// this parser only understood JSON.
+    #[test]
+    fn parse_session_key_parses_real_pipe_delimited_format() {
+        let sk = parse_session_key("M 51|L|1x1|100|2025-05-03", None);
+        assert_eq!(sk.target, "M 51");
+        assert_eq!(sk.filter, "L");
+        assert_eq!(sk.binning, "1x1");
+        assert_eq!(sk.gain, "100");
+        assert_eq!(sk.night, "2025-05-03");
+    }
+
+    #[test]
+    fn parse_session_key_delimited_falls_back_to_fingerprint_for_blank_segments() {
+        // A resolved canonical-target key has an empty filter/binning/gain
+        // segment when the frame's FITS header omitted them; fingerprint
+        // supplementation must still kick in exactly as it does for JSON.
+        let fp = Fingerprint {
+            gain: Some(50.0),
+            filter_name: Some("Ha".to_owned()),
+            binning: Some("2x2".to_owned()),
+            optic_train: None,
+            observing_night_date: Some("2026-02-01".to_owned()),
+        };
+        let sk = parse_session_key("target-uuid-1||||", Some(&fp));
+        assert_eq!(sk.target, "target-uuid-1");
+        assert_eq!(sk.filter, "Ha");
+        assert_eq!(sk.binning, "2x2");
+        assert_eq!(sk.gain, "50");
     }
 }
