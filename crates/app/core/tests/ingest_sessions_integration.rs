@@ -228,7 +228,10 @@ async fn two_m31_frames_group_into_one_linked_session() {
     // because `parse_session_key` only understood a JSON shape nothing ever
     // wrote.
     assert_eq!(listed[0].session_key.filter, "Ha", "filter must surface from session_key");
-    assert_eq!(listed[0].session_key.night, "2026-06-21", "observing night must surface, not created_at");
+    assert_eq!(
+        listed[0].session_key.night, "2026-06-21",
+        "observing night must surface, not created_at"
+    );
 }
 
 // ── T046: unknown OBJECT → pending → back-fill ───────────────────────────────────
