@@ -216,6 +216,8 @@
   "err_alias_not_found": "That alias could not be found.",
   "err_alias_not_removable": "This alias can't be removed.",
   "err_archive_empty": "There's nothing to archive.",
+  "err_attribution_geometry_unavailable": "This item has no pointing/rotation data, so a new framing can't be created for it.",
+  "err_attribution_not_light_frame": "Attribution only applies to light frames.",
   "err_classification_ambiguous": "This file could be more than one type — confirm how to classify it.",
   "err_classification_stale": "This classification is out of date. Re-scan to refresh it.",
   "err_confirm_text_mismatch": "The confirmation text doesn't match.",

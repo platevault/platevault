@@ -152,6 +152,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'framing.split.invalid_session': m.err_framing_split_invalid_session,
   'framing.split.would_empty_source': m.err_framing_split_would_empty_source,
   'framing.reassign.empty_selection': m.err_framing_reassign_empty_selection,
+  // Inbox-confirm attribution (spec 008 Q27, F-Framing-5/10).
+  'attribution.not_light_frame': m.err_attribution_not_light_frame,
+  'attribution.geometry_unavailable': m.err_attribution_geometry_unavailable,
   // The generic wrap code maps to the shared generic fallback message (no
   // duplicated catalog values; spec 046 FR-013).
   'internal.error': m.err_generic_fallback,
