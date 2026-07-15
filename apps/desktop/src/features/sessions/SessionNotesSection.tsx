@@ -1,0 +1,139 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * SessionNotesSection — post-hoc free-text notes for an inventory session
+ * (#773, Journey 4 "Notes"). A single always-editable textarea with debounced
+ * autosave (the journey's "autosave signal"): edits persist via
+ * `inventory.session.notes.update` and survive navigation because the backend
+ * write is invalidated back into the inventory query.
+ *
+ * Reuses the shared note constraints (`@/lib/notes`) and the project notes CSS
+ * (`alm-project-notes__*`) so the two note editors stay visually identical
+ * without duplicating rules.
+ */
+
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useDebouncedCallback } from 'use-debounce';
+import { queryKeys } from '@/data/queryKeys';
+import { addToast } from '@/shared/toast';
+import { m } from '@/lib/i18n';
+import { MAX_NOTE_BYTES, NOTE_DEBOUNCE_MS, noteByteLength } from '@/lib/notes';
+import { saveSessionNote } from './store';
+
+export interface SessionNotesSectionProps {
+  sessionId: string;
+  /** Persisted notes from the inventory projection (`null` when never set). */
+  initialContent: string | null;
+}
+
+export function SessionNotesSection({
+  sessionId,
+  initialContent,
+}: SessionNotesSectionProps) {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState(initialContent ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Reseed the draft only when the selected session changes — NOT when
+  // `initialContent` changes, so the post-save inventory refetch (which
+  // updates the prop to the value we just saved) never clobbers in-progress
+  // typing. Render-phase reset per the React "adjust state on prop change"
+  // guidance, keyed on the session id.
+  const [seededFor, setSeededFor] = useState(sessionId);
+  if (seededFor !== sessionId) {
+    setSeededFor(sessionId);
+    setDraft(initialContent ?? '');
+    setSaved(false);
+  }
+
+  const byteCount = noteByteLength(draft);
+  const overLimit = byteCount > MAX_NOTE_BYTES;
+  const nearLimit = byteCount > MAX_NOTE_BYTES * 0.9;
+
+  const triggerSave = useDebouncedCallback((content: string) => {
+    // Client guard: never send content the backend would reject on its byte
+    // cap — the counter already shows why nothing is being saved.
+    if (noteByteLength(content) > MAX_NOTE_BYTES) return;
+    void (async () => {
+      setSaving(true);
+      try {
+        await saveSessionNote(sessionId, content);
+        setSaved(true);
+        // Persistence across navigation: refresh the cached inventory so a
+        // later remount seeds the editor from the saved value (#773).
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.inventory.all(),
+        });
+      } catch {
+        addToast({ message: m.sessions_notes_save_failed(), variant: 'error' });
+      } finally {
+        setSaving(false);
+      }
+    })();
+  }, NOTE_DEBOUNCE_MS);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setDraft(value);
+    setSaved(false);
+    triggerSave(value);
+  };
+
+  return (
+    <div className="alm-project-notes__root">
+      <textarea
+        data-testid="session-notes-textarea"
+        className="alm-input alm-project-notes__textarea"
+        aria-label={m.sessions_notes_label()}
+        placeholder={m.sessions_notes_placeholder()}
+        value={draft}
+        onChange={handleChange}
+        rows={4}
+        aria-invalid={overLimit}
+        aria-describedby={overLimit ? 'session-notes-error' : undefined}
+      />
+      <div className="alm-project-notes__toolbar">
+        <span
+          data-testid="session-notes-byte-counter"
+          className={
+            overLimit
+              ? 'alm-project-notes__byte-counter--over'
+              : nearLimit
+                ? 'alm-project-notes__byte-counter--near'
+                : 'alm-project-notes__byte-counter'
+          }
+        >
+          {byteCount.toLocaleString()} / {MAX_NOTE_BYTES.toLocaleString()}{' '}
+          {m.projects_notes_bytes_unit()}
+        </span>
+        {saving ? (
+          <span className="alm-project-notes__saved">{m.common_saving()}</span>
+        ) : (
+          saved && (
+            <span
+              data-testid="session-notes-saved"
+              className="alm-project-notes__saved"
+            >
+              {m.sessions_notes_saved()}
+            </span>
+          )
+        )}
+      </div>
+      {overLimit && (
+        <span
+          id="session-notes-error"
+          role="alert"
+          data-testid="session-notes-error"
+          className="alm-field-error"
+        >
+          {m.sessions_notes_byte_limit({
+            max: MAX_NOTE_BYTES.toLocaleString(),
+          })}
+        </span>
+      )}
+    </div>
+  );
+}

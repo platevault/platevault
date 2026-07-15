@@ -23,6 +23,7 @@ import type {
   InventoryListResponse,
   InventoryListRequest,
   InventoryFrameType,
+  SessionNotesUpdateResult,
 } from '@/bindings/index';
 
 export type { InventoryListResponse };
@@ -36,6 +37,25 @@ async function inventoryList(
 ): Promise<InventoryListResponse> {
   return unwrap(
     await commands.inventoryList(ipcArgs<typeof commands.inventoryList>(req)),
+  );
+}
+
+/**
+ * Persist post-hoc notes for an inventory session (#773). Empty/whitespace
+ * `notes` clears the field server-side. Throws the mapped `ContractError` on
+ * `note.content_too_large` / `session.not_found` / database error.
+ */
+export async function saveSessionNote(
+  sessionId: string,
+  notes: string,
+): Promise<SessionNotesUpdateResult> {
+  return unwrap(
+    await commands.inventorySessionNotesUpdate(
+      ipcArgs<typeof commands.inventorySessionNotesUpdate>({
+        sessionId,
+        notes,
+      }),
+    ),
   );
 }
 

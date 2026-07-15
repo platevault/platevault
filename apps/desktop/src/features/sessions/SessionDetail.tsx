@@ -19,18 +19,69 @@
  * unrelated to the review lifecycle and is retained.
  */
 
-import type { InventorySession } from '@/bindings/index';
+import type {
+  InventorySession,
+  SessionCalibrationMatch,
+} from '@/bindings/index';
 import {
   DetailPane,
   DetailPanel,
   PropertyTable,
   type PropertyDef,
 } from '@/components';
-import { EmptyState, Btn } from '@/ui';
+import { EmptyState, Btn, Section, Pill } from '@/ui';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
 import { SessionFrameInventory } from './SessionFrameInventory';
+import { SessionNotesSection } from './SessionNotesSection';
 import { RawFrameCleanupSection } from './RawFrameCleanupSection';
+
+/** Read-only calibration-linkage list (#772). Renders an explicit
+ * "no calibration match" state when a light session has no assignment yet
+ * (and for calibration sessions, which never carry assignments). */
+function CalibrationLinkage({
+  matches,
+}: {
+  matches: SessionCalibrationMatch[];
+}) {
+  if (matches.length === 0) {
+    return (
+      <EmptyState
+        title={m.sessions_calib_none()}
+        desc={m.sessions_calib_none_desc()}
+        data-testid="session-calib-empty"
+      />
+    );
+  }
+  return (
+    <div
+      className="alm-session-detail2__linked-list"
+      data-testid="session-calib-list"
+    >
+      {matches.map((match) => (
+        <div
+          key={`${match.kind}-${match.masterId}`}
+          className="alm-session-detail2__calib-row"
+        >
+          <Pill variant="info">{match.kind}</Pill>
+          <span className="alm-mono">{match.masterId}</span>
+          {match.score != null && (
+            <span className="alm-session-detail2__calib-note">
+              {m.sessions_calib_score({ pct: Math.round(match.score * 100) })}
+            </span>
+          )}
+          {match.softMismatches.length > 0 && (
+            <span className="alm-session-detail2__calib-note">
+              {m.sessions_calib_soft_mismatch({
+                dims: match.softMismatches.join(', '),
+              })}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 interface Props {
   session: InventorySession | null;
@@ -231,6 +282,20 @@ export function SessionDetail({
           )}
         </div>
       </div>
+
+      {/* Calibration linkage (#772): the session's assigned calibration
+          masters, or an explicit "no calibration match" state. */}
+      <Section title={m.sessions_calib_heading()} defaultOpen>
+        <CalibrationLinkage matches={session.calibrationMatches ?? []} />
+      </Section>
+
+      {/* Post-hoc notes (#773): debounced-autosave free-text editor. */}
+      <Section title={m.sessions_notes_heading()} defaultOpen>
+        <SessionNotesSection
+          sessionId={session.id}
+          initialContent={session.notes ?? null}
+        />
+      </Section>
 
       {/* Spec 048 T014/T025: on-demand per-frame inventory (present count +
           disk total) with a relink action for frames flagged missing. */}
