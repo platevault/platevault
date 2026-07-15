@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J03-ingest-confirm-catalogue-in-place/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 3 — Ingest → confirm (catalogue-in-place)
 
 **Goal:** teach PlateVault about a folder of files that is *already*

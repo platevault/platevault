@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J15-equipment-observing-site-setup/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 15 — Equipment & observing-site setup
 
 **Goal:** register optical hardware (cameras, telescopes, optical trains,

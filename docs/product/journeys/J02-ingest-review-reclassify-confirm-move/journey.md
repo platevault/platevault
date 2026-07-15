@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J02-ingest-review-reclassify-confirm-move/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 2 — Ingest → review/reclassify → confirm (move mode)
 
 **Goal:** take files sitting in an inbox drop folder (unorganized) and get

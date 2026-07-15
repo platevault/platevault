@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J13-audit-activity-investigation/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 13 — Audit & activity investigation: "what happened to my files?"
 
 **Goal:** reconstruct what PlateVault did (or refused to do) after an

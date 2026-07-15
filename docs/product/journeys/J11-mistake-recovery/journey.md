@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J11-mistake-recovery/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 11 — Mistake recovery: undo a wrong classification or assignment
 
 **Goal:** recover from the user's own mistakes without data archaeology: a

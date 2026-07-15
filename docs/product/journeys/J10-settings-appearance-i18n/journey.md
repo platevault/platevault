@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J10-settings-appearance-i18n/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 10 — Settings, appearance, and i18n
 
 **Goal:** configure the app's look and feel, per-library behavior defaults,

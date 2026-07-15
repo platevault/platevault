@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J09-targets-planning/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 9 — Targets & planning (what's real today vs. 044/047-pending)
 
 **Goal:** browse the target catalog, resolve new targets against SIMBAD, and

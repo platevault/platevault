@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J04-sessions-review-derived/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 4 — Sessions review (derived groupings, live membership)
 
 **Goal:** see acquisition sessions (a night's worth of a target/filter
