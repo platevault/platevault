@@ -1351,6 +1351,7 @@ mod tests {
     /// second call must not silently re-derive from the on-disk header (which
     /// still says the pre-override, unmapped IMAGETYP) and lose the override.
     #[tokio::test]
+    #[allow(clippy::too_many_lines)] // real-pipeline regression test: scan/classify/reclassify/classify
     async fn v2_reclassify_resplit_subitem_classify_stays_single_type() {
         let root = tempfile::tempdir().unwrap();
         // "Frame Unknown" is not a mapped IMAGETYP (classify.rs:
