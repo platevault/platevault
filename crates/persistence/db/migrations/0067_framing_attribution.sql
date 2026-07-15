@@ -1,7 +1,8 @@
 PRAGMA foreign_keys = ON;
 
--- Migration 0066: Inbox-confirm attribution apply-path (spec 008 Q27,
--- F-Framing-10, FR-022).
+-- Migration 0067: Inbox-confirm attribution apply-path (spec 008 Q27,
+-- F-Framing-10, FR-022). Renumbered from 0066 (claim-next-free collision
+-- with main's 0066_session_notes.sql, PR #891 — precedent PR #317).
 --
 -- `plans.chosen_framing_id` carries the user's attribution pick from an
 -- `inbox.confirm` request through to plan-apply time: the target framing (or

@@ -32,7 +32,7 @@
 //! ## Apply-path session binding
 //!
 //! A chosen attribution's target framing is recorded on the plan
-//! (`plans.chosen_framing_id`, migration 0066) rather than applied to a
+//! (`plans.chosen_framing_id`, migration 0067) rather than applied to a
 //! session immediately — no session exists yet. `ingest_sessions` reads it
 //! back once the real session is created and adds the membership then
 //! (F-Framing-10).
