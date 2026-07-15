@@ -163,10 +163,15 @@ export function CommandPalette() {
     };
   }, []);
 
-  // Load the full target catalog on mount so target matches (#581) are
-  // available client-side the moment the user types — mirrors the devMode
-  // load above; matches TargetsPage's own load-full-list-on-mount pattern.
+  // Load the full target catalog when the palette opens (#581) so client-side
+  // matches are ready by the time the user types. Deferred to open (not
+  // mount) because CommandPalette lives in Shell — a mount-time fetch would
+  // pull the whole catalog on every app boot even if the palette is never
+  // used, and would go stale for targets added mid-session. Refetching per
+  // open keeps the list fresh; it is a local SQLite read and races only the
+  // 200ms search debounce below.
   useEffect(() => {
+    if (!open) return;
     let cancelled = false;
     commands
       .targetList()
@@ -180,7 +185,7 @@ export function CommandPalette() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [open]);
 
   // ⌘/Ctrl+K toggles the palette. `$mod` resolves to Cmd on macOS, Ctrl
   // elsewhere — matching the prior `metaKey || ctrlKey` check. We opt out of the
