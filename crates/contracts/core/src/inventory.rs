@@ -129,6 +129,13 @@ pub struct InventorySession {
     pub provenance: Option<InventoryProvenanceSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linked: Option<InventoryLinkedRefs>,
+    /// The session's frame folder, relative to its source root
+    /// (`source_id`'s `current_path`). The reveal action joins the root path
+    /// with this so it opens the session's actual frame folder instead of the
+    /// library root (#567). `None` when no frame `file_record` resolves a
+    /// path (legacy/unscanned sessions) — the UI then falls back to the root.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relative_path: Option<String>,
     /// User-editable free-text notes (#773). `None` when never set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,

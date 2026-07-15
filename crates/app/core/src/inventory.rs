@@ -37,6 +37,7 @@ use persistence_db::repositories::inventory::{
     list_roots_with_sessions, list_sessions_for_root, set_session_notes, InventoryFilters,
     SessionCalibrationLinkRow, SessionProjectionRow,
 };
+use persistence_db::repositories::q_core::file_records_by_ids;
 use sqlx::SqlitePool;
 
 /// Maximum UTF-8 byte length for a session note (mirrors
@@ -93,12 +94,21 @@ pub async fn list(
         // Build a map: session_id → Vec<SessionCalibrationMatch> (#772).
         let mut cal_map: HashMap<String, Vec<SessionCalibrationMatch>> = HashMap::new();
         for link in calibration_links {
-            cal_map.entry(link.session_id.clone()).or_default().push(calibration_link_to_match(link));
+            cal_map
+                .entry(link.session_id.clone())
+                .or_default()
+                .push(calibration_link_to_match(link));
         }
+
+        // Build a map: session_id → relative frame folder (#567). A session's
+        // frames live under one folder; the reveal action joins the root path
+        // with this so it opens that folder rather than the library root.
+        // Batch-load the first frame of every session in one query (no N+1).
+        let folder_map = build_folder_map(pool, &sessions).await?;
 
         let inventory_sessions: Vec<InventorySession> = sessions
             .into_iter()
-            .map(|row| project_row_to_session(row, &proj_map, &cal_map))
+            .map(|row| project_row_to_session(row, &proj_map, &cal_map, &folder_map))
             .collect();
 
         sources.push(InventorySource {
@@ -166,6 +176,49 @@ fn count_frames(frame_ids_json: &str) -> u32 {
         .map_or(0, |v| u32::try_from(v.len()).unwrap_or(0))
 }
 
+/// First frame id in a session's `frame_ids` JSON array, if any.
+fn first_frame_id(frame_ids_json: &str) -> Option<String> {
+    serde_json::from_str::<Vec<String>>(frame_ids_json).ok()?.into_iter().next()
+}
+
+/// Parent folder of a root-relative frame path, or `None` when the frame sits
+/// directly at the root (no separator). Handles both `/` and `\` so a
+/// Windows-captured relative path resolves the same as a POSIX one.
+fn frame_folder(relative_path: &str) -> Option<String> {
+    let idx = relative_path.rfind(['/', '\\'])?;
+    Some(relative_path[..idx].to_owned())
+}
+
+/// Map each session id to its relative frame folder (#567), derived from the
+/// parent folder of the session's first frame `file_record`. Sessions whose
+/// first frame resolves no `file_record`, or whose frame sits at the root,
+/// are simply absent from the map (the UI falls back to the root path).
+async fn build_folder_map(
+    pool: &SqlitePool,
+    sessions: &[SessionProjectionRow],
+) -> Result<HashMap<String, String>, String> {
+    let first_frames: Vec<(String, String)> = sessions
+        .iter()
+        .filter_map(|s| first_frame_id(&s.frame_ids).map(|fid| (s.id.clone(), fid)))
+        .collect();
+    let frame_ids: Vec<String> = first_frames.iter().map(|(_, fid)| fid.clone()).collect();
+
+    let rel_by_frame: HashMap<String, String> = file_records_by_ids(pool, &frame_ids)
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|r| (r.id, r.relative_path))
+        .collect();
+
+    let mut folder_map = HashMap::new();
+    for (session_id, fid) in first_frames {
+        if let Some(folder) = rel_by_frame.get(&fid).and_then(|rel| frame_folder(rel)) {
+            folder_map.insert(session_id, folder);
+        }
+    }
+    Ok(folder_map)
+}
+
 /// `(target, filter, binning, gain, night)`, each `None` for an absent or
 /// blank field.
 type SessionKeyFields =
@@ -186,7 +239,13 @@ fn parse_session_key_fields(key: &str) -> SessionKeyFields {
     if key.trim_start().starts_with('{') {
         let v: serde_json::Value = serde_json::from_str(key).unwrap_or(serde_json::Value::Null);
         let str_field = |k: &str| v.get(k).and_then(|x| x.as_str()).map(ToOwned::to_owned);
-        (str_field("target"), str_field("filter"), str_field("binning"), str_field("gain"), str_field("night"))
+        (
+            str_field("target"),
+            str_field("filter"),
+            str_field("binning"),
+            str_field("gain"),
+            str_field("night"),
+        )
     } else {
         let non_empty = |s: &str| if s.is_empty() { None } else { Some(s.to_owned()) };
         let mut parts = key.splitn(5, '|');
@@ -237,15 +296,22 @@ fn calibration_link_to_match(row: SessionCalibrationLinkRow) -> SessionCalibrati
     let kind = row.calibration_type.parse().unwrap_or(CalibrationKind::Dark);
     let soft_mismatches: Vec<String> =
         serde_json::from_str(&row.mismatched_dimensions).unwrap_or_default();
-    SessionCalibrationMatch { master_id: row.master_id, kind, score: row.confidence, soft_mismatches }
+    SessionCalibrationMatch {
+        master_id: row.master_id,
+        kind,
+        score: row.confidence,
+        soft_mismatches,
+    }
 }
 
 fn project_row_to_session(
     row: SessionProjectionRow,
     proj_map: &HashMap<String, Vec<(String, String)>>,
     cal_map: &HashMap<String, Vec<SessionCalibrationMatch>>,
+    folder_map: &HashMap<String, String>,
 ) -> InventorySession {
     let frames = count_frames(&row.frame_ids);
+    let relative_path = folder_map.get(&row.id).cloned();
     let name = derive_session_name(&row);
     let target = effective_target(&row);
     let frame_type = map_frame_type(&row.frame_type);
@@ -280,7 +346,11 @@ fn project_row_to_session(
     // back to the ingest date only when the key carries no night segment
     // (legacy rows / calibration sessions, which have no observing night).
     let captured_on = night.or_else(|| {
-        if row.created_at.len() >= 10 { Some(row.created_at[..10].to_owned()) } else { None }
+        if row.created_at.len() >= 10 {
+            Some(row.created_at[..10].to_owned())
+        } else {
+            None
+        }
     });
 
     // No exposure in session_key; would come from the fingerprint/provenance
@@ -305,6 +375,7 @@ fn project_row_to_session(
         captured_on,
         provenance,
         linked,
+        relative_path,
         notes: row.notes,
         calibration_matches,
     }
@@ -335,7 +406,8 @@ pub async fn update_session_notes(
     }
     let stored: Option<&str> = if trimmed.is_empty() { None } else { Some(trimmed) };
 
-    let updated = set_session_notes(pool, &req.session_id, stored).await.map_err(|e| e.to_string())?;
+    let updated =
+        set_session_notes(pool, &req.session_id, stored).await.map_err(|e| e.to_string())?;
     if !updated {
         return Err(format!("session.not_found: {}", req.session_id));
     }
@@ -423,7 +495,8 @@ mod tests {
 
     #[test]
     fn parse_session_key_fields_accepts_legacy_json_form() {
-        let (target, filter, ..) = parse_session_key_fields(r#"{"target":"NGC 7000","filter":"Ha"}"#);
+        let (target, filter, ..) =
+            parse_session_key_fields(r#"{"target":"NGC 7000","filter":"Ha"}"#);
         assert_eq!(target.as_deref(), Some("NGC 7000"));
         assert_eq!(filter.as_deref(), Some("Ha"));
     }
@@ -448,8 +521,8 @@ mod tests {
         let db = setup().await;
         let pool = db.pool();
         sqlx::query(
-            "INSERT INTO library_root (id, kind, current_path, state) \
-             VALUES ('root-1', 'local', '/lib', 'active')",
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-1', 'Lib', 'local', '/lib', 'active', '2026-07-14T00:00:00Z')",
         )
         .execute(pool)
         .await
@@ -479,8 +552,8 @@ mod tests {
         let db = setup().await;
         let pool = db.pool();
         sqlx::query(
-            "INSERT INTO library_root (id, kind, current_path, state) \
-             VALUES ('root-2', 'local', '/lib', 'active')",
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-2', 'Lib', 'local', '/lib', 'active', '2026-07-14T00:00:00Z')",
         )
         .execute(pool)
         .await
@@ -517,8 +590,8 @@ mod tests {
         let db = setup().await;
         let pool = db.pool();
         sqlx::query(
-            "INSERT INTO library_root (id, kind, current_path, state) \
-             VALUES ('root-3', 'local', '/lib', 'active')",
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-3', 'Lib', 'local', '/lib', 'active', '2026-07-14T00:00:00Z')",
         )
         .execute(pool)
         .await
@@ -536,6 +609,47 @@ mod tests {
         let session = &sources[0].sessions[0];
         assert!(session.calibration_matches.is_empty());
         assert!(session.notes.is_none());
+    }
+
+    #[tokio::test]
+    async fn list_resolves_relative_frame_folder_from_first_frame() {
+        let db = setup().await;
+        let pool = db.pool();
+        sqlx::query(
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-rp', 'Lib', 'local', '/lib', 'active', '2026-07-14T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO file_record \
+                (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at) \
+             VALUES ('f1', 'root-rp', 'M 51/2025-05-03/light_001.fits', 100, '2026-07-14T00:00:00Z', \
+                     'observed', '2026-07-14T00:00:00Z', '2026-07-14T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, root_id, frame_ids, created_at) \
+             VALUES ('acq-rp', 'M 51|L|1x1|100|2025-05-03', 'root-rp', '[\"f1\"]', \
+                     '2026-07-14T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let sources = list(pool, None).await.unwrap();
+        let session = &sources[0].sessions[0];
+        assert_eq!(session.relative_path.as_deref(), Some("M 51/2025-05-03"));
+    }
+
+    #[test]
+    fn frame_folder_derives_parent_and_handles_root_level() {
+        assert_eq!(frame_folder("a/b/c.fits").as_deref(), Some("a/b"));
+        assert_eq!(frame_folder("a\\b\\c.fits").as_deref(), Some("a\\b"));
+        assert!(frame_folder("c.fits").is_none());
     }
 
     // ── update_session_notes (#773) ───────────────────────────────────────────
@@ -573,7 +687,10 @@ mod tests {
         .await
         .unwrap();
 
-        let req = SessionNotesUpdateRequest { session_id: "acq-clear".to_owned(), notes: "   ".to_owned() };
+        let req = SessionNotesUpdateRequest {
+            session_id: "acq-clear".to_owned(),
+            notes: "   ".to_owned(),
+        };
         let result = update_session_notes(pool, &req).await.unwrap();
         assert!(result.notes.is_none());
     }
@@ -582,7 +699,10 @@ mod tests {
     async fn update_session_notes_unknown_session_errors() {
         let db = setup().await;
         let pool = db.pool();
-        let req = SessionNotesUpdateRequest { session_id: "no-such-id".to_owned(), notes: "x".to_owned() };
+        let req = SessionNotesUpdateRequest {
+            session_id: "no-such-id".to_owned(),
+            notes: "x".to_owned(),
+        };
         let err = update_session_notes(pool, &req).await.unwrap_err();
         assert!(err.starts_with("session.not_found:"), "got: {err}");
     }
