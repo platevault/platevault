@@ -349,6 +349,62 @@ pub async fn list_projects(pool: &SqlitePool) -> DbResult<Vec<ProjectRow>> {
         .collect())
 }
 
+/// List every project whose `canonical_target_id` matches (spec 008 Q27,
+/// F-Framing-5 attribution — the `flag_optic_difference` candidate detection:
+/// same target, different optic-train).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_projects_by_canonical_target_id(
+    pool: &SqlitePool,
+    canonical_target_id: &str,
+) -> DbResult<Vec<ProjectRow>> {
+    let rows: Vec<ProjectRowTuple> = sqlx::query_as(
+        "SELECT id, name, tool, lifecycle, path, notes, channel_drift, created_at, updated_at,
+                blocked_reason_kind, blocked_reason_note, is_mosaic
+         FROM projects WHERE canonical_target_id = ? ORDER BY updated_at DESC",
+    )
+    .bind(canonical_target_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(
+                id,
+                name,
+                tool,
+                lifecycle,
+                path,
+                notes,
+                channel_drift,
+                created_at,
+                updated_at,
+                blocked_reason_kind,
+                blocked_reason_note,
+                is_mosaic,
+            )| {
+                ProjectRow {
+                    id,
+                    name,
+                    tool,
+                    lifecycle,
+                    path,
+                    notes,
+                    channel_drift: channel_drift != 0,
+                    created_at,
+                    updated_at,
+                    blocked_reason_kind,
+                    blocked_reason_note,
+                    is_mosaic: is_mosaic != 0,
+                }
+            },
+        )
+        .collect())
+}
+
 /// Check whether a project with the given name already exists (excluding a
 /// specific id — used by update to allow rename to same value).
 ///
@@ -1023,6 +1079,49 @@ mod tests {
         assert_eq!(row.tool, "PixInsight");
         assert_eq!(row.lifecycle, "setup_incomplete");
         assert!(!row.channel_drift);
+    }
+
+    // ── list_projects_by_canonical_target_id (F-Framing-5) ────────────────────
+
+    async fn seed_canonical_target(pool: &SqlitePool, id: &str) {
+        sqlx::query(
+            "INSERT INTO canonical_target
+                (id, simbad_oid, primary_designation, object_type, ra_deg, dec_deg, source, resolved_at)
+             VALUES (?, NULL, 'M 31', 'galaxy', 10.68, 41.27, 'resolved', '2026-01-01T00:00:00Z')",
+        )
+        .bind(id)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn list_projects_by_canonical_target_id_returns_only_matching() {
+        let db = setup().await;
+        seed_canonical_target(db.pool(), "target-1").await;
+        seed_canonical_target(db.pool(), "target-2").await;
+        insert_project(
+            db.pool(),
+            &InsertProject { canonical_target_id: Some("target-1"), ..project_a("p1") },
+        )
+        .await
+        .unwrap();
+        insert_project(
+            db.pool(),
+            &InsertProject {
+                id: "p2",
+                name: "M31 LRGB",
+                path: "projects/p2",
+                canonical_target_id: Some("target-2"),
+                ..project_a("p2")
+            },
+        )
+        .await
+        .unwrap();
+
+        let rows = list_projects_by_canonical_target_id(db.pool(), "target-1").await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "p1");
     }
 
     #[tokio::test]
