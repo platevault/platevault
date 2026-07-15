@@ -8,7 +8,7 @@ actors: [astrophotographer]
 surfaces: [targets, projects]
 interfaces: [desktop-ui]
 trace:
-  - docs/product/journeys/J14-target-first-project-start/journey.md @ 66026463
+  - pre-migration journey.md @ git 66026463
   - deltas/2026-07-14-q27-f4.md (evidence reviewed, not folded — see Δ/gap notes)
   - spec-008 (project create/onboard/edit), spec-035 (SIMBAD target resolution & canonical_target_id)
   - github: nightwatch-astro/alm#612, nightwatch-astro/alm#719
@@ -77,11 +77,18 @@ the link survives creation, renaming, and navigating away and back.
 
 ### S5 — Optional calibration mapping {#S5}
 - **Do:** Map available flats/darks/bias to the selected sources.
-- **Expect:** The mappings appear in the review-step summary.
-- **Expect (negative):** These mappings are not sent to the backend on
-  create — the create request carries only name/tool/path/sources/notes, so
-  anything mapped here is silently discarded.
-- **Trace:** #719
+- **Expect (negative):** The "available" flats/darks/bias offered are
+  hardcoded fixture rows (`MOCK_FLAT_ROWS`/`SHARED_ROWS` in
+  `StepCalibration.tsx`), not real calibration-matching results for the
+  sessions selected at S4 — the same Ha/OIII rows, master ids, and scores
+  render regardless of what was actually selected. Whatever the user picks
+  here also does not appear in the review-step summary —
+  `StepReview.tsx` renders a hardcoded fixture plan (`NGC7000_HOO/…`) that
+  ignores its `wizardState` prop entirely — and is not sent to the backend on
+  create; the create request carries only name/tool/path/sources/notes, so
+  anything mapped here is silently discarded at both display and
+  persistence.
+- **Trace:** #719, #327, #599
 
 ### S6 — Review and create {#S6}
 - **Do:** Review the summary panel and click Create.
