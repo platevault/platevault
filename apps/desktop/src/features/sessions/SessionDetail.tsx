@@ -289,9 +289,13 @@ export function SessionDetail({
         <CalibrationLinkage matches={session.calibrationMatches ?? []} />
       </Section>
 
-      {/* Post-hoc notes (#773): debounced-autosave free-text editor. */}
+      {/* Post-hoc notes (#773): debounced-autosave free-text editor.
+          key: one instance (draft + debouncer) per session — required by
+          SessionNotesSection's contract so a pending save can never be
+          flushed against a different session (cross-session lost write). */}
       <Section title={m.sessions_notes_heading()} defaultOpen>
         <SessionNotesSection
+          key={session.id}
           sessionId={session.id}
           initialContent={session.notes ?? null}
         />

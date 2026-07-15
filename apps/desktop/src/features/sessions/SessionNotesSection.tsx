@@ -23,6 +23,14 @@ import { MAX_NOTE_BYTES, NOTE_DEBOUNCE_MS, noteByteLength } from '@/lib/notes';
 import { saveSessionNote } from './store';
 
 export interface SessionNotesSectionProps {
+  /**
+   * MUST also be passed as the React `key` by the caller. The debounced-save
+   * closure captures this id, so a single instance re-targeted to another
+   * session would flush a pending save against the wrong session (cross-
+   * session lost write). Keyed remount gives every session its own instance,
+   * debouncer, and draft — the closure id can never diverge from the session
+   * being edited — and naturally reseeds the draft on selection change.
+   */
   sessionId: string;
   /** Persisted notes from the inventory projection (`null` when never set). */
   initialContent: string | null;
@@ -37,43 +45,42 @@ export function SessionNotesSection({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Reseed the draft only when the selected session changes — NOT when
-  // `initialContent` changes, so the post-save inventory refetch (which
-  // updates the prop to the value we just saved) never clobbers in-progress
-  // typing. Render-phase reset per the React "adjust state on prop change"
-  // guidance, keyed on the session id.
-  const [seededFor, setSeededFor] = useState(sessionId);
-  if (seededFor !== sessionId) {
-    setSeededFor(sessionId);
-    setDraft(initialContent ?? '');
-    setSaved(false);
-  }
-
   const byteCount = noteByteLength(draft);
   const overLimit = byteCount > MAX_NOTE_BYTES;
   const nearLimit = byteCount > MAX_NOTE_BYTES * 0.9;
 
-  const triggerSave = useDebouncedCallback((content: string) => {
-    // Client guard: never send content the backend would reject on its byte
-    // cap — the counter already shows why nothing is being saved.
-    if (noteByteLength(content) > MAX_NOTE_BYTES) return;
-    void (async () => {
-      setSaving(true);
-      try {
-        await saveSessionNote(sessionId, content);
-        setSaved(true);
-        // Persistence across navigation: refresh the cached inventory so a
-        // later remount seeds the editor from the saved value (#773).
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.inventory.all(),
-        });
-      } catch {
-        addToast({ message: m.sessions_notes_save_failed(), variant: 'error' });
-      } finally {
-        setSaving(false);
-      }
-    })();
-  }, NOTE_DEBOUNCE_MS);
+  const triggerSave = useDebouncedCallback(
+    (content: string) => {
+      // Client guard: never send content the backend would reject on its byte
+      // cap — the counter already shows why nothing is being saved.
+      if (noteByteLength(content) > MAX_NOTE_BYTES) return;
+      void (async () => {
+        setSaving(true);
+        try {
+          await saveSessionNote(sessionId, content);
+          setSaved(true);
+          // Persistence across navigation: refresh the cached inventory so a
+          // later remount seeds the editor from the saved value (#773).
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.inventory.all(),
+          });
+        } catch {
+          addToast({
+            message: m.sessions_notes_save_failed(),
+            variant: 'error',
+          });
+        } finally {
+          setSaving(false);
+        }
+      })();
+    },
+    NOTE_DEBOUNCE_MS,
+    // flushOnExit: a save still pending when this instance unmounts (user
+    // switched sessions before the debounce fired) is flushed immediately —
+    // to THIS session, per the keyed-remount contract above — instead of
+    // being silently dropped.
+    { flushOnExit: true },
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
