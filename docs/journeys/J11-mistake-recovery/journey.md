@@ -2,13 +2,16 @@
 id: J11
 title: Correct an inbox or calibration mistake before it becomes permanent
 version: 1
-status: active
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
-surfaces: [inbox, calibration]
+surfaces: [inbox-confirm, calibration]
 interfaces: [desktop-ui]
 trace:
-  - docs/product/journeys/J11-mistake-recovery/journey.md @ 66026463
+  - pre-migration journey.md @ git 66026463
+  - docs/development/journey-run-2026-07-14.md (Journey 11 section)
+  - issue #611 (Bulk frame-type override has no heterogeneity warning and no undo, open)
+  - issue #664 (calibration.match.suggest observer_location_missing leak/gate, open)
   - crates/app/inbox/src/reclassify.rs
   - crates/persistence/db/src/repositories/inbox.rs
   - crates/app/core/src/inbox_plan.rs
@@ -59,8 +62,14 @@ mistake — no orphaned plan, no leftover file, no stuck classification.
   the selection and bulk-input fields clear on success; the remaining
   needs-review count drops by the number of files that received a frame
   type.
-- **Expect (negative):** files not in the selection are unaffected.
-- **Trace:** `apps/desktop/src/features/inbox/InboxDetail.tsx` (`handleBulkApply`).
+- **Expect (negative):** files not in the selection are unaffected. Today the
+  submission itself carries no safety check: if the selection actually spans
+  differing true frame types (the scanner failed to detect a type for any of
+  them, so nothing prevents a user from multi-selecting, say, both bias and
+  dark files together), the bulk override is accepted and persisted with no
+  warning and no way to undo it short of resubmitting a correct value per
+  file — see G3.
+- **Trace:** `apps/desktop/src/features/inbox/InboxDetail.tsx` (`handleBulkApply`); issue #611 (open, "Bulk frame-type override has no heterogeneity warning and no undo").
 
 ### S3 — Reclassification is refused while a plan is open on the item {#S3}
 - **Do:** with an open (confirmed, unapplied) plan linked to an item, attempt
@@ -107,7 +116,7 @@ mistake — no orphaned plan, no leftover file, no stuck classification.
   accordingly; an audit event records the new assignment.
 - **Expect (negative):** assigning a replacement master never mutates or
   moves any file; only the assignment link changes.
-- **Trace:** `crates/calibration/*/src/assign.rs`; `crates/persistence/db/src/repositories/calibration_assignment.rs` (`ON CONFLICT(session_id, calibration_type)`); `apps/desktop/src/features/calibration/MatchCandidatesPanel.tsx`.
+- **Trace:** `crates/calibration/*/src/assign.rs`; `crates/app/calibration/src/matching.rs` (orchestration + audit emission); `crates/persistence/db/src/repositories/calibration_assignment.rs` (`ON CONFLICT(session_id, calibration_type)`); `apps/desktop/src/features/calibration/MatchCandidatesPanel.tsx`.
 
 ## Success criteria
 - SC1: after S1/S2, the file's/selection's classification matches only the
@@ -122,27 +131,9 @@ mistake — no orphaned plan, no leftover file, no stuck classification.
   calibration type) pair, and it is the newly assigned master.
 
 ## Known gaps
-- G1: there is no "reset to detected" action anywhere in the reclassify
-  path — `set_overrides`/`set_manual_override` only ever write a new
-  override value (`COALESCE(?, manual_override)`); no code path sets
-  `manual_override` back to `NULL`. This is moot for the S1/S2 scenario
-  (needs-review files carry no scanner-detected value to fall back to), but
-  means a file the scanner *did* successfully classify has no UI path to
-  correct it at all — reclassify's per-file/bulk override controls are
-  wired only for the needs-review table
-  (`apps/desktop/src/features/inbox/InboxDetail.tsx`), not for already
-  `single_type` items, even though the backend's `reclassify_v2` accepts a
-  `frameType` correction for any file (`crates/app/inbox/src/reclassify.rs`).
-- G2: there is no calibration-master "un-assign" action — only reassignment
-  (replacing one master with another for the same session + calibration
-  type) is possible. A user who wants a session to have *no* assigned
-  master for a type again has no path to that state.
-- G3: the legacy pre-migration doc described a "heterogeneous bulk override"
-  warning gate (bulk-assigning across files with *differing already-detected*
-  types) that does not exist in the current model — mixed-type folders are
-  split into single-type sub-items at ingest (spec 041), and the override
-  table only ever holds files with no detected type, so no such conflict can
-  arise today.
+- G1: (dissolved 2026-07-15) — tracked as issue #611; no reset-to-detected action in reclassify.
+- G2: (dissolved 2026-07-15) — tracked as issue #875; no master un-assign.
+- G3: (dissolved 2026-07-15) — tracked as issue #611; bulk override has no heterogeneity warning.
 
 ## Delta log
 (none — first migrated version)

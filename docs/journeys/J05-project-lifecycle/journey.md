@@ -2,13 +2,13 @@
 id: J05
 title: Run a project from creation through tool launch and output tracking
 version: 1
-status: active
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [projects, plans, audit]
 interfaces: [desktop-ui]
 trace:
-  - docs/product/journeys/J05-project-lifecycle/journey.md @ 66026463
+  - pre-migration journey.md @ git 66026463
   - e2e-agentic-test/008-project-create-onboard-edit/*
   - e2e-agentic-test/024-project-manifests-and-notes/manifests-notes-reveal-labels/scenario.md
   - e2e-agentic-test/011-processing-tool-launch/tool-launch-containment/scenario.md
@@ -41,8 +41,10 @@ safe-by-construction or was explicitly reviewed.
 ### S1 — Create the project {#S1}
 - **Do:** Open the project creation flow, enter a name, optionally choose a
   processing-tool profile, and proceed to create.
-- **Expect:** On success, a confirmation names the created project and
-  navigates into it; the project's on-disk folder structure (e.g. `lights/`,
+- **Expect:** On success, a toast names the created project and its folder
+  outcome (folders created / folder creation failed / plan pending review);
+  the user returns to the projects list (the created project is not
+  auto-selected). The project's on-disk folder structure (e.g. `lights/`,
   `darks/`, `flats/`) is created automatically inside the user's registered
   project library root, never elsewhere.
 - **Expect (negative):** Entering a name that collides with an existing
@@ -53,7 +55,7 @@ safe-by-construction or was explicitly reviewed.
   folder should go, creation still succeeds for the project record, but the
   user is told which folder could not be created and that plan step remains
   available for review rather than being silently dropped.
-- **Trace:** e2e-agentic-test/008-.../create-wizard-field-errors/scenario.md; e2e-agentic-test/008-.../project-mkdir-auto-apply/scenario.md; e2e-agentic-test/008-.../project-path-root-anchoring/scenario.md
+- **Trace:** e2e-agentic-test/008-.../create-wizard-field-errors/scenario.md; e2e-agentic-test/008-.../project-mkdir-auto-apply/scenario.md; e2e-agentic-test/008-.../project-path-root-anchoring/scenario.md; correction — navigation target verified against `apps/desktop/src/features/projects/wizard/WizardPage.tsx` (`handleCreate` calls `navigate({ to: '/projects' })` with no `selected` search param) and `WizardPage.test.tsx` ("shows success toast and navigates to /projects after successful create"); duplicate-name-at-submit verified against the same `handleCreate` (`findDuplicateProjectName` runs inside `handleCreate`, not on keystroke), consistent with `docs/product/journeys/J05-project-lifecycle/deltas/2026-07-14-jval-docdrift.md`
 
 ### S2 — Attach sources {#S2}
 - **Do:** From the project's edit view, add sources from a picker and, when
@@ -117,8 +119,9 @@ safe-by-construction or was explicitly reviewed.
 - **Trace:** e2e-agentic-test/012-processing-artifact-observation/artifact-attribution/scenario.md
 
 ## Success criteria
-- SC1: Creating a project with a valid, unique name results in a selected
-  project whose registered-root folders exist on disk (S1).
+- SC1: Creating a project with a valid, unique name results in the project
+  appearing in the projects list with its registered-root folders existing
+  on disk (S1).
 - SC2: A duplicate name (any casing) never creates a project or folders;
   the rejection is surfaced at the name field on submit, not as a generic
   toast (S1).
@@ -137,11 +140,7 @@ safe-by-construction or was explicitly reviewed.
 ## Known gaps
 - G1: Rejecting an unconfirmed session as a project source is enforced by
   the backend but has no dedicated UI path to trigger it today (carried
-  from legacy doc).
-- G2: The flagship `CreateProjectDialog` component (polished per-field
-  error mapping) is built and tested but not mounted by the router — the
-  real `/projects/new` flow goes through the step wizard (`WizardPage`)
-  instead. This is a product decision, not a defect, but affects where to
-  look for the "other" creation UI (carried from legacy doc).
+  from legacy doc). (accepted by user, 2026-07-15)
+- G2: (dissolved 2026-07-15) — tracked as issue #887 (also #719); dialog-vs-wizard design review.
 
 ## Delta log

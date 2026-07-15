@@ -2,12 +2,12 @@
 id: J15
 title: Register owned equipment and observing sites in Settings
 version: 1
-status: active
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [equipment, observing-sites]
 interfaces: [desktop-ui]
-trace: [J15 pre-migration journey.md @66026463, deltas/2026-07-14-q15-t124.md, PR#826 (0cdc81cc), spec-030 T017/T018, spec-044 Track B US3/US6, spec-047 T015]
+trace: [docs/product/journeys/J15-equipment-observing-site-setup/journey.md @42c596d6, deltas/2026-07-14-q15-t124.md, PR#826 (0cdc81cc), spec-030 T017/T018, spec-044 Track B US3/US6, spec-047 T015, docs/development/journey-run-2026-07-14.md (Journey 15 section, run @7e522c16)]
 ---
 
 ## Goal
@@ -60,6 +60,9 @@ imaging time) reflects a real location instead of the no-site placeholder.
   train with no camera or telescope linked is accepted.
 - **Expect (negative):** Saving without a numeric focal length is rejected
   inline — no train row is created.
+- **Trace:** issue-835 — a train with neither camera nor telescope linked
+  saves successfully today; the pre-migration doc's "train requires its
+  parts" is not implemented (client or server side) as of this writing.
 
 ### S4 — Adjust the filter list {#S4}
 - **Do:** Edit or remove one of the seeded filters (Ha, SII, OIII, NII, L,
@@ -84,6 +87,10 @@ imaging time) reflects a real location instead of the no-site placeholder.
   optical train cannot be removed — the pane blocks the attempt with an
   "in use" message before any delete request reaches the backend, and the
   referenced record is never deleted or left orphaned.
+- **Trace:** PR#826 (0cdc81cc) — equipment CRUD previously wrote no audit
+  row at all; `crates/app/calibration/src/equipment.rs` write_equipment_audit
+  now covers create/update/delete on all four entity types, applied and
+  refused.
 
 ### S6 — Open Settings → Target Planner and add an observing site {#S6}
 - **Do:** From Settings, open the Target Planner pane; add an observing
@@ -96,6 +103,9 @@ imaging time) reflects a real location instead of the no-site placeholder.
 - **Expect (negative):** Latitude outside ±90°, longitude outside ±180°,
   a non-numeric elevation, or a minimum horizon altitude outside 0–90° is
   each rejected inline — no site is saved.
+- **Trace:** spec-044 Track B US6 T016 (first-site default+active),
+  `apps/desktop/src/features/targets/observing-sites/ObservingSites.tsx`
+  handleSubmit (range validation, first-site pointer assignment).
 
 ### S7 — Add a second site and switch the active one {#S7}
 - **Do:** Add another site; mark it Active (or Default).
@@ -107,6 +117,10 @@ imaging time) reflects a real location instead of the no-site placeholder.
 - **Expect (negative):** Switching the pointer does not alter the
   previous active/default site's own coordinates, timezone, or other
   fields — only the pointer moves.
+- **Trace:** spec-044 Track B US3 T022 (active-site switch recomputes
+  observability via `useActiveSite()`/`useObservingState()` subscribers);
+  issue-839 notes the planner surfaces the recomputed *values* but never
+  names which site is active (out of scope for this Expect, see report).
 
 ### S8 — Remove a site {#S8}
 - **Do:** Remove the currently active (or default) site.
@@ -115,17 +129,32 @@ imaging time) reflects a real location instead of the no-site placeholder.
   no-site state.
 - **Expect (negative):** The deletion never leaves Default or Active
   pointing at a site id that no longer exists.
+- **Trace:** spec-044 Track B US3 T020; `ObservingSites.tsx`
+  handleConfirmDelete (reassigns default/active to `remaining[0]` or
+  `null`). issue-840: this auto-fallback is disclosed in the confirm-dialog
+  copy but never offers the user an explicit choice among remaining sites
+  — the pre-migration doc's "forces an explicit fallback choice" is not
+  implemented; today's behavior is the automatic reassignment described
+  above.
 
 ### S9 — Tune per-band moon-avoidance guidance {#S9}
 - **Do:** In the same Target Planner pane, edit the distance/width values
   for one or more of the seven fixed bands (L, R, G, B, Ha, SII, OIII);
-  use Restore Defaults.
-- **Expect:** Each edited cell persists independently on blur/Enter and
-  immediately changes the planner's per-band guidance; Restore Defaults
-  states which values it resets before confirming.
+  use Restore Defaults; reload the app and revisit the pane.
+- **Expect:** Each edited cell commits on blur/Enter with no inline
+  validation error for an in-range value, and the planner's per-band
+  guidance reflects the new value for the remainder of the running
+  session.
 - **Expect (negative):** This table's bands are fixed and independent of
   the Filters registered in S4 — renaming or removing a registered Filter
   has no effect on this table's rows or values (see G3).
+- **Expect (negative):** An edited cell does not currently survive an app
+  reload — it reverts to the shipped default on revisit — and the Restore
+  Defaults control gives no indication of its scope (no tooltip, label, or
+  confirmation naming what it resets) before firing.
+- **Trace:** issue-836 (edits revert on reload), issue-837 (Restore
+  Defaults scope unstated), docs/development/journey-run-2026-07-14.md
+  Journey 15 section.
 
 ## Success criteria
 
@@ -144,34 +173,23 @@ imaging time) reflects a real location instead of the no-site placeholder.
   both pointers resolve to a remaining site or the no-site state — never
   to a nonexistent id — across single-delete and delete-to-zero cases
   (S8).
-- SC5: All seven moon-avoidance bands' distance/width values persist
-  across a Settings pane revisit, and Restore Defaults returns all seven
-  to the shipped values (S9).
+- SC5: All seven moon-avoidance bands' distance/width values commit
+  on-blur without a validation error and drive the planner's guidance for
+  the remainder of the session (S9); persistence across a pane revisit
+  after reload, and Restore Defaults stating its scope, are currently NOT
+  met (issue-836, issue-837 — candidate Known gap, pending user
+  confirmation).
 
 ## Known gaps
 
-- G1: Registered camera/telescope/optical-train/filter data is not
-  consumed anywhere else in the product today. Sessions inventory rows
-  hardcode `camera: None` (`crates/app/core/src/inventory.rs:243`);
-  calibration match candidates display the raw fingerprint string, not a
-  resolved equipment name (`crates/app/calibration/src/matching.rs:737,792`);
-  the alias-based auto-detect helpers `find_or_create_camera_by_alias` /
-  `find_or_create_telescope_by_alias` (`crates/app/calibration/src/equipment.rs`)
-  have no caller anywhere in the ingest pipeline; and the Target Planner's
-  astronomy code never reads camera/telescope/optical-train data.
-  Registering equipment today builds a named, audited inventory in
-  Settings — it does not yet drive friendly names or matching elsewhere,
-  contrary to the pre-migration doc's description. Out of scope for this
-  journey until that wiring ships.
-- G2: Only `filters.name` has a database uniqueness constraint
-  (`crates/persistence/db/migrations/0007_equipment.sql:49`); cameras,
-  telescopes, optical trains, and observing sites accept duplicate names
-  silently — no client or server check exists for them.
+- G1: (dissolved 2026-07-15) — tracked as issue #879; registered equipment not consumed elsewhere.
+- G2: (dissolved 2026-07-15) — tracked as issue #659; no duplicate-name check for most equipment.
 - G3: The Equipment → Filters category (narrowband/broadband/dual-band/
   other/custom, per registered filter) is not read by the per-band
   moon-avoidance table; that table's seven bands (L/R/G/B/Ha/SII/OIII,
   `apps/desktop/src/features/targets/astro/moon-avoidance.ts`) are a fixed
   built-in taxonomy, unrelated to the user's registered filter list.
+  (accepted by user, 2026-07-15)
 
 ## Delta log
 

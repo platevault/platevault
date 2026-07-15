@@ -187,6 +187,15 @@ const RECOMMENDATION_FILTER_OPTIONS = (): FilterOption[] => [
   { value: 'unknown', label: recommendationLabel('unknown') },
 ];
 
+/**
+ * Progressive-reveal chunk size for the Planner catalogue load (#573). See
+ * the `revealCount` effects below for why: TargetsTable's per-row astronomy
+ * pass over the WHOLE catalogue synchronously on first render froze the app,
+ * so `TargetsPage` grows what it feeds TargetsTable in chunks of this size
+ * instead of handing over the full (possibly ~13k-row) set at once.
+ */
+const REVEAL_CHUNK = 300;
+
 export function TargetsPage() {
   const { selected } = useSearch({ from: '/shell/targets' });
   const navigate = useNavigate({ from: '/targets' });
@@ -300,6 +309,35 @@ export function TargetsPage() {
     load();
   }, [load]);
 
+  /**
+   * Progressive reveal of the Planner catalogue (#573): `commands.targetList()`
+   * IPC-loads every target at once (thousands of rows), and TargetsTable's
+   * per-row astronomy pass over the WHOLE set synchronously on first render is
+   * what froze the app on open. Capping what reaches TargetsTable to a small
+   * first chunk, then growing it in the background via `setTimeout` (a real
+   * macrotask boundary, so the browser gets to paint/handle input between
+   * chunks) keeps the page interactive immediately. TargetsTable's per-target-
+   * id row cache (see its module doc) means each growth step only pays for the
+   * newly-revealed delta, not the whole set again — so total work stays
+   * roughly linear in catalogue size instead of blocking once, all at once.
+   * Resets to the first chunk on every fresh `load()` (mount + "Add target").
+   */
+  const [revealCount, setRevealCount] = useState(REVEAL_CHUNK);
+
+  useEffect(() => {
+    if (listState.status === 'loading') setRevealCount(REVEAL_CHUNK);
+  }, [listState.status]);
+
+  useEffect(() => {
+    if (listState.status !== 'loaded') return;
+    const total = listState.items.length;
+    if (revealCount >= total) return;
+    const handle = setTimeout(() => {
+      setRevealCount((n) => Math.min(n + REVEAL_CHUNK, total));
+    }, 0);
+    return () => clearTimeout(handle);
+  }, [listState, revealCount]);
+
   const onSelect = (id: string) =>
     navigate({ search: (prev) => ({ ...prev, selected: id }) });
 
@@ -340,16 +378,33 @@ export function TargetsPage() {
   );
 
   /**
+   * #573: the "All targets" view is what the progressive reveal caps — a
+   * prefix slice of the full filtered catalogue, growing via `revealCount`.
+   * Order is the raw fetch order (not the user's chosen sort — TargetsTable
+   * sorts whatever it's given), so this only affects which rows exist during
+   * the brief initial-load window, not final correctness once fully loaded.
+   */
+  const revealedPlannerTargets = useMemo(
+    () => plannerTargets.slice(0, revealCount),
+    [plannerTargets, revealCount],
+  );
+
+  /**
    * task #18: when "My Targets" is active, filter the Planner catalog to only
    * the targets the user has starred (stored client-side via useFavourites).
    * STUB: favouriteIds comes from localStorage only until task #54 lands and
    * provides real backend "has linked sessions/projects" data.
+   *
+   * Uses the FULL `plannerTargets` (not the progressive-reveal slice, #573):
+   * favourites are a small set regardless of catalogue size, so there's no
+   * perf reason to cap it, and capping it would make a starred target
+   * transiently vanish from "My Targets" until reveal catches up to it.
    */
   const tabTargets = useMemo(() => {
-    if (myTargetsFilter !== MY_TARGETS_VALUE) return plannerTargets;
+    if (myTargetsFilter !== MY_TARGETS_VALUE) return revealedPlannerTargets;
     if (favouriteIds.size === 0) return MY_TARGETS_EMPTY;
     return plannerTargets.filter((t) => favouriteIds.has(t.id));
-  }, [myTargetsFilter, plannerTargets, favouriteIds]);
+  }, [myTargetsFilter, revealedPlannerTargets, plannerTargets, favouriteIds]);
 
   const visibleTargets = useMemo(() => {
     const q = search.trim();

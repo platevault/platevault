@@ -2,17 +2,23 @@
 id: J06
 title: Reclaim disk space from processing outputs and raw sub-frames without losing anything protected
 version: 1
-status: active
+status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [cleanup, projects, sessions, plans]
 interfaces: [desktop-ui]
 trace:
-  - docs/product/journeys/J06-cleanup-scan-review-apply/journey.md @ 66026463
+  - pre-migration journey.md @ git 66026463
   - deltas/2026-07-14-jval-docdrift.md (folded — PR #413 status verified)
+  - deltas/2026-07-14-q15-t123.md (superseded by current code — see G2)
   - spec-017 WP-E (project-level cleanup review flow)
   - spec-048 US3 (session-scoped raw sub-frame cleanup)
   - spec-025 FR-004 (destructive-confirm apply gate)
+  - docs/development/journey-run-2026-07-14.md (Journey 6 section — live-app
+    validation, build 7e522c16; project-level flow only, S5/S6 not exercised)
+  - docs/development/windows-journeys/journey-06-cleanup-scan-apply.md
+  - PR #413 (merged 2026-07-04 — scan/review/generate cleanup UI)
+  - issue #741, issue #807, issue #766, issue #780, issue #806 (all open)
 ---
 
 ## Goal
@@ -64,13 +70,23 @@ protected ever touched without an acknowledged, reviewed step.
 - **Do:** Open the review overlay that follows plan generation.
 - **Expect:** Every item in the plan is listed 1:1 with the generated plan;
   if any protected item is included, its protection must be explicitly
-  acknowledged (per item) before "Approve & apply" becomes clickable; an
-  empty plan (nothing selected) cannot be approved and the overlay states why
-  it is empty; choosing "Discard" leaves disk untouched and returns cleanly.
+  acknowledged (per item) before "Approve & apply" becomes clickable;
+  "Approve & apply" is also disabled whenever the plan holds zero items;
+  choosing "Discard" leaves disk untouched and returns cleanly.
 - **Expect (negative):** "Approve & apply" stays disabled while any protected
-  item's acknowledgement is outstanding.
-- **Trace:** `apps/desktop/src/features/plans/PlanReviewOverlay.tsx`,
-  `apps/desktop/src/features/plans/PlanProtectionGate.tsx`
+  item's acknowledgement is outstanding, or while the plan holds zero items —
+  in both cases the overlay shows no explanatory text, only the disabled
+  control (no "this plan is empty" or similar message). A zero-item plan
+  cannot actually be produced by either flow in the first place: the project
+  flow's Generate control does not render unless S1's scan found candidates,
+  and the session flow's Generate (S6) is disabled while no frame is
+  selected — so this overlay state is unreachable via the documented S1–S4 /
+  S5–S6 path; the server-side rejection is defense-in-depth only.
+- **Trace:** `apps/desktop/src/features/plans/PlanReviewOverlay.tsx:293`
+  (Approve & apply `disabled={... || plan.itemsTotal === 0}`, no message
+  rendered for that case), `crates/app/core/src/plans.rs:341-349` (server
+  rejects approving a zero-item plan with `PlanItemsEmpty`, not reachable via
+  the shipped UI), `apps/desktop/src/features/plans/PlanProtectionGate.tsx`
 
 ### S4 — Approve and apply {#S4}
 - **Do:** Click "Approve & apply" on a plan whose destination is Archive and
@@ -114,55 +130,21 @@ protected ever touched without an acknowledged, reviewed step.
   offers those items as candidates (S2–S4).
 - SC3: Any plan containing a protected item cannot reach "Approve & apply"
   enabled without an explicit per-item acknowledgement (S3).
-- SC4: An empty plan (zero candidates selected) is refused before apply, with
-  a stated reason, in both the project and session flows (S3, S6).
+- SC4: A plan can never reach an enabled "Approve & apply" with zero items:
+  the project flow's Generate control cannot exist without at least one
+  candidate (S1 gates it) and the session flow's Generate is disabled while
+  no frame is selected (S6); approving a zero-item plan is separately
+  rejected server-side as defense-in-depth. No step surfaces an explanatory
+  reason to the user for this (S1–S3, S5–S6).
 - SC5: A session raw-frame scan preselects only non-protected frames and
   offers no selection control on protected frames (S5).
 
 ## Known gaps
-- G1: Plans whose destination is System trash currently fail every item at
-  apply, unconditionally — `destructive_confirmed` (the column the apply-time
-  gate reads for `trash`/`delete` actions) has no write path anywhere in the
-  codebase, so the check can never pass. Confirmed by reading
-  `crates/fs/executor/src/run.rs:384-404` and
-  `crates/app/core/src/plan_apply.rs:680-681`. Tracked as issue #741 (open).
-  Affects both the project (S2/S4) and session (S6) flows, which share the
-  same executor.
-- G2: The review overlay's protected-item acknowledgement (S3) is cosmetic —
-  acknowledging only publishes an audit-bus event and persists no state that
-  the apply-time protection gate consults; approving and applying a plan
-  containing any protected item with a mutating action (archive/trash) fails
-  every such item unconditionally, regardless of acknowledgement. Confirmed
-  by reading `apps/desktop/src/features/plans/PlanProtectionGate.tsx:70-97`,
-  `crates/app/core/src/protection.rs:395-420`, and
-  `crates/fs/executor/src/run.rs:474-493`. Tracked as issue #807 (open).
-  Supersedes the prior belief (see deltas/2026-07-14-q15-t123.md) that
-  acknowledgement is durably audited — that claim conflicts with the current
-  code and was not folded into this body.
-- G3: Applied plans are not confirmed to produce durable `audit_log_entry`
-  rows. Issue #766 (open) demonstrates zero audit rows for a successfully
-  applied plan through the shared plan-apply/executor pipeline that cleanup
-  plans also use; not independently reproduced against a cleanup plan
-  specifically, but the mechanism is shared with S4/S6.
-- G4 (carried from legacy 2026-07-04 doc, updated): no pre-generate estimate
-  of whether a cleanup would even fit at the chosen destination is shown
-  before generating a plan (S2). A real per-item free-space check now runs at
-  apply time and fails safely with a stated reason
-  (`crates/fs/executor/src/ops/volume_check.rs`) rather than the previously
-  documented hardcoded-zero estimate — but the user still only learns of
-  insufficient destination space after attempting apply, not at generate or
-  review time.
-- G5 (project-level Outputs flow only, S1–S4): candidate accuracy after a
-  project is reopened following an out-of-app file drop may be affected by a
-  separate, documented defect (issue #780, open, filed against Journey 5) in
-  which the on-attach `processing_artifacts` reconcile is non-recursive and
-  can flip present output files to `missing` (or miss new ones). Since S1's
-  candidates are grounded in `processing_artifacts`
-  (`crates/app/core/src/cleanup_generator.rs`), this could under- or
-  over-report candidates after a reopen; not independently reproduced
-  against a cleanup scan. Does not apply to the session-scoped raw sub-frame
-  flow (S5/S6), which reads frame inventory instead of
-  `processing_artifacts`.
+- G1: (dissolved 2026-07-15) — tracked as issue #741; trash destination fails every apply item.
+- G2: (dissolved 2026-07-15) — tracked as issue #807; protected-item acknowledgement is cosmetic.
+- G3: (dissolved 2026-07-15) — tracked as issue #766; applied plans lack durable audit rows.
+- G4: (dissolved 2026-07-15) — tracked as issue #876; no free-space estimate at review.
+- G5: (dissolved 2026-07-15) — tracked as issue #780; reopen reconcile can misreport cleanup candidates.
 - Dropped: the legacy 2026-07-04 note that the cleanup review UI "requires
   PR #413 (open)" is stale — PR #413 merged 2026-07-04
   (`feat: review and safely apply project cleanup plans with live

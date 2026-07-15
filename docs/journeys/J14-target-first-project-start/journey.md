@@ -8,7 +8,7 @@ actors: [astrophotographer]
 surfaces: [targets, projects]
 interfaces: [desktop-ui]
 trace:
-  - docs/product/journeys/J14-target-first-project-start/journey.md @ 66026463
+  - pre-migration journey.md @ git 66026463
   - deltas/2026-07-14-q27-f4.md (evidence reviewed, not folded — see Δ/gap notes)
   - spec-008 (project create/onboard/edit), spec-035 (SIMBAD target resolution & canonical_target_id)
   - github: nightwatch-astro/alm#612, nightwatch-astro/alm#719
@@ -77,11 +77,18 @@ the link survives creation, renaming, and navigating away and back.
 
 ### S5 — Optional calibration mapping {#S5}
 - **Do:** Map available flats/darks/bias to the selected sources.
-- **Expect:** The mappings appear in the review-step summary.
-- **Expect (negative):** These mappings are not sent to the backend on
-  create — the create request carries only name/tool/path/sources/notes, so
-  anything mapped here is silently discarded.
-- **Trace:** #719
+- **Expect (negative):** The "available" flats/darks/bias offered are
+  hardcoded fixture rows (`MOCK_FLAT_ROWS`/`SHARED_ROWS` in
+  `StepCalibration.tsx`), not real calibration-matching results for the
+  sessions selected at S4 — the same Ha/OIII rows, master ids, and scores
+  render regardless of what was actually selected. Whatever the user picks
+  here also does not appear in the review-step summary —
+  `StepReview.tsx` renders a hardcoded fixture plan (`NGC7000_HOO/…`) that
+  ignores its `wizardState` prop entirely — and is not sent to the backend on
+  create; the create request carries only name/tool/path/sources/notes, so
+  anything mapped here is silently discarded at both display and
+  persistence.
+- **Trace:** #719, #327, #599
 
 ### S6 — Review and create {#S6}
 - **Do:** Review the summary panel and click Create.
@@ -117,31 +124,9 @@ the link survives creation, renaming, and navigating away and back.
 
 ## Known gaps
 
-- G1: None of the three project-creation entry points (target detail's
-  "+ New project here," the Projects page's "+ New project," or the command
-  palette) pass a target id into the wizard, and the wizard never sets
-  `canonicalTargetId` on create. The "From target context" chip is derived by
-  splitting the typed project name as text, not a real target reference.
-  Result: SC1–SC3 all currently fail — a project created from a target's
-  detail is indistinguishable, start to finish, from one created generically.
-  Evidence: github#612 (P1, filed from the 2026-07-11 design review,
-  reproduced live in the 2026-07-14 validation run —
-  docs/development/journey-run-2026-07-14.md, Journey 14 section).
-- G2: The wizard's Sources step requires at least one selected session to
-  advance (contradicting SC4/spec-008 FR-004's zero-source acceptance
-  scenario), and calibration mappings collected in the wizard are discarded
-  before the create request is sent. Separately, `CreateProjectDialog` — the
-  only component that actually wires a target picker to
-  `canonicalTargetId` — is not mounted anywhere in the app; every reachable
-  create path goes through the wizard instead. Evidence: github#719.
-- G3: A mosaic flag (`is_mosaic`) is modeled in the domain/persistence layer
-  (`crates/domain/core/src/project/framing.rs`) but is not exposed anywhere
-  in the project-creation UI (wizard or the orphaned dialog). The prior
-  wave-0 delta note for this journey (`deltas/2026-07-14-q27-f4.md`, task
-  q27-f4) claimed a selectable mosaic flag with target-inheritance across
-  framings; that is not reflected in the current build, and no tracking
-  issue for it was found. Left as an open question rather than folded (see
-  below) — do not treat that delta as current behavior.
+- G1: (dissolved 2026-07-15) — tracked as issue #612; project-creation entry points never pass a target id.
+- G2: (dissolved 2026-07-15) — tracked as issue #719 (also #887); Sources step and CreateProjectDialog mounting.
+- G3: (dissolved 2026-07-15) — mosaic-flag UI is delivered by the spec-008 framing implementation lane (use cases merged in #857).
 
 ## Delta log
 

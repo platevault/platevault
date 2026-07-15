@@ -5,7 +5,7 @@ version: 1
 status: draft
 last_reviewed: 2026-07-15
 actors: [astrophotographer]
-surfaces: [inbox, calibration]
+surfaces: [inbox-confirm, calibration]
 interfaces: [desktop-ui]
 trace: [docs/product/journeys/J08-calibration-ingest-masters-matching/journey.md @ 66026463, deltas/2026-07-14-jval-docdrift.md, deltas/2026-07-14-q15-t122.md, deltas/2026-07-14-q16-t128.md, deltas/2026-07-14-q16-t129.md, deltas/2026-07-14-q16-t131.md, deltas/2026-07-14-q16-t132.md, deltas/2026-07-14-q16-t133.md, docs/journeys/J08-calibration-ingest-masters-matching/journey.md pilot (PR #848), spec-040 MasterDetector, spec-030 FR-135-FR-140, issue-619, issue-620, PR #851, PR #849]
 ---
@@ -78,13 +78,20 @@ assigned through an explicit, confirmable action — never silently.
 - **Do:** Open a master's detail panel.
 - **Expect:** The panel leads with information not already on the list row
   (full metadata, provenance, related entities, history, actions) and trims
-  echoed list columns to a small identifying summary. "Used by" (sessions
-  and projects) lists open and navigate. Age/created date is visible as a
-  value, not only as an aging warning. A metadata-less field renders an
-  explicit unresolved chip, never a plausible-looking zero.
+  echoed list columns to a small identifying summary. A "Used by" list of
+  the sessions the master is assigned to opens and navigates. Age/created
+  date is visible as a value, not only as an aging warning. A metadata-less
+  field renders an explicit unresolved chip, never a plausible-looking zero.
 - **Expect (negative):** The panel is never a raw dump of every available
   field with no more information than its row.
-- **Trace:** issue-619, spec-030 FR-135-FR-140; PR #849.
+- **Trace:** issue-619, spec-030 FR-135-FR-140; PR #849. Corrected:
+  "Used by" links sessions only, not projects — the panel's only other
+  linked-entity list is "Compatible" sessions, whose backing
+  `compatible_sessions` field the backend hardcodes to an empty vec today
+  (`crates/app/calibration/src/matching.rs` `masters_get`, per
+  `MasterDetail.tsx` file-header note), so it never has anything to
+  navigate yet; dropped rather than claimed
+  (`apps/desktop/src/features/calibration/MasterDetail.tsx:313-330`).
 
 ### S5 — Use master actions {#S5}
 - **Do:** Trigger "Use in project", "Replace master", and the platform-native

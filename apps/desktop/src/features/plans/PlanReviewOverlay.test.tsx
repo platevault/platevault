@@ -32,6 +32,8 @@ const {
   mockPlansDiscard,
   mockPlansRetry,
   mockPlansResume,
+  mockPlansCancel,
+  mockPlansConfirmDestructive,
   mockProtectionCheck,
   mockAcknowledge,
   mockApplyPlan,
@@ -41,6 +43,8 @@ const {
   mockPlansDiscard: vi.fn(),
   mockPlansRetry: vi.fn(),
   mockPlansResume: vi.fn(),
+  mockPlansCancel: vi.fn(),
+  mockPlansConfirmDestructive: vi.fn(),
   mockProtectionCheck: vi.fn(),
   mockAcknowledge: vi.fn(),
   mockApplyPlan: vi.fn(),
@@ -53,6 +57,8 @@ vi.mock('@/bindings/index', () => ({
     plansDiscard: mockPlansDiscard,
     plansRetry: mockPlansRetry,
     plansResume: mockPlansResume,
+    plansCancel: mockPlansCancel,
+    plansConfirmDestructive: mockPlansConfirmDestructive,
     planProtectionCheckCmd: mockProtectionCheck,
     protectionPlanAcknowledged: mockAcknowledge,
   },
@@ -176,6 +182,17 @@ beforeEach(() => {
   );
   mockPlansDiscard.mockResolvedValue(
     ok({ planId: 'plan-1', discardedAt: '2026-07-01T00:00:00Z' }),
+  );
+  mockPlansCancel.mockResolvedValue(
+    ok({
+      planId: 'plan-1',
+      cancelledAt: '2026-07-01T00:00:00Z',
+      itemsApplied: 0,
+      itemsCancelled: 1,
+    }),
+  );
+  mockPlansConfirmDestructive.mockResolvedValue(
+    ok({ planId: 'plan-1', itemsConfirmed: 1 }),
   );
   // Default apply: streams item events then a completed terminal event.
   mockApplyPlan.mockImplementation(
@@ -492,5 +509,66 @@ describe('PlanReviewOverlay (spec 017 WP-E)', () => {
       expect(screen.getByText(/No protected items/)).toBeInTheDocument(),
     );
     expect(approveBtn).toBeDisabled();
+  });
+
+  it('keeps Approve & apply disabled for a delete item until destructive-confirm succeeds (issue #741)', async () => {
+    mockProtectionCheck.mockResolvedValue(
+      ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),
+    );
+    mockPlansGet.mockResolvedValue(
+      ok(
+        plan({
+          items: [item({ action: 'delete', to: '' })],
+        }),
+      ),
+    );
+    renderOverlay();
+
+    const approveBtn = await screen.findByTestId('plan-review-approve-apply');
+    const confirmBox = await screen.findByTestId(
+      'plan-review-confirm-destructive',
+    );
+    // Protection gate is already satisfied (no protected items), but the
+    // destructive-confirm checkbox is unchecked — Approve & apply stays
+    // blocked until it is confirmed.
+    await waitFor(() => expect(approveBtn).toBeDisabled());
+    expect(confirmBox).not.toBeChecked();
+
+    fireEvent.click(confirmBox);
+    await waitFor(() =>
+      expect(mockPlansConfirmDestructive).toHaveBeenCalledWith('plan-1'),
+    );
+    await waitFor(() => expect(approveBtn).not.toBeDisabled());
+  });
+
+  it('offers Cancel apply during a running apply and calls plan.cancel (US3/FR-009, issue #743)', async () => {
+    mockProtectionCheck.mockResolvedValue(
+      ok(protectionCheck({ hasProtectedItems: false, protectedItems: [] })),
+    );
+    // Never emits a terminal event — the run stays "running" so Cancel stays
+    // available (mirrors the pause test's no-terminal-event pattern above).
+    mockApplyPlan.mockImplementation(
+      (args: { id: string; onEvent?: (e: OperationEvent) => void }) => {
+        args.onEvent?.({
+          contractVersion: '1.0.0',
+          operationId: 'op-1',
+          eventType: 'item_started',
+          sequence: 0,
+          payload: { itemsTotal: 2, runId: 'run-1' },
+        });
+        return new Promise(() => {
+          /* never resolves within the test — run stays live */
+        });
+      },
+    );
+
+    renderOverlay();
+    const approveBtn = await screen.findByTestId('plan-review-approve-apply');
+    await waitFor(() => expect(approveBtn).not.toBeDisabled());
+    fireEvent.click(approveBtn);
+
+    const cancelBtn = await screen.findByTestId('plan-review-cancel-run');
+    fireEvent.click(cancelBtn);
+    await waitFor(() => expect(mockPlansCancel).toHaveBeenCalledWith('plan-1'));
   });
 });

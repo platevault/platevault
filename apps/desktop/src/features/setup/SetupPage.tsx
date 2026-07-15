@@ -10,6 +10,7 @@ import { SetupWizard } from './SetupWizard';
 
 export function SetupPage() {
   const [setupCompleted] = usePreference('setupCompleted');
+  const [density] = usePreference('density');
   const navigate = useNavigate();
   const [checking, setChecking] = useState(!setupCompleted);
 
@@ -45,7 +46,10 @@ export function SetupPage() {
   }
 
   return (
-    <div className="alm-page">
+    // density-* mirrors Shell.tsx's `.alm-frame` class: the wizard renders
+    // outside the Shell, so it needs its own carrier for a live density
+    // preview during setup (#505).
+    <div className={`alm-page density-${density}`}>
       <SetupWizard />
     </div>
   );

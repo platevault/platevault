@@ -57,6 +57,7 @@ import { deriveRowMoonPlanning } from './astro/row-planning';
 import type { ObservingNight } from './astro/moon-state';
 import { useGuidanceParams } from './guidance-settings';
 import { formatOppositionDate, oppositionRelative } from './astro/opposition';
+import type { SeparationFigure } from './planner-derive';
 import { Group } from '@visx/group';
 import { LinePath } from '@visx/shape';
 import { Threshold } from '@visx/threshold';
@@ -91,6 +92,17 @@ type LoadState =
   | { status: 'loaded'; data: TargetDetailV3 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * #758/FR-020: format one of the three real target↔Moon separation figures —
+ * a whole-degree value, or the explicit "Moon not up" state (never a
+ * fabricated number when the Moon is below the horizon at that reference).
+ */
+function formatSeparationFigure(figure: SeparationFigure): string {
+  return figure === 'moon-not-up'
+    ? m.targets_moon_not_up()
+    : `${Math.round(figure)}°`;
+}
 
 /** Map an AliasKind string to a human label for the badge. */
 function kindLabel(kind: string): string {
@@ -159,6 +171,13 @@ function AltitudeGraph({
   darkWindowHours,
   moonSpans = [],
 }: AltitudeGraphProps) {
+  // #757 defense-in-depth: the caller (TargetDetailV2) already gates this
+  // component out of the render tree for the degrade states where `points`
+  // is `[]` (DEGRADE_ROW — no coordinates / no site). Guard here too so a
+  // future caller passing an empty curve degrades to nothing rather than
+  // crashing on `points.reduce(..., points[0])` → `undefined`.
+  if (points.length === 0) return null;
+
   const yScale = altitudeScale(PLOT_H, 0);
   const xScale = hourScale(0, PLOT_W);
 
@@ -813,6 +832,35 @@ export function TargetDetailV2({
       ]
     : [];
 
+  // #758/FR-020: the three real target↔Moon separation figures — computed
+  // (`rowAlt.separationScalars`, spec 044 T028) but previously never rendered
+  // anywhere in the app. Distinct from the "Lunar" stat above (Track A's
+  // single "tonight" reference separation, `astro/row-planning.ts`) — this is
+  // Track B's transit/min-over-dark/dark-midpoint trio.
+  const moonTrio: PropertyDef[] = tonightAvailable
+    ? [
+        {
+          key: 'moon-transit',
+          label: m.targets_detail_moon_at_transit(),
+          value: formatSeparationFigure(rowAlt.separationScalars.atTransitDeg),
+        },
+        {
+          key: 'moon-min-dark',
+          label: m.targets_detail_moon_min_over_dark(),
+          value: formatSeparationFigure(
+            rowAlt.separationScalars.minOverDarkDeg,
+          ),
+        },
+        {
+          key: 'moon-dark-mid',
+          label: m.targets_detail_moon_at_dark_midpoint(),
+          value: formatSeparationFigure(
+            rowAlt.separationScalars.atDarkMidpointDeg,
+          ),
+        },
+      ]
+    : [];
+
   return (
     <DetailPane fill>
       {/* ── Planner header ──────────────────────────────────────────────── */}
@@ -889,6 +937,16 @@ export function TargetDetailV2({
                 {m.targets_planner_no_site_banner_action()}
               </Link>
             </Banner>
+          ) : rowAlt.needsCoordinates ? (
+            // #757: a site is active but this target has no catalogued
+            // coordinates (unresolved manual target) — `rowAlt.points` is
+            // `[]` here (DEGRADE_ROW), so the altitude graph MUST NOT render
+            // (its transit-marker peak computation assumes a non-empty
+            // curve). Render the same "un-plannable" degrade state as the
+            // no-site case, distinctly worded, instead of crashing.
+            <Banner variant="info">
+              {m.targets_detail_needs_coordinates_banner()}
+            </Banner>
           ) : (
             <>
               <AltitudeGraph
@@ -914,6 +972,15 @@ export function TargetDetailV2({
               {tonightAvailable && (
                 <>
                   <PropertyTable mode="view" properties={tonightStats} />
+                  {/* #758/FR-020: the transit/min-over-dark/dark-midpoint
+                      Moon-separation trio — computed since spec 044 T028 but
+                      never rendered anywhere in the app until now. */}
+                  <div className="alm-planner__tonight-filters">
+                    <span className="alm-planner__tonight-filters-label">
+                      {m.targets_detail_moon_trio_title()}
+                    </span>
+                    <PropertyTable mode="view" properties={moonTrio} />
+                  </div>
                   <div className="alm-planner__tonight-filters">
                     <span className="alm-planner__tonight-filters-label">
                       {m.common_filters()}
