@@ -215,6 +215,7 @@
   "err_alias_duplicate": "That alias already exists for this target.",
   "err_alias_not_found": "That alias could not be found.",
   "err_alias_not_removable": "This alias can't be removed.",
+  "err_archive_delete_failed": "Couldn't permanently delete the archive — please try again.",
   "err_archive_empty": "There's nothing to archive.",
   "err_classification_ambiguous": "This file could be more than one type — confirm how to classify it.",
   "err_classification_stale": "This classification is out of date. Re-scan to refresh it.",

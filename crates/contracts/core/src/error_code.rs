@@ -212,6 +212,12 @@ pub enum ErrorCode {
     /// `archive.send_to_trash` run.
     #[serde(rename = "os_trash.permission.denied")]
     OsTrashPermissionDenied,
+    /// Non-permission delete failure (e.g. the file vanished mid-run, its
+    /// volume went unavailable, or the destination disk filled) for every
+    /// item in an `archive.permanently_delete` run. Permission failures use
+    /// the more specific `path.permission_denied`.
+    #[serde(rename = "archive.delete_failed")]
+    ArchiveDeleteFailed,
 
     // ── Confirm ──────────────────────────────────────────────────────────────
     #[serde(rename = "confirm.text.mismatch")]

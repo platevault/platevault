@@ -690,7 +690,10 @@ fn delete_failure_error_code(code: FailureCode) -> ErrorCode {
         FailureCode::PermissionDenied | FailureCode::ProtectedSource => {
             ErrorCode::PathPermissionDenied
         }
-        _ => ErrorCode::OsTrashUnavailable,
+        // Non-permission delete failures (source vanished, volume unavailable,
+        // disk full, unknown) — NOT `OsTrashUnavailable`, which is trash-specific
+        // and semantically wrong for a non-trash delete failure (review #1).
+        _ => ErrorCode::ArchiveDeleteFailed,
     }
 }
 
@@ -810,6 +813,8 @@ pub async fn send_archive_to_trash(
 /// - `plan.blocked_by_protection` — spec-016 blockPermanentDelete is enabled.
 /// - `plan.not_found` — no matching plan.
 /// - `archive.empty` — plan has no archived items.
+/// - `path.permission_denied` / `archive.delete_failed` — every item's real
+///   delete attempt failed (no items were deleted).
 pub async fn permanently_delete_archive(
     pool: &SqlitePool,
     bus: &EventBus,
@@ -1350,6 +1355,132 @@ mod tests {
                 assert!(file.exists());
             }
         }
+    }
+
+    /// Review #2: `cleanup_generator::generate_raw_frame_plan` sets
+    /// `from_root_id: Some(row.root_id)` with a root-*relative* `archive_path`
+    /// (`protection::compute_archive_destination`) — the `Some(root) =>
+    /// root.join(archive_path)` branch of `resolve_archive_abs_path` is a real
+    /// production path, not just the `from_root_id: None`/absolute-path shape
+    /// every other test above exercises. Registers a real source (mirrors
+    /// `plan_apply::resolve_root_path_reflects_remap_not_stale_cache`) so
+    /// `resolve_root_path`'s `registered_sources` fallback resolves it, then
+    /// exercises BOTH commands against real files anchored under that root.
+    #[tokio::test]
+    async fn archive_commands_resolve_root_relative_archive_path_via_registered_root() {
+        use contracts_core::first_run::{
+            OrganizationState, RegisterSourceRequest, ScanDepth, SourceKind,
+        };
+
+        let (db, bus) = setup().await;
+        let root_dir = tempfile::tempdir().unwrap();
+
+        let reg = crate::first_run::register_source(
+            db.pool(),
+            &bus,
+            &RegisterSourceRequest {
+                kind: SourceKind::Project,
+                path: root_dir.path().to_str().unwrap().to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Organized,
+            },
+        )
+        .await
+        .unwrap();
+        let root_id = reg.source_id;
+
+        // Plan A: send_archive_to_trash, root-relative archive_path.
+        let trash_rel = "raw/.astro-plan-archive/plan-a/item-1-file.fits";
+        std::fs::create_dir_all(root_dir.path().join("raw/.astro-plan-archive/plan-a")).unwrap();
+        let trash_abs = root_dir.path().join(trash_rel);
+        std::fs::write(&trash_abs, b"data").unwrap();
+
+        insert_draft(&db, "plan-a").await;
+        repo::insert_plan_item(
+            db.pool(),
+            &repo::InsertPlanItem {
+                id: "item-a-1",
+                plan_id: "plan-a",
+                item_index: 1,
+                name: "file.fits",
+                action: "archive",
+                from_root_id: Some(&root_id),
+                from_relative_path: "raw/file.fits",
+                to_root_id: None,
+                to_relative_path: "",
+                reason: "test",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: Some(trash_rel),
+                source_id: None,
+                category: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        match send_archive_to_trash(db.pool(), &bus, "plan-a").await {
+            Ok(resp) => {
+                assert_eq!(resp.items_moved, 1);
+                assert!(
+                    !trash_abs.exists(),
+                    "root-relative archive_path must resolve to a real, trashable file"
+                );
+            }
+            Err(err) => {
+                // Environment-dependent (no OS trash in CI sandbox, review #732
+                // precedent) — the root MUST still have resolved (a failure to
+                // resolve the root at all would surface as archive.empty, not
+                // a trash-specific code).
+                assert!(matches!(
+                    err.code,
+                    ErrorCode::OsTrashUnavailable | ErrorCode::OsTrashPermissionDenied
+                ));
+                assert!(trash_abs.exists());
+            }
+        }
+
+        // Plan B: permanently_delete_archive, root-relative archive_path.
+        // Deterministic (std::fs::remove_file, no OS-trash dependency).
+        let delete_rel = "raw/.astro-plan-archive/plan-b/item-1-file.fits";
+        std::fs::create_dir_all(root_dir.path().join("raw/.astro-plan-archive/plan-b")).unwrap();
+        let delete_abs = root_dir.path().join(delete_rel);
+        std::fs::write(&delete_abs, b"data").unwrap();
+
+        insert_draft(&db, "plan-b").await;
+        repo::insert_plan_item(
+            db.pool(),
+            &repo::InsertPlanItem {
+                id: "item-b-1",
+                plan_id: "plan-b",
+                item_index: 1,
+                name: "file.fits",
+                action: "archive",
+                from_root_id: Some(&root_id),
+                from_relative_path: "raw/file.fits",
+                to_root_id: None,
+                to_relative_path: "",
+                reason: "test",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: Some(delete_rel),
+                source_id: None,
+                category: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let resp =
+            permanently_delete_archive(db.pool(), &bus, "plan-b", "DELETE", false).await.unwrap();
+        assert_eq!(resp.items_deleted, 1);
+        assert!(
+            !delete_abs.exists(),
+            "root-relative archive_path must resolve to a real, deletable file"
+        );
     }
 
     // ── mkdir-only auto-apply predicate (user decision 2026-07-04) ────────────

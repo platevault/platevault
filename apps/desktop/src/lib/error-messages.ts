@@ -79,6 +79,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'archive.empty': m.err_archive_empty,
   'os_trash.unavailable': m.err_os_trash_unavailable,
   'os_trash.permission.denied': m.err_os_trash_permission_denied,
+  'archive.delete_failed': m.err_archive_delete_failed,
   'confirm.text.mismatch': m.err_confirm_text_mismatch,
   'no.items.to.retry': m.err_no_items_to_retry,
   no_op: m.err_no_op,
