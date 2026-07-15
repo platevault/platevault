@@ -767,9 +767,15 @@ pub(crate) async fn materialize_sub_items(
     file_records: &[(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)],
 ) {
     // Step 1 + 2 + T070 gate: partition files by group_key.
-    // key → (group_label, Vec<abs_path>)
-    let mut groups: std::collections::HashMap<String, (String, Vec<PathBuf>)> =
-        std::collections::HashMap::new();
+    // key → (group_label, Vec<(rel_path, abs_path, raw_meta)>) — abs_path/raw_meta
+    // are carried through per-group so the cache-seed step below (R-14 CI fix,
+    // issue #755) can rebuild each sub-item's own evidence/metadata without a
+    // second DB round-trip.
+    #[allow(clippy::type_complexity)]
+    let mut groups: std::collections::HashMap<
+        String,
+        (String, Vec<(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)>),
+    > = std::collections::HashMap::new();
 
     for (i, (rel, frame_type_opt, raw_meta_opt)) in file_records.iter().enumerate() {
         let abs_path = file_paths.get(i).cloned();
@@ -799,24 +805,23 @@ pub(crate) async fn materialize_sub_items(
             (SENTINEL_NEEDS_REVIEW.to_owned(), "(root) · needs review".to_owned())
         };
 
+        // Files without a resolvable abs path (e.g. reclassify_v2's re-split,
+        // which has no root path to join) still need to land in their group so
+        // the sub-item is upserted with the correct file_count and evidence.
         let entry = groups.entry(group_key).or_insert_with(|| (group_label, Vec::new()));
-        // Track the absolute path for signature computation.
-        if let Some(p) = abs_path {
-            entry.1.push(p);
-        } else {
-            // If we can't resolve the abs path (shouldn't happen), still create
-            // the group entry so the sub-item is upserted with file_count.
-            let _ = rel; // rel is in scope; abs derivation would need root + rel
-        }
+        entry.1.push((rel.clone(), abs_path, raw_meta_opt.clone()));
     }
 
     // Step 4 + 5: upsert one sub-item per group and update child_count.
     let child_count = i64::try_from(groups.len()).unwrap_or(i64::MAX);
 
-    for (group_key, (group_label, abs_paths)) in &groups {
+    for (group_key, (group_label, files)) in &groups {
         // Per-sub-group content_signature (R-11).
-        let file_sigs: Vec<[u8; 32]> =
-            abs_paths.iter().filter_map(|p| super::signature::file_signature(p)).collect();
+        let file_sigs: Vec<[u8; 32]> = files
+            .iter()
+            .filter_map(|(_, abs, _)| abs.as_deref())
+            .filter_map(super::signature::file_signature)
+            .collect();
         let sub_sig = folder_signature(file_sigs);
 
         // Determine frame_type from the group_key prefix (type=<value>).
@@ -830,7 +835,7 @@ pub(crate) async fn materialize_sub_items(
                 .filter(|s| !s.is_empty())
         };
 
-        let file_count = i64::try_from(abs_paths.len()).unwrap_or(i64::MAX);
+        let file_count = i64::try_from(files.len()).unwrap_or(i64::MAX);
         let sub_id = Uuid::new_v4().to_string();
 
         let sub_item = UpsertInboxSubItem {
@@ -847,6 +852,19 @@ pub(crate) async fn materialize_sub_items(
         };
 
         repo::upsert_inbox_sub_item(pool, &sub_item).await.ok();
+
+        // Seed this sub-item's OWN evidence/metadata/breakdown + a matching
+        // `inbox_classifications` cache row (content_signature == sub_sig, the
+        // same value just written on the `inbox_items` row above). Without
+        // this, a subsequent `inbox.classify(sub_id)` call (e.g. the frontend
+        // selecting the newly split row) is a guaranteed cache MISS — the
+        // fallback re-derives straight from the on-disk FITS headers,
+        // silently discarding the manual/generic override that produced this
+        // very group (overrides are keyed to the pre-split item id or the
+        // source group, never copied to a freshly materialized sub-item id
+        // otherwise), re-classifying it back to unclassified and leaving
+        // Confirm permanently disabled (issue #755 CI fix, R-14).
+        seed_sub_item_cache(pool, &sub_id, group_key, frame_type_str, &sub_sig, files).await;
     }
 
     // Purge sub-item rows for groups that no longer exist: when a file's metadata
@@ -864,6 +882,89 @@ pub(crate) async fn materialize_sub_items(
     }
 
     repo::update_source_group_child_count(pool, source_group_id, child_count).await.ok();
+}
+
+/// Seed one materialized sub-item's evidence, per-file metadata, breakdown,
+/// and `inbox_classifications` cache row directly from the data that just
+/// decided its `group_key` — no on-disk re-read (issue #755 CI fix, R-14).
+///
+/// `content_signature` MUST equal the value written on the sub-item's own
+/// `inbox_items` row (`sub_sig`, from the caller) — `classify()`'s cache-hit
+/// check compares the two columns for equality.
+async fn seed_sub_item_cache(
+    pool: &SqlitePool,
+    sub_id: &str,
+    group_key: &str,
+    frame_type_str: Option<&str>,
+    content_signature: &str,
+    files: &[(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)],
+) {
+    let is_needs_review = group_key == SENTINEL_NEEDS_REVIEW;
+
+    repo::delete_evidence_for_item(pool, sub_id).await.ok();
+    repo::delete_breakdown_for_item(pool, sub_id).await.ok();
+    repo::delete_file_metadata_for_item(pool, sub_id).await.ok();
+
+    let mut sample_files: Vec<String> = Vec::new();
+    for (rel, abs_opt, raw_meta_opt) in files {
+        let ev_id = Uuid::new_v4().to_string();
+        let ev = InsertEvidence {
+            id: &ev_id,
+            inbox_item_id: sub_id,
+            relative_file_path: rel,
+            frame_type: if is_needs_review { None } else { frame_type_str },
+            evidence_source: EvidenceSource::ImagetypHeader.as_str(),
+            raw_value: None,
+            unclassified: is_needs_review,
+            manual_override: None,
+            is_master: false,
+            master_detector: None,
+        };
+        repo::insert_evidence(pool, &ev).await.ok();
+
+        // Real abs path when available (initial classify's own re-split) for
+        // accurate file_size_bytes/file_mtime; falls back to an unreadable
+        // sentinel path (reclassify_v2 has no root path) — persist_file_metadata
+        // already treats a failed stat as None/None, same as its documented
+        // "no abs path available" behaviour elsewhere in this module.
+        let abs_for_stat = abs_opt.as_deref().unwrap_or_else(|| Path::new(""));
+        persist_file_metadata(pool, sub_id, rel, abs_for_stat, raw_meta_opt.as_ref()).await;
+
+        if sample_files.len() < 10 {
+            sample_files.push(rel.clone());
+        }
+    }
+
+    if !is_needs_review {
+        let bd_id = Uuid::new_v4().to_string();
+        let sample_json = serde_json::to_string(&sample_files).unwrap_or_else(|_| "[]".to_owned());
+        repo::upsert_breakdown_row(
+            pool,
+            &bd_id,
+            sub_id,
+            frame_type_str.unwrap_or("unknown"),
+            i64::try_from(files.len()).unwrap_or(i64::MAX),
+            None,
+            &sample_json,
+        )
+        .await
+        .ok();
+    }
+
+    let (db_result, unclassified_count) = if is_needs_review {
+        ("unclassified", i64::try_from(files.len()).unwrap_or(i64::MAX))
+    } else {
+        ("classified", 0)
+    };
+
+    let classification = UpsertClassification {
+        inbox_item_id: sub_id,
+        result: db_result,
+        frame_type: if is_needs_review { None } else { frame_type_str },
+        content_signature,
+        unclassified_file_count: unclassified_count,
+    };
+    repo::upsert_classification(pool, &classification).await.ok();
 }
 
 /// Enumerate FITS/XISF files directly inside a folder (non-recursive).

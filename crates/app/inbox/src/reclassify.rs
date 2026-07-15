@@ -318,6 +318,25 @@ pub async fn reclassify_v2(
         }
     }
 
+    // Evidence now lives on whichever items are CURRENTLY authoritative for
+    // this group's files. Once classify has split the group, each
+    // materialized single-type sub-item (`group_key != ''`) carries its own
+    // evidence/metadata (issue #755 CI fix — `materialize_sub_items` seeds it
+    // so a later `inbox.classify(sub_id)` is a cache hit instead of silently
+    // re-deriving from the raw header); the placeholder row (`group_key ==
+    // ''`) is superseded at that point and its evidence duplicates the same
+    // files, which would double-count `file_records` below. Falling back to
+    // the full `sub_item_ids` set only matters pre-split (a legacy item, or
+    // one that has never been classified yet).
+    let materialized_sub_items = inbox_repo::list_inbox_sub_items(pool, &source_group_id)
+        .await
+        .map_err(|e| db_internal_ctx(e, "list materialized sub-items for source group"))?;
+    let evidence_item_ids: Vec<String> = if materialized_sub_items.is_empty() {
+        sub_item_ids.clone()
+    } else {
+        materialized_sub_items.into_iter().map(|row| row.id).collect()
+    };
+
     // ── 3. Build the property registry lookup map ─────────────────────────────
 
     let registry = super::property_registry::property_registry();
@@ -358,12 +377,13 @@ pub async fn reclassify_v2(
 
     // ── 4. Gather all evidence paths for the group ────────────────────────────
     //
-    // Evidence rows are keyed by inbox_item_id, so we need to iterate over all
-    // sub-items in the group to get their file paths.
+    // Evidence rows are keyed by inbox_item_id, so we need to iterate over the
+    // group's CURRENT authoritative items (`evidence_item_ids`, see above) to
+    // get their file paths without double-counting a superseded placeholder.
 
     // Build a flat map: relative_file_path → inbox_item_id
     let mut path_to_item: HashMap<String, String> = HashMap::new();
-    for item_id in &sub_item_ids {
+    for item_id in &evidence_item_ids {
         let evidence = inbox_repo::list_evidence(pool, item_id)
             .await
             .map_err(|e| db_internal_ctx(e, "list evidence for sub-item"))?;
@@ -553,7 +573,10 @@ pub async fn reclassify_v2(
         .map(|o| ((o.relative_file_path.as_str(), o.property_key.as_str()), o.value.as_str()))
         .collect();
 
-    // Collect all evidence (with overrides) across all sub-items in this group.
+    // Collect all evidence (with overrides) across the group's CURRENT
+    // authoritative items (`evidence_item_ids`) — see the doc comment above,
+    // avoids re-counting the same file via both a superseded placeholder and
+    // its materialized sub-item.
     // We need: (relative_file_path, effective_frame_type, raw_meta_opt)
     let mut file_records: Vec<(
         String,
@@ -561,7 +584,7 @@ pub async fn reclassify_v2(
         Option<metadata_core::RawFileMetadata>,
     )> = Vec::new();
 
-    for item_id in &sub_item_ids {
+    for item_id in &evidence_item_ids {
         let evidence = inbox_repo::list_evidence(pool, item_id)
             .await
             .map_err(|e| db_internal_ctx(e, "list evidence for re-split"))?;
@@ -1318,6 +1341,146 @@ mod tests {
         let dark_item = resp.sub_items.iter().find(|s| s.frame_type.as_deref() == Some("dark"));
         assert!(dark_item.is_some(), "must have a dark sub-item after re-split");
         assert_eq!(resp.needs_review_count, 0, "no needs-review files after full override");
+    }
+
+    /// Issue #755 CI fix (R-14): the real user flow doesn't stop at
+    /// `reclassify_v2`'s own response — the frontend immediately selects the
+    /// freshly materialized sub-item and calls `inbox.classify` on it AGAIN
+    /// (`useInboxClassification`, real `Real-UI` E2E
+    /// `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`). That
+    /// second call must not silently re-derive from the on-disk header (which
+    /// still says the pre-override, unmapped IMAGETYP) and lose the override.
+    #[tokio::test]
+    async fn v2_reclassify_resplit_subitem_classify_stays_single_type() {
+        let root = tempfile::tempdir().unwrap();
+        // "Frame Unknown" is not a mapped IMAGETYP (classify.rs:
+        // v1_normalization_table) — matches the real E2E fixture exactly, and
+        // deliberately carries NO EXPTIME/EXPOSURE header (also matching the
+        // E2E fixture, which only sets IMAGETYP/OBJECT/FILTER/DATE-OBS) so
+        // this test also settles whether `exposureS` genuinely gates a light
+        // frame out of the resolved bucket here.
+        let fits_path = root.path().join("ambiguous_001.fits");
+        {
+            let mut data = vec![b' '; 2880];
+            let cards = [
+                "IMAGETYP= 'Frame Unknown'",
+                "OBJECT  = 'M42'",
+                "FILTER  = 'Ha'",
+            ];
+            for (i, c) in cards.iter().enumerate() {
+                let card = format!("{c:<80}");
+                data[i * 80..i * 80 + 80].copy_from_slice(card.as_bytes());
+            }
+            data[cards.len() * 80..cards.len() * 80 + 3].copy_from_slice(b"END");
+            std::fs::write(&fits_path, &data).unwrap();
+        }
+
+        let db = test_db().await;
+        let sg_id = "sg-persist";
+        let placeholder_id = "item-persist-ph";
+
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: sg_id,
+                root_id: "root-1",
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("fits"),
+            },
+        )
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO inbox_items \
+             (id, root_id, relative_path, source_group_id, group_key, group_label, \
+              frame_type, file_count, discovered_at, last_scanned_at, \
+              content_signature, state, lane) \
+             VALUES (?, 'root-1', '', ?, '', NULL, NULL, 1, \
+                     datetime('now'), datetime('now'), 'sig', 'pending_classification', 'fits')",
+        )
+        .bind(placeholder_id)
+        .bind(sg_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // Real classify (not a hand-rolled evidence fixture) so evidence +
+        // per-file metadata + the initial needs-review sub-item all come from
+        // the SAME real pipeline the E2E journey drives.
+        let first = crate::classify::classify(
+            db.pool(),
+            crate::classify::ClassifyRequest {
+                inbox_item_id: placeholder_id.to_owned(),
+                root_absolute_path: root.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(first.classification_type, "unclassified");
+
+        // Bulk reclassify: frameType -> light AND exposureS, exactly what the
+        // bulk-apply UI sends once the generic bulk-property editor (issue
+        // #755/R-13) also fills the exposure field — `exposureS` is a hard
+        // mandatory key for light frames alongside target/filter (spec 041
+        // R-14/FR-047), and the fixture's header carries no EXPTIME.
+        let resp = reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                source_group_id: Some(sg_id.to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![
+                    InboxReclassifyBulk {
+                        property: "frameType".to_owned(),
+                        value: serde_json::json!("light").into(),
+                        file_paths: None,
+                    },
+                    InboxReclassifyBulk {
+                        property: "exposureS".to_owned(),
+                        value: serde_json::json!(300.0).into(),
+                        file_paths: None,
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+
+        let light_item = resp.sub_items.iter().find(|s| s.frame_type.as_deref() == Some("light"));
+        assert!(
+            light_item.is_some(),
+            "expected a resolved 'light' sub-item after the frameType override: {:?}",
+            resp.sub_items
+        );
+        let light_item = light_item.unwrap();
+        assert!(
+            light_item.missing_mandatory.is_empty(),
+            "resolved sub-item must report no missing mandatory attrs: {light_item:?}"
+        );
+
+        // The real regression: select the post-split sub-item and classify it
+        // again, exactly like `useInboxClassification` does after the
+        // frontend's post-split selection handoff.
+        let second = crate::classify::classify(
+            db.pool(),
+            crate::classify::ClassifyRequest {
+                inbox_item_id: light_item.inbox_item_id.clone(),
+                root_absolute_path: root.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            second.classification_type, "single_type",
+            "re-selecting the post-split sub-item must stay single_type, not regress to \
+             unclassified by silently re-deriving from the raw on-disk header"
+        );
+        assert_eq!(second.frame_type, Some("light".to_owned()));
     }
 
     /// T081 (spec 041 FR-035–FR-040): `offset` and `temperatureC` overrides
