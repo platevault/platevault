@@ -300,44 +300,8 @@
 /* --- Planning columns (#85) ----------------------------------------------- */
 .alm-targets-cell--center { text-align: center; }
 
-/* Sparkline column: fixed-ish narrow column, vertically centered. */
-.alm-targets-cell--spark {
-  width: 76px;
-  padding-top: var(--alm-sp-1);
-  padding-bottom: var(--alm-sp-1);
-}
-
-/* Inline altitude sparkline. Size is fixed here; geometry is data-driven in the
- * SVG (the allowed dynamic case). preserveAspectRatio=none lets it stretch to
- * this box without distorting the unitless viewBox math. */
-.alm-targets-spark {
-  display: block;
-  width: 64px;
-  height: 18px;
-  overflow: visible;
-}
-.alm-targets-spark__guide {
-  stroke: var(--alm-border);
-  stroke-width: 1;
-  stroke-dasharray: 2 2;
-  vector-effect: non-scaling-stroke;
-}
-.alm-targets-spark__curve {
-  fill: none;
-  stroke: var(--alm-text-muted);
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-/* Usable tonight → accent stroke; low → stays muted. */
-.alm-targets-spark--usable .alm-targets-spark__curve {
-  stroke: var(--alm-accent);
-}
-.alm-targets-spark--low .alm-targets-spark__curve {
-  stroke: var(--alm-text-muted);
-  opacity: 0.7;
-}
+/* Altitude sparkline removed (iteration 2026-07-15, FR-007 hard removal):
+   the detail panel's altitude graph is the canonical altitude view. */
 
 /* Visible-tonight indicator removed (iteration 2026-07-15, FR-007): the
    visible column folded into the imaging-time why-glyph (FR-030/FR-031). */

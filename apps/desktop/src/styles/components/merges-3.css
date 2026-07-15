@@ -781,37 +781,7 @@
 /* task 5: add readable spacing between filter badges (was alm-sp-1 = 4px). */
 .alm-filter-badges { gap: var(--alm-sp-2); }
 
-/* ── task 19: sparkline size + time-axis ───────────────────────────────────
- * Make the sparkline shorter vertically (from 18 px → 14 px) and a touch
- * wider (from 64 px → 72 px) so the bottom time-axis ticks have headroom.
- * The SVG viewBox is updated in AltitudeSparkline.tsx to match. */
-
-.alm-targets-spark {
-  width: 72px;
-  height: 22px; /* taller than before to fit axis ticks below the curve */
-}
-
-/* task 19: axis tick lines (bottom of sparkline viewBox). */
-.alm-targets-spark__axis-tick {
-  stroke: var(--alm-border);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-/* task 19: axis tick labels (hour marks below the curve). */
-.alm-targets-spark__axis-label {
-  font-size: var(--alm-text-2xs);
-  fill: var(--alm-text-faint);
-
-}
-
-/* task 19: hover tooltip title — pointer-events on the SVG so browser shows
- * the native <title> tooltip. The SVG itself was pointer-events:none before;
- * we enable it here so hovering works without JS. */
-.alm-targets-spark {
-  pointer-events: auto;
-  cursor: default;
-}
+/* task 19 sparkline CSS removed (iteration 2026-07-15, FR-007 hard removal). */
 
 /* ── task 18: favourite star button in Planner rows ───────────────────────
  * A 16×16 toggle button that appears in each Planner row.

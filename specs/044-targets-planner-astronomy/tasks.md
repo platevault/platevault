@@ -540,7 +540,7 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
       the full-catalogue sort pass deliberately skips Moon geometry (`includeMoonGeometry=false`,
       the ~13k-row Layer-2 perf cliff documented on `rowAltitudeFor`), so a Moon-dependent sort key
       would recreate that cliff. The rendered HEADLINE is the OSC single-pass window per SC-017.
-- [ ] T047 i18n + a11y sweep (FR-039, depends T041/T043/T044/T046): Paraglide messages for reasons,
+- [x] T047 i18n + a11y sweep (FR-039, depends T041/T043/T044/T046): Paraglide messages for reasons,
       tooltips, and the context label; text alternatives for the glyphs; keyboard/SR pass over the new
       surfaces.
 - [ ] T048 Regression + E2E alignment (depends all above): update mock-Playwright planner specs for the
