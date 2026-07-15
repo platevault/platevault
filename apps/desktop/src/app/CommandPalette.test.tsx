@@ -4,14 +4,16 @@
 /**
  * CommandPalette T008 integration tests — alias-aware target search routing.
  *
- * The CommandPalette renders via cmdk + @base-ui-components/react/dialog which
- * require ResizeObserver and other browser APIs not available in jsdom.
- * These tests therefore validate the **logic layer** of the palette:
+ * Logic-layer tests validate:
  *   - search results are filtered/routed correctly
  *   - target results produced by searchGlobal have the right shape
  *   - the navigate call receives the verbatim route from the result
  *
- * Full visual smoke is deferred to Playwright (WSL constraint).
+ * Rendered smoke tests (#581 review) mount the real palette with a local
+ * ResizeObserver/scrollIntoView stub (cmdk + @base-ui-components/react/dialog
+ * need both; jsdom has neither) and assert the alm-palette* class wiring,
+ * the initialFocus fix, and ArrowDown+Enter keyboard navigation. Pixel-level
+ * visual verification stays with Playwright (WSL constraint).
  *
  * Tests:
  *  1. Target search result routes start with /targets/
@@ -36,10 +38,35 @@
  * here, not just at `/targets`.
  */
 
-import { describe, it, expect } from 'vitest';
-import { PAGES, buildTargetResults } from './CommandPalette';
+import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
+import { render, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { CommandPalette, PAGES, buildTargetResults } from './CommandPalette';
 import { matchesSearch, normalizeDesig } from '@/features/targets/TargetsPage';
 import type { TargetListItem } from '@/bindings/index';
+
+// ── Mocks (rendered smoke tests) ──────────────────────────────────────────────
+
+const mockNavigate = vi.fn();
+
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => mockNavigate,
+  useRouterState: () => '/',
+}));
+
+vi.mock('@/bindings/index', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/bindings/index')>();
+  return {
+    ...actual,
+    commands: {
+      ...actual.commands,
+      settingsGet: vi
+        .fn()
+        .mockResolvedValue({ status: 'ok', data: { values: {} } }),
+      targetList: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+      searchGlobal: vi.fn().mockResolvedValue({ status: 'ok', data: [] }),
+    },
+  };
+});
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -314,5 +341,95 @@ describe('buildTargetResults (#581 client-side alias-aware target search)', () =
         results[i].score ?? 0,
       );
     }
+  });
+});
+
+// ── Rendered smoke tests (#581 review) ────────────────────────────────────────
+//
+// These mount the real palette so the CSS class wiring, the initialFocus fix,
+// and cmdk keyboard navigation have regression coverage — the styling blocker
+// shipped precisely because nothing rendered the component.
+
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+beforeAll(() => {
+  vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+  // cmdk scrolls the selected item into view; jsdom has no scrollIntoView.
+  Element.prototype.scrollIntoView = vi.fn();
+});
+
+afterEach(() => {
+  cleanup();
+  mockNavigate.mockClear();
+});
+
+/** Renders the palette and opens it via the real Ctrl+K hotkey path. */
+async function openPalette() {
+  render(<CommandPalette />);
+  fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true });
+  await waitFor(() => {
+    expect(document.querySelector('.alm-palette')).not.toBeNull();
+  });
+}
+
+describe('CommandPalette rendered smoke (#581)', () => {
+  it('opens on Ctrl+K with the expected alm-palette* class structure', async () => {
+    await openPalette();
+    expect(document.querySelector('.alm-palette-backdrop')).not.toBeNull();
+    expect(document.querySelector('.alm-palette__input')).not.toBeNull();
+    expect(document.querySelector('.alm-palette__list')).not.toBeNull();
+    // Pages + Actions groups render without a query; each must carry the
+    // styled class (the review blocker: cmdk only sets cmdk-group="",
+    // so .alm-palette__group CSS was dead without an explicit className).
+    const groups = document.querySelectorAll('.alm-palette__group');
+    expect(groups.length).toBeGreaterThanOrEqual(2);
+    for (const group of groups) {
+      expect(group.querySelector('[cmdk-group-heading]')).not.toBeNull();
+    }
+    expect(
+      document.querySelectorAll('.alm-palette__item').length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('gives the search input initial focus (initialFocus fix)', async () => {
+    await openPalette();
+    // The focus race left focus on the popup container, which silenced all
+    // of cmdk's input-keydown plumbing (arrow keys, Enter, selection).
+    const input = document.querySelector<HTMLInputElement>(
+      '.alm-palette__input',
+    )!;
+    await waitFor(() => {
+      expect(document.activeElement).toBe(input);
+    });
+  });
+
+  it('navigates via ArrowDown + Enter (cmdk keyboard nav reaches the input)', async () => {
+    await openPalette();
+    const input = document.querySelector<HTMLInputElement>(
+      '.alm-palette__input',
+    )!;
+    fireEvent.keyDown(input, { key: 'ArrowDown', code: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledTimes(1);
+    });
+    const call = mockNavigate.mock.calls[0][0] as { to: string };
+    expect(PAGES.some((p) => p.route === call.to)).toBe(true);
+  });
+
+  it('navigates when an item is clicked (click-to-select)', async () => {
+    await openPalette();
+    const item = document.querySelector('.alm-palette__item')!;
+    // cmdk selects on pointer events, not plain click.
+    fireEvent.pointerMove(item);
+    fireEvent.pointerUp(item);
+    fireEvent.click(item);
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalled();
+    });
   });
 });

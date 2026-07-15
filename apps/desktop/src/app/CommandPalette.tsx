@@ -284,7 +284,10 @@ export function CommandPalette() {
                 </Command.Empty>
               )}
               {results.length > 0 && (
-                <Command.Group heading={m.cmdk_group_results()}>
+                <Command.Group
+                  className="alm-palette__group"
+                  heading={m.cmdk_group_results()}
+                >
                   {results.map((r) => (
                     <Command.Item
                       key={r.id}
@@ -302,7 +305,10 @@ export function CommandPalette() {
                   ))}
                 </Command.Group>
               )}
-              <Command.Group heading={m.cmdk_group_pages()}>
+              <Command.Group
+                className="alm-palette__group"
+                heading={m.cmdk_group_pages()}
+              >
                 {visiblePages.map((p) => (
                   <Command.Item
                     key={p.route}
@@ -313,7 +319,10 @@ export function CommandPalette() {
                   </Command.Item>
                 ))}
               </Command.Group>
-              <Command.Group heading={m.cmdk_group_actions()}>
+              <Command.Group
+                className="alm-palette__group"
+                heading={m.cmdk_group_actions()}
+              >
                 {ALL_ACTIONS.map((a) => (
                   <Command.Item
                     key={a.label()}
