@@ -310,7 +310,8 @@ export async function flushToDB(sources: SourcesState): Promise<FlushResult> {
         success: false,
         // Issue #704: an exact-path duplicate is not a genuine failure in the
         // restart flow — flag it so the wizard advances instead of blocking.
-        alreadyRegistered: item.error === 'path.already_registered' || undefined,
+        alreadyRegistered:
+          item.error === 'path.already_registered' || undefined,
         error: message,
       };
     });

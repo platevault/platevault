@@ -974,7 +974,9 @@ describe('SetupWizard step-tab navigation (issue #512)', () => {
     expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
 
     // Free backward jump to any visited/earlier step.
-    fireEvent.click(screen.getByRole('button', { name: /1\. Source Folders/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /1\. Source Folders/i }),
+    );
     expect(screen.getByText(/where does your data live/i)).toBeInTheDocument();
   });
 });
