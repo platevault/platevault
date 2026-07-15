@@ -101,7 +101,9 @@ describe('resolveRevealPath (#567)', () => {
   });
 
   it('collapses a trailing root separator and a leading relative separator', () => {
-    expect(resolveRevealPath('/mnt/lib/', '/Lights/L')).toBe('/mnt/lib/Lights/L');
+    expect(resolveRevealPath('/mnt/lib/', '/Lights/L')).toBe(
+      '/mnt/lib/Lights/L',
+    );
   });
 
   it('falls back to the root when relativePath is null or empty', () => {
