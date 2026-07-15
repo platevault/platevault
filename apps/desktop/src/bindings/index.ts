@@ -1578,6 +1578,15 @@ export const commands = {
 	 */
 	inventoryList: (req: InventoryListRequest_Deserialize) => typedError<InventoryListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_list", { req })),
 	/**
+	 *  `inventory.session.notes.update` — write post-hoc notes for an inventory
+	 *  session. Empty/whitespace-only `notes` clears the field.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` (mapped to `ContractError::internal`) on
+	 *  `session.not_found`, `note.content_too_large`, or a database error.
+	 */
+	inventorySessionNotesUpdate: (req: SessionNotesUpdateRequest) => typedError<SessionNotesUpdateResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("inventory_session_notes_update", { req })),
+	/**
 	 *  `inventory.frame.list` — list per-frame inventory entries for a session
 	 *  or root.
 	 * 
@@ -5472,6 +5481,26 @@ export type InventorySession_Deserialize = {
 	capturedOn: string | null,
 	provenance: InventoryProvenanceSummary_Deserialize | null,
 	linked: InventoryLinkedRefs_Deserialize | null,
+	/**
+	 *  The session's frame folder, relative to its source root
+	 *  (`source_id`'s `current_path`). The reveal action joins the root path
+	 *  with this so it opens the session's actual frame folder instead of the
+	 *  library root (#567). `None` when no frame `file_record` resolves a
+	 *  path (legacy/unscanned sessions) — the UI then falls back to the root.
+	 */
+	relativePath: string | null,
+	/**  User-editable free-text notes (#773). `None` when never set. */
+	notes: string | null,
+	/**
+	 *  Calibration masters assigned to this session (`calibration_assignment`
+	 *  rows), reusing the same DTO the (frontend-unused) `sessions_get`
+	 *  contract already carries. Empty for calibration sessions (dark/flat/
+	 *  bias) — assignment links a light session to its calibration masters,
+	 *  never the reverse — and for a light session with no assignment yet;
+	 *  the UI renders both as an explicit "no calibration match" state
+	 *  rather than omitting the section (#772).
+	 */
+	calibrationMatches?: SessionCalibrationMatch[],
 };
 
 /**
@@ -5497,6 +5526,26 @@ export type InventorySession_Serialize = {
 	capturedOn?: string | null,
 	provenance?: InventoryProvenanceSummary_Serialize | null,
 	linked?: InventoryLinkedRefs_Serialize | null,
+	/**
+	 *  The session's frame folder, relative to its source root
+	 *  (`source_id`'s `current_path`). The reveal action joins the root path
+	 *  with this so it opens the session's actual frame folder instead of the
+	 *  library root (#567). `None` when no frame `file_record` resolves a
+	 *  path (legacy/unscanned sessions) — the UI then falls back to the root.
+	 */
+	relativePath?: string | null,
+	/**  User-editable free-text notes (#773). `None` when never set. */
+	notes?: string | null,
+	/**
+	 *  Calibration masters assigned to this session (`calibration_assignment`
+	 *  rows), reusing the same DTO the (frontend-unused) `sessions_get`
+	 *  contract already carries. Empty for calibration sessions (dark/flat/
+	 *  bias) — assignment links a light session to its calibration masters,
+	 *  never the reverse — and for a light session with no assignment yet;
+	 *  the UI renders both as an explicit "no calibration match" state
+	 *  rather than omitting the section (#772).
+	 */
+	calibrationMatches?: SessionCalibrationMatch[],
 };
 
 /**
@@ -8154,6 +8203,31 @@ export type SessionKey = {
 	gain: string,
 	/**  ISO date of the observing night (local sunset date). */
 	night: string,
+};
+
+/**
+ *  Request for `inventory.session.notes.update`. Mirrors the
+ *  `target.note.update` shape (spec 023 US4) — empty/whitespace-only `notes`
+ *  clears the field (stores NULL).
+ */
+export type SessionNotesUpdateRequest = {
+	sessionId: string,
+	notes: string,
+};
+
+/**  Response for `inventory.session.notes.update`. */
+export type SessionNotesUpdateResult = SessionNotesUpdateResult_Serialize | SessionNotesUpdateResult_Deserialize;
+
+/**  Response for `inventory.session.notes.update`. */
+export type SessionNotesUpdateResult_Deserialize = {
+	/**  Notes after the update, or `null` when cleared. */
+	notes: string | null,
+};
+
+/**  Response for `inventory.session.notes.update`. */
+export type SessionNotesUpdateResult_Serialize = {
+	/**  Notes after the update, or `null` when cleared. */
+	notes?: string | null,
 };
 
 /**  Wrapper for `sessions.split` return value. */
