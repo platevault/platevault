@@ -245,4 +245,11 @@ describe('AddTargetDialog', () => {
     const confirmBtn = screen.getByRole('button', { name: /Add target/i });
     expect(confirmBtn).toBeDisabled();
   });
+
+  it('9. opening the dialog focuses the search input, not the ✕ close button (#841)', async () => {
+    render(<AddTargetDialog open onClose={vi.fn()} onAdded={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toHaveFocus();
+    });
+  });
 });
