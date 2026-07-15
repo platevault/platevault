@@ -382,3 +382,41 @@ describe('TargetsTable — lunar distance (US2)', () => {
     expect(screen.queryByText('90°')).not.toBeInTheDocument();
   });
 });
+
+// ── #757: needs-coordinates is a distinct table state, not 0°/"low" ────────────
+
+describe('TargetsTable — needs-coordinates state (#757)', () => {
+  beforeEach(() => {
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+  });
+
+  it('shows the unresolved chip (never "0°") in Max alt + sparkline for a target with no coordinates', () => {
+    renderTable({ targets: [coordItem('UNK', null, null)] });
+    expect(screen.queryByText('0°')).not.toBeInTheDocument();
+    // One chip in the Max alt cell, one in place of the sparkline.
+    expect(screen.getAllByTestId('unresolved-chip').length).toBe(2);
+  });
+
+  it('shows a "Needs coordinates" indicator distinct from the low-altitude "○ Low" state', () => {
+    // Pin to a winter night (see the circumpolar test above): mid-summer at
+    // 52°N never reaches astronomical twilight, which would make the
+    // low-altitude fixture read "No dark window" instead of "low" — not a
+    // useful test of the #757 distinction.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-15T20:00:00Z'));
+    try {
+      renderTable({
+        targets: [coordItem('UNK', null, null), coordItem('LOW', 0, -80)],
+      });
+      expect(screen.getByText('Needs coordinates')).toBeInTheDocument();
+      // The genuinely low-altitude target still gets its own distinct label.
+      expect(screen.getByText('low')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
