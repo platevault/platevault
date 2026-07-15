@@ -7,20 +7,22 @@
  * controls have no visible effect).
  *
  * Confirms both selects, when changed, apply through the shared token layer
- * on <html> (data/theme.ts `applyDensity`/`applyFontSize`) rather than being
- * inert local state — the density select already wired `applyDensity`
- * on change (App), font size previously did nothing at all.
+ * on <html> (data/theme.ts) rather than being inert local state. Density
+ * applies via the preference subscription installed by `initAppearance()`
+ * (called at app boot in main.tsx), so the test boots it the same way.
  */
 
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { initAppearance } from '@/data/theme';
 import { General } from './General';
 
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.removeAttribute('style');
   document.documentElement.className = '';
+  initAppearance();
 });
 
 afterEach(() => {

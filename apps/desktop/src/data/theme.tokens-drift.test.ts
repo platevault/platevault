@@ -24,11 +24,16 @@ import { SPACING_BASE_PX, TEXT_SCALE_BASE_PX } from './theme';
 // instead. vitest runs with cwd = apps/desktop (see package.json `test`).
 const tokensCssPath = join(process.cwd(), 'src/styles/tokens.css');
 
-/** Parses only the base `:root { ... }` block, before any `[data-theme]` override block. */
+/**
+ * Parses the base `:root { ... }` block only. Anchored to the bare `:root`
+ * selector: theme blocks use `[data-theme=...]` and the shared default-palette
+ * block uses `:root, [data-theme=...]`, so neither matches `:root\s*{`. CSS
+ * blocks here never nest, so `[^}]*` spans exactly one block.
+ */
 function parseRootTokenPx(varPrefix: string): Record<string, number> {
   const css = readFileSync(tokensCssPath, 'utf-8');
-  const rootBlockEnd = css.indexOf('\n}');
-  const rootBlock = css.slice(0, rootBlockEnd);
+  const rootBlock = /:root\s*\{([^}]*)\}/.exec(css)?.[1];
+  if (rootBlock === undefined) throw new Error('no :root block in tokens.css');
   const pattern = new RegExp(
     `(${varPrefix}[\\w-]+):\\s*(\\d+(?:\\.\\d+)?)px;`,
     'g',

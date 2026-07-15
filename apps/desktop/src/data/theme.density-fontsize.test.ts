@@ -193,3 +193,27 @@ describe('hydrateThemeFromSettings — reconciles font size alongside theme', ()
     expect(getFontSizeChoice()).toBe('large');
   });
 });
+
+describe('density preference writes — central rescale via initAppearance()', () => {
+  it('a bare setPreference("density") rescales tokens (the Setup wizard path, which never calls applyDensity)', async () => {
+    const { initAppearance } = await import('./theme');
+    const { setPreference } = await import('./preferences');
+    initAppearance();
+
+    // StepCatalogs' DensityControl only writes the preference via
+    // usePreference('density') → setPreference; no applyDensity call.
+    setPreference('density', 'compact');
+
+    const style = document.documentElement.style;
+    expect(style.getPropertyValue('--alm-sp-2')).toBe('6.00px'); // 8 * 0.75
+    expect(document.documentElement.classList.contains('density-compact')).toBe(
+      true,
+    );
+
+    setPreference('density', 'comfortable');
+    expect(style.getPropertyValue('--alm-sp-2')).toBe('');
+    expect(document.documentElement.classList.contains('density-compact')).toBe(
+      false,
+    );
+  });
+});

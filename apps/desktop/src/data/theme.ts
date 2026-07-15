@@ -26,7 +26,7 @@
 // backed — it stays on the existing `AppPreferences.density` (localStorage)
 // path.
 import { useSyncExternalStore } from 'react';
-import { getPreferences } from '@/data/preferences';
+import { getPreferences, subscribePreferences } from '@/data/preferences';
 
 export type ThemeId =
   | 'warm-clay'
@@ -344,11 +344,24 @@ export function setFontSizeChoice(choice: FontSizeChoice): void {
   notify();
 }
 
-/** Call once at startup (before/at first render). Wires OS-theme changes. */
+/**
+ * Call once at startup (before/at first render). Wires OS-theme changes and
+ * re-applies density on any preference write, so every density writer
+ * (Settings, the Setup wizard's usePreference('density')) gets the token
+ * rescale without needing its own applyDensity call (#587).
+ */
 export function initAppearance(): void {
   applyTheme();
   applyDensity();
   applyFontSize();
+  let lastDensity = getPreferences().density;
+  subscribePreferences(() => {
+    const d = getPreferences().density;
+    if (d !== lastDensity) {
+      lastDensity = d;
+      applyDensity(d);
+    }
+  });
   if (typeof window !== 'undefined' && window.matchMedia) {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const onChange = (): void => {

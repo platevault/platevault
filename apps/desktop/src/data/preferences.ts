@@ -88,6 +88,16 @@ export function resetPreferences(): void {
   notify();
 }
 
+/**
+ * Subscribes to preference changes outside React (components use the hooks
+ * below). Lets the appearance runtime (data/theme.ts) re-apply density when
+ * ANY caller writes it — Settings, the Setup wizard's usePreference — so the
+ * app-wide token rescale never depends on a per-call-site applyDensity (#587).
+ */
+export function subscribePreferences(listener: Listener): () => void {
+  return subscribe(listener);
+}
+
 // --- Hooks ---
 
 function subscribe(listener: Listener): () => void {

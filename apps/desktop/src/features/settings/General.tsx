@@ -12,7 +12,6 @@ import {
   useFontSizeChoice,
   resolveTheme,
   THEMES,
-  applyDensity,
 } from '@/data/theme';
 import type { FontSizeChoice } from '@/data/theme';
 import type { Density } from '@/bindings/types';
@@ -122,11 +121,7 @@ export function General() {
             <select
               className="alm-select"
               value={density}
-              onChange={(e) => {
-                const d = e.target.value as Density;
-                setDensity(d);
-                applyDensity(d);
-              }}
+              onChange={(e) => setDensity(e.target.value as Density)}
             >
               <option value="compact">
                 {m.settings_general_density_compact()}
