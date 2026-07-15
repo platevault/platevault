@@ -192,7 +192,10 @@ export function ToolLaunchesAccordion({
 
   if (loading) {
     return (
-      <Section title={m.projects_toollaunches_title()} defaultOpen={defaultOpen}>
+      <Section
+        title={m.projects_toollaunches_title()}
+        defaultOpen={defaultOpen}
+      >
         <div className="tool-launches-loading alm-tool-launches__loading">
           {m.projects_artifacts_loading()}
         </div>
@@ -202,7 +205,10 @@ export function ToolLaunchesAccordion({
 
   if (error) {
     return (
-      <Section title={m.projects_toollaunches_title()} defaultOpen={defaultOpen}>
+      <Section
+        title={m.projects_toollaunches_title()}
+        defaultOpen={defaultOpen}
+      >
         <div className="tool-launches-error alm-tool-launches__error">
           {m.projects_artifacts_load_error({ error })}
         </div>
@@ -212,7 +218,10 @@ export function ToolLaunchesAccordion({
 
   if (groups.length === 0) {
     return (
-      <Section title={m.projects_toollaunches_title()} defaultOpen={defaultOpen}>
+      <Section
+        title={m.projects_toollaunches_title()}
+        defaultOpen={defaultOpen}
+      >
         <div className="tool-launches-empty alm-tool-launches__empty">
           {m.projects_artifacts_empty()}
         </div>
