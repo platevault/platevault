@@ -1,4 +1,4 @@
--- Migration 0066: camera sensor-type dimension (spec 044 iteration
+-- Migration 0067: camera sensor-type dimension (spec 044 iteration
 -- 2026-07-15, FR-035/T045).
 --
 -- Adds exactly two additive nullable columns to `cameras` (0007) -- no wider

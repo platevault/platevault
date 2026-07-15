@@ -41,7 +41,7 @@ fn str_to_category(s: &str) -> FilterCategory {
     }
 }
 
-// Camera sensor type (spec 044 iteration 2026-07-15, FR-035/migration 0066):
+// Camera sensor type (spec 044 iteration 2026-07-15, FR-035/migration 0067):
 // stored as TEXT 'mono'|'osc'; NULL/unknown values read back as None so
 // unknown always behaves as mono downstream (FR-038).
 fn sensor_type_to_str(sensor: SensorType) -> &'static str {
