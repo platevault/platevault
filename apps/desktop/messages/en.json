@@ -923,7 +923,6 @@
   "setup_config_density_compact": "Compact",
   "setup_config_density_spacious": "Spacious",
   "setup_config_display_density_desc": "How compact the interface is — affects row heights and spacing across the app.",
-  "setup_config_theme_light": "Light",
   "setup_confirm_blocked": "Cannot complete setup: missing required folder types — {kinds}. Go back to Step 1 to add them.",
   "setup_confirm_next_roots": "Your selected folders are registered as library roots.",
   "setup_confirm_next_scan": "An initial scan runs after setup, reading file headers to build the index.",
