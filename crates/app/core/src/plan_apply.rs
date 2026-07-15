@@ -2311,6 +2311,7 @@ mod tests {
                 path: "projects/M31_LRGB",
                 notes: None,
                 canonical_target_id: None,
+                is_mosaic: false,
             },
         )
         .await
@@ -2345,6 +2346,7 @@ mod tests {
                 path: "projects/M31",
                 notes: None,
                 canonical_target_id: None,
+                is_mosaic: false,
             },
         )
         .await
@@ -2391,6 +2393,7 @@ mod tests {
                 path: "projects/M31_Ready",
                 notes: None,
                 canonical_target_id: None,
+                is_mosaic: false,
             },
         )
         .await

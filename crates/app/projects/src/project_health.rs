@@ -413,6 +413,7 @@ mod tests {
             initial_sources: vec![],
             notes: None,
             canonical_target_id: None,
+            is_mosaic: false,
         }
     }
 

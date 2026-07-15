@@ -61,6 +61,7 @@ async fn create_project(pool: &SqlitePool, bus: &EventBus, name: &str) -> String
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,
+        is_mosaic: false,
     };
     let result = project_setup::create(pool, bus, &empty_cache(), &req).await.unwrap();
     result.project_id
@@ -442,6 +443,7 @@ async fn relative_project_path_without_registered_root_is_rejected() {
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,
+        is_mosaic: false,
     };
 
     let err = project_setup::create(db.pool(), &bus, &empty_cache(), &req).await.unwrap_err();

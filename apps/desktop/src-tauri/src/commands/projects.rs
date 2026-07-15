@@ -12,6 +12,10 @@
 //!   - `projects.source.remove` — unlink a source.
 //!   - `projects.channels.reinfer`      — re-infer channels.
 //!   - `projects.channels.dismiss_drift` — dismiss channel drift banner.
+//!   - `projects.framing.list`          — list a project's framings.
+//!   - `projects.framing.merge`         — fold framings together.
+//!   - `projects.framing.split`         — split sessions into a new framing.
+//!   - `projects.framing.reassign`      — move sessions between framings.
 //!
 //! Stub commands that remain until spec 025/003 integration completes:
 //!   - `projects.create_plan`  — retained for UI compatibility (returns fixture).
@@ -19,7 +23,11 @@
 //! `projects.list` and `projects.get` retain their original specta rename strings
 //! so the existing TypeScript surface is not broken.
 
-use app_core::project_setup;
+use app_core::{framing as framing_use_case, project_setup};
+use contracts_core::framing::{
+    FramingListRequest, FramingListResponse, FramingMergeRequest, FramingMergeResult,
+    FramingReassignRequest, FramingReassignResult, FramingSplitRequest, FramingSplitResult,
+};
 use contracts_core::lifecycle::PlanState;
 use contracts_core::plans::{
     DestructiveDestination, PlanDetail, PlanItemAction, PlanItemDetail, PlanItemProtection,
@@ -171,6 +179,79 @@ pub async fn projects_channels_dismiss_drift(
     req: ProjectChannelsDismissDriftRequest,
 ) -> Result<ProjectChannelsDismissDriftResult, ContractError> {
     project_setup::dismiss_drift(state.repo.pool(), &state.bus, &req).await
+}
+
+// ── projects.framing.list (spec 008 Q27, F-Framing-3) ─────────────────────────
+
+/// `projects.framing.list` — list a project's framings.
+///
+/// # Errors
+///
+/// Returns `Err(String)` with `"project.not_found"` when the project does not
+/// exist.
+#[tauri::command]
+#[specta::specta]
+pub async fn projects_framing_list(
+    state: State<'_, AppState>,
+    req: FramingListRequest,
+) -> Result<FramingListResponse, ContractError> {
+    framing_use_case::list(state.repo.pool(), &req).await
+}
+
+// ── projects.framing.merge ────────────────────────────────────────────────────
+
+/// `projects.framing.merge` — fold one or more framings into a primary
+/// framing; membership-only, flips the primary to `user_adjusted`.
+///
+/// # Errors
+///
+/// Returns `Err(String)` on validation failure (e.g.
+/// `"framing.merge.requires_two"`) or when a referenced framing is not found.
+#[tauri::command]
+#[specta::specta]
+pub async fn projects_framing_merge(
+    state: State<'_, AppState>,
+    req: FramingMergeRequest,
+) -> Result<FramingMergeResult, ContractError> {
+    framing_use_case::merge(state.repo.pool(), &state.bus, &req).await
+}
+
+// ── projects.framing.split ────────────────────────────────────────────────────
+
+/// `projects.framing.split` — move a subset of a framing's sessions into a
+/// brand-new framing; membership-only, flips both framings to
+/// `user_adjusted`.
+///
+/// # Errors
+///
+/// Returns `Err(String)` on validation failure (e.g.
+/// `"framing.split.would_empty_source"`) or when the framing is not found.
+#[tauri::command]
+#[specta::specta]
+pub async fn projects_framing_split(
+    state: State<'_, AppState>,
+    req: FramingSplitRequest,
+) -> Result<FramingSplitResult, ContractError> {
+    framing_use_case::split(state.repo.pool(), &state.bus, &req).await
+}
+
+// ── projects.framing.reassign ─────────────────────────────────────────────────
+
+/// `projects.framing.reassign` — move sessions into a target framing;
+/// membership-only, flips every touched framing to `user_adjusted`.
+///
+/// # Errors
+///
+/// Returns `Err(String)` on validation failure (e.g.
+/// `"framing.reassign.empty_selection"`) or when the target framing is not
+/// found.
+#[tauri::command]
+#[specta::specta]
+pub async fn projects_framing_reassign(
+    state: State<'_, AppState>,
+    req: FramingReassignRequest,
+) -> Result<FramingReassignResult, ContractError> {
+    framing_use_case::reassign(state.repo.pool(), &state.bus, &req).await
 }
 
 // ── projects.create_plan (stub retained for spec 025 compatibility) ───────────

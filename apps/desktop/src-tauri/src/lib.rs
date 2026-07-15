@@ -92,8 +92,9 @@ use crate::commands::prepared_views::{
 };
 use crate::commands::projects::{
     projects_channels_dismiss_drift, projects_channels_reinfer, projects_create,
-    projects_create_plan, projects_get, projects_list, projects_source_add, projects_source_remove,
-    projects_update,
+    projects_create_plan, projects_framing_list, projects_framing_merge, projects_framing_reassign,
+    projects_framing_split, projects_get, projects_list, projects_source_add,
+    projects_source_remove, projects_update,
 };
 use crate::commands::protection::{
     plan_protection_check_cmd, protection_plan_acknowledged, source_protection_get,
@@ -245,6 +246,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         projects_source_remove,
         projects_channels_reinfer,
         projects_channels_dismiss_drift,
+        projects_framing_list,
+        projects_framing_merge,
+        projects_framing_split,
+        projects_framing_reassign,
         projects_create_plan,
         // plans (spec 017)
         plans_list,
@@ -482,6 +487,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         projects_source_remove,
         projects_channels_reinfer,
         projects_channels_dismiss_drift,
+        projects_framing_list,
+        projects_framing_merge,
+        projects_framing_split,
+        projects_framing_reassign,
         projects_create_plan,
         // plans (spec 017)
         plans_list,
