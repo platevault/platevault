@@ -134,9 +134,18 @@ export function PlanReviewOverlay({
   >(null);
 
   const busy = approving || discarding || retrying || progress.running;
-  const applied = finalState === 'applied';
+  // FR-011 (issue #733): a plan reopened from a prior session carries no
+  // session-local `finalState` (it starts `null` every mount), so the
+  // footer must fall back to the persisted `plan.state` from `plans.get`
+  // rather than always rendering the pre-apply Discard/Approve&Apply pair
+  // — the backend refuses those actions on a terminal plan with
+  // `plan.invalid_state`.
+  const effectiveState = finalState ?? plan?.state ?? null;
+  const applied = effectiveState === 'applied';
   const retryable =
-    finalState === 'failed' || finalState === 'partially_applied';
+    effectiveState === 'failed' ||
+    effectiveState === 'partially_applied' ||
+    effectiveState === 'cancelled';
 
   const invalidatePlan = useCallback(() => {
     if (planId !== null) {
@@ -250,8 +259,12 @@ export function PlanReviewOverlay({
     if (planId === null || busy) return;
     setRetrying(true);
     setApplyError(null);
+    // A plan reopened in `cancelled` state has no `failed` items to retry
+    // (`plan.retry`'s `failed` filter would refuse with `no.items.to.retry`)
+    // — retry its cancelled items instead (`RetryItemsFilter::Cancelled`).
+    const itemsFilter = effectiveState === 'cancelled' ? 'cancelled' : 'failed';
     try {
-      const res = unwrap(await commands.plansRetry(planId, 'failed'));
+      const res = unwrap(await commands.plansRetry(planId, itemsFilter));
       addToast({
         message: m.plans_review_retry_created_toast(),
         variant: 'info',
@@ -269,7 +282,7 @@ export function PlanReviewOverlay({
     } finally {
       setRetrying(false);
     }
-  }, [planId, busy, resetApply, onRetryCreated]);
+  }, [planId, busy, resetApply, onRetryCreated, effectiveState]);
 
   // ── Items table ────────────────────────────────────────────────────────────
 
@@ -279,10 +292,14 @@ export function PlanReviewOverlay({
     { key: 'from', label: m.plans_review_col_from() },
     { key: 'to', label: m.plans_review_col_to() },
     { key: 'protection', label: m.plans_review_col_protection() },
+    { key: 'reason', label: m.plans_review_col_reason() },
+    { key: 'linked', label: m.plans_review_col_linked() },
   ];
 
   // FR-003: every item shows its destination path or, for `delete`-action
   // items (no destination — the source is removed in place), a deletion cue.
+  // `reason`/`linked` (issue #733): present on the DTO but were never
+  // rendered, undermining SC-001's pre-approval inspectability.
   const rows = (plan?.items ?? []).map((item) => ({
     _testid: `plan-review-item-${item.index}`,
     _rowClassName:
@@ -306,6 +323,10 @@ export function PlanReviewOverlay({
       ) : (
         <Pill variant="ghost">{m.settings_cleanup_protection_normal()}</Pill>
       ),
+    reason: item.reason,
+    linked: item.linked ?? (
+      <span className="alm-cell--muted">{m.common_none()}</span>
+    ),
   }));
 
   // ── Footer ────────────────────────────────────────────────────────────────
