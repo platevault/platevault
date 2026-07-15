@@ -441,6 +441,24 @@ pub async fn generate(
 /// artifact `DataType` categories `intermediate`/`masters`/`finals` above).
 const RAW_FRAME_PROTECTION_CATEGORY: &str = "raw_frames";
 
+/// Pick the protection source id for a raw frame (issue #563): the owning
+/// session when a per-session override row exists (future surface), otherwise
+/// the frame's root — the only override unit the UI ships today. Resolving
+/// under the root also covers the no-override case (plain global
+/// inheritance), so no third branch is needed.
+async fn frame_protection_source(
+    pool: &SqlitePool,
+    session_id: Option<&str>,
+    root_id: &str,
+) -> Result<String, ContractError> {
+    if let Some(sid) = session_id {
+        if prot_repo::get_source_protection_row(pool, sid).await.map_err(db_err)?.is_some() {
+            return Ok(sid.to_owned());
+        }
+    }
+    Ok(root_id.to_owned())
+}
+
 /// Pure, read-only raw sub-frame cleanup preview for a root or session
 /// (spec 048 US3 T029/T030 — the headline "biggest disk win" this feature
 /// exists to unblock, per spec.md).
@@ -453,12 +471,13 @@ const RAW_FRAME_PROTECTION_CATEGORY: &str = "raw_frames";
 /// (FR-023).
 ///
 /// DECISION NOTE: protection is resolved keyed by the frame's owning session
-/// id (falling back to the root id when a frame has no owning session) — raw
-/// frames have no natural project-like "source" the way processing artifacts
-/// do, and grouping candidates by session (the acceptance-scenario shape) makes
-/// the session the natural protection-override unit. No shipped path creates
-/// per-session protection overrides today; if that surface lands, this is
-/// where it takes effect.
+/// id when a per-session override row exists (no shipped surface creates one
+/// today; if that surface lands, this is where it takes effect), otherwise by
+/// the frame's root id — the ONLY override unit the UI ships (the Data
+/// Sources card, keyed by root id). Issue #563: the previous
+/// session-id-or-bust keying meant a per-root "Unprotected" override was
+/// cosmetic for every session-attributed frame — enforcement resolved under
+/// the session id, found no row, and inherited the global default instead.
 ///
 /// # Errors
 ///
@@ -494,7 +513,8 @@ pub async fn scan_raw_frames(
             }
         }
 
-        let source_id = frame.session_id.clone().unwrap_or_else(|| frame.root_id.clone());
+        let source_id =
+            frame_protection_source(pool, frame.session_id.as_deref(), &frame.root_id).await?;
         let resolved = prot_repo::resolve_protection(
             pool,
             &source_id,
@@ -555,7 +575,7 @@ pub async fn generate_raw_frame_plan(
         }
         let (session_id, _frame_type) =
             frame_inventory::owning_session_frame_type(pool, &row.id).await?;
-        let source_id = session_id.unwrap_or_else(|| row.root_id.clone());
+        let source_id = frame_protection_source(pool, session_id.as_deref(), &row.root_id).await?;
         let size = row.size_bytes.max(0);
         total_bytes_required = total_bytes_required.saturating_add(size);
 
@@ -1094,6 +1114,118 @@ mod tests {
         let resp = scan_raw_frames(db.pool(), &req).await.unwrap();
 
         assert!(resp.candidates.is_empty(), "session is Light-kind; Dark filter excludes it");
+    }
+
+    /// Issue #563 regression: a per-root "Unprotected" override (the only
+    /// override surface the UI ships — the Data Sources card) previously
+    /// never reached session-attributed frames, because enforcement resolved
+    /// protection under the session id, found no row, and inherited the
+    /// global `protected` default — making the override cosmetic exactly
+    /// where it gates cleanup.
+    #[tokio::test]
+    async fn root_override_applies_to_session_attributed_raw_frames() {
+        use app_core_targets::frame_writer::upsert_frame_record;
+
+        let (db, bus, _lock) = setup().await;
+        insert_root(db.pool(), "root-1", "/tmp/lib").await;
+        let f1 = upsert_frame_record(db.pool(), "root-1", "l1.fits", 1000, "t0", "classified")
+            .await
+            .unwrap();
+        insert_acquisition_session(db.pool(), "sess-1", &[&f1]).await;
+
+        protection::set_source_protection(
+            db.pool(),
+            &bus,
+            &SourceProtectionSetRequest {
+                source_id: "root-1".to_owned(),
+                level: ProtectionLevel::Unprotected,
+                block_permanent_delete: Some(false),
+                categories: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let scan = scan_raw_frames(
+            db.pool(),
+            &RawFrameCleanupScanRequest {
+                scope: RawFrameCleanupScope {
+                    session_id: Some("sess-1".to_owned()),
+                    root_id: None,
+                },
+                kinds: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(scan.candidates.len(), 1);
+        assert_eq!(
+            scan.candidates[0].protection, "unprotected",
+            "per-root override must reach session-attributed frames"
+        );
+
+        let plan = generate_raw_frame_plan(
+            db.pool(),
+            &RawFrameCleanupGenerateRequest {
+                selected_frame_ids: vec![f1],
+                title: None,
+                destructive_destination: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            plan.protected_item_count, 0,
+            "generated plan must honour the root override, not the global default"
+        );
+    }
+
+    /// Pins the #563 precedence chain: a per-session override row (future
+    /// surface) still wins over the frame's root override when both exist.
+    #[tokio::test]
+    async fn session_override_takes_precedence_over_root_for_raw_frames() {
+        use app_core_targets::frame_writer::upsert_frame_record;
+
+        let (db, bus, _lock) = setup().await;
+        insert_root(db.pool(), "root-1", "/tmp/lib").await;
+        let f1 = upsert_frame_record(db.pool(), "root-1", "l1.fits", 1000, "t0", "classified")
+            .await
+            .unwrap();
+        insert_acquisition_session(db.pool(), "sess-1", &[&f1]).await;
+
+        for (source_id, level) in
+            [("root-1", ProtectionLevel::Unprotected), ("sess-1", ProtectionLevel::Protected)]
+        {
+            protection::set_source_protection(
+                db.pool(),
+                &bus,
+                &SourceProtectionSetRequest {
+                    source_id: source_id.to_owned(),
+                    level,
+                    block_permanent_delete: None,
+                    categories: None,
+                },
+            )
+            .await
+            .unwrap();
+        }
+
+        let scan = scan_raw_frames(
+            db.pool(),
+            &RawFrameCleanupScanRequest {
+                scope: RawFrameCleanupScope {
+                    session_id: Some("sess-1".to_owned()),
+                    root_id: None,
+                },
+                kinds: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            scan.candidates[0].protection, "protected",
+            "an existing session override row outranks the root override"
+        );
     }
 
     #[tokio::test]

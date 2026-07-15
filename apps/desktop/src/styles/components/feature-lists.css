@@ -872,8 +872,15 @@
 
 /* === SOURCE PROTECTION OVERRIDE (spec 016 — per-root protection control) === */
 
+/* Issue #562: the pill + (when open) the edit form are rendered inline
+   inside the card's path row (`.alm-data-sources__root-path-row`, a wrapping
+   flex row) instead of as a standalone block below the path. `display:
+   contents` drops this wrapper's own box so the pill and the edit-col below
+   become direct flex items of that outer row — combined with
+   `.alm-source-protect__edit-col`'s `flex-basis: 100%`, the edit form always
+   starts its own wrapped line under the path/pill/pills line. */
 .alm-source-protect__root {
-  margin-top: var(--alm-sp-2);
+  display: contents;
 }
 
 .alm-source-protect__status {
@@ -881,7 +888,6 @@
   font-size: var(--alm-text-xs);
 }
 
-.alm-source-protect__view-row,
 .alm-source-protect__edit-row {
   display: flex;
   flex-wrap: wrap;
@@ -890,9 +896,11 @@
 }
 
 .alm-source-protect__edit-col {
+  flex-basis: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--alm-sp-2);
+  margin-top: var(--alm-sp-2);
 }
 
 .alm-source-protect__label {
