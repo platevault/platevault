@@ -287,3 +287,11 @@ Checked against `docs/development/track-b-044-plan-handover-2026-07-04.md`
 ## Complexity Tracking
 
 No constitution violations; table not required.
+
+## Iterate 2026-07-15 — planner observability UX (pointer)
+
+Spec-side changes only (FR-015/FR-016 supersession, FR-020 consumer-side
+passband aggregation, FR-014 sizing annotation). All implementation lands
+under spec 044's Phase 10 (tasks T040–T049). Decision record:
+`docs/research/044-047-planner-observability-ux-iterate.md` (approved
+2026-07-14, PR #819).

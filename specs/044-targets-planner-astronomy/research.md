@@ -166,3 +166,12 @@ Carried for the plan; they are UI concerns, not product requirements:
 - Orchestrator/backend: publishable `fits-header`/`xisf-header` crate extraction (own tinyspec off `main`,
   **not** this UI branch); sky/finder charts (d3-celestial / Aladin Lite) are phase-2.
 - Planets/comets/asteroids; pointing-grade astrometry; online services (FR-028/FR-026/FR-027).
+
+## Iterate 2026-07-15 — planner observability UX (decision record pointer)
+
+Decisions D1–D7 (three-quantity model, reason-for-zero, why-glyph, column
+consolidation/right-sizing, "Computed for" label, #817 graph fix, mono/OSC
+single-pass) live in `docs/research/044-047-planner-observability-ux-iterate.md`
+(approved 2026-07-14, PR #819, five review questions resolved). Reiterated
+constraint: no `min_lunar_separation_deg`-style scalar — rejected here (R5),
+in 047's plan/contracts, and again in the iterate doc (D7-FR3).
