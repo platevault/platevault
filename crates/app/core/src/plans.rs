@@ -29,6 +29,7 @@ use audit::event_bus::{
     Source, TOPIC_ARCHIVE_PERMANENTLY_DELETED, TOPIC_ARCHIVE_SENT_TO_TRASH, TOPIC_PLAN_APPROVED,
     TOPIC_PLAN_DISCARDED, TOPIC_PLAN_RETRY_CREATED,
 };
+use camino::Utf8PathBuf;
 use contracts_core::lifecycle::PlanState;
 use contracts_core::plans::{
     ArchivePermanentlyDeleteResponse, ArchiveSendToTrashResponse, DestructiveDestination,
@@ -38,12 +39,16 @@ use contracts_core::plans::{
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::{new_id, Timestamp};
+use fs_executor::failure::FailureCode;
+use fs_executor::ops::{delete_op, trash_op};
 use persistence_db::repositories::plans as repo;
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::errors::bus_err;
+use crate::plan_apply::resolve_root_path;
 
 // ── State helpers ─────────────────────────────────────────────────────────────
 
@@ -651,18 +656,78 @@ pub async fn retry_plan(
 
 // ── Archive management (US6) ──────────────────────────────────────────────────
 
+/// Resolve an archived item's on-disk absolute path.
+///
+/// `archive_path` is stored root-relative when the item has a `from_root_id`
+/// (mirrors the spec-025 executor's `resolve_item_path`, `crates/fs/executor/src/run.rs`);
+/// archive-plan generators that predate a resolved root (`archive_generator`,
+/// `cleanup_generator`) store an already-absolute path with `from_root_id: None`,
+/// so the "no root" branch uses `archive_path` as-is rather than erroring.
+fn resolve_archive_abs_path(
+    archive_path: &str,
+    from_root_id: Option<&str>,
+    root_map: &HashMap<String, Utf8PathBuf>,
+) -> Utf8PathBuf {
+    match from_root_id.and_then(|rid| root_map.get(rid)) {
+        Some(root) => root.join(archive_path),
+        None => Utf8PathBuf::from(archive_path),
+    }
+}
+
+/// Map a trash-primitive failure to the closed `archive.send_to_trash` error set.
+fn trash_failure_error_code(code: FailureCode) -> ErrorCode {
+    match code {
+        FailureCode::OsTrashPermissionDenied | FailureCode::PermissionDenied => {
+            ErrorCode::OsTrashPermissionDenied
+        }
+        _ => ErrorCode::OsTrashUnavailable,
+    }
+}
+
+/// Map a delete-primitive failure to the closed `archive.permanently_delete` error set.
+fn delete_failure_error_code(code: FailureCode) -> ErrorCode {
+    match code {
+        FailureCode::PermissionDenied | FailureCode::ProtectedSource => {
+            ErrorCode::PathPermissionDenied
+        }
+        _ => ErrorCode::OsTrashUnavailable,
+    }
+}
+
+/// Build a `from_root_id → absolute library root path` map for the given
+/// archived items (T023a pattern, `crate::plan_apply::resolve_root_path`).
+async fn build_root_map(
+    pool: &SqlitePool,
+    items: &[&repo::PlanItemRow],
+) -> HashMap<String, Utf8PathBuf> {
+    let mut root_map = HashMap::new();
+    for rid in items.iter().filter_map(|i| i.from_root_id.as_deref()) {
+        if root_map.contains_key(rid) {
+            continue;
+        }
+        if let Some(path) = resolve_root_path(pool, rid).await {
+            root_map.insert(rid.to_owned(), Utf8PathBuf::from(path));
+        }
+    }
+    root_map
+}
+
 /// Send the app-managed archive subtree for a plan to the OS trash (T045).
 ///
-/// Archive path: `<library_root>/.astro-plan-archive/<planId>/`.
-/// This is a metadata-level operation in spec 017; actual filesystem execution
-/// is deferred to spec 025. Here we validate the plan exists, record the audit
-/// event, and return the stub response. Full filesystem access requires spec 025.
+/// Archive path: `<library_root>/.astro-plan-archive/<planId>/`. Sends every
+/// archived item's real file to the OS trash via `fs_executor::ops::trash_op`
+/// (constitution §II: prefer trash over permanent delete). An item whose
+/// on-disk file is already gone (e.g. a repeated call) is a no-op, not a
+/// failure. `itemsMoved` on success always reflects real trash outcomes, never
+/// the DB item count (the prior stub's bug, #732).
 ///
 /// # Errors
 ///
 /// Returns `ContractError` with code:
 /// - `plan.not_found` — no matching plan.
 /// - `archive.empty` — plan has no archived items.
+/// - `os_trash.unavailable` / `os_trash.permission.denied` — every item's real
+///   trash attempt failed (no items were moved).
 pub async fn send_archive_to_trash(
     pool: &SqlitePool,
     bus: &EventBus,
@@ -670,12 +735,11 @@ pub async fn send_archive_to_trash(
 ) -> Result<ArchiveSendToTrashResponse, ContractError> {
     let row = repo::get_plan(pool, plan_id, false).await.map_err(db_err)?;
 
-    // Count archive items.
     let items = repo::list_plan_items(pool, plan_id).await.map_err(db_err)?;
-    let archive_count = i64::try_from(items.iter().filter(|i| i.archive_path.is_some()).count())
-        .unwrap_or(i64::MAX);
+    let archive_items: Vec<&repo::PlanItemRow> =
+        items.iter().filter(|i| i.archive_path.is_some()).collect();
 
-    if archive_count == 0 {
+    if archive_items.is_empty() {
         return Err(ContractError::new(
             ErrorCode::ArchiveEmpty,
             format!("plan {} has no archived items", row.id),
@@ -684,23 +748,54 @@ pub async fn send_archive_to_trash(
         ));
     }
 
+    let root_map = build_root_map(pool, &archive_items).await;
+
+    let mut items_moved: i64 = 0;
+    let mut last_failure: Option<(FailureCode, String)> = None;
+    for item in &archive_items {
+        // Filtered by `archive_path.is_some()` above.
+        let archive_rel = item.archive_path.as_deref().unwrap_or_default();
+        let abs_path =
+            resolve_archive_abs_path(archive_rel, item.from_root_id.as_deref(), &root_map);
+
+        if !abs_path.exists() {
+            // Already gone (e.g. a repeated call) — not a failure, no-op.
+            continue;
+        }
+
+        match trash_op::trash_file(&abs_path, None) {
+            Ok(_) => items_moved += 1,
+            Err((failure, _)) => {
+                tracing::warn!(item_id = %item.id, path = %abs_path, error = %failure, "archive item trash failed");
+                last_failure = Some((failure.code, failure.message));
+            }
+        }
+    }
+
+    if items_moved == 0 {
+        if let Some((code, message)) = last_failure {
+            return Err(ContractError::new(
+                trash_failure_error_code(code),
+                message,
+                ErrorSeverity::Blocking,
+                code.is_recoverable(),
+            ));
+        }
+    }
+
     let at = Timestamp::now_iso();
     let audit_id = new_id();
 
-    // Emit audit event (T045).
+    // Emit audit event (T045) — real outcome, not the DB item count (#732).
     bus.publish(
         TOPIC_ARCHIVE_SENT_TO_TRASH,
         Source::User,
-        ArchiveSentToTrash { plan_id: plan_id.to_owned(), items_moved: archive_count, at },
+        ArchiveSentToTrash { plan_id: plan_id.to_owned(), items_moved, at },
     )
     .await
     .map_err(bus_err)?;
 
-    Ok(ArchiveSendToTrashResponse {
-        plan_id: plan_id.to_owned(),
-        items_moved: archive_count,
-        audit_id,
-    })
+    Ok(ArchiveSendToTrashResponse { plan_id: plan_id.to_owned(), items_moved, audit_id })
 }
 
 /// Permanently delete the app-managed archive subtree for a plan (T046).
@@ -746,10 +841,10 @@ pub async fn permanently_delete_archive(
     let row = repo::get_plan(pool, plan_id, false).await.map_err(db_err)?;
 
     let items = repo::list_plan_items(pool, plan_id).await.map_err(db_err)?;
-    let archive_count = i64::try_from(items.iter().filter(|i| i.archive_path.is_some()).count())
-        .unwrap_or(i64::MAX);
+    let archive_items: Vec<&repo::PlanItemRow> =
+        items.iter().filter(|i| i.archive_path.is_some()).collect();
 
-    if archive_count == 0 {
+    if archive_items.is_empty() {
         return Err(ContractError::new(
             ErrorCode::ArchiveEmpty,
             format!("plan {} has no archived items", row.id),
@@ -758,23 +853,56 @@ pub async fn permanently_delete_archive(
         ));
     }
 
+    let root_map = build_root_map(pool, &archive_items).await;
+
+    let mut items_deleted: i64 = 0;
+    let mut last_failure: Option<(FailureCode, String)> = None;
+    for item in &archive_items {
+        let archive_rel = item.archive_path.as_deref().unwrap_or_default();
+        let abs_path =
+            resolve_archive_abs_path(archive_rel, item.from_root_id.as_deref(), &root_map);
+
+        if !abs_path.exists() {
+            // Already gone (e.g. a repeated call) — not a failure, no-op.
+            continue;
+        }
+
+        // `confirm_required = true`: the confirm-text guard above already
+        // gated entry into this function (constitution §II: permanent
+        // delete is always behind explicit confirmation).
+        match delete_op::delete_file(&abs_path, true) {
+            Ok(()) => items_deleted += 1,
+            Err((failure, _)) => {
+                tracing::warn!(item_id = %item.id, path = %abs_path, error = %failure, "archive item permanent delete failed");
+                last_failure = Some((failure.code, failure.message));
+            }
+        }
+    }
+
+    if items_deleted == 0 {
+        if let Some((code, message)) = last_failure {
+            return Err(ContractError::new(
+                delete_failure_error_code(code),
+                message,
+                ErrorSeverity::Blocking,
+                code.is_recoverable(),
+            ));
+        }
+    }
+
     let at = Timestamp::now_iso();
     let audit_id = new_id();
 
-    // Emit audit event (T046).
+    // Emit audit event (T046) — real outcome, not the DB item count (#732).
     bus.publish(
         TOPIC_ARCHIVE_PERMANENTLY_DELETED,
         Source::User,
-        ArchivePermanentlyDeleted { plan_id: plan_id.to_owned(), items_deleted: archive_count, at },
+        ArchivePermanentlyDeleted { plan_id: plan_id.to_owned(), items_deleted, at },
     )
     .await
     .map_err(bus_err)?;
 
-    Ok(ArchivePermanentlyDeleteResponse {
-        plan_id: plan_id.to_owned(),
-        items_deleted: archive_count,
-        audit_id,
-    })
+    Ok(ArchivePermanentlyDeleteResponse { plan_id: plan_id.to_owned(), items_deleted, audit_id })
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -828,6 +956,42 @@ mod tests {
                 linked_entity: None,
                 provenance_json: None,
                 archive_path: Some(".astro-plan-archive/p1/file.fits"),
+                source_id: None,
+                category: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    /// Like `add_item`, but `archive_path` points at a real, caller-supplied
+    /// absolute path (`from_root_id: None`, matching every real archive
+    /// generator — `resolve_archive_abs_path` then uses it as-is), so
+    /// `send_archive_to_trash`/`permanently_delete_archive` real-fs tests can
+    /// exercise an on-disk file.
+    async fn add_item_with_real_archive_path(
+        db: &Database,
+        plan_id: &str,
+        item_id: &str,
+        archive_abs_path: &str,
+    ) {
+        repo::insert_plan_item(
+            db.pool(),
+            &repo::InsertPlanItem {
+                id: item_id,
+                plan_id,
+                item_index: 1,
+                name: "file.fits",
+                action: "archive",
+                from_root_id: None,
+                from_relative_path: "raw/file.fits",
+                to_root_id: None,
+                to_relative_path: archive_abs_path,
+                reason: "test",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: Some(archive_abs_path),
                 source_id: None,
                 category: None,
             },
@@ -1073,6 +1237,119 @@ mod tests {
         let err =
             permanently_delete_archive(db.pool(), &bus, "p1", "DELETE", true).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::PlanBlockedByProtection);
+    }
+
+    /// #732: `permanently_delete_archive` must actually remove the on-disk
+    /// archived file, not just record an audit event over an untouched
+    /// filesystem. Deterministic (unlike OS trash): `delete_op::delete_file`
+    /// is a direct `std::fs::remove_file`.
+    #[tokio::test]
+    async fn permanently_delete_archive_removes_real_file() {
+        let (db, bus) = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("archived.fits");
+        std::fs::write(&file, b"data").unwrap();
+        let abs_path = file.to_str().unwrap();
+
+        insert_draft(&db, "p1").await;
+        add_item_with_real_archive_path(&db, "p1", "item-1", abs_path).await;
+
+        let resp =
+            permanently_delete_archive(db.pool(), &bus, "p1", "DELETE", false).await.unwrap();
+        assert_eq!(resp.items_deleted, 1);
+        assert!(!file.exists(), "the real archived file must be gone from disk");
+    }
+
+    /// A repeated call (file already deleted) is an idempotent no-op, not a
+    /// failure — the item's archive_path row survives a first successful
+    /// call, so a second click must not error.
+    #[tokio::test]
+    async fn permanently_delete_archive_is_idempotent_when_already_gone() {
+        let (db, bus) = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("already_gone.fits");
+        // Never created on disk.
+        let abs_path = file.to_str().unwrap();
+
+        insert_draft(&db, "p1").await;
+        add_item_with_real_archive_path(&db, "p1", "item-1", abs_path).await;
+
+        let resp =
+            permanently_delete_archive(db.pool(), &bus, "p1", "DELETE", false).await.unwrap();
+        assert_eq!(resp.items_deleted, 0);
+    }
+
+    // ── send_archive_to_trash ─────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn send_archive_to_trash_rejects_empty_archive() {
+        let (db, bus) = setup().await;
+        insert_draft(&db, "p1").await;
+        // Item with no `archive_path` set (`add_item` always sets one; build
+        // this row directly so the archive-empty precondition is real).
+        repo::insert_plan_item(
+            db.pool(),
+            &repo::InsertPlanItem {
+                id: "item-1",
+                plan_id: "p1",
+                item_index: 1,
+                name: "file.fits",
+                action: "move",
+                from_root_id: None,
+                from_relative_path: "raw/file.fits",
+                to_root_id: None,
+                to_relative_path: "moved/file.fits",
+                reason: "test",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: None,
+                source_id: None,
+                category: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let err = send_archive_to_trash(db.pool(), &bus, "p1").await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::ArchiveEmpty);
+    }
+
+    /// #732: exercises the real `fs_executor::ops::trash_op` primitive.
+    /// OS trash availability is environment-dependent (CI sandboxes may lack
+    /// XDG trash) — mirrors `trash_op`'s own test precedent
+    /// (`crates/fs/executor/src/ops/trash_op.rs`): assert on the contract
+    /// invariant (no silent success without either the file being gone or a
+    /// real, typed trash error) rather than a single hard-coded outcome.
+    #[tokio::test]
+    async fn send_archive_to_trash_moves_real_file_or_reports_real_failure() {
+        let (db, bus) = setup().await;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("archived.fits");
+        std::fs::write(&file, b"data").unwrap();
+        let abs_path = file.to_str().unwrap();
+
+        insert_draft(&db, "p1").await;
+        add_item_with_real_archive_path(&db, "p1", "item-1", abs_path).await;
+
+        match send_archive_to_trash(db.pool(), &bus, "p1").await {
+            Ok(resp) => {
+                assert_eq!(resp.items_moved, 1);
+                assert!(!file.exists(), "trashed file must be gone from its original path");
+            }
+            Err(err) => {
+                assert!(
+                    matches!(
+                        err.code,
+                        ErrorCode::OsTrashUnavailable | ErrorCode::OsTrashPermissionDenied
+                    ),
+                    "unexpected error code: {:?}",
+                    err.code
+                );
+                // No silent loss: the file must survive a genuinely failed trash.
+                assert!(file.exists());
+            }
+        }
     }
 
     // ── mkdir-only auto-apply predicate (user decision 2026-07-04) ────────────

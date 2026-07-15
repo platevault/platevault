@@ -861,7 +861,12 @@ impl ExecutorCallbacks for PlanApplyCallbacks {
 /// writers of `registered_sources` (register / remap / delete), so caching
 /// the legacy-table branch too would go stale on writes this module never
 /// sees.
-async fn resolve_root_path(pool: &SqlitePool, root_id: &str) -> Option<String> {
+// `pub(crate)`: reused by `crate::plans::send_archive_to_trash` /
+// `permanently_delete_archive` (spec 017 US6) to resolve the same
+// root_id → absolute-path mapping the apply executor uses (T023a), so an
+// archive item's `archive_path` (stored root-relative when `from_root_id`
+// is set) can be turned into a real filesystem path.
+pub(crate) async fn resolve_root_path(pool: &SqlitePool, root_id: &str) -> Option<String> {
     match inventory_repo::get_library_root_path(pool, root_id).await {
         Ok(Some(path)) => Some(path),
         _ => {

@@ -204,6 +204,14 @@ pub enum ErrorCode {
     // ── Archive ──────────────────────────────────────────────────────────────
     #[serde(rename = "archive.empty")]
     ArchiveEmpty,
+    /// OS trash unavailable or failed for every item in an
+    /// `archive.send_to_trash` run (spec 017 US6, spec 025 `FailureCode::OsTrashUnavailable`).
+    #[serde(rename = "os_trash.unavailable")]
+    OsTrashUnavailable,
+    /// OS trash denied permission for every item in an
+    /// `archive.send_to_trash` run.
+    #[serde(rename = "os_trash.permission.denied")]
+    OsTrashPermissionDenied,
 
     // ── Confirm ──────────────────────────────────────────────────────────────
     #[serde(rename = "confirm.text.mismatch")]
