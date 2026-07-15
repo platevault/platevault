@@ -111,12 +111,27 @@ export function PlanReviewOverlay({
   // real terminal plan state to decide whether to offer "Generate retry plan".
   const [finalState, setFinalState] = useState<string | null>(null);
   const [resuming, setResuming] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const {
     progress,
     run: runApply,
     resume: resumeApply,
+    cancel: cancelApply,
     reset: resetApply,
   } = usePlanApplyProgress();
+
+  // Destructive-confirm gate (FR-003, D9, issue #741): `delete` items are
+  // permanently refused at apply time until `destructive_confirmed` is set.
+  // Plan-level (not per-item — `PlanItemDetail` carries no such flag; the
+  // gate mirrors the existing plan-wide protection gate above it).
+  const hasDestructiveItems = (plan?.items ?? []).some(
+    (item) => item.action === 'delete',
+  );
+  const [destructiveConfirmed, setDestructiveConfirmed] = useState(false);
+  const [confirmingDestructive, setConfirmingDestructive] = useState(false);
+  const [confirmDestructiveError, setConfirmDestructiveError] = useState<
+    string | null
+  >(null);
 
   const busy = approving || discarding || retrying || progress.running;
   const applied = finalState === 'applied';
@@ -139,8 +154,26 @@ export function PlanReviewOverlay({
     setApplyError(null);
     setGateReady(false);
     setFinalState(null);
+    setDestructiveConfirmed(false);
+    setConfirmDestructiveError(null);
     onClose();
   }, [busy, onClose, resetApply]);
+
+  /** Persist the destructive-confirm flag for this plan (`plans.confirm.destructive`,
+   * issue #741) before Approve & apply unlocks. */
+  const handleConfirmDestructive = useCallback(async () => {
+    if (planId === null || confirmingDestructive) return;
+    setConfirmingDestructive(true);
+    setConfirmDestructiveError(null);
+    try {
+      unwrap(await commands.plansConfirmDestructive(planId));
+      setDestructiveConfirmed(true);
+    } catch (e) {
+      setConfirmDestructiveError(errMessage(e));
+    } finally {
+      setConfirmingDestructive(false);
+    }
+  }, [planId, confirmingDestructive]);
 
   const handleApproveAndApply = useCallback(async () => {
     if (planId === null || busy) return;
@@ -169,6 +202,17 @@ export function PlanReviewOverlay({
       setApplyError(m.plans_review_apply_failed());
     }
   }, [planId, busy, runApply, invalidatePlan, onApplied]);
+
+  /** Cancel the currently-streaming apply run (`plan.cancel`, US3/FR-009,
+   * issue #743). The channel already delivers the resulting terminal event;
+   * this only signals the backend and surfaces a failure to send it. */
+  const handleCancelRun = useCallback(async () => {
+    if (planId === null || cancelling) return;
+    setCancelling(true);
+    const ok = await cancelApply(planId);
+    setCancelling(false);
+    if (!ok) setApplyError(m.plans_review_cancel_failed());
+  }, [planId, cancelling, cancelApply]);
 
   const handleDiscard = useCallback(async () => {
     if (planId === null || busy) return;
@@ -290,7 +334,13 @@ export function PlanReviewOverlay({
       <Btn
         variant="danger"
         onClick={() => void handleApproveAndApply()}
-        disabled={busy || !gateReady || plan == null || plan.itemsTotal === 0}
+        disabled={
+          busy ||
+          !gateReady ||
+          plan == null ||
+          plan.itemsTotal === 0 ||
+          (hasDestructiveItems && !destructiveConfirmed)
+        }
         data-testid="plan-review-approve-apply"
       >
         {approving
@@ -356,6 +406,32 @@ export function PlanReviewOverlay({
             onAcknowledgedChange={setGateReady}
           />
 
+          {/* Destructive-confirm gate (FR-003, D9, issue #741): delete items
+              are refused at apply time until confirmed. Plan-level — see
+              `handleConfirmDestructive`. */}
+          {hasDestructiveItems && (
+            <div className="alm-plan-review__destructive-gate">
+              <label className="alm-plan-review__destructive-label">
+                <input
+                  type="checkbox"
+                  checked={destructiveConfirmed}
+                  disabled={confirmingDestructive || destructiveConfirmed}
+                  onChange={() => void handleConfirmDestructive()}
+                  aria-label={m.plans_review_confirm_destructive_label()}
+                  data-testid="plan-review-confirm-destructive"
+                />
+                <span>
+                  {confirmingDestructive
+                    ? m.plans_review_confirm_destructive_confirming()
+                    : m.plans_review_confirm_destructive_label()}
+                </span>
+              </label>
+              {confirmDestructiveError !== null && (
+                <Banner variant="danger">{confirmDestructiveError}</Banner>
+              )}
+            </div>
+          )}
+
           {/* Live apply progress (D17 — spec 025 progress UI, absorbed here). */}
           {(progress.running ||
             progress.terminal !== null ||
@@ -372,6 +448,25 @@ export function PlanReviewOverlay({
                   applied: progress.applied,
                   total: progress.total ?? plan.itemsTotal,
                 })}
+              {/* Cancel-in-flight (US3/FR-009, issue #743): available for the
+                  whole active-run window (running or paused), matching what
+                  `plan.cancel` accepts server-side. */}
+              {progress.running && progress.terminal === null && (
+                <>
+                  {' '}
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void handleCancelRun()}
+                    disabled={cancelling}
+                    data-testid="plan-review-cancel-run"
+                  >
+                    {cancelling
+                      ? m.plans_review_cancelling()
+                      : m.plans_review_cancel_run_btn()}
+                  </Btn>
+                </>
+              )}
               {applied && (
                 <Pill variant="ok">
                   {m.plans_review_progress_done({ count: progress.applied })}

@@ -1367,6 +1367,13 @@ export async function mockInvoke(
     case 'protection_plan_acknowledged': {
       return 'mock-audit-ack';
     }
+    case 'plans_confirm_destructive': {
+      // FR-003/D9/issue #741: persists `destructive_confirmed` so the
+      // review overlay's destructive-confirm gate unlocks Approve & apply.
+      const planId =
+        (_args as { planId?: string } | undefined)?.planId ?? 'mock-plan';
+      return { planId, itemsConfirmed: 1 };
+    }
     case 'cleanup_scan': {
       // D11 step 1: pure read-only preview. Reason strings follow the backend
       // generator format (see cleanup_generator.rs::scan_with_policy).

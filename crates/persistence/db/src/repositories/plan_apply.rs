@@ -505,6 +505,58 @@ pub async fn batch_cancel_pending_items(pool: &SqlitePool, plan_id: &str) -> DbR
     Ok(cancelled_count)
 }
 
+/// Cancel any items left in `applying` when a run ends `Cancelled`.
+///
+/// Under normal forward-loop execution no item is ever `applying` when
+/// `fs_executor::run::execute_plan` returns `Cancelled` — cancellation is
+/// checked strictly *between* items, so an item picked up for real always
+/// runs to a terminal state first. The one exception is a mid-run retry
+/// (`retry_plan_item`): it flips the DB row `failed -> applying` and queues
+/// the id *eagerly*, independent of whether the executor's retry-drain loop
+/// ever actually re-executes it before observing cancellation. Such an item
+/// is invisible to [`batch_cancel_pending_items`] (which only targets
+/// `pending`) and would otherwise stay `applying` forever with no terminal
+/// audit record (review fix for issues #742/#575 follow-up). Returns the
+/// cancelled item ids so the caller can emit a per-item audit row for each.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn cancel_orphaned_applying_items(
+    pool: &SqlitePool,
+    plan_id: &str,
+) -> DbResult<Vec<String>> {
+    let mut tx = pool.begin().await?;
+
+    let ids: Vec<String> = sqlx::query_scalar(
+        "SELECT id FROM plan_items WHERE plan_id = ? AND item_state = 'applying' \
+         ORDER BY item_index ASC",
+    )
+    .bind(plan_id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    if !ids.is_empty() {
+        sqlx::query(
+            "UPDATE plan_items SET item_state = 'cancelled' \
+             WHERE plan_id = ? AND item_state = 'applying'",
+        )
+        .bind(plan_id)
+        .execute(&mut *tx)
+        .await?;
+
+        let cancelled_count = i64::try_from(ids.len()).unwrap_or(i64::MAX);
+        sqlx::query("UPDATE plans SET items_cancelled = items_cancelled + ? WHERE id = ?")
+            .bind(cancelled_count)
+            .bind(plan_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(ids)
+}
+
 // ── Audit event writes ────────────────────────────────────────────────────────
 
 /// Append an audit event row (append-only; no UPDATE/DELETE allowed).

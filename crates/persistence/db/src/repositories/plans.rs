@@ -322,6 +322,32 @@ pub async fn list_plan_items(pool: &SqlitePool, plan_id: &str) -> DbResult<Vec<P
         .await?)
 }
 
+/// Set `destructive_confirmed = 1` on every item in `plan_id` that requires
+/// destructive confirmation (`action IN ('delete','trash')`, or the explicit
+/// `requires_destructive_confirm` override column — mirrors the derivation in
+/// `app_core::plan_apply::item_row_to_executor_item`).
+///
+/// This is the write half of the FR-003/D9 confirm gate: the executor
+/// (`fs_executor::run::execute_plan`) refuses any destructive item where
+/// `destructive_confirmed` is still 0 (issue #741 — the column previously had
+/// no writer anywhere in the codebase). Idempotent: re-confirming an
+/// already-confirmed plan is a no-op.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn confirm_plan_destructive_items(pool: &SqlitePool, plan_id: &str) -> DbResult<u64> {
+    let result = sqlx::query(
+        "UPDATE plan_items SET destructive_confirmed = 1 \
+         WHERE plan_id = ? AND destructive_confirmed = 0 \
+         AND (action IN ('delete', 'trash') OR requires_destructive_confirm = 1)",
+    )
+    .bind(plan_id)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
 /// Update the plan state.
 ///
 /// Only the review-side states are written by this function:
@@ -568,6 +594,68 @@ mod tests {
         let plan = get_plan(db.pool(), "p1", false).await.unwrap();
         assert_eq!(plan.items_total, 1);
         assert_eq!(plan.items_pending, 1);
+    }
+
+    #[tokio::test]
+    async fn confirm_plan_destructive_items_confirms_only_destructive_actions() {
+        let db = setup().await;
+        insert_plan(db.pool(), &sample_plan("p-confirm")).await.unwrap();
+
+        let move_item = InsertPlanItem {
+            id: "item-move",
+            plan_id: "p-confirm",
+            item_index: 1,
+            name: "keep.fits",
+            action: "move",
+            from_root_id: None,
+            from_relative_path: "raw/keep.fits",
+            to_root_id: None,
+            to_relative_path: "archive/keep.fits",
+            reason: "cleanup",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        };
+        // `plan_items.action` CHECK never admits the literal 'trash' — the
+        // archive/trash *destination* choice lives on `plans.destructive_destination`;
+        // item-level destructive intent is always the 'delete' action (mirrors
+        // `cleanup_generator::action_label` and `item_row_to_executor_item`).
+        let delete_item = InsertPlanItem {
+            id: "item-delete",
+            plan_id: "p-confirm",
+            item_index: 2,
+            name: "junk.fits",
+            action: "delete",
+            from_root_id: None,
+            from_relative_path: "raw/junk.fits",
+            to_root_id: None,
+            to_relative_path: "",
+            reason: "cleanup",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        };
+        insert_plan_item(db.pool(), &move_item).await.unwrap();
+        insert_plan_item(db.pool(), &delete_item).await.unwrap();
+
+        let confirmed = confirm_plan_destructive_items(db.pool(), "p-confirm").await.unwrap();
+        assert_eq!(confirmed, 1, "only the delete item requires confirmation");
+
+        let items = list_plan_items(db.pool(), "p-confirm").await.unwrap();
+        let move_row = items.iter().find(|i| i.id == "item-move").unwrap();
+        let delete_row = items.iter().find(|i| i.id == "item-delete").unwrap();
+        assert_eq!(move_row.destructive_confirmed, 0);
+        assert_eq!(delete_row.destructive_confirmed, 1);
+
+        // Idempotent: a second confirm on an already-confirmed plan touches nothing.
+        let confirmed_again = confirm_plan_destructive_items(db.pool(), "p-confirm").await.unwrap();
+        assert_eq!(confirmed_again, 0);
     }
 
     #[tokio::test]

@@ -740,6 +740,21 @@ export const commands = {
 	 */
 	plansApplyStatus: (planId: string) => typedError<PlanApplyStatus_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_apply_status", { planId })),
 	/**
+	 *  `plans.confirm.destructive` — confirm every delete/trash item in a plan
+	 *  (FR-003, D9, issue #741).
+	 * 
+	 *  Persists `destructive_confirmed = 1` on the plan's destructive items so a
+	 *  subsequent apply does not refuse them at the executor's
+	 *  destructive-confirm gate. Plan-level, not per-item — see
+	 *  `confirm_plan_destructive_items`'s doc comment for why.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with `"plan.not_found"` if the plan does not
+	 *  exist.
+	 */
+	plansConfirmDestructive: (planId: string) => typedError<PlanDestructiveConfirmResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_confirm_destructive", { planId })),
+	/**
 	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
 	 *  # Errors
@@ -6315,6 +6330,21 @@ export type PlanCancelResponse = {
 	itemsApplied: number,
 	/**  Items transitioned from pending to cancelled. */
 	itemsCancelled: number,
+};
+
+/**
+ *  Response for `plans.confirm.destructive`.
+ * 
+ *  Local to this command (rather than a `contracts_core::plan_apply` DTO):
+ *  the shape is a plain confirmation receipt with no other consumer.
+ */
+export type PlanDestructiveConfirmResponse = {
+	planId: string,
+	/**
+	 *  Number of items whose `destructive_confirmed` flag flipped (0 when
+	 *  every destructive item in the plan was already confirmed).
+	 */
+	itemsConfirmed: number,
 };
 
 /**  Full plan detail returned by `plans.get`. */
