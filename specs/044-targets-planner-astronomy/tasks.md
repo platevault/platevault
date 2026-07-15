@@ -526,7 +526,7 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
       (FR-007); add the three-quantity breakdown (dark window / uptime / imaging time) to the detail
       stats (FR-005). Layering: twilight shading must not override the Moon-excluded overlay or transit
       marker.
-- [ ] T045 Equipment sensor-type end-to-end (FR-035): camera `sensorType: 'mono'|'osc'` + `passband:
+- [x] T045 Equipment sensor-type end-to-end (FR-035): camera `sensorType: 'mono'|'osc'` + `passband:
       'rgb'|narrowband set` through the equipment contract (`packages/contracts` schema + generated
       bindings), Rust DTO/persistence, and `features/settings/Equipment.tsx` UI. Migration (if cameras
       are DB-persisted) takes the **next free number after checking open PRs** (duplicate versions abort

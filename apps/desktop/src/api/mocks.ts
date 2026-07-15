@@ -380,12 +380,16 @@ let mockCameras: Camera[] = [
     name: 'ASI2600MM Pro',
     aliases: ['ZWO ASI2600MM'],
     autoDetected: false,
+    sensorType: 'mono',
+    passband: null,
   },
   {
     id: 'cam-002',
     name: 'ASI533MC Pro',
     aliases: ['ZWO ASI533MC'],
     autoDetected: false,
+    sensorType: 'osc',
+    passband: null,
   },
 ];
 
@@ -2234,6 +2238,8 @@ export async function mockInvoke(
         name: req?.name ?? '',
         aliases: req?.aliases ?? [],
         autoDetected: false,
+        sensorType: req?.sensorType ?? null,
+        passband: req?.passband ?? null,
       };
       mockCameras = [...mockCameras, camera];
       return camera;
@@ -2252,6 +2258,8 @@ export async function mockInvoke(
         ...existing,
         name: req.name,
         aliases: req.aliases,
+        sensorType: req.sensorType ?? null,
+        passband: req.passband ?? null,
       };
       mockCameras = mockCameras.map((c) => (c.id === req.id ? updated : c));
       return updated;

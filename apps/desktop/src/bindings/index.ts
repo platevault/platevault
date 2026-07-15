@@ -2766,6 +2766,14 @@ export type Camera = {
 	name: string,
 	aliases: string[],
 	autoDetected: boolean,
+	/**  FR-035: `None` = unknown (behaves as mono, FR-038). */
+	sensorType: SensorType | null,
+	/**
+	 *  FR-035: narrowband set for an OSC dual/tri-band filter (e.g.
+	 *  `["Ha","OIII"]`); `None` = plain color camera (`rgb` default). Only
+	 *  meaningful when `sensor_type` is `Osc`.
+	 */
+	passband: string[] | null,
 };
 
 /**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
@@ -3156,6 +3164,9 @@ export type Coordinates_Serialize = {
 export type CreateCamera = {
 	name: string,
 	aliases: string[],
+	/**  FR-035; `#[serde(default)]` keeps pre-iteration payloads valid. */
+	sensorType?: SensorType | null,
+	passband?: string[] | null,
 };
 
 export type CreateFilter = {
@@ -8059,6 +8070,14 @@ export type SearchResult_Serialize = {
 /**  How a candidate was selected (observing-night provenance). */
 export type SelectionReason = "same_session" | "same_night" | "compatible_fallback";
 
+/**
+ *  Camera sensor type (spec 044 iteration 2026-07-15, FR-035): `mono`
+ *  per-filter imaging vs `osc` (one-shot color) single-pass imaging.
+ *  Absence (`None` on [`Camera::sensor_type`]) means unknown, which MUST
+ *  behave as mono downstream (FR-038).
+ */
+export type SensorType = "mono" | "osc";
+
 /**  A calibration match entry for a session detail view. */
 export type SessionCalibrationMatch = {
 	masterId: string,
@@ -9290,6 +9309,9 @@ export type UpdateCamera = {
 	id: string,
 	name: string,
 	aliases: string[],
+	/**  FR-035; `#[serde(default)]` keeps pre-iteration payloads valid. */
+	sensorType?: SensorType | null,
+	passband?: string[] | null,
 };
 
 export type UpdateCleanupPolicy = {
