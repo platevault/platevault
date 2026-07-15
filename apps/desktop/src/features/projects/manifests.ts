@@ -77,11 +77,15 @@ export type {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/** Maximum note size enforced client-side (A5). */
-export const MAX_NOTE_BYTES = 16_384;
-
-/** Debounce delay in ms before issuing `project.note.update` (A5). */
-export const NOTE_DEBOUNCE_MS = 5_000;
+// Note constraints moved to the shared `@/lib/notes` module now that sessions
+// (#773) also drive a debounced-autosave note editor. Re-exported here so
+// existing project-side imports keep working unchanged.
+export {
+  MAX_NOTE_BYTES,
+  NOTE_DEBOUNCE_MS,
+  noteByteLength,
+  noteContentValid,
+} from '@/lib/notes';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -109,19 +113,6 @@ export function formatManifestTimestamp(iso: string): string {
   if (isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
-}
-
-/**
- * Check whether note content exceeds the 16 384-byte cap.
- * Uses `TextEncoder` so the byte count matches the server-side UTF-8 check (A5).
- */
-export function noteByteLength(content: string): number {
-  return new TextEncoder().encode(content).length;
-}
-
-/** Returns `true` when content is within the allowed size. */
-export function noteContentValid(content: string): boolean {
-  return noteByteLength(content) <= MAX_NOTE_BYTES;
 }
 
 /**

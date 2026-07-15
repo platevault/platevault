@@ -60,7 +60,7 @@ use crate::commands::inbox::{
     inbox_stats, inbox_target_recommendations,
 };
 use crate::commands::ingestion::{ingestion_settings_get, ingestion_settings_update};
-use crate::commands::inventory::inventory_list;
+use crate::commands::inventory::{inventory_list, inventory_session_notes_update};
 use crate::commands::inventory_frame::{
     inventory_frame_list, inventory_frame_relink, inventory_reconcile_run,
     inventory_root_config_get, inventory_root_config_set,
@@ -376,6 +376,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_target_recommendations,
         // inventory (spec 006)
         inventory_list,
+        inventory_session_notes_update,
         // per-frame inventory (spec 048)
         inventory_frame_list,
         inventory_reconcile_run,
@@ -618,6 +619,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         inbox_target_recommendations,
         // inventory (spec 006)
         inventory_list,
+        inventory_session_notes_update,
         // per-frame inventory (spec 048)
         inventory_frame_list,
         inventory_reconcile_run,
