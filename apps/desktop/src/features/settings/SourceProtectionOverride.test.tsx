@@ -15,7 +15,10 @@ import { useState } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SourceProtectionOverride } from './SourceProtectionOverride';
-import type { SourceProtectionGetResponse, ProtectionLevel } from './settingsIpc';
+import type {
+  SourceProtectionGetResponse,
+  ProtectionLevel,
+} from './settingsIpc';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 // Mocks the generated bindings surface (spec 037) so the real `settingsIpc`
@@ -110,9 +113,7 @@ describe('SourceProtectionOverride', () => {
     // No separate "Inherits global default" pill/sentence, no Override
     // trigger button — the caller drives editing via the kebab menu instead.
     expect(screen.queryByText('Inherits global default')).toBeNull();
-    expect(
-      screen.queryByRole('button', { name: /Override/i }),
-    ).toBeNull();
+    expect(screen.queryByRole('button', { name: /Override/i })).toBeNull();
   });
 
   it('shows the override pill for a non-default level when not open', async () => {
