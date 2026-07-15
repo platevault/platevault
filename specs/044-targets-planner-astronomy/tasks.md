@@ -546,7 +546,7 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
 - [x] T048 Regression + E2E alignment (depends all above): update mock-Playwright planner specs for the
       removed columns/new glyph; add #817 (graph/stat agreement) and #792 (no clipping) assertions;
       `just lint` + `just test` + `just typecheck` green.
-- [ ] T049 verify-on-windows scenario: extend `docs/development/windows-journeys/journey-09-targets-planning.md`
+- [x] T049 verify-on-windows scenario: extend `docs/development/windows-journeys/journey-09-targets-planning.md`
       with the iterate surfaces (glyphs, reasons, context label, no-dark graph, OSC equipment) for the
       dedicated Windows session to execute.
 
