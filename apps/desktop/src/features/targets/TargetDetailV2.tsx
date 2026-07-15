@@ -48,6 +48,7 @@ import {
   USABLE_ALT_DEG,
 } from './planner-altitude';
 import { BANDS } from './astro/moon-avoidance';
+import type { SensorConfig } from './planner-derive';
 import { errorMessage } from './target-error-message';
 import { useActiveSite } from './observing-sites/site-store';
 import { usePlannerDateMs } from './planner-date-store';
@@ -75,6 +76,13 @@ interface Props {
    * shown alongside the real (spec 044 Track B) tonight altitude graph.
    */
   night?: ObservingNight | null;
+  /**
+   * Camera sensor configuration (FR-035/FR-036, T046): when OSC the
+   * imaging-time stat collapses to the strictest-band single-pass window and
+   * a per-line breakdown appears for narrowband passbands (FR-037).
+   * `null`/absent keeps the per-filter model unchanged (FR-038).
+   */
+  sensorConfig?: SensorConfig | null;
 }
 
 type LoadState =
@@ -376,6 +384,7 @@ export function TargetDetailV2({
   item = null,
   usableAltDeg = USABLE_ALT_DEG,
   night = null,
+  sensorConfig = null,
 }: Props) {
   const guidanceParams = useGuidanceParams();
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
@@ -623,13 +632,23 @@ export function TargetDetailV2({
   // imaging-time model is real (spec 044 Track B); lunar distance + filter
   // guidance below are the real spec 047 Track A values from `moon`.
   const rowAlt = item
-    ? rowAltitudeFor(item, usableAltDeg, site, dateMs, guidanceParams)
+    ? rowAltitudeFor(
+        item,
+        usableAltDeg,
+        site,
+        dateMs,
+        guidanceParams,
+        true,
+        sensorConfig,
+      )
     : altitudeFor(
         { id: detail.id, raDeg: detail.raDeg, decDeg: detail.decDeg },
         usableAltDeg,
         site,
         dateMs,
         guidanceParams,
+        true,
+        sensorConfig,
       );
   const tonightPoints: AltPoint[] = rowAlt.points;
 
@@ -727,6 +746,26 @@ export function TargetDetailV2({
   const darkWindowValue = rowAlt.darkWindowHours
     ? `${(rowAlt.darkWindowHours.endHour - rowAlt.darkWindowHours.startHour).toFixed(1)} h`
     : m.targets_detail_dark_window_none();
+  // FR-036/SC-017: OSC cameras collapse the imaging-time headline to the
+  // strictest-band single-pass window; mono/unknown keeps the geometric
+  // dark ∩ uptime value byte-identical.
+  const imagingHeadlineHours =
+    rowAlt.oscSinglePassHours ?? rowAlt.hoursAboveUsable;
+  // FR-037: for an OSC narrowband passband, each captured line's own
+  // moon-viable window ("Ha 4h · OIII 1h") — the tolerant line may still be
+  // usable on a moonlit night even when the single-pass headline is small.
+  const oscPassband = sensorConfig?.passband;
+  const oscLineValue =
+    sensorConfig?.sensorType === 'osc' &&
+    Array.isArray(oscPassband) &&
+    oscPassband.length > 0 &&
+    rowAlt.oscSinglePassHours !== null
+      ? oscPassband
+          .map(
+            (b) => `${b} ${(rowAlt.moonFreeMinutesByBand[b] / 60).toFixed(1)}h`,
+          )
+          .join(' · ')
+      : null;
   const tonightStats: PropertyDef[] = tonightAvailable
     ? [
         {
@@ -747,8 +786,17 @@ export function TargetDetailV2({
         {
           key: 'imgtime',
           label: m.targets_col_img_time(),
-          value: `${rowAlt.hoursAboveUsable.toFixed(1)} h`,
+          value: `${imagingHeadlineHours.toFixed(1)} h`,
         },
+        ...(oscLineValue !== null
+          ? [
+              {
+                key: 'osclines',
+                label: m.targets_detail_osc_lines(),
+                value: oscLineValue,
+              },
+            ]
+          : []),
         {
           key: 'lunar',
           label: m.targets_col_lunar(),

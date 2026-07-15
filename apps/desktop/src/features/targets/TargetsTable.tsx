@@ -96,7 +96,7 @@ import {
   DEFAULT_MOON_AVOIDANCE,
   type MoonAvoidanceParams,
 } from './astro/moon-avoidance';
-import type { ZeroImagingReason } from './planner-derive';
+import type { SensorConfig, ZeroImagingReason } from './planner-derive';
 import { formatOppositionDate, oppositionRelative } from './astro/opposition';
 import { GuidanceCell } from './GuidanceCell';
 import { recommendationLabel } from './FilterBadges';
@@ -514,6 +514,11 @@ function ImagingTimeCell({
     );
   }
 
+  // FR-036/SC-017: for an OSC camera the headline collapses to the
+  // strictest-band single-pass window; null (mono/unknown/not computed)
+  // keeps the geometric dark ∩ uptime value byte-identical.
+  const headlineHours = alt.oscSinglePassHours ?? alt.hoursAboveUsable;
+
   const reason = alt.zeroImagingReason;
   if (reason !== null) {
     const title =
@@ -524,9 +529,7 @@ function ImagingTimeCell({
           : m.targets_imgtime_zero_moon_title();
     return (
       <span title={title}>
-        {alt.hoursAboveUsable > 0
-          ? formatImagingHours(alt.hoursAboveUsable)
-          : '—'}{' '}
+        {headlineHours > 0 ? formatImagingHours(headlineHours) : '—'}{' '}
         <span
           role="img"
           aria-label={title}
@@ -538,7 +541,28 @@ function ImagingTimeCell({
     );
   }
 
-  if (alt.hoursAboveUsable <= 0) {
+  // OSC single-pass zero with a non-zero geometric window: the Moon blocks
+  // the strictest band of every single-pass exposure tonight — the FR-030
+  // moon case as it manifests for OSC (per-band reasons can't fire because
+  // some individual line may still be viable; the detail panel shows those
+  // per-line windows, FR-037).
+  if (alt.oscSinglePassHours !== null && alt.oscSinglePassHours <= 0) {
+    const title = m.targets_imgtime_zero_moon_title();
+    return (
+      <span title={title}>
+        {'—'}{' '}
+        <span
+          role="img"
+          aria-label={title}
+          className="alm-imgtime-glyph alm-imgtime-glyph--warn"
+        >
+          ☾
+        </span>
+      </span>
+    );
+  }
+
+  if (headlineHours <= 0) {
     // Unreachable once astronomy ran (zero always carries a reason, SC-015),
     // but never render a bare 0.
     return (
@@ -560,11 +584,11 @@ function ImagingTimeCell({
   return (
     <span
       title={m.targets_table_hours_above_title({
-        hours: alt.hoursAboveUsable.toFixed(1),
+        hours: headlineHours.toFixed(1),
         threshold,
       })}
     >
-      {formatImagingHours(alt.hoursAboveUsable)}
+      {formatImagingHours(headlineHours)}
       {limitedTitle !== null && (
         <>
           {' '}
@@ -638,6 +662,13 @@ interface Props {
    * Called when the user clicks the star button in a row (task #18).
    */
   onToggleFavourite?: (targetId: string) => void;
+  /**
+   * Camera sensor configuration (FR-035/FR-036, T046): when OSC, the
+   * imaging-time headline collapses to the strictest-band single-pass
+   * window; `null`/absent keeps the per-filter model unchanged (FR-038).
+   * Pass `usePlannerSensorConfig()` from the host page.
+   */
+  sensorConfig?: SensorConfig | null;
 }
 
 export function TargetsTable({
@@ -658,6 +689,7 @@ export function TargetsTable({
   guidanceParams = DEFAULT_MOON_AVOIDANCE,
   favouriteIds,
   onToggleFavourite,
+  sensorConfig = null,
 }: Props) {
   // task #18: subscribe to the local favourites store.  The host page (TargetsPage)
   // passes its own useFavourites result down; if it doesn't (e.g. tests that don't
@@ -1018,6 +1050,7 @@ export function TargetsTable({
                 dateMs,
                 guidanceParams,
                 true,
+                sensorConfig,
               );
               const showAltDesig = t.effectiveLabel !== t.primaryDesignation;
               const isSelected = selected === t.id;

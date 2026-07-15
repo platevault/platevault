@@ -1853,6 +1853,7 @@
   "targets_detail_dark_window": "Dark window",
   "targets_detail_dark_window_none": "none tonight",
   "targets_detail_uptime": "Above {threshold}° (night)",
+  "targets_detail_osc_lines": "Per line (OSC)",
   "settings_equipment_col_sensor": "Sensor",
   "settings_equipment_field_sensor": "Sensor type",
   "settings_equipment_sensor_unknown_option": "Unknown (treated as mono)",

@@ -531,11 +531,15 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
       bindings), Rust DTO/persistence, and `features/settings/Equipment.tsx` UI. Migration (if cameras
       are DB-persisted) takes the **next free number after checking open PRs** (duplicate versions abort
       fresh-DB migrate).
-- [ ] T046 OSC single-pass aggregation (`planner-derive.ts`, depends T040+T045): `effective_min_sep(age)
+- [x] T046 OSC single-pass aggregation (`planner-derive.ts`, depends T040+T045): `effective_min_sep(age)
       = max over passband of minSeparationDeg(band, age, params)` feeding the existing integration
       (FR-036); per-line moon-viable windows for the detail panel (FR-037); unset/unknown equipment
       behaves as mono (FR-038). Unit tests: strictest-band-wins, per-line windows, and a mono-regression
       case proving pre-iteration output is unchanged (SC-017).
+      *Deviation (2026-07-15)*: the imaging-time SORT key stays on the geometric dark ∩ uptime value —
+      the full-catalogue sort pass deliberately skips Moon geometry (`includeMoonGeometry=false`,
+      the ~13k-row Layer-2 perf cliff documented on `rowAltitudeFor`), so a Moon-dependent sort key
+      would recreate that cliff. The rendered HEADLINE is the OSC single-pass window per SC-017.
 - [ ] T047 i18n + a11y sweep (FR-039, depends T041/T043/T044/T046): Paraglide messages for reasons,
       tooltips, and the context label; text alternatives for the glyphs; keyboard/SR pass over the new
       surfaces.
