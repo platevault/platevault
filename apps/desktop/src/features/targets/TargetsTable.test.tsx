@@ -627,9 +627,9 @@ describe('TargetsTable — no-dark-window summer night (#579, glyph model)', () 
       expect(
         zenithRow.querySelectorAll('.alm-imgtime-glyph--warn').length,
       ).toBe(1);
-      expect(
-        neverRow.querySelectorAll('.alm-imgtime-glyph--warn').length,
-      ).toBe(1);
+      expect(neverRow.querySelectorAll('.alm-imgtime-glyph--warn').length).toBe(
+        1,
+      );
       // …while Max alt keeps the two extremes visibly different: the zenith
       // target renders a large real altitude, the never-riser does not.
       expect(within(zenithRow).getByText(/^(8[5-9]|90)°$/)).toBeInTheDocument();
