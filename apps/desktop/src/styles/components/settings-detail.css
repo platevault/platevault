@@ -112,14 +112,6 @@
   gap: var(--alm-sp-1);
 }
 
-/* View-mode row: badge + inherit pill + Override button */
-.alm-source-protect__view-row {
-  display: flex;
-  align-items: center;
-  gap: var(--alm-sp-2);
-  flex-wrap: wrap;
-}
-
 /* Hint text under view/edit row */
 .alm-source-protect__hint {
   font-size: var(--alm-text-xs);

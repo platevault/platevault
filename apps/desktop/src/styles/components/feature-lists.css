@@ -888,7 +888,6 @@
   font-size: var(--alm-text-xs);
 }
 
-.alm-source-protect__view-row,
 .alm-source-protect__edit-row {
   display: flex;
   flex-wrap: wrap;
