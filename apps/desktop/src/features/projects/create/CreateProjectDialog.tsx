@@ -25,7 +25,7 @@
  * wrapping `<Modal>` in JSX would NOT be its actual DOM ancestor).
  */
 
-import { useId, useState, useCallback } from 'react';
+import { useId, useState, useCallback, useRef } from 'react';
 import { m } from '@/lib/i18n';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -86,6 +86,11 @@ export function CreateProjectDialog({
   // field (tracked separately, not part of T013).
   const [target, setTarget] = useState<TargetSuggestion | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
+  // #841: point the dialog's initial focus directly at the name field instead
+  // of racing Base UI's own default (first tabbable = the ✕ close button)
+  // with a bare `autoFocus`. `register('name')`'s own ref must still run (RHF
+  // needs it), so the input below merges both into one callback ref.
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const {
     control,
@@ -99,6 +104,7 @@ export function CreateProjectDialog({
     defaultValues: { name: '', tool: 'PixInsight', path: '', notes: '' },
     mode: 'onSubmit',
   });
+  const { ref: nameFieldRef, ...nameField } = register('name');
 
   // Reset form state and close.
   const closeAndReset = useCallback(() => {
@@ -152,6 +158,7 @@ export function CreateProjectDialog({
       size="md"
       className="alm-create-project__popup"
       ariaLabel={m.projects_create_btn()}
+      initialFocus={nameInputRef}
       footer={
         <>
           <Btn
@@ -196,9 +203,11 @@ export function CreateProjectDialog({
             maxLength={MAX_NAME_LEN + 10}
             aria-invalid={Boolean(errors.name)}
             aria-describedby={errors.name ? 'name-error' : undefined}
-            // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: moves focus to the first field when the Create Project modal opens (expected modal behaviour)
-            autoFocus
-            {...register('name')}
+            {...nameField}
+            ref={(el) => {
+              nameFieldRef(el);
+              nameInputRef.current = el;
+            }}
           />
           {errors.name && (
             <span id="name-error" role="alert" className="alm-field-error">
