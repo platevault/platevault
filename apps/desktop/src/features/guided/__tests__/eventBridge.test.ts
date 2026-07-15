@@ -114,20 +114,44 @@ describe('guidedEventBridge', () => {
     });
   });
 
-  it('advances tool.open_first on tool.opened event', async () => {
+  it('advances tool.open_first on tool.launch event with outcome=spawned', async () => {
     const { startGuidedEventBridge } = await import('../eventBridge');
     await startGuidedEventBridge();
 
-    emitEvent('tool.opened', {
+    emitEvent('tool.launch', {
       source: 'user',
       toolId: 'pixinsight',
       projectId: 'proj-1',
+      outcome: 'spawned',
       at: '2026-01-01T00:00:00Z',
     });
 
     await vi.waitFor(() => {
       expect(mockCompleteGuidedStep).toHaveBeenCalledWith('tool.open_first');
     });
+  });
+
+  it('does not advance tool.open_first when tool.launch outcome is not spawned', async () => {
+    const { startGuidedEventBridge } = await import('../eventBridge');
+    await startGuidedEventBridge();
+
+    for (const outcome of [
+      'spawn_failed',
+      'tool_not_configured',
+      'executable_not_found',
+    ]) {
+      emitEvent('tool.launch', {
+        source: 'user',
+        toolId: 'pixinsight',
+        projectId: 'proj-1',
+        outcome,
+        at: '2026-01-01T00:00:00Z',
+      });
+    }
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(mockCompleteGuidedStep).not.toHaveBeenCalled();
   });
 
   it('ignores inventory.confirmed when source is "restore" (FR-010)', async () => {
@@ -154,6 +178,23 @@ describe('guidedEventBridge', () => {
     emitEvent('project.created', {
       source: 'restore',
       projectId: 'proj-1',
+      at: '2026-01-01T00:00:00Z',
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(mockCompleteGuidedStep).not.toHaveBeenCalled();
+  });
+
+  it('ignores tool.launch when source is "restore"', async () => {
+    const { startGuidedEventBridge } = await import('../eventBridge');
+    await startGuidedEventBridge();
+
+    emitEvent('tool.launch', {
+      source: 'restore',
+      toolId: 'pixinsight',
+      projectId: 'proj-1',
+      outcome: 'spawned',
       at: '2026-01-01T00:00:00Z',
     });
 

@@ -302,6 +302,7 @@
   "err_source_already_linked": "This source is already linked.",
   "err_source_invalid_organization_state": "This source isn't in a state that allows that change.",
   "err_source_not_found": "That source could not be found.",
+  "err_state_corrupted": "Some saved progress was reset due to a data issue. Please try again.",
   "err_target_invalid_id": "That target identifier isn't valid.",
   "err_target_not_found": "That target could not be found.",
   "err_resolve_offline": "Target lookup is unavailable offline.",

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Guided flow event → step bridge (spec 010, FR-010, spec 033 T029).
+ * Guided flow event → step bridge (spec 010, FR-010, spec 033 T029; #722).
  *
  * Subscribes to domain events forwarded over the Tauri event bus and
  * calls `completeGuidedStep` when the corresponding step's action is
@@ -10,13 +10,25 @@
  *
  * Modeled on `apps/desktop/src/data/logSubscription.ts`.
  *
- * Event → step mapping:
+ * Event → step mapping. Topics are the real backend event-bus topics (see
+ * `crates/audit-types/src/event_bus.rs` `TOPIC_*` constants and
+ * `crates/app/core/src/guided_flow.rs` `STEP_REGISTRY.completion_topic`),
+ * not the aspirational names from the FR-003 prose:
  *   `inventory.confirmed`  → `inbox.confirm_first`
  *   `project.created`      → `project.create_first`
- *   `tool.opened`          → `tool.open_first`
+ *   `tool.launch`          → `tool.open_first` (only when `outcome === "spawned"`)
  *
- * Filter rule: events with `source === "restore"` are ignored — they replay
- * historical state and MUST NOT advance the guide (FR-010).
+ * The backend forwards these three topics to the webview as raw Tauri
+ * events (dots mapped to `:`) via `start_guided_event_forwarder`
+ * (`apps/desktop/src-tauri/src/commands/guided.rs`), which merges the bus
+ * envelope's `source` onto the payload.
+ *
+ * Filter rules:
+ * - events with `source === "restore"` are ignored — they replay historical
+ *   state and MUST NOT advance the guide (FR-010).
+ * - `tool.launch` only advances the coach when `outcome === "spawned"`; a
+ *   failed/blocked launch attempt (`spawn_failed` | `tool_not_configured` |
+ *   `executable_not_found`) is not "tool opened" (FR-003).
  */
 
 import { completeGuidedStep } from './store';
@@ -27,7 +39,7 @@ const IS_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
 const EVENT_TO_STEP: Record<string, string> = {
   'inventory.confirmed': 'inbox.confirm_first',
   'project.created': 'project.create_first',
-  'tool.opened': 'tool.open_first',
+  'tool.launch': 'tool.open_first',
 };
 
 type UnlistenFn = () => void;
@@ -41,7 +53,9 @@ let started = false;
  * Handle a domain event envelope payload.
  *
  * Checks the `source` field on the envelope and skips `"restore"` events
- * so that state-restore replays do not advance the guide.
+ * so that state-restore replays do not advance the guide. `tool.launch`
+ * additionally requires `outcome === "spawned"` — the topic fires for
+ * failed/blocked launch attempts too, and those are not "tool opened".
  */
 function handleDomainEvent(topic: string, payload: unknown): void {
   if (!payload || typeof payload !== 'object') return;
@@ -50,6 +64,8 @@ function handleDomainEvent(topic: string, payload: unknown): void {
 
   // Filter: ignore events emitted from a restore source.
   if (envelope['source'] === 'restore') return;
+
+  if (topic === 'tool.launch' && envelope['outcome'] !== 'spawned') return;
 
   const stepId = EVENT_TO_STEP[topic];
   if (!stepId) return;

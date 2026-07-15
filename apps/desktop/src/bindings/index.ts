@@ -3451,6 +3451,14 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
 "hash.mismatch" | 
 /**  Referenced `file_record` id does not exist. */
 "frame.not_found" | 
+/**
+ *  `guided.state.get` detected a corrupt `guided_flow_state` row, reset it
+ *  to Idle, and is returning this informational code on the one call that
+ *  observed the corruption. Distinct from `internal.database` (unrelated
+ *  generic persistence failures) per the contract's closed `code` enum
+ *  (`specs/010-guided-first-project-flow/contracts/guided.state.get.json`).
+ */
+"state_corrupted" | 
 /**  Used when a legacy `String` error is wrapped into `ContractError`. */
 "internal.error";
 

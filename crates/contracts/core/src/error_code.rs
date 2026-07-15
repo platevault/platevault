@@ -390,6 +390,15 @@ pub enum ErrorCode {
     #[serde(rename = "frame.not_found")]
     FrameNotFound,
 
+    // ── Guided first-project flow (spec 010, FR-010) ──────────────────────────
+    /// `guided.state.get` detected a corrupt `guided_flow_state` row, reset it
+    /// to Idle, and is returning this informational code on the one call that
+    /// observed the corruption. Distinct from `internal.database` (unrelated
+    /// generic persistence failures) per the contract's closed `code` enum
+    /// (`specs/010-guided-first-project-flow/contracts/guided.state.get.json`).
+    #[serde(rename = "state_corrupted")]
+    StateCorrupted,
+
     // ── Generic fallback ─────────────────────────────────────────────────────
     /// Used when a legacy `String` error is wrapped into `ContractError`.
     #[serde(rename = "internal.error")]

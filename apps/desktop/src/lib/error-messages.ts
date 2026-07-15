@@ -104,6 +104,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'source.already.linked': m.err_source_already_linked,
   'source.not_found': m.err_source_not_found,
   'source.invalid_organization_state': m.err_source_invalid_organization_state,
+  // Guided first-project flow (spec 010 FR-010, #723).
+  state_corrupted: m.err_state_corrupted,
   'root.has_dependents': m.err_root_has_dependents,
   'tool.locked': m.err_tool_locked,
   'tool.unknown': m.err_tool_unknown,
