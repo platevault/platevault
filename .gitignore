@@ -380,3 +380,6 @@ ds-bundle/
 .design-sync/node_modules
 apps/desktop/.ds-css/
 .scratch.md
+
+# Orchestration run stores (journey campaigns)
+.orchestration/
