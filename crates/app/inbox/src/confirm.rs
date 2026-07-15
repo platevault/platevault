@@ -30,7 +30,11 @@
 use std::path::PathBuf;
 
 use app_core_targets::metadata_cache::cached_extract;
+use audit::bus::EventBus;
 use contracts_core::first_run::{OrganizationState, SourceKind};
+use contracts_core::framing::{
+    AttributionAppliedDto, ChosenAttributionDto, IngestionAttributionCandidateDto,
+};
 use contracts_core::settings::PatternPart as ContractPatternPart;
 use metadata_core::v1_normalization_table;
 use patterns::{classify_frame, resolve_pattern_str, FrameTypeClass, MetadataBundle, PatternPart};
@@ -45,6 +49,8 @@ use uuid::Uuid;
 use app_core_errors::db_internal_ctx;
 use contracts_core::error_code::ErrorCode;
 use contracts_core::{ContractError, ErrorSeverity};
+
+use crate::attribution;
 
 // ── Request / Response ────────────────────────────────────────────────────────
 
@@ -62,6 +68,12 @@ pub struct ConfirmRequest {
     /// consulted for inbox sources whose frame-type category has >1 candidate
     /// root; ignored otherwise.
     pub root_id: Option<String>,
+    /// Attribution apply-path (spec 008 Q27, F-Framing-10, FR-022) — additive.
+    /// The user's pick from a prior `attribution_candidates` list. Only
+    /// meaningful for light-frame items (`attribution.not_light_frame`
+    /// otherwise); omitting it leaves the confirmed session's framing
+    /// membership unset.
+    pub chosen_attribution: Option<ChosenAttributionDto>,
 }
 
 #[derive(Clone, Debug)]
@@ -82,6 +94,14 @@ pub struct ConfirmResponse {
     pub catalogue_count: usize,
     /// Per-action absolute destination previews (spec 041 US8/FR-031).
     pub destinations: Vec<ResolvedDestination>,
+    /// Inbox-confirm attribution pass (spec 008 Q27, F-Framing-5, FR-019).
+    /// Ranked suggestions for where this item's light session belongs — a
+    /// suggestion surface only, never auto-applied. Empty for non-light items
+    /// or when no candidate matched.
+    pub attribution_candidates: Vec<IngestionAttributionCandidateDto>,
+    /// Present when the request carried a `chosen_attribution` that was
+    /// successfully applied (F-Framing-10/6).
+    pub attribution_applied: Option<AttributionAppliedDto>,
 }
 
 /// One resolved per-file destination (spec 041 US8/FR-031). The absolute path
@@ -107,9 +127,14 @@ pub struct ResolvedDestination {
 /// - `classification.ambiguous` — action/classification mismatch or no classified files.
 /// - `classification.stale` — signature drift detected.
 /// - `pattern.unset` — naming pattern is unset or fails to resolve required tokens.
+/// - `attribution.not_light_frame` — `chosen_attribution` was supplied for a
+///   non-light item (spec 008 Q27 F-Framing-10).
+/// - `attribution.geometry_unavailable` — `chosen_attribution` requires
+///   creating a new framing, but this item has no staged pointing/rotation.
 #[allow(clippy::too_many_lines)]
 pub async fn confirm(
     pool: &SqlitePool,
+    bus: &EventBus,
     req: ConfirmRequest,
 ) -> Result<ConfirmResponse, ContractError> {
     // 1. Load item
@@ -212,6 +237,38 @@ pub async fn confirm(
             false,
         ));
     }
+
+    // 9b. Attribution pass (spec 008 Q27, F-Framing-5, FR-019) — the first
+    // pre-ingest pass at the confirm gate (composition point for the Q22
+    // duplicate sweep once it lands, see `crate::attribution` module docs).
+    // A confirmable item is single-type (FR-050), so the first file's
+    // effective frame type determines the whole item's class.
+    let first_file_class = plan_files
+        .first()
+        .and_then(|ev| effective_frame_type(ev).map(|ft| (ft, ev.is_master != 0)))
+        .and_then(|(ft, is_master)| classify_frame(ft, is_master));
+    let is_light_item = first_file_class == Some(FrameTypeClass::Light);
+
+    if req.chosen_attribution.is_some() && !is_light_item {
+        return Err(ContractError::new(
+            ErrorCode::AttributionNotLightFrame,
+            "chosen_attribution only applies to light-frame items.",
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
+    // `item_geometry` is also consumed by the apply-path below once the plan
+    // (and its id) exists — computed once here rather than twice.
+    let item_geometry = if is_light_item {
+        Some(attribution::compute_item_geometry(pool, &req.inbox_item_id).await?)
+    } else {
+        None
+    };
+    let attribution_candidates = match &item_geometry {
+        Some(geometry) => attribution::compute_candidates(pool, geometry).await?,
+        None => Vec::new(),
+    };
 
     // Spec 041 FR-050/T071: per-type action grouping is retired along with the
     // "split" action — a confirmable item is single-type (classification.result
@@ -526,6 +583,18 @@ pub async fn confirm(
 
     inbox_repo::update_inbox_item_state(pool, &req.inbox_item_id, "plan_open").await.ok();
 
+    // 14. Attribution apply-path (spec 008 Q27, F-Framing-10/6, FR-022): the
+    // plan now exists, so the pick can be persisted (`plans.chosen_framing_id`)
+    // for `ingest_sessions` to bind once the real session is created. Creates
+    // the framing/project the kind requires and honors the F-Framing-6
+    // completed-project reopen.
+    let attribution_applied = match (&item_geometry, &req.chosen_attribution) {
+        (Some(geometry), Some(chosen)) => {
+            attribution::apply_chosen_attribution(pool, bus, &plan_id, geometry, chosen).await?
+        }
+        _ => None,
+    };
+
     Ok(ConfirmResponse {
         plan_id,
         plan_state: "ready_for_review".to_owned(),
@@ -537,6 +606,8 @@ pub async fn confirm(
         move_count,
         catalogue_count,
         destinations,
+        attribution_candidates,
+        attribution_applied,
     })
 }
 
@@ -790,6 +861,10 @@ mod tests {
         db
     }
 
+    fn test_bus(db: &Database) -> EventBus {
+        EventBus::with_pool(db.pool().clone())
+    }
+
     /// Write a minimal FITS file with a given IMAGETYP and optional OBJECT/FILTER/DATE-OBS.
     fn write_fits(
         dir: &std::path::Path,
@@ -1016,12 +1091,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-c1".to_owned(),
                 content_signature: "sig-abc".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1077,12 +1154,14 @@ mod tests {
 
             let resp = confirm(
                 db.pool(),
+                &test_bus(&db),
                 ConfirmRequest {
                     inbox_item_id: "item-dd".to_owned(),
                     content_signature: "sig-dd".to_owned(),
                     destructive_destination: dest.map(str::to_owned),
                     root_absolute_path: tmp.path().to_owned(),
                     root_id: None,
+                    chosen_attribution: None,
                 },
             )
             .await
@@ -1206,12 +1285,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: item_id.to_owned(),
                 content_signature: sig.to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1322,12 +1403,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-single".to_owned(),
                 content_signature: "sig-single".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1358,12 +1441,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-stale".to_owned(),
                 content_signature: "sig-OLD".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1397,12 +1482,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-ambig".to_owned(),
                 content_signature: "sig-x".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1445,12 +1532,14 @@ mod tests {
         // First confirm
         confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-dup".to_owned(),
                 content_signature: "sig-dup".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1459,12 +1548,14 @@ mod tests {
         // Second confirm should fail
         let err = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-dup".to_owned(),
                 content_signature: "sig-dup".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1517,12 +1608,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-org".to_owned(),
                 content_signature: "sig-org".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1575,12 +1668,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-unorg".to_owned(),
                 content_signature: "sig-unorg".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1632,12 +1727,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-absent".to_owned(),
                 content_signature: "sig-absent".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1700,12 +1797,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-np".to_owned(),
                 content_signature: "sig-np".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1753,12 +1852,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-1cand".to_owned(),
                 content_signature: "sig-1c".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1811,20 +1912,24 @@ mod tests {
             destructive_destination: None,
             root_absolute_path: tmp.path().to_owned(),
             root_id,
+            chosen_attribution: None,
         };
 
         // Absent selection → blocking error listing both candidates.
-        let err = confirm(db.pool(), mk(None)).await.unwrap_err();
+        let err = confirm(db.pool(), &test_bus(&db), mk(None)).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::InboxDestinationRootRequired);
         let candidates = err.details.0.get("candidates").and_then(|c| c.as_array()).unwrap();
         assert_eq!(candidates.len(), 2, "both library roots offered as candidates");
 
         // Invalid selection (an id that is not a candidate) → rejected.
-        let err = confirm(db.pool(), mk(Some("root-inbox".to_owned()))).await.unwrap_err();
+        let err = confirm(db.pool(), &test_bus(&db), mk(Some("root-inbox".to_owned())))
+            .await
+            .unwrap_err();
         assert_eq!(err.code, ErrorCode::InboxInvalidDestinationRoot);
 
         // Valid selection → plan lands under the chosen root.
-        let resp = confirm(db.pool(), mk(Some("root-lib-b".to_owned()))).await.unwrap();
+        let resp =
+            confirm(db.pool(), &test_bus(&db), mk(Some("root-lib-b".to_owned()))).await.unwrap();
         assert_eq!(resp.destinations.len(), 1);
         assert_eq!(resp.destinations[0].to_root_id, "root-lib-b");
     }
@@ -1859,12 +1964,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-0cand".to_owned(),
                 content_signature: "sig-0c".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1899,12 +2006,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-cal-dark".to_owned(),
                 content_signature: "sig-cal-dark".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -1973,12 +2082,14 @@ mod tests {
 
         let resp = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-cal-master".to_owned(),
                 content_signature: "sig-cal-master".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2014,12 +2125,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-gate".to_owned(),
                 content_signature: "sig-gate".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2089,12 +2202,14 @@ mod tests {
 
         let err = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: item_id.to_owned(),
                 content_signature: sig.to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await
@@ -2144,12 +2259,14 @@ mod tests {
         // not SENTINEL_NEEDS_REVIEW) must pass the sentinel gate.
         let result = confirm(
             db.pool(),
+            &test_bus(&db),
             ConfirmRequest {
                 inbox_item_id: "item-t070-ok".to_owned(),
                 content_signature: "sig-t070-ok".to_owned(),
                 destructive_destination: None,
                 root_absolute_path: tmp.path().to_owned(),
                 root_id: None,
+                chosen_attribution: None,
             },
         )
         .await;
