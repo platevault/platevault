@@ -1,120 +1,147 @@
-## Journey 5 — Project lifecycle: create → attach sources → manifests/notes → tool launch → artifacts
+---
+id: J05
+title: Run a project from creation through tool launch and output tracking
+version: 1
+status: active
+last_reviewed: 2026-07-14
+actors: [astrophotographer]
+surfaces: [projects, plans, audit]
+interfaces: [windows-desktop]
+trace:
+  - pre-migration journey.md @ git 66026463
+  - e2e-agentic-test/008-project-create-onboard-edit/*
+  - e2e-agentic-test/024-project-manifests-and-notes/manifests-notes-reveal-labels/scenario.md
+  - e2e-agentic-test/011-processing-tool-launch/tool-launch-containment/scenario.md
+  - e2e-agentic-test/012-processing-artifact-observation/artifact-attribution/scenario.md
+  - e2e-agentic-test/journeys/full-project-lifecycle/scenario.md
+  - deltas/2026-07-14-jval-docdrift.md (folded as correction)
+---
 
-**Goal:** create a project, link the acquisition data it should use, document
-it (manifests/notes), launch a processing tool against it, and track the
-outputs that tool produces.
+## Goal
+The user turns a set of already-confirmed acquisition sessions into a
+tracked project: create it, attach the sessions it should use, watch its
+documentation (per-channel numbers, manifests, notes) stay accurate as the
+project changes, launch their processing tool against it, and have the
+outputs that tool writes get recorded automatically. Done means the project
+detail view reflects real attached data at every stage and every filesystem
+side effect (folder creation, tool launch, artifact discovery) is either
+safe-by-construction or was explicitly reviewed.
 
-**Preconditions:** at least one confirmed session exists to attach (from
-Journey 2/3); a processing tool (e.g. PixInsight) configured with an
-executable path is useful but not required to exercise creation.
+## Preconditions
+- P1: At least one confirmed acquisition session exists and is unattached to
+  any other project (see J02/J03).
+- P2: A library root is registered so project folders and tool working
+  directories have somewhere valid to resolve into.
+- P3: A processing-tool profile (e.g. PixInsight) with a configured
+  executable path exists if S5 (tool launch) is to be exercised; project
+  creation and the rest of the journey do not require it.
 
-**Narrative flow:**
+## Steps
 
-1. **Create** (`/projects/new`): name the project, optionally pick a
-   processing-tool profile and initial sources. Typing a name that already
-   exists (case-insensitively) surfaces an inline field error immediately,
-   not a generic toast, and creation is blocked from that step. On success,
-   a plain toast confirms creation and the project's on-disk folder
-   structure (e.g. `lights/`, `darks/`, `flats/`) is created automatically —
-   this "mkdir-only" plan auto-applies (see Known gaps for why that's safe)
-   while still leaving an audit record and a reviewable plan row behind it.
-   If a file already occupies where a folder should go, creation still
-   succeeds but the toast says so and the folder plan stays available for
-   review instead of being silently skipped.
-2. **Attach sources** (Edit pane): "Add sources" opens a picker pre-filtered
-   to unlinked, already-confirmed sessions only — you cannot attach
-   not-yet-confirmed inbox data. Removing a source is immediate except for
-   the *last* remaining source, which requires an inline confirmation
-   ("You can't remove the last confirmed source.") because removing it drops
-   the project back to an incomplete-setup state. A project in a locked
-   lifecycle state (e.g. archived) refuses edits with a clear message instead
-   of silently no-op-ing.
-3. **Review the real numbers**: the project detail's per-channel (per-filter)
-   breakdown shows actual sub-frame counts and total integration time
-   computed from the attached sessions, formatted as hours/minutes — not a
-   placeholder dash.
-4. **Manifests & notes**: every lifecycle-relevant change (creation, source
-   change, later a completed cleanup/archive) appends a new manifest
-   snapshot — manifests are generated documentation, never overwritten, so
-   the history of "what did this project look like at each point" is
-   preserved. Notes are freehand, auto-saved a few seconds after typing
-   stops, with a live byte counter and a hard size cap.
-5. **Launch a tool**: with an executable configured, "Open in {tool}" spawns
-   the process without touching the project's lifecycle state, refuses to
-   launch if the project's working directory would resolve outside every
-   registered root (a containment safety check), and if the OS itself fails
-   to spawn the process, that failure is reported plainly rather than
-   silently swallowed.
-6. **Observe outputs**: while the project is open, a per-project watcher
-   attaches to its output folder only (not the whole library) and records
-   new files as artifacts with a kind (intermediate/master/final) and
-   confidence; artifacts written while the project was closed are picked up
-   the next time it's reopened. PlateVault never modifies or deletes an
-   artifact file itself.
+### S1 — Create the project {#S1}
+- **Do:** Open the project creation flow, enter a name, optionally choose a
+  processing-tool profile, and proceed to create.
+- **Expect:** On success, a confirmation names the created project and
+  navigates into it; the project's on-disk folder structure (e.g. `lights/`,
+  `darks/`, `flats/`) is created automatically inside the user's registered
+  project library root, never elsewhere.
+- **Expect (negative):** Entering a name that collides with an existing
+  project (case-insensitively) is rejected only when the user submits the
+  form — the wizard returns to the name step with an inline field error
+  naming the conflict; no project is created and no folders are written.
+- **Expect (negative):** If a plain file already occupies where a project
+  folder should go, creation still succeeds for the project record, but the
+  user is told which folder could not be created and that plan step remains
+  available for review rather than being silently dropped.
+- **Trace:** e2e-agentic-test/008-.../create-wizard-field-errors/scenario.md; e2e-agentic-test/008-.../project-mkdir-auto-apply/scenario.md; e2e-agentic-test/008-.../project-path-root-anchoring/scenario.md
 
-**Touch & validate:**
+### S2 — Attach sources {#S2}
+- **Do:** From the project's edit view, add sources from a picker and, when
+  needed, remove a previously attached source.
+- **Expect:** The picker offers only unlinked, already-confirmed sessions;
+  removing any source except the last one takes effect immediately.
+- **Expect (negative):** Not-yet-confirmed inbox data never appears as an
+  attachable source. Removing the *last* remaining source is blocked behind
+  an inline confirmation, because it would drop the project back to an
+  incomplete-setup state.
+- **Expect (negative):** A project in a locked lifecycle state (e.g.
+  archived) refuses source edits with an explicit message rather than
+  silently no-op-ing.
+- **Trace:** e2e-agentic-test/008-.../edit-project-sources/scenario.md
 
-- Wizard, every step against the *actual* selection: step 2's session list
-  and running integration total must reflect what is checked, at selection
-  time; step 3's calibration recommendations must be computed from the
-  library's real masters (assert at least one recommendation references a
-  master that exists on the Calibration page); step 5's naming preview must
-  render the *typed* project name; step 6's plan items and disk tree must
-  correspond 1:1 to what apply will create (spot-check two destination
-  paths). Any fixture/demo content on these steps fails the journey.
-- Wizard chrome: duplicate-name inline error; Save draft → leave → resume;
-  Cancel from every step; stepper state at 1100×720.
-- Create: success signal naming the project with a path into it; landing
-  state (project selected/open); Target association persisted when entered
-  via Journey 14.
-- Detail: Sources table shows human names (never raw ids) with real
-  filter/subs/integration per row; Channels palette values carry correct
-  units; lifecycle stepper advances through each state in order, including
-  reverse transitions (Re-open on a completed project), and any refused
-  transition explains itself at the control; Edit sources add/remove
-  including the last-source guard; locked-state (archived) edit refusal.
-- Manifests: creation, a source change, and a lifecycle transition each
-  append a snapshot; the list grows append-only; reveal opens the
-  manifest's folder; Notes: autosave signal, byte counter, cap behavior.
-- Source views: the Generate dialog (profile choice, link-kind fallback
-  disclosure, allow-copy option) produces a reviewable plan — never a
-  direct filesystem mutation; Cancel leaves no plan behind; generated
-  views list with their status.
-- Tool launch: launch succeeds with a configured tool; containment refusal
-  (working dir outside all roots) reported plainly; OS spawn failure
-  reported plainly.
-- Artifacts: a file dropped in the output folder while open is recorded with
-  kind + confidence; one dropped while closed is picked up on reopen.
+### S3 — Review real per-channel numbers {#S3}
+- **Do:** Open the project detail view.
+- **Expect:** The per-channel (per-filter) breakdown shows actual sub-frame
+  counts and total integration time, computed from the currently attached
+  sessions and formatted as hours/minutes.
+- **Expect (negative):** No channel row shows a placeholder dash or a bare
+  `0` where the real value is simply unknown — a missing value is
+  distinguishable from a real zero.
+- **Trace:** e2e-agentic-test/008-.../per-channel-integration-time/scenario.md
 
-**Safety & trust notes:** mkdir-only project scaffolding auto-applies
-because every action in that plan is a folder creation (never a move/copy/
-delete of user files) — anything beyond that still requires explicit review;
-tool launches are contained to registered roots; manifests are an
-append-only audit trail, not a mutable summary.
+### S4 — Track manifests and notes {#S4}
+- **Do:** Trigger any lifecycle-relevant change (creation, a source change,
+  a later completed cleanup/archive) and, separately, type freeform notes on
+  the project.
+- **Expect:** Each lifecycle-relevant change appends a new manifest
+  snapshot to an append-only list; opening "reveal" on a manifest opens its
+  folder. Notes autosave a few seconds after typing stops, showing a live
+  byte counter against a hard size cap.
+- **Expect (negative):** No manifest is ever overwritten or removed by a
+  later change — the history of prior snapshots stays intact.
+- **Trace:** e2e-agentic-test/024-project-manifests-and-notes/manifests-notes-reveal-labels/scenario.md
 
-**Scenario files:**
-`e2e-agentic-test/008-project-create-onboard-edit/create-wizard-field-errors/scenario.md`,
-`.../edit-project-sources/scenario.md`,
-`.../per-channel-integration-time/scenario.md`,
-`.../project-mkdir-auto-apply/scenario.md`,
-`.../project-path-root-anchoring/scenario.md`,
-`e2e-agentic-test/024-project-manifests-and-notes/manifests-notes-reveal-labels/scenario.md`,
-`e2e-agentic-test/011-processing-tool-launch/tool-launch-containment/scenario.md`,
-`e2e-agentic-test/012-processing-artifact-observation/artifact-attribution/scenario.md`,
-`e2e-agentic-test/journeys/full-project-lifecycle/scenario.md` (canonical
-end-to-end version of Journeys 5–7; this is the release gate for the
-projects area).
+### S5 — Launch the processing tool {#S5}
+- **Do:** With a tool executable configured, choose "Open in {tool}" from
+  the project.
+- **Expect:** The tool process launches against the project's working
+  directory without changing the project's lifecycle state.
+- **Expect (negative):** If the project's working directory would resolve
+  outside every registered library root, the launch is refused with a
+  plain explanation instead of spawning into an unexpected location. If the
+  OS itself fails to spawn the process, that failure is reported plainly,
+  not swallowed.
+- **Trace:** e2e-agentic-test/011-processing-tool-launch/tool-launch-containment/scenario.md
 
-**Known gaps (2026-07-04):**
-- Project folders were only actually created on disk starting with **PR
-  #411** (merged). A related bug — folders landing under the app's working
-  directory instead of the user's registered project library — is fixed by
-  **PR #414** (open); until it merges, new project folders can land in the
-  wrong place.
-- Rejecting an unconfirmed session as a project source is enforced by the
-  backend but has no dedicated UI path to trigger it today.
-- The flagship `CreateProjectDialog` component (with polished per-field
-  error mapping) is built and tested but not actually mounted by the router
-  — the real create flow goes through the setup-style wizard instead. This
-  is a product decision, not a bug, but is worth knowing if you go looking
-  for the "other" creation UI.
+### S6 — Observe artifacts the tool produces {#S6}
+- **Do:** Leave the project open while the processing tool writes files
+  into its output folder; separately, close the project and let files land
+  while it is closed, then reopen it.
+- **Expect:** While open, new files in the output folder are recorded as
+  artifacts with a kind (intermediate/master/final) and a confidence level.
+  Files written while the project was closed are picked up the next time it
+  is reopened.
+- **Expect (negative):** The watcher only observes the project's own output
+  folder, never the whole library, and the application never modifies or
+  deletes an artifact file itself.
+- **Trace:** e2e-agentic-test/012-processing-artifact-observation/artifact-attribution/scenario.md
+
+## Success criteria
+- SC1: Creating a project with a valid, unique name results in a selected
+  project whose registered-root folders exist on disk (S1).
+- SC2: A duplicate name (any casing) never creates a project or folders;
+  the rejection is surfaced at the name field on submit, not as a generic
+  toast (S1).
+- SC3: The last-remaining-source removal is always intercepted by a
+  confirmation; every other removal is immediate (S2).
+- SC4: Per-channel counts and integration time in the detail view always
+  match the sum of the currently attached sessions' subs (S3).
+- SC5: The manifest list length only grows; it never shrinks or replaces an
+  existing entry (S4).
+- SC6: A tool launch whose working directory falls outside all registered
+  roots never spawns a process (S5).
+- SC7: Every file appearing in a project's output folder — whether the
+  project was open or closed at the time — is eventually recorded as an
+  artifact with a kind and confidence (S6).
+
+## Known gaps
+- G1: Rejecting an unconfirmed session as a project source is enforced by
+  the backend but has no dedicated UI path to trigger it today (carried
+  from legacy doc).
+- G2: The flagship `CreateProjectDialog` component (polished per-field
+  error mapping) is built and tested but not mounted by the router — the
+  real `/projects/new` flow goes through the step wizard (`WizardPage`)
+  instead. This is a product decision, not a defect, but affects where to
+  look for the "other" creation UI (carried from legacy doc).
+
+## Delta log
