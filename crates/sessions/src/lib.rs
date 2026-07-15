@@ -5,6 +5,7 @@
 
 pub mod clustering;
 pub mod key;
+pub mod optic_train;
 
 pub use clustering::{
     angular_separation_deg, circular_mean_deg, derive_clustering, fov_diagonal_deg,
@@ -12,6 +13,7 @@ pub use clustering::{
     SessionGeometry, ToleranceParams, UnassignedReason,
 };
 pub use key::{observing_night, session_key, KeyError, ObserverContext};
+pub use optic_train::optic_train_key;
 
 pub const CRATE_NAME: &str = "sessions";
 

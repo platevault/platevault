@@ -456,7 +456,7 @@ fn render_dimension(
 /// from present parts; entirely absent ⇒ `None` (sentinel). Each part is
 /// normalized; focal length is bucketed to whole mm so float noise doesn't fork
 /// the group.
-pub(crate) fn optic_train(meta: &FrameMetadata) -> Option<String> {
+fn optic_train(meta: &FrameMetadata) -> Option<String> {
     let tel = normalize_text(meta.telescop.as_deref());
     let inst = normalize_text(meta.instrume.as_deref());
     let fl = meta.focal_length_mm.map(|f| format_num(f.round()));

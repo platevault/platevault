@@ -58,10 +58,11 @@ use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
 use persistence_db::repositories::plans as plans_repo;
 use persistence_db::repositories::projects as projects_repo;
 use persistence_db::repositories::q_resolver;
-use sessions::{angular_separation_deg, rotation_circular_distance_deg, ToleranceParams};
+use sessions::{
+    angular_separation_deg, optic_train_key as compute_optic_train_key,
+    rotation_circular_distance_deg, ToleranceParams,
+};
 use sqlx::SqlitePool;
-
-use crate::grouping::{optic_train, FrameMetadata};
 
 // Takes ownership so it composes directly as a `.map_err(db_err)` callback
 // (`Result::map_err` requires `FnOnce(E) -> F`); a `&DbError` signature would
@@ -120,13 +121,11 @@ pub async fn compute_item_geometry(
 
     for row in &rows {
         if optic_train_key.is_none() {
-            let meta = FrameMetadata {
-                telescop: row.telescop.clone(),
-                instrume: row.instrume.clone(),
-                focal_length_mm: row.focal_length_mm,
-                ..FrameMetadata::default()
-            };
-            optic_train_key = optic_train(&meta);
+            optic_train_key = compute_optic_train_key(
+                row.telescop.as_deref(),
+                row.instrume.as_deref(),
+                row.focal_length_mm,
+            );
         }
         if fov_diagonal_deg.is_none() {
             if let (Some(focal), Some(px), Some(x), Some(y)) =
