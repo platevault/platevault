@@ -744,15 +744,38 @@
 .alm-filter-badges { gap: var(--alm-sp-2); }
 
 /* ── task 19 / #580: sparkline size + time-axis ────────────────────────────
- * #580: the row sparkline was too small to read. Enlarged from 72×22 → 96×34
- * (wider curve, taller body) with twilight shading, an area fill, and a
+ * #580: the row sparkline was too small to read. Enlarged from 72×22 → 96px
+ * wide with a density-capped height, twilight shading, an area fill, and a
  * transit/max-altitude marker. The SVG viewBox (96×28) is set in
- * AltitudeSparkline.tsx; CSS renders it at a legible pixel size. */
+ * AltitudeSparkline.tsx; preserveAspectRatio=none stretches it to this box.
+ *
+ * HEIGHT INVARIANT (virtualizer, TargetsTable.tsx ROW_ESTIMATE): the sparkline
+ * must NEVER be the row-height driver. Rows are border-box
+ * `height: var(--alm-row-height)` minimums (24/32/40 per density) and this
+ * cell carries 1px vertical padding + 1px border-bottom, so the height budget
+ * is `--alm-row-height - 3px`. `min()` grows the curve to 28px where the
+ * density allows (comfortable: 28+2+1 = 31 ≤ 32; spacious: 31 ≤ 40) and caps
+ * it to exactly fill compact (21+2+1 = 24). A fixed height taller than that
+ * budget would inflate EVERY row past the fixed-estimate windowing math and
+ * override the user's density choice. */
 
 .alm-targets-spark {
   width: 96px;
-  height: 34px; /* taller so the enlarged curve + axis ticks are readable */
+  height: min(28px, calc(var(--alm-row-height) - 3px));
 }
+
+/* #580: tighter vertical padding than the 4px table default so the enlarged
+ * curve fits the comfortable (32px) row budget — see the invariant above. */
+.alm-targets-table td.alm-targets-cell--spark {
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+
+/* #579 review nit: persistent "twilight" visibility state — the target clears
+ * the usable altitude tonight but there is NO astronomical dark window
+ * (high-lat summer), so a plain "tonight" dot would overpromise. Amber to
+ * read as a caveat, distinct from --yes (ok) and --no (muted). */
+.alm-targets-vis--twilight { color: var(--alm-warn); }
 
 /* #580: soft area fill under the curve — usable/low tinted via the state
  * modifier classes below. */

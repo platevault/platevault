@@ -1132,10 +1132,12 @@ export function TargetsTable({
                       (does the target clear the usable altitude tonight),
                       which now discriminates even on a no-dark-window night
                       (high-lat summer) instead of collapsing every row to a
-                      single "no dark window" state. When there is no
-                      astronomical darkness the tooltip discloses it (FR-017 —
-                      imaging time is genuinely zero) without hiding the
-                      altitude distinction. */}
+                      single "no dark window" state. A visible target on a
+                      no-dark night renders a persistent, distinct "twilight"
+                      state (◐ + amber label) rather than the plain "tonight"
+                      dot, which would overpromise — the target only clears
+                      the threshold in twilight and imaging time is genuinely
+                      zero (FR-017). */}
                   <td className="alm-targets-cell--center">
                     {alt.needsCoordinates ? (
                       <span
@@ -1147,18 +1149,24 @@ export function TargetsTable({
                           {m.targets_table_needs_coordinates()}
                         </span>
                       </span>
+                    ) : alt.visibleTonight && alt.noDarkWindow ? (
+                      <span
+                        className="alm-targets-vis alm-targets-vis--twilight"
+                        title={m.targets_table_no_dark_window_title()}
+                      >
+                        ◐
+                        <span className="alm-targets-vis__label">
+                          {m.targets_table_visible_twilight()}
+                        </span>
+                      </span>
                     ) : alt.visibleTonight ? (
                       <span
                         className="alm-targets-vis alm-targets-vis--yes"
-                        title={
-                          alt.noDarkWindow
-                            ? m.targets_table_no_dark_window_title()
-                            : m.targets_table_visible_reaches_title({
-                                deg: Math.round(alt.maxAltDeg),
-                                hours: alt.hoursAboveUsable.toFixed(1),
-                                threshold: usableAltDeg,
-                              })
-                        }
+                        title={m.targets_table_visible_reaches_title({
+                          deg: Math.round(alt.maxAltDeg),
+                          hours: alt.hoursAboveUsable.toFixed(1),
+                          threshold: usableAltDeg,
+                        })}
                       >
                         ●
                         <span className="alm-targets-vis__label">
