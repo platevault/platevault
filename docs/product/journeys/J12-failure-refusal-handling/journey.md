@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J12-failure-refusal-handling/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 12 — Failure & refusal handling: when the backend says no
 
 **Goal:** when an action fails or is refused — a plan apply partially fails,

@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J06-cleanup-scan-review-apply/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 6 — Cleanup: scan → review → apply
 
 **Goal:** find and safely reclaim disk space from intermediate/redundant

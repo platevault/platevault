@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J16-keyboard-first-navigation/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 16 — Keyboard-first navigation & window management
 
 **Goal:** an efficiency-focused user drives PlateVault mostly without the

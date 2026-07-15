@@ -90,9 +90,10 @@ validation. Agent judgment bridges anything unmapped.
 
 | path glob | surfaces |
 |---|---|
-| `apps/desktop/src/features/setup/**` | setup, data-sources |
-| `apps/desktop/src/features/settings/**` | settings |
-| `apps/desktop/src/features/inbox/**` | inbox-confirm |
+| `apps/desktop/src/features/setup/**` | setup |
+| `apps/desktop/src/features/settings/**` | settings, equipment, observing-sites |
+| `apps/desktop/src/app/**` | shell, activity |
+| `apps/desktop/src/features/inbox/**` | inbox |
 | `apps/desktop/src/features/sessions/**` | sessions |
 | `apps/desktop/src/features/projects/**` | projects |
 | `apps/desktop/src/features/targets/**` | targets |
