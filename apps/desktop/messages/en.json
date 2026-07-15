@@ -181,6 +181,7 @@
   "cmp_target_search_set_primary_aria": "Set \"{query}\" to {designation}",
   "cmp_target_search_suggestions_aria": "Target suggestions",
   "cmp_target_search_type_label": "Type",
+  "cmp_target_search_type_more": "Keep typing to search…",
   "common_add": "Add",
   "common_adding": "Adding…",
   "common_aliases": "Aliases",
