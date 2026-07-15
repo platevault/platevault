@@ -133,9 +133,9 @@ pub fn fov_diagonal_deg(
     if focal_length_mm <= 0.0 || pixel_size_um <= 0.0 || naxis1 <= 0 || naxis2 <= 0 {
         return None;
     }
-    let sensor_w_mm = (naxis1 as f64) * pixel_size_um / 1000.0;
-    let sensor_h_mm = (naxis2 as f64) * pixel_size_um / 1000.0;
-    let sensor_diagonal_mm = sensor_w_mm.hypot(sensor_h_mm);
+    let sensor_width_mm = (naxis1 as f64) * pixel_size_um / 1000.0;
+    let sensor_height_mm = (naxis2 as f64) * pixel_size_um / 1000.0;
+    let sensor_diagonal_mm = sensor_width_mm.hypot(sensor_height_mm);
     Some(2.0 * (sensor_diagonal_mm / (2.0 * focal_length_mm)).atan().to_degrees())
 }
 

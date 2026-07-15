@@ -209,7 +209,7 @@ pub enum IngestionAttributionKind {
     NewProject,
 }
 
-/// A ranked attribution candidate (data-model.md §IngestionAttributionCandidate).
+/// A ranked attribution candidate (data-model.md §`IngestionAttributionCandidate`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct IngestionAttributionCandidateDto {
