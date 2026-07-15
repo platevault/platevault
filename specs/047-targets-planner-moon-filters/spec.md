@@ -283,18 +283,25 @@ by soonest-next-opposition.
   culminates near local midnight, derived from the target's catalogued
   position and the Sun's seasonal position — no observer coordinates —
   replacing the "—" stub. The column MUST be sortable by soonest-next.
+  *(Iteration 2026-07-15)*: the opposition column is retained in the
+  consolidated planner table and MUST be sized to its real content
+  ("14 Apr · in 9 months") per spec 044's content-driven sizing requirement
+  (closes #792); soonest-next sort semantics (SC-003) are unchanged.
 
 **Boundary and placeholder integrity**
 
-- **FR-015**: The planner columns that require observer location — max
-  altitude, imaging time tonight, visible tonight, and the per-row altitude
-  sparkline — MUST remain in place but stay clearly presented as
-  estimates/placeholders, unchanged in behavior, until Track B delivers real
-  values. Track A MUST NOT alter their semantics and MUST NOT request or use
-  observer location.
-- **FR-016**: The existing usable-altitude threshold setting MUST be retained
-  unchanged (it continues to drive the placeholder columns and will carry
-  over to Track B).
+- **FR-015** *(superseded, iteration 2026-07-15)*: ~~The planner columns that
+  require observer location — max altitude, imaging time tonight, visible
+  tonight, and the per-row altitude sparkline — MUST remain in place but stay
+  clearly presented as estimates/placeholders, unchanged in behavior, until
+  Track B delivers real values.~~ Track B (spec 044) shipped real values, and
+  the 044 observability iterate (D4, resolved Q2) removes the per-row
+  altitude sparkline column and folds visible-tonight into the imaging-time
+  glyph — the "remain in place unchanged" obligation no longer binds. The
+  enduring half stands: Track A MUST NOT request or use observer location.
+- **FR-016** *(fulfilled, iteration 2026-07-15)*: The existing usable-altitude
+  threshold setting was retained and has carried over to Track B as planned
+  (spec 044 FR-004 owns it now); historical.
 - **FR-017**: After Track A ships, no moon-related or opposition value in the
   planner may be derived from placeholder/deterministic-hash sources; every
   displayed Track A number is a real planning-granularity computation or an
@@ -310,6 +317,15 @@ by soonest-next-opposition.
   site-existence signal (the default site is created by the setup-wizard work
   coordinated under Track B/spec 048); Track A does not build the wizard step
   and does not use the site's coordinates in any computation.
+- **FR-020** *(added, iteration 2026-07-15 — 044 D7)*: Rule consumers MAY
+  aggregate the per-band required separations across an OSC camera's
+  passband by taking the strictest (maximum) `minSeparationDeg` over the
+  passband's bands for a given Moon age. The aggregation lives on the
+  consumer (Track B / spec 044) side; this spec's rule, per-band
+  `(distance, width)` parameters, shipped defaults, and viability pills are
+  unchanged, and no scalar aggregate parameter is introduced (the
+  `min_lunar_separation_deg` scalar remains rejected — see plan.md:255-260
+  and contracts/settings.plannerMoonAvoidance.md).
 
 ### Key Entities
 

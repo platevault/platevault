@@ -495,6 +495,59 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
 
 ---
 
+## Phase 10: Iterate — planner observability UX (2026-07-15)
+
+> Decision record: `docs/research/044-047-planner-observability-ux-iterate.md` (PR #819, all five review
+> questions resolved). Implements FR-029–FR-039 + the FR-005/FR-007 amendments. **Deliberately reworks
+> shipped Phase 3/7 surfaces** (sparkline + visible-tonight columns removed, detail-graph rendering
+> changed). NOTE: the pending-iteration draft proposed folding T036 into this phase; T036's documented
+> deferral assessment stands — all column work here stays within the existing sort/group engine, and
+> T036 remains a separate, dedicated refactor decision.
+
+- [ ] T040 [P] Derive-layer exposure (`planner-derive.ts`): expose per-target **dark-window** and
+      **uptime-window** facts alongside imaging time (FR-005/D1); add the **binding-blocker reason**
+      (`'darkness' | 'altitude' | 'moon'`, precedence darkness > altitude > moon, FR-029) and the
+      **moon-is-actionable-limiter** boolean (some band's moon-viable window strictly smaller than
+      dark ∩ uptime, FR-031). Unit tests incl. the #817 repro fixture (52.09°N, 2026-07-14, M31) and a
+      simultaneous-blockers precedence case.
+- [ ] T041 Table why-glyph + column consolidation (`TargetsTable.tsx`, depends T040): remove the altitude
+      sparkline column (hard removal) and the visible-tonight column; imaging-time cell renders ☀/▲/☾
+      glyph + reason tooltip for zero values (FR-030) and the muted actionable-☾ with affected-band
+      tooltip for non-zero values (FR-031). Stay within the existing sort/group engine (see phase note).
+- [ ] T042 Column right-sizing (`merges-3.css:323-355`, depends T041): content-driven widths for the
+      survivor columns; Opposition renders "14 Apr · in 9 months" unclipped (#792, FR-032); imaging time
+      fits "2h10m" + glyph; verify no clipping at 1100×720 (SC-016).
+- [ ] T043 [P] Computation-context label (FR-033): always-visible single-line "Computed for: `<site>`
+      `<lat>`°N · `<twilight>` · ≥`<N>`° · change" in the planner toolbar; "change" opens the existing
+      site-switch/settings surface; verify against the crowded-toolbar layout at 1100×720.
+- [ ] T044 Detail-graph agreement + overlays (`TargetDetailV2.tsx:140-243`, depends T040): render the
+      no-dark-window case without the green usable fill (whole-plot non-dark shading or greyed fill,
+      FR-034/#817); overlay twilight bands + threshold line + Moon-excluded spans for the default band
+      (FR-007); add the three-quantity breakdown (dark window / uptime / imaging time) to the detail
+      stats (FR-005). Layering: twilight shading must not override the Moon-excluded overlay or transit
+      marker.
+- [ ] T045 Equipment sensor-type end-to-end (FR-035): camera `sensorType: 'mono'|'osc'` + `passband:
+      'rgb'|narrowband set` through the equipment contract (`packages/contracts` schema + generated
+      bindings), Rust DTO/persistence, and `features/settings/Equipment.tsx` UI. Migration (if cameras
+      are DB-persisted) takes the **next free number after checking open PRs** (duplicate versions abort
+      fresh-DB migrate).
+- [ ] T046 OSC single-pass aggregation (`planner-derive.ts`, depends T040+T045): `effective_min_sep(age)
+      = max over passband of minSeparationDeg(band, age, params)` feeding the existing integration
+      (FR-036); per-line moon-viable windows for the detail panel (FR-037); unset/unknown equipment
+      behaves as mono (FR-038). Unit tests: strictest-band-wins, per-line windows, and a mono-regression
+      case proving pre-iteration output is unchanged (SC-017).
+- [ ] T047 i18n + a11y sweep (FR-039, depends T041/T043/T044/T046): Paraglide messages for reasons,
+      tooltips, and the context label; text alternatives for the glyphs; keyboard/SR pass over the new
+      surfaces.
+- [ ] T048 Regression + E2E alignment (depends all above): update mock-Playwright planner specs for the
+      removed columns/new glyph; add #817 (graph/stat agreement) and #792 (no clipping) assertions;
+      `just lint` + `just test` + `just typecheck` green.
+- [ ] T049 verify-on-windows scenario: extend `docs/development/windows-journeys/journey-09-targets-planning.md`
+      with the iterate surfaces (glyphs, reasons, context label, no-dark graph, OSC equipment) for the
+      dedicated Windows session to execute.
+
+---
+
 ## Dependencies (exhaustive graph)
 
 ```
@@ -509,6 +562,8 @@ Setup T001,T002,T003
           ├─> US6 (Phase 4) T015 ─> T016 ─> T017 ; T018[P]           (co-P1 w/ US1; needs settings)
           └─> US3 (Phase 5) T019 ─> T020 ; T021 ; T022 ; T023[P]
    Polish (Phase 9) T035[P],T036[P] after their consumer stories; T037 ─> T038 ─> T039 last
+   Iterate (Phase 10, 2026-07-15) T040 ─> T041 ─> T042 ; T043[P] ; T040 ─> T044 ; T045 ─> T046 (T046 also
+   needs T040) ; T047 after T041/T043/T044/T046 ; T048 after all ; T049 last
 ```
 
 **Critical path (MVP)**: T001/T002 → T004→T008 → T009→T012b → (seed one site or T016) → usable planner.

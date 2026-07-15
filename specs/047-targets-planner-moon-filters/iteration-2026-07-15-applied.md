@@ -1,5 +1,6 @@
 ---
-status: pending
+status: applied
+applied: 2026-07-15
 created: 2026-07-15
 change_request: "Apply the approved planner observability UX iterate (docs/research/044-047-planner-observability-ux-iterate.md, PR #819, all five open questions resolved 2026-07-14) to spec 047: retire the vestigial Track-B placeholder-integrity requirement, record that rule consumers may aggregate per-band minima across an OSC passband, and note the opposition column right-sizing (#792)."
 scope: "Feature-wide"

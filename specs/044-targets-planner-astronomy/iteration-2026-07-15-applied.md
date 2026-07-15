@@ -1,5 +1,6 @@
 ---
-status: pending
+status: applied
+applied: 2026-07-15
 created: 2026-07-15
 change_request: "Apply the approved planner observability UX iterate (docs/research/044-047-planner-observability-ux-iterate.md, PR #819, all five open questions resolved 2026-07-14) to spec 044: three-quantity model, reason-for-zero, table why-glyph, column consolidation/right-sizing, site-context label, #817 detail-graph fix, and mono/OSC single-pass imaging time."
 scope: "Feature-wide"
@@ -160,6 +161,10 @@ Presentation-only astronomy: no change to ephemeris math or the Track A rule.
   #817/#792 repros; verify-on-windows scenario for the new surfaces.
 - Annotate T036: fold into / sequence before the Phase 10 column tasks so
   the column model is rewritten once.
+  **Deviation at apply time**: T036 carries a documented deferral assessment
+  (react-table swap = risk without user benefit; entangled shared grouping
+  engine). That assessment stands — Phase 10 column work stays within the
+  existing sort/group engine and T036 remains a separate refactor decision.
 
 ### data-model.md
 
