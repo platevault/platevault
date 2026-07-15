@@ -89,6 +89,13 @@ pub struct ToleranceParams {
     pub pointing_fallback_deg: f64,
     /// Rotation tolerance in degrees (R11a default 3.0).
     pub rotation_tolerance_deg: f32,
+    /// Mosaic candidate envelope (F-Framing-5, FR-019 relaxation): fraction of
+    /// FOV diagonal used as the pointing envelope around any existing framing's
+    /// representative for `isMosaic` projects, replacing target equality
+    /// (R11a default 1.0 — adjacent panels at 10-20% overlap land at
+    /// ~0.8-0.9x FOV spacing, inside the envelope; unrelated targets fall far
+    /// outside it).
+    pub mosaic_envelope_fraction_of_fov: f64,
 }
 
 impl ToleranceParams {
@@ -99,8 +106,37 @@ impl ToleranceParams {
             pointing_fraction_of_fov: 0.10,
             pointing_fallback_deg: 0.2,
             rotation_tolerance_deg: 3.0,
+            mosaic_envelope_fraction_of_fov: 1.0,
         }
     }
+}
+
+/// FOV diagonal in degrees from optic-train focal length + sensor dimensions
+/// (R11a "FOV source"). `None` when any input is non-positive/absent — callers
+/// fall back to [`ToleranceParams::pointing_fallback_deg`] per R11a.
+///
+/// Standard small-angle-free optics formula: `2 * atan(sensor_diagonal_mm /
+/// (2 * focal_length_mm))`, converted to degrees. `pixel_size_um` is the same
+/// value on both axes (square pixels, the overwhelming common case for
+/// astro cameras); `naxis1`/`naxis2` are the sensor dimensions in pixels.
+// Sensor dimensions in pixels never approach f64's exact-integer limit
+// (2^53) at any real camera resolution; this narrows an i64 pixel count into
+// FOV geometry math, not a precision-sensitive accumulation.
+#[allow(clippy::cast_precision_loss)]
+#[must_use]
+pub fn fov_diagonal_deg(
+    focal_length_mm: f64,
+    pixel_size_um: f64,
+    naxis1: i64,
+    naxis2: i64,
+) -> Option<f64> {
+    if focal_length_mm <= 0.0 || pixel_size_um <= 0.0 || naxis1 <= 0 || naxis2 <= 0 {
+        return None;
+    }
+    let sensor_w_mm = (naxis1 as f64) * pixel_size_um / 1000.0;
+    let sensor_h_mm = (naxis2 as f64) * pixel_size_um / 1000.0;
+    let sensor_diagonal_mm = sensor_w_mm.hypot(sensor_h_mm);
+    Some(2.0 * (sensor_diagonal_mm / (2.0 * focal_length_mm)).atan().to_degrees())
 }
 
 /// Why a session was excluded from clustering.
