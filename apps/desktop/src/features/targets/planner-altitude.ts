@@ -38,7 +38,9 @@ import {
   getNightObservability,
   UNKNOWN_SEPARATION_SCALARS,
   type BestImagingDate,
+  type SensorConfig,
   type SeparationScalars,
+  type ZeroImagingReason,
 } from './planner-derive';
 import {
   BANDS,
@@ -101,6 +103,21 @@ export interface RowAltitude {
    * states.
    */
   darkWindowHours: { startHour: number; endHour: number } | null;
+  /**
+   * Hours the target sits above the usable altitude across the WHOLE night
+   * (the D1 uptime window — NOT dark-gated; distinguishable from
+   * `hoursAboveUsable` per FR-005). 0 in the degrade states.
+   */
+  uptimeHours: number;
+  /** Stated blocker when imaging time is (effectively) zero (FR-029); `null` otherwise / degrade. */
+  zeroImagingReason: ZeroImagingReason | null;
+  /** Bands the Moon actionably limits tonight (FR-031); empty when not computed / degrade. */
+  moonLimitedBands: Band[];
+  /**
+   * OSC single-pass imaging hours (FR-036); `null` for mono/unknown sensors,
+   * when Moon geometry wasn't computed, and in the degrade states.
+   */
+  oscSinglePassHours: number | null;
 }
 
 const ZERO_BY_BAND: Record<Band, number> = Object.fromEntries(
@@ -117,6 +134,10 @@ const DEGRADE_ROW: Omit<RowAltitude, 'needsCoordinates' | 'needsSite'> = {
   moonFreeMinutesByBand: ZERO_BY_BAND,
   noDarkWindow: false,
   darkWindowHours: null,
+  uptimeHours: 0,
+  zeroImagingReason: null,
+  moonLimitedBands: [],
+  oscSinglePassHours: null,
 };
 
 /** A minimal shape sufficient to compute tonight observability (T012 fallback reuse). */
@@ -166,6 +187,7 @@ export function altitudeFor(
   dateMs: number = Date.now(),
   moonAvoidanceParams: MoonAvoidanceParams = DEFAULT_MOON_AVOIDANCE,
   includeMoonGeometry = true,
+  sensorConfig: SensorConfig | null = null,
 ): RowAltitude {
   const needsCoordinates = subject.raDeg === null || subject.decDeg === null;
   const needsSite = !site;
@@ -192,6 +214,7 @@ export function altitudeFor(
     minHorizonAltDeg: site.minHorizonAltDeg,
     moonAvoidanceParams,
     bestDateFromMs: dateMs,
+    sensorConfig,
   });
   const points: AltPoint[] = night.samples.map((s) => ({
     tHour: (s.tMs - night.nightStartMs) / 3_600_000,
@@ -215,6 +238,13 @@ export function altitudeFor(
           endHour: (night.darkWindow.endMs - night.nightStartMs) / 3_600_000,
         }
       : null,
+    uptimeHours: derived.uptimeMinutes / 60,
+    zeroImagingReason: derived.zeroImagingReason,
+    moonLimitedBands: derived.moonLimitedBands,
+    oscSinglePassHours:
+      derived.oscSinglePassMinutes === null
+        ? null
+        : derived.oscSinglePassMinutes / 60,
   };
 }
 
@@ -244,6 +274,7 @@ export function rowAltitudeFor(
   dateMs: number = Date.now(),
   moonAvoidanceParams: MoonAvoidanceParams = DEFAULT_MOON_AVOIDANCE,
   includeMoonGeometry = true,
+  sensorConfig: SensorConfig | null = null,
 ): RowAltitude {
   return altitudeFor(
     { id: t.id, raDeg: t.raDeg, decDeg: t.decDeg },
@@ -252,5 +283,6 @@ export function rowAltitudeFor(
     dateMs,
     moonAvoidanceParams,
     includeMoonGeometry,
+    sensorConfig,
   );
 }

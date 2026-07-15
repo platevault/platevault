@@ -504,7 +504,7 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
 > deferral assessment stands — all column work here stays within the existing sort/group engine, and
 > T036 remains a separate, dedicated refactor decision.
 
-- [ ] T040 [P] Derive-layer exposure (`planner-derive.ts`): expose per-target **dark-window** and
+- [x] T040 [P] Derive-layer exposure (`planner-derive.ts`): expose per-target **dark-window** and
       **uptime-window** facts alongside imaging time (FR-005/D1); add the **binding-blocker reason**
       (`'darkness' | 'altitude' | 'moon'`, precedence darkness > altitude > moon, FR-029) and the
       **moon-is-actionable-limiter** boolean (some band's moon-viable window strictly smaller than
