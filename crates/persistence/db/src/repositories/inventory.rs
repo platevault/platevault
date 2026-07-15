@@ -632,7 +632,8 @@ mod tests {
         .await
         .unwrap();
 
-        let updated = set_session_notes(db.pool(), "acq-notes", Some("Great seeing.")).await.unwrap();
+        let updated =
+            set_session_notes(db.pool(), "acq-notes", Some("Great seeing.")).await.unwrap();
         assert!(updated);
 
         let (notes,): (Option<String>,) =
@@ -654,7 +655,8 @@ mod tests {
         .await
         .unwrap();
 
-        let updated = set_session_notes(db.pool(), "cal-notes", Some("Fresh bias batch.")).await.unwrap();
+        let updated =
+            set_session_notes(db.pool(), "cal-notes", Some("Fresh bias batch.")).await.unwrap();
         assert!(updated);
 
         let (notes,): (Option<String>,) =

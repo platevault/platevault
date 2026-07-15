@@ -12,7 +12,8 @@
 
 use app_core::inventory::{list, update_session_notes};
 use contracts_core::inventory::{
-    InventoryListRequest, InventoryListResponse, SessionNotesUpdateRequest, SessionNotesUpdateResult,
+    InventoryListRequest, InventoryListResponse, SessionNotesUpdateRequest,
+    SessionNotesUpdateResult,
 };
 use contracts_core::ContractError;
 use sqlx::SqlitePool;
