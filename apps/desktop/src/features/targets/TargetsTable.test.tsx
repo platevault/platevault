@@ -41,7 +41,11 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }));
 
-import { TargetsTable, DEFAULT_TARGET_SORT, __testExports } from './TargetsTable';
+import {
+  TargetsTable,
+  DEFAULT_TARGET_SORT,
+  __testExports,
+} from './TargetsTable';
 import { __setObservingStateForTest } from './observing-sites/site-store';
 import type { ObserverSite } from './observing-sites/observer-site';
 import type { ObservingNight } from './astro/moon-state';
@@ -407,7 +411,13 @@ describe('TargetsTable row cache (#573)', () => {
 
   it('reuses the same object on a cache hit (same target id + genKey)', () => {
     const cache = new Map();
-    const genKey = rowCacheGenKey(30, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE);
+    const genKey = rowCacheGenKey(
+      30,
+      SITE_A,
+      1000,
+      null,
+      DEFAULT_MOON_AVOIDANCE,
+    );
     const first = getCachedRow(
       cache,
       TARGET,
@@ -433,8 +443,20 @@ describe('TargetsTable row cache (#573)', () => {
 
   it('recomputes (fresh object) when the generation key changes', () => {
     const cache = new Map();
-    const genKeyA = rowCacheGenKey(30, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE);
-    const genKeyB = rowCacheGenKey(45, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE);
+    const genKeyA = rowCacheGenKey(
+      30,
+      SITE_A,
+      1000,
+      null,
+      DEFAULT_MOON_AVOIDANCE,
+    );
+    const genKeyB = rowCacheGenKey(
+      45,
+      SITE_A,
+      1000,
+      null,
+      DEFAULT_MOON_AVOIDANCE,
+    );
     const first = getCachedRow(
       cache,
       TARGET,
@@ -462,17 +484,23 @@ describe('TargetsTable row cache (#573)', () => {
 
   it('rowCacheGenKey changes with each astronomy input', () => {
     const base = rowCacheGenKey(30, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE);
-    expect(rowCacheGenKey(31, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE)).not.toBe(
-      base,
-    );
-    expect(rowCacheGenKey(30, null, 1000, null, DEFAULT_MOON_AVOIDANCE)).not.toBe(
-      base,
-    );
-    expect(rowCacheGenKey(30, SITE_A, 2000, null, DEFAULT_MOON_AVOIDANCE)).not.toBe(
-      base,
-    );
     expect(
-      rowCacheGenKey(30, SITE_A, 1000, nightWithMoonAtVernalEquinox(), DEFAULT_MOON_AVOIDANCE),
+      rowCacheGenKey(31, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE),
+    ).not.toBe(base);
+    expect(
+      rowCacheGenKey(30, null, 1000, null, DEFAULT_MOON_AVOIDANCE),
+    ).not.toBe(base);
+    expect(
+      rowCacheGenKey(30, SITE_A, 2000, null, DEFAULT_MOON_AVOIDANCE),
+    ).not.toBe(base);
+    expect(
+      rowCacheGenKey(
+        30,
+        SITE_A,
+        1000,
+        nightWithMoonAtVernalEquinox(),
+        DEFAULT_MOON_AVOIDANCE,
+      ),
     ).not.toBe(base);
   });
 });

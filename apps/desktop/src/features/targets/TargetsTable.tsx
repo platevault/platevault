@@ -654,7 +654,13 @@ export function TargetsTable({
   // state — it never needs to trigger a re-render itself). See the
   // `getCachedRow`/`rowCacheGenKey` doc above.
   const rowCacheRef = useRef<Map<string, RowCacheEntry>>(new Map());
-  const genKey = rowCacheGenKey(usableAltDeg, site, dateMs, night, guidanceParams);
+  const genKey = rowCacheGenKey(
+    usableAltDeg,
+    site,
+    dateMs,
+    night,
+    guidanceParams,
+  );
 
   // Grouping + sorting + per-row altitude are all derived here so a filter
   // or sort change does one O(n) pass off the render hot path, not per-row work
