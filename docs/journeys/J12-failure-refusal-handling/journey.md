@@ -173,15 +173,6 @@ control, or a raw error code.
   same reason text is retrievable afterward (S5).
 
 ## Known gaps
-- G1: Durable audit rows for plan-apply outcomes (partial-apply failures,
-  S3; stale-plan refusals, S4) do not exist yet — `crates/app/core/src/
-  plan_apply.rs` only emits live `EventBus::publish` events
-  (`plan.item.progress`, `plan.applying.completed`), not the durable
-  `audit_log_entry` rows the Audit Log UI reads. PR #826 (merged) extended
-  durable audit to settings, protection, equipment, and source/root
-  mutations (FR-130-134), but issue #647 (open) tracks the remaining
-  action classes, including plan apply. SC5 currently only holds for S1
-  (lifecycle transitions), which write durable rows via the pre-existing
-  `LifecycleRepository::record_transition`/`record_refused_transition` path.
+- G1: (dissolved 2026-07-15) — tracked as issues #647 and #766; plan-apply outcomes lack durable audit rows.
 
 ## Delta log

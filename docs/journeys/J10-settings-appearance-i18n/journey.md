@@ -38,6 +38,9 @@ durable-data settings) the change is discoverable afterward in the Audit Log.
 - P1: Setup is complete with at least one registered source, so every pane
   has real data to act on.
 
+Note: Release builds lack the /dev/contracts palette entry by design
+(dev-tools compile-time gate, spec 021).
+
 ## Steps
 
 ### S1 — Open Settings and find a pane {#S1}
@@ -201,25 +204,10 @@ durable-data settings) the change is discoverable afterward in the Audit Log.
   action bar pinned (S7).
 
 ## Known gaps
-- G1: Appearance's font-size control (`general` pane, displayed as
-  "Appearance") is local component state only — it is not persisted and
-  changes nothing outside the pane it lives in
-  (apps/desktop/src/features/settings/General.tsx:36).
-- G2: Ingestion settings persist durably but no scan/watch/ingest pipeline
-  consumes them yet (apps/desktop/src/features/settings/Ingestion.tsx:22-25,
-  explicit in source comment: "CONSUMER STATUS (P12): no scan/watch/ingest
-  pipeline reads these values yet").
-- G3: The bottom log panel reads only the in-memory event bus, not the
-  durable audit table — user-meaningful workflow rows are not yet guaranteed
-  to survive a restart from the log panel's perspective (blocked on a
-  separate log-panel iteration; deltas/2026-07-14-q15-t126.md).
-- G4: A `/dev/contracts` command-palette entry exists only in developer-mode
-  builds (compile-time gated off in release, per spec 021) — its absence in
-  a release build is expected, not a bug.
-- G5: Issue #647 ("Durable audit log misses most audited action classes")
-  remains open on the tracker even though commit 0cdc81cc/PR #826 appears to
-  address its described symptom; not closed as of this migration — flagged
-  as an open question rather than assumed stale.
+- G1: (dissolved 2026-07-15) — tracked as issue #587; Appearance font-size control is not persisted.
+- G2: (dissolved 2026-07-15) — tracked as issue #878; no pipeline consumes ingestion settings yet.
+- G3: (dissolved 2026-07-15) — tracked as issue #647; log panel not backed by durable audit table.
+- G5: (dissolved 2026-07-15) — tracked as issue #647; close-check folded into #647.
 
 ## Delta log
 (none — consolidated at migration; window starts fresh from `last_reviewed`)

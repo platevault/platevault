@@ -180,17 +180,9 @@ user typing the literal word `DELETE`.
 
 ## Known gaps
 
-- G1: Restore (un-archive) is not implemented; the control is absent by
-  design (decision D15) pending its own reviewable plan generator — moving
-  files back is itself a filesystem mutation and needs the same plan-gate
-  discipline as archiving.
-- G2: No Master/Target archival concept exists (decision D7); the Archive
-  page also ships without a Sessions tab (decision D14) — sessions have no
-  lifecycle to archive since the derived-inventory redesign. Archive covers
-  Projects only.
-- G3: Reveal is a stub, permanently disabled: the `ArchiveEntry` contract
-  does not yet expose the app-managed archive folder path a reveal action
-  would need. (apps/desktop/src/features/archive/ArchivePage.tsx)
+- G1: (dissolved 2026-07-15) — tracked as issue #885; Restore is a reviewable restore-plan generator, archive confirmed a real file move.
+- G2: (dissolved 2026-07-15) — tracked as issue #886; masters archivable tracked as #886; targets stay non-archivable (DB-only); session files archivable via session-scoped cleanup flow (J06 S5-S6).
+- G3: (dissolved 2026-07-15) — tracked as issue #874; reveal is a permanently disabled stub.
 
 ## Delta log
 
