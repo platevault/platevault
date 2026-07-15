@@ -33,7 +33,10 @@ interface TargetMatcher {
  */
 async function loadTargetMatcher(): Promise<TargetMatcher> {
   const mod = await import('@/features/targets/TargetsPage');
-  return { matchesSearch: mod.matchesSearch, normalizeDesig: mod.normalizeDesig };
+  return {
+    matchesSearch: mod.matchesSearch,
+    normalizeDesig: mod.normalizeDesig,
+  };
 }
 
 /** Max target results shown (mirrors the backend's per-kind result budget). */

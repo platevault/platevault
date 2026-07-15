@@ -178,3 +178,141 @@ describe('CommandPalette debounce contract', () => {
     expect(DEBOUNCE_MS).toBe(200);
   });
 });
+
+// ── buildTargetResults (#581) ─────────────────────────────────────────────────
+//
+// Exercises the palette's client-side target matcher against the REAL
+// `matchesSearch`/`normalizeDesig` from TargetsPage.tsx — the same pairing
+// `target-search.test.ts` uses — so a regression in either the palette's
+// wiring or the shared matcher fails here, not just at `/targets`. This is
+// the exact bug from #581: the backend's SQL `LIKE` never matched "M31"
+// against a stored "M 31" designation; the fix routes through this matcher
+// instead of a second, drifting implementation.
+
+function targetItem(
+  id: string,
+  primaryDesignation: string,
+  effectiveLabel?: string,
+  aliases: string[] = [],
+): TargetListItem {
+  return {
+    id,
+    effectiveLabel: effectiveLabel ?? primaryDesignation,
+    primaryDesignation,
+    objectType: 'other',
+    raDeg: 0,
+    decDeg: 0,
+    aliases,
+  };
+}
+
+describe('buildTargetResults (#581 client-side alias-aware target search)', () => {
+  const m31 = targetItem('t-m31', 'M 31', 'Andromeda Galaxy', [
+    'M 31',
+    'NGC 224',
+    'Andromeda Galaxy',
+  ]);
+  const ngc7000 = targetItem('t-ngc7000', 'NGC 7000', 'North America Nebula', [
+    'NGC 7000',
+    'Caldwell 20',
+  ]);
+  const targets = [m31, ngc7000];
+
+  it('empty query short-circuits to no results (no crash on blank input)', () => {
+    expect(
+      buildTargetResults(targets, '', { matchesSearch, normalizeDesig }),
+    ).toEqual([]);
+    expect(
+      buildTargetResults(targets, '   ', { matchesSearch, normalizeDesig }),
+    ).toEqual([]);
+  });
+
+  it('exact match: "M 31" scores highest and routes to /targets/<id>', () => {
+    const results = buildTargetResults(targets, 'M 31', {
+      matchesSearch,
+      normalizeDesig,
+    });
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe('t-m31');
+    expect(results[0].route).toBe('/targets/t-m31');
+    expect(results[0].score).toBe(1);
+  });
+
+  it('compact query "M31" matches the spaced designation "M 31" (#581 bug)', () => {
+    // This is the exact case the backend LIKE match missed: "M31" (no space)
+    // against a stored "M 31" designation.
+    const results = buildTargetResults(targets, 'M31', {
+      matchesSearch,
+      normalizeDesig,
+    });
+    expect(results.map((r) => r.id)).toContain('t-m31');
+  });
+
+  it('prefix match scores above a plain contains match', () => {
+    const prefixResult = buildTargetResults(targets, 'NGC 70', {
+      matchesSearch,
+      normalizeDesig,
+    })[0];
+    const containsResult = buildTargetResults(targets, 'C 700', {
+      matchesSearch,
+      normalizeDesig,
+    })[0];
+    expect(prefixResult.id).toBe('t-ngc7000');
+    expect(containsResult.id).toBe('t-ngc7000');
+    expect(prefixResult.score ?? 0).toBeGreaterThan(containsResult.score ?? 0);
+  });
+
+  it('alias-only match: "Andromeda" resolves to M 31 via the aliases array', () => {
+    const results = buildTargetResults(targets, 'Andromeda', {
+      matchesSearch,
+      normalizeDesig,
+    });
+    expect(results.map((r) => r.id)).toContain('t-m31');
+  });
+
+  it('alias match on "Caldwell 20" resolves to NGC 7000', () => {
+    const results = buildTargetResults(targets, 'Caldwell 20', {
+      matchesSearch,
+      normalizeDesig,
+    });
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe('t-ngc7000');
+  });
+
+  it('non-matching query returns no results', () => {
+    const results = buildTargetResults(targets, 'zzz-no-such-target', {
+      matchesSearch,
+      normalizeDesig,
+    });
+    expect(results).toEqual([]);
+  });
+
+  it('sublabel carries the primary designation when it differs from the label', () => {
+    const results = buildTargetResults(targets, 'Andromeda', {
+      matchesSearch,
+      normalizeDesig,
+    });
+    expect(results[0].sublabel).toBe('M 31');
+  });
+
+  it('sublabel is null when the designation equals the effective label', () => {
+    const bare = targetItem('t-bare', 'Sh2-155', 'Sh2-155');
+    const results = buildTargetResults([bare], 'Sh2-155', {
+      matchesSearch,
+      normalizeDesig,
+    });
+    expect(results[0].sublabel).toBeNull();
+  });
+
+  it('results are sorted by descending score', () => {
+    const results = buildTargetResults(targets, 'NGC', {
+      matchesSearch,
+      normalizeDesig,
+    });
+    for (let i = 1; i < results.length; i++) {
+      expect(results[i - 1].score ?? 0).toBeGreaterThanOrEqual(
+        results[i].score ?? 0,
+      );
+    }
+  });
+});
