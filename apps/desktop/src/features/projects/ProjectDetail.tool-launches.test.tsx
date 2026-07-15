@@ -151,11 +151,14 @@ describe('ProjectBottomDetail — Tool Launches accordion (#728)', () => {
   it('shows the empty state when no artifacts have been observed', async () => {
     mockArtifactList.mockResolvedValue(ok({ artifacts: [] }));
     renderDetail();
+    // The section title renders synchronously in both the loading and loaded
+    // states, so waiting on it (as before) never actually waits for the
+    // mocked artifactList fetch to resolve — wait on the post-fetch empty
+    // state text itself instead.
     await waitFor(() => {
-      expect(screen.getByText('Tool Launches')).toBeInTheDocument();
+      expect(
+        screen.getByText('No processing artifacts observed yet.'),
+      ).toBeInTheDocument();
     });
-    expect(
-      screen.getByText('No processing artifacts observed yet.'),
-    ).toBeInTheDocument();
   });
 });

@@ -872,6 +872,13 @@
 }
 .alm-session-detail2__linked-list { display: flex; flex-direction: column; gap: var(--alm-sp-2); }
 .alm-session-detail2__muted { color: var(--alm-text-muted); }
+/* Calibration-linkage row (#772): pill + master id + score/mismatch, inline. */
+.alm-session-detail2__calib-row {
+  display: flex;
+  align-items: center;
+  gap: var(--alm-sp-2);
+}
+.alm-session-detail2__calib-note { color: var(--alm-text-faint); }
 /* Review actions inline with the title (left-grouped). */
 .alm-session-detail2__actions {
   display: inline-flex;

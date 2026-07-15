@@ -1,7 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { WizardShell } from '@/ui/WizardShell';
 import { Btn } from '@/ui/Btn';
@@ -323,13 +323,23 @@ export function SetupWizard() {
     try {
       const result = await flushToDB(state.sources);
 
-      if (!result.allSucceeded) {
-        const failed = result.results.filter((r) => !r.success);
+      // Issue #704: the restart flow pre-fills already-registered folders, and
+      // a mixed batch may add new folders alongside them. An "already
+      // registered" item is the desired end state, not a failure — only a
+      // genuine registration failure (invalid path, overlap, DB error) should
+      // block advancing. Previously ANY non-success item (including benign
+      // already-registered ones) stuck the wizard on Confirm behind a
+      // misleading "batch failed" banner while newly-added folders were still
+      // silently written to the DB.
+      const genuineFailures = result.results.filter(
+        (r) => !r.success && !r.alreadyRegistered,
+      );
+      if (genuineFailures.length > 0) {
         const detail =
-          failed
+          genuineFailures
             .map((r) => r.error)
             .filter(Boolean)
-            .join('; ') || String(failed.length);
+            .join('; ') || String(genuineFailures.length);
         setSubmitError(
           m.setup_sources_error_batch_registration_failed({ message: detail }),
         );
@@ -433,35 +443,67 @@ export function SetupWizard() {
     // T016 persistence surfaced it, so both are listed now for correctness.
   }, [isMockMode, navigate, state.tools, state.site]);
 
-  // Determine whether "Continue" should be enabled.
-  // Step 0 (Source Folders) and step 3 (Confirm) require all required folder kinds.
-  // All other intermediate steps advance freely.
-  // The Scan step (SCAN_STEP) uses the shared footer Finish button, which is
-  // enabled by scanComplete — canProceed is not consulted for that step.
-  const canProceed = useMemo(() => {
-    if (isMockMode) return true;
-    const step = state.currentStep;
-    if (step === 0 || step === SCAN_STEP - 1) {
-      return getMissingRequiredKinds(state.sources).length === 0;
-    }
-    // Observing Site step (T016): never required (FR-025), but a partially
-    // filled-in site must be internally consistent before Continue — an
-    // out-of-range lat/lon shouldn't silently get dropped at Finish.
-    if (step === 3) {
-      return siteStepError(state.site) === null;
-    }
-    return true;
-  }, [state.currentStep, state.sources, state.site, isMockMode]);
+  // Validation gate for a given step index. Step 0 (Source Folders) and the
+  // Confirm step require all required folder kinds; the Observing Site step
+  // (T016) must be internally consistent (FR-025 never blocks, but a partially
+  // filled-in, out-of-range site can't silently proceed). Every other step
+  // advances freely. Used both for "Continue" and for validation-gated forward
+  // step-tab jumps (issue #512).
+  const isStepValid = useCallback(
+    (i: number): boolean => {
+      if (isMockMode) return true;
+      if (i === 0 || i === SCAN_STEP - 1) {
+        return getMissingRequiredKinds(state.sources).length === 0;
+      }
+      if (i === 3) {
+        return siteStepError(state.site) === null;
+      }
+      return true;
+    },
+    [state.sources, state.site, isMockMode],
+  );
 
   const step = state.currentStep;
+
+  // Whether the step-tab for index `i` can be jumped to from the current step
+  // (issue #512): backward/visited steps are always free; a forward jump is
+  // allowed only when every step between here and the target validates; the
+  // Scan step is never a jump target (reaching it runs registration via the
+  // "Start scan" action, not a plain navigation).
+  const isStepReachable = useCallback(
+    (i: number): boolean => {
+      if (i === step) return true;
+      if (i < step) return true;
+      if (i >= SCAN_STEP) return false;
+      for (let j = step; j < i; j++) {
+        if (!isStepValid(j)) return false;
+      }
+      return true;
+    },
+    [step, isStepValid],
+  );
+
+  const isOnScanStep = step === SCAN_STEP;
+
+  const handleStepSelect = useCallback(
+    (i: number) => {
+      if (i === step || isOnScanStep || !isStepReachable(i)) return;
+      goTo(i);
+    },
+    [step, isOnScanStep, isStepReachable, goTo],
+  );
+
+  // The Scan step (SCAN_STEP) uses the shared footer Finish button, which is
+  // enabled by scanComplete — canProceed is not consulted for that step.
+  const canProceed = isStepValid(step);
+
   const stepMeta = STEPS[step];
 
   const wizardSteps = STEPS.map((s, i) => ({
     label: s.label(),
     completed: i < step,
+    disabled: !isStepReachable(i),
   }));
-
-  const isOnScanStep = step === SCAN_STEP;
 
   // Build the navigation footer for the current step.
   // The Scan step (SCAN_STEP) now renders Back + Finish here, consistent with
@@ -535,6 +577,9 @@ export function SetupWizard() {
         steps={wizardSteps}
         currentStep={step}
         footer={footer}
+        // Scan runs registration side-effects on entry, so disable step-tab
+        // navigation while on it (Back button still works) — issue #512.
+        onStepSelect={isOnScanStep ? undefined : handleStepSelect}
         className="alm-setup-wizard__shell"
       >
         {/* Step label + heading */}

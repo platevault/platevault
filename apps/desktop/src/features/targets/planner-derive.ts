@@ -93,7 +93,12 @@ export interface SensorConfig {
 export interface DerivedObservability {
   /** Peak altitude across the night (= transit altitude), degrees. */
   maxAltDeg: number;
-  /** True when any dark-window sample reaches the usable altitude (FR-005). */
+  /**
+   * True when the target reaches the usable altitude anywhere in the
+   * observable window — the astronomical dark window when one exists, else the
+   * whole night (#579: discriminate by altitude even when there is no
+   * astronomical darkness, rather than collapsing every target to not-visible).
+   */
   visibleTonight: boolean;
   /** Minutes of dark window with altitude ≥ usable (band-free — FR-005). */
   totalImagingMinutes: number;
@@ -352,13 +357,27 @@ export function deriveObservability(
   // quantities must stay distinguishable (FR-005).
   let usableSamples = 0;
   let uptimeSamples = 0;
-  let visibleTonight = false;
   const dark = night.darkWindow;
+  // Visibility (#579) discriminates by ALTITUDE over the observable window,
+  // which is the astronomical dark window when one exists, else the whole
+  // night. At high latitude there is no astronomical darkness for months
+  // (e.g. lat 52 in summer), but a high/circumpolar target is still observable
+  // in twilight and MUST NOT read identically to a target that never rises.
+  // Imaging time stays dark-gated (FR-017); only the visibility flag falls
+  // back. Uptime (FR-005/D1) counts the whole night's above-threshold samples
+  // either way.
+  const observable = dark ?? {
+    startMs: night.nightStartMs,
+    endMs: night.nightEndMs,
+  };
+  let visibleTonight = false;
   for (const s of night.samples) {
     if (s.altDeg < usableAltitudeDeg) continue;
     uptimeSamples += 1;
     if (dark && s.tMs >= dark.startMs && s.tMs <= dark.endMs) {
       usableSamples += 1;
+    }
+    if (s.tMs >= observable.startMs && s.tMs <= observable.endMs) {
       visibleTonight = true;
     }
   }

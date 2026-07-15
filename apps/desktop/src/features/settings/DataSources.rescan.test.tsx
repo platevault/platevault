@@ -95,6 +95,11 @@ beforeEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+/** Issue #562: per-source actions live inside the kebab (⋯) menu now. */
+function openKebab() {
+  fireEvent.click(screen.getByRole('button', { name: /Source actions/i }));
+}
+
 describe('DataSources — Rescan', () => {
   it('calls the real inbox.scan_folder command and reloads roots on completion', async () => {
     mockRootsList
@@ -111,7 +116,8 @@ describe('DataSources — Rescan', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Rescan$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Rescan$/i }));
 
     await waitFor(() => {
       expect(mockScanFolder).toHaveBeenCalledWith({
@@ -142,11 +148,14 @@ describe('DataSources — Rescan', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Rescan$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Rescan$/i }));
 
+    // The kebab menu stays open across a Rescan click (unlike other items)
+    // so the disabled/relabeled state remains visible.
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: /Rescanning/i }),
+        screen.getByRole('menuitem', { name: /Rescanning/i }),
       ).toBeDisabled();
     });
 
@@ -154,7 +163,7 @@ describe('DataSources — Rescan', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: /^Rescan$/i }),
+        screen.getByRole('menuitem', { name: /^Rescan$/i }),
       ).not.toBeDisabled();
     });
   });
@@ -166,7 +175,8 @@ describe('DataSources — Rescan', () => {
     render(<DataSources save={vi.fn()} />, { wrapper });
     await waitFor(() => screen.getByText('/astro/raw', { selector: 'code' }));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Rescan$/i }));
+    openKebab();
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Rescan$/i }));
 
     await waitFor(() => expect(mockScanFolder).toHaveBeenCalled());
     // `scan_start` was never wired into the mocked commands object at all —

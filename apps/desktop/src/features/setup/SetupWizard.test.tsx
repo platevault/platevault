@@ -776,3 +776,207 @@ describe('SetupWizard 5-step flow', () => {
     expect(mockFirstrunComplete).toHaveBeenCalledTimes(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #704 — restart flow: already-registered batch items are benign no-ops
+// ---------------------------------------------------------------------------
+
+describe('SetupWizard restart re-confirm (issue #704)', () => {
+  /** Seed the wizard at the Confirm step with the two required sources. */
+  function seedConfirmStep() {
+    window.localStorage.setItem(
+      WIZARD_STORAGE_KEY,
+      JSON.stringify({
+        currentStep: 4,
+        sources: [
+          {
+            path: '/astro/lights',
+            kind: 'light_frames',
+            scanDepth: 'recursive',
+            organizationState: 'organized',
+          },
+          {
+            path: '/astro/projects',
+            kind: 'project',
+            scanDepth: 'recursive',
+            organizationState: 'organized',
+          },
+        ],
+      }),
+    );
+  }
+
+  async function clickStartScan() {
+    const startScanBtn = screen.getByRole('button', { name: /start scan/i });
+    await act(async () => {
+      fireEvent.click(startScanBtn);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  }
+
+  it('advances to Scan when every item is already registered (unchanged restart buffer)', async () => {
+    seedConfirmStep();
+    mockRootsRegisterBatch.mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        status: 'failure',
+        items: [
+          {
+            index: 0,
+            status: 'failure',
+            sourceId: null,
+            error: 'path.already_registered',
+            errorDetail: null,
+          },
+          {
+            index: 1,
+            status: 'failure',
+            sourceId: null,
+            error: 'path.already_registered',
+            errorDetail: null,
+          },
+        ],
+      },
+    });
+
+    renderWizard();
+    await clickStartScan();
+
+    // No misleading "batch failed" banner, and the wizard is on the Scan step.
+    expect(screen.queryByTestId('setup-submit-error')).toBeNull();
+    expect(screen.getByTestId('step-scan')).toBeInTheDocument();
+  });
+
+  it('advances to Scan and scans only the new folder in a mixed batch', async () => {
+    seedConfirmStep();
+    mockRootsRegisterBatch.mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        status: 'partial',
+        items: [
+          {
+            index: 0,
+            status: 'failure',
+            sourceId: null,
+            error: 'path.already_registered',
+            errorDetail: null,
+          },
+          {
+            index: 1,
+            status: 'success',
+            sourceId: 'root-new-1',
+            error: null,
+            errorDetail: null,
+          },
+        ],
+      },
+    });
+
+    renderWizard();
+    await clickStartScan();
+
+    expect(screen.queryByTestId('setup-submit-error')).toBeNull();
+    expect(screen.getByTestId('step-scan')).toBeInTheDocument();
+
+    // Only the newly registered folder is scanned — never the
+    // already-registered one (its content is already ingested; scanning by
+    // path-as-rootId would orphan inbox items).
+    await waitFor(() => expect(mockInboxScanFolder).toHaveBeenCalledTimes(1));
+    expect(mockInboxScanFolder).toHaveBeenCalledWith(
+      expect.objectContaining({ rootId: 'root-new-1' }),
+    );
+  });
+
+  it('still blocks on Confirm for genuine registration failures', async () => {
+    seedConfirmStep();
+    mockInboxScanFolder.mockClear();
+    mockRootsRegisterBatch.mockResolvedValueOnce({
+      status: 'ok',
+      data: {
+        status: 'partial',
+        items: [
+          {
+            index: 0,
+            status: 'failure',
+            sourceId: null,
+            error: 'path.not_exists',
+            errorDetail: null,
+          },
+          {
+            index: 1,
+            status: 'success',
+            sourceId: 'root-new-2',
+            error: null,
+            errorDetail: null,
+          },
+        ],
+      },
+    });
+
+    renderWizard();
+    await clickStartScan();
+
+    expect(screen.getByTestId('setup-submit-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('step-scan')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #512 — step tabs are clickable with validation-gated forward jumps
+// ---------------------------------------------------------------------------
+
+describe('SetupWizard step-tab navigation (issue #512)', () => {
+  it('renders step tabs as buttons and marks the current step', () => {
+    renderWizard();
+    const sourcesTab = screen.getByRole('button', {
+      name: /1\. Source Folders/i,
+    });
+    expect(sourcesTab).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('disables forward tabs while step validation fails, enables them once it passes', async () => {
+    renderWizard();
+
+    // No folders yet: step 0 fails validation, so every forward tab is disabled.
+    expect(
+      screen.getByRole('button', { name: /2\. Processing Tools/i }),
+    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: /5\. Confirm/i })).toBeDisabled();
+
+    await addFolder('/astro/lights', 'light_frames');
+    await addFolder('/astro/projects', 'project');
+
+    // Required kinds present: intermediate steps and Confirm become reachable…
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /2\. Processing Tools/i }),
+      ).not.toBeDisabled(),
+    );
+    expect(
+      screen.getByRole('button', { name: /5\. Confirm/i }),
+    ).not.toBeDisabled();
+    // …but Scan is never a plain jump target (it runs registration on entry).
+    expect(screen.getByRole('button', { name: /6\. Scan/i })).toBeDisabled();
+  });
+
+  it('jumps forward and freely back via the tabs', async () => {
+    renderWizard();
+    await addFolder('/astro/lights', 'light_frames');
+    await addFolder('/astro/projects', 'project');
+
+    // Forward jump straight to Confirm (all gates pass).
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /5\. Confirm/i }),
+      ).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /5\. Confirm/i }));
+    expect(screen.getByText(/ready to go/i)).toBeInTheDocument();
+
+    // Free backward jump to any visited/earlier step.
+    fireEvent.click(
+      screen.getByRole('button', { name: /1\. Source Folders/i }),
+    );
+    expect(screen.getByText(/where does your data live/i)).toBeInTheDocument();
+  });
+});

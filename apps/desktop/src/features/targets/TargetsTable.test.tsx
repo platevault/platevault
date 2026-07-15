@@ -585,3 +585,73 @@ describe('TargetsTable — needs-coordinates state (#757)', () => {
     }
   });
 });
+
+// ── #579: no-dark-window nights still discriminate by altitude ───────────────
+//
+// At lat 52 there is no astronomical darkness for months (summer). Under the
+// iteration 2026-07-15 glyph model the Visible column is gone (FR-007) — the
+// #579 discrimination now reads as: BOTH extremes carry the ☀ darkness-reason
+// glyph on their zero imaging time (FR-029 precedence: darkness is the most
+// upstream blocker for every target), while Max alt still separates the
+// zenith target (large real value) from the never-riser (0°/low). The
+// derive-level "observable in twilight" flag itself is pinned in
+// planner-derive.test.ts (#579 describe).
+describe('TargetsTable — no-dark-window summer night (#579, glyph model)', () => {
+  beforeEach(() => {
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+  });
+
+  it('zenith vs never-riser: same darkness reason, but Max alt discriminates', () => {
+    vi.useFakeTimers();
+    // Mid-July at 52°N: no astronomical dark window exists all night.
+    vi.setSystemTime(new Date('2026-07-15T21:00:00Z'));
+    try {
+      renderTable({
+        targets: [
+          coordItem('ZENITH', 270, 52), // transits near the zenith
+          coordItem('NEVER', 0, -80), // never rises at 52°N
+        ],
+      });
+      const table = screen.getByRole('table');
+      const zenithRow = within(table)
+        .getByText('ZENITH')
+        .closest('tr') as HTMLTableRowElement;
+      const neverRow = within(table)
+        .getByText('NEVER')
+        .closest('tr') as HTMLTableRowElement;
+      // Both zero imaging-time cells expose the darkness reason (SC-015)…
+      expect(
+        zenithRow.querySelectorAll('.alm-imgtime-glyph--warn').length,
+      ).toBe(1);
+      expect(
+        neverRow.querySelectorAll('.alm-imgtime-glyph--warn').length,
+      ).toBe(1);
+      // …while Max alt keeps the two extremes visibly different: the zenith
+      // target renders a large real altitude, the never-riser does not.
+      expect(within(zenithRow).getByText(/^(8[5-9]|90)°$/)).toBeInTheDocument();
+      expect(within(neverRow).queryByText(/^(8[5-9]|90)°$/)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a normal dark night renders a real value with NO warning glyph', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-15T20:00:00Z'));
+    try {
+      renderTable({ targets: [coordItem('HIGH', 90, 52)] });
+      const table = screen.getByRole('table');
+      const row = within(table)
+        .getByText('HIGH')
+        .closest('tr') as HTMLTableRowElement;
+      expect(within(row).getByText(/^\d+h(\d+m)?$/)).toBeInTheDocument();
+      expect(row.querySelector('.alm-imgtime-glyph--warn')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

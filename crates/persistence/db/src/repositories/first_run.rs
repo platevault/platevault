@@ -416,29 +416,45 @@ pub async fn set_source_active(pool: &SqlitePool, source_id: &str, active: bool)
     Ok(())
 }
 
-/// Sample up to `limit` relative paths previously recorded for a root, for use
-/// as `roots.remap` preview candidates.
+/// Fetch every relative path previously recorded for a root, for exhaustive
+/// `roots.remap` preview verification (issue #560).
 ///
-/// Reads `file_record` (populated as light frames are ingested through inbox
-/// plan-apply — see `app_targets::ingest_sessions`), ordered for determinism.
-/// Roots with no `file_record` rows (calibration/project roots, or raw roots
-/// registered directly without ever receiving an inbox ingest) simply yield an
-/// empty sample set; there is no broader per-root file inventory in the
-/// current schema to sample from.
+/// Reads BOTH `file_record` (light frames already ingested through inbox
+/// plan-apply — see `app_targets::ingest_sessions`) AND `inbox_items` (items
+/// scanned into the Inbox but not yet ingested — these live under the
+/// *inbox* root's own id, which never gets `file_record` rows, since ingest
+/// writes `file_record` against the *destination* root instead). A root that
+/// was only ever scanned into the Inbox previously sampled as empty here,
+/// which made a remap preview vacuously report "all verified" with nothing
+/// actually checked.
+///
+/// `inbox_items` rows in the terminal `resolved` state are excluded: those
+/// items were already moved out of this root by a prior plan-apply, so their
+/// `relative_path` legitimately no longer exists at the root's original
+/// location regardless of any remap — checking them would produce false
+/// "not found" results unrelated to the remap itself.
+///
+/// No `LIMIT` — a prior 5-path sample let files outside the sample go
+/// unverified; correctness (this gates a destructive-adjacent path swap) is
+/// prioritised over the sample being lighter to render.
+///
+/// Deduplicated (`UNION`) and ordered for determinism. Roots with no rows in
+/// either table (calibration/project roots, or raw roots registered directly
+/// without ever receiving an inbox scan) yield an empty result — there is
+/// nothing recorded to verify.
 ///
 /// # Errors
 ///
 /// Returns [`DbError::Database`] on query failure.
-pub async fn sample_relative_paths(
-    pool: &SqlitePool,
-    root_id: &str,
-    limit: i64,
-) -> DbResult<Vec<String>> {
+pub async fn relative_paths_for_root(pool: &SqlitePool, root_id: &str) -> DbResult<Vec<String>> {
     let rows: Vec<(String,)> = sqlx::query_as(
-        "SELECT relative_path FROM file_record WHERE root_id = ? ORDER BY relative_path ASC LIMIT ?",
+        "SELECT relative_path FROM file_record WHERE root_id = ? \
+         UNION \
+         SELECT relative_path FROM inbox_items WHERE root_id = ? AND state != 'resolved' \
+         ORDER BY relative_path ASC",
     )
     .bind(root_id)
-    .bind(limit)
+    .bind(root_id)
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(|(p,)| p).collect())
@@ -1125,7 +1141,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sample_relative_paths_empty_when_no_file_records() {
+    async fn relative_paths_for_root_empty_when_no_records() {
         let pool = setup_db().await;
         let resp = register_source(
             &pool,
@@ -1140,12 +1156,12 @@ mod tests {
         .await
         .unwrap();
 
-        let samples = sample_relative_paths(&pool, &resp.source_id, 5).await.unwrap();
-        assert!(samples.is_empty());
+        let paths = relative_paths_for_root(&pool, &resp.source_id).await.unwrap();
+        assert!(paths.is_empty());
     }
 
     #[tokio::test]
-    async fn sample_relative_paths_respects_limit_and_order() {
+    async fn relative_paths_for_root_is_exhaustive_and_ordered() {
         let pool = setup_db().await;
         let resp = register_source(
             &pool,
@@ -1176,8 +1192,18 @@ mod tests {
         .await
         .unwrap();
 
-        for (i, relative_path) in
-            ["M31/light_003.fits", "M31/light_001.fits", "M31/light_002.fits"].iter().enumerate()
+        // 6 file_record rows -- no LIMIT means all of them must come back
+        // (issue #560 failure mode 2: a bounded 5-path sample missed items).
+        for (i, relative_path) in [
+            "M31/light_003.fits",
+            "M31/light_001.fits",
+            "M31/light_002.fits",
+            "M31/light_004.fits",
+            "M31/light_005.fits",
+            "M31/light_006.fits",
+        ]
+        .iter()
+        .enumerate()
         {
             sqlx::query(
                 "INSERT INTO file_record \
@@ -1192,8 +1218,76 @@ mod tests {
             .unwrap();
         }
 
-        let samples = sample_relative_paths(&pool, &resp.source_id, 2).await.unwrap();
-        assert_eq!(samples, vec!["M31/light_001.fits", "M31/light_002.fits"]);
+        let paths = relative_paths_for_root(&pool, &resp.source_id).await.unwrap();
+        assert_eq!(
+            paths,
+            vec![
+                "M31/light_001.fits",
+                "M31/light_002.fits",
+                "M31/light_003.fits",
+                "M31/light_004.fits",
+                "M31/light_005.fits",
+                "M31/light_006.fits",
+            ]
+        );
+    }
+
+    /// Issue #560 failure mode 1: a root only scanned into the Inbox (never
+    /// ingested through plan-apply) has zero `file_record` rows but real
+    /// `inbox_items` rows — the old `file_record`-only sample reported those
+    /// vacuously as "all verified". A `resolved` inbox item (already moved
+    /// out by a prior plan-apply) must NOT be included.
+    #[tokio::test]
+    async fn relative_paths_for_root_includes_pending_inbox_items_excludes_resolved() {
+        use crate::repositories::inbox::{insert_inbox_item, InsertInboxItem};
+
+        let pool = setup_db().await;
+        let resp = register_source(
+            &pool,
+            &RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            },
+        )
+        .await
+        .unwrap();
+
+        insert_inbox_item(
+            &pool,
+            &InsertInboxItem {
+                id: "item-pending",
+                root_id: &resp.source_id,
+                relative_path: "2026-01-01/lights",
+                file_count: 3,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        insert_inbox_item(
+            &pool,
+            &InsertInboxItem {
+                id: "item-resolved",
+                root_id: &resp.source_id,
+                relative_path: "2026-01-02/lights",
+                file_count: 2,
+                content_signature: None,
+                lane: "fits",
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE inbox_items SET state = 'resolved' WHERE id = 'item-resolved'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let paths = relative_paths_for_root(&pool, &resp.source_id).await.unwrap();
+        assert_eq!(paths, vec!["2026-01-01/lights"]);
     }
 
     // ── P6b: active flag repository functions ────────────────────────────────
@@ -1329,7 +1423,7 @@ mod tests {
 
         // `file_record.root_id`/`acquisition_session.root_id` FK the legacy
         // `library_root` table (mirrored under the SAME id — see
-        // `sample_relative_paths_respects_limit_and_order` above).
+        // `relative_paths_for_root_is_exhaustive_and_ordered` above).
         sqlx::query(
             "INSERT INTO library_root (id, label, current_path, kind, state, created_at) \
              VALUES (?, ?, ?, 'local', 'active', '2026-01-01T00:00:00Z')",

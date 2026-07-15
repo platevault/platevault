@@ -95,8 +95,8 @@ impl Database {
     ///
     /// Returns [`DbError::Migration`] if any migration script fails, or a
     /// database error if the reconciliation scan fails.
-    // Touched for spec-030 Q16 (migration 0065) to force `sqlx::migrate!`
-    // re-embed (project memory: stale-embed guard).
+    // Touched for #773 (migration 0066) to force `sqlx::migrate!` re-embed
+    // (project memory: stale-embed guard).
     pub async fn migrate(&self) -> DbResult<()> {
         sqlx::migrate!("./migrations").run(&self.pool).await?;
         crate::repositories::prepared_source_views::reconcile_kind_diverged_views(&self.pool)
