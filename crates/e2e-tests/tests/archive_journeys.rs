@@ -79,7 +79,7 @@ async fn setup_archived_project(
     // never a direct transition into `archived`).
     let hops: &[(&str, &str)] =
         &[("setup_incomplete", "ready"), ("ready", "processing"), ("processing", "completed")];
-    for (idx, (current_state, next_state)) in hops.iter().enumerate() {
+    for (current_state, next_state) in hops.iter() {
         let transition: serde_json::Value = app
             .invoke(
                 "lifecycle_transition_apply",
@@ -87,7 +87,11 @@ async fn setup_archived_project(
                     "request": {
                         "entityType": "project",
                         "contractVersion": "2.0.0",
-                        "requestId": format!("e2e-archive-{label}-hop-{idx}"),
+                        // `requestId` deserializes as a real `Uuid`
+                        // (contracts_core::lifecycle transition_request_base!),
+                        // unlike most other request ids — a hand-crafted
+                        // placeholder string fails IPC deserialization.
+                        "requestId": uuid::Uuid::new_v4().to_string(),
                         "entityId": project_id,
                         "currentState": current_state,
                         "nextState": next_state,
