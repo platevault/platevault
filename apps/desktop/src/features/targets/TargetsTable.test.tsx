@@ -41,10 +41,15 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }));
 
-import { TargetsTable, DEFAULT_TARGET_SORT } from './TargetsTable';
+import {
+  TargetsTable,
+  DEFAULT_TARGET_SORT,
+  __testExports,
+} from './TargetsTable';
 import { __setObservingStateForTest } from './observing-sites/site-store';
 import type { ObserverSite } from './observing-sites/observer-site';
 import type { ObservingNight } from './astro/moon-state';
+import { DEFAULT_MOON_AVOIDANCE } from './astro/moon-avoidance';
 
 function item(
   primaryDesignation: string,
@@ -380,6 +385,123 @@ describe('TargetsTable — lunar distance (US2)', () => {
     );
     // No numeric lunar separations; both rows show the unknown dash.
     expect(screen.queryByText('90°')).not.toBeInTheDocument();
+  });
+});
+
+// ── Row cache contract (#573 perf) ──────────────────────────────────────────
+//
+// The full-catalogue sort/group pass reuses a per-target-id cache gated by a
+// generation key of all astronomy inputs (see TargetsTable.tsx's module doc)
+// so growing the revealed target set only pays for the delta. These tests
+// assert the cache CONTRACT directly (object-identity reuse on a hit, a
+// fresh compute on a miss) rather than timing, which would be flaky on CI.
+describe('TargetsTable row cache (#573)', () => {
+  const { getCachedRow, rowCacheGenKey } = __testExports;
+  const TARGET = coordItem('CACHE-TEST', 10, 20);
+  const SITE_A: ObserverSite = {
+    id: 'site-a',
+    name: 'A',
+    latitudeDeg: 52,
+    longitudeDeg: 5,
+    elevationM: 0,
+    timezone: 'Europe/Amsterdam',
+    twilight: 'astronomical',
+    minHorizonAltDeg: 0,
+  };
+
+  it('reuses the same object on a cache hit (same target id + genKey)', () => {
+    const cache = new Map();
+    const genKey = rowCacheGenKey(
+      30,
+      SITE_A,
+      1000,
+      null,
+      DEFAULT_MOON_AVOIDANCE,
+    );
+    const first = getCachedRow(
+      cache,
+      TARGET,
+      genKey,
+      30,
+      SITE_A,
+      1000,
+      DEFAULT_MOON_AVOIDANCE,
+      null,
+    );
+    const second = getCachedRow(
+      cache,
+      TARGET,
+      genKey,
+      30,
+      SITE_A,
+      1000,
+      DEFAULT_MOON_AVOIDANCE,
+      null,
+    );
+    expect(second).toBe(first);
+  });
+
+  it('recomputes (fresh object) when the generation key changes', () => {
+    const cache = new Map();
+    const genKeyA = rowCacheGenKey(
+      30,
+      SITE_A,
+      1000,
+      null,
+      DEFAULT_MOON_AVOIDANCE,
+    );
+    const genKeyB = rowCacheGenKey(
+      45,
+      SITE_A,
+      1000,
+      null,
+      DEFAULT_MOON_AVOIDANCE,
+    );
+    const first = getCachedRow(
+      cache,
+      TARGET,
+      genKeyA,
+      30,
+      SITE_A,
+      1000,
+      DEFAULT_MOON_AVOIDANCE,
+      null,
+    );
+    const second = getCachedRow(
+      cache,
+      TARGET,
+      genKeyB,
+      45,
+      SITE_A,
+      1000,
+      DEFAULT_MOON_AVOIDANCE,
+      null,
+    );
+    expect(second).not.toBe(first);
+    // The new entry now occupies the cache slot for this id.
+    expect(cache.get(TARGET.id)).toBe(second);
+  });
+
+  it('rowCacheGenKey changes with each astronomy input', () => {
+    const base = rowCacheGenKey(30, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE);
+    expect(
+      rowCacheGenKey(31, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE),
+    ).not.toBe(base);
+    expect(
+      rowCacheGenKey(30, null, 1000, null, DEFAULT_MOON_AVOIDANCE),
+    ).not.toBe(base);
+    expect(
+      rowCacheGenKey(30, SITE_A, 2000, null, DEFAULT_MOON_AVOIDANCE),
+    ).not.toBe(base);
+    expect(
+      rowCacheGenKey(
+        30,
+        SITE_A,
+        1000,
+        nightWithMoonAtVernalEquinox(),
+        DEFAULT_MOON_AVOIDANCE,
+      ),
+    ).not.toBe(base);
   });
 });
 
