@@ -25,15 +25,23 @@
 
 use std::collections::HashMap;
 
+use contracts_core::calibration::CalibrationKind;
 use contracts_core::inventory::{
     InventoryFrameType, InventoryLinkedRefs, InventoryListFilters, InventoryProvenanceSummary,
     InventorySession, InventorySource, InventorySourceKind, InventorySourceState, LinkedProjectRef,
+    SessionNotesUpdateRequest, SessionNotesUpdateResult,
 };
+use contracts_core::sessions::SessionCalibrationMatch;
 use persistence_db::repositories::inventory::{
-    list_project_links_for_sessions, list_roots_with_sessions, list_sessions_for_root,
-    InventoryFilters, SessionProjectionRow,
+    list_calibration_matches_for_sessions, list_project_links_for_sessions,
+    list_roots_with_sessions, list_sessions_for_root, set_session_notes, InventoryFilters,
+    SessionCalibrationLinkRow, SessionProjectionRow,
 };
 use sqlx::SqlitePool;
+
+/// Maximum UTF-8 byte length for a session note (mirrors
+/// `target_management::MAX_NOTE_BYTES`, spec 023 US4's FR-004 precedent).
+const MAX_NOTE_BYTES: usize = 16_384;
 
 // ── list ─────────────────────────────────────────────────────────────────────
 
@@ -68,10 +76,13 @@ pub async fn list(
             continue;
         }
 
-        // Collect session ids for batch project-link lookup.
+        // Collect session ids for batch project-link + calibration-match lookup.
         let session_ids: Vec<String> = sessions.iter().map(|s| s.id.clone()).collect();
         let project_links =
             list_project_links_for_sessions(pool, &session_ids).await.map_err(|e| e.to_string())?;
+        let calibration_links = list_calibration_matches_for_sessions(pool, &session_ids)
+            .await
+            .map_err(|e| e.to_string())?;
 
         // Build a map: session_id → Vec<(project_id, project_name)>
         let mut proj_map: HashMap<String, Vec<(String, String)>> = HashMap::new();
@@ -79,8 +90,16 @@ pub async fn list(
             proj_map.entry(link.session_id).or_default().push((link.project_id, link.project_name));
         }
 
-        let inventory_sessions: Vec<InventorySession> =
-            sessions.into_iter().map(|row| project_row_to_session(row, &proj_map)).collect();
+        // Build a map: session_id → Vec<SessionCalibrationMatch> (#772).
+        let mut cal_map: HashMap<String, Vec<SessionCalibrationMatch>> = HashMap::new();
+        for link in calibration_links {
+            cal_map.entry(link.session_id.clone()).or_default().push(calibration_link_to_match(link));
+        }
+
+        let inventory_sessions: Vec<InventorySession> = sessions
+            .into_iter()
+            .map(|row| project_row_to_session(row, &proj_map, &cal_map))
+            .collect();
 
         sources.push(InventorySource {
             id: root.id.clone(),
@@ -147,18 +166,50 @@ fn count_frames(frame_ids_json: &str) -> u32 {
         .map_or(0, |v| u32::try_from(v.len()).unwrap_or(0))
 }
 
+/// `(target, filter, binning, gain, night)`, each `None` for an absent or
+/// blank field.
+type SessionKeyFields =
+    (Option<String>, Option<String>, Option<String>, Option<String>, Option<String>);
+
+/// Parse the stored `session_key` string.
+///
+/// The real/production format (written by `sessions::session_key`, spec 035
+/// US4) is the stable pipe-delimited tuple `target|filter|binning|gain|night`
+/// — see `crates/sessions/src/key.rs`. A handful of pre-035/test-only call
+/// sites still write a legacy JSON object (`{"target":...,"filter":...}`);
+/// both are accepted so neither format regresses. Mirrors `sessions::
+/// parse_session_key`'s dual-format handling (#564) — this projection had the
+/// exact same JSON-only bug, silently discarding filter/binning/gain/night
+/// for every real catalogue-ingested session (every `Sessions` page row
+/// showed a generic "Session — <date>" label with blank fields).
+fn parse_session_key_fields(key: &str) -> SessionKeyFields {
+    if key.trim_start().starts_with('{') {
+        let v: serde_json::Value = serde_json::from_str(key).unwrap_or(serde_json::Value::Null);
+        let str_field = |k: &str| v.get(k).and_then(|x| x.as_str()).map(ToOwned::to_owned);
+        (str_field("target"), str_field("filter"), str_field("binning"), str_field("gain"), str_field("night"))
+    } else {
+        let non_empty = |s: &str| if s.is_empty() { None } else { Some(s.to_owned()) };
+        let mut parts = key.splitn(5, '|');
+        (
+            parts.next().and_then(non_empty),
+            parts.next().and_then(non_empty),
+            parts.next().and_then(non_empty),
+            parts.next().and_then(non_empty),
+            parts.next().and_then(non_empty),
+        )
+    }
+}
+
 /// The session's target: the linked `target_name` when present, otherwise the
-/// `target` field parsed out of the `session_key` JSON. `target_name` is
-/// currently always NULL in the projection (gen-3 canonical_target is not
-/// joined), so the session_key fallback is what gives every acquisition row its
-/// object identity instead of a generic "Session — <date>".
+/// `target` field parsed out of `session_key`. `target_name` is currently
+/// always NULL in the projection (gen-3 canonical_target is not joined), so
+/// the session_key fallback is what gives every acquisition row its object
+/// identity instead of a generic "Session — <date>".
 fn effective_target(row: &SessionProjectionRow) -> Option<String> {
     if let Some(ref t) = row.target_name {
         return Some(t.clone());
     }
-    serde_json::from_str::<serde_json::Value>(&row.session_key)
-        .ok()
-        .and_then(|k| k.get("target").and_then(|v| v.as_str()).map(ToOwned::to_owned))
+    parse_session_key_fields(&row.session_key).0
 }
 
 /// Derive a human display name for an inventory session.
@@ -167,22 +218,32 @@ fn derive_session_name(row: &SessionProjectionRow) -> String {
     if row.session_kind == "calibration" {
         return format!("{} calibration — {date}", row.frame_type);
     }
-    let key = serde_json::from_str::<serde_json::Value>(&row.session_key).ok();
     match effective_target(row) {
         Some(target) => {
-            let filter =
-                key.as_ref().and_then(|k| k.get("filter").and_then(|v| v.as_str())).unwrap_or("?");
-            let night =
-                key.as_ref().and_then(|k| k.get("night").and_then(|v| v.as_str())).unwrap_or(date);
+            let (_, filter, _, _, night) = parse_session_key_fields(&row.session_key);
+            let filter = filter.as_deref().unwrap_or("?");
+            let night = night.as_deref().unwrap_or(date);
             format!("{target} · {filter} — {night}")
         }
         None => format!("Session — {date}"),
     }
 }
 
+/// Parse one `calibration_assignment` row into the contract's match DTO.
+/// The DB `CHECK` constrains `calibration_type` to dark/flat/bias; an
+/// unrecognized value falls back to `Dark`, matching
+/// `sessions::load_calibration_matches`'s existing tolerance.
+fn calibration_link_to_match(row: SessionCalibrationLinkRow) -> SessionCalibrationMatch {
+    let kind = row.calibration_type.parse().unwrap_or(CalibrationKind::Dark);
+    let soft_mismatches: Vec<String> =
+        serde_json::from_str(&row.mismatched_dimensions).unwrap_or_default();
+    SessionCalibrationMatch { master_id: row.master_id, kind, score: row.confidence, soft_mismatches }
+}
+
 fn project_row_to_session(
     row: SessionProjectionRow,
     proj_map: &HashMap<String, Vec<(String, String)>>,
+    cal_map: &HashMap<String, Vec<SessionCalibrationMatch>>,
 ) -> InventorySession {
     let frames = count_frames(&row.frame_ids);
     let name = derive_session_name(&row);
@@ -200,36 +261,33 @@ fn project_row_to_session(
         calibration: None,
     });
 
+    let (_, filter, binning, gain, night) = parse_session_key_fields(&row.session_key);
+
     // Provenance summary: derive from session_key metadata where available.
-    let provenance = if let Ok(key) = serde_json::from_str::<serde_json::Value>(&row.session_key) {
-        let target_prov = key.get("target").and_then(|v| v.as_str()).map(ToOwned::to_owned);
-        let filter_prov = key.get("filter").and_then(|v| v.as_str()).map(ToOwned::to_owned);
-        if target_prov.is_some() || filter_prov.is_some() {
-            Some(InventoryProvenanceSummary {
-                target: target_prov,
-                filter: filter_prov,
-                ..Default::default()
-            })
-        } else {
-            None
-        }
+    let provenance = if target.is_some() || filter.is_some() {
+        Some(InventoryProvenanceSummary {
+            target: target.clone(),
+            filter: filter.clone(),
+            ..Default::default()
+        })
     } else {
         None
     };
 
-    // Capture date: first 10 chars of created_at (YYYY-MM-DD).
-    let captured_on =
-        if row.created_at.len() >= 10 { Some(row.created_at[..10].to_owned()) } else { None };
+    // Night (#564/#567): the observing night parsed from session_key —
+    // computed by `sessions::observing_night` at ingest time, distinct from
+    // `created_at` (when the row was inserted, e.g. a later re-scan). Falls
+    // back to the ingest date only when the key carries no night segment
+    // (legacy rows / calibration sessions, which have no observing night).
+    let captured_on = night.or_else(|| {
+        if row.created_at.len() >= 10 { Some(row.created_at[..10].to_owned()) } else { None }
+    });
 
-    // Filter/exposure: attempt to parse from session_key JSON.
-    let (filter, exposure) =
-        if let Ok(key) = serde_json::from_str::<serde_json::Value>(&row.session_key) {
-            let f = key.get("filter").and_then(|v| v.as_str()).map(ToOwned::to_owned);
-            // No exposure in session_key; would come from provenance in full impl.
-            (f, None)
-        } else {
-            (None, None)
-        };
+    // No exposure in session_key; would come from the fingerprint/provenance
+    // join in a full implementation (camera has the same gap — TODO(037)).
+    let exposure = None;
+
+    let calibration_matches = cal_map.get(&row.id).cloned().unwrap_or_default();
 
     InventorySession {
         id: row.id,
@@ -241,13 +299,48 @@ fn project_row_to_session(
         filter,
         exposure,
         camera: None,
-        gain: None,
-        binning: None,
+        gain,
+        binning,
         set_temp: None,
         captured_on,
         provenance,
         linked,
+        notes: row.notes,
+        calibration_matches,
     }
+}
+
+// ── session.notes.update ─────────────────────────────────────────────────────
+
+/// `inventory.session.notes.update` — write post-hoc notes for an inventory
+/// session (#773). Empty/whitespace-only `notes` clears the field (stores
+/// `NULL`), mirroring `target_management::note_update`'s FR-004 precedent:
+/// notes exceeding 16 384 UTF-8 bytes (after trimming) are rejected.
+///
+/// # Errors
+/// Returns `Err("note.content_too_large: ...")` when the trimmed note
+/// exceeds the byte limit, `Err("session.not_found: <id>")` when
+/// `session_id` matches neither session table, or a database error string.
+pub async fn update_session_notes(
+    pool: &SqlitePool,
+    req: &SessionNotesUpdateRequest,
+) -> Result<SessionNotesUpdateResult, String> {
+    let trimmed = req.notes.trim();
+    if trimmed.len() > MAX_NOTE_BYTES {
+        return Err(format!(
+            "note.content_too_large: note body exceeds the {MAX_NOTE_BYTES}-byte limit \
+             ({} bytes supplied)",
+            trimmed.len()
+        ));
+    }
+    let stored: Option<&str> = if trimmed.is_empty() { None } else { Some(trimmed) };
+
+    let updated = set_session_notes(pool, &req.session_id, stored).await.map_err(|e| e.to_string())?;
+    if !updated {
+        return Err(format!("session.not_found: {}", req.session_id));
+    }
+
+    Ok(SessionNotesUpdateResult { notes: stored.map(ToOwned::to_owned) })
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────
@@ -303,5 +396,212 @@ mod tests {
         assert_eq!(count_frames("[\"a\",\"b\",\"c\"]"), 3);
         assert_eq!(count_frames("[]"), 0);
         assert_eq!(count_frames("invalid"), 0);
+    }
+
+    // ── parse_session_key_fields (#564 backend half) ──────────────────────────
+
+    #[test]
+    fn parse_session_key_fields_parses_real_pipe_delimited_format() {
+        let (target, filter, binning, gain, night) =
+            parse_session_key_fields("M 51|L|1x1|100|2025-05-03");
+        assert_eq!(target.as_deref(), Some("M 51"));
+        assert_eq!(filter.as_deref(), Some("L"));
+        assert_eq!(binning.as_deref(), Some("1x1"));
+        assert_eq!(gain.as_deref(), Some("100"));
+        assert_eq!(night.as_deref(), Some("2025-05-03"));
+    }
+
+    #[test]
+    fn parse_session_key_fields_blank_segments_become_none() {
+        let (target, filter, binning, gain, night) = parse_session_key_fields("M 51||||");
+        assert_eq!(target.as_deref(), Some("M 51"));
+        assert!(filter.is_none());
+        assert!(binning.is_none());
+        assert!(gain.is_none());
+        assert!(night.is_none());
+    }
+
+    #[test]
+    fn parse_session_key_fields_accepts_legacy_json_form() {
+        let (target, filter, ..) = parse_session_key_fields(r#"{"target":"NGC 7000","filter":"Ha"}"#);
+        assert_eq!(target.as_deref(), Some("NGC 7000"));
+        assert_eq!(filter.as_deref(), Some("Ha"));
+    }
+
+    #[test]
+    fn parse_session_key_fields_invalid_json_degrades_to_none() {
+        let (target, filter, ..) = parse_session_key_fields("{not-json");
+        assert!(target.is_none());
+        assert!(filter.is_none());
+    }
+
+    // ── list() session_key wiring + notes + calibration matches ──────────────
+
+    async fn setup() -> persistence_db::Database {
+        let db = persistence_db::Database::in_memory().await.expect("in-memory DB");
+        db.migrate().await.expect("migrations");
+        db
+    }
+
+    #[tokio::test]
+    async fn list_resolves_target_filter_binning_gain_night_from_pipe_delimited_key() {
+        let db = setup().await;
+        let pool = db.pool();
+        sqlx::query(
+            "INSERT INTO library_root (id, kind, current_path, state) \
+             VALUES ('root-1', 'local', '/lib', 'active')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, root_id, frame_ids, created_at) \
+             VALUES ('acq-1', 'M 51|L|1x1|100|2025-05-03', 'root-1', '[\"f1\",\"f2\"]', \
+                     '2026-07-14T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let sources = list(pool, None).await.unwrap();
+        let session = &sources[0].sessions[0];
+
+        assert_eq!(session.target.as_deref(), Some("M 51"));
+        assert_eq!(session.filter.as_deref(), Some("L"));
+        assert_eq!(session.binning.as_deref(), Some("1x1"));
+        assert_eq!(session.gain.as_deref(), Some("100"));
+        // Night from session_key wins over the ingest created_at date (#564/#567).
+        assert_eq!(session.captured_on.as_deref(), Some("2025-05-03"));
+    }
+
+    #[tokio::test]
+    async fn list_surfaces_notes_and_calibration_matches() {
+        let db = setup().await;
+        let pool = db.pool();
+        sqlx::query(
+            "INSERT INTO library_root (id, kind, current_path, state) \
+             VALUES ('root-2', 'local', '/lib', 'active')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, root_id, frame_ids, created_at, notes) \
+             VALUES ('acq-2', 'M 31|L|1x1|100|2026-01-01', 'root-2', '[\"f1\"]', \
+                     '2026-07-14T00:00:00Z', 'Great seeing.')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO calibration_assignment \
+                (id, session_id, calibration_type, master_id, confidence, mismatched_dimensions, assigned_at) \
+             VALUES ('ca-1', 'acq-2', 'dark', 'master-dark-1', 0.9, '[\"gain\"]', '2026-07-14T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let sources = list(pool, None).await.unwrap();
+        let session = &sources[0].sessions[0];
+
+        assert_eq!(session.notes.as_deref(), Some("Great seeing."));
+        assert_eq!(session.calibration_matches.len(), 1);
+        assert_eq!(session.calibration_matches[0].master_id, "master-dark-1");
+        assert!(matches!(session.calibration_matches[0].kind, CalibrationKind::Dark));
+        assert_eq!(session.calibration_matches[0].soft_mismatches, vec!["gain".to_owned()]);
+    }
+
+    #[tokio::test]
+    async fn list_session_with_no_calibration_assignment_has_empty_matches() {
+        let db = setup().await;
+        let pool = db.pool();
+        sqlx::query(
+            "INSERT INTO library_root (id, kind, current_path, state) \
+             VALUES ('root-3', 'local', '/lib', 'active')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, root_id, frame_ids, created_at) \
+             VALUES ('acq-3', 'M 42|Ha|1x1|100|2026-01-01', 'root-3', '[\"f1\"]', \
+                     '2026-07-14T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let sources = list(pool, None).await.unwrap();
+        let session = &sources[0].sessions[0];
+        assert!(session.calibration_matches.is_empty());
+        assert!(session.notes.is_none());
+    }
+
+    // ── update_session_notes (#773) ───────────────────────────────────────────
+
+    #[tokio::test]
+    async fn update_session_notes_roundtrips() {
+        let db = setup().await;
+        let pool = db.pool();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at) \
+             VALUES ('acq-notes', 'k', '[]', '2026-01-01T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let req = SessionNotesUpdateRequest {
+            session_id: "acq-notes".to_owned(),
+            notes: "  Great seeing.  ".to_owned(),
+        };
+        let result = update_session_notes(pool, &req).await.unwrap();
+        // Stored value is trimmed.
+        assert_eq!(result.notes.as_deref(), Some("Great seeing."));
+    }
+
+    #[tokio::test]
+    async fn update_session_notes_blank_clears() {
+        let db = setup().await;
+        let pool = db.pool();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at, notes) \
+             VALUES ('acq-clear', 'k', '[]', '2026-01-01T00:00:00Z', 'old')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let req = SessionNotesUpdateRequest { session_id: "acq-clear".to_owned(), notes: "   ".to_owned() };
+        let result = update_session_notes(pool, &req).await.unwrap();
+        assert!(result.notes.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_session_notes_unknown_session_errors() {
+        let db = setup().await;
+        let pool = db.pool();
+        let req = SessionNotesUpdateRequest { session_id: "no-such-id".to_owned(), notes: "x".to_owned() };
+        let err = update_session_notes(pool, &req).await.unwrap_err();
+        assert!(err.starts_with("session.not_found:"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn update_session_notes_rejects_oversized_body() {
+        let db = setup().await;
+        let pool = db.pool();
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, frame_ids, created_at) \
+             VALUES ('acq-big', 'k', '[]', '2026-01-01T00:00:00Z')",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let oversized = "x".repeat(MAX_NOTE_BYTES + 1);
+        let req = SessionNotesUpdateRequest { session_id: "acq-big".to_owned(), notes: oversized };
+        let err = update_session_notes(pool, &req).await.unwrap_err();
+        assert!(err.starts_with("note.content_too_large:"), "got: {err}");
     }
 }

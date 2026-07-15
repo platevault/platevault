@@ -10,8 +10,10 @@
 //! spec-002 lifecycle transition use case was removed along with the
 //! review-state machine it mutated.
 
-use app_core::inventory::list;
-use contracts_core::inventory::{InventoryListRequest, InventoryListResponse};
+use app_core::inventory::{list, update_session_notes};
+use contracts_core::inventory::{
+    InventoryListRequest, InventoryListResponse, SessionNotesUpdateRequest, SessionNotesUpdateResult,
+};
 use contracts_core::ContractError;
 use sqlx::SqlitePool;
 use tauri::State;
@@ -45,6 +47,24 @@ pub async fn inventory_list(
         generated_at,
         sources,
     })
+}
+
+// ── inventory.session.notes.update (#773) ────────────────────────────────────
+
+/// `inventory.session.notes.update` — write post-hoc notes for an inventory
+/// session. Empty/whitespace-only `notes` clears the field.
+///
+/// # Errors
+/// Returns `Err(String)` (mapped to `ContractError::internal`) on
+/// `session.not_found`, `note.content_too_large`, or a database error.
+#[tauri::command]
+#[specta::specta]
+pub async fn inventory_session_notes_update(
+    req: SessionNotesUpdateRequest,
+    pool: State<'_, SqlitePool>,
+) -> Result<SessionNotesUpdateResult, ContractError> {
+    tracing::debug!("inventory.session.notes.update session_id={}", req.session_id);
+    update_session_notes(&pool, &req).await.map_err(ContractError::internal)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
