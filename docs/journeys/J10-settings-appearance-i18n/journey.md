@@ -1,7 +1,7 @@
 ---
 id: J10
 title: Configure appearance, per-library defaults, and trust the app is fully localized
-version: 1
+version: 3
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -23,6 +23,7 @@ trace:
   - PR #388 (Audit Log screen), PR #410 (audit detail localization),
     PR #415 (aria-sort), PR #826 (durable audit rows for settings/protection/
     equipment/source changes), commit 1f4ba13f (accessibility/theming pass)
+  - PR #882 (merged, fixes #587) · PR #884 (merged, fixes #581)
 ---
 
 ## Goal
@@ -37,6 +38,9 @@ durable-data settings) the change is discoverable afterward in the Audit Log.
 ## Preconditions
 - P1: Setup is complete with at least one registered source, so every pane
   has real data to act on.
+
+Note: Release builds lack the /dev/contracts palette entry by design
+(dev-tools compile-time gate, spec 021).
 
 ## Steps
 
@@ -55,24 +59,36 @@ durable-data settings) the change is discoverable afterward in the Audit Log.
   and nav groups), apps/desktop/messages/en.json:59,67 (displayed titles)
 
 ### S2 — Change an appearance setting {#S2}
-- **Do:** In Appearance, pick a different theme, then change density.
+- **Do:** In Appearance, pick a different theme, change density, and change
+  font size.
 - **Expect:** One of four named themes (Warm Clay, Warm Slate, Observatory,
   Espresso) or "System" (follows OS) applies live with no reload; the choice
   survives a full app restart (confirmed by a live Windows kill+relaunch
   test, docs/development/journey-run-2026-07-14.md). Density
-  (compact/comfortable/spacious) sets `--alm-row-height` and has a
-  measurable effect on the Targets table's row height and wizard-step rows.
-- **Expect (negative):** Density currently has **no** visible effect on
-  Sessions, Inbox, or Calibration list row heights — only the Targets table
-  and wizard rows consume the `--alm-row-height` token (issue #587, open).
-  No first-paint flash of the previous theme on reload (flash-of-default is
-  a documented issue for at least one other auto-saved toggle, issue #584,
-  open — not verified either way for theme/density specifically by this
-  audit).
-- **Trace:** apps/desktop/src/data/theme.ts,
+  (compact/comfortable/spacious) and font size both rescale the shared
+  design-token layer live — density rescales the `--alm-sp-*` spacing tokens
+  (plus `--alm-row-height`), font size rescales the `--alm-text-*` type-scale
+  tokens — consumed by component stylesheets app-wide, so both now have a
+  visible effect across surfaces (paddings, gaps, and text size on Sessions,
+  Inbox, Calibration, etc.), not just the Targets table and wizard rows.
+  Font size persists through the settings DB (with a localStorage boot
+  cache) and survives a restart; it previously reset to default on every
+  remount.
+- **Expect (negative):** The `--alm-row-height` token itself — the actual
+  row *height* — is still consumed only by the Targets table, the
+  wizard-step rows, and the Tonight sparkline's row minimum: Sessions,
+  Inbox, and Calibration list rows do not get taller or shorter with
+  density, even though their internal spacing now does. No first-paint
+  flash of the previous theme on reload (flash-of-default is a documented
+  issue for at least one other auto-saved toggle, issue #584, open — not
+  verified either way for theme/density specifically by this audit).
+- **Trace:** apps/desktop/src/data/theme.ts (`applyTokenScale`,
+  `applyDensity`, `applyFontSize`/`FontSizeChoice`),
   apps/desktop/src/features/settings/General.tsx,
   apps/desktop/src/styles/tokens.css:157-158,
-  apps/desktop/src/styles/components/merges-1.css:556, issue #587
+  apps/desktop/src/styles/components/merges-1.css:556. PR #882 fixes #587:
+  density previously only ever touched `--alm-row-height`; font size was
+  fully inert local state with no layout effect at all.
 
 ### S3 — Change a durable-data setting and find it in the Audit Log {#S3}
 - **Do:** Change a durable-data setting (e.g. add/remove an Equipment item),
@@ -139,16 +155,23 @@ durable-data settings) the change is discoverable afterward in the Audit Log.
   1100×720.
 - **Expect:** Sidebar collapse state persists across reload and keeps
   per-item tooltips. Every page keeps its header/action bar pinned while
-  only its content scrolls, down to 1100×720.
-- **Expect (negative):** As of this audit, command palette navigation is
-  broken end to end: clicking or pressing Enter on a result does not
-  navigate and there is no arrow-key selection (issue #581, open, P1, filed
-  from this journey's own validation); 3 of the palette's 8 listed routes
-  (`/review`, `/plans`, `/audit`) do not exist in the route tree and
-  silently redirect to `/sessions` when selected (issue #617, open,
-  `apps/desktop/src/app/CommandPalette.tsx:17-30`). Neither has a fix commit
-  since filing (2026-07-11).
-- **Trace:** apps/desktop/src/app/Sidebar.tsx, apps/desktop/src/app/CommandPalette.tsx, issue #581, issue #617
+  only its content scrolls, down to 1100×720. The command palette now
+  renders fully styled (a `.alm-palette*` floating overlay, not bare
+  document flow); search matching is alias-aware and reuses the Targets
+  page's own tested matcher (a compact query like "M31" now matches a
+  spaced designation like "M 31"); arrow-key navigation and clicking a
+  result both navigate reliably (a focus-ownership race between the
+  input's autofocus and the dialog's own focus management previously could
+  leave keyboard/click handling dead); the entity-search catalog is fetched
+  fresh each time the palette opens rather than eagerly at app boot.
+- **Expect (negative):** 3 of the palette's 8 listed routes (`/review`,
+  `/plans`, `/audit`) still do not exist in the route tree and silently
+  redirect when selected (issue #617, still open — not addressed by the
+  styling/matching/keyboard fix below).
+- **Trace:** apps/desktop/src/app/Sidebar.tsx,
+  apps/desktop/src/app/CommandPalette.tsx, issue #617. PR #884 fixes #581
+  (unstyled palette, broken alias matching, dead keyboard nav and clicks —
+  all four were one focus-race + CSS-class + matcher defect, now fixed).
 
 ### S8 — Confirm no raw strings leak anywhere in the sweep {#S8}
 - **Do:** Walk every pane and the log panel/audit log, including error and
@@ -201,25 +224,25 @@ durable-data settings) the change is discoverable afterward in the Audit Log.
   action bar pinned (S7).
 
 ## Known gaps
-- G1: Appearance's font-size control (`general` pane, displayed as
-  "Appearance") is local component state only — it is not persisted and
-  changes nothing outside the pane it lives in
-  (apps/desktop/src/features/settings/General.tsx:36).
-- G2: Ingestion settings persist durably but no scan/watch/ingest pipeline
-  consumes them yet (apps/desktop/src/features/settings/Ingestion.tsx:22-25,
-  explicit in source comment: "CONSUMER STATUS (P12): no scan/watch/ingest
-  pipeline reads these values yet").
-- G3: The bottom log panel reads only the in-memory event bus, not the
-  durable audit table — user-meaningful workflow rows are not yet guaranteed
-  to survive a restart from the log panel's perspective (blocked on a
-  separate log-panel iteration; deltas/2026-07-14-q15-t126.md).
-- G4: A `/dev/contracts` command-palette entry exists only in developer-mode
-  builds (compile-time gated off in release, per spec 021) — its absence in
-  a release build is expected, not a bug.
-- G5: Issue #647 ("Durable audit log misses most audited action classes")
-  remains open on the tracker even though commit 0cdc81cc/PR #826 appears to
-  address its described symptom; not closed as of this migration — flagged
-  as an open question rather than assumed stale.
+- G1: (dissolved 2026-07-15, resolved 2026-07-15) — tracked as issue #587;
+  Appearance font-size control now persists and rescales the shared token
+  layer, via PR #882 — see S2.
+- G2: (dissolved 2026-07-15) — tracked as issue #878; no pipeline consumes ingestion settings yet.
+- G3: (dissolved 2026-07-15) — tracked as issue #647; log panel not backed by durable audit table.
+- G5: (dissolved 2026-07-15) — tracked as issue #647; close-check folded into #647.
 
 ## Delta log
-(none — consolidated at migration; window starts fresh from `last_reviewed`)
+
+- **Δ2** 2026-07-15 · S2 · behavior-change
+  Density and font size now rescale the shared spacing/type-scale design
+  tokens live, giving both a visible effect app-wide (not just the Targets
+  table/wizard row-height token); font size now persists across a restart
+  instead of resetting on every remount.
+  Evidence: PR #882 (fixes #587) · by: journey-scribe (intent-gated)
+
+- **Δ3** 2026-07-15 · S7 · behavior-change
+  The command palette now renders styled, matches aliases the same way the
+  Targets page does, and its keyboard/click selection works reliably (a
+  focus-ownership race previously could leave it dead). The 3 dead
+  Pages-group routes remain unfixed.
+  Evidence: PR #884 (fixes #581) · by: journey-scribe (intent-gated)

@@ -27,7 +27,7 @@
  * is the canonical replacement for the ad-hoc per-feature dialog wrappers.
  */
 
-import { type ReactNode } from 'react';
+import { type ReactNode, type RefObject } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { m } from '@/lib/i18n';
 
@@ -42,6 +42,15 @@ export interface ModalProps {
   title?: ReactNode;
   /** Secondary line beside the title (e.g. a count summary). */
   subtitle?: ReactNode;
+  /**
+   * Element to focus when the dialog opens (Base UI `Dialog.Popup`
+   * `initialFocus`). DEFAULT (omitted): Base UI's own default — the first
+   * tabbable element, which in this chrome is the header ✕ (#841: a bare
+   * `autoFocus` on a body field races that default and can lose). Pass a ref
+   * to the field that should actually receive focus instead of relying on
+   * `autoFocus` inside `children`.
+   */
+  initialFocus?: RefObject<HTMLElement | null> | boolean;
   /** Modal body — scrolls within the height cap. */
   children: ReactNode;
   /** Optional pinned footer (e.g. action buttons). */
@@ -69,6 +78,7 @@ export function Modal({
   subtitle,
   children,
   footer,
+  initialFocus,
   size = 'md',
   ariaLabel,
   closeOnBackdrop = true,
@@ -101,6 +111,7 @@ export function Modal({
           className={`alm-modal alm-modal--${size}${className ? ` ${className}` : ''}`}
           aria-label={label}
           data-testid={testId}
+          initialFocus={initialFocus}
         >
           <div className="alm-modal__header">
             {title != null ? (

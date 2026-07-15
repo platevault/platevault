@@ -211,9 +211,6 @@ explicit, reviewed plan, and the action is visible in the audit history.
 
 ## Known gaps
 
-- G1: The generic, registry-driven per-property reclassify editor exists
-  at the IPC level (`inbox_property_registry` / `inbox_reclassify_v2`);
-  the shipped UI in S3 only exposes the common fields (frame type, filter,
-  exposure, binning) — carried from legacy doc.
+- G1: (dissolved 2026-07-15) — tracked as issue #880; registry editor UI exposes only common fields.
 
 ## Delta log

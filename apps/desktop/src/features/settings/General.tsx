@@ -5,19 +5,17 @@
 // Theme is applied live via the appearance runtime (data/theme.ts): swatch
 // cards re-scope the token layer with `data-theme` so each preview shows its
 // own palette without any element-level color injection.
-import { useState } from 'react';
 import { clsx } from 'clsx';
 import { usePreference } from '@/data/preferences';
 import {
   useThemeChoice,
+  useFontSizeChoice,
   resolveTheme,
   THEMES,
-  applyDensity,
 } from '@/data/theme';
+import type { FontSizeChoice } from '@/data/theme';
 import type { Density } from '@/bindings/types';
 import { m } from '@/lib/i18n';
-
-type FontSize = 'small' | 'default' | 'large';
 
 // `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
 // THEMES carry static brand names (not translatable) — wrap them as thunks so
@@ -33,7 +31,7 @@ const CHOICES = [
 
 export function General() {
   const [choice, setChoice] = useThemeChoice();
-  const [fontSize, setFontSize] = useState<FontSize>('default');
+  const [fontSize, setFontSize] = useFontSizeChoice();
   const [density, setDensity] = usePreference('density');
   const resolved = resolveTheme(choice);
 
@@ -95,7 +93,7 @@ export function General() {
             <select
               className="alm-select"
               value={fontSize}
-              onChange={(e) => setFontSize(e.target.value as FontSize)}
+              onChange={(e) => setFontSize(e.target.value as FontSizeChoice)}
             >
               <option value="small">
                 {m.settings_general_fontsize_small()}
@@ -123,11 +121,7 @@ export function General() {
             <select
               className="alm-select"
               value={density}
-              onChange={(e) => {
-                const d = e.target.value as Density;
-                setDensity(d);
-                applyDensity(d);
-              }}
+              onChange={(e) => setDensity(e.target.value as Density)}
             >
               <option value="compact">
                 {m.settings_general_density_compact()}

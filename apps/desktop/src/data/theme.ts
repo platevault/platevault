@@ -1,24 +1,32 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Appearance runtime — theme + density (PlateVault redesign).
+// Appearance runtime — theme + density + font size (PlateVault redesign).
 //
 // Theme is applied as a `data-theme` attribute on <html>; tokens.css defines
 // one scope per theme. `system` follows the OS via prefers-color-scheme.
 // Density mirrors the existing AppPreferences.density and is applied as a
-// class on <html>.
+// class on <html>. Density and font size both scale the shared
+// spacing/type-scale CSS custom properties (tokens.css `--alm-sp-*` /
+// `--alm-text-*`) in place via inline overrides on <html> — those tokens are
+// consumed by hundreds of component stylesheets already, so this gives an
+// app-wide effect through the existing token layer rather than adding
+// per-component density/font-size branches (#587).
 //
 // Persistence (theme-settings-db): the settings DB (`general` scope, `theme`
-// key — spec 018) is the durable source of truth. localStorage (`alm.theme`)
-// is kept ONLY as a synchronous boot cache so `initAppearance()` can paint the
-// right theme before first render without waiting on an IPC round-trip. On
-// Windows, WebView2 only flushes its localStorage-backing LevelDB store on a
-// graceful shutdown, so a force-killed app can lose the cache entirely — the
-// DB survives that. `hydrateThemeFromSettings()` reconciles the cache from
-// the DB once IPC is available (call after `initAppearance()`); `setThemeChoice`
-// writes both on every change.
+// / `fontSize` keys — spec 018) is the durable source of truth. localStorage
+// (`alm.theme` / `alm.fontSize`) is kept ONLY as a synchronous boot cache so
+// `initAppearance()` can paint the right theme/font size before first render
+// without waiting on an IPC round-trip. On Windows, WebView2 only flushes its
+// localStorage-backing LevelDB store on a graceful shutdown, so a force-killed
+// app can lose the cache entirely — the DB survives that.
+// `hydrateThemeFromSettings()` reconciles both caches from the DB once IPC is
+// available (call after `initAppearance()`); `setThemeChoice` /
+// `setFontSizeChoice` write both on every change. Density is not settings-DB
+// backed — it stays on the existing `AppPreferences.density` (localStorage)
+// path.
 import { useSyncExternalStore } from 'react';
-import { getPreferences } from '@/data/preferences';
+import { getPreferences, subscribePreferences } from '@/data/preferences';
 
 export type ThemeId =
   | 'warm-clay'
@@ -81,6 +89,46 @@ function isThemeChoice(v: unknown): v is ThemeChoice {
   );
 }
 
+/**
+ * Base pixel values for the shared spacing/type-scale tokens (tokens.css
+ * `:root`), duplicated here rather than read via `getComputedStyle` —
+ * jsdom (vitest) doesn't reliably resolve stylesheet-declared custom
+ * properties through computed style, which would make scaling non-
+ * deterministic under test. Keep these in sync with tokens.css if its base
+ * `--alm-sp-*` / `--alm-text-*` values ever change — `theme.tokens-drift.test.ts`
+ * asserts these tables match the parsed tokens.css `:root` values.
+ */
+export const SPACING_BASE_PX: Record<string, number> = {
+  '--alm-sp-0': 2,
+  '--alm-sp-1': 4,
+  '--alm-sp-2': 8,
+  '--alm-sp-3': 12,
+  '--alm-sp-4': 16,
+  '--alm-sp-5': 24,
+  '--alm-sp-6': 32,
+  '--alm-sp-7': 48,
+};
+
+export const TEXT_SCALE_BASE_PX: Record<string, number> = {
+  '--alm-text-2xs': 10,
+  '--alm-text-xs': 11,
+  '--alm-text-sm': 12,
+  '--alm-text-base': 13,
+  '--alm-text-md': 14,
+  '--alm-text-lg': 16,
+  '--alm-text-xl': 18,
+  '--alm-text-2xl': 22,
+};
+
+/** Rescales a base token table onto <html> inline styles; `scale === 1` clears the override (back to tokens.css defaults). */
+function applyTokenScale(base: Record<string, number>, scale: number): void {
+  const style = document.documentElement.style;
+  for (const [token, px] of Object.entries(base)) {
+    if (scale === 1) style.removeProperty(token);
+    else style.setProperty(token, `${(px * scale).toFixed(2)}px`);
+  }
+}
+
 const listeners = new Set<() => void>();
 function notify(): void {
   for (const l of listeners) l();
@@ -135,12 +183,14 @@ export function setThemeChoice(choice: ThemeChoice): void {
 }
 
 /**
- * Reconcile the synchronous localStorage boot cache against the settings DB
- * (spec 018) — the DB is the durable source of truth; localStorage only
- * exists to avoid a flash of the wrong theme before this async call
- * resolves. Call once after `initAppearance()` at boot. No-ops outside
- * Tauri or on any IPC failure (the localStorage cache stays authoritative
- * until the next successful reconcile).
+ * Reconcile the synchronous localStorage boot caches (theme + font size)
+ * against the settings DB (spec 018) — the DB is the durable source of
+ * truth; localStorage only exists to avoid a flash of the wrong value
+ * before this async call resolves. Both live in the same `general` scope,
+ * so one `settingsGet` round-trip reconciles both. Call once after
+ * `initAppearance()` at boot. No-ops outside Tauri or on any IPC failure
+ * (the localStorage caches stay authoritative until the next successful
+ * reconcile).
  */
 export async function hydrateThemeFromSettings(): Promise<void> {
   try {
@@ -152,12 +202,22 @@ export async function hydrateThemeFromSettings(): Promise<void> {
       import('@/api/ipc'),
     ]);
     const data = unwrap(await commands.settingsGet(SETTINGS_SCOPE));
-    const stored = (data.values as Record<string, unknown>)[SETTINGS_KEY];
-    if (isThemeChoice(stored) && stored !== getThemeChoice()) {
-      setThemeChoice(stored);
+    const values = data.values as Record<string, unknown>;
+
+    const storedTheme = values[SETTINGS_KEY];
+    if (isThemeChoice(storedTheme) && storedTheme !== getThemeChoice()) {
+      setThemeChoice(storedTheme);
+    }
+
+    const storedFontSize = values[FONT_SIZE_SETTINGS_KEY];
+    if (
+      isFontSizeChoice(storedFontSize) &&
+      storedFontSize !== getFontSizeChoice()
+    ) {
+      setFontSizeChoice(storedFontSize);
     }
   } catch {
-    // Best-effort — keep the current localStorage-cached choice.
+    // Best-effort — keep the current localStorage-cached choices.
   }
 }
 
@@ -204,6 +264,13 @@ export function applyTheme(): void {
   syncNativeWindowTheme(resolved);
 }
 
+/** Matches the existing row-height ratio (24/32/40px = -25%/base/+25%). */
+const DENSITY_SPACING_SCALE: Record<string, number> = {
+  compact: 0.75,
+  comfortable: 1,
+  spacious: 1.25,
+};
+
 export function applyDensity(density?: string): void {
   if (typeof document === 'undefined') return;
   const d = density ?? getPreferences().density;
@@ -211,12 +278,90 @@ export function applyDensity(density?: string): void {
   root.remove('density-compact', 'density-spacious');
   if (d === 'compact') root.add('density-compact');
   else if (d === 'spacious') root.add('density-spacious');
+  applyTokenScale(SPACING_BASE_PX, DENSITY_SPACING_SCALE[d] ?? 1);
 }
 
-/** Call once at startup (before/at first render). Wires OS-theme changes. */
+export type FontSizeChoice = 'small' | 'default' | 'large';
+
+const FONT_SIZE_KEY = 'alm.fontSize';
+const FONT_SIZE_SETTINGS_KEY = 'fontSize';
+const FONT_SIZE_SCALE: Record<FontSizeChoice, number> = {
+  small: 0.9,
+  default: 1,
+  large: 1.15,
+};
+
+function isFontSizeChoice(v: unknown): v is FontSizeChoice {
+  return v === 'small' || v === 'default' || v === 'large';
+}
+
+export function getFontSizeChoice(): FontSizeChoice {
+  try {
+    const v = localStorage.getItem(FONT_SIZE_KEY);
+    return isFontSizeChoice(v) ? v : 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+/** Best-effort write-through to the settings DB — mirrors `persistThemeToSettings`. */
+function persistFontSizeToSettings(choice: FontSizeChoice): void {
+  void (async () => {
+    try {
+      const { isTauri } = await import('@tauri-apps/api/core');
+      if (!isTauri()) return;
+
+      const [{ commands }, { unwrap }] = await Promise.all([
+        import('@/bindings/index'),
+        import('@/api/ipc'),
+      ]);
+      unwrap(
+        await commands.settingsUpdate(SETTINGS_SCOPE, {
+          [FONT_SIZE_SETTINGS_KEY]: choice,
+        }),
+      );
+    } catch {
+      // Best-effort — a DB write failure never blocks or reverts the UI change.
+    }
+  })();
+}
+
+export function applyFontSize(
+  choice: FontSizeChoice = getFontSizeChoice(),
+): void {
+  if (typeof document === 'undefined') return;
+  applyTokenScale(TEXT_SCALE_BASE_PX, FONT_SIZE_SCALE[choice]);
+}
+
+export function setFontSizeChoice(choice: FontSizeChoice): void {
+  try {
+    localStorage.setItem(FONT_SIZE_KEY, choice);
+  } catch {
+    /* localStorage may be unavailable */
+  }
+  persistFontSizeToSettings(choice);
+  applyFontSize(choice);
+  notify();
+}
+
+/**
+ * Call once at startup (before/at first render). Wires OS-theme changes and
+ * re-applies density on any preference write, so every density writer
+ * (Settings, the Setup wizard's usePreference('density')) gets the token
+ * rescale without needing its own applyDensity call (#587).
+ */
 export function initAppearance(): void {
   applyTheme();
   applyDensity();
+  applyFontSize();
+  let lastDensity = getPreferences().density;
+  subscribePreferences(() => {
+    const d = getPreferences().density;
+    if (d !== lastDensity) {
+      lastDensity = d;
+      applyDensity(d);
+    }
+  });
   if (typeof window !== 'undefined' && window.matchMedia) {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const onChange = (): void => {
@@ -245,4 +390,13 @@ export function useThemeChoice(): [ThemeChoice, (c: ThemeChoice) => void] {
 /** Hook: the resolved (concrete) theme id, tracks OS changes under `system`. */
 export function useResolvedTheme(): ThemeId {
   return useSyncExternalStore(subscribe, () => resolveTheme());
+}
+
+/** Hook: [choice, setChoice] for the app-wide font size. */
+export function useFontSizeChoice(): [
+  FontSizeChoice,
+  (c: FontSizeChoice) => void,
+] {
+  const choice = useSyncExternalStore(subscribe, getFontSizeChoice);
+  return [choice, setFontSizeChoice];
 }

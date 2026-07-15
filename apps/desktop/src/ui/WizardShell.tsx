@@ -8,6 +8,12 @@ import type { ReactNode, HTMLAttributes } from 'react';
 export interface WizardStep {
   label: string;
   completed?: boolean;
+  /**
+   * When true, this step is not reachable from the current step (issue #512) —
+   * the step control renders as a disabled button that can't be jumped to.
+   * Only consulted when `onStepSelect` is provided.
+   */
+  disabled?: boolean;
 }
 
 export interface WizardShellProps extends HTMLAttributes<HTMLDivElement> {
@@ -18,6 +24,13 @@ export interface WizardShellProps extends HTMLAttributes<HTMLDivElement> {
   footer?: ReactNode;
   /** Optional summary sidebar on the right (project wizard style). */
   summary?: ReactNode;
+  /**
+   * When provided, the centered step bar becomes interactive (issue #512):
+   * each step renders as a real focusable button that calls this with the
+   * target step index. Unreachable steps (`step.disabled`) are disabled.
+   * Omit to keep the step bar display-only.
+   */
+  onStepSelect?: (index: number) => void;
 }
 
 /**
@@ -31,7 +44,16 @@ export interface WizardShellProps extends HTMLAttributes<HTMLDivElement> {
  */
 export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
   function WizardShell(
-    { steps, currentStep, children, footer, summary, className, ...rest },
+    {
+      steps,
+      currentStep,
+      children,
+      footer,
+      summary,
+      onStepSelect,
+      className,
+      ...rest
+    },
     ref,
   ) {
     const hasSidebar = summary != null;
@@ -113,20 +135,37 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                   {steps.map((step, i) => {
                     const isActive = i === currentStep;
                     const isPast = i < currentStep;
-                    return (
+                    const cardClass =
+                      'alm-wizard__steps-card' +
+                      (isActive
+                        ? ' alm-wizard__steps-card--active'
+                        : isPast
+                          ? ' alm-wizard__steps-card--past'
+                          : '');
+                    const label = `${i + 1}. ${step.label}`;
+                    // Issue #512: when navigation is wired, render each step as
+                    // a real focusable button so completed/reachable steps can
+                    // be jumped to via mouse or keyboard; unreachable steps are
+                    // disabled. Falls back to an inert div otherwise (e.g. the
+                    // project wizard, which navigates only via Back/Continue).
+                    return onStepSelect ? (
+                      <button
+                        key={step.label}
+                        type="button"
+                        className={cardClass}
+                        aria-current={isActive ? 'step' : undefined}
+                        disabled={step.disabled}
+                        onClick={() => onStepSelect(i)}
+                      >
+                        {label}
+                      </button>
+                    ) : (
                       <div
                         key={step.label}
-                        className={
-                          'alm-wizard__steps-card' +
-                          (isActive
-                            ? ' alm-wizard__steps-card--active'
-                            : isPast
-                              ? ' alm-wizard__steps-card--past'
-                              : '')
-                        }
+                        className={cardClass}
                         aria-current={isActive ? 'step' : undefined}
                       >
-                        {i + 1}. {step.label}
+                        {label}
                       </div>
                     );
                   })}

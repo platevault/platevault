@@ -73,6 +73,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type Ref,
 } from 'react';
 import { Combobox } from '@base-ui-components/react/combobox';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -100,8 +101,18 @@ const TARGET_SEARCH_CONTRACT_VERSION = '1.0';
 
 const DEBOUNCE_MS = 300;
 const DEFAULT_LIMIT = 20;
-/** Minimum query length before the SIMBAD long-tail phase fires (US3, T022). */
-const MIN_RESOLVE_LEN = 3;
+/**
+ * Minimum trimmed query length before the SIMBAD long-tail phase fires (US3,
+ * T022). #843: this gates the RAW input, before the backend's catalog-prefix
+ * normalization (`M31` -> `m 31`) — duplicating that normalization here (NFKC
+ * + prefix-expansion + punctuation stripping, `crates/targeting/src/
+ * normalize.rs`) would recreate the exact cross-crate drift risk that module
+ * exists to avoid. `2` is the lower bound the issue accepts instead: the
+ * debounce already protects the network, and cache/seed lookups are cheap, so
+ * a two-character gate (letting legitimate un-spaced 2-char designations like
+ * `M1`..`M9` through) costs nothing extra in the common case.
+ */
+const MIN_RESOLVE_LEN = 2;
 /** Estimated suggestion-row height (px) for the virtualizer. */
 const OPTION_ESTIMATE = 44;
 /**
@@ -147,6 +158,12 @@ export interface TargetSearchProps {
   inputId?: string;
   /** Forwarded to the input for autofocus. */
   autoFocus?: boolean;
+  /**
+   * Ref to the search `<input>` DOM node. Lets a caller point a Base UI
+   * `Dialog.Popup`'s `initialFocus` at this field instead of using `autoFocus`
+   * (#841: a bare `autoFocus` races the dialog's own initial-focus management).
+   */
+  inputRef?: Ref<HTMLInputElement>;
   /**
    * Show the optional catalogue/type filter control (T029, US5). Default off.
    * The control seeds from `catalogFilter`/`typeFilter` and overrides them.
@@ -211,6 +228,7 @@ export function TargetSearch({
   hideLabel = false,
   inputId,
   autoFocus = false,
+  inputRef,
   showFilters = false,
   enableOverride = false,
   onOverride,
@@ -574,6 +592,7 @@ export function TargetSearch({
           {label}
         </label>
         <Combobox.Input
+          ref={inputRef}
           id={id}
           className="alm-input alm-target-search__input"
           autoComplete="off"
@@ -708,8 +727,9 @@ export function TargetSearch({
                   </Combobox.Status>
                 )}
                 {/*
-                 * Below the minimum resolve length there's no fallback to
-                 * offer yet (Phase 2 hasn't even run) — plain "no matches".
+                 * Below the minimum resolve length, Phase 2 (SIMBAD) hasn't
+                 * run at all — "No matching targets." would falsely claim a
+                 * search happened and missed (#843). Say so honestly instead.
                  */}
                 {!loading &&
                   !error &&
@@ -717,7 +737,7 @@ export function TargetSearch({
                   suggestions.length === 0 &&
                   query.trim().length < MIN_RESOLVE_LEN && (
                     <Combobox.Status className="alm-target-search__status">
-                      {m.cmp_target_search_no_results()}
+                      {m.cmp_target_search_type_more()}
                     </Combobox.Status>
                   )}
                 {/*

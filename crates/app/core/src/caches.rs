@@ -43,21 +43,30 @@ pub fn invalidate_library_root(root_id: &str) {
 
 // ── source_protection_state: source_id → resolved protection (`protection.rs`) ──
 
-/// `source_id` → resolved [`contracts_core::protection::SourceProtectionGetResponse`].
-/// Capacity 8,192, explicit-only invalidation.
+/// `source_id` → resolved [`contracts_core::protection::SourceProtectionGetResponse`],
+/// tagged with the `app_core_cache::protection_defaults_epoch` it was resolved
+/// under. Capacity 8,192, explicit-only invalidation.
+///
+/// Resolved responses embed values inherited from the global defaults (the
+/// level for inheriting sources; `block_permanent_delete`/categories even for
+/// overridden ones), so an entry is only valid for the defaults epoch it was
+/// resolved under — readers must treat an epoch mismatch as a miss (issue
+/// #563: a global-defaults change otherwise left stale per-source answers
+/// here forever, since this cache has no TTL and `app_core_settings` cannot
+/// invalidate it without a dependency cycle).
 ///
 /// Invalidate at `protection::set_source_protection` (the affected
 /// `source_id`) and `protection::seed_source_protection` (loop the affected
 /// `source_id`s — `TtlCache` exposes no bulk-clear, so a "seed touches every
 /// source" write invalidates each known id it just seeded).
 static SOURCE_PROTECTION_STATE: OnceLock<
-    TtlCache<String, contracts_core::protection::SourceProtectionGetResponse>,
+    TtlCache<String, (u64, contracts_core::protection::SourceProtectionGetResponse)>,
 > = OnceLock::new();
 
 /// Return the process-global `source_protection_state` cache (source_id →
-/// resolved protection).
+/// (defaults epoch, resolved protection)).
 pub fn source_protection_state(
-) -> &'static TtlCache<String, contracts_core::protection::SourceProtectionGetResponse> {
+) -> &'static TtlCache<String, (u64, contracts_core::protection::SourceProtectionGetResponse)> {
     SOURCE_PROTECTION_STATE.get_or_init(|| TtlCache::new(CacheConfig::new(8_192)))
 }
 
@@ -99,8 +108,8 @@ mod tests {
             categories: vec!["lights".to_owned()],
             inherits_default: true,
         };
-        cache.insert("src-1".to_owned(), value.clone());
-        assert_eq!(cache.get(&"src-1".to_owned()).map(|v| v.source_id), Some(value.source_id));
+        cache.insert("src-1".to_owned(), (0, value.clone()));
+        assert_eq!(cache.get(&"src-1".to_owned()).map(|(_, v)| v.source_id), Some(value.source_id));
 
         invalidate_source_protection_state("src-1");
         assert!(cache.get(&"src-1".to_owned()).is_none());

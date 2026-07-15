@@ -222,6 +222,16 @@ async fn two_m31_frames_group_into_one_linked_session() {
     assert_eq!(listed[0].frame_count, 2);
     assert_eq!(listed[0].session_key.target, "M 31", "canonical name surfaced");
     assert!(listed[0].target_ids.contains(&target_id));
+    // Regression for #564: the real ingest-written session_key
+    // (`target|filter|binning|gain|night`) must round-trip through the read
+    // path, not just the target — filter/night previously came back empty
+    // because `parse_session_key` only understood a JSON shape nothing ever
+    // wrote.
+    assert_eq!(listed[0].session_key.filter, "Ha", "filter must surface from session_key");
+    assert_eq!(
+        listed[0].session_key.night, "2026-06-21",
+        "observing night must surface, not created_at"
+    );
 }
 
 // ── T046: unknown OBJECT → pending → back-fill ───────────────────────────────────

@@ -95,6 +95,12 @@ pub enum ErrorCode {
     PathCollision,
     #[serde(rename = "path.invalid")]
     PathInvalid,
+    /// `roots.register`/`roots.register.batch`: a candidate root path is a
+    /// parent of, or nested within, an already-registered root (issue #501).
+    /// Cross-cutting across categories — an inbox root inside a light-frames
+    /// root is still an overlap.
+    #[serde(rename = "path.overlaps_existing")]
+    PathOverlapsExisting,
 
     // ── Inbox ───────────────────────────────────────────────────────────────
     #[serde(rename = "inbox.item.not_found")]
@@ -303,6 +309,10 @@ pub enum ErrorCode {
     /// root; deletion is blocked rather than cascade-nullified.
     #[serde(rename = "root.has_dependents")]
     RootHasDependents,
+    /// `roots.remap.apply` (issue #707): the two-step Verify → Apply flow
+    /// requires a successful Verify before Apply may mutate the root's path.
+    #[serde(rename = "remap.not_verified")]
+    RemapNotVerified,
 
     // ── Tool ────────────────────────────────────────────────────────────────
     #[serde(rename = "tool.locked")]

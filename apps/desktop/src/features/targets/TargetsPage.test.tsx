@@ -35,6 +35,7 @@ import {
   fireEvent,
   waitFor,
   within,
+  act,
 } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -499,5 +500,84 @@ describe('TargetsPage', () => {
       expect(screen.getByText('NGC 7000')).toBeInTheDocument();
       expect(screen.getByText('M 31')).toBeInTheDocument();
     });
+  });
+});
+
+// ── Progressive reveal of a large catalogue (#573) ───────────────────────────
+//
+// TargetsTable's per-row astronomy pass over the WHOLE catalogue synchronously
+// froze the app. TargetsPage now caps what it hands the table to REVEAL_CHUNK
+// (300) rows on first paint, then grows the revealed set toward the full total
+// on setTimeout macrotask boundaries so the browser can paint between chunks.
+// The table footer ("{count} targets") reflects exactly the revealed count, so
+// these tests drive the reveal timers with fake timers and assert on it.
+describe('TargetsPage — progressive reveal (#573)', () => {
+  // Valid Planner (NGC) rows so filterByCatalogues keeps them and the cap
+  // actually engages (a 2-row fixture never exceeds REVEAL_CHUNK).
+  function ngcItems(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+      id: `ngc-${i}`,
+      effectiveLabel: `NGC ${7000 + i}`,
+      primaryDesignation: `NGC ${7000 + i}`,
+      objectType: 'emission_nebula',
+    }));
+  }
+
+  // Flush the listTargets promise chain (microtasks only) WITHOUT firing the
+  // reveal setTimeout, so the first-paint cap is observable before any growth.
+  async function flushLoad() {
+    await act(async () => {
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+  }
+
+  // Fire the delay-0 reveal timers (and their re-scheduled successors) while
+  // NOT advancing far enough to trip observing-night's hourly interval.
+  async function drainRevealTimers() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+  }
+
+  it('caps first paint to REVEAL_CHUNK rows, then grows to the full catalogue on timers', async () => {
+    vi.useFakeTimers();
+    try {
+      mockListTargets.mockResolvedValue(ok(ngcItems(350)));
+      render(<TargetsPage />);
+      await flushLoad();
+
+      // First paint is capped — never the full 350-row synchronous burst.
+      expect(screen.getByText('300 targets')).toBeInTheDocument();
+      expect(screen.queryByText('350 targets')).not.toBeInTheDocument();
+
+      // Draining the reveal timers grows the visible set to the full catalogue.
+      await drainRevealTimers();
+      expect(screen.getByText('350 targets')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reset the revealed count on a sort interaction', async () => {
+    vi.useFakeTimers();
+    try {
+      mockListTargets.mockResolvedValue(ok(ngcItems(350)));
+      render(<TargetsPage />);
+      await flushLoad();
+      await drainRevealTimers();
+      expect(screen.getByText('350 targets')).toBeInTheDocument();
+
+      // A sort toggle re-renders but must NOT send the reveal back to the first
+      // chunk — only a fresh load() resets it.
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Sort by Designation' }),
+      );
+      await flushLoad();
+
+      expect(screen.getByText('350 targets')).toBeInTheDocument();
+      expect(screen.queryByText('300 targets')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

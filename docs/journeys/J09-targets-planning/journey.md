@@ -1,7 +1,7 @@
 ---
 id: J09
 title: Find, add, and plan around an astrophotography target
-version: 1
+version: 3
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -18,6 +18,7 @@ trace:
   - docs/development/journey-run-2026-07-14.md (Journey 9 section — validation
     evidence for S1-S5, dupes #658/#792/#574 hit)
   - issues #658, #815, #816 (open — audit-2026-07-15 corrections to S1/S2/S3)
+  - PR #890 (merged, fixes #573) · PR #896 (merged, fixes #579, #580)
 ---
 
 ## Goal
@@ -53,11 +54,20 @@ configured) real per-site astronomy for tonight.
   single active sort indicator, and optionally groupable (e.g. by catalogue).
   A search for a designation or a catalog-provided alias (e.g. "M31" or
   "Andromeda") finds the same row. The active sortable column header
-  announces its sort direction to assistive technology (`aria-sort`).
+  announces its sort direction to assistive technology (`aria-sort`). On a
+  large added-target set, first paint reveals rows in chunks of 300 rather
+  than blocking on the full set; during that reveal window a search matches
+  only rows already revealed, catching up as more are revealed a moment
+  later. Opening the page no longer freezes the app.
 - **Expect (negative):** The bundled seed catalog (thousands of entries) is
   never materialized as browsable rows in this list — it is reachable only
   through the Add-target search (S2).
-- **Trace:** commits fd87e99c, PR #415
+- **Trace:** commits fd87e99c, PR #415;
+  `apps/desktop/src/features/targets/TargetsPage.tsx` (`REVEAL_CHUNK = 300`
+  progressive reveal), `TargetsTable.tsx` (per-target-id astronomy row
+  cache) — PR #890 fixes #573 (opening previously froze the app: astronomy
+  altitude sampling ran synchronously over the entire catalogue on every
+  render).
 
 ### S2 — Add a target {#S2}
 - **Do:** Open Add target and type a name or designation.
@@ -118,12 +128,25 @@ configured) real per-site astronomy for tonight.
   and by site, and change as the site or date changes (not a value stable
   across reloads regardless of input). "Why this guidance" opens (from either
   the row or the detail panel), names the per-filter thresholds behind the
-  recommendation, and closes on Escape or an outside click.
+  recommendation, and closes on Escape or an outside click. The
+  Visible-tonight rating reflects whether the target actually clears the
+  usable altitude threshold tonight, so it varies by target and site even on
+  a night with no astronomical-twilight dark window (e.g. high-latitude
+  summer) — a target near the zenith no longer reads identically to one that
+  never rises just because there's no dark window; imaging time stays zero
+  on such a night regardless. The per-row "Tonight" altitude sparkline is
+  larger and wider than before, with a coloured line, a soft fill under the
+  curve, twilight shading either side of the dark window, and a marker at
+  the transit (highest) point.
 - **Expect (negative):** Without a configured observing site, these columns
   disclose that they need a site rather than rendering a plausible-looking
   number. The Sessions column always renders as a dash — session-linkage is
   not implemented yet (see G1).
-- **Trace:** deltas/2026-07-14-jval-docdrift.md
+- **Trace:** deltas/2026-07-14-jval-docdrift.md;
+  `apps/desktop/src/features/targets/planner-derive.ts`,
+  `AltitudeSparkline.tsx` — PR #896 fixes #579 (visibility rating no longer
+  uniform on a no-dark-window night) and #580 (larger sparkline with
+  twilight shading + transit marker).
 
 ### S5 — Toggle a favourite / "My Targets" {#S5}
 - **Do:** Star a target from the row or detail panel; switch the list to "My
@@ -149,27 +172,25 @@ configured) real per-site astronomy for tonight.
 
 ## Known gaps
 
-- G1: The Sessions column always renders as a dash; session-linkage to the
-  planner is not implemented yet.
-- G2: A target with an active observing site but unresolved/missing
-  coordinates (e.g. a manually-added target never matched to a catalog
-  entry) crashes the detail panel's altitude graph instead of rendering an
-  explicit "needs coordinates" state, and the table itself renders such a
-  target indistinguishably from a genuinely low-altitude one (no label,
-  pill, or tooltip). Open issues #757, #758 as of 2026-07-15 — no linked PR
-  found for either; a branch named `fix/target-detail-coords-moon` exists in
-  the repo but contains no commits beyond `origin/main`'s tip, so no
-  in-progress fix could be verified.
-- G3: On a night with no qualifying dark window, the altitude graph still
-  paints the usable-altitude fill under the curve while omitting twilight
-  shading, so the graph visually implies imaging time even though the
-  computed Image time correctly reads 0 — a rendering contradiction, not a
-  calculation error. Open issue #817.
+- G1: (dissolved 2026-07-15) — tracked as issue #877; Sessions column always renders as a dash.
+- G2: (dissolved 2026-07-15) — tracked as issues #757 and #758; unresolved coordinates crash the altitude graph.
+- G3: (dissolved 2026-07-15) — tracked as issue #817; dark-window fill implies imaging time at zero.
 
 ## Delta log
 
-(empty at last_reviewed — window holds only entries newer than
-last_reviewed)
+- **Δ2** 2026-07-15 · S1 · behavior-change
+  Opening Targets no longer freezes the app on a large added-target set —
+  astronomy sampling is now per-target-id cached and first paint is
+  chunked (300 rows), with search covering only the currently-revealed
+  rows during that reveal window.
+  Evidence: PR #890 (fixes #573) · by: journey-scribe (intent-gated)
+
+- **Δ3** 2026-07-15 · S4 · behavior-change
+  The Visible-tonight rating now discriminates by altitude on nights with
+  no astronomical-twilight dark window instead of reading uniformly for
+  every target; the Tonight sparkline is larger, with twilight shading and
+  a transit-point marker.
+  Evidence: PR #896 (fixes #579, #580) · by: journey-scribe (intent-gated)
 
 Note (not a Δ entry — provenance for why two deltas were not folded into the
 body above): `deltas/2026-07-14-q16-t132.md` and `2026-07-14-q16-t133.md`

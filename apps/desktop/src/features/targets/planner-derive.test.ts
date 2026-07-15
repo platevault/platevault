@@ -154,6 +154,50 @@ describe('deriveObservability — never-visible edge case (T013)', () => {
   });
 });
 
+describe('deriveObservability — #579 no-dark-window still discriminates by altitude', () => {
+  // A high-latitude summer night: no astronomical dark window exists for
+  // months, but visibility MUST still vary by altitude (a zenith/circumpolar
+  // target is observable in twilight; a never-riser is not) instead of
+  // collapsing every target to not-visible.
+  const SUMMER_MS = Date.UTC(2026, 6, 15, 12, 0, 0);
+
+  it('has no dark window on a lat-52 summer night (precondition)', () => {
+    const night = getNightObservability('t', 270, 52, AMSTERDAM, SUMMER_MS);
+    expect(night.darkWindow).toBeNull();
+  });
+
+  it('a zenith-transiting target reads visible even with no dark window', () => {
+    const night = getNightObservability('t', 270, 52, AMSTERDAM, SUMMER_MS);
+    const derived = deriveObservability(night, 30);
+    expect(derived.maxAltDeg).toBeGreaterThan(80);
+    expect(derived.visibleTonight).toBe(true);
+    // Imaging time stays honestly zero — no astronomical darkness (FR-017).
+    expect(derived.totalImagingMinutes).toBe(0);
+  });
+
+  it('a never-rising target stays not-visible on the same no-dark night', () => {
+    const night = getNightObservability('never', 0, -80, AMSTERDAM, SUMMER_MS);
+    expect(night.darkWindow).toBeNull();
+    const derived = deriveObservability(night, 30);
+    expect(derived.maxAltDeg).toBeLessThan(0);
+    expect(derived.visibleTonight).toBe(false);
+  });
+
+  it('winter behaviour is unchanged: visibility follows the dark window', () => {
+    const night = getNightObservability(
+      't',
+      90,
+      52,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+    );
+    expect(night.darkWindow).not.toBeNull();
+    const derived = deriveObservability(night, 30);
+    expect(derived.visibleTonight).toBe(true);
+    expect(derived.totalImagingMinutes).toBeGreaterThan(0);
+  });
+});
+
 describe('deriveObservability — US5 separation scalars (T028, SC-009)', () => {
   it('all three scalars are either a finite [0,180] degree figure or "moon-not-up"', () => {
     const night = getNightObservability(

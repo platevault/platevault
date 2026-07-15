@@ -1,7 +1,7 @@
 ---
 id: J04
 title: Review acquisition sessions as a derived, always-current inventory
-version: 1
+version: 3
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -18,6 +18,7 @@ trace:
   - docs/development/journey-run-2026-07-14.md (live Windows validation, build 7e522c16)
   - docs/development/windows-validation-journeys-tracker.md
   - PR #415 (merged) · PR #849 (merged, Q16 missing-value rendering)
+  - PR #891 (merged, fixes #772, #773, #568) · PR #899 (merged, fixes #564, #567)
 ---
 
 ## Goal
@@ -54,20 +55,28 @@ the view carries no leftover review-state controls.
   "review this session" action; frame counts match what the plan actually
   moved/catalogued (live-verified 2026-07-14: a 22-file folder split into
   3 sessions with counts 4/14/4, the exact canonical gain/binning split).
-  Each row's Target cell falls back to the session's own name
-  (`session.target ?? session.name`) rather than a blank/dash when FITS
-  target metadata is null.
+  A catalogued session's target/filter/binning/gain/night are now parsed
+  from the real pipe-delimited session key (was JSON-only before, which
+  silently discarded every field for a catalogue-ingested session) — rows
+  show their real values instead of a generic "Session — {date}" whenever
+  that metadata actually exists. Each row's Target cell falls back to the
+  session's own name (`session.target ?? session.name`) rather than a
+  blank/dash only when the target is genuinely absent.
 - **Expect (negative):** No Confirm, Re-open, Reject, or Ignore control and
   no review-state pill (e.g. needs-review/candidate) appears anywhere on
   the page — the Inbox confirm gate the user already passed is the only
   gate (live-verified 2026-07-14: DOM/button scan found none).
 - **Trace:** `apps/desktop/src/features/sessions/SessionsTable.tsx:296-299`;
-  docs/development/journey-run-2026-07-14.md. Corrected: the name fallback
-  is not always a *unique* discriminator — two same-night sessions that both
-  lack metadata can render the identical label `Session — {date}` (open bug
-  #654, P3, live-reproduced). SC4 below is narrowed to describe this
-  precisely rather than claim 100% uniqueness the current fallback doesn't
-  deliver.
+  docs/development/journey-run-2026-07-14.md;
+  `crates/app/core/src/inventory.rs` `parse_session_key_fields`,
+  `crates/app/core/src/sessions.rs` (PR #891, PR #899 — fix #564). Corrected:
+  the name fallback is not always a *unique* discriminator — two same-night
+  sessions that both lack metadata can render the identical label
+  `Session — {date}` (open bug #654, P3, live-reproduced). SC4 below is
+  narrowed to describe this precisely rather than claim 100% uniqueness the
+  current fallback doesn't deliver; #654 is a distinct, still-open gap from
+  the #564 key-parse fix above (it covers sessions with no metadata at all,
+  not sessions whose real metadata was previously mis-parsed).
 
 ### S3 — Filter, group, and sort the session list {#S3}
 - **Do:** Use the Filter and Camera dropdowns, the Group-by control
@@ -97,7 +106,13 @@ the view carries no leftover review-state controls.
   only when a real value is present; a field that is applicable but has no
   value renders a distinct "unresolved" chip (never a bare em dash and never
   a source badge); a field that does not apply to this entity renders a
-  blank em dash with no chip.
+  blank em dash with no chip. Below the property grid, the panel is now
+  organized into two further sections: a read-only Calibration section
+  listing the session's linked calibration matches (with an explicit
+  "no calibration match" empty state when there are none), and a Notes
+  section — a free-text editor that autosaves on a debounced pause after
+  typing stops, shows an explicit saved signal, rejects input past a 16 KiB
+  limit, and persists across navigating away and back.
 - **Expect (negative):** Closing the panel via the ✕ control never mutates
   the session or triggers any lifecycle transition. Pressing Escape does
   **not** currently close the panel — the shared `ListPageLayout`/
@@ -105,7 +120,13 @@ the view carries no leftover review-state controls.
   `onClick`; no `keydown`/Escape listener exists in either component (open
   bug #771, live-reproduced, affects every `ListPageLayout` detail panel
   app-wide, not Sessions-specific).
-- **Trace:** `apps/desktop/src/components/PropertyTable.tsx:171-205`,
+- **Trace:** `apps/desktop/src/features/sessions/SessionDetail.tsx`
+  (Calibration/Notes sections, PR #891 fixes #568),
+  `apps/desktop/src/features/sessions/SessionNotesSection.tsx` (debounced
+  autosave + 16 KiB guard, PR #891 fixes #773),
+  `crates/app/core/src/inventory.rs` (`calibrationMatches`, batch-loaded
+  from `calibration_assignment`, PR #891 fixes #772);
+  `apps/desktop/src/components/PropertyTable.tsx:171-205`,
   `apps/desktop/src/components/RenderValue.tsx:100-132` (Q16 shared
   renderer, PR #849, merged). Corrected: the previous "renders as an em
   dash" claim described the pre-#849 behavior (issue #620/#770: a missing
@@ -142,26 +163,24 @@ the view carries no leftover review-state controls.
 ### S6 — Reveal the session's source root {#S6}
 - **Do:** With a resolvable source path, click the reveal action ("Show in
   File Explorer" on Windows) in session detail.
-- **Expect:** The OS file browser opens. The path it opens to is the
-  session's owning `InventorySource` path — which is one path per
-  registered library root (`InventorySource` is "one per LibraryRoot",
-  `path: root.current_path`), not a per-session subfolder. Every session
-  under the same root reveals the same folder; a library root with multiple
-  target/night subfolders does not let Reveal distinguish between the
-  sessions inside it. If the reveal call fails, an error toast is shown and
-  the panel stays open.
+- **Expect:** The OS file browser opens to the session's own frame folder:
+  the owning library root's path joined with the session's new
+  `InventorySession.relativePath` (derived from the parent folder of the
+  session's first frame). Distinct sessions under the same root now reveal
+  distinct folders. A session with no resolvable `relativePath` (legacy or
+  never-scanned) falls back to the root path rather than failing. If the
+  reveal call fails, an error toast is shown and the panel stays open.
 - **Expect (negative):** The reveal action is not offered at all when no
   source path can be resolved for the selection (never a dead/no-op
   button).
-- **Trace:** `crates/app/core/src/inventory.rs:85-91` (`InventorySource.path
-  = root.current_path`, one entry per `LibraryRoot`);
-  `crates/contracts/core/src/inventory.rs:138-144` (doc comment: "one per
-  `LibraryRoot`"). Corrected: the pre-migration baseline and this doc's
-  first draft both claimed Reveal opens "the session's own folder, not a
-  library-root ancestor" (SC6). Live-tested false on 2026-07-14 across
-  three M 51 sessions in one root, all opening the same top-level folder
-  (open bugs #567, #651, user-confirmed) — `InventorySession` carries no
-  per-session path field for this to be architecturally possible today.
+- **Trace:** `crates/app/core/src/inventory.rs` (`InventorySession.relativePath`,
+  PR #891); `apps/desktop/src/features/sessions/revealInventory.ts`
+  `resolveRevealPath` (root + relativePath join, native-separator aware, PR
+  #899 fixes #567). Corrected: the previous body described Reveal as opening
+  the shared `InventorySource` root for every session (live-tested
+  2026-07-14 across three M 51 sessions, open bugs #567, #651) — that defect
+  is fixed by this join; #651 described the identical symptom and is closed
+  by the same fix (its own tracker state may lag).
 
 ### S7 — Rescan the Inbox without disturbing Sessions {#S7}
 - **Do:** Re-run an Inbox scan of an already-confirmed source.
@@ -186,32 +205,39 @@ the view carries no leftover review-state controls.
   pre-selected, every time (S5). Currently NOT met: no project is ever
   pre-selected — see S5 (`SessionsPage.tsx:256` drops the id argument).
 - SC6: Reveal opens the session's own folder, never a root ancestor (S6).
-  Currently NOT met: Reveal opens the owning library root's folder for
-  every session under it — see S6 (open bugs #567, #651).
+  Met as of PR #899: Reveal joins the owning root with the session's own
+  `relativePath`, falling back to the root only when no relative path is
+  recorded (legacy/unscanned sessions) — see S6.
 - SC7: A rescan changes neither session count nor introduces any
   review-state indicator (S7).
 
 ## Known gaps
 
-- G1: Session notes/annotation editing is not implemented — there is no
-  notes field on the session DTO or in the Sessions UI (carried from
-  legacy doc; verified absent by inspection of
-  `apps/desktop/src/bindings/index.ts` and
-  `apps/desktop/src/features/sessions/`; also filed live as open bug #773,
-  2026-07-14). Its absence remains a coverage gap for this journey until it
-  ships.
+- G1: (dissolved 2026-07-15, resolved 2026-07-15) — tracked as issue #773;
+  session notes editing, shipped via PR #891 — see S4.
 - G2: (retired) — the prior G2 ("PropertyTable source badge on missing
   values, unmerged fix on `impl/q16-missing-value`") is stale. PR #849
   (merged) adopted the shared `RenderValue`/`PropertyTable` renderer on
   Sessions detail, coupling the source badge to value presence
   (`PropertyTable.tsx:201`); see S4. Retired per the id-stability rule
   (never renumbered, never reused) rather than deleted.
-- G3: Library-root connectivity edge cases for a session's backing source
-  (missing/disabled/reconnect_required) are out of scope for this
-  journey — covered by first-run-setup / library-root management
-  journeys.
+- G3: (dissolved 2026-07-15) — tracked as issue #889; was wrongly scoped out, now tracked (connectivity state).
 
 ## Delta log
 
-(none — this is the version-1 migrated baseline; the pre-migration
-journey.md and folded delta are recorded in `trace:` above.)
+- **Δ2** 2026-07-15 · S4 · behavior-change
+  Session detail now shows a read-only Calibration-linkage section (with an
+  explicit no-match empty state) and a Notes section with debounced-autosave
+  free text (16 KiB limit, persists across navigation), reorganized below
+  the property grid.
+  Evidence: PR #891 (fixes #772, #773, #568) · by: journey-scribe
+  (intent-gated)
+
+- **Δ3** 2026-07-15 · S2, S6 · behavior-change
+  Catalogued sessions now parse their real pipe-delimited
+  target/filter/binning/gain/night key (previously JSON-only, silently
+  discarding these fields), so rows show real metadata instead of a generic
+  "Session — {date}" whenever it exists. Reveal now opens the session's own
+  frame folder (root + `relativePath`), not the shared library-root folder
+  every session under it previously opened.
+  Evidence: PR #899 (fixes #564, #567) · by: journey-scribe (intent-gated)

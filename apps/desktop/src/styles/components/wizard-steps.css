@@ -1686,6 +1686,30 @@
   font-weight: var(--alm-weight-semibold);
 }
 
+/* Interactive step card (issue #512): rendered as a <button> when step-nav is
+   wired. Reset button chrome so it matches the inert-div variant, then add
+   pointer/hover/focus/disabled affordances. */
+button.alm-wizard__steps-card {
+  font: inherit;
+  font-size: var(--alm-text-xs);
+  cursor: pointer;
+}
+
+button.alm-wizard__steps-card:not(:disabled):hover {
+  border-color: var(--alm-accent);
+  color: var(--alm-text);
+}
+
+button.alm-wizard__steps-card:focus-visible {
+  outline: 2px solid var(--alm-focus-ring);
+  outline-offset: 2px;
+}
+
+button.alm-wizard__steps-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 /* Pinned navigation footer */
 .alm-wizard__footer {
   border-top: 1px solid var(--alm-border);

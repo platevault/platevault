@@ -13,6 +13,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ResolverSettingsControl } from '@/features/settings/ResolverSettingsControl';
 import { usePreference } from '@/data/preferences';
+import { useThemeChoice, THEMES, type ThemeChoice } from '@/data/theme';
 import { m } from '@/lib/i18n';
 import type { Density } from '@/bindings/types';
 import { commands } from '@/bindings/index';
@@ -109,6 +110,29 @@ function DensityControl() {
   );
 }
 
+// ── Appearance / theme (data/theme.ts runtime; applied globally via `data-theme`
+// on <html>, so it is already live outside the wizard — this control just wires
+// the setup step's select to the same source of truth as Settings > General) ──
+
+function ThemeControl() {
+  const [choice, setChoice] = useThemeChoice();
+  return (
+    <select
+      className="alm-select"
+      value={choice}
+      aria-label={m.settings_general_theme()}
+      onChange={(e) => setChoice(e.target.value as ThemeChoice)}
+    >
+      <option value="system">{m.settings_general_theme_system()}</option>
+      {THEMES.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 // ── A labelled config row: title + control on one line, description below ──────
 
 function ConfigOption({
@@ -161,15 +185,7 @@ export function StepCatalogs(_props: StepCatalogsProps) {
       <ConfigOption
         title={m.setup_config_appearance_title()}
         description={m.setup_config_appearance_desc()}
-        control={
-          <select
-            className="alm-select"
-            disabled
-            aria-label={m.settings_general_theme()}
-          >
-            <option>{m.setup_config_theme_light()}</option>
-          </select>
-        }
+        control={<ThemeControl />}
       />
     </div>
   );

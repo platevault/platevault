@@ -222,19 +222,7 @@ happened" or "nothing was recorded".
 
 ## Known gaps
 
-- G1: The Activity panel has session-only severity filtering plus a
-  `sourceFilter` state, but no UI control (chip/toggle) currently sets that
-  source/category filter — `apps/desktop/src/app/LogPanel.tsx` never calls
-  `setSourceFilter`. Until that control ships, category/source filtering
-  alongside severity (as originally scoped for this journey) cannot be
-  exercised. Carried from the pre-migration doc; still true as of 2026-07-14.
-- G2: The Activity panel reads only the in-session bus/ring buffer
-  (`apps/desktop/src/data/logStore.ts`), not the durable audit store — so
-  "activity is a view over the audit" (the log-panel iteration referenced as
-  blocked-on-Q9 in spec-030) is not yet true. A durable settings/protection/
-  equipment/source change from an earlier session is discoverable only via
-  Settings → Audit Log (S6–S8), not via the Activity panel. Not yet specified
-  in spec-030 per the pre-migration delta note; unconfirmed whether/when this
-  ships.
+- G1: (dissolved 2026-07-15) — tracked as issue #666; no UI control sets the Activity panel source filter.
+- G2: (dissolved 2026-07-15) — tracked as issue #647; activity-over-durable-audit, same audit-classes lane.
 
 ## Delta log

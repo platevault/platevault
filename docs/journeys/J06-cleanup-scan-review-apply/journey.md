@@ -1,7 +1,7 @@
 ---
 id: J06
 title: Reclaim disk space from processing outputs and raw sub-frames without losing anything protected
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -19,6 +19,7 @@ trace:
   - docs/development/windows-journeys/journey-06-cleanup-scan-apply.md
   - PR #413 (merged 2026-07-04 — scan/review/generate cleanup UI)
   - issue #741, issue #807, issue #766, issue #780, issue #806 (all open)
+  - PR #894 (fixes #563)
 ---
 
 ## Goal
@@ -107,9 +108,20 @@ protected ever touched without an acknowledged, reviewed step.
 - **Expect:** A read-only preview lists individual light/dark/flat/bias
   frames with type, size, and protection state; non-protected frames are
   preselected; protected frames show no selection control; the reclaimable
-  total reflects only the currently selected frames.
+  total reflects only the currently selected frames. A per-root protection
+  override set on a source (Settings → Data Sources) now actually governs
+  this classification for the frames it owns: a root marked "Unprotected"
+  correctly preselects its session-attributed frames as non-protected,
+  rather than the override being silently ignored in favor of the global
+  default.
 - **Expect (negative):** No file is moved or altered by scanning.
-- **Trace:** `apps/desktop/src/features/sessions/RawFrameCleanupSection.tsx`
+- **Trace:** `apps/desktop/src/features/sessions/RawFrameCleanupSection.tsx`;
+  `crates/app/core/src/cleanup_generator.rs` `frame_protection_source` (PR
+  #894 fixes #563 — a per-root override previously never reached
+  session-attributed frames because resolution was keyed under the session
+  id, which has no shipped override surface, and silently fell back to the
+  global default; it is now keyed under the root when no per-session
+  override row exists).
 
 ### S6 — Select frames and generate a session cleanup plan {#S6}
 - **Do:** Adjust the frame selection if needed, choose Archive or System
@@ -140,49 +152,11 @@ protected ever touched without an acknowledged, reviewed step.
   offers no selection control on protected frames (S5).
 
 ## Known gaps
-- G1: Plans whose destination is System trash currently fail every item at
-  apply, unconditionally — `destructive_confirmed` (the column the apply-time
-  gate reads for `trash`/`delete` actions) has no write path anywhere in the
-  codebase, so the check can never pass. Confirmed by reading
-  `crates/fs/executor/src/run.rs:384-404` and
-  `crates/app/core/src/plan_apply.rs:680-681`. Tracked as issue #741 (open).
-  Affects both the project (S2/S4) and session (S6) flows, which share the
-  same executor.
-- G2: The review overlay's protected-item acknowledgement (S3) is cosmetic —
-  acknowledging only publishes an audit-bus event and persists no state that
-  the apply-time protection gate consults; approving and applying a plan
-  containing any protected item with a mutating action (archive/trash) fails
-  every such item unconditionally, regardless of acknowledgement. Confirmed
-  by reading `apps/desktop/src/features/plans/PlanProtectionGate.tsx:70-97`,
-  `crates/app/core/src/protection.rs:395-420`, and
-  `crates/fs/executor/src/run.rs:474-493`. Tracked as issue #807 (open).
-  Supersedes the prior belief (see deltas/2026-07-14-q15-t123.md) that
-  acknowledgement is durably audited — that claim conflicts with the current
-  code and was not folded into this body.
-- G3: Applied plans are not confirmed to produce durable `audit_log_entry`
-  rows. Issue #766 (open) demonstrates zero audit rows for a successfully
-  applied plan through the shared plan-apply/executor pipeline that cleanup
-  plans also use; not independently reproduced against a cleanup plan
-  specifically, but the mechanism is shared with S4/S6.
-- G4 (carried from legacy 2026-07-04 doc, updated): no pre-generate estimate
-  of whether a cleanup would even fit at the chosen destination is shown
-  before generating a plan (S2). A real per-item free-space check now runs at
-  apply time and fails safely with a stated reason
-  (`crates/fs/executor/src/ops/volume_check.rs`) rather than the previously
-  documented hardcoded-zero estimate — but the user still only learns of
-  insufficient destination space after attempting apply, not at generate or
-  review time.
-- G5 (project-level Outputs flow only, S1–S4): candidate accuracy after a
-  project is reopened following an out-of-app file drop may be affected by a
-  separate, documented defect (issue #780, open, filed against Journey 5) in
-  which the on-attach `processing_artifacts` reconcile is non-recursive and
-  can flip present output files to `missing` (or miss new ones). Since S1's
-  candidates are grounded in `processing_artifacts`
-  (`crates/app/core/src/cleanup_generator.rs`), this could under- or
-  over-report candidates after a reopen; not independently reproduced
-  against a cleanup scan. Does not apply to the session-scoped raw sub-frame
-  flow (S5/S6), which reads frame inventory instead of
-  `processing_artifacts`.
+- G1: (dissolved 2026-07-15) — tracked as issue #741; trash destination fails every apply item.
+- G2: (dissolved 2026-07-15) — tracked as issue #807; protected-item acknowledgement is cosmetic.
+- G3: (dissolved 2026-07-15) — tracked as issue #766; applied plans lack durable audit rows.
+- G4: (dissolved 2026-07-15) — tracked as issue #876; no free-space estimate at review.
+- G5: (dissolved 2026-07-15) — tracked as issue #780; reopen reconcile can misreport cleanup candidates.
 - Dropped: the legacy 2026-07-04 note that the cleanup review UI "requires
   PR #413 (open)" is stale — PR #413 merged 2026-07-04
   (`feat: review and safely apply project cleanup plans with live
@@ -190,3 +164,10 @@ protected ever touched without an acknowledged, reviewed step.
   deltas/2026-07-14-jval-docdrift.md).
 
 ## Delta log
+
+- **Δ2** 2026-07-15 · S5 · behavior-change
+  A per-root protection override now actually governs cleanup
+  classification for the session-attributed raw frames it owns; previously
+  the override was cosmetic there (resolution was keyed under the session
+  id, found no override row, and silently inherited the global default).
+  Evidence: PR #894 (fixes #563) · by: journey-scribe (intent-gated)

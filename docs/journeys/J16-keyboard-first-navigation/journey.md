@@ -1,7 +1,7 @@
 ---
 id: J16
 title: Drive PlateVault end to end without a pointer
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -27,6 +27,7 @@ trace:
     PASS, log-panel-persist FAIL; bridge cannot drive Tab/native-button keyboard activation)
   - e2e-agentic-test/043-ui-redesign-platevault/global-search-command-palette/scenario.md
   - e2e-agentic-test/043-ui-redesign-platevault/a11y-keyboard-and-aria-sort/scenario.md
+  - PR #884 (merged, fixes #581)
 ---
 
 ## Goal
@@ -50,21 +51,30 @@ operable, and observable using only the keyboard, from any page.
 ### S1 — Open the command palette from anywhere {#S1}
 - **Do:** Press Ctrl+K (Cmd+K on macOS) from any page; type to filter; press
   Enter on a highlighted entry; press Escape.
-- **Expect:** By design the palette opens as a styled floating overlay;
-  today it renders unstyled — plain document-flow markup, with no
-  `.alm-palette*` CSS rule defined anywhere in the app (Known gap G6) —
-  but the underlying interaction works: it shows Pages and Actions groups;
-  after a short pause (200ms debounce), typing a query that matches a
-  target/session/project adds a Results group sourced from the backend
-  search; Enter on the highlighted item navigates to a page, jumps to the
-  matched entity, or runs the action (e.g. "Open in new window" — see S2);
+- **Expect:** The palette now opens as a styled floating overlay (a
+  `.alm-palette*` CSS block ships it; it previously rendered as bare
+  document-flow markup). It shows Pages and Actions groups; after a short
+  pause (200ms debounce), typing a query that matches a target/session/
+  project adds a Results group — matching is now alias-aware and
+  client-side, reusing the Targets page's own tested matcher, rather than
+  the backend's exact-substring SQL match (a compact query like "M31" now
+  matches a spaced designation like "M 31"); the entity list is fetched
+  fresh each time the palette opens. Enter on the highlighted item
+  navigates to a page, jumps to the matched entity, or runs the action
+  (e.g. "Open in new window" — see S2); a click on a result does the same.
   Escape closes the palette without navigating. Three of the eight Pages
-  entries (`/review`, `/plans`, `/audit`) are dead routes that silently
-  redirect to the app root instead of navigating (Known gap G6).
+  entries (`/review`, `/plans`, `/audit`) are still dead routes that
+  silently redirect to the app root instead of navigating (Known gap G6,
+  not addressed by this fix).
 - **Expect (negative):** Pressing Ctrl/Cmd+K again while the palette is open
   closes it rather than opening a second instance.
 - **Trace:** `apps/desktop/src/app/CommandPalette.tsx` (cmdk + base-ui
-  Dialog); Known gap G6.
+  Dialog), `apps/desktop/src/styles/components/target-search.css`
+  (`.alm-palette*`). PR #884 fixes #581 (unstyled palette, broken alias
+  matching, dead keyboard nav/clicks — a focus-ownership race between the
+  input's `autoFocus` and the dialog's own focus management left cmdk's
+  already-correct keyboard/click handlers unreachable). Known gap G6 (dead
+  routes, issue #617) remains open.
 
 ### S2 — Pop the current view into its own window {#S2}
 - **Do:** From the palette's Actions group, choose "Open in new window."
@@ -147,59 +157,23 @@ operable, and observable using only the keyboard, from any page.
 
 ## Known gaps
 
-- G1: Inbox has no keyboard shortcuts at all (no confirm/reject/skip
-  accelerators, no J/K row navigation) — the shared `useHotkeys` hook only
-  has bindings left for the command palette and the log panel; an
-  "Inbox ActionSidebar" binding referenced in that hook's own comment was
-  orphaned when `ActionSidebar` was deleted, with no replacement. Tracked
-  as GitHub issue #747 (open).
-- G2: The primary Sidebar nav links (`apps/desktop/src/app/Sidebar.tsx`,
-  `.alm-sidebar__item`) have no `:focus-visible` rule at all, unlike other
-  interactive elements in the app that follow the `--alm-focus-ring`
-  convention — Tab-focus on the main nav has no reliable visible
-  indicator. Tracked as GitHub issue #797 (open).
-- G3: List-page detail panels do not close on Escape at all. Root cause is
-  the shared `ListPageLayout` component itself
-  (`apps/desktop/src/components/ListPageLayout.tsx`): its `onCloseDetail`
-  handler is wired only to the ✕ button's `onClick`, with no keydown
-  listener — this affects every page built on `ListPageLayout` (Sessions,
-  Calibration, Targets, Projects, Inbox, Archive), not only Sessions as
-  the tracking issue's title implies. Tracked as GitHub issue #771 (open).
-- G4: The Activity log panel's expand/collapse state does not persist
-  across restart (plain `useState`, no preference wiring), unlike the
-  sidebar's collapse state which does persist. Tracked as GitHub issue
-  #842 (open).
-- G5: The shared `Modal` component wraps base-ui's Dialog in controlled
-  mode without a registered `Dialog.Trigger`, so focus does not return to
-  the control that opened an overlay once it closes. Tracked as GitHub
-  issue #844 (open).
-- G6: The command palette (Ctrl+K) renders unstyled — no `.alm-palette*`
-  CSS rule exists anywhere in the app (confirmed by a repo-wide grep and a
-  2026-07-12 live-app sweep), so it appears as plain document-flow markup
-  rather than a floating overlay. A follow-up investigation on the same
-  issue confirmed the underlying interaction is *not* broken: backend
-  `searchGlobal`, entity navigation/selection, "New project", and "Open
-  view in new window" all work correctly — only the styling is missing.
-  Separately, the Pages group's `PAGES` list
-  (`apps/desktop/src/app/CommandPalette.tsx:18-30`) still includes three
-  routes — `/review`, `/plans`, `/audit` — that don't exist in the route
-  tree (`apps/desktop/src/app/router.tsx`); selecting them hits the
-  router's `defaultNotFoundComponent` and silently redirects to `/`.
-  Tracked as GitHub issues #581 (styling, open) and #617 (dead routes,
-  open).
-- G7: The `--alm-focus-ring` token is misapplied as an `outline-color`
-  (invalid CSS) on three specific selectors (Targets guidance cell,
-  Calibration session popover, Inbox files trigger), so no focus ring
-  renders on those elements despite following the naming convention.
-  Tracked as GitHub issue #810 (open).
-- G8: Two overlays outside the shared `Modal` component don't reliably
-  trap focus or close on Escape: the Projects Edit pane (renders full-window
-  with no dialog chrome, no Escape, no focus trap — issue #660, open) and
-  the Inbox plan-review overlay, which can get stuck open with an empty
-  body — Escape/✕/backdrop all fail — after "Apply all" empties its plan
-  list (issue #767, open).
+- G1: (dissolved 2026-07-15) — tracked as issue #747; Inbox has no keyboard shortcuts.
+- G2: (dissolved 2026-07-15) — tracked as issue #797; Sidebar nav links lack focus-visible.
+- G3: (dissolved 2026-07-15) — tracked as issue #771; list-page detail panels don't close on Escape.
+- G4: (dissolved 2026-07-15) — tracked as issue #842; Activity log expand/collapse doesn't persist.
+- G5: (dissolved 2026-07-15) — tracked as issue #844; Modal doesn't return focus on close.
+- G6: (dissolved 2026-07-15; #581 resolved 2026-07-15 via PR #884, see S1)
+  — tracked as issues #581 and #617; command palette unstyled (fixed) and
+  dead routes (#617, still open).
+- G7: (dissolved 2026-07-15) — tracked as issue #810; focus-ring token misapplied on three selectors.
+- G8: (dissolved 2026-07-15) — tracked as issues #660 and #767; two overlays don't trap focus/Escape.
 
 ## Delta log
 
-(none — this is the version-1 migrated baseline; the pre-migration
-journey.md and the issues folded above are recorded in `trace:`.)
+- **Δ2** 2026-07-15 · S1 · behavior-change
+  The command palette now renders as a styled floating overlay, matches
+  aliases client-side (reusing the Targets page's matcher), and its
+  keyboard/click selection works reliably — a focus-ownership race
+  previously left cmdk's keyboard/click handling unreachable. The 3 dead
+  Pages-group routes are unaffected by this fix and remain open (#617).
+  Evidence: PR #884 (fixes #581) · by: journey-scribe (intent-gated)
