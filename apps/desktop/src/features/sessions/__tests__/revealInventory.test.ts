@@ -30,7 +30,10 @@ vi.mock('@/api/ipc', () => ({
   setInvokeOverride: vi.fn(),
 }));
 
-import { revealInventoryPath } from '@/features/sessions/revealInventory';
+import {
+  revealInventoryPath,
+  resolveRevealPath,
+} from '@/features/sessions/revealInventory';
 
 interface RevealArg {
   requestId: string;
@@ -78,5 +81,32 @@ describe('revealInventoryPath (spec 006 FR-007)', () => {
       error: { code: 'path.not_exists' },
     });
     await expect(revealInventoryPath({ path: '/gone' })).rejects.toBeDefined();
+  });
+});
+
+describe('resolveRevealPath (#567)', () => {
+  it('joins the POSIX root with the session frame folder', () => {
+    expect(resolveRevealPath('/mnt/lib/SessionMatrix', 'Lights/M 51/L')).toBe(
+      '/mnt/lib/SessionMatrix/Lights/M 51/L',
+    );
+  });
+
+  it('joins with the native separator for a Windows root', () => {
+    expect(
+      resolveRevealPath(
+        'D:\\Astrophotography\\SessionMatrix',
+        'Lights\\M 51\\2025-05-03\\L',
+      ),
+    ).toBe('D:\\Astrophotography\\SessionMatrix\\Lights\\M 51\\2025-05-03\\L');
+  });
+
+  it('collapses a trailing root separator and a leading relative separator', () => {
+    expect(resolveRevealPath('/mnt/lib/', '/Lights/L')).toBe('/mnt/lib/Lights/L');
+  });
+
+  it('falls back to the root when relativePath is null or empty', () => {
+    expect(resolveRevealPath('/mnt/lib', null)).toBe('/mnt/lib');
+    expect(resolveRevealPath('/mnt/lib', undefined)).toBe('/mnt/lib');
+    expect(resolveRevealPath('/mnt/lib', '')).toBe('/mnt/lib');
   });
 });

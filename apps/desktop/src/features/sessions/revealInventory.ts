@@ -15,6 +15,28 @@
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 
+/**
+ * Resolve a session's reveal target: the source root joined with the session's
+ * frame folder (`relativePath`, #567), so reveal opens the session's actual
+ * frame folder instead of the shared library root. Falls back to the root when
+ * the session has no relative path (legacy/unscanned sessions).
+ *
+ * The join preserves the root's native separator (backslash on Windows) rather
+ * than normalizing to POSIX — the joined path is handed to the OS-native reveal
+ * command, and the stored root/relative paths are already native. `pathe.join`
+ * is unsuitable here because it rewrites backslashes to forward slashes.
+ */
+export function resolveRevealPath(
+  rootPath: string,
+  relativePath: string | null | undefined,
+): string {
+  if (!relativePath) return rootPath;
+  const sep = rootPath.includes('\\') ? '\\' : '/';
+  const root = rootPath.replace(/[/\\]+$/, '');
+  const rel = relativePath.replace(/^[/\\]+/, '');
+  return `${root}${sep}${rel}`;
+}
+
 export async function revealInventoryPath(args: {
   path: string;
   sessionId?: string;
