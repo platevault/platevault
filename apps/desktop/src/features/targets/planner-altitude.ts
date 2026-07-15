@@ -36,6 +36,7 @@ import { activeSite } from './observing-sites/site-store';
 import {
   deriveObservability,
   getNightObservability,
+  moonExcludedSpans,
   UNKNOWN_SEPARATION_SCALARS,
   type BestImagingDate,
   type SensorConfig,
@@ -285,4 +286,38 @@ export function rowAltitudeFor(
     includeMoonGeometry,
     sensorConfig,
   );
+}
+
+/**
+ * Moon-excluded spans for one band on the SAME `tHour` axis as
+ * `RowAltitude.points` (iteration 2026-07-15, FR-007's detail-graph
+ * overlay). Reads the same cached `NightObservability` as `altitudeFor` for
+ * the (target, site, date) key — no second astronomy pass. Empty in the
+ * degrade states and when Moon geometry wasn't computed.
+ */
+export function moonExcludedSpanHours(
+  subject: AltitudeSubject,
+  band: Band,
+  site: ObserverSite | null | undefined = activeSite(),
+  dateMs: number = Date.now(),
+  moonAvoidanceParams: MoonAvoidanceParams = DEFAULT_MOON_AVOIDANCE,
+): Array<{ startHour: number; endHour: number }> {
+  if (subject.raDeg === null || subject.decDeg === null || !site) return [];
+  const night = getNightObservability(
+    subject.id,
+    subject.raDeg,
+    subject.decDeg,
+    site,
+    dateMs,
+    true,
+  );
+  return moonExcludedSpans(
+    night,
+    band,
+    site.minHorizonAltDeg,
+    moonAvoidanceParams,
+  ).map((s) => ({
+    startHour: (s.startMs - night.nightStartMs) / 3_600_000,
+    endHour: (s.endMs - night.nightStartMs) / 3_600_000,
+  }));
 }

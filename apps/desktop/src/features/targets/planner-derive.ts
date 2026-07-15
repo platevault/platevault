@@ -282,6 +282,42 @@ function oscSinglePassMinutesFor(
   return minutes;
 }
 
+/**
+ * Moon-excluded spans for ONE band across the whole night (iteration
+ * 2026-07-15, FR-007's detail-graph overlay): contiguous sample runs where
+ * the Moon is up (≥ `minHorizonAltDeg`) AND its separation is below the
+ * band's Lorentzian minimum for the night's Moon age. Empty when Moon
+ * geometry wasn't computed (`night.moonSamples` empty) — "not computed"
+ * must render as no overlay, never as a fabricated exclusion.
+ */
+export function moonExcludedSpans(
+  night: NightObservability,
+  band: Band,
+  minHorizonAltDeg: number,
+  params: MoonAvoidanceParams,
+): Array<{ startMs: number; endMs: number }> {
+  if (night.moonSamples.length === 0) return [];
+  const spans: Array<{ startMs: number; endMs: number }> = [];
+  let open: { startMs: number; endMs: number } | null = null;
+  for (const s of night.samples) {
+    const moon = nearestMoonSample(night.moonSamples, s.tMs);
+    const excluded =
+      moon !== null &&
+      moon.moonAltDeg >= minHorizonAltDeg &&
+      moon.separationDeg <
+        minSeparationDeg(band, night.moonAgeFromFullDays, params);
+    if (excluded) {
+      if (open) open.endMs = s.tMs;
+      else open = { startMs: s.tMs, endMs: s.tMs };
+    } else if (open) {
+      spans.push(open);
+      open = null;
+    }
+  }
+  if (open) spans.push(open);
+  return spans;
+}
+
 /** Best-imaging date (US2, FR-009) — thin wrapper reusing Track A's `nextOpposition` (no second search). */
 function deriveBestDate(
   raDegJ2000: number | null | undefined,

@@ -14,6 +14,7 @@ import {
   clearObservabilityCache,
   deriveObservability,
   getNightObservability,
+  moonExcludedSpans,
 } from './planner-derive';
 import type { ObserverSite } from './observing-sites/observer-site';
 import { BANDS, DEFAULT_MOON_AVOIDANCE } from './astro/moon-avoidance';
@@ -499,5 +500,59 @@ describe('deriveObservability — OSC single-pass (FR-036/FR-037/FR-038)', () =>
     });
     // LRGB share params, so the rgb single-pass equals any broadband band's window.
     expect(d.oscSinglePassMinutes).toBe(d.moonFreeMinutesByBand.R);
+  });
+});
+
+describe('moonExcludedSpans — detail-graph overlay (FR-007, iteration 2026-07-15)', () => {
+  it('spans are ordered, non-overlapping, and stay within the night', () => {
+    const night = getNightObservability(
+      't-spans',
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+    );
+    const spans = moonExcludedSpans(night, 'L', 0, DEFAULT_MOON_AVOIDANCE);
+    for (const s of spans) {
+      expect(s.startMs).toBeGreaterThanOrEqual(night.nightStartMs);
+      expect(s.endMs).toBeLessThanOrEqual(night.nightEndMs);
+      expect(s.endMs).toBeGreaterThanOrEqual(s.startMs);
+    }
+    for (let i = 1; i < spans.length; i++) {
+      expect(spans[i].startMs).toBeGreaterThan(spans[i - 1].endMs);
+    }
+  });
+
+  it('not-computed Moon geometry yields NO spans (never a fabricated exclusion)', () => {
+    const night = getNightObservability(
+      't-spans-nomoon',
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+      false,
+    );
+    expect(moonExcludedSpans(night, 'L', 0, DEFAULT_MOON_AVOIDANCE)).toEqual(
+      [],
+    );
+  });
+
+  it('a stricter broadband band excludes at least as much time as a narrowband line', () => {
+    const night = getNightObservability(
+      't-spans',
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+    );
+    const totalMs = (spans: Array<{ startMs: number; endMs: number }>) =>
+      spans.reduce((acc, s) => acc + (s.endMs - s.startMs), 0);
+    // Broadband L needs a LARGER Moon separation than Ha at every Moon age,
+    // so its excluded time can never be smaller.
+    expect(
+      totalMs(moonExcludedSpans(night, 'L', 0, DEFAULT_MOON_AVOIDANCE)),
+    ).toBeGreaterThanOrEqual(
+      totalMs(moonExcludedSpans(night, 'Ha', 0, DEFAULT_MOON_AVOIDANCE)),
+    );
   });
 });

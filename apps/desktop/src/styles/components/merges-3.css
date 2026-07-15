@@ -384,6 +384,14 @@
   color: var(--alm-accent);
 }
 
+/* Detail altitude graph: Moon-excluded spans for the displayed band
+   (iteration 2026-07-15, FR-007 overlay) — a bottom-anchored exclusion band
+   so it reads as a time range without hiding the curve. */
+.alm-planner__graph-moon {
+  fill: var(--alm-warn);
+  opacity: 0.35;
+}
+
 /* Lunar dist cell: tabular numeric, muted (mock value). */
 .alm-targets-cell--lunardist {
   font-variant-numeric: tabular-nums;

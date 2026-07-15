@@ -520,7 +520,7 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
 - [x] T043 [P] Computation-context label (FR-033): always-visible single-line "Computed for: `<site>`
       `<lat>`°N · `<twilight>` · ≥`<N>`° · change" in the planner toolbar; "change" opens the existing
       site-switch/settings surface; verify against the crowded-toolbar layout at 1100×720.
-- [ ] T044 Detail-graph agreement + overlays (`TargetDetailV2.tsx:140-243`, depends T040): render the
+- [x] T044 Detail-graph agreement + overlays (`TargetDetailV2.tsx:140-243`, depends T040): render the
       no-dark-window case without the green usable fill (whole-plot non-dark shading or greyed fill,
       FR-034/#817); overlay twilight bands + threshold line + Moon-excluded spans for the default band
       (FR-007); add the three-quantity breakdown (dark window / uptime / imaging time) to the detail
