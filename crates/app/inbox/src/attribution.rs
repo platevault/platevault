@@ -915,7 +915,8 @@ mod tests {
         projects_repo::set_project_canonical_target_id(db.pool(), "proj-1", "target-1")
             .await
             .unwrap();
-        seed_framing(db.pool(), "framing-1", "proj-1", Some("target-1"), 83.633, 22.0145, 1.0).await;
+        seed_framing(db.pool(), "framing-1", "proj-1", Some("target-1"), 83.633, 22.0145, 1.0)
+            .await;
 
         let geometry = ItemGeometry {
             optic_train_key: Some("rasa 8|asi2600mm|400".to_owned()),
@@ -1270,7 +1271,7 @@ mod tests {
         assert!(applied.reopened);
         assert!(applied.raw_subs_archived_warning);
 
-        let project = projects_repo::get_project(db.pool(), "proj-completed").await.unwrap();
+        let project = projects_repo::get_project(db.pool(), &project_id).await.unwrap();
         assert_eq!(project.lifecycle, "processing");
     }
 }
