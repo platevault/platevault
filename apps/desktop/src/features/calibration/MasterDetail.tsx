@@ -48,6 +48,7 @@ import { revealLabel } from '@/lib/reveal-label';
 import { SessionListPopover } from './SessionListPopover';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
 import { useCalibrationAssign, useCalibrationSuggest } from './useCalibration';
+import { masterFieldApplicability } from './master-applicability';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -227,48 +228,51 @@ export function MasterDetail({
     : m.calibration_master_title({ kind: kindCap });
 
   // Fingerprint as flat PropertyTable rows — split across two columns like
-  // SessionDetail's factProps.
+  // SessionDetail's factProps. Rows are always present (never omitted for a
+  // missing value — that collapsed "missing" into "not-applicable", spec-030
+  // Q16 / FR-135); applicability per master kind comes from
+  // `masterFieldApplicability` (data-model.md matrix), so an applicable-but-
+  // absent field renders the unresolved chip instead of silently vanishing.
   const fingerprintProps: PropertyDef[] = [
     { key: 'kind', label: m.calibration_fp_kind(), value: kindStr },
-    { key: 'camera', label: m.settings_calmatch_camera(), value: fp.camera },
-    { key: 'gain', label: m.settings_calmatch_gain(), value: String(fp.gain) },
+    {
+      key: 'camera',
+      label: m.settings_calmatch_camera(),
+      value: fp.camera ?? null,
+    },
+    { key: 'gain', label: m.settings_calmatch_gain(), value: fp.gain ?? null },
     {
       key: 'exposure',
       label: m.calibration_fp_exposure(),
-      value: `${fp.exposureS}s`,
+      value: fp.exposureS != null ? `${fp.exposureS}s` : null,
+      applicability: masterFieldApplicability(master.kind, 'exposure'),
     },
-    ...(fp.tempC != null
-      ? [
-          {
-            key: 'temp',
-            label: m.calibration_fp_temperature(),
-            value: `${fp.tempC}°C`,
-          } as PropertyDef,
-        ]
-      : []),
-    ...(fp.filter
-      ? [
-          {
-            key: 'filter',
-            label: m.common_filter(),
-            value: fp.filter,
-          } as PropertyDef,
-        ]
-      : []),
-    ...(fp.sensorMode
-      ? [
-          {
-            key: 'sensorMode',
-            label: m.calibration_fp_sensor_mode(),
-            value: fp.sensorMode,
-          } as PropertyDef,
-        ]
-      : []),
-    { key: 'binning', label: m.settings_calmatch_binning(), value: fp.binning },
+    {
+      key: 'temp',
+      label: m.calibration_fp_temperature(),
+      value: fp.tempC != null ? `${fp.tempC}°C` : null,
+      applicability: masterFieldApplicability(master.kind, 'setTemp'),
+    },
+    {
+      key: 'filter',
+      label: m.common_filter(),
+      value: fp.filter ?? null,
+      applicability: masterFieldApplicability(master.kind, 'filter'),
+    },
+    {
+      key: 'sensorMode',
+      label: m.calibration_fp_sensor_mode(),
+      value: fp.sensorMode ?? null,
+    },
+    {
+      key: 'binning',
+      label: m.settings_calmatch_binning(),
+      value: fp.binning ?? null,
+    },
     {
       key: 'size',
       label: m.settings_advanced_db_size(),
-      value: fmtBytes(master.sizeBytes),
+      value: master.sizeBytes != null ? fmtBytes(master.sizeBytes) : null,
     },
   ];
 

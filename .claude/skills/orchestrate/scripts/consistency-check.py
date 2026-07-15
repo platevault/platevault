@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-
-# Copyright (C) 2024-2026 Sjors Robroek
-# SPDX-License-Identifier: AGPL-3.0-only
-
 """orchestrate: graph/ledger consistency check (stdlib-only).
 
 The orchestrator's close-out go/no-go: cross-checks the DAG (graph.json)

@@ -280,6 +280,13 @@ describe('CreateProjectDialog', () => {
     });
   });
 
+  it('opening the dialog focuses the name field, not the ✕ close button (#841)', async () => {
+    renderDialog();
+    await waitFor(() => {
+      expect(screen.getByLabelText(/project name/i)).toHaveFocus();
+    });
+  });
+
   it('shows error message when command returns an error code', async () => {
     mockListProjects.mockResolvedValue({ status: 'ok', data: [] });
     mockCreateProject.mockRejectedValue('name.duplicate');

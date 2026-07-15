@@ -176,10 +176,16 @@ fn table_for(entity_type: EntityType) -> &'static str {
         EntityType::DataSource | EntityType::LibraryRoot => "library_root",
         // Spec 030 T120: Settings/Protection/Equipment are audit-only tags
         // (no lifecycle state table) written via `EventBus::write_audit`,
-        // never through `record_transition`'s CAS state-column path.
-        EntityType::Settings | EntityType::Protection | EntityType::Equipment => unreachable!(
-            "{entity_type:?} has no lifecycle state table; it never flows through record_transition"
-        ),
+        // never through `record_transition`'s CAS state-column path. Framing
+        // (spec 008 Q27) joins the same audit-only precedent.
+        EntityType::Settings
+        | EntityType::Protection
+        | EntityType::Equipment
+        | EntityType::Framing => {
+            unreachable!(
+                "{entity_type:?} has no lifecycle state table; it never flows through record_transition"
+            )
+        }
     }
 }
 

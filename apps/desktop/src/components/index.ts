@@ -71,6 +71,24 @@ export type { TargetSearchProps } from './TargetSearch';
 export { PropertyTable } from './PropertyTable';
 export type { PropertyDef, PropertyTableProps } from './PropertyTable';
 
+// spec-030 Q16 (#620, #619): shared missing-value renderer — real value
+// (+source pill) / unresolved chip / not-applicable blank, driven by an
+// explicit applicability marker (never inferred from data absence).
+export {
+  renderValue,
+  renderValueOnly,
+  valueState,
+  UnresolvedChip,
+  SourceBadge,
+  NOT_APPLICABLE_DISPLAY,
+} from './RenderValue';
+export type {
+  FieldApplicability,
+  ValueSource,
+  ValueState,
+  RenderValueOptions,
+} from './RenderValue';
+
 // Legacy ListSidebar types re-exported for feature files pending migration.
 export type {
   SelectOption,

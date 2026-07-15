@@ -63,7 +63,14 @@ impl MasterDetector for PixInsightDetector {
             infer_frame_type_from_path(input.file_name, input.rel_path)?
         };
 
-        Some(MasterDetection { frame_type, is_master, detector: self.id() })
+        // PixInsight/WBPP never write STACKCNT/NCOMBINE-derived masters; this
+        // detector's is_master is always a naming-convention inference.
+        Some(MasterDetection {
+            frame_type,
+            is_master,
+            detector: self.id(),
+            stack_count_evidence: false,
+        })
     }
 }
 

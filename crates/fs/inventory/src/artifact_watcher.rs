@@ -4,9 +4,9 @@
 //! Artifact filesystem watcher service (spec 012, FR-009, spec 033 T028).
 //!
 //! Watches registered library-root paths for new or modified files.  Uses
-//! plain `notify 7` (already a workspace dep) with an in-loop time-based
-//! debounce via a `HashMap<PathBuf, Instant>` to coalesce Create/Modify
-//! bursts before forwarding them downstream.
+//! plain `notify 7` (already a workspace dep) and forwards every raw
+//! Create/Modify/Remove event downstream, undebounced, via a
+//! `tokio::sync::mpsc` channel.
 //!
 //! ## Debounce strategy (deviation from D10)
 //!
@@ -14,13 +14,12 @@
 //! `notify 8.x` while the rest of the workspace uses `notify 7`.  Adding
 //! `notify 8` as a second version would cause a duplicate-type conflict in
 //! `WatcherService` (which already uses `notify 7`).  The fallback described
-//! in D10 ("acceptable fallback — noted") is used here instead: a
-//! `HashMap<PathBuf, Instant>` tracks the last-seen timestamp for each path;
-//! events that arrive within 500 ms of the last flush for that path are
-//! deduplicated in the consumer loop.
-//!
-//! Events are delivered via a `tokio::sync::mpsc` channel so the caller can
-//! drive the `artifact::detect` use-case.
+//! in D10 ("acceptable fallback — noted") is used here instead: this crate
+//! does NOT debounce — it stays a thin raw-event source. The stable-size
+//! debounce (default 2s, spec 012 edge case) is pure logic in
+//! `workflow_artifacts::watcher::check_stability`/`FileSnapshot`, applied by
+//! the consumer (`apps/desktop/src-tauri/src/watcher.rs`'s per-project
+//! forward task) against a `HashMap<PathBuf, FileSnapshot>` it owns.
 
 use std::sync::Arc;
 

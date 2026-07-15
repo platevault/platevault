@@ -231,6 +231,7 @@ async fn projects_create_and_list() {
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,
+        is_mosaic: false,
     };
     let cache = state.resolve_cache.read().await.clone();
     let result =

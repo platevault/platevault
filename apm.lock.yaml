@@ -1,22 +1,22 @@
-lockfile_version: '2'
-generated_at: '2026-07-09T14:16:02.675092+00:00'
+lockfile_version: '1'
+generated_at: '2026-07-14T18:15:34.512554+00:00'
 apm_version: 0.24.0
 dependencies:
 - repo_url: srobroek/agentic-packages
   name: core
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
-  version: 6.0.0
+  version: 7.0.1
   virtual_path: packages/core
   is_virtual: true
   package_type: marketplace_plugin
-  content_hash: sha256:bb6379f07e44382634c42155cac49648f63819bb592c718f954dbb67c3cd839a
+  content_hash: sha256:b453ca2204ff4aaf3a430edd29760da175fe0fe01a0f1d25106adf1224e96a81
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: docs-architecture
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 2.0.0
   virtual_path: packages/docs-architecture
@@ -27,7 +27,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: frontend
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 3.0.0
   virtual_path: packages/frontend
@@ -38,7 +38,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: hooks-quality
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.2.1
   virtual_path: packages/hooks-quality
@@ -59,7 +59,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: language-rust
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 3.0.0
   virtual_path: packages/language-rust
@@ -70,7 +70,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: language-shell
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 2.0.1
   virtual_path: packages/language-shell
@@ -81,7 +81,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: language-typescript
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 3.0.0
   virtual_path: packages/language-typescript
@@ -92,7 +92,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-codebase-memory
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/mcp-codebase-memory
@@ -103,7 +103,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-context7
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/mcp-context7
@@ -114,7 +114,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-package-version
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/mcp-package-version
@@ -125,7 +125,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-playwright
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/mcp-playwright
@@ -136,7 +136,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-repomix
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.1.1
   virtual_path: packages/mcp-repomix
@@ -153,7 +153,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-serena
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/mcp-serena
@@ -164,7 +164,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: mcp-tauri
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.1.0
   virtual_path: packages/mcp-tauri
@@ -179,7 +179,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: orchestrate
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.0.0
   virtual_path: packages/orchestrate
@@ -298,7 +298,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: release-please
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.0.0
   virtual_path: packages/release-please
@@ -353,7 +353,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: speckit
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 5.0.0
   virtual_path: packages/speckit
@@ -446,7 +446,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-data
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.0.0
   virtual_path: packages/steering-data
@@ -461,22 +461,22 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-docs-specs
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
-  version: 2.0.0
+  version: 3.0.0
   virtual_path: packages/steering-docs-specs
   is_virtual: true
   package_type: apm_package
   deployed_files:
   - .claude/rules/75-docs-specs.md
   deployed_file_hashes:
-    .claude/rules/75-docs-specs.md: sha256:ff10332e1abd8fe068a85967c6998a3ad1521331fbecd25ef8d5082bf0ee0d18
-  content_hash: sha256:5a62388707ee707d30a8f1c90e08029644f84b8d7e179c07969bf14abb4ec199
+    .claude/rules/75-docs-specs.md: sha256:6a3770cb1318823126ebfa4a9081a83c1995fb629c299b7fc2e92005a4add308
+  content_hash: sha256:671e4b1f32708d7a0f4b7759a231dc41e7375cb933c131ea78969257bde28468
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: steering-infrastructure
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 2.0.0
   virtual_path: packages/steering-infrastructure
@@ -491,9 +491,9 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-pragmatic
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
-  version: 4.1.0
+  version: 4.2.0
   virtual_path: packages/steering-pragmatic
   is_virtual: true
   package_type: marketplace_plugin
@@ -505,12 +505,12 @@ dependencies:
     .claude/hooks/steering-pragmatic/scripts/inject-working-style.sh: sha256:91fd505a1ca367cfdde25751a0aad482045b69e7ae89392d9885848411b20ce1
     .claude/rules/05-pragmatic.md: sha256:22cae70883560fbab5a96d373aa548ec2d1c1ddd7b4d68dad6b410c0f39bd43d
     .codex/hooks/steering-pragmatic/scripts/inject-working-style.sh: sha256:91fd505a1ca367cfdde25751a0aad482045b69e7ae89392d9885848411b20ce1
-  content_hash: sha256:d4221353bfb4c6dab7b8a74672703528a17fdbb1bd15592f488c8475d69ad986
+  content_hash: sha256:6e10ab7a06823f902663b4d825d9a17017cbd125cb6e891803f0f87150100fd1
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: steering-speckit
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 3.0.0
   virtual_path: packages/steering-speckit
@@ -525,7 +525,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-tools-scripts
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: main
   version: 1.0.0
   virtual_path: packages/steering-tools-scripts
@@ -537,10 +537,91 @@ dependencies:
     .claude/rules/80-tools-scripts.md: sha256:be6287a66aaa9d395c506d75fa0e88362785866177323253ce931cc3552208af
   content_hash: sha256:8f2ff1961812ed065ffe6a6a93cf8474f1dabd5a6059c5d3caa62bc1ebfdeb1f
   declared_license: Apache-2.0
+- repo_url: srobroek/agentic-packages
+  name: user-journeys
+  host: github.com
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
+  resolved_ref: main
+  version: 0.1.0
+  virtual_path: packages/user-journeys
+  is_virtual: true
+  package_type: marketplace_plugin
+  deployed_files:
+  - .agents/skills/journey-campaign
+  - .agents/skills/journey-campaign/SKILL.md
+  - .agents/skills/journey-consolidate
+  - .agents/skills/journey-consolidate/SKILL.md
+  - .agents/skills/journey-init
+  - .agents/skills/journey-init/SKILL.md
+  - .agents/skills/journey-init/scripts/journeys.py
+  - .agents/skills/journey-init/scripts/test_journeys.py
+  - .agents/skills/journey-init/templates/FORMAT.md
+  - .agents/skills/journey-init/templates/README.template.md
+  - .agents/skills/journey-init/templates/journey.template.md
+  - .agents/skills/journey-init/templates/run.template.md
+  - .agents/skills/journey-verify
+  - .agents/skills/journey-verify-changed
+  - .agents/skills/journey-verify-changed/SKILL.md
+  - .agents/skills/journey-verify/SKILL.md
+  - .agents/skills/journey-write
+  - .agents/skills/journey-write/SKILL.md
+  - .claude/agents/journey-scribe.md
+  - .claude/agents/journey-validator.md
+  - .claude/skills/journey-campaign
+  - .claude/skills/journey-campaign/SKILL.md
+  - .claude/skills/journey-consolidate
+  - .claude/skills/journey-consolidate/SKILL.md
+  - .claude/skills/journey-init
+  - .claude/skills/journey-init/SKILL.md
+  - .claude/skills/journey-init/scripts/journeys.py
+  - .claude/skills/journey-init/scripts/test_journeys.py
+  - .claude/skills/journey-init/templates/FORMAT.md
+  - .claude/skills/journey-init/templates/README.template.md
+  - .claude/skills/journey-init/templates/journey.template.md
+  - .claude/skills/journey-init/templates/run.template.md
+  - .claude/skills/journey-verify
+  - .claude/skills/journey-verify-changed
+  - .claude/skills/journey-verify-changed/SKILL.md
+  - .claude/skills/journey-verify/SKILL.md
+  - .claude/skills/journey-write
+  - .claude/skills/journey-write/SKILL.md
+  - .codex/agents/journey-scribe.toml
+  - .codex/agents/journey-validator.toml
+  deployed_file_hashes:
+    .agents/skills/journey-campaign/SKILL.md: sha256:654508222dccaa5949ca804c07147f8b55c8a6c99d14292759a72ddebe65f90d
+    .agents/skills/journey-consolidate/SKILL.md: sha256:3bca6aa058cc39ccd7fe9d0082c422490914789c7568bcba5d98db26cce39494
+    .agents/skills/journey-init/SKILL.md: sha256:f5714db899199edb33d2128a410abfaf21c9dbef37a8e6364568bf4aa14607f3
+    .agents/skills/journey-init/scripts/journeys.py: sha256:9f07c6b0164ab2549821c94c1b7878ecad4be70133a7827e0bca73ceafdf0e03
+    .agents/skills/journey-init/scripts/test_journeys.py: sha256:36e4b0f6ad0b1af0868b8dd007f8355e52036fda8b1d646993629b522c542a2b
+    .agents/skills/journey-init/templates/FORMAT.md: sha256:5b8dafd79e1b1875da8d67ca16df7842a8d300dc761853e28bd66785c476d73d
+    .agents/skills/journey-init/templates/README.template.md: sha256:e953f6112cee7a30db58c0ed54ca7ca8554922781480a6a8730d60be86394b7e
+    .agents/skills/journey-init/templates/journey.template.md: sha256:4a1feb652cca2b779191a88e5d71fa74c6f7a8a5ef1cfeb8538447c0b87fd2e8
+    .agents/skills/journey-init/templates/run.template.md: sha256:f0d9868222ec4d434a6b6df4d43742cd47082077dbf65414a7de9319ff95d81a
+    .agents/skills/journey-verify-changed/SKILL.md: sha256:5cf34028c62764305643e78e10ba88dca548fe41f5736ebd125d45a85466b6a5
+    .agents/skills/journey-verify/SKILL.md: sha256:68b2b5e441a2c9f92dd91d44301a3f68c304369446c93d06d1f7247fe9ba330e
+    .agents/skills/journey-write/SKILL.md: sha256:a82aca760281612ae40cabee990d8b1869dd2a1f533c5de70c3c9801f008bc2f
+    .claude/agents/journey-scribe.md: sha256:70da1cecee16bec516853a9f7c6d4cc7903b32cb4e9558ad39b6c2a02ca5f58e
+    .claude/agents/journey-validator.md: sha256:eb2a9ac51a75a1e6d5b8426f7641d21cb37d7b136027e3d3f343e939e94be360
+    .claude/skills/journey-campaign/SKILL.md: sha256:654508222dccaa5949ca804c07147f8b55c8a6c99d14292759a72ddebe65f90d
+    .claude/skills/journey-consolidate/SKILL.md: sha256:3bca6aa058cc39ccd7fe9d0082c422490914789c7568bcba5d98db26cce39494
+    .claude/skills/journey-init/SKILL.md: sha256:f5714db899199edb33d2128a410abfaf21c9dbef37a8e6364568bf4aa14607f3
+    .claude/skills/journey-init/scripts/journeys.py: sha256:9f07c6b0164ab2549821c94c1b7878ecad4be70133a7827e0bca73ceafdf0e03
+    .claude/skills/journey-init/scripts/test_journeys.py: sha256:36e4b0f6ad0b1af0868b8dd007f8355e52036fda8b1d646993629b522c542a2b
+    .claude/skills/journey-init/templates/FORMAT.md: sha256:5b8dafd79e1b1875da8d67ca16df7842a8d300dc761853e28bd66785c476d73d
+    .claude/skills/journey-init/templates/README.template.md: sha256:e953f6112cee7a30db58c0ed54ca7ca8554922781480a6a8730d60be86394b7e
+    .claude/skills/journey-init/templates/journey.template.md: sha256:4a1feb652cca2b779191a88e5d71fa74c6f7a8a5ef1cfeb8538447c0b87fd2e8
+    .claude/skills/journey-init/templates/run.template.md: sha256:f0d9868222ec4d434a6b6df4d43742cd47082077dbf65414a7de9319ff95d81a
+    .claude/skills/journey-verify-changed/SKILL.md: sha256:5cf34028c62764305643e78e10ba88dca548fe41f5736ebd125d45a85466b6a5
+    .claude/skills/journey-verify/SKILL.md: sha256:68b2b5e441a2c9f92dd91d44301a3f68c304369446c93d06d1f7247fe9ba330e
+    .claude/skills/journey-write/SKILL.md: sha256:a82aca760281612ae40cabee990d8b1869dd2a1f533c5de70c3c9801f008bc2f
+    .codex/agents/journey-scribe.toml: sha256:fdb8d720900d67aa91edd4d9cc076bc3a5b2a851c9fe4fbdea6d36d98db3ec52
+    .codex/agents/journey-validator.toml: sha256:5809177196fa6417c971d2a6acb42c0f8df58aa80a24b59142c7641c9593090c
+  content_hash: sha256:030a67be587e58ed9af5e53c08efbec042a72f2c82b9fcc753380d4af959b521
+  declared_license: Apache-2.0
 - repo_url: wshobson/agents
   name: database-design
   host: github.com
-  resolved_commit: d7cf7dca8c4c7d0635e284f77204daa85552bfa4
+  resolved_commit: b6af3711058190e4b5c5274b9758498fe626ec5a
   version: 1.2.1
   virtual_path: plugins/database-design
   is_virtual: true
@@ -1147,7 +1228,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: agentic-maintenance
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=4.0.0 <5.0.0'
   version: 4.0.0
   virtual_path: packages/agentic-maintenance
@@ -1160,7 +1241,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: code-intelligence
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=6.0.0 <7.0.0'
   version: 6.0.0
   virtual_path: packages/code-intelligence
@@ -1179,7 +1260,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: language-steering-rust
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/language-steering-rust
@@ -1192,7 +1273,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: language-steering-typescript
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/language-steering-typescript
@@ -1205,7 +1286,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: lsp-rust
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=0.2.0 <1.0.0'
   version: 0.2.0
   virtual_path: packages/lsp-rust
@@ -1218,8 +1299,8 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: lsp-shell
   host: github.com
-  resolved_commit: 6fb0655a3c82802f3932a094fd27b33ee203d076
-  resolved_ref: lsp-shell--v0.2.0
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
+  resolved_ref: '>=0.2.0 <1.0.0'
   version: 0.2.0
   virtual_path: packages/lsp-shell
   is_virtual: true
@@ -1227,14 +1308,11 @@ dependencies:
   resolved_by: srobroek/agentic-packages
   package_type: marketplace_plugin
   content_hash: sha256:2c36f20ec45bd7338590eca9a31ecb8454a1c0cbea206bc6c19588e110b39e51
-  constraint: '>=0.2.0 <1.0.0'
-  resolved_tag: lsp-shell--v0.2.0
-  resolved_at: '2026-07-09T14:13:54+00:00'
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: lsp-typescript
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=0.2.0 <1.0.0'
   version: 0.2.0
   virtual_path: packages/lsp-typescript
@@ -1247,7 +1325,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: playwright
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=3.0.0 <4.0.0'
   version: 3.0.0
   virtual_path: packages/playwright
@@ -1268,7 +1346,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: project-lifecycle
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=3.1.0 <4.0.0'
   version: 3.1.0
   virtual_path: packages/project-lifecycle
@@ -1281,9 +1359,9 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: resume-session
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
-  version: 2.0.0
+  version: 2.0.1
   virtual_path: packages/resume-session
   is_virtual: true
   depth: 2
@@ -1305,24 +1383,24 @@ dependencies:
   - .claude/skills/resume-session/scripts/test_list_sessions.py
   - .claude/skills/resume-session/scripts/test_read_session.py
   deployed_file_hashes:
-    .agents/skills/resume-session/SKILL.md: sha256:22d3bfb083d50303e86a49b9fdd64ea29359ba98f5dca816c5b55485134a1f5f
+    .agents/skills/resume-session/SKILL.md: sha256:1374f7d28f3d18414372405a95e7e51149b867cd65423dbef31653888449180b
     .agents/skills/resume-session/references/transcript-format.md: sha256:6289eba378a1476d758aef95e7f17a15a7caff3c8eda0971f0abe2a6c2a52a66
-    .agents/skills/resume-session/scripts/list-sessions.py: sha256:3f1b7c30e6e7bd34794a765af0b65db572f11aec976ed94c0d8f7ad94f97d0d7
-    .agents/skills/resume-session/scripts/read-session.py: sha256:7f9f87cc6e445b127e1fb34007c8060bd38915628951020ad4d6427a6b945153
-    .agents/skills/resume-session/scripts/test_list_sessions.py: sha256:9e523b0b8ef7ee6b4fb6ea392f3eba9bce04d0188052f7ffd3408718460834ad
+    .agents/skills/resume-session/scripts/list-sessions.py: sha256:7d6a79c393620c62def544b2fb5b60273b805e221e213a4ac5b214e1a0bca75e
+    .agents/skills/resume-session/scripts/read-session.py: sha256:0d4ed4ca002e606abd835529dc69350f89a368e6a65a03a0abbddb9496cfd727
+    .agents/skills/resume-session/scripts/test_list_sessions.py: sha256:df451a7875070e78cad4fd0da244cbd8ee988b69d93300c43e2b3fa84b53feba
     .agents/skills/resume-session/scripts/test_read_session.py: sha256:c9185dbe0500f8d2645e6c26fe019e8146e8356b10b470156f43687014c12eeb
-    .claude/skills/resume-session/SKILL.md: sha256:22d3bfb083d50303e86a49b9fdd64ea29359ba98f5dca816c5b55485134a1f5f
+    .claude/skills/resume-session/SKILL.md: sha256:1374f7d28f3d18414372405a95e7e51149b867cd65423dbef31653888449180b
     .claude/skills/resume-session/references/transcript-format.md: sha256:6289eba378a1476d758aef95e7f17a15a7caff3c8eda0971f0abe2a6c2a52a66
-    .claude/skills/resume-session/scripts/list-sessions.py: sha256:3f1b7c30e6e7bd34794a765af0b65db572f11aec976ed94c0d8f7ad94f97d0d7
-    .claude/skills/resume-session/scripts/read-session.py: sha256:7f9f87cc6e445b127e1fb34007c8060bd38915628951020ad4d6427a6b945153
-    .claude/skills/resume-session/scripts/test_list_sessions.py: sha256:9e523b0b8ef7ee6b4fb6ea392f3eba9bce04d0188052f7ffd3408718460834ad
+    .claude/skills/resume-session/scripts/list-sessions.py: sha256:7d6a79c393620c62def544b2fb5b60273b805e221e213a4ac5b214e1a0bca75e
+    .claude/skills/resume-session/scripts/read-session.py: sha256:0d4ed4ca002e606abd835529dc69350f89a368e6a65a03a0abbddb9496cfd727
+    .claude/skills/resume-session/scripts/test_list_sessions.py: sha256:df451a7875070e78cad4fd0da244cbd8ee988b69d93300c43e2b3fa84b53feba
     .claude/skills/resume-session/scripts/test_read_session.py: sha256:c9185dbe0500f8d2645e6c26fe019e8146e8356b10b470156f43687014c12eeb
-  content_hash: sha256:8d6f17d6ceadefadaf54832e918be38b6f17c5ff563fb2294d40fcb622afebea
+  content_hash: sha256:f211ed82f87b87f4525afca68766d1023f3e218d1cffc4f910e1e0230f88e701
   declared_license: Apache-2.0
 - repo_url: srobroek/agentic-packages
   name: rust-quality
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/rust-quality
@@ -1355,7 +1433,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-delivery
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=1.0.0 <2.0.0'
   version: 1.0.0
   virtual_path: packages/steering-delivery
@@ -1372,7 +1450,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-frontend
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/steering-frontend
@@ -1391,7 +1469,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: typescript-quality
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/typescript-quality
@@ -1972,7 +2050,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: agent-coder
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=4.0.0 <5.0.0'
   version: 4.0.0
   virtual_path: packages/agent-coder
@@ -2001,7 +2079,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: agent-pr-reviewer
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/agent-pr-reviewer
@@ -2018,7 +2096,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: audit-steering
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/audit-steering
@@ -2055,7 +2133,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: catchup
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/catchup
@@ -2080,7 +2158,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: codebase-memory
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/codebase-memory
@@ -2117,7 +2195,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: handover
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/handover
@@ -2150,7 +2228,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-git-workflow
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.1.0 <3.0.0'
   version: 2.1.0
   virtual_path: packages/steering-git-workflow
@@ -2167,7 +2245,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: steering-project-structure
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=1.0.0 <2.0.0'
   version: 1.0.0
   virtual_path: packages/steering-project-structure
@@ -2184,7 +2262,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: verify
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/verify
@@ -2209,7 +2287,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: web-fetch
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=2.0.0 <3.0.0'
   version: 2.0.0
   virtual_path: packages/web-fetch
@@ -2234,7 +2312,7 @@ dependencies:
 - repo_url: srobroek/agentic-packages
   name: write-agentic
   host: github.com
-  resolved_commit: 4ace28f343080ac21093ec509f3f8c96145729e4
+  resolved_commit: 57999765c239a322883d662545ab1b2739f19792
   resolved_ref: '>=3.1.0 <4.0.0'
   version: 3.1.0
   virtual_path: packages/write-agentic

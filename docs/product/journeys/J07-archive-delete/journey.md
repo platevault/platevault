@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J07-archive-delete/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 7 — Archive → (delete from archive)
 
 **Goal:** move a finished project's files out of the active library into an

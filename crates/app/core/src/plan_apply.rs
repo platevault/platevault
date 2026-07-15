@@ -1330,6 +1330,36 @@ fn spawn_executor_run(params: SpawnExecutorParams) {
                     }
                 }
 
+                // Sweep items orphaned `applying` by a mid-run retry whose
+                // DB flip (`retry_plan_item`) landed but whose re-execution
+                // never got picked up by the executor's retry-drain before
+                // cancellation was observed (review fix, #742 follow-up).
+                // `batch_cancel_pending_items` above only targets `pending`
+                // and would otherwise leave these permanently stuck with no
+                // terminal audit record.
+                match apply_repo::cancel_orphaned_applying_items(&pool, &plan_id).await {
+                    Ok(orphaned_ids) => {
+                        for item_id in &orphaned_ids {
+                            let _ = apply_repo::append_event(
+                                &pool,
+                                &new_id(),
+                                &run_id,
+                                &plan_id,
+                                Some(item_id.as_str()),
+                                "applying",
+                                "cancelled",
+                                &at,
+                                None,
+                                None,
+                            )
+                            .await;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(error=%e, "failed to sweep orphaned applying items for cancel audit");
+                    }
+                }
+
                 // Fetch cumulative counters (see `cumulative_counts`) AFTER
                 // the batch-cancel above so the just-cancelled items are
                 // included.
@@ -1797,9 +1827,7 @@ pub async fn resume_plan(
     revalidate_pause_condition(pool, plan_id, active_run_row.pause_reason.as_deref()).await?;
 
     // Load the plan's remaining pending items and rebuild the executor's
-    // root map (mirrors apply_plan's item preparation, T023a). Previously
-    // failed/succeeded/skipped/cancelled items are excluded — the executor
-    // is only handed genuinely-pending work to continue.
+    // root map (mirrors apply_plan's item preparation, T023a).
     let item_rows = plans_repo::list_plan_items(pool, plan_id).await.map_err(db_err)?;
 
     let mut root_map: HashMap<String, Utf8PathBuf> = HashMap::new();
@@ -1814,9 +1842,20 @@ pub async fn resume_plan(
         }
     }
 
+    // `pending` items are the genuine remaining work; `failed` items are
+    // included too (not for re-execution — `execute_plan`'s forward loop
+    // treats "failed" as an already-terminal state and skips it as a no-op)
+    // so that `id -> ExecutorItem` lookup is complete for the resumed run.
+    // Without this, `retry_plan_item` can flip a pre-pause-failed item's DB
+    // row `failed -> applying` and queue it, but the executor's retry-drain
+    // (`item_by_id` in `fs_executor::run::execute_plan`) has no entry for
+    // it — the item is then permanently stuck `applying` with no terminal
+    // audit record (review fix, resume+retry item-set mismatch).
+    // succeeded/skipped/cancelled items are still excluded: they are truly
+    // terminal and never eligible for retry.
     let executor_items: Vec<ExecutorItem> = item_rows
         .iter()
-        .filter(|r| r.item_state == "pending")
+        .filter(|r| matches!(r.item_state.as_str(), "pending" | "failed"))
         .map(|r| item_row_to_executor_item(r, &root_map))
         .collect();
 
@@ -1975,6 +2014,13 @@ pub async fn skip_plan_item(
 /// - `plan.not_in_apply` — plan is not applying.
 /// - `item.not_found` — item not found.
 /// - `item.not_failed` — item is not in failed state.
+/// - `run.not_found` — the plan is `applying` in the DB but no `ActiveRun` is
+///   registered (the executor task already finished and dropped its
+///   registry entry — a narrow race between the run's completion and this
+///   call). Rejecting here, before any DB write, avoids flipping the item to
+///   `applying` with nothing left to ever re-execute or terminalize it
+///   (review fix: an item stuck `applying` forever with no terminal audit
+///   record).
 pub async fn retry_plan_item(
     pool: &SqlitePool,
     plan_id: &str,
@@ -2014,6 +2060,23 @@ pub async fn retry_plan_item(
         ));
     }
 
+    // Require a live ActiveRun for this plan BEFORE mutating any DB state
+    // (see doc comment above). This does not fully eliminate the race (the
+    // run could still finish between this check and the DB write below),
+    // but it closes the common case: retrying against a plan whose run has
+    // already reached a terminal state.
+    if !active_runs().contains_key(plan_id) {
+        return Err(ContractError::new(
+            ErrorCode::RunNotFound,
+            format!(
+                "no active run found for plan {plan_id}; the run may have already finished. \
+                 For plan-level retry use plan.retry on a terminal plan."
+            ),
+            ErrorSeverity::Blocking,
+            false,
+        ));
+    }
+
     // Transition item back to applying in DB (failed → applying).
     apply_repo::item_retry_applying(pool, item_id, plan_id).await.map_err(db_err)?;
 
@@ -2028,6 +2091,55 @@ pub async fn retry_plan_item(
     }
 
     Ok(PlanItemRetryResponse { item_id: item_id.to_owned(), new_state: "applying".to_owned() })
+}
+
+// ── confirm_plan_destructive_items ────────────────────────────────────────────
+
+/// Confirm every destructive (delete/trash) item in a plan, persisting
+/// `plan_items.destructive_confirmed = 1` (FR-003, D9, issue #741).
+///
+/// This is the write half of the executor's destructive-confirm gate
+/// (`fs_executor::run::execute_plan`'s `destructive_unconfirmed` refusal,
+/// `item_row_to_executor_item`'s `requires_destructive_confirm` derivation):
+/// before this function existed, `destructive_confirmed` had no writer
+/// anywhere in the codebase, so every delete/trash item was permanently
+/// refused at apply time regardless of what the plan's `destructiveDestination`
+/// UI showed.
+///
+/// Plan-level (not per-item): the caller confirms a whole plan's destructive
+/// items in one call, matching the existing panel-wide destructive-destination
+/// control rather than requiring a per-item id round-trip the frontend DTOs
+/// (`InboxPlanAction`, `PlanItemDetail`) don't carry.
+///
+/// Intentionally permissive on plan state: confirming while a run is
+/// `applying`/`paused` cannot retroactively affect an already-snapshotted
+/// forward pass, but a `paused` run's remaining `pending` items ARE re-read
+/// fresh from the DB on `resume_plan`, so confirming while paused is a
+/// legitimate way to unblock a stalled run before resuming.
+///
+/// Returns the number of items whose `destructive_confirmed` flag flipped
+/// (idempotent — already-confirmed items are not re-counted).
+///
+/// # Errors
+///
+/// - `plan.not_found` — plan not found.
+pub async fn confirm_plan_destructive_items(
+    pool: &SqlitePool,
+    plan_id: &str,
+) -> Result<i64, ContractError> {
+    // Existence check only — see docstring for why plan state is not gated.
+    plans_repo::get_plan(pool, plan_id, false).await.map_err(db_err)?;
+
+    let confirmed =
+        plans_repo::confirm_plan_destructive_items(pool, plan_id).await.map_err(db_err)?;
+    i64::try_from(confirmed).map_err(|e| {
+        ContractError::new(
+            ErrorCode::InternalDatabase,
+            format!("confirmed item count overflowed i64: {e}"),
+            ErrorSeverity::Fatal,
+            true,
+        )
+    })
 }
 
 // ── get_apply_status ──────────────────────────────────────────────────────────
@@ -2311,6 +2423,7 @@ mod tests {
                 path: "projects/M31_LRGB",
                 notes: None,
                 canonical_target_id: None,
+                is_mosaic: false,
             },
         )
         .await
@@ -2345,6 +2458,7 @@ mod tests {
                 path: "projects/M31",
                 notes: None,
                 canonical_target_id: None,
+                is_mosaic: false,
             },
         )
         .await
@@ -2391,6 +2505,7 @@ mod tests {
                 path: "projects/M31_Ready",
                 notes: None,
                 canonical_target_id: None,
+                is_mosaic: false,
             },
         )
         .await
@@ -2441,11 +2556,32 @@ mod tests {
         assert_eq!(err.code, ErrorCode::PlanNotInApply);
     }
 
+    /// Register a minimal `ActiveRun` directly in the process-global
+    /// registry, bypassing `apply_plan`/`resume_plan`'s executor spawn.
+    /// `retry_plan_item` requires a live entry before it will mutate any DB
+    /// state (review fix — see its doc comment); tests that exercise the
+    /// success path without driving a real executor need one of these.
+    /// Callers own removing it (or rely on process exit — the registry is a
+    /// `static`, so a leaked test entry cannot affect other plan ids).
+    fn register_fake_active_run(plan_id: &str) {
+        active_runs().insert(
+            plan_id.to_owned(),
+            ActiveRun {
+                cancel_token: CancellationToken::new(),
+                skip_set: SkipSet::new(),
+                retry_queue: RetryQueue::new(),
+                run_id: "fake-run".to_owned(),
+                path_set: crate::path_set::PlanPathSet::new(),
+            },
+        );
+    }
+
     /// T038 gap-fill: `retry_plan_item`'s success path had zero coverage at
     /// any level prior to this test (only the not-applying rejection was
     /// tested). Drives the item failed -> applying transition directly
-    /// (bypassing the executor, so no live `ActiveRun` is required) and
-    /// asserts both the response and the persisted item state.
+    /// (bypassing the real executor, but with a fake `ActiveRun` registered
+    /// so the review-fix "run must be active" gate passes) and asserts both
+    /// the response and the persisted item state.
     #[tokio::test]
     async fn retry_plan_item_transitions_failed_item_to_applying() {
         let (db, _bus) = setup().await;
@@ -2454,6 +2590,7 @@ mod tests {
         apply_repo::item_failed(db.pool(), "p-retry-item-0", "p-retry", "permission.denied")
             .await
             .unwrap();
+        register_fake_active_run("p-retry");
 
         let resp = retry_plan_item(db.pool(), "p-retry", "p-retry-item-0").await.unwrap();
         assert_eq!(resp.item_id, "p-retry-item-0");
@@ -2464,15 +2601,177 @@ mod tests {
         assert_eq!(item.item_state, "applying", "retried item must move failed -> applying in DB");
     }
 
+    /// Review fix: a retry attempted after the run has already finished
+    /// (no `ActiveRun` registered) must be rejected outright, not silently
+    /// flip the item to `applying` with nothing left to ever resolve it.
+    #[tokio::test]
+    async fn retry_plan_item_rejects_when_no_active_run() {
+        let (db, _bus) = setup().await;
+        insert_approved_plan_with_items(&db, "p-retry-no-run", 1).await;
+        plans_repo::update_plan_state(db.pool(), "p-retry-no-run", "applying").await.unwrap();
+        apply_repo::item_failed(
+            db.pool(),
+            "p-retry-no-run-item-0",
+            "p-retry-no-run",
+            "permission.denied",
+        )
+        .await
+        .unwrap();
+        // Deliberately NOT registering an ActiveRun.
+
+        let err = retry_plan_item(db.pool(), "p-retry-no-run", "p-retry-no-run-item-0")
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, ErrorCode::RunNotFound);
+
+        // The DB write must never have happened — item stays failed, not
+        // stuck applying with nothing to resolve it.
+        let items = plans_repo::list_plan_items(db.pool(), "p-retry-no-run").await.unwrap();
+        let item = items.iter().find(|i| i.id == "p-retry-no-run-item-0").unwrap();
+        assert_eq!(item.item_state, "failed", "rejected retry must not mutate item state");
+    }
+
     #[tokio::test]
     async fn retry_plan_item_rejects_non_failed_item() {
         let (db, _bus) = setup().await;
         insert_approved_plan_with_items(&db, "p-retry2", 1).await;
         plans_repo::update_plan_state(db.pool(), "p-retry2", "applying").await.unwrap();
 
-        // Item is still `pending` (never failed) — retry must reject it.
+        // Item is still `pending` (never failed) — retry must reject it
+        // before reaching the active-run check (which runs after).
         let err = retry_plan_item(db.pool(), "p-retry2", "p-retry2-item-0").await.unwrap_err();
         assert_eq!(err.code, ErrorCode::ItemNotFailed);
+    }
+
+    #[tokio::test]
+    async fn confirm_plan_destructive_items_rejects_unknown_plan() {
+        let (db, _bus) = setup().await;
+        let err = confirm_plan_destructive_items(db.pool(), "missing-plan").await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::PlanNotFound);
+    }
+
+    #[tokio::test]
+    async fn confirm_plan_destructive_items_persists_flag() {
+        let (db, _bus) = setup().await;
+        repo::insert_plan(
+            db.pool(),
+            &repo::InsertPlan {
+                id: "p-del",
+                title: "Test",
+                origin: "cleanup",
+                origin_path: None,
+                plan_type: "cleanup",
+                destructive_destination: "trash",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+        )
+        .await
+        .unwrap();
+        repo::insert_plan_item(
+            db.pool(),
+            &repo::InsertPlanItem {
+                id: "p-del-item-0",
+                plan_id: "p-del",
+                item_index: 1,
+                name: "junk.fits",
+                action: "delete",
+                from_root_id: None,
+                from_relative_path: "p-del/raw/junk.fits",
+                to_root_id: None,
+                to_relative_path: "",
+                reason: "test",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: None,
+                source_id: None,
+                category: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let before = repo::list_plan_items(db.pool(), "p-del").await.unwrap();
+        assert_eq!(before[0].destructive_confirmed, 0);
+
+        let confirmed = confirm_plan_destructive_items(db.pool(), "p-del").await.unwrap();
+        assert_eq!(confirmed, 1);
+
+        let after = repo::list_plan_items(db.pool(), "p-del").await.unwrap();
+        assert_eq!(after[0].destructive_confirmed, 1);
+
+        // Idempotent second call.
+        let confirmed_again = confirm_plan_destructive_items(db.pool(), "p-del").await.unwrap();
+        assert_eq!(confirmed_again, 0);
+    }
+
+    /// End-to-end regression for issue #741: before this fix, a delete item
+    /// was refused *permanently* at apply time (`destructive_confirmed` had
+    /// no writer anywhere). Confirming via the new write path must let a
+    /// subsequent apply actually delete the file on disk.
+    #[tokio::test]
+    async fn confirm_then_apply_executes_previously_refused_delete_item() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("junk.fits");
+        std::fs::write(&file_path, b"data").unwrap();
+        let abs = file_path.to_str().unwrap();
+
+        let (db, bus) = setup().await;
+        repo::insert_plan(
+            db.pool(),
+            &repo::InsertPlan {
+                id: "p-e2e",
+                title: "Test",
+                origin: "cleanup",
+                origin_path: None,
+                plan_type: "cleanup",
+                destructive_destination: "trash",
+                parent_plan_id: None,
+                total_bytes_required: 0,
+            },
+        )
+        .await
+        .unwrap();
+        repo::insert_plan_item(
+            db.pool(),
+            &repo::InsertPlanItem {
+                id: "p-e2e-item-0",
+                plan_id: "p-e2e",
+                item_index: 1,
+                name: "junk.fits",
+                action: "delete",
+                // No from_root_id: item_row_to_executor_item leaves
+                // library_root None, so `from_relative_path` is used as-is —
+                // an absolute temp-file path works (mirrors the executor
+                // crate's own "legacy" no-root test items).
+                from_root_id: None,
+                from_relative_path: abs,
+                to_root_id: None,
+                to_relative_path: "",
+                reason: "test",
+                protection: "normal",
+                linked_entity: None,
+                provenance_json: None,
+                archive_path: None,
+                source_id: None,
+                category: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        confirm_plan_destructive_items(db.pool(), "p-e2e").await.unwrap();
+
+        repo::update_plan_state(db.pool(), "p-e2e", "ready_for_review").await.unwrap();
+        repo::set_approved(db.pool(), "p-e2e", "2026-06-01T00:00:00Z", "test-token").await.unwrap();
+
+        apply_plan(db.pool(), &bus, "p-e2e", "test-token", None).await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+
+        assert!(!file_path.exists(), "confirmed delete item must actually execute");
+        let plan = repo::get_plan(db.pool(), "p-e2e", false).await.unwrap();
+        assert_eq!(plan.state, "applied");
     }
 
     #[tokio::test]

@@ -167,6 +167,17 @@ test.describe("project lifecycle · full state machine (Journey 5)", () => {
     const approveBtn = overlay.getByTestId("plan-review-approve-apply");
     await expect(approveBtn).toBeDisabled();
     await overlay.getByRole("button", { name: "Acknowledge" }).click();
+
+    // ── Destructive-confirm gate (FR-003, D9, issue #741): the shared plan
+    //    fixture carries `delete` items, so approval also stays locked
+    //    behind an explicit destructive-confirm checkbox ───────────────────
+    // `.click()` (not `.check()`) — the checkbox's `onChange` awaits a mock
+    // IPC round-trip before flipping `checked`, and `.check()`'s single
+    // post-click snapshot races that async update.
+    await overlay.getByTestId("plan-review-confirm-destructive").click();
+    await expect(
+      overlay.getByTestId("plan-review-confirm-destructive"),
+    ).toBeChecked({ timeout: 5_000 });
     await expect(approveBtn).toBeEnabled({ timeout: 5_000 });
 
     // ── Approve & apply → plans.approve → plans.apply, live progress ─────────

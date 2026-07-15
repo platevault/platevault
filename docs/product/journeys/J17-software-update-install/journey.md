@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J17-software-update-install/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 17 — Software update & install
 
 **Goal:** learn that a new PlateVault version exists, install it with a

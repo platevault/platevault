@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-
-# Copyright (C) 2024-2026 Sjors Robroek
-# SPDX-License-Identifier: AGPL-3.0-only
-
 """Emit the most recent context of one agent session, newest turn first.
 
 Reads a Claude Code or Codex transcript and renders a small, filtered window of
@@ -58,7 +54,9 @@ TOOL_RESULT_CHARS = 320  # max chars of a truncated tool result
 
 
 def encode_project(path: str) -> str:
-    return re.sub(r"[/.]", "-", path)
+    # Claude encodes a project path by replacing every non-alphanumeric
+    # character with '-' (so '/', '.', spaces, and '_' all become '-').
+    return re.sub(r"[^a-zA-Z0-9]", "-", path)
 
 
 def worktree_projects(project: str) -> list[str]:

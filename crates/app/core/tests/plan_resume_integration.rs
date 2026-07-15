@@ -585,3 +585,112 @@ async fn resume_refused_when_plan_not_paused() {
         .expect_err("an approved (not paused) plan must refuse resume");
     assert_eq!(err.code, contracts_core::error_code::ErrorCode::RunNotPaused);
 }
+
+// ── resume + retry item-set agreement (review fix) ────────────────────────────
+
+/// Review fix regression: `resume_plan` previously filtered `executor_items`
+/// to `item_state == "pending"` only, excluding the item that caused the
+/// original pause (left `failed`, terminal, once resumed). A `retry_plan_item`
+/// call against that pre-pause-failed item — perfectly legal per its own
+/// state-machine guards (`plan` is `applying`, item is `failed`) — flipped
+/// its DB row `failed -> applying` and queued it, but the executor's
+/// `item_by_id` lookup (built only from the filtered, pending-only list) had
+/// no entry for it: the retry was silently dropped, leaving the item stuck
+/// `applying` forever with no terminal audit record and `items_total`
+/// permanently under-accounted.
+///
+/// Exercises the exact real sequence end to end (real SQLite + real tempdir
+/// files + the real spawned executor, no seeding shortcuts): pause on a
+/// stale item, resolve the staleness, resume, then retry the pre-pause-failed
+/// item while the resumed run is still draining its other pending items.
+/// Many pending items (as in `cancel_signals_the_executor_restarted_by_resume`
+/// above) widen the race window so the retry reliably lands while the
+/// executor task is still alive, rather than racing its completion.
+#[tokio::test]
+async fn resume_then_retry_of_pre_pause_failed_item_reaches_terminal_state() {
+    const OTHER_PENDING_ITEMS: usize = 30;
+
+    let (db, _repo, bus) = support::setup().await;
+    let plan_id = Uuid::new_v4().to_string();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root_id = register_root(db.pool(), dir.path()).await;
+
+    let paths = seed_rooted_approved_plan(
+        db.pool(),
+        &plan_id,
+        &root_id,
+        dir.path(),
+        OTHER_PENDING_ITEMS + 1,
+    )
+    .await;
+    let (src0, dst0) = &paths[0];
+    let item0_id = format!("{plan_id}-item-0");
+
+    // Force item 0 stale, same as the other pause tests above.
+    let real_size = i64::try_from(std::fs::metadata(src0).expect("stat src0").len()).unwrap();
+    plans_repo::update_item_fs_snapshot(db.pool(), &item0_id, None, Some(real_size + 1))
+        .await
+        .expect("update_item_fs_snapshot");
+
+    app_core::plan_apply::apply_plan(db.pool(), &bus, &plan_id, "tok-test-fixed", None)
+        .await
+        .expect("apply_plan should start");
+    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+
+    let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
+    assert_eq!(plan_row.state, "paused", "run must have paused on the stale item");
+    let run_row = apply_repo::get_active_run(db.pool(), &plan_id)
+        .await
+        .expect("get_active_run")
+        .expect("a paused run must still have its run row");
+
+    // Resolve the condition so resume succeeds.
+    plans_repo::update_item_fs_snapshot(db.pool(), &item0_id, None, Some(real_size))
+        .await
+        .expect("update_item_fs_snapshot to resolve staleness");
+
+    app_core::plan_apply::resume_plan(db.pool(), &bus, &plan_id, &run_row.id)
+        .await
+        .expect("resume must succeed once the stale condition is resolved");
+
+    // Retry item 0 (still `failed` from the pre-pause attempt) immediately —
+    // no `.await` yield beyond `resume_plan`'s own, giving the restarted
+    // executor the least possible head start (same rationale as the cancel
+    // test above: the race is what this test exists to exercise).
+    app_core::plan_apply::retry_plan_item(db.pool(), &plan_id, &item0_id)
+        .await
+        .expect("retry must be accepted: plan is applying, item is failed, run is active");
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // The retried item actually re-executed for real (not just a DB flip):
+    // its source file really moved.
+    assert!(!src0.exists(), "item 0's source should have been moved by the retried re-execution");
+    assert!(dst0.exists(), "item 0's destination should exist after the retry");
+
+    let items = plans_repo::list_plan_items(db.pool(), &plan_id).await.expect("list_plan_items");
+    let item0 = items.iter().find(|i| i.id == item0_id).expect("item 0 row");
+    assert_eq!(
+        item0.item_state, "succeeded",
+        "retried item must reach a real terminal state, not stay stuck 'applying'"
+    );
+
+    let plan_row = plans_repo::get_plan(db.pool(), &plan_id, false).await.expect("get_plan");
+    assert_eq!(plan_row.state, "applied", "every item (including the retried one) succeeded");
+    assert_eq!(
+        plan_row.items_applied,
+        i64::try_from(OTHER_PENDING_ITEMS + 1).unwrap(),
+        "items_total must not be under-accounted — the retried item counts too"
+    );
+    assert_eq!(plan_row.items_failed, 0, "the retry cleared item 0's failed count");
+
+    // A real terminal audit record landed for the retry (applying -> succeeded),
+    // not silence.
+    let events = apply_repo::list_events(db.pool(), &plan_id).await.expect("list_events");
+    assert!(
+        events.iter().any(|e| e.item_id.as_deref() == Some(item0_id.as_str())
+            && e.prior_state == "applying"
+            && e.new_state == "succeeded"),
+        "the retry must append a real terminal audit event for item 0, not leave it silent"
+    );
+}

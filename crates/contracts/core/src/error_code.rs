@@ -233,6 +233,24 @@ pub enum ErrorCode {
     #[serde(rename = "project.read_only")]
     ProjectReadOnly,
 
+    // ── Framing (spec 008 Q27, F-Framing-3) ────────────────────────────────────
+    #[serde(rename = "framing.not_found")]
+    FramingNotFound,
+    #[serde(rename = "framing.project_mismatch")]
+    FramingProjectMismatch,
+    #[serde(rename = "framing.merge.requires_two")]
+    FramingMergeRequiresTwo,
+    #[serde(rename = "framing.merge.duplicate_id")]
+    FramingMergeDuplicateId,
+    #[serde(rename = "framing.split.empty_selection")]
+    FramingSplitEmptySelection,
+    #[serde(rename = "framing.split.invalid_session")]
+    FramingSplitInvalidSession,
+    #[serde(rename = "framing.split.would_empty_source")]
+    FramingSplitWouldEmptySource,
+    #[serde(rename = "framing.reassign.empty_selection")]
+    FramingReassignEmptySelection,
+
     // ── View ────────────────────────────────────────────────────────────────
     #[serde(rename = "view.mixed_kind")]
     ViewMixedKind,
@@ -389,6 +407,15 @@ pub enum ErrorCode {
     /// Referenced `file_record` id does not exist.
     #[serde(rename = "frame.not_found")]
     FrameNotFound,
+
+    // ── Guided first-project flow (spec 010, FR-010) ──────────────────────────
+    /// `guided.state.get` detected a corrupt `guided_flow_state` row, reset it
+    /// to Idle, and is returning this informational code on the one call that
+    /// observed the corruption. Distinct from `internal.database` (unrelated
+    /// generic persistence failures) per the contract's closed `code` enum
+    /// (`specs/010-guided-first-project-flow/contracts/guided.state.get.json`).
+    #[serde(rename = "state_corrupted")]
+    StateCorrupted,
 
     // ── Generic fallback ─────────────────────────────────────────────────────
     /// Used when a legacy `String` error is wrapped into `ContractError`.

@@ -83,13 +83,15 @@ pub struct CalibrationFingerprintRow {
     pub observing_night_date: Option<String>,
 }
 
-/// Row from `calibration_master_view` (migration 0033).
+/// Row from `calibration_master_view` (migration 0033, redefined by 0065 —
+/// Q16 / FR-136 — to emit `NULL` size_bytes instead of a hardcoded `0`; no
+/// size column exists on `calibration_session` yet).
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct CalibrationMasterViewRow {
     pub id: String,
     pub kind: String,
     pub created_at: String,
-    pub size_bytes: i64,
+    pub size_bytes: Option<i64>,
     pub fp_gain: Option<f64>,
     pub fp_exposure_s: Option<f64>,
     pub fp_temp_c: Option<f64>,

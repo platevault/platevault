@@ -13,6 +13,7 @@ pub mod cone_search;
 pub mod dev;
 pub mod enums;
 pub mod error_code;
+pub mod framing;
 pub mod guided;
 pub mod inbox;
 pub mod ingestion;

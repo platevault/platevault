@@ -61,6 +61,7 @@ fn make_create_req(name: &str, tool: ProjectTool) -> ProjectCreateRequest {
         initial_sources: vec![],
         notes: None,
         canonical_target_id: None,
+        is_mosaic: false,
     }
 }
 
@@ -82,6 +83,7 @@ async fn create_then_get_returns_persisted_fields() {
         initial_sources: vec![],
         notes: Some("Initial observing notes".to_owned()),
         canonical_target_id: None,
+        is_mosaic: false,
     };
 
     let result = project_setup::create(db.pool(), &bus, &empty_cache(), &req)

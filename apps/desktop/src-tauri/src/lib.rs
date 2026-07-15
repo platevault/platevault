@@ -37,7 +37,7 @@ use crate::commands::cleanup::{
 };
 #[cfg(feature = "dev-tools")]
 use crate::commands::dev::{
-    dev_calls_list, dev_contracts_list, dev_export, dev_schema_get, CallBuffer,
+    dev_calls_list, dev_calls_push, dev_contracts_list, dev_export, dev_schema_get, CallBuffer,
 };
 use crate::commands::equipment::{
     equipment_cameras_create, equipment_cameras_delete, equipment_cameras_list,
@@ -78,8 +78,8 @@ use crate::commands::patterns::{
     pattern_path_preview, pattern_preview, pattern_resolve, pattern_validate,
 };
 use crate::commands::plan_apply::{
-    plans_apply_direct, plans_apply_real, plans_apply_status, plans_cancel, plans_item_retry,
-    plans_item_skip, plans_resume,
+    plans_apply_direct, plans_apply_real, plans_apply_status, plans_cancel,
+    plans_confirm_destructive, plans_item_retry, plans_item_skip, plans_resume,
 };
 use crate::commands::plans::{
     archive_list, archive_permanently_delete, archive_plan_generate, archive_send_to_trash,
@@ -92,8 +92,9 @@ use crate::commands::prepared_views::{
 };
 use crate::commands::projects::{
     projects_channels_dismiss_drift, projects_channels_reinfer, projects_create,
-    projects_create_plan, projects_get, projects_list, projects_source_add, projects_source_remove,
-    projects_update,
+    projects_create_plan, projects_framing_list, projects_framing_merge, projects_framing_reassign,
+    projects_framing_split, projects_get, projects_list, projects_source_add,
+    projects_source_remove, projects_update,
 };
 use crate::commands::protection::{
     plan_protection_check_cmd, protection_plan_acknowledged, source_protection_get,
@@ -245,6 +246,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         projects_source_remove,
         projects_channels_reinfer,
         projects_channels_dismiss_drift,
+        projects_framing_list,
+        projects_framing_merge,
+        projects_framing_split,
+        projects_framing_reassign,
         projects_create_plan,
         // plans (spec 017)
         plans_list,
@@ -265,6 +270,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         plans_item_skip,
         plans_item_retry,
         plans_apply_status,
+        plans_confirm_destructive,
         // audit
         audit_list,
         audit_export,
@@ -482,6 +488,10 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         projects_source_remove,
         projects_channels_reinfer,
         projects_channels_dismiss_drift,
+        projects_framing_list,
+        projects_framing_merge,
+        projects_framing_split,
+        projects_framing_reassign,
         projects_create_plan,
         // plans (spec 017)
         plans_list,
@@ -502,6 +512,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         plans_item_skip,
         plans_item_retry,
         plans_apply_status,
+        plans_confirm_destructive,
         // audit
         audit_list,
         audit_export,
@@ -646,6 +657,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // developer diagnostics (spec 021) — dev-tools build only
         dev_contracts_list,
         dev_calls_list,
+        dev_calls_push,
         dev_export,
         dev_schema_get,
     ])
@@ -1027,6 +1039,9 @@ pub fn run_app(
     //  - spec 019: log forwarder → pushes audit + diagnostic entries to the
     //    webview `log:entry` channel. Forward at the most permissive level; the
     //    client filters by level.
+    //  - spec 010 (#722): guided-flow event forwarder → re-emits
+    //    inventory.confirmed/project.created/tool.launch as named events so
+    //    `eventBridge.ts` can advance the coach on real domain completions.
     app_core::inbox::plan_listener::start_inbox_plan_listener(pool.clone(), &bus);
     crate::commands::log::start_log_forwarder(
         app.handle().clone(),
@@ -1034,6 +1049,7 @@ pub fn run_app(
         contracts_core::log::LogLevel::Debug,
         pool.clone(),
     );
+    crate::commands::guided::start_guided_event_forwarder(app.handle().clone(), &bus);
     // spec 024: manifest auto-generation on workflow-run completion.
     // The JoinHandle is intentionally dropped — the task runs independently.
     drop(app_core::project_manifests::spawn_workflow_run_subscriber(pool.clone(), bus.clone()));

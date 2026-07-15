@@ -713,6 +713,65 @@ pub async fn complete_run(
     Ok(updated)
 }
 
+// ── sweep_stale_launches ────────────────────────────────────────────────────────
+
+/// Complete any of a project's open tool launches whose attribution window
+/// has closed (#727 / FR-010's stated heuristic: a launch is terminal when
+/// the attribution window elapses after the last artifact attributed to it
+/// was last seen — or, when nothing was ever attributed, after the launch
+/// itself started).
+///
+/// This is the real production trigger for [`complete_run`]: it is polled
+/// periodically by the live per-project watcher
+/// (`apps/desktop/src-tauri/src/watcher.rs`) while a project's drawer is
+/// open. Previously `complete_run` had no production caller at all, so
+/// `workflow.run_completed` (and the spec 024 manifest subscriber that
+/// depends on it) never fired outside tests.
+///
+/// Returns the number of launches completed.
+///
+/// # Errors
+/// Returns `Err(String)` on DB failure.
+pub async fn sweep_stale_launches(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    project_id: &str,
+) -> Result<usize, String> {
+    let launches = tl_repo::list_launches_for_project(pool, project_id)
+        .await
+        .map_err(|e| format!("DB launches failed: {e}"))?;
+    let open: Vec<_> = launches
+        .into_iter()
+        .filter(|l| l.outcome == "spawned" && l.completed_at.is_none())
+        .collect();
+    if open.is_empty() {
+        return Ok(0);
+    }
+
+    let artifacts = repo::list_artifacts_for_project(pool, project_id, &[])
+        .await
+        .map_err(|e| format!("DB artifacts failed: {e}"))?;
+
+    let now = OffsetDateTime::now_utc();
+    let mut completed = 0usize;
+    for launch in open {
+        let last_seen = artifacts
+            .iter()
+            .filter(|a| a.tool_launch_id.as_deref() == Some(launch.id.as_str()))
+            .filter_map(|a| parse_dt(&a.last_seen_at))
+            .max();
+        let Some(reference) = last_seen.or_else(|| parse_dt(&launch.launched_at)) else {
+            continue; // unparseable timestamp; leave for the next sweep
+        };
+        if now - reference >= DEFAULT_ATTRIBUTION_WINDOW
+            && complete_run(pool, bus, project_id, &launch.tool_id, &launch.id).await?
+        {
+            completed += 1;
+        }
+    }
+    Ok(completed)
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 /// Load `LaunchRef` entries for a project + tool from the `tool_launches` table.
@@ -977,6 +1036,88 @@ mod tests {
         // Idempotent second call.
         let updated2 = complete_run(&pool, &bus, "proj-1", "pixinsight", "tl-1").await.unwrap();
         assert!(!updated2);
+    }
+
+    // ── sweep_stale_launches (#727) ─────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn sweep_completes_launch_with_no_recent_activity() {
+        let pool = make_pool().await;
+        let bus = make_bus(&pool);
+
+        // Launched long enough ago (> DEFAULT_ATTRIBUTION_WINDOW = 6h) with no
+        // artifacts ever attributed to it — the sweep must complete it.
+        sqlx::query(
+            "INSERT INTO tool_launches (id, project_id, tool_id, launched_at, outcome, audit_id)
+             VALUES ('tl-stale','proj-1','pixinsight','2020-01-01T00:00:00Z','spawned','aud-1')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let completed = sweep_stale_launches(&pool, &bus, "proj-1").await.unwrap();
+        assert_eq!(completed, 1);
+
+        let launches = tl_repo::list_launches_for_project(&pool, "proj-1").await.unwrap();
+        assert!(launches[0].completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn sweep_leaves_recently_launched_run_open() {
+        let pool = make_pool().await;
+        let bus = make_bus(&pool);
+
+        let recent = Timestamp::now_iso();
+        sqlx::query(
+            "INSERT INTO tool_launches (id, project_id, tool_id, launched_at, outcome, audit_id)
+             VALUES ('tl-fresh','proj-1',?,?, 'spawned','aud-1')",
+        )
+        .bind("pixinsight")
+        .bind(&recent)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let completed = sweep_stale_launches(&pool, &bus, "proj-1").await.unwrap();
+        assert_eq!(completed, 0);
+
+        let launches = tl_repo::list_launches_for_project(&pool, "proj-1").await.unwrap();
+        assert!(launches[0].completed_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn sweep_uses_last_artifact_activity_not_launch_time() {
+        let pool = make_pool().await;
+        let bus = make_bus(&pool);
+
+        // Launch started long ago, but an artifact under it was seen recently
+        // (e.g. re-touched by an on-attach reconciliation pass) — the run is
+        // still active and must NOT be completed.
+        sqlx::query(
+            "INSERT INTO tool_launches (id, project_id, tool_id, launched_at, outcome, audit_id)
+             VALUES ('tl-active','proj-1','pixinsight','2020-01-01T00:00:00Z','spawned','aud-1')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let art_id = detect(
+            &pool,
+            &bus,
+            "proj-1",
+            "output/img.xisf",
+            "pixinsight",
+            512,
+            "2020-01-01T00:05:00Z",
+            "2020-01-01T00:05:00Z",
+        )
+        .await
+        .unwrap();
+        repo::set_tool_launch_id(&pool, &art_id, "tl-active").await.unwrap();
+        repo::touch_artifact(&pool, &art_id).await.unwrap(); // bumps last_seen_at to now
+
+        let completed = sweep_stale_launches(&pool, &bus, "proj-1").await.unwrap();
+        assert_eq!(completed, 0);
     }
 
     // ── T028: artifact.detected AND artifact.classified both emitted (FR-009) ──

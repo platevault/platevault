@@ -26,10 +26,10 @@
  * on CalibrationPage; the per-master actions live in that detail panel's header.
  */
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Pill, Table, EmptyState, Skeleton, tableIndent } from '@/ui';
 import type { PillVariant, TableColumn, TableRow } from '@/ui';
-import { SortHeader, ariaSortFor } from '@/components';
+import { SortHeader, ariaSortFor, renderValue } from '@/components';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
 import { m } from '@/lib/i18n';
 import {
@@ -38,6 +38,7 @@ import {
   type DimensionAccessor,
 } from '@/lib/grouping';
 import { useCollapsibleGroups } from '@/lib/use-grouping';
+import { masterFieldApplicability } from './master-applicability';
 
 // ── Kind model ──────────────────────────────────────────────────────────────
 
@@ -84,8 +85,6 @@ export interface MasterSort {
 
 export const DEFAULT_MASTER_SORT: MasterSort = { col: 'created', dir: 'desc' };
 
-const EMPTY = '—';
-
 // ── Display helpers ──────────────────────────────────────────────────────────────
 
 /**
@@ -104,36 +103,61 @@ function masterLabel(m: CalibrationMaster): string {
     : `Master ${kindCap}`;
 }
 
-/** Filter only applies to flats; other kinds render the empty marker. */
-function filterCell(m: CalibrationMaster): string {
-  if (m.kind.toLowerCase() !== 'flat') return EMPTY;
-  return m.fingerprint?.filter ?? EMPTY;
+/**
+ * Kind-conditional cells go through the shared renderer (spec-030 Q16 /
+ * FR-135–FR-137, `@/components/RenderValue`): not-applicable to this kind
+ * (e.g. filter on a dark) renders blank, applicable-but-absent renders the
+ * unresolved chip — never the same "—" for both, which previously hid a
+ * missing filter on a real flat behind the same marker as "flats have no
+ * filter field."
+ */
+
+/** Filter only applies to flats (data-model.md matrix). */
+function filterCell(m: CalibrationMaster): ReactNode {
+  return renderValue(m.fingerprint?.filter ?? null, {
+    applicability: masterFieldApplicability(m.kind, 'filter'),
+  });
 }
 
-/** Exposure only applies to darks; other kinds render the empty marker. */
-function exposureCell(m: CalibrationMaster): string {
-  if (m.kind.toLowerCase() !== 'dark') return EMPTY;
-  return m.fingerprint?.exposureS != null
-    ? `${m.fingerprint.exposureS}s`
-    : EMPTY;
+/** Exposure applies to darks/flats, not bias (data-model.md matrix). */
+function exposureCell(m: CalibrationMaster): ReactNode {
+  return renderValue(
+    m.fingerprint?.exposureS ?? null,
+    { applicability: masterFieldApplicability(m.kind, 'exposure') },
+    (v) => `${v}s`,
+  );
 }
 
-function tempCell(m: CalibrationMaster): string {
-  return m.fingerprint?.tempC != null ? `${m.fingerprint.tempC}°C` : EMPTY;
+/** Set-temperature applies to darks (masters have no Light column, matrix §Set temperature). */
+function tempCell(m: CalibrationMaster): ReactNode {
+  return renderValue(
+    m.fingerprint?.tempC ?? null,
+    { applicability: masterFieldApplicability(m.kind, 'setTemp') },
+    (v) => `${v}°C`,
+  );
 }
 
-function gainCell(m: CalibrationMaster): string {
-  return m.fingerprint?.gain != null ? String(m.fingerprint.gain) : EMPTY;
+/** Gain applies to every master kind. */
+function gainCell(m: CalibrationMaster): ReactNode {
+  return renderValue(m.fingerprint?.gain ?? null, {
+    applicability: 'applicable',
+  });
 }
 
-function binningCell(m: CalibrationMaster): string {
-  return m.fingerprint?.binning
-    ? m.fingerprint.binning.replace('x', '×')
-    : EMPTY;
+/** Binning applies to every master kind. */
+function binningCell(m: CalibrationMaster): ReactNode {
+  return renderValue(
+    m.fingerprint?.binning ?? null,
+    { applicability: 'applicable' },
+    (v) => String(v).replace('x', '×'),
+  );
 }
 
-function cameraCell(m: CalibrationMaster): string {
-  return m.fingerprint?.camera ?? EMPTY;
+/** Camera applies to every master kind. */
+function cameraCell(m: CalibrationMaster): ReactNode {
+  return renderValue(m.fingerprint?.camera ?? null, {
+    applicability: 'applicable',
+  });
 }
 
 /**

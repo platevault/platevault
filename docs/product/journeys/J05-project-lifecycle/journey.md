@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J05-project-lifecycle/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 5 — Project lifecycle: create → attach sources → manifests/notes → tool launch → artifacts
 
 **Goal:** create a project, link the acquisition data it should use, document

@@ -204,6 +204,64 @@ async fn suggest_returns_candidates_when_master_matches() {
     );
 }
 
+/// T134 (Q16 / FR-136) regression: calibration matching runs on the
+/// Option-typed domain `SessionInfo`/`MasterInfo`, loaded straight from
+/// `acquisition_fingerprint`/`calibration_fingerprint` — never through the
+/// contract DTOs de-zeroed by T128/T129. Absent gain (a hard-rule dimension
+/// for dark matching) must still be handled deterministically; it must
+/// never be silently treated as a real 0 that spuriously matches a master
+/// whose gain is also absent (the exact failure mode de-zeroing the
+/// contract could have introduced had matching read the DTO instead of the
+/// domain-layer Option fields).
+#[tokio::test]
+async fn suggest_deterministic_when_gain_absent_on_both_sides() {
+    let (db, _repo, _bus) = support::setup().await;
+    let pool = db.pool();
+
+    let session_id = Uuid::new_v4().to_string();
+    let master_id = Uuid::new_v4().to_string();
+
+    insert_acq_session(pool, &session_id).await;
+    // Fingerprint with NO gain/offset_val (both NULL) — every other hard-rule
+    // dimension matches the master below.
+    sqlx::query(
+        "INSERT INTO acquisition_fingerprint \
+         (id, session_type, temp_c, binning, has_observer_location, has_exposure_start_utc) \
+         VALUES (?, 'light', -10.0, '1x1', 1, 1)",
+    )
+    .bind(&session_id)
+    .execute(pool)
+    .await
+    .unwrap_or_else(|e| panic!("insert acquisition_fingerprint failed: {e}"));
+
+    insert_cal_session(pool, &master_id, "dark").await;
+    // Master fingerprint ALSO with NO gain/offset_val.
+    sqlx::query(
+        "INSERT INTO calibration_fingerprint (id, calibration_type, temp_c, binning) \
+         VALUES (?, 'dark', -10.0, '1x1')",
+    )
+    .bind(&master_id)
+    .execute(pool)
+    .await
+    .unwrap_or_else(|e| panic!("insert calibration_fingerprint failed: {e}"));
+
+    let req = CalibrationMatchSuggestRequest {
+        contract_version: SUGGEST_CONTRACT_VERSION.to_owned(),
+        request_id: Uuid::new_v4().to_string(),
+        session_id: session_id.clone(),
+        calibration_types: Some(vec![CalibrationType::Dark]),
+    };
+
+    let resp = suggest(pool, req).await.expect("suggest should not return Err");
+    assert_eq!(resp.status, "success", "expected success, got: {:?}", resp.error);
+    let matches = resp.matches.expect("expected Some(matches)");
+    assert!(
+        matches.iter().all(|m| m.master_id != master_id),
+        "absent gain must never be silently synthesized as a real 0 that \
+         spuriously matches another absent-gain master; got: {matches:?}",
+    );
+}
+
 /// Session with no fingerprint row (no observer location) triggers the A6 guard.
 #[tokio::test]
 async fn suggest_returns_observer_location_missing_when_no_fingerprint() {

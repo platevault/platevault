@@ -495,6 +495,47 @@ export const commands = {
 	 */
 	projectsChannelsDismissDrift: (req: ProjectChannelsDismissDriftRequest) => typedError<ProjectChannelsDismissDriftResult, ContractError_Serialize>(__TAURI_INVOKE("projects_channels_dismiss_drift", { req })),
 	/**
+	 *  `projects.framing.list` — list a project's framings.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` with `"project.not_found"` when the project does not
+	 *  exist.
+	 */
+	projectsFramingList: (req: FramingListRequest) => typedError<FramingListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_framing_list", { req })),
+	/**
+	 *  `projects.framing.merge` — fold one or more framings into a primary
+	 *  framing; membership-only, flips the primary to `user_adjusted`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on validation failure (e.g.
+	 *  `"framing.merge.requires_two"`) or when a referenced framing is not found.
+	 */
+	projectsFramingMerge: (req: FramingMergeRequest) => typedError<FramingMergeResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_framing_merge", { req })),
+	/**
+	 *  `projects.framing.split` — move a subset of a framing's sessions into a
+	 *  brand-new framing; membership-only, flips both framings to
+	 *  `user_adjusted`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on validation failure (e.g.
+	 *  `"framing.split.would_empty_source"`) or when the framing is not found.
+	 */
+	projectsFramingSplit: (req: FramingSplitRequest) => typedError<FramingSplitResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_framing_split", { req })),
+	/**
+	 *  `projects.framing.reassign` — move sessions into a target framing;
+	 *  membership-only, flips every touched framing to `user_adjusted`.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(String)` on validation failure (e.g.
+	 *  `"framing.reassign.empty_selection"`) or when the target framing is not
+	 *  found.
+	 */
+	projectsFramingReassign: (req: FramingReassignRequest) => typedError<FramingReassignResult_Serialize, ContractError_Serialize>(__TAURI_INVOKE("projects_framing_reassign", { req })),
+	/**
 	 *  `projects.create_plan` — create a filesystem plan from wizard state.
 	 * 
 	 *  This stub is retained for UI compatibility until spec 025 folder-plan
@@ -580,7 +621,7 @@ export const commands = {
 	 * 
 	 *  Returns `Err` with the contract error code on database failure.
 	 */
-	archiveList: () => typedError<ArchiveListResponse, ContractError_Serialize>(__TAURI_INVOKE("archive_list")),
+	archiveList: () => typedError<ArchiveListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("archive_list")),
 	/**
 	 *  `archive.plan.generate` — build a reviewable whole-project archive plan
 	 *  (spec 017 US2/WP-B). Creates a `ready_for_review` plan; performs NO
@@ -698,6 +739,21 @@ export const commands = {
 	 *  Returns `Err(String)` with `"plan.not_found"` if the plan does not exist.
 	 */
 	plansApplyStatus: (planId: string) => typedError<PlanApplyStatus_Serialize, ContractError_Serialize>(__TAURI_INVOKE("plans_apply_status", { planId })),
+	/**
+	 *  `plans.confirm.destructive` — confirm every delete/trash item in a plan
+	 *  (FR-003, D9, issue #741).
+	 * 
+	 *  Persists `destructive_confirmed = 1` on the plan's destructive items so a
+	 *  subsequent apply does not refuse them at the executor's
+	 *  destructive-confirm gate. Plan-level, not per-item — see
+	 *  `confirm_plan_destructive_items`'s doc comment for why.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with `"plan.not_found"` if the plan does not
+	 *  exist.
+	 */
+	plansConfirmDestructive: (planId: string) => typedError<PlanDestructiveConfirmResponse, ContractError_Serialize>(__TAURI_INVOKE("plans_confirm_destructive", { planId })),
 	/**
 	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
@@ -1835,6 +1891,19 @@ export const commands = {
 	 */
 	devCallsList: (request: DevCallsListRequest_Deserialize) => typedError<DevCallsListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("dev_calls_list", { request })),
 	/**
+	 *  `dev.calls.push` — record a call captured by the JS-side recording proxy
+	 *  (spec 021 US2 / follow-up #736) into the shared ring buffer, so
+	 *  `dev.calls.list` and `dev.export` observe live calls too. The frontend
+	 *  recorder (`apps/desktop/src/dev/recorder.ts`) keeps its own buffer for
+	 *  instant, reactive rendering; this is a best-effort mirror for backend
+	 *  consumers (export). The call is already redacted client-side before this
+	 *  is invoked.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` when `devMode` is disabled.
+	 */
+	devCallsPush: (call: ContractCall_Deserialize) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("dev_calls_push", { call })),
+	/**
 	 *  `dev.export` — dump contract registry + calls to a JSON file (spec 021 US4).
 	 * 
 	 *  # Errors
@@ -1926,7 +1995,10 @@ export type AppPreferences = {
 };
 
 /**  One archived entity row for the Archive page (C5 design: projects only). */
-export type ArchiveEntry = {
+export type ArchiveEntry = ArchiveEntry_Serialize | ArchiveEntry_Deserialize;
+
+/**  One archived entity row for the Archive page (C5 design: projects only). */
+export type ArchiveEntry_Deserialize = {
 	/**  Archived entity id (a project id in the current design). */
 	id: string,
 	/**  Display name (project name). */
@@ -1938,12 +2010,53 @@ export type ArchiveEntry = {
 	entityType: string,
 	/**  When the entity reached the `archived` lifecycle state (ISO-8601). */
 	archivedAt: string,
-	/**  Human-readable reason (the archive plan title when available). */
-	reason: string,
+	/**
+	 *  Human-readable reason (the archive plan title). `None` when the owning
+	 *  plan row no longer exists (spec-030 Q16 / FR-136 — never an empty-string
+	 *  sentinel standing in for absence).
+	 */
+	reason: string | null,
 	/**  The entity's original on-disk location (project-relative library path). */
 	originalPath: string,
-	/**  Bytes moved into the app-managed archive by the owning plan. */
-	sizeBytes: number,
+	/**
+	 *  Bytes moved into the app-managed archive by the owning plan. `None`
+	 *  when unresolved (spec-030 Q16 / FR-136 — never a sentinel 0, "Size 0 KB").
+	 */
+	sizeBytes: number | null,
+	/**
+	 *  Plan that archived this entity. Drives the management operations
+	 *  (`archive.send_to_trash` / `archive.permanently_delete`). `None` only
+	 *  for legacy rows archived before this column existed.
+	 */
+	archivedViaPlanId: string | null,
+};
+
+/**  One archived entity row for the Archive page (C5 design: projects only). */
+export type ArchiveEntry_Serialize = {
+	/**  Archived entity id (a project id in the current design). */
+	id: string,
+	/**  Display name (project name). */
+	name: string,
+	/**
+	 *  Entity kind. Always `"project"` today (D7/D14: no session/master/target
+	 *  tabs until a real archival model for them is designed).
+	 */
+	entityType: string,
+	/**  When the entity reached the `archived` lifecycle state (ISO-8601). */
+	archivedAt: string,
+	/**
+	 *  Human-readable reason (the archive plan title). `None` when the owning
+	 *  plan row no longer exists (spec-030 Q16 / FR-136 — never an empty-string
+	 *  sentinel standing in for absence).
+	 */
+	reason?: string | null,
+	/**  The entity's original on-disk location (project-relative library path). */
+	originalPath: string,
+	/**
+	 *  Bytes moved into the app-managed archive by the owning plan. `None`
+	 *  when unresolved (spec-030 Q16 / FR-136 — never a sentinel 0, "Size 0 KB").
+	 */
+	sizeBytes?: number | null,
 	/**
 	 *  Plan that archived this entity. Drives the management operations
 	 *  (`archive.send_to_trash` / `archive.permanently_delete`). `None` only
@@ -1953,8 +2066,16 @@ export type ArchiveEntry = {
 };
 
 /**  Response for `archive.list` — every project currently in `archived`. */
-export type ArchiveListResponse = {
-	entries: ArchiveEntry[],
+export type ArchiveListResponse = ArchiveListResponse_Serialize | ArchiveListResponse_Deserialize;
+
+/**  Response for `archive.list` — every project currently in `archived`. */
+export type ArchiveListResponse_Deserialize = {
+	entries: ArchiveEntry_Deserialize[],
+};
+
+/**  Response for `archive.list` — every project currently in `archived`. */
+export type ArchiveListResponse_Serialize = {
+	entries: ArchiveEntry_Serialize[],
 };
 
 /**  Response for `archive.permanently_delete`. */
@@ -2349,28 +2470,52 @@ export type CalendarSessionStub = {
 	filter: string,
 };
 
-/**  Sensor/optical fingerprint that determines calibration compatibility. */
+/**
+ *  Sensor/optical fingerprint that determines calibration compatibility.
+ * 
+ *  Every field is `Option` (Q16 / #620, FR-135/FR-136): extraction may leave
+ *  any of these unresolved, and the contract MUST carry that absence as
+ *  `null` rather than a synthesized value (empty string, fabricated `"1x1"`
+ *  binning, or a defaulted `0.0`) — the missing/real-zero distinction is
+ *  unrecoverable once a sentinel overwrites it at this hop.
+ */
 export type CalibrationFingerprint = CalibrationFingerprint_Serialize | CalibrationFingerprint_Deserialize;
 
-/**  Sensor/optical fingerprint that determines calibration compatibility. */
+/**
+ *  Sensor/optical fingerprint that determines calibration compatibility.
+ * 
+ *  Every field is `Option` (Q16 / #620, FR-135/FR-136): extraction may leave
+ *  any of these unresolved, and the contract MUST carry that absence as
+ *  `null` rather than a synthesized value (empty string, fabricated `"1x1"`
+ *  binning, or a defaulted `0.0`) — the missing/real-zero distinction is
+ *  unrecoverable once a sentinel overwrites it at this hop.
+ */
 export type CalibrationFingerprint_Deserialize = {
-	camera: string,
+	camera: string | null,
 	sensorMode: string | null,
 	exposureS: number | null,
 	tempC: number | null,
 	gain: number | null,
-	binning: string,
+	binning: string | null,
 	filter: string | null,
 };
 
-/**  Sensor/optical fingerprint that determines calibration compatibility. */
+/**
+ *  Sensor/optical fingerprint that determines calibration compatibility.
+ * 
+ *  Every field is `Option` (Q16 / #620, FR-135/FR-136): extraction may leave
+ *  any of these unresolved, and the contract MUST carry that absence as
+ *  `null` rather than a synthesized value (empty string, fabricated `"1x1"`
+ *  binning, or a defaulted `0.0`) — the missing/real-zero distinction is
+ *  unrecoverable once a sentinel overwrites it at this hop.
+ */
 export type CalibrationFingerprint_Serialize = {
-	camera: string,
+	camera?: string | null,
 	sensorMode?: string | null,
-	exposureS: number | null,
+	exposureS?: number | null,
 	tempC?: number | null,
-	gain: number | null,
-	binning: string,
+	gain?: number | null,
+	binning?: string | null,
 	filter?: string | null,
 };
 
@@ -2385,10 +2530,18 @@ export type CalibrationMaster_Deserialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Deserialize,
-	sourceSessionId: string,
+	/**
+	 *  `None` when the originating session is unresolved (Q16 / FR-136) —
+	 *  never self-referentially defaulted to this master's own id.
+	 */
+	sourceSessionId: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	/**
+	 *  `None` when file size is unresolved (Q16 / FR-136) — never a
+	 *  sentinel 0.
+	 */
+	sizeBytes: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
 };
@@ -2398,10 +2551,18 @@ export type CalibrationMaster_Serialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Serialize,
-	sourceSessionId: string,
+	/**
+	 *  `None` when the originating session is unresolved (Q16 / FR-136) —
+	 *  never self-referentially defaulted to this master's own id.
+	 */
+	sourceSessionId?: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	/**
+	 *  `None` when file size is unresolved (Q16 / FR-136) — never a
+	 *  sentinel 0.
+	 */
+	sizeBytes?: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
 };
@@ -3290,7 +3451,7 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  */
 "volume.still.unavailable" | 
 /**  `plan.resume` re-validated and the destination volume is still full. */
-"disk.still.full" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
+"disk.still.full" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "framing.not_found" | "framing.project_mismatch" | "framing.merge.requires_two" | "framing.merge.duplicate_id" | "framing.split.empty_selection" | "framing.split.invalid_session" | "framing.split.would_empty_source" | "framing.reassign.empty_selection" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
 /**
  *  Returned by `roots.delete` (P6b, decision D8) when dependent records
  *  (inbox items, plan items, file records, sessions) still reference the
@@ -3346,6 +3507,14 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
 "hash.mismatch" | 
 /**  Referenced `file_record` id does not exist. */
 "frame.not_found" | 
+/**
+ *  `guided.state.get` detected a corrupt `guided_flow_state` row, reset it
+ *  to Idle, and is returning this informational code on the one call that
+ *  observed the corruption. Distinct from `internal.database` (unrelated
+ *  generic persistence failures) per the contract's closed `code` enum
+ *  (`specs/010-guided-first-project-flow/contracts/guided.state.get.json`).
+ */
+"state_corrupted" | 
 /**  Used when a legacy `String` error is wrapped into `ContractError`. */
 "internal.error";
 
@@ -3483,6 +3652,212 @@ export type Frameset = {
 	filter: string,
 	count: number,
 	integrationS: number | null,
+};
+
+/**
+ *  Clustering provenance (FR-015). `Suggested` is the app's own tolerance-based
+ *  grouping; `UserAdjusted` marks a framing a user has merged, split, or
+ *  reassigned into — re-derivation (F-Framing-2) never modifies it.
+ */
+export type FramingClustering = "suggested" | "user_adjusted";
+
+/**
+ *  A framing (spec 008 Q27 data-model.md `Framing`) — the co-registerable
+ *  integration unit within a project.
+ */
+export type FramingDto = FramingDto_Serialize | FramingDto_Deserialize;
+
+/**
+ *  A framing (spec 008 Q27 data-model.md `Framing`) — the co-registerable
+ *  integration unit within a project.
+ */
+export type FramingDto_Deserialize = {
+	id: string,
+	projectId: string,
+	/**
+	 *  `null` for a framing whose target has not yet resolved, or before the
+	 *  Q20/Q10 projections attach one. Equal to the project's declared target
+	 *  for mosaic panels (FR-017) and for the single active framing of a
+	 *  non-mosaic project (FR-016).
+	 */
+	targetId: string | null,
+	opticTrainKey: string,
+	pointing: FramingPointingDto,
+	/**  Representative rotation, degrees. */
+	rotation: number | null,
+	tolerance: FramingToleranceDto,
+	sessionIds: string[],
+	clustering: FramingClustering,
+};
+
+/**
+ *  A framing (spec 008 Q27 data-model.md `Framing`) — the co-registerable
+ *  integration unit within a project.
+ */
+export type FramingDto_Serialize = {
+	id: string,
+	projectId: string,
+	/**
+	 *  `null` for a framing whose target has not yet resolved, or before the
+	 *  Q20/Q10 projections attach one. Equal to the project's declared target
+	 *  for mosaic panels (FR-017) and for the single active framing of a
+	 *  non-mosaic project (FR-016).
+	 */
+	targetId?: string | null,
+	opticTrainKey: string,
+	pointing: FramingPointingDto,
+	/**  Representative rotation, degrees. */
+	rotation: number | null,
+	tolerance: FramingToleranceDto,
+	sessionIds: string[],
+	clustering: FramingClustering,
+};
+
+/**  Request body for `framing.list`. */
+export type FramingListRequest = {
+	projectId: string,
+};
+
+/**  Response body for `framing.list`. */
+export type FramingListResponse = FramingListResponse_Serialize | FramingListResponse_Deserialize;
+
+/**  Response body for `framing.list`. */
+export type FramingListResponse_Deserialize = {
+	framings: FramingDto_Deserialize[],
+};
+
+/**  Response body for `framing.list`. */
+export type FramingListResponse_Serialize = {
+	framings: FramingDto_Serialize[],
+};
+
+/**
+ *  Request body for `framing.merge`: fold `mergeFramingIds` into
+ *  `primaryFramingId`. The merged-away framings are deleted; their sessions
+ *  become members of `primaryFramingId`, which flips to `user_adjusted`.
+ */
+export type FramingMergeRequest = {
+	requestId: string,
+	projectId: string,
+	primaryFramingId: string,
+	/**
+	 *  At least one id, all distinct from `primaryFramingId` and belonging to
+	 *  the same project.
+	 */
+	mergeFramingIds: string[],
+};
+
+/**  Successful result from `framing.merge`. */
+export type FramingMergeResult = FramingMergeResult_Serialize | FramingMergeResult_Deserialize;
+
+/**  Successful result from `framing.merge`. */
+export type FramingMergeResult_Deserialize = {
+	projectId: string,
+	/**  The surviving framing with its post-merge membership. */
+	framing: FramingDto_Deserialize,
+	removedFramingIds: string[],
+	auditId: string,
+};
+
+/**  Successful result from `framing.merge`. */
+export type FramingMergeResult_Serialize = {
+	projectId: string,
+	/**  The surviving framing with its post-merge membership. */
+	framing: FramingDto_Serialize,
+	removedFramingIds: string[],
+	auditId: string,
+};
+
+/**  Representative pointing, degrees ICRS (data-model.md `Framing.pointing`). */
+export type FramingPointingDto = {
+	ra: number | null,
+	dec: number | null,
+};
+
+/**
+ *  Request body for `framing.reassign`: move `sessionIds` into
+ *  `targetFramingId`, whether they currently belong to another framing of the
+ *  same project or to none. `targetFramingId` flips to `user_adjusted`, as
+ *  does any framing a session was moved out of.
+ */
+export type FramingReassignRequest = {
+	requestId: string,
+	projectId: string,
+	sessionIds: string[],
+	targetFramingId: string,
+};
+
+/**  Successful result from `framing.reassign`. */
+export type FramingReassignResult = FramingReassignResult_Serialize | FramingReassignResult_Deserialize;
+
+/**  Successful result from `framing.reassign`. */
+export type FramingReassignResult_Deserialize = {
+	projectId: string,
+	targetFraming: FramingDto_Deserialize,
+	/**
+	 *  `targetFramingId` plus every framing a session was moved out of —
+	 *  callers should invalidate/refetch all of these.
+	 */
+	affectedFramingIds: string[],
+	auditId: string,
+};
+
+/**  Successful result from `framing.reassign`. */
+export type FramingReassignResult_Serialize = {
+	projectId: string,
+	targetFraming: FramingDto_Serialize,
+	/**
+	 *  `targetFramingId` plus every framing a session was moved out of —
+	 *  callers should invalidate/refetch all of these.
+	 */
+	affectedFramingIds: string[],
+	auditId: string,
+};
+
+/**
+ *  Request body for `framing.split`: move `sessionIds` (a non-empty proper
+ *  subset of `sourceFramingId`'s members) into a brand-new framing. The new
+ *  framing inherits `sourceFramingId`'s target/optic-train/pointing/rotation/
+ *  tolerance snapshot unchanged (membership-only mutation, FR-015); both the
+ *  source and the new framing flip to `user_adjusted`.
+ */
+export type FramingSplitRequest = {
+	requestId: string,
+	projectId: string,
+	sourceFramingId: string,
+	/**
+	 *  Must be non-empty and leave at least one session behind in
+	 *  `sourceFramingId`.
+	 */
+	sessionIds: string[],
+};
+
+/**  Successful result from `framing.split`. */
+export type FramingSplitResult = FramingSplitResult_Serialize | FramingSplitResult_Deserialize;
+
+/**  Successful result from `framing.split`. */
+export type FramingSplitResult_Deserialize = {
+	projectId: string,
+	sourceFraming: FramingDto_Deserialize,
+	newFraming: FramingDto_Deserialize,
+	auditId: string,
+};
+
+/**  Successful result from `framing.split`. */
+export type FramingSplitResult_Serialize = {
+	projectId: string,
+	sourceFraming: FramingDto_Serialize,
+	newFraming: FramingDto_Serialize,
+	auditId: string,
+};
+
+/**
+ *  Snapshot of the tunable tolerance the clustering pass used (FR-014;
+ *  data-model.md `Framing.tolerance`). Never an exact-match key.
+ */
+export type FramingToleranceDto = {
+	pointing: number | null,
+	rotation: number | null,
 };
 
 /**
@@ -5525,10 +5900,10 @@ export type MasterDetail_Deserialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Deserialize,
-	sourceSessionId: string,
+	sourceSessionId: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	sizeBytes: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
 	compatibleSessions: CompatibleSessionEntry[],
@@ -5542,10 +5917,10 @@ export type MasterDetail_Serialize = {
 	id: string,
 	kind: CalibrationKind,
 	fingerprint: CalibrationFingerprint_Serialize,
-	sourceSessionId: string,
+	sourceSessionId?: string | null,
 	createdAt: string,
 	ageDays: number,
-	sizeBytes: number,
+	sizeBytes?: number | null,
 	usedBySessionIds: string[],
 	usedByProjectIds: string[],
 	compatibleSessions: CompatibleSessionEntry[],
@@ -5955,6 +6330,21 @@ export type PlanCancelResponse = {
 	itemsApplied: number,
 	/**  Items transitioned from pending to cancelled. */
 	itemsCancelled: number,
+};
+
+/**
+ *  Response for `plans.confirm.destructive`.
+ * 
+ *  Local to this command (rather than a `contracts_core::plan_apply` DTO):
+ *  the shape is a plain confirmation receipt with no other consumer.
+ */
+export type PlanDestructiveConfirmResponse = {
+	planId: string,
+	/**
+	 *  Number of items whose `destructive_confirmed` flag flipped (0 when
+	 *  every destructive item in the plan was already confirmed).
+	 */
+	itemsConfirmed: number,
 };
 
 /**  Full plan detail returned by `plans.get`. */
@@ -6450,6 +6840,8 @@ export type ProjectCreateRequest_Deserialize = {
 	 *  decision). Existing callers omit it.
 	 */
 	canonicalTargetId?: string | null,
+	/**  Mosaic-mode flag (Q27 FR-017), default false. Existing callers omit it. */
+	isMosaic?: boolean,
 };
 
 /**  Request body for `projects.create` (spec 008, contract version 2.0.0). */
@@ -6473,6 +6865,8 @@ export type ProjectCreateRequest_Serialize = {
 	 *  decision). Existing callers omit it.
 	 */
 	canonicalTargetId?: string | null,
+	/**  Mosaic-mode flag (Q27 FR-017), default false. Existing callers omit it. */
+	isMosaic?: boolean,
 };
 
 /**  Successful result from `projects.create`. */
@@ -6481,6 +6875,7 @@ export type ProjectCreateResult = ProjectCreateResult_Serialize | ProjectCreateR
 /**  Successful result from `projects.create`. */
 export type ProjectCreateResult_Deserialize = {
 	projectId: string,
+	isMosaic?: boolean,
 	/**
 	 *  Initial lifecycle state. `"setup_incomplete"` when the project has no sources at create time;
 	 *  may auto-transition to `"ready"` when sources are provided in the create request (FR-008).
@@ -6511,6 +6906,7 @@ export type ProjectCreateResult_Deserialize = {
 /**  Successful result from `projects.create`. */
 export type ProjectCreateResult_Serialize = {
 	projectId: string,
+	isMosaic?: boolean,
 	/**
 	 *  Initial lifecycle state. `"setup_incomplete"` when the project has no sources at create time;
 	 *  may auto-transition to `"ready"` when sources are provided in the create request (FR-008).
@@ -6565,6 +6961,12 @@ export type ProjectDetailDto_Deserialize = {
 	blockedReasonKind: string | null,
 	/**  FR-020: free-form note for the blocked reason. */
 	blockedReasonNote: string | null,
+	/**
+	 *  Mosaic-mode flag (Q27 FR-017), default false. When true, every framing
+	 *  derived for this project inherits the declared target and per-frame
+	 *  OBJECT/coordinate resolution is suppressed. There is no panel entity.
+	 */
+	isMosaic?: boolean,
 };
 
 /**  A project detail (sources + channels included). */
@@ -6591,6 +6993,12 @@ export type ProjectDetailDto_Serialize = {
 	blockedReasonKind?: string | null,
 	/**  FR-020: free-form note for the blocked reason. */
 	blockedReasonNote?: string | null,
+	/**
+	 *  Mosaic-mode flag (Q27 FR-017), default false. When true, every framing
+	 *  derived for this project inherits the declared target and per-frame
+	 *  OBJECT/coordinate resolution is suppressed. There is no panel entity.
+	 */
+	isMosaic?: boolean,
 };
 
 /**  Request for `project.note.get`. */
@@ -6749,6 +7157,12 @@ export type ProjectSummaryDto_Deserialize = {
 	blockedReasonKind: string | null,
 	/**  FR-020: free-form note for the blocked reason. */
 	blockedReasonNote: string | null,
+	/**
+	 *  Mosaic-mode flag (Q27 FR-017), default false. When true, the project
+	 *  may hold multiple framings (panels) that all inherit the project's
+	 *  declared target.
+	 */
+	isMosaic?: boolean,
 };
 
 /**  A project summary for list views (spec 008 read surface). */
@@ -6767,6 +7181,12 @@ export type ProjectSummaryDto_Serialize = {
 	blockedReasonKind?: string | null,
 	/**  FR-020: free-form note for the blocked reason. */
 	blockedReasonNote?: string | null,
+	/**
+	 *  Mosaic-mode flag (Q27 FR-017), default false. When true, the project
+	 *  may hold multiple framings (panels) that all inherit the project's
+	 *  declared target.
+	 */
+	isMosaic?: boolean,
 };
 
 /**
@@ -6809,6 +7229,8 @@ export type ProjectUpdateRequest_Deserialize = {
 	name: string | null,
 	tool: ProjectTool | null,
 	notes: string | null,
+	/**  Mosaic-mode flag (Q27 FR-017). Omitted means "leave unchanged". */
+	isMosaic?: boolean | null,
 };
 
 /**  Request body for `projects.update`. */
@@ -6818,6 +7240,8 @@ export type ProjectUpdateRequest_Serialize = {
 	name?: string | null,
 	tool?: ProjectTool | null,
 	notes?: string | null,
+	/**  Mosaic-mode flag (Q27 FR-017). Omitted means "leave unchanged". */
+	isMosaic?: boolean | null,
 };
 
 /**  Successful result from `projects.update`. */

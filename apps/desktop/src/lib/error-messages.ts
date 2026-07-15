@@ -104,6 +104,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'source.already.linked': m.err_source_already_linked,
   'source.not_found': m.err_source_not_found,
   'source.invalid_organization_state': m.err_source_invalid_organization_state,
+  // Guided first-project flow (spec 010 FR-010, #723).
+  state_corrupted: m.err_state_corrupted,
   'root.has_dependents': m.err_root_has_dependents,
   'tool.locked': m.err_tool_locked,
   'tool.unknown': m.err_tool_unknown,
@@ -141,6 +143,15 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'root.unavailable': m.err_root_unavailable,
   'hash.mismatch': m.err_hash_mismatch,
   'frame.not_found': m.err_frame_not_found,
+  // Framing layer (spec 008 Q27, F-Framing-3).
+  'framing.not_found': m.err_framing_not_found,
+  'framing.project_mismatch': m.err_framing_project_mismatch,
+  'framing.merge.requires_two': m.err_framing_merge_requires_two,
+  'framing.merge.duplicate_id': m.err_framing_merge_duplicate_id,
+  'framing.split.empty_selection': m.err_framing_split_empty_selection,
+  'framing.split.invalid_session': m.err_framing_split_invalid_session,
+  'framing.split.would_empty_source': m.err_framing_split_would_empty_source,
+  'framing.reassign.empty_selection': m.err_framing_reassign_empty_selection,
   // The generic wrap code maps to the shared generic fallback message (no
   // duplicated catalog values; spec 046 FR-013).
   'internal.error': m.err_generic_fallback,

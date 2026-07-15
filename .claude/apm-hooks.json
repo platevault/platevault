@@ -1,29 +1,6 @@
 {
   "PreToolUse": [
     {
-      "matcher": "Grep|Glob|Read",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/code-intelligence/scripts/code-discovery-steer.sh",
-          "timeout": 3
-        }
-      ],
-      "_apm_source": "code-intelligence"
-    },
-    {
-      "matcher": "Skill",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/dispatcher.py ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/nodes.json pre",
-          "timeout": 5,
-          "statusMessage": "Checking SpecKit DAG preconditions..."
-        }
-      ],
-      "_apm_source": "speckit-dag-hooks"
-    },
-    {
       "matcher": "Bash",
       "hooks": [
         {
@@ -34,24 +11,6 @@
         }
       ],
       "_apm_source": "hooks-quality"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-issue-close-guard.sh"
-        },
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-issue-label-guard.sh"
-        },
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh"
-        }
-      ],
-      "_apm_source": "speckit"
     },
     {
       "matcher": "Bash",
@@ -74,6 +33,24 @@
       "_apm_source": "speckit"
     },
     {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-issue-close-guard.sh"
+        },
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-issue-label-guard.sh"
+        },
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    },
+    {
       "matcher": "apply_patch|Edit|Write|MultiEdit",
       "hooks": [
         {
@@ -86,31 +63,6 @@
     }
   ],
   "PostToolUse": [
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/code-intelligence/scripts/reindex-after-commit.sh",
-          "if": "Bash(git commit*)",
-          "timeout": 30,
-          "async": true
-        }
-      ],
-      "_apm_source": "code-intelligence"
-    },
-    {
-      "matcher": "Skill",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/dispatcher.py ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/nodes.json post",
-          "timeout": 5,
-          "statusMessage": "Loading SpecKit next-step context..."
-        }
-      ],
-      "_apm_source": "speckit-dag-hooks"
-    },
     {
       "matcher": "apply_patch|Edit|Write|MultiEdit",
       "hooks": [
@@ -260,45 +212,7 @@
       "_apm_source": "speckit"
     }
   ],
-  "UserPromptExpansion": [
-    {
-      "matcher": "speckit.*",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "python3 ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/dispatcher.py ${CLAUDE_PROJECT_DIR}/.claude/hooks/speckit-dag-hooks/scripts/nodes.json pre",
-          "timeout": 5,
-          "statusMessage": "Checking SpecKit DAG preconditions..."
-        }
-      ],
-      "_apm_source": "speckit-dag-hooks"
-    }
-  ],
-  "SessionStart": [
-    {
-      "matcher": "startup",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/code-intelligence/scripts/codebase-index.sh",
-          "statusMessage": "Indexing codebase...",
-          "async": true
-        }
-      ],
-      "_apm_source": "code-intelligence"
-    }
-  ],
   "SubagentStart": [
-    {
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/code-intelligence/scripts/subagent-context-inject.sh",
-          "timeout": 5
-        }
-      ],
-      "_apm_source": "code-intelligence"
-    },
     {
       "hooks": [
         {
@@ -308,6 +222,16 @@
         }
       ],
       "_apm_source": "steering-pragmatic"
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/code-intelligence/scripts/subagent-context-inject.sh",
+          "timeout": 5
+        }
+      ],
+      "_apm_source": "code-intelligence"
     }
   ]
 }

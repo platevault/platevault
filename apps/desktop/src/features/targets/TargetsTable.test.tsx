@@ -41,10 +41,15 @@ vi.mock('@tanstack/react-router', () => ({
   ),
 }));
 
-import { TargetsTable, DEFAULT_TARGET_SORT } from './TargetsTable';
+import {
+  TargetsTable,
+  DEFAULT_TARGET_SORT,
+  __testExports,
+} from './TargetsTable';
 import { __setObservingStateForTest } from './observing-sites/site-store';
 import type { ObserverSite } from './observing-sites/observer-site';
 import type { ObservingNight } from './astro/moon-state';
+import { DEFAULT_MOON_AVOIDANCE } from './astro/moon-avoidance';
 
 function item(
   primaryDesignation: string,
@@ -380,5 +385,160 @@ describe('TargetsTable — lunar distance (US2)', () => {
     );
     // No numeric lunar separations; both rows show the unknown dash.
     expect(screen.queryByText('90°')).not.toBeInTheDocument();
+  });
+});
+
+// ── Row cache contract (#573 perf) ──────────────────────────────────────────
+//
+// The full-catalogue sort/group pass reuses a per-target-id cache gated by a
+// generation key of all astronomy inputs (see TargetsTable.tsx's module doc)
+// so growing the revealed target set only pays for the delta. These tests
+// assert the cache CONTRACT directly (object-identity reuse on a hit, a
+// fresh compute on a miss) rather than timing, which would be flaky on CI.
+describe('TargetsTable row cache (#573)', () => {
+  const { getCachedRow, rowCacheGenKey } = __testExports;
+  const TARGET = coordItem('CACHE-TEST', 10, 20);
+  const SITE_A: ObserverSite = {
+    id: 'site-a',
+    name: 'A',
+    latitudeDeg: 52,
+    longitudeDeg: 5,
+    elevationM: 0,
+    timezone: 'Europe/Amsterdam',
+    twilight: 'astronomical',
+    minHorizonAltDeg: 0,
+  };
+
+  it('reuses the same object on a cache hit (same target id + genKey)', () => {
+    const cache = new Map();
+    const genKey = rowCacheGenKey(
+      30,
+      SITE_A,
+      1000,
+      null,
+      DEFAULT_MOON_AVOIDANCE,
+    );
+    const first = getCachedRow(
+      cache,
+      TARGET,
+      genKey,
+      30,
+      SITE_A,
+      1000,
+      DEFAULT_MOON_AVOIDANCE,
+      null,
+    );
+    const second = getCachedRow(
+      cache,
+      TARGET,
+      genKey,
+      30,
+      SITE_A,
+      1000,
+      DEFAULT_MOON_AVOIDANCE,
+      null,
+    );
+    expect(second).toBe(first);
+  });
+
+  it('recomputes (fresh object) when the generation key changes', () => {
+    const cache = new Map();
+    const genKeyA = rowCacheGenKey(
+      30,
+      SITE_A,
+      1000,
+      null,
+      DEFAULT_MOON_AVOIDANCE,
+    );
+    const genKeyB = rowCacheGenKey(
+      45,
+      SITE_A,
+      1000,
+      null,
+      DEFAULT_MOON_AVOIDANCE,
+    );
+    const first = getCachedRow(
+      cache,
+      TARGET,
+      genKeyA,
+      30,
+      SITE_A,
+      1000,
+      DEFAULT_MOON_AVOIDANCE,
+      null,
+    );
+    const second = getCachedRow(
+      cache,
+      TARGET,
+      genKeyB,
+      45,
+      SITE_A,
+      1000,
+      DEFAULT_MOON_AVOIDANCE,
+      null,
+    );
+    expect(second).not.toBe(first);
+    // The new entry now occupies the cache slot for this id.
+    expect(cache.get(TARGET.id)).toBe(second);
+  });
+
+  it('rowCacheGenKey changes with each astronomy input', () => {
+    const base = rowCacheGenKey(30, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE);
+    expect(
+      rowCacheGenKey(31, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE),
+    ).not.toBe(base);
+    expect(
+      rowCacheGenKey(30, null, 1000, null, DEFAULT_MOON_AVOIDANCE),
+    ).not.toBe(base);
+    expect(
+      rowCacheGenKey(30, SITE_A, 2000, null, DEFAULT_MOON_AVOIDANCE),
+    ).not.toBe(base);
+    expect(
+      rowCacheGenKey(
+        30,
+        SITE_A,
+        1000,
+        nightWithMoonAtVernalEquinox(),
+        DEFAULT_MOON_AVOIDANCE,
+      ),
+    ).not.toBe(base);
+  });
+});
+
+// ── #757: needs-coordinates is a distinct table state, not 0°/"low" ────────────
+
+describe('TargetsTable — needs-coordinates state (#757)', () => {
+  beforeEach(() => {
+    __setObservingStateForTest({
+      sites: [SITE],
+      activeSiteId: SITE.id,
+      defaultSiteId: SITE.id,
+    });
+  });
+
+  it('shows the unresolved chip (never "0°") in Max alt + sparkline for a target with no coordinates', () => {
+    renderTable({ targets: [coordItem('UNK', null, null)] });
+    expect(screen.queryByText('0°')).not.toBeInTheDocument();
+    // One chip in the Max alt cell, one in place of the sparkline.
+    expect(screen.getAllByTestId('unresolved-chip').length).toBe(2);
+  });
+
+  it('shows a "Needs coordinates" indicator distinct from the low-altitude "○ Low" state', () => {
+    // Pin to a winter night (see the circumpolar test above): mid-summer at
+    // 52°N never reaches astronomical twilight, which would make the
+    // low-altitude fixture read "No dark window" instead of "low" — not a
+    // useful test of the #757 distinction.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-15T20:00:00Z'));
+    try {
+      renderTable({
+        targets: [coordItem('UNK', null, null), coordItem('LOW', 0, -80)],
+      });
+      expect(screen.getByText('Needs coordinates')).toBeInTheDocument();
+      // The genuinely low-altitude target still gets its own distinct label.
+      expect(screen.getByText('low')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

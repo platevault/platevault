@@ -14,6 +14,7 @@ interface CallListProps {
   calls: ContractCall[];
   contracts: ContractMeta[];
   onViewSchema: (call: ContractCall) => void;
+  onReplay: (call: ContractCall) => void;
 }
 
 function formatDuration(ms: number | null): string {
@@ -31,7 +32,12 @@ function formatStarted(iso: string): string {
   }
 }
 
-export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
+export function CallList({
+  calls,
+  contracts,
+  onViewSchema,
+  onReplay,
+}: CallListProps) {
   if (calls.length === 0) {
     return (
       <p className="alm-dev-calls__empty">
@@ -113,6 +119,7 @@ export function CallList({ calls, contracts, onViewSchema }: CallListProps) {
                       ? ' alm-dev-calls__replay-btn--safe'
                       : ' alm-dev-calls__replay-btn--unsafe')
                   }
+                  onClick={() => onReplay(call)}
                   disabled={!isReplaySafe}
                   title={
                     isReplaySafe

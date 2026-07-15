@@ -17,7 +17,7 @@
  * Reuses `TargetSearch` (spec 035 US1/US3) unchanged.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { m } from '@/lib/i18n';
 import { Btn, Pill } from '@/ui';
 import { Modal, TargetSearch } from '@/components';
@@ -40,6 +40,10 @@ export function AddTargetDialog({
   const [pending, setPending] = useState<TargetSuggestion | null>(null);
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // #841: point the dialog's initial focus directly at the search input
+  // instead of racing Base UI's own default (first tabbable = the ✕ close
+  // button) with a bare `autoFocus`.
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const reset = useCallback(() => {
     setPending(null);
@@ -99,6 +103,7 @@ export function AddTargetDialog({
       size="md"
       className="alm-add-target__popup"
       ariaLabel={m.targets_add_target()}
+      initialFocus={searchInputRef}
       footer={
         <>
           <Btn
@@ -141,8 +146,7 @@ export function AddTargetDialog({
             label={m.targets_add_target_search_label()}
             placeholder={m.projects_create_target_search_placeholder()}
             onSelect={handleSelect}
-            // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: moves focus to the search field when the Add Target dialog opens (expected modal behaviour)
-            autoFocus
+            inputRef={searchInputRef}
           />
         )}
 

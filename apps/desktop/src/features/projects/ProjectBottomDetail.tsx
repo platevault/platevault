@@ -13,6 +13,7 @@
  *   Notes          — project notes (editable unless archived)
  *   Manifests      — manifest files accordion
  *   Calibration    — calibration match panel for project sources
+ *   Tool Launches  — observed processing artifacts grouped by launch (spec 012)
  *   Source views   — generated source view removal / regenerate (spec 026)
  *   Outputs        — accepted outputs verification (stub; spec 043 §4)
  *   Cleanup        — cleanup preview (stub; spec 043 §4)
@@ -32,6 +33,7 @@ import { useProjectDetail } from './store';
 import { ProjectNotesSection } from './ProjectNotesSection';
 import { ManifestsAccordion } from './ManifestsAccordion';
 import { CalibrationMatchPanel } from './CalibrationMatchPanel';
+import { ToolLaunchesAccordion } from './ToolLaunchesAccordion';
 import { SourceViewsSection } from './SourceViewsSection';
 import { OutputsSection, CleanupSection } from './OutputsCleanupSections';
 
@@ -89,6 +91,12 @@ export function ProjectBottomDetail({ projectId }: ProjectBottomDetailProps) {
         {/* ── Manifests accordion ───────────────────────────────────────── */}
         <div className="alm-project-bottom__cell">
           <ManifestsAccordion projectId={projectId} defaultOpen={true} />
+        </div>
+
+        {/* ── Tool Launches — observed processing artifacts (spec 012 FR-009,
+            #728: previously built and tested but never mounted) ──────────── */}
+        <div className="alm-project-bottom__cell">
+          <ToolLaunchesAccordion projectId={projectId} defaultOpen={true} />
         </div>
 
         {/* ── Generated source views (spec 026) ────────────────────────── */}

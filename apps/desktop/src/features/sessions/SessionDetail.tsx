@@ -151,16 +151,15 @@ export function SessionDetail({
       value: session.binning ?? null,
       source: 'fits',
     },
-    ...(session.setTemp
-      ? [
-          {
-            key: 'temp',
-            label: m.settings_calmatch_sensor_temp(),
-            value: session.setTemp,
-            source: 'fits',
-          } as PropertyDef,
-        ]
-      : []),
+    {
+      // Applicable to every light session (data-model.md matrix) — always
+      // present so an absent value renders the unresolved chip (spec-030
+      // Q16 / FR-135) instead of silently vanishing.
+      key: 'temp',
+      label: m.settings_calmatch_sensor_temp(),
+      value: session.setTemp ?? null,
+      source: 'fits',
+    },
     ...(prov?.confirmedBy
       ? [
           {

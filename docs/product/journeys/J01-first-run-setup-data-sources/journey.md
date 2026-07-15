@@ -1,3 +1,7 @@
+> **MIGRATED (pilot):** current truth now lives at
+> `docs/journeys/J01-first-run-setup-data-sources/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 1 — First-run setup → data sources
 
 **Goal:** get a fresh install from an empty database to a working library:

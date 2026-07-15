@@ -4,13 +4,16 @@
 //! Plan apply Tauri commands (spec 025).
 //!
 //! Implements the five JSON-Schema contracts under
-//! `specs/025-filesystem-plan-application/contracts/`:
+//! `specs/025-filesystem-plan-application/contracts/`, plus one additional
+//! confirm command (issue #741, not part of the original spec 025 contract
+//! set — the DB column it writes predates this command by several specs):
 //! - `plans.apply`       — start applying an approved plan.
 //! - `plans.cancel`      — cancel an in-flight apply.
 //! - `plans.resume`      — resume a paused apply run.
 //! - `plans.item.skip`   — skip a pending item.
 //! - `plans.item.retry`  — retry a failed item.
 //! - `plans.apply.status`— fetch current apply status.
+//! - `plans.confirm.destructive` — confirm a plan's delete/trash items.
 //!
 //! All state-machine enforcement lives in `crates/app/core/src/plan_apply.rs`.
 //! These commands are thin adapters: validate inputs, delegate, return DTOs.
@@ -18,13 +21,15 @@
 use std::sync::Arc;
 
 use app_core::plan_apply::{
-    apply_plan, apply_plan_channel_free, cancel_plan, get_apply_status, resume_plan,
-    retry_plan_item, skip_plan_item, OperationEventSink,
+    apply_plan, apply_plan_channel_free, cancel_plan, confirm_plan_destructive_items,
+    get_apply_status, resume_plan, retry_plan_item, skip_plan_item, OperationEventSink,
 };
 use contracts_core::plan_apply::{
     PlanApplyResponse, PlanApplyStatus, PlanCancelResponse, PlanItemRetryResponse,
     PlanItemSkipResponse, PlanResumeResponse,
 };
+use serde::Serialize;
+use specta::Type;
 use tauri::ipc::Channel;
 use tauri::State;
 
@@ -190,6 +195,43 @@ pub async fn plans_item_retry(
     item_id: String,
 ) -> Result<PlanItemRetryResponse, ContractError> {
     retry_plan_item(state.repo.pool(), &plan_id, &item_id).await
+}
+
+// ── plans.confirm.destructive ─────────────────────────────────────────────────
+
+/// Response for `plans.confirm.destructive`.
+///
+/// Local to this command (rather than a `contracts_core::plan_apply` DTO):
+/// the shape is a plain confirmation receipt with no other consumer.
+#[derive(Clone, Debug, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanDestructiveConfirmResponse {
+    pub plan_id: String,
+    /// Number of items whose `destructive_confirmed` flag flipped (0 when
+    /// every destructive item in the plan was already confirmed).
+    pub items_confirmed: i64,
+}
+
+/// `plans.confirm.destructive` — confirm every delete/trash item in a plan
+/// (FR-003, D9, issue #741).
+///
+/// Persists `destructive_confirmed = 1` on the plan's destructive items so a
+/// subsequent apply does not refuse them at the executor's
+/// destructive-confirm gate. Plan-level, not per-item — see
+/// `confirm_plan_destructive_items`'s doc comment for why.
+///
+/// # Errors
+///
+/// Returns `Err(ContractError)` with `"plan.not_found"` if the plan does not
+/// exist.
+#[tauri::command]
+#[specta::specta]
+pub async fn plans_confirm_destructive(
+    state: State<'_, AppState>,
+    plan_id: String,
+) -> Result<PlanDestructiveConfirmResponse, ContractError> {
+    let items_confirmed = confirm_plan_destructive_items(state.repo.pool(), &plan_id).await?;
+    Ok(PlanDestructiveConfirmResponse { plan_id, items_confirmed })
 }
 
 // ── plans.apply.status ────────────────────────────────────────────────────────

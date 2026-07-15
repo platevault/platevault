@@ -75,6 +75,9 @@ pub mod first_run;
 /// Per-frame inventory use cases (spec 048): `inventory.frame.list` and the
 /// on-demand `inventory.reconcile.run` pass.
 pub mod frame_inventory;
+/// `framing.list` / `framing.merge` / `framing.split` / `framing.reassign`
+/// use cases (spec 008 Q27, F-Framing-3).
+pub mod framing;
 pub mod guided_flow;
 /// Inbox plan use-cases (spec 041). Lives in `app_core` (not `app_core_inbox`)
 /// because it orchestrates `plans` + `plan_apply`, which are `app_core` modules.

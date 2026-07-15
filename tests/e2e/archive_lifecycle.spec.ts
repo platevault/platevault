@@ -80,14 +80,17 @@ test.describe("archive lifecycle (spec 017 US6 / Journey 7)", () => {
     // ── 2. Select the first entry → single-column detail panel opens ────────
     await page.getByTestId("archive-row-arch-proj-001").click();
 
-    // Scope to the detail pane — "Superseded by reprocess" also renders as a
-    // table cell in the list above (same reason string), and the detail's
-    // own Details PropertyTable repeats it as a property value.
+    // Detail-as-delta (spec-030 Q16 T133 / FR-139): the detail panel no
+    // longer echoes list-row facts. The reason renders on the LIST row only;
+    // the detail keeps header identity (name/type/status/path) and leads
+    // with Audit history — the panel's one real information class.
+    await expect(
+      page.getByTestId("archive-row-arch-proj-001").getByText("Superseded by reprocess"),
+    ).toBeVisible();
     const detail = page.locator(".alm-detail");
     await expect(detail).toBeVisible({ timeout: 5_000 });
-    await expect(detail.getByText("Superseded by reprocess")).toBeVisible();
-    // The subtitle and the Details PropertyTable both repeat the original
-    // path; assert the first (subtitle) occurrence renders.
+    await expect(detail.getByText("Audit history")).toBeVisible();
+    // The original path renders as the header subtitle.
     await expect(detail.getByText("Projects/NGC7000_HOO_v1").first()).toBeVisible();
     // Status pill from the shared archive vocabulary (scoped + case-sensitive
     // regex — "Archived" also appears as a PropertyTable field label).

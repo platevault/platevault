@@ -57,6 +57,10 @@ pub enum EntityType {
     Settings,
     Protection,
     Equipment,
+    /// A framing (spec 008 Q27) — audit-only entity type, same precedent as
+    /// Settings/Protection/Equipment (no lifecycle table/transitions of its
+    /// own; only used at the `insert_audit_entry` write path).
+    Framing,
 }
 
 impl EntityType {
@@ -75,6 +79,7 @@ impl EntityType {
             Self::Settings => "settings",
             Self::Protection => "protection",
             Self::Equipment => "equipment",
+            Self::Framing => "framing",
         }
     }
 }

@@ -21,7 +21,7 @@
  * 9. Column headers + sort callback fire.
  */
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MastersTable, DEFAULT_MASTER_SORT } from './MastersTable';
 import type { CalibrationMaster_Serialize as CalibrationMaster } from '@/bindings/index';
@@ -234,5 +234,54 @@ describe('MastersTable (spec 043 §4)', () => {
     const allText = document.body.textContent ?? '';
     expect(allText).not.toContain('undefined');
     expect(allText).not.toContain('NaN');
+  });
+
+  // ── spec-030 Q16 (#620, #619): missing vs not-applicable per-kind cells ──
+
+  it('11. filter on a dark master (not-applicable) renders blank, never the unresolved chip', () => {
+    const dark = makeMaster({ id: 'dark-noflt', kind: 'dark', ageDays: 5 });
+    render(<MastersTable {...baseProps} masters={[dark]} />);
+    const row = screen.getByTestId('master-row-dark-noflt');
+    expect(within(row).queryByTestId('unresolved-chip')).toBeNull();
+  });
+
+  it('12. filter absent on a flat master (applicable) renders the unresolved chip, not blank', () => {
+    const flat = makeMaster({
+      id: 'flat-noflt',
+      kind: 'flat',
+      ageDays: 5,
+      fingerprint: {
+        camera: 'ASI2600MM',
+        exposureS: 2,
+        tempC: -10,
+        gain: 100,
+        binning: '1x1',
+        filter: null,
+      },
+    });
+    render(<MastersTable {...baseProps} masters={[flat]} />);
+    const row = screen.getByTestId('master-row-flat-noflt');
+    expect(
+      within(row).getAllByTestId('unresolved-chip').length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('13. exposure on a bias master (not-applicable) renders blank, never the unresolved chip', () => {
+    const bias = makeMaster({
+      id: 'bias-noexp',
+      kind: 'bias',
+      ageDays: 5,
+      fingerprint: {
+        camera: 'ASI2600MM',
+        tempC: -10,
+        gain: 100,
+        binning: '1x1',
+      },
+    });
+    render(<MastersTable {...baseProps} masters={[bias]} />);
+    const row = screen.getByTestId('master-row-bias-noexp');
+    // Exposure and filter are both not-applicable to bias; temp (set-temp)
+    // is also not-applicable — none of them may render the unresolved chip.
+    expect(within(row).queryByTestId('unresolved-chip')).toBeNull();
   });
 });

@@ -17,7 +17,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+
+const { mockPlansConfirmDestructive } = vi.hoisted(() => ({
+  mockPlansConfirmDestructive: vi.fn(),
+}));
+
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    plansConfirmDestructive: mockPlansConfirmDestructive,
+  },
+}));
 
 // Per-signature spy types. `vi.fn<Fn>()` yields a callable `Mock<Fn>` that the
 // project's strict types accept as a plain function prop — unlike the bare
@@ -117,6 +127,11 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     onApplyAll = vi.fn<() => void>();
     onCancel = vi.fn<(id: string) => void>();
     onDestructiveChange = vi.fn<(d: DestructiveDestination) => void>();
+    mockPlansConfirmDestructive.mockReset();
+    mockPlansConfirmDestructive.mockResolvedValue({
+      status: 'ok',
+      data: { planId: 'plan-1', itemsConfirmed: 1 },
+    });
   });
 
   // ── Aggregate rendering ────────────────────────────────────────────────────
@@ -512,6 +527,49 @@ describe('PlanPanel (aggregate surface)', { timeout: 15_000 }, () => {
     );
     fireEvent.click(screen.getByTestId('plan-destructive-trash'));
     expect(onDestructiveChange).toHaveBeenCalledWith('trash');
+  });
+
+  // ── Destructive-confirm gate (FR-003, D9, issue #741) ──────────────────────
+
+  it('blocks Apply all until the destructive-confirm checkbox is confirmed', () => {
+    renderPanel([
+      makePlan({
+        planId: 'plan-1',
+        actions: [makeAction({ requiresDestructiveConfirm: true })],
+      }),
+    ]);
+    expect(
+      (screen.getByTestId('plan-apply-all') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    const confirmBox = screen.getByTestId(
+      'plan-destructive-confirm',
+    ) as HTMLInputElement;
+    expect(confirmBox.checked).toBe(false);
+  });
+
+  it('confirming destructive items calls plans.confirm.destructive and unblocks Apply all', async () => {
+    renderPanel([
+      makePlan({
+        planId: 'plan-1',
+        actions: [makeAction({ requiresDestructiveConfirm: true })],
+      }),
+    ]);
+    fireEvent.click(screen.getByTestId('plan-destructive-confirm'));
+    await waitFor(() =>
+      expect(mockPlansConfirmDestructive).toHaveBeenCalledWith('plan-1'),
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByTestId('plan-apply-all') as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
+  });
+
+  it('does not gate Apply all on destructive-confirm when no action requires it', () => {
+    renderPanel([makePlan({ actions: [makeAction()] })]);
+    expect(
+      (screen.getByTestId('plan-apply-all') as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 
   // ── Busy ───────────────────────────────────────────────────────────────────

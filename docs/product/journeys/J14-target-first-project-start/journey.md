@@ -1,3 +1,7 @@
+> **MIGRATED:** current truth now lives at
+> `docs/journeys/J14-target-first-project-start/journey.md`. This file and
+> its deltas are frozen legacy history.
+
 ## Journey 14 — Target-first project start
 
 **Goal:** start from "I want to shoot IC 10 next" in the Targets planner and
