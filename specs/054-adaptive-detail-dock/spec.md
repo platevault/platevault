@@ -125,6 +125,12 @@ self-contained. These are settled — do not relitigate.
   selection with the detail following, Escape closes the panel — are
   **placement-neutral requirements**: identical in side and bottom dock.
   **No overlay variant** — focus-trap obligations are deliberately avoided.
+- Q: How is this validated? → A: (second amendment, owner 2026-07-17)
+  Every behavior this spec ships MUST have **(1) UI validation tests that
+  run in GitHub CI** (mock-mode Playwright) and **(2) journey-catalog
+  coverage** (intent-gated deltas with stable step ids in `docs/journeys/`,
+  the canonical catalog). Encoded as FR-016/FR-017, SC-009/SC-010, and the
+  "Testing & Journey Coverage" section.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -411,6 +417,67 @@ confirm the panel closes without mutating the record.
   works at ~360px: the name column truncates with a full-name tooltip, and
   only the essential status columns are shown (the current overly-wide name
   column layout is replaced).
+- **FR-016**: Every behavior this spec ships MUST be covered by UI
+  validation tests that run in the GitHub CI job (mock-mode Playwright
+  end-to-end assertions). At minimum the assertion set in "Testing &
+  Journey Coverage" below MUST exist and pass in CI. Existing end-to-end
+  pins that assert the current detail dock MUST be kept passing or migrated
+  deliberately as part of the implementation — never silently broken or
+  deleted (the affected pins are enumerated below).
+- **FR-017**: Every behavior this spec ships MUST be reflected in the
+  canonical journey catalog (`docs/journeys/`) via journey deltas for each
+  affected journey, following the catalog's intent-gated delta format with
+  stable step ids (the affected journey set is enumerated in "Testing &
+  Journey Coverage" below).
+
+### Testing & Journey Coverage
+
+**CI-run UI validation (FR-016).** The GitHub CI end-to-end job (mock-mode
+Playwright) MUST assert at least:
+
+- Side dock engages at the page's threshold and disengages below it
+  (viewport resize across the boundary; Targets at 1500px logical width).
+- A per-page placement override (pin side / pin bottom) persists across an
+  app restart (persisted-state reload in the test harness).
+- Dragging the resize handle changes the side panel/split width, and the
+  width persists across restart.
+- Inbox renders the permanent detail-dominant layout at every tested width:
+  item list ~360px on the left, full-height detail on the right, never a
+  bottom dock.
+- Targets beside a side dock: the pinned identity columns (star +
+  designation) stay visible while the non-pinned columns scroll
+  horizontally — and horizontal scroll appears ONLY when space is
+  insufficient. The existing full-width unclipped pin
+  (`tests/e2e/targets_planner.spec.ts:531` and `:536`, asserting
+  `scrollWidth <= clientWidth` at 1100×720) MUST keep passing.
+
+**Existing pins on the current dock (FR-016).** These assertions target
+`.alm-listpage__detail` and will be affected by the new placement logic;
+each MUST be kept passing or migrated deliberately (never silently
+deleted):
+
+- `tests/e2e/calibration_masters_matching.spec.ts:157` (master detail pane
+  mounts on selection).
+- `tests/e2e/inbox_ingest_confirm.spec.ts:69` (no detail dock before
+  selection), `:135` and `:183` (detail mounts with expected content) —
+  these move to the detail-dominant split semantics (FR-014).
+
+**Journey-catalog deltas (FR-017).** `docs/journeys/` is the canonical
+catalog; the implementation MUST ship intent-gated deltas with stable step
+ids for the affected journeys:
+
+- `J16-keyboard-first-navigation` — placement-neutral arrow-follow and
+  Escape-close (S3/S4) across side dock, bottom dock, and the Inbox split.
+- `J02-ingest-review-reclassify-confirm-move` and
+  `J03-ingest-confirm-catalogue-in-place` — the Inbox permanent
+  detail-dominant split (FR-014/FR-015).
+- `J09-targets-planning` — Targets side dock, pinned columns, column
+  order, conditional horizontal scroll.
+- `J04-sessions-review-derived` and
+  `J08-calibration-ingest-masters-matching` — the adaptive dock on
+  Sessions and Calibration.
+- `J05-project-lifecycle` and `J07-archive-delete` — Projects unification
+  and the Archive dock change (same adaptive mechanism).
 
 ### Key Entities *(include if feature involves data)*
 
@@ -457,6 +524,16 @@ confirm the panel closes without mutating the record.
   metadata-confirm workflow — review, reclassify, resolve mandatory fields,
   plan — is fully usable, with item names truncated to a tooltip rather
   than clipped silently.
+- **SC-009**: Every FR of this spec traces to at least one mock-mode
+  Playwright assertion that runs (and passes) in the GitHub CI job, covering
+  at minimum the assertion set in "Testing & Journey Coverage"; the
+  pre-existing pins enumerated there (targets full-width unclipped;
+  `.alm-listpage__detail` in the calibration and inbox specs) pass or are
+  migrated with an explicit rationale in the change that migrates them.
+- **SC-010**: Journey deltas exist in `docs/journeys/` for every affected
+  journey listed in "Testing & Journey Coverage" (J02, J03, J04, J05, J07,
+  J08, J09, J16), each following the intent-gated delta format with stable
+  step ids, before the feature is declared complete.
 
 ## Out of Scope
 
