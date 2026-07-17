@@ -19,6 +19,8 @@ trace:
     evidence for S1-S5, dupes #658/#792/#574 hit)
   - issues #658, #815, #816 (open — audit-2026-07-15 corrections to S1/S2/S3)
   - PR #890 (merged, fixes #573) · PR #896 (merged, fixes #579, #580)
+  - PR #940 (Moon-aware detail "Best date"; list Opposition unchanged —
+    addresses the naming half of #792)
 ---
 
 ## Goal
@@ -137,7 +139,17 @@ configured) real per-site astronomy for tonight.
   on such a night regardless. The per-row "Tonight" altitude sparkline is
   larger and wider than before, with a coloured line, a soft fill under the
   curve, twilight shading either side of the dark window, and a marker at
-  the transit (highest) point.
+  the transit (highest) point. In the detail panel, the "Best date" stat is
+  the nearest Moon-favourable night to the target's opposition (±15 nights,
+  earlier night wins ties, scored with the live Moon-avoidance parameters)
+  and explains itself via a tooltip — mirrored into the value's
+  accessible name — stating one of three things: the date diverged from the
+  opposition and why (both nights' Moon illumination/separation), it
+  coincides because the opposition night's Moon is favourable, or no
+  favourable night exists within ±2 weeks (the opposition date is then shown
+  with that disclosure). The detail date may therefore legitimately differ
+  from the list's "Opposition" column, which stays the pure geometric
+  transit-at-midnight date with unchanged sort.
 - **Expect (negative):** Without a configured observing site, these columns
   disclose that they need a site rather than rendering a plausible-looking
   number. The Sessions column always renders as a dash — session-linkage is
@@ -191,6 +203,20 @@ configured) real per-site astronomy for tonight.
   every target; the Tonight sparkline is larger, with twilight shading and
   a transit-point marker.
   Evidence: PR #896 (fixes #579, #580) · by: journey-scribe (intent-gated)
+
+- **Δ4** 2026-07-17 · S4 · behavior-change
+  The detail panel's "Best date" no longer duplicates the list's
+  "Opposition": it is now the nearest Moon-favourable night to the
+  opposition (±15 nights, live Moon-avoidance parameters, broadband
+  scoring) with a self-explaining tooltip covering the diverged /
+  coincides / none-found states; the list column keeps the pure geometric
+  opposition date and sort. Automated coverage: mock-Playwright
+  targets_planner 9.5c (CI) + a real-UI Best-date assertion in
+  targets_journeys.rs; manual tooltip-styling check added as Windows
+  journey-09 Test 9.
+  Evidence: PR #940 (addresses the naming half of #792; spec 044 FR-009
+  amendment, iteration 2026-07-17) · by: best-moon-date lane
+  (intent-gated)
 
 Note (not a Δ entry — provenance for why two deltas were not folded into the
 body above): `deltas/2026-07-14-q16-t132.md` and `2026-07-14-q16-t133.md`

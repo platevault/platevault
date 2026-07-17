@@ -34,6 +34,7 @@ Layer-2 smoke journey; **—** = covered implicitly via screen-load smoke.
 | 20 | Bottom log viewer | ✅ | ✅ | log stream render |
 | 21 | Router & URL state | n/a | ✅ | **all top-level screens load** (FR-007) |
 | 22 | Audit event model (cross-cutting) | ✅ | via #18 | bus + stale propagation; **spec 030 Q15/#647 (T122–T125, 2026-07-14)**: settings/protection/equipment/source+root mutations now write durable `audit_log_entry` rows (previously bus-only for protection/source/root, no audit at all for equipment) — see the Q15 row below |
+| 23 | Framing clustering + Inbox-confirm attribution (spec 008 Q27) | ✅ | ❌ | clustering/list/merge/split/reassign + attribution ranking/apply-path all real IPC, **zero frontend consumer** — see the dated section below |
 
 **Required round-trip proof (FR-008)**: areas #1, #7, #12/#14 each round-trip a
 UI value through the real backend.
@@ -493,3 +494,56 @@ full 6-step wizard happy path (Sources→Tools→Config→Site→Confirm→Scan)
 to end, and Data Sources management (rescan/remap/disable/delete/reveal) —
 both remain "UNCOVERED" per the original audit and are follow-up candidates,
 not regressions.
+
+## Spec 008 Q27 iteration — framing clustering + Inbox-confirm attribution (F-Framing-8/9/11) — 2026-07-17
+
+New area #23 (above). Grouping a project's light sessions into **framings**
+(tolerance-based clustering, R11a) and ranking Inbox-confirm **attribution**
+candidates against existing framings/projects (FR-019/FR-020/FR-022) are
+real, shipped backend features with **zero frontend consumer** for the
+grouping/attribution flow itself — `projects.framing.list/merge/split/
+reassign` and `inbox.confirm`'s `attributionCandidates`/`chosenAttribution`
+fields are wired IPC commands with no page rendering a framing list, a
+merge/split/reassign control, or an attribution-candidate picker. This is a
+real product gap (no UI exists yet), not a testing gap — flagged explicitly
+per this feature's own auditing convention (see the journey-04 Test 4
+precedent). The one exception: **Settings → Framing** (NEW, F-Framing-11),
+the clustering tolerance tunables pane, is a real, shipped UI surface.
+
+| Scenario (F-Framing-8 Layer-1 sweep) | Layer-1 test |
+|---|---|
+| Multi-night/multi-filter sessions collapse into one framing | `crates/sessions/src/clustering.rs::multi_night_multi_filter_sessions_collapse_into_one_framing` |
+| Pointing/rotation beyond tolerance splits into distinct framings; `user_adjusted` framings never modified by re-derivation | `clustering.rs::pointing_beyond_tolerance_splits_into_distinct_framings`, `::user_adjusted_framing_membership_is_never_modified` |
+| NULL-geometry sessions excluded, never zero-defaulted | `clustering.rs::null_geometry_sessions_are_excluded_not_zero_defaulted` |
+| `framing.merge`/`split`/`reassign` persistence + `user_adjusted` flips, cross-project/partial-mutation rejection | `crates/app/core/src/framing.rs` (`merge_folds_sessions_and_deletes_merged_framings`, `split_moves_selected_sessions_into_a_new_framing`, `reassign_moves_session_between_framings`, + rejection-path tests) |
+| Attribution ranking: `add_to_framing` top-ranked within tolerance, `new_framing` suggested out of tolerance, `flag_optic_difference` for a same-target/different-optic-train match, trailing `new_project` fallback always present | `crates/app/inbox/src/attribution.rs` (`compute_candidates_ranks_add_to_framing_top_when_within_tolerance`, `::compute_candidates_suggests_new_framing_when_pointing_is_out_of_tolerance`, `::compute_candidates_flags_optic_difference_for_same_target_different_optic_train`, `::compute_candidates_returns_only_new_project_when_nothing_matches`) |
+| Mosaic first-new-panel suggestion (US6 AS3) | `attribution.rs::compute_candidates_mosaic_first_new_panel_suggests_new_framing` |
+| Mosaic new-framing inherits the project's declared target, ignoring a misleading per-frame OBJECT resolution (NEW this pass — the one genuine coverage gap found) | `attribution.rs::apply_new_framing_for_mosaic_project_inherits_declared_target_ignoring_resolved_object` |
+| User-pick-only apply via `chosenAttribution`, geometry-unavailable rejection, unassigned no-op | `attribution.rs` (`apply_new_project_creates_project_framing_and_persists_plan_pick`, `::apply_add_to_framing_links_existing_framing_without_creating_a_new_one`, `::apply_unassigned_is_a_noop`, `::apply_new_framing_without_geometry_is_rejected`) |
+| Completed-project attribution match → add + reopen, honoring the Q25 raw-subs-archived warning | `attribution.rs::apply_to_completed_project_reopens_and_surfaces_raw_subs_warning` |
+| SC-008 end-to-end: a `chosenAttribution` pick persisted at confirm time materializes as real framing membership only once the plan applies, via the real `plan_listener` → `ingest_sessions` pipeline (no internal calls) | `crates/app/core/tests/attribution_integration.rs::chosen_framing_pick_materializes_as_session_membership_once_the_plan_applies` |
+| F-Framing-11 settings wiring: a stored `framingPointingFractionOfFov` override actually changes `compute_candidates`' ranking outcome (not just the parameter struct); defaults reproduce `ToleranceParams::defaults()` bit-for-bit | `attribution.rs::tolerance_params_reads_r11a_defaults_when_unset`, `::tolerance_params_honours_stored_settings_overrides`, `::compute_candidates_honours_widened_pointing_tolerance_setting` |
+| Framing settings keys: validation bounds, `load_settings`/`get_settings` round-trip | `crates/app/settings/src/lib.rs::framing_tolerances_round_trip_through_db`, `::framing_tolerances_reject_out_of_range_values`; `crates/persistence/db/src/repositories/settings.rs::load_settings_applies_stored_framing_tolerance_overrides` |
+
+**Deliberately out of this sweep's scope**: per-framing source view /
+manifest coverage (F-Framing-7) — externally blocked on the Q20
+(spec-026/049) and Q10 (spec-024) iterations, not yet started, per
+F-Framing-7's own task note.
+
+**F-Framing-9 (this pass)**: `docs/development/windows-journeys/
+journey-11-framing-clustering-attribution.md` documents the click-by-click
+Settings → Framing pane scenario (Test 1, real UI) plus the Tauri-MCP-bridge
+`invoke()` scenario for framing grouping (Test 2), attribution ranking +
+apply-path (Test 3), and merge/split/reassign (Test 4) — bridge-driven
+because no UI exists to click through for those three. `tests/e2e/
+settings_framing.spec.ts` (NEW, mock-Playwright) covers Test 1's mock-mode
+round-trip: R11a defaults render, an edit auto-saves and survives an
+unmount/remount via the `settings_get('framing')`/`settings_update('framing',
+…)` mock fixture (`apps/desktop/src/api/mocks.ts`).
+
+**Promoting Tests 2-4 to a Layer-2 thirtyfour journey or a mock-Playwright
+spec is blocked on product UI work** (a framing list/merge/split/reassign
+surface and an attribution-candidate picker at Inbox confirm), not on
+test-harness capability — the same class of gap as row 8's
+`MatchCandidatesPanel.tsx` "implemented but unreachable" finding, but here
+even earlier: no consuming component exists at all yet.

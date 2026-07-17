@@ -21,6 +21,7 @@
 
 import { Checkbox } from '@base-ui-components/react/checkbox';
 import { Select } from '@base-ui-components/react/select';
+import { Tooltip } from '@/ui';
 import { m } from '@/lib/i18n';
 import {
   renderValueOnly,
@@ -44,6 +45,13 @@ export interface PropertyDef {
    * to this entity/frame-type (e.g. filter on a dark).
    */
   applicability?: FieldApplicability;
+  /**
+   * Optional explanation revealed on hover/focus of the VALUE (view mode
+   * only), via the shared token-styled `ui/Tooltip`. Mirrored into the
+   * trigger's `aria-label` together with the value (the InfoTip pattern) so
+   * screen readers get it without a hover.
+   */
+  tooltip?: string;
   confirmed?: boolean;
   onConfirmToggle?: () => void;
   onChange?: (newValue: string) => void;
@@ -186,6 +194,19 @@ export function PropertyTable({
             >
               {isEditing ? (
                 <PropertyValueEditor prop={prop} />
+              ) : prop.tooltip ? (
+                <Tooltip
+                  content={prop.tooltip}
+                  tabIndex={0}
+                  data-testid={`proptable-tooltip-${prop.key}`}
+                  aria-label={
+                    prop.value != null
+                      ? `${String(prop.value)} — ${prop.tooltip}`
+                      : prop.tooltip
+                  }
+                >
+                  {renderValueOnly(prop.value, { applicability })}
+                </Tooltip>
               ) : (
                 renderValueOnly(prop.value, { applicability })
               )}

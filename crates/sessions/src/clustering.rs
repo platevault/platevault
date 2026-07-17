@@ -558,18 +558,38 @@ fn normalize_deg_0_360(deg: f64) -> f64 {
 }
 
 /// Great-circle angular separation between two ICRS pointings, in degrees
-/// (haversine — accurate at the sub-degree scale framing tolerances operate
-/// at; avoids the RA/Dec Euclidean-distance bug that overstates separation
-/// near the poles).
+/// (delegates to `skymath::separation` — accurate at the sub-degree scale
+/// framing tolerances operate at; avoids the RA/Dec Euclidean-distance bug
+/// that overstates separation near the poles).
+///
+/// A non-finite input on either pointing yields `NaN` (matching the previous
+/// haversine's permissive behaviour), rather than the domain-validation error
+/// `skymath::Equatorial` would otherwise raise.
 #[must_use]
 pub fn angular_separation_deg(a: Pointing, b: Pointing) -> f64 {
-    let (lat1, lat2) = (a.dec_deg.to_radians(), b.dec_deg.to_radians());
-    let dlat = lat2 - lat1;
-    let dlon = (b.ra_deg - a.ra_deg).to_radians();
-    let sin_dlat_2 = (dlat / 2.0).sin();
-    let sin_dlon_2 = (dlon / 2.0).sin();
-    let h = sin_dlat_2.mul_add(sin_dlat_2, lat1.cos() * lat2.cos() * sin_dlon_2 * sin_dlon_2);
-    2.0 * h.clamp(0.0, 1.0).sqrt().asin().to_degrees()
+    if !a.ra_deg.is_finite()
+        || !a.dec_deg.is_finite()
+        || !b.ra_deg.is_finite()
+        || !b.dec_deg.is_finite()
+    {
+        return f64::NAN;
+    }
+    skymath::separation(to_equatorial(a), to_equatorial(b)).degrees()
+}
+
+/// Build a `skymath::Equatorial` from a [`Pointing`], wrapping RA into
+/// `[0, 360)` and clamping Dec into `[-90, 90]` so out-of-domain-but-finite
+/// inputs still produce a position rather than an error (the previous
+/// haversine was equally permissive).
+///
+/// # Panics
+/// Panics if `p.ra_deg` or `p.dec_deg` is non-finite; [`angular_separation_deg`]
+/// filters those before calling.
+fn to_equatorial(p: Pointing) -> skymath::Equatorial {
+    let ra = skymath::Angle::from_degrees(p.ra_deg).normalized_0_360();
+    let dec = skymath::Angle::from_degrees(p.dec_deg.clamp(-90.0, 90.0));
+    skymath::Equatorial::j2000(ra, dec)
+        .expect("ra normalized to [0, 360), dec clamped to [-90, 90]")
 }
 
 /// Shortest circular distance between two rotation angles, in degrees,

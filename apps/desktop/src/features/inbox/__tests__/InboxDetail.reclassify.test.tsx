@@ -21,7 +21,7 @@
  * - Render InboxDetail directly with fixture props — no InboxPage wrapper
  *   (avoids OOM from the full page tree).
  */
-import React from 'react';
+import type React from 'react';
 import {
   render as rtlRender,
   screen,

@@ -120,7 +120,7 @@ vi.mock('@/ui', async (importOriginal) => {
   };
 });
 
-import React from 'react';
+import type React from 'react';
 import { WizardPage } from './WizardPage';
 
 const EXISTING_PROJECT = {

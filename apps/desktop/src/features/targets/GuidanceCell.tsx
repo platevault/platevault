@@ -73,7 +73,7 @@ export function GuidanceCell({
         openOnHover
         nativeButton
         onClick={(e) => e.stopPropagation()}
-        aria-label={m.targets_guidance_explain_title() + ': ' + targetLabel}
+        aria-label={`${m.targets_guidance_explain_title()}: ${targetLabel}`}
       >
         <FilterBadges
           viability={bandViability}
