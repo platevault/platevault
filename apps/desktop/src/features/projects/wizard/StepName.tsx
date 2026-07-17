@@ -7,12 +7,34 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { RadioGroup } from '@base-ui-components/react/radio-group';
 import { Radio } from '@base-ui-components/react/radio';
+import { Btn, Pill } from '@/ui';
+import { TargetSearch } from '@/components';
 import {
   wizardNameSchema,
   type WizardNameValues,
 } from '@/features/projects/schemas';
 
-export type StepNameData = WizardNameValues;
+/**
+ * Minimal real-target reference the wizard needs to display and persist
+ * (`canonicalTargetId`) — narrower than the full `TargetSuggestion`/
+ * `TargetDetailV3` shapes both possible sources (`TargetSearch`'s picker,
+ * `WizardPage`'s `?targetId=` resolve) can produce.
+ */
+export interface WizardTargetContext {
+  targetId: string;
+  primaryDesignation: string;
+  commonName: string | null;
+}
+
+/**
+ * #887/#719/#586 (2026-07-17): the wizard is the single create path.
+ * `target` folds in the retired `CreateProjectDialog`'s target picker so a
+ * project can carry a real `canonicalTargetId` from creation — the wizard
+ * previously had no way to associate one (#719 SC-001/#612).
+ */
+export interface StepNameData extends WizardNameValues {
+  target: WizardTargetContext | null;
+}
 
 /**
  * Server-side `projects.create` error routed onto this step (WP-008-B).
@@ -72,6 +94,11 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
     mode: 'onChange',
   });
 
+  // `target` isn't part of the RHF-managed WizardNameValues (it's not a form
+  // field with a text/enum input); track it alongside so onChange can still
+  // report the full StepNameData shape on every edit.
+  const target = data.target;
+
   // Push local edits back to the wizard on every change so the parent's draft
   // and summary rail stay in sync with the prior controlled behaviour.
   useEffect(() => {
@@ -79,10 +106,11 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
       onChange({
         name: value.name ?? '',
         workflowProfile: value.workflowProfile ?? 'pixinsight',
+        target,
       });
     });
     return () => sub.unsubscribe();
-  }, [watch, onChange]);
+  }, [watch, onChange, target]);
 
   // Re-sync if the wizard restores a different draft (e.g. Reset wizard).
   useEffect(() => {
@@ -128,6 +156,47 @@ export function StepName({ data, onChange, serverError }: StepNameProps) {
             {serverError.message}
           </span>
         ) : null}
+      </div>
+
+      {/* Target (optional) — folded in from the retired CreateProjectDialog
+          (spec 035 US1 / #887/#719/#612): lets the wizard carry a real
+          `canonicalTargetId` instead of guessing one from the typed name. */}
+      <div className="alm-wizard-name__field-group">
+        {target ? (
+          <>
+            <span className="alm-wizard-name__label">
+              {m.projects_create_target_label()}
+            </span>
+            <div className="alm-create-project__target-row">
+              <Pill variant="accent">{target.primaryDesignation}</Pill>
+              {target.commonName && (
+                <span className="alm-field-hint">{target.commonName}</span>
+              )}
+              <Btn
+                type="button"
+                variant="ghost"
+                onClick={() => onChange({ ...data, target: null })}
+              >
+                {m.common_change()}
+              </Btn>
+            </div>
+          </>
+        ) : (
+          <TargetSearch
+            label={m.projects_create_target_search_label()}
+            placeholder={m.projects_create_target_search_placeholder()}
+            onSelect={(selected) =>
+              onChange({
+                ...data,
+                target: {
+                  targetId: selected.targetId,
+                  primaryDesignation: selected.primaryDesignation,
+                  commonName: selected.commonName ?? null,
+                },
+              })
+            }
+          />
+        )}
       </div>
 
       {/* Workflow profile */}

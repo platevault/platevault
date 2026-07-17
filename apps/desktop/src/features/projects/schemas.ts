@@ -5,7 +5,6 @@
  * Client-side form schemas for project create / edit forms — spec 042 US5 (T170).
  *
  * These zod schemas drive react-hook-form validation in:
- *   - features/projects/create/CreateProjectDialog.tsx
  *   - features/projects/edit/EditProjectPane.tsx
  *   - features/projects/wizard/StepName.tsx (+ WizardPage orchestration)
  *
@@ -17,6 +16,11 @@
  * is assembled from these validated values plus the non-user-editable fields
  * (`requestId`, `initialSources`, `canonicalTargetId`, `projectId`) at the call
  * site, byte-identical to the pre-RHF behaviour.
+ *
+ * `CreateProjectDialog` was the original spec-008 US1 modal; #887/#719/#586
+ * (2026-07-17) converged project creation onto the wizard-only path, folding
+ * the dialog's name validation (`projectNameSchema`, shared below) and its
+ * target picker into the wizard's `StepName`, then retiring the dialog.
  */
 
 import { z } from 'zod';
@@ -45,41 +49,24 @@ export const PROJECT_TOOL_VALUES = [
 
 export const projectToolSchema = z.enum(PROJECT_TOOL_VALUES);
 
-// ── Create project (CreateProjectDialog) ──────────────────────────────────────
+// ── Shared project name rule ───────────────────────────────────────────────────
 
 /**
- * Fields the user edits in CreateProjectDialog. The non-editable contract fields
- * (requestId, initialSources, notes-coalescing, canonicalTargetId) are added at
- * submit time, so this schema deliberately covers only the user-facing inputs.
- *
- * Validation rules mirror the original manual `validate()`:
- *   - name: required (after trim), ≤ MAX_NAME_LEN
- *   - tool: required, one of the offered tools
- *   - path: required (after trim)
- *   - notes: optional, ≤ MAX_NOTES_LEN
+ * #586: the single source of truth for the "project name" validation rule
+ * (required after trim, ≤ MAX_NAME_LEN). Both `wizardNameSchema` (wizard step
+ * 0) and `editProjectFormSchema` (EditProjectPane) compose this instead of
+ * each re-declaring the rule — a prior duplication let the wizard's name
+ * field skip the length cap that the (now-retired) CreateProjectDialog
+ * enforced.
  */
-export const createProjectFormSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, m.projects_schema_name_required())
-    .max(
-      MAX_NAME_LEN,
-      m.projects_schema_name_too_long({ max: String(MAX_NAME_LEN) }),
-    ),
-  tool: projectToolSchema.refine((v) => Boolean(v), {
-    message: m.projects_schema_tool_required(),
-  }),
-  path: z.string().trim().min(1, m.projects_schema_path_required()),
-  notes: z
-    .string()
-    .max(
-      MAX_NOTES_LEN,
-      m.projects_schema_notes_too_long({ max: String(MAX_NOTES_LEN) }),
-    ),
-});
-
-export type CreateProjectFormValues = z.infer<typeof createProjectFormSchema>;
+export const projectNameSchema = z
+  .string()
+  .trim()
+  .min(1, m.projects_schema_name_required())
+  .max(
+    MAX_NAME_LEN,
+    m.projects_schema_name_too_long({ max: String(MAX_NAME_LEN) }),
+  );
 
 // ── Edit project (EditProjectPane) ────────────────────────────────────────────
 
@@ -119,7 +106,7 @@ export type EditProjectFormValues = z.infer<typeof editProjectFormSchema>;
  * that `canAdvance()` enforced (length > 0 after trim).
  */
 export const wizardNameSchema = z.object({
-  name: z.string().trim().min(1, m.projects_schema_name_required()),
+  name: projectNameSchema,
   workflowProfile: z.enum(['pixinsight', 'siril', 'planetary']),
 });
 
