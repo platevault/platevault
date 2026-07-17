@@ -135,3 +135,9 @@ pedantic = { level = "warn", priority = -1 }
 #   cargo clippy -- -W clippy::disallowed_methods
 # See docs/development/persistence-layer-hardening.md.
 disallowed_methods = "allow"
+
+# TEMPORARY: skymath 0.4.0 (CircularMean/circular_distance, issue #921) is
+# merged upstream but the crates.io publish is still in flight. Remove this
+# patch once 0.4.0 is live and `cargo update -p skymath` picks it up.
+[patch.crates-io]
+skymath = { git = "https://github.com/nightwatch-astro/skymath" }

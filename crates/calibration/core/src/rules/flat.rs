@@ -69,7 +69,13 @@ pub fn evaluate(
     let rot_cfg = config.flat_rotation_config();
     match (session.rotation_deg, master.rotation_deg) {
         (Some(sr), Some(mr)) => {
-            let delta = (sr - mr).abs();
+            // Issue #921: rotator angles are circular — plain `.abs()` scored
+            // 359.9° vs 0.1° as 359.8° instead of the true 0.2° apart.
+            let delta = skymath::circular_distance(
+                skymath::Angle::from_degrees(sr),
+                skymath::Angle::from_degrees(mr),
+            )
+            .degrees();
             match rot_cfg.penalty(delta) {
                 Some(penalty) => {
                     matched.push(MatchedDim::soft(Dimension::Rotation, sr, mr, delta));
@@ -255,6 +261,25 @@ mod tests {
         );
         let r = r.unwrap();
         assert!(r.dimensions_mismatched.iter().any(|d| d.dimension == "rotation"));
+    }
+
+    #[test]
+    fn rotation_wraparound_across_0_360_seam_matched() {
+        // Issue #921: 359.9° vs 0.1° is truly 0.2° apart, not 359.8° — must
+        // match within the default ±0.5° tolerance, not be max-penalized.
+        let s = SessionInfo { rotation_deg: Some(359.9), ..session() };
+        let r = evaluate(
+            &s,
+            &master_flat("Ha", "1x1", "train-a", 100.0, 0.1, "2026-01-15"),
+            &MatchingRuleConfig::default(),
+        );
+        let r = r.unwrap();
+        assert!(
+            r.dimensions_matched.iter().any(|d| d.dimension == "rotation"),
+            "359.9 vs 0.1 should match within tolerance, got mismatched={:?}",
+            r.dimensions_mismatched
+        );
+        assert!(!r.dimensions_mismatched.iter().any(|d| d.dimension == "rotation"));
     }
 
     #[test]
