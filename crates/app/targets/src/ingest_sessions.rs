@@ -287,15 +287,34 @@ async fn backfill_session_geometry(
         meta.focal_length_mm,
     );
 
-    let (pointing_ra_deg, pointing_dec_deg, rotation_deg, optic_train_key) = match existing {
+    let (pointing_ra_deg, pointing_dec_deg, rotation_deg, optic_train_key) = match &existing {
         Some(row) => (
             row.pointing_ra_deg.or(meta.ra_deg),
             row.pointing_dec_deg.or(meta.dec_deg),
             row.rotation_deg.or(meta.rotator_angle_deg),
-            row.optic_train_key.or(optic_train_key),
+            row.optic_train_key.clone().or(optic_train_key),
         ),
         None => (meta.ra_deg, meta.dec_deg, meta.rotator_angle_deg, optic_train_key),
     };
+
+    // Every light frame in a session runs this (`ingest_light_frame`'s
+    // per-frame hook), but a session's geometry is only ever WRITTEN ONCE in
+    // practice: the COALESCE-with-existing merge above means frame 2+ of an
+    // already-backfilled session recomputes the exact same tuple it read.
+    // Skipping the no-op write avoids an avoidable `UPDATE` (and its
+    // exclusive lock) on every subsequent frame of a session — real
+    // contention on the shared, non-WAL-mode pool this background task
+    // shares with foreground UI reads (`plan_listener` runs on the same
+    // connection pool as every other command).
+    let unchanged = existing.as_ref().is_some_and(|row| {
+        row.pointing_ra_deg == pointing_ra_deg
+            && row.pointing_dec_deg == pointing_dec_deg
+            && row.rotation_deg == rotation_deg
+            && row.optic_train_key.as_deref() == optic_train_key.as_deref()
+    });
+    if unchanged {
+        return Ok(());
+    }
 
     framing_repo::set_session_geometry(
         pool,
