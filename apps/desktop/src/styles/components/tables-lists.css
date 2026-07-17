@@ -253,11 +253,14 @@
 .alm-listpage__detail-bar {
   flex-shrink: 0;
   display: flex;
+  align-items: center;
+  gap: var(--alm-sp-1);
   justify-content: flex-end;
   padding: var(--alm-sp-1) var(--alm-sp-2);
   border-bottom: 1px solid var(--alm-border-subtle);
 }
-.alm-listpage__detail-close {
+.alm-listpage__detail-close,
+.alm-listpage__detail-pin {
   background: none;
   border: none;
   cursor: pointer;
@@ -267,7 +270,29 @@
   padding: var(--alm-sp-1);
   border-radius: var(--alm-radius-sm);
 }
-.alm-listpage__detail-close:hover { color: var(--alm-text); }
+.alm-listpage__detail-close:hover,
+.alm-listpage__detail-pin:hover { color: var(--alm-text); }
+
+/* Adaptive dock (spec 054 / #936): drag handle on the side panel's left
+ * edge, and the pin-placement toggle in the detail bar (above). */
+.alm-listpage__detail--side {
+  position: relative;
+}
+.alm-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+  touch-action: none;
+}
+.alm-resize-handle:hover,
+.alm-resize-handle:active {
+  background: var(--alm-accent);
+  opacity: 0.4;
+}
 .alm-listpage__detail-body {
   flex: 1;
   min-height: 0;

@@ -15,11 +15,24 @@
  * `bottomDetail`), each with their own aria label and close affordance.
  */
 
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ListPageLayout } from './ListPageLayout';
 import { Modal } from './Modal';
 import { Combobox } from '@base-ui-components/react/combobox';
+
+/** Simulate a browser window resize for the adaptive-dock hook (jsdom
+ * doesn't resize on its own — `window.innerWidth` must be forced). */
+function resizeWindowTo(width: number) {
+  Object.defineProperty(window, 'innerWidth', {
+    writable: true,
+    configurable: true,
+    value: width,
+  });
+  act(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
+}
 
 describe('ListPageLayout', () => {
   it('defaults to the bottom dock (no side variant classes)', () => {
@@ -345,5 +358,147 @@ describe('ListPageLayout', () => {
     );
     fireEvent.keyDown(document, { key: 'Enter' });
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // ── Adaptive dock (spec 054 / #936) ──────────────────────────────────────
+
+  describe('adaptive dock', () => {
+    const originalInnerWidth = window.innerWidth;
+
+    beforeEach(() => {
+      window.localStorage.clear();
+    });
+
+    afterEach(() => {
+      resizeWindowTo(originalInnerWidth);
+    });
+
+    it('docks to the bottom under the threshold and to the side at/above it', () => {
+      resizeWindowTo(1024);
+      const { container, rerender } = render(
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          dockId="adaptive-test-a"
+        >
+          <div>main</div>
+        </ListPageLayout>,
+      );
+      expect(container.querySelector('.alm-listpage__detail')).not.toHaveClass(
+        'alm-listpage__detail--side',
+      );
+
+      resizeWindowTo(1600);
+      rerender(
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          dockId="adaptive-test-a"
+        >
+          <div>main</div>
+        </ListPageLayout>,
+      );
+      expect(container.querySelector('.alm-listpage__detail')).toHaveClass(
+        'alm-listpage__detail--side',
+      );
+    });
+
+    it('honors adaptiveThreshold overrides per page', () => {
+      resizeWindowTo(1450);
+      const { container } = render(
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          dockId="adaptive-test-threshold"
+          adaptiveThreshold={1500}
+        >
+          <div>main</div>
+        </ListPageLayout>,
+      );
+      // 1450 < 1500 → still bottom, even though it clears the generic default.
+      expect(container.querySelector('.alm-listpage__detail')).not.toHaveClass(
+        'alm-listpage__detail--side',
+      );
+    });
+
+    it('pinning to side persists across remount (dockId-scoped localStorage)', () => {
+      resizeWindowTo(1024);
+      const { container, unmount } = render(
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          dockId="adaptive-test-pin"
+        >
+          <div>main</div>
+        </ListPageLayout>,
+      );
+      fireEvent.click(screen.getByTestId('dock-placement-toggle'));
+      expect(container.querySelector('.alm-listpage__detail')).toHaveClass(
+        'alm-listpage__detail--side',
+      );
+      unmount();
+
+      const { container: container2 } = render(
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          dockId="adaptive-test-pin"
+        >
+          <div>main</div>
+        </ListPageLayout>,
+      );
+      // Narrow window (1024), but the pin from the previous mount survives.
+      expect(container2.querySelector('.alm-listpage__detail')).toHaveClass(
+        'alm-listpage__detail--side',
+      );
+    });
+
+    it('renders a resize handle only in the side placement', () => {
+      resizeWindowTo(1600);
+      const { rerender, queryByTestId } = render(
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          dockId="adaptive-test-handle"
+        >
+          <div>main</div>
+        </ListPageLayout>,
+      );
+      expect(queryByTestId('dock-resize-handle')).toBeInTheDocument();
+
+      resizeWindowTo(1024);
+      rerender(
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          dockId="adaptive-test-handle"
+        >
+          <div>main</div>
+        </ListPageLayout>,
+      );
+      expect(queryByTestId('dock-resize-handle')).not.toBeInTheDocument();
+    });
+
+    it('keeps role=complementary + close affordance working in adaptive-side mode', () => {
+      resizeWindowTo(1600);
+      const onClose = vi.fn();
+      render(
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          dockId="adaptive-test-close"
+          detailLabel="Adaptive details"
+          onCloseDetail={onClose}
+        >
+          <div>main</div>
+        </ListPageLayout>,
+      );
+      const region = screen.getByRole('complementary', {
+        name: 'Adaptive details',
+      });
+      expect(region).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Close details' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -38,3 +38,11 @@ export { InfoTip } from './InfoTip';
 export type { InfoTipProps } from './InfoTip';
 export { Tooltip } from './Tooltip';
 export type { TooltipProps } from './Tooltip';
+export { useAdaptiveDock } from './useAdaptiveDock';
+export type {
+  DockPlacement,
+  UseAdaptiveDockOptions,
+  UseAdaptiveDockResult,
+} from './useAdaptiveDock';
+export { ResizeHandle } from './ResizeHandle';
+export type { ResizeHandleProps } from './ResizeHandle';
