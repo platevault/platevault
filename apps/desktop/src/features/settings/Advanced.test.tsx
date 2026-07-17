@@ -17,6 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Advanced } from './Advanced';
 import type { FirstRunRestartResponse } from './settingsIpc';
+import type { GuidedFlowStateDto } from '@/features/guided/store';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -34,11 +35,18 @@ vi.mock('./settingsIpc', () => ({
   restartFirstRun: mockRestartFirstRun,
 }));
 
-// Guided-tour state fetch rejects so the unrelated guided-tour section does
-// not render — this suite only exercises the first-run restart control.
+// Guided-tour state fetch rejects by default so the unrelated guided-tour
+// section does not render in the first-run suite below — the guided-restart
+// suite (#827) overrides this per-test with mockResolvedValueOnce.
+const { mockGetGuidedState, mockRestartGuidedFlow } = vi.hoisted(() => ({
+  mockGetGuidedState: vi
+    .fn()
+    .mockRejectedValue(new Error('unavailable in test')),
+  mockRestartGuidedFlow: vi.fn(),
+}));
 vi.mock('@/features/guided/store', () => ({
-  getGuidedState: vi.fn().mockRejectedValue(new Error('unavailable in test')),
-  restartGuidedFlow: vi.fn(),
+  getGuidedState: mockGetGuidedState,
+  restartGuidedFlow: mockRestartGuidedFlow,
   STEP_ORDER: ['step-one', 'step-two'],
 }));
 
@@ -156,5 +164,63 @@ describe('Advanced — first-run setup restart control (spec 003 US3)', () => {
     });
     expect(mockResetWizardStateWithSources).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+// ── Guided-tour restart control (#827) ──────────────────────────────────────
+//
+// 'Restart guided flow' had no confirm gate and no feedback, asymmetric with
+// the first-run restart control covered above (which has both). These tests
+// cover the added confirm step and the transient success message.
+
+function makeGuidedState(overrides: Partial<GuidedFlowStateDto> = {}) {
+  return {
+    completedSteps: [],
+    dismissed: false,
+    ...overrides,
+  } as GuidedFlowStateDto;
+}
+
+describe('Advanced — guided-tour restart control (#827)', () => {
+  it('requires a confirm step before calling restartGuidedFlow', async () => {
+    mockGetGuidedState.mockResolvedValueOnce(makeGuidedState());
+    render(<Advanced save={vi.fn()} />);
+
+    const trigger = await screen.findByTestId('guided-restart-btn');
+    fireEvent.click(trigger);
+
+    expect(mockRestartGuidedFlow).not.toHaveBeenCalled();
+    expect(
+      await screen.findByTestId('guided-restart-confirm-btn'),
+    ).toBeInTheDocument();
+  });
+
+  it('cancels back to the initial control without calling restartGuidedFlow', async () => {
+    mockGetGuidedState.mockResolvedValueOnce(makeGuidedState());
+    render(<Advanced save={vi.fn()} />);
+
+    fireEvent.click(await screen.findByTestId('guided-restart-btn'));
+    fireEvent.click(await screen.findByText(/cancel/i));
+
+    expect(mockRestartGuidedFlow).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByTestId('guided-restart-btn')).toBeInTheDocument();
+    });
+  });
+
+  it('on confirm, calls restartGuidedFlow and shows a success message', async () => {
+    mockGetGuidedState.mockResolvedValueOnce(makeGuidedState());
+    mockRestartGuidedFlow.mockResolvedValue(makeGuidedState());
+    render(<Advanced save={vi.fn()} />);
+
+    fireEvent.click(await screen.findByTestId('guided-restart-btn'));
+    fireEvent.click(await screen.findByTestId('guided-restart-confirm-btn'));
+
+    await waitFor(() => {
+      expect(mockRestartGuidedFlow).toHaveBeenCalledTimes(1);
+    });
+    expect(
+      await screen.findByTestId('guided-restart-done'),
+    ).toBeInTheDocument();
   });
 });

@@ -1,7 +1,11 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// spec 018 — owned pane: logLevel, rememberFollowLogs, devMode.
+// spec 018 — owned scope: logLevel (rendered below), rememberFollowLogs
+// (surfaced via the log panel's follow-tail toggle, app/LogPanelContext.tsx —
+// not duplicated here) and devMode (deliberately hidden per spec 021 T032,
+// reachable only at /dev/settings; NOT a UI gap, see app/router.tsx). #624
+// audited this pane's key list; both are covered elsewhere by design.
 // On mount, loads persisted values from backend via settings.get('advanced').
 // Changes are auto-saved via the save() prop (useAutoSave -> settings.update).
 // spec 010 — Guided flow restart control added (T042).
@@ -50,6 +54,8 @@ export function Advanced({ save }: AdvancedProps) {
     null,
   );
   const [guidedRestarting, setGuidedRestarting] = useState(false);
+  const [guidedConfirming, setGuidedConfirming] = useState(false);
+  const [guidedRestarted, setGuidedRestarted] = useState(false);
   const [firstRunConfirming, setFirstRunConfirming] = useState(false);
   const [firstRunRestarting, setFirstRunRestarting] = useState(false);
   const [firstRunError, setFirstRunError] = useState<string | null>(null);
@@ -98,11 +104,21 @@ export function Advanced({ save }: AdvancedProps) {
     };
   }, []);
 
+  // #827: this control was a silent no-op with no confirm gate, asymmetric
+  // with the sibling "Restart first-run setup" control below (which has both).
+  // It doesn't reopen anything destructive (unlike the first-run wizard
+  // restart, which clears the setup-completed flag), so the confirm copy is
+  // lighter, but the gate + a transient success message are still required
+  // so a click always produces an observable result.
   const handleGuidedRestart = async () => {
     setGuidedRestarting(true);
+    setGuidedRestarted(false);
     try {
       const newState = await restartGuidedFlow();
       setGuidedState(newState);
+      setGuidedConfirming(false);
+      setGuidedRestarted(true);
+      setTimeout(() => setGuidedRestarted(false), 3000);
     } catch {
       // Best-effort.
     } finally {
@@ -240,16 +256,50 @@ export function Advanced({ save }: AdvancedProps) {
                     ? m.settings_advanced_guided_dismissed()
                     : m.settings_advanced_guided_active()}
               </p>
-              <Btn
-                size="sm"
-                onClick={() => void handleGuidedRestart()}
-                disabled={guidedRestarting}
-                data-testid="guided-restart-btn"
-              >
-                {guidedRestarting
-                  ? m.common_restarting()
-                  : m.settings_advanced_restart_guided()}
-              </Btn>
+              {guidedConfirming ? (
+                <div className="alm-adv-settings__danger-box">
+                  <p className="alm-adv-settings__danger-desc">
+                    {m.settings_advanced_guided_restart_confirm_desc()}
+                  </p>
+                  <div className="alm-adv-settings__control-row">
+                    <Btn
+                      size="sm"
+                      onClick={() => void handleGuidedRestart()}
+                      disabled={guidedRestarting}
+                      data-testid="guided-restart-confirm-btn"
+                    >
+                      {guidedRestarting
+                        ? m.common_restarting()
+                        : m.settings_advanced_guided_restart_confirm_yes()}
+                    </Btn>
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setGuidedConfirming(false)}
+                      disabled={guidedRestarting}
+                    >
+                      {m.settings_advanced_guided_restart_cancel()}
+                    </Btn>
+                  </div>
+                </div>
+              ) : (
+                <Btn
+                  size="sm"
+                  onClick={() => setGuidedConfirming(true)}
+                  data-testid="guided-restart-btn"
+                >
+                  {m.settings_advanced_restart_guided()}
+                </Btn>
+              )}
+              {guidedRestarted && (
+                <p
+                  className="alm-adv-settings__control-desc"
+                  role="status"
+                  data-testid="guided-restart-done"
+                >
+                  {m.settings_advanced_guided_restart_done()}
+                </p>
+              )}
             </div>
           </SettingsRow>
         </SettingsSection>
