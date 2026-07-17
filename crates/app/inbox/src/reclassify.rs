@@ -394,6 +394,18 @@ pub async fn reclassify_v2(
     let all_paths: std::collections::HashSet<&str> =
         path_to_item.keys().map(String::as_str).collect();
 
+    // TEMP DIAGNOSTIC (#854 CI-red investigation, remove once root-caused): an
+    // empty `path_to_item` here despite a non-empty `evidence_item_ids` means
+    // `list_evidence` found nothing for every candidate item — bulk overrides
+    // then silently target zero files (step 6 defaults to `path_to_item.keys()`).
+    eprintln!(
+        "DIAG reclassify_v2: source_group_id={source_group_id} sub_item_ids.len()={} \
+         evidence_item_ids.len()={} path_to_item.len()={}",
+        sub_item_ids.len(),
+        evidence_item_ids.len(),
+        path_to_item.len()
+    );
+
     // ── 5. Validate that all requested file paths exist in the group ──────────
 
     for file_override in &req.overrides {

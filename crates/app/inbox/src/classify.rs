@@ -321,6 +321,13 @@ pub async fn classify(
     // Re-derivation into proper single-type sub-items happens naturally the
     // next time classify runs on the item once it is no longer `plan_open`.
     let sg_id_for_split = item.source_group_id.as_deref().filter(|_| item.state != "plan_open");
+    // TEMP DIAGNOSTIC (#854 CI-red investigation, remove once root-caused): if
+    // `item.source_group_id` is None here, materialize_sub_items never runs on
+    // classify() at all — the item stays a bare placeholder forever.
+    eprintln!(
+        "DIAG classify(): inbox_item_id={} source_group_id={:?} state={:?} sg_id_for_split={:?}",
+        req.inbox_item_id, item.source_group_id, item.state, sg_id_for_split
+    );
     if let Some(sg_id) = sg_id_for_split {
         materialize_sub_items(
             pool,
@@ -815,6 +822,17 @@ pub(crate) async fn materialize_sub_items(
     // Step 4 + 5: upsert one sub-item per group and update child_count.
     let child_count = i64::try_from(groups.len()).unwrap_or(i64::MAX);
 
+    // TEMP DIAGNOSTIC (#854 CI-red investigation, remove once root-caused):
+    // `groups` empty here for a non-empty `file_records` input, or a silently
+    // swallowed `upsert_inbox_sub_item` error, would both explain the observed
+    // CI symptom (materialize_sub_items never produces a visible sub-item).
+    eprintln!(
+        "DIAG materialize_sub_items: source_group_id={source_group_id} \
+         file_records.len()={} groups.len()={}",
+        file_records.len(),
+        groups.len()
+    );
+
     for (group_key, (group_label, files)) in &groups {
         // Per-sub-group content_signature (R-11).
         let file_sigs: Vec<[u8; 32]> = files
@@ -851,7 +869,10 @@ pub(crate) async fn materialize_sub_items(
             lane,
         };
 
-        repo::upsert_inbox_sub_item(pool, &sub_item).await.ok();
+        // TEMP DIAGNOSTIC (#854 CI-red investigation, remove once root-caused).
+        if let Err(e) = repo::upsert_inbox_sub_item(pool, &sub_item).await {
+            eprintln!("DIAG upsert_inbox_sub_item FAILED for group_key={group_key:?}: {e}");
+        }
 
         // Seed this sub-item's OWN evidence/metadata/breakdown + a matching
         // `inbox_classifications` cache row (content_signature == sub_sig, the
