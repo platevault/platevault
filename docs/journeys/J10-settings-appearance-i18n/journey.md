@@ -1,7 +1,7 @@
 ---
 id: J10
 title: Configure appearance, per-library defaults, and trust the app is fully localized
-version: 7
+version: 8
 status: draft
 last_reviewed: 2026-07-17
 actors: [astrophotographer]
@@ -31,6 +31,8 @@ trace:
   - PR #914 (merged, carried nJ09c/nJ10a review nit: palette catalog
     caching)
   - spec 055 (typography rework) Phase 2, T010–T015
+  - spec-054-adaptive-detail-dock (FR-003 — per-page Detail panel placement
+    control)
 ---
 
 ## Goal
@@ -117,8 +119,10 @@ Note: Release builds lack the /dev/contracts palette entry by design
   desktop build. At the documented envelope edge (a min-size 1100×720
   window at 150% zoom, which is above the shipped 125% CI-pinned floor), the
   spec records the resulting ~733px CSS viewport as accepted layout
-  degradation, not guarded — spec 054 (adaptive detail dock) remains
-  orphaned and was not required for this phase.
+  degradation, not guarded (correction, 2026-07-17: spec 054, adaptive
+  detail dock, has since shipped — see S11 — but it addresses list-page
+  detail-panel placement specifically, not this shell/zoom viewport
+  degradation, which remains accepted as-is).
 - **Trace:** apps/desktop/src/data/theme.ts (`applyTokenScale`,
   `applyDensity`, `applyFontSize`/`FontSizeChoice`/`FONT_SIZE_ROOT_PX`/
   `roundedTextScalePx`, `ZOOM_STEPS`/`useZoomChoice`/`setZoomChoice`/
@@ -295,9 +299,33 @@ Note: Release builds lack the /dev/contracts palette entry by design
   (`tolerance_params`), tests/e2e/settings_framing.spec.ts,
   docs/development/windows-journeys/journey-11-framing-clustering-attribution.md.
 
+### S11 — Choose the detail panel's placement per page {#S11}
+- **Do:** In Appearance, open the new "Detail panel placement" control and
+  set it to Auto / Bottom / Right for each of Sessions, Calibration,
+  Archive, Projects, and Targets; restart the app; open Inbox.
+- **Expect:** Each of the five adopting pages exposes its own Auto/Bottom/
+  Right choice; choosing Bottom or Right pins that page's detail-panel
+  placement regardless of window width, overriding the automatic
+  width-based placement (spec-054's default: side on a wide window, bottom
+  when narrow); Auto restores the automatic width-based behavior. The
+  choice persists per page across an app restart. Inbox is not offered
+  this control at all — its detail region is shown as fixed (not
+  user-adjustable) since it is a permanent split, not an adaptive dock
+  (see J02/S2, J03/S1).
+- **Expect (negative):** No placement control appears for Inbox; setting a
+  pinned placement (Bottom or Right) for one page never changes another
+  page's placement or its own automatic-vs-pinned state after restart.
+- **Trace:** apps/desktop/src/features/settings/General.tsx (placement
+  control); `ListPageLayout` per-page pin consumption (Sessions/
+  Calibration/Archive/Projects/Targets); spec-054/FR-003.
+
 ## Success criteria
 - SC1: Every control across all 14 panes does something observable,
   persists, and round-trips a pane switch (S1–S5, S9, S10).
+- SC6: Each of the 5 adopting pages' Detail panel placement choice
+  (Auto/Bottom/Right) persists across an app restart and overrides
+  width-based automatic placement when set to Bottom or Right; Inbox is
+  never offered the control (S11).
 - SC2: Durable-data settings/protection/equipment/source mutations each
   produce exactly one audit row per committed change, with none for
   UI-state-only keys (S3).
@@ -387,3 +415,16 @@ Note: Release builds lack the /dev/contracts palette entry by design
   with no horizontal overflow at either pin.
   Evidence: spec 055 Phase 4 (T030/T032), branch feat/app-zoom (PR not yet
   merged at authoring time) · by: journey-scribe (intent-gated)
+
+- **Δ8** 2026-07-17 · +S11, +SC6 · behavior-change
+  Appearance gains a per-page "Detail panel placement" control
+  (Auto/Bottom/Right) for each of the 5 pages adopting the adaptive detail
+  dock (Sessions, Calibration, Archive, Projects, Targets); the choice
+  persists across restarts and takes precedence over automatic width-based
+  placement. Inbox is fixed to its permanent split and is not offered the
+  control. Also corrected S2's stale note that spec 054 (adaptive detail
+  dock) "remains orphaned" — it has since shipped (see S11), though it does
+  not by itself resolve the S2 zoom-envelope viewport degradation, which is
+  a shell/zoom concern rather than a detail-dock concern.
+  Evidence: spec-054-adaptive-detail-dock (FR-003) · by: journey-scribe
+  (intent-gated)

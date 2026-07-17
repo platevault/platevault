@@ -1,7 +1,7 @@
 ---
 id: J05
 title: Run a project from creation through tool launch and output tracking
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -15,6 +15,8 @@ trace:
   - e2e-agentic-test/012-processing-artifact-observation/artifact-attribution/scenario.md
   - e2e-agentic-test/journeys/full-project-lifecycle/scenario.md
   - deltas/2026-07-14-jval-docdrift.md (folded as correction)
+  - spec-054-adaptive-detail-dock (FR-004, FR-011 — unified adaptive dock,
+    1100×720 bottom-mode usability)
 ---
 
 ## Goal
@@ -72,14 +74,22 @@ safe-by-construction or was explicitly reviewed.
 - **Trace:** e2e-agentic-test/008-.../edit-project-sources/scenario.md
 
 ### S3 — Review real per-channel numbers {#S3}
-- **Do:** Open the project detail view.
-- **Expect:** The per-channel (per-filter) breakdown shows actual sub-frame
+- **Do:** Open the project detail view at the 1100×720 minimum window size,
+  then at a wide window.
+- **Expect:** The project detail is now unified onto the same shared
+  adaptive dock as other list pages (Sessions/Calibration/Archive/Targets):
+  a full-height, drag-resizable side panel on a wide window, a bottom dock
+  when narrow, fully usable at the 1100×720 minimum in bottom mode
+  (previously a bespoke side-and-bottom dual layout with no narrow
+  fallback). The per-channel (per-filter) breakdown shows actual sub-frame
   counts and total integration time, computed from the currently attached
   sessions and formatted as hours/minutes.
 - **Expect (negative):** No channel row shows a placeholder dash or a bare
   `0` where the real value is simply unknown — a missing value is
-  distinguishable from a real zero.
-- **Trace:** e2e-agentic-test/008-.../per-channel-integration-time/scenario.md
+  distinguishable from a real zero. At the 1100×720 minimum, no part of the
+  detail's content is unreachable or clipped in bottom-dock mode.
+- **Trace:** e2e-agentic-test/008-.../per-channel-integration-time/scenario.md;
+  spec-054/FR-004, FR-011 (unified adaptive dock, 1100×720 usability).
 
 ### S4 — Track manifests and notes {#S4}
 - **Do:** Trigger any lifecycle-relevant change (creation, a source change,
@@ -144,3 +154,11 @@ safe-by-construction or was explicitly reviewed.
 - G2: (dissolved 2026-07-15) — tracked as issue #887 (also #719); dialog-vs-wizard design review.
 
 ## Delta log
+
+- **Δ2** 2026-07-17 · S3 · behavior-change
+  Project detail is unified onto the shared adaptive dock (side when wide,
+  bottom when narrow, resizable, pin persists) instead of its previous
+  bespoke side-and-bottom dual layout, and is now fully usable at the
+  1100×720 minimum window in bottom mode.
+  Evidence: spec-054-adaptive-detail-dock (FR-004, FR-011) · by:
+  journey-scribe (intent-gated)
