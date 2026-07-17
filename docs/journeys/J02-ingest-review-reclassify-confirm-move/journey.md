@@ -155,14 +155,15 @@ explicit, reviewed plan, and the action is visible in the audit history.
   today this is reachable only by calling the IPC command directly. No
   control in the Inbox UI displays a candidate list or lets the user make
   a pick, so this step's on-screen behavior is unchanged: Confirm still
-  just turns the item into a plan with no attribution UI shown.
+  just turns the item into a plan with no attribution UI shown. Tracked as
+  issue #943.
 - **Trace:** `crates/app/inbox/src/attribution.rs`,
   `crates/app/inbox/src/confirm.rs` (`attribution_candidates`,
   `chosenAttribution`); no reference to `attribution`/`Attribution` exists
   under `apps/desktop/src/features/inbox/` — confirmed by repo-wide search
   and by `docs/development/windows-journeys/journey-11-framing-clustering-
   attribution.md`, which states this explicitly as "a real, currently-
-  accurate product gap, not a testing gap."
+  accurate product gap, not a testing gap." Issue: #943.
 
 ### S6 — Review the plan before anything touches disk {#S6}
 - **Do:** Open the plan review surface (e.g. via a "Review plans (N)"

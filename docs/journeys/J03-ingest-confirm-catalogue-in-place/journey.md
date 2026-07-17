@@ -76,11 +76,11 @@ hashes on disk are byte-for-byte unchanged from before confirm.
   catalogue/move branch decides the plan action), and a `chosenAttribution`
   pick persists membership at confirm time with zero filesystem I/O. No
   Inbox UI surfaces this for catalogue-mode confirms any more than it does
-  for move-mode ones.
+  for move-mode ones. Tracked as issue #943.
 - **Trace:** crates/app/inbox/src/confirm.rs (attribution pass runs before
   the `is_light_item`-gated catalogue/move dispatch, so it is
   organization-state-agnostic); see J02/S5's trace for the UI-absence
-  evidence.
+  evidence. Issue: #943.
 
 ### S3 — Review the plan {#S3}
 - **Do:** The user opens the plan review overlay ("Review plans (N)"), the

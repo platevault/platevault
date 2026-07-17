@@ -235,7 +235,8 @@ Note: Release builds lack the /dev/contracts palette entry by design
   framing feature has — the framing list/merge/split/reassign surface and
   the Inbox-confirm attribution-candidate picker referenced by J02/S5 and
   J03/S2 do not exist in any page; editing these tunables has no visible
-  effect anywhere else in the app within this same session.
+  effect anywhere else in the app within this same session. Tracked as
+  issue #943.
 - **Trace:** apps/desktop/src/features/settings/Framing.tsx,
   crates/app/settings/src/descriptors.rs (bounds),
   crates/sessions/src/clustering.rs, crates/app/inbox/src/attribution.rs
