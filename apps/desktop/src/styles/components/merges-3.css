@@ -668,22 +668,24 @@
  */
 
 /* Classification colours reused by the inbox Table's Type cell (the row/path/
-   count/format rules were retired with the bespoke div-list → shared Table). */
+   count/format grid rules were retired with the bespoke div-list → shared
+   Table, so `grid-column` no longer applies here — dropped). Bold uppercase
+   + the saturated info colour read as a loud "pill" that visually clashed
+   with the adjacent Format column, which repeats the same frame type for
+   master rows (e.g. Type "DARK" next to Format "dark master") — quieted to a
+   plain-weight, muted-ink label (#555). */
 .alm-inbox-row__classification {
-  grid-column: classification;
   font-size: var(--alm-text-xs, 0.75rem);
-  font-weight: 600;
-  color: var(--alm-info);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--alm-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 /* State variant colours (task 32). */
-.alm-inbox-row__classification--pending  { color: var(--alm-ink3); }
-.alm-inbox-row__classification--classified { color: var(--alm-info); }
+.alm-inbox-row__classification--pending  { color: var(--alm-text-muted); }
+.alm-inbox-row__classification--classified { color: var(--alm-text-secondary); }
 .alm-inbox-row__classification--plan_open { color: var(--alm-ok); }
 .alm-inbox-row__classification--resolved  { color: var(--alm-ink4); }
 /* T070/FR-047: a materialized sub-item with a missing mandatory attribute
