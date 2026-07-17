@@ -1,7 +1,7 @@
 ---
 id: J04
 title: Review acquisition sessions as a derived, always-current inventory
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -19,6 +19,7 @@ trace:
   - docs/development/windows-validation-journeys-tracker.md
   - PR #415 (merged) · PR #849 (merged, Q16 missing-value rendering)
   - PR #891 (merged, fixes #772, #773, #568) · PR #899 (merged, fixes #564, #567)
+  - PR #906 (merged, fixes #771)
 ---
 
 ## Goal
@@ -113,13 +114,15 @@ the view carries no leftover review-state controls.
   section — a free-text editor that autosaves on a debounced pause after
   typing stops, shows an explicit saved signal, rejects input past a 16 KiB
   limit, and persists across navigating away and back.
-- **Expect (negative):** Closing the panel via the ✕ control never mutates
-  the session or triggers any lifecycle transition. Pressing Escape does
-  **not** currently close the panel — the shared `ListPageLayout`/
-  `DetailPanel` components wire `onCloseDetail` only to the ✕ button's
-  `onClick`; no `keydown`/Escape listener exists in either component (open
-  bug #771, live-reproduced, affects every `ListPageLayout` detail panel
-  app-wide, not Sessions-specific).
+- **Expect (negative):** Closing the panel via the ✕ control or Escape never
+  mutates the session or triggers any lifecycle transition.
+- **Expect:** Pressing Escape closes the panel — `ListPageLayout` now
+  registers a document-level Escape keydown handler that closes whichever
+  detail is open (bottom, side, or the dual strip). This holds even when
+  focus stayed on `<body>` after selecting the row. An open nested dialog
+  (e.g. a Base UI `Dialog`) that stops propagation on its own Escape
+  handling closes first — the page-level listener only fires once no such
+  dialog consumes the key first.
 - **Trace:** `apps/desktop/src/features/sessions/SessionDetail.tsx`
   (Calibration/Notes sections, PR #891 fixes #568),
   `apps/desktop/src/features/sessions/SessionNotesSection.tsx` (debounced
@@ -134,11 +137,12 @@ the view carries no leftover review-state controls.
   indistinguishable from a real value); PR #849 decouples the source badge
   from missing values app-wide including Sessions detail. #770 appears
   resolved by this merge but is still open in the tracker as of this audit
-  — worth a maintainer check. Corrected: the "✕ or Escape" close claim
-  (carried from the pre-migration baseline) was live-tested false on
-  2026-07-14 (#771); no fix has since landed
-  (`apps/desktop/src/components/ListPageLayout.tsx` still has no keydown
-  handler).
+  — worth a maintainer check. PR #906 fixes #771 (previously "✕ or Escape"
+  was live-tested false on 2026-07-14): `ListPageLayout.tsx` now closes the
+  open detail on a document-level Escape keydown, deferring to any nested
+  dialog's own Escape handling first. This fix is shared across every
+  `ListPageLayout` consumer (Sessions/Calibration/Inbox/Projects), not
+  Sessions-specific.
 
 ### S5 — Follow a linked project from session detail {#S5}
 - **Do:** Click a linked project chip in session detail.
@@ -241,3 +245,10 @@ the view carries no leftover review-state controls.
   frame folder (root + `relativePath`), not the shared library-root folder
   every session under it previously opened.
   Evidence: PR #899 (fixes #564, #567) · by: journey-scribe (intent-gated)
+
+- **Δ4** 2026-07-17 · S4 · behavior-change
+  Pressing Escape now closes the session detail panel (a shared
+  `ListPageLayout` fix — also applies to Calibration/Inbox/Projects), where
+  previously only the ✕ button worked; a nested dialog's own Escape
+  handling still takes precedence.
+  Evidence: PR #906 (fixes #771) · by: journey-scribe (intent-gated)

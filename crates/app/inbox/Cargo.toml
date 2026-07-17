@@ -32,9 +32,9 @@ hex.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true
 sha2.workspace = true
-skymath = "0.3"
+skymath = "0.4"
 sqlx.workspace = true
-target-match = "0.3"
+target-match = "0.4"
 # spec 052 P3: the cone-search suggestion use case needs the upstream crate's
 # own `ResolvedIdentity` (otype_raw/common_name/aliases, OQ-1/OQ-2 ranking
 # inputs) and `PositionResolver` types directly — mirrors the existing

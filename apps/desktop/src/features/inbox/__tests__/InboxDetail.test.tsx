@@ -26,6 +26,7 @@ import type {
   InboxItemSummary_Serialize as InboxItemSummary,
 } from '@/bindings';
 
+import { m } from '@/lib/i18n';
 import { InboxDetail } from '../InboxDetail';
 
 // InboxDetail uses the TanStack-Query-backed `useInboxReclassify` hook (spec 042),
@@ -71,6 +72,23 @@ const sampleItem: InboxItemSummary = {
   masterFrameType: null,
   masterFilter: null,
   masterExposureS: null,
+};
+
+/** A detected calibration master file (#551 repro: masters never get a
+ * per-file `inbox_file_metadata` row — `fileMetadata` is always empty for
+ * them — so the required-attribute gate has no data to evaluate). */
+const masterItem: InboxItemSummary = {
+  inboxItemId: 'item-master-001',
+  relativePath: 'masterDark.fit',
+  fileCount: 1,
+  lane: 'fits',
+  format: 'fits',
+  state: 'classified',
+  contentSignature: 'sig-master-001',
+  isMaster: true,
+  masterFrameType: 'dark',
+  masterFilter: null,
+  masterExposureS: 300,
 };
 
 /** Classification with three frame types → classType "mixed" */
@@ -377,6 +395,52 @@ describe('InboxDetail — FR-032: missing-attribute banner', () => {
       screen.queryByTestId('inbox-missing-attr-banner'),
     ).not.toBeInTheDocument();
   });
+
+  // #554: the banner used to be its own trailing `.alm-session-detail2__col`
+  // (a separate full-width alert competing with the property tables). It now
+  // lives inline inside the Files column, right below the popover trigger it
+  // explains.
+  it('renders inline in the Files column, not as a separate trailing column', () => {
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification}
+        fileMetadata={withMissing}
+      />,
+    );
+    const banner = screen.getByTestId('inbox-missing-attr-banner');
+    const trigger = screen.getByTestId('inbox-files-popover-trigger');
+    // Same `.alm-session-detail2__col` ancestor as the Files trigger — i.e.
+    // the banner is NOT its own separate trailing column.
+    const filesCol = trigger.closest('.alm-session-detail2__col');
+    expect(filesCol).not.toBeNull();
+    expect(filesCol?.contains(banner)).toBe(true);
+  });
+});
+
+// ── #551: item-detail gating parity with the "batch"/list view ───────────────
+//
+// Master items never get a per-file `inbox_file_metadata` row (they bypass
+// classify()'s persist_file_metadata path — see
+// crates/app/inbox/src/metadata.rs), so `fileMetadata` is always empty for
+// them and the FR-032 missing-attribute gate has no data to evaluate. Before
+// this fix that silently rendered as "No file metadata" with no caveat,
+// which read as "nothing to worry about" even though `inbox.confirm` can
+// still reject the file server-side (`inbox.missing_path_attributes`) —
+// the exact item-view-vs-batch-view mismatch reported in #551.
+describe('InboxDetail — #551: honest "unknown" state when no per-file metadata is available', () => {
+  it('appends a caveat explaining the gate is unverified, instead of implying "all clear"', () => {
+    render(
+      <InboxDetail
+        item={masterItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification}
+      />,
+    );
+    const empty = screen.getByText(/No file metadata/);
+    expect(empty.textContent).toContain('Required-attribute status');
+  });
 });
 
 // ── task #34: mixed-folder — banner in body, action in header ────────────────
@@ -447,6 +511,26 @@ describe('InboxDetail — task #34: mixed-folder banner + header confirm action'
       'Confirm to inventory',
     );
   });
+
+  // #552/#569: the banner used to say "Confirm to produce a reviewable split
+  // plan" — but Confirm is disabled entirely for mixed rows (spec 041
+  // FR-050/T071/T072: the backend "split" action was removed), so that
+  // promised a click that could never do anything. The folder is actually
+  // ALREADY auto-split into separate single-type sub-items by the time this
+  // banner renders (classify() materializes them — T066); the copy must
+  // point there instead of a nonexistent "Confirm"-triggered split.
+  it('#552/#569: does not promise a Confirm-triggered split; explains the automatic split instead', () => {
+    render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={mixedClassification}
+      />,
+    );
+    const banner = screen.getByTestId('inbox-mixed-alert');
+    expect(banner.textContent).toContain(m.inbox_mixed_folder_body());
+    expect(banner.textContent).not.toMatch(/Confirm to produce/i);
+  });
 });
 
 // ── Compact layout: SessionDetail-style left-packed col ───────────────────────
@@ -471,6 +555,29 @@ describe('InboxDetail — compact layout: detection col + popover trigger', () =
     expect(container.querySelector('.alm-detailpanel__aux')).toBeNull();
     // No inline metadata col (it lives in the popover).
     expect(container.querySelector('.alm-inbox-detail__meta-col')).toBeNull();
+  });
+
+  // #553: DetailPanel's content-only mode renders `children` with no scroll
+  // wrapper (that mode assumes a self-scrolling child like a virtualized
+  // Table). InboxDetail's body isn't one — it wraps everything in
+  // `.alm-inbox-detail__scroll`, the sole scroll region (see detail-panes.css
+  // `:has()` rule pinning the header above it), so FILES/Needs-review content
+  // taller than the docked panel's max-height scrolls instead of being
+  // clipped by the ancestor `.alm-listpage__detail-body`'s `overflow:hidden`.
+  it('#553: wraps the body in the sole scroll region, containing the session-detail2 row', () => {
+    const { container } = render(
+      <InboxDetail
+        item={sampleItem}
+        rootAbsolutePath="/astro/inbox"
+        classification={singleTypeClassification}
+        fileMetadata={fileMetadataFixture}
+      />,
+    );
+    const scroll = container.querySelector('.alm-inbox-detail__scroll');
+    expect(scroll).not.toBeNull();
+    expect(
+      scroll?.contains(container.querySelector('.alm-session-detail2')),
+    ).toBe(true);
   });
 
   it('renders detection facts spread across multiple property columns', () => {
