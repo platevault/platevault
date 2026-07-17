@@ -1,13 +1,13 @@
 ---
 id: J08
 title: Ingest calibration masters and match them to sessions
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-07-15
 actors: [astrophotographer]
 surfaces: [inbox-confirm, calibration]
 interfaces: [desktop-ui]
-trace: [docs/product/journeys/J08-calibration-ingest-masters-matching/journey.md @ 66026463, deltas/2026-07-14-jval-docdrift.md, deltas/2026-07-14-q15-t122.md, deltas/2026-07-14-q16-t128.md, deltas/2026-07-14-q16-t129.md, deltas/2026-07-14-q16-t131.md, deltas/2026-07-14-q16-t132.md, deltas/2026-07-14-q16-t133.md, docs/journeys/J08-calibration-ingest-masters-matching/journey.md pilot (PR #848), spec-040 MasterDetector, spec-030 FR-135-FR-140, issue-619, issue-620, PR #851, PR #849]
+trace: [docs/product/journeys/J08-calibration-ingest-masters-matching/journey.md @ 66026463, deltas/2026-07-14-jval-docdrift.md, deltas/2026-07-14-q15-t122.md, deltas/2026-07-14-q16-t128.md, deltas/2026-07-14-q16-t129.md, deltas/2026-07-14-q16-t131.md, deltas/2026-07-14-q16-t132.md, deltas/2026-07-14-q16-t133.md, docs/journeys/J08-calibration-ingest-masters-matching/journey.md pilot (PR #848), spec-040 MasterDetector, spec-030 FR-135-FR-140, issue-619, issue-620, PR #851, PR #849, PR #910]
 ---
 
 ## Goal
@@ -46,6 +46,23 @@ assigned through an explicit, confirmable action — never silently.
   header evidence from any registered detector now outranks an earlier,
   naming-only, possibly-wrong verdict from another detector, regardless of
   detector registration order).
+
+  In the Inbox list itself (pre-confirm), a materialized single-file master
+  item now reads by its own authoritative `frameType` rather than the
+  legacy folder-level `groupFrameType`, so a lone master item no longer
+  mislabels as "Mixed". The classification pill in the Type column is
+  quieter (no longer louder than the duplicate frame-type text already
+  shown in the Format column for master rows), and the former "Detection"
+  column is renamed "Path" and shows the source root's own basename for a
+  root-level row instead of a literal "(root)" placeholder shared
+  indistinguishably across every root. PR #910 fixes #550, #555, #556
+  (`apps/desktop/src/features/inbox/InboxList.tsx`,
+  `inboxStatsFromItems.ts`, `grouping.ts`). #549 (mixed-folder placeholder
+  double-counting extracted masters) was investigated but is explicitly
+  left open — the reporter found no safe frontend-only fix; it needs a
+  backend change in `crates/app/inbox`/`crates/persistence/db` (parent
+  leaf-folder rows are never retired once single-type sub-items are
+  materialized).
 
 ### S2 — Confirm and register masters {#S2}
 - **Do:** Confirm and apply the inbox item(s) covering the ingested masters.
@@ -149,8 +166,12 @@ assigned through an explicit, confirmable action — never silently.
 <!-- - G1: <step or environment that cannot be validated, and why> -->
 
 ## Delta log
-<!-- Window since last_reviewed. Format:
-- **Δ<version>** <date> · <step ids> · behavior-change
-  <what changed, user-visibly>
-  Evidence: <PR/spec/commit refs> · by: <author>
--->
+
+- **Δ2** 2026-07-17 · S1 · behavior-change
+  In the pre-confirm Inbox list, a single-file materialized master item no
+  longer mislabels as "Mixed" (now reads by its own frame type); the Type
+  pill is quieter, and the former "Detection" column is renamed "Path" and
+  shows each source root's own basename instead of an indistinguishable
+  "(root)" placeholder.
+  Evidence: PR #910 (fixes #550, #555, #556) · by: journey-scribe
+  (intent-gated)
