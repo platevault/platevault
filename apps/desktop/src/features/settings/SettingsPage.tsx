@@ -14,6 +14,7 @@ import { ProcessingTools } from './ProcessingTools';
 import { CalibrationMatching } from './CalibrationMatching';
 import { ResolverSettings } from './ResolverSettings';
 import { PlannerSettings } from './PlannerSettings';
+import { Framing } from './Framing';
 import { Cleanup } from './Cleanup';
 import { SourceViews } from './SourceViews';
 import { General } from './General';
@@ -30,6 +31,7 @@ const PANES = [
   { id: 'cal', label: () => m.settings_nav_pane_cal() },
   { id: 'catalogs', label: () => m.settings_nav_pane_catalogs() },
   { id: 'planner', label: () => m.settings_nav_pane_planner() },
+  { id: 'framing', label: () => m.settings_nav_pane_framing() },
   { id: 'cleanup', label: () => m.settings_nav_pane_cleanup() },
   { id: 'source-views', label: () => m.settings_nav_pane_source_views() },
   { id: 'general', label: () => m.settings_nav_pane_general() },
@@ -50,6 +52,7 @@ const NAV_GROUPS: { label: () => string; panes: PaneId[] }[] = [
       'naming',
       'catalogs',
       'planner',
+      'framing',
     ],
   },
   {
@@ -96,6 +99,10 @@ const PANE_META: Record<PaneId, { title: () => string; desc: () => string }> = {
     title: () => m.settings_pane_planner_title(),
     desc: () => m.settings_pane_planner_desc(),
   },
+  framing: {
+    title: () => m.settings_pane_framing_title(),
+    desc: () => m.settings_pane_framing_desc(),
+  },
   cleanup: {
     title: () => m.settings_pane_cleanup_title(),
     desc: () => m.settings_pane_cleanup_desc(),
@@ -139,6 +146,8 @@ function renderPane(
       return <ResolverSettings save={save} />;
     case 'planner':
       return <PlannerSettings />;
+    case 'framing':
+      return <Framing save={save} />;
     case 'cleanup':
       return <Cleanup save={save} />;
     case 'source-views':
