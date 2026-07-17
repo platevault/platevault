@@ -1,67 +1,4 @@
 {
-  "PreToolUse": [
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/hooks-quality/scripts/quality-before-commit.sh",
-          "if": "Bash(git commit*)",
-          "timeout": 10
-        }
-      ],
-      "_apm_source": "hooks-quality"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/release-please/scripts/release-please-guard.sh"
-        }
-      ],
-      "_apm_source": "release-please"
-    },
-    {
-      "matcher": "Skill",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-context7-reminder.sh"
-        }
-      ],
-      "_apm_source": "speckit"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-issue-close-guard.sh"
-        },
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-issue-label-guard.sh"
-        },
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh"
-        }
-      ],
-      "_apm_source": "speckit"
-    },
-    {
-      "matcher": "apply_patch|Edit|Write|MultiEdit",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
-          "timeout": 3
-        }
-      ],
-      "_apm_source": "agent-coder"
-    }
-  ],
   "PostToolUse": [
     {
       "matcher": "apply_patch|Edit|Write|MultiEdit",
@@ -190,15 +127,67 @@
       "_apm_source": "speckit"
     }
   ],
-  "UserPromptSubmit": [
+  "PreToolUse": [
     {
+      "matcher": "Bash",
       "hooks": [
         {
           "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-deferred-issues.sh"
+          "command": ".claude/hooks/hooks-quality/scripts/quality-before-commit.sh",
+          "if": "Bash(git commit*)",
+          "timeout": 10
+        }
+      ],
+      "_apm_source": "hooks-quality"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-issue-close-guard.sh"
+        },
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-issue-label-guard.sh"
+        },
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh"
         }
       ],
       "_apm_source": "speckit"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/release-please/scripts/release-please-guard.sh"
+        }
+      ],
+      "_apm_source": "release-please"
+    },
+    {
+      "matcher": "Skill",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-context7-reminder.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    },
+    {
+      "matcher": "apply_patch|Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
+          "timeout": 3
+        }
+      ],
+      "_apm_source": "agent-coder"
     }
   ],
   "Stop": [
@@ -217,21 +206,32 @@
       "hooks": [
         {
           "type": "command",
-          "command": ".claude/hooks/steering-pragmatic/scripts/inject-working-style.sh",
-          "timeout": 5
-        }
-      ],
-      "_apm_source": "steering-pragmatic"
-    },
-    {
-      "hooks": [
-        {
-          "type": "command",
           "command": ".claude/hooks/code-intelligence/scripts/subagent-context-inject.sh",
           "timeout": 5
         }
       ],
       "_apm_source": "code-intelligence"
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/steering-pragmatic/scripts/inject-working-style.sh",
+          "timeout": 5
+        }
+      ],
+      "_apm_source": "steering-pragmatic"
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-deferred-issues.sh"
+        }
+      ],
+      "_apm_source": "speckit"
     }
   ]
 }
