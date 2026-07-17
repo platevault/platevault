@@ -55,7 +55,19 @@ export function siteStepHasSite(state: SiteStepState): boolean {
 
 /** Validate the (optional) site step; `null` when the step is empty (skipped) or valid. */
 export function siteStepError(state: SiteStepState): string | null {
-  if (!siteStepHasSite(state)) return null;
+  const nameFilled = state.name.trim() !== '';
+  const coordsFilled =
+    state.latitudeDegText.trim() !== '' && state.longitudeDegText.trim() !== '';
+  // A blank step (nothing filled in yet) is skipped, not invalid. But once
+  // the user has entered coordinates, the site needs a name too — matching
+  // the Settings -> Target Planner site editor, which requires it
+  // (`ObservingSites.tsx`) — otherwise Continue silently accepted an
+  // anonymous site that then got dropped entirely at Finish (#516).
+  if (!nameFilled && !coordsFilled) return null;
+  if (!nameFilled) {
+    return m.settings_observing_sites_error_name();
+  }
+  if (!coordsFilled) return null;
   const lat = Number(state.latitudeDegText.trim());
   if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
     return m.settings_observing_sites_error_latitude();

@@ -18,6 +18,19 @@ pub enum FilterCategory {
     Custom,
 }
 
+/// Camera sensor type (spec 044 iteration 2026-07-15, FR-035): `mono`
+/// per-filter imaging vs `osc` (one-shot color) single-pass imaging.
+/// Absence (`None` on [`Camera::sensor_type`]) means unknown, which MUST
+/// behave as mono downstream (FR-038).
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, Type,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SensorType {
+    Mono,
+    Osc,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Camera {
@@ -25,6 +38,12 @@ pub struct Camera {
     pub name: String,
     pub aliases: Vec<String>,
     pub auto_detected: bool,
+    /// FR-035: `None` = unknown (behaves as mono, FR-038).
+    pub sensor_type: Option<SensorType>,
+    /// FR-035: narrowband set for an OSC dual/tri-band filter (e.g.
+    /// `["Ha","OIII"]`); `None` = plain color camera (`rgb` default). Only
+    /// meaningful when `sensor_type` is `Osc`.
+    pub passband: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -61,6 +80,11 @@ pub struct Filter {
 pub struct CreateCamera {
     pub name: String,
     pub aliases: Vec<String>,
+    /// FR-035; `#[serde(default)]` keeps pre-iteration payloads valid.
+    #[serde(default)]
+    pub sensor_type: Option<SensorType>,
+    #[serde(default)]
+    pub passband: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -69,6 +93,11 @@ pub struct UpdateCamera {
     pub id: String,
     pub name: String,
     pub aliases: Vec<String>,
+    /// FR-035; `#[serde(default)]` keeps pre-iteration payloads valid.
+    #[serde(default)]
+    pub sensor_type: Option<SensorType>,
+    #[serde(default)]
+    pub passband: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]

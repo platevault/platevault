@@ -104,6 +104,8 @@ const CAMERA: Camera = {
   name: 'ASI2600MM Pro',
   aliases: ['ZWO 2600'],
   autoDetected: false,
+  sensorType: null,
+  passband: null,
 };
 
 const TELESCOPE: Telescope = {
@@ -186,6 +188,9 @@ describe('Equipment', () => {
     expect(mockCamerasCreate).toHaveBeenCalledWith({
       name: 'ASI533MC Pro',
       aliases: [],
+      // FR-035: sensor type defaults to unknown (null) until chosen.
+      sensorType: null,
+      passband: null,
     });
     await waitFor(() =>
       expect(screen.getByText('ASI533MC Pro')).toBeInTheDocument(),

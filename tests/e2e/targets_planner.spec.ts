@@ -90,15 +90,16 @@ function targetRow(page: Page, designation: string) {
   return page.locator(".alm-targets-table__row", { hasText: designation });
 }
 
-// Column order in TargetsTable (see COLUMNS): 0 star · 1 designation · 2 type ·
-// 3 maxAlt · 4 spark · 5 visible · 6 opposition · 7 lunarDist · 8 filters ·
-// 9 imagingTime · 10 sessions.
+// Column order in TargetsTable (see COLUMNS; sparkline + visible columns
+// removed by the 2026-07-15 iteration, FR-007): 0 star · 1 designation ·
+// 2 type · 3 maxAlt · 4 opposition · 5 lunarDist · 6 filters ·
+// 7 imagingTime · 8 sessions.
 const COL = {
   maxAlt: 3,
-  opposition: 6,
-  lunarDist: 7,
-  imagingTime: 9,
-  sessions: 10,
+  opposition: 4,
+  lunarDist: 5,
+  imagingTime: 7,
+  sessions: 8,
 } as const;
 
 test.describe("PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)", () => {
@@ -208,10 +209,26 @@ test.describe("PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)", () =>
     // ── 047 US3: moon-driven filter guidance pills render in the Filters cell. ─
     await expect(m31.locator(".alm-guidance-cell__trigger")).toBeVisible();
 
-    // ── 044: imaging-time column present; renders an honest value ("N h" when
-    //    the target clears the threshold tonight, else "—") — never fabricated. ─
+    // ── 044: imaging-time column present; renders an honest value ("2h10m"-
+    //    style when the target clears the threshold tonight, else "—" with a
+    //    reason glyph, FR-030/FR-032) — never fabricated or a bare 0. ─────────
     await expect(page.getByRole("columnheader", { name: "Img time" })).toBeVisible();
-    await expect(m31.locator("td").nth(COL.imagingTime)).toHaveText(/^(\d+(\.\d+)? h|—)$/);
+    await expect(m31.locator("td").nth(COL.imagingTime)).toHaveText(
+      /^(\d+h(\d+m)?( ☾)?|— [☀▲☾]|—)$/,
+    );
+
+    // ── Iteration 2026-07-15 (FR-007): the sparkline + visible columns are
+    //    hard-removed; visibility is folded into the imaging-time glyph. ──────
+    await expect(page.getByRole("columnheader", { name: "Tonight" })).toHaveCount(0);
+    await expect(page.getByRole("columnheader", { name: "Visible" })).toHaveCount(0);
+
+    // ── Iteration 2026-07-15 (FR-033): the always-visible computation-context
+    //    label disclosing site · latitude · twilight · threshold + "change". ──
+    const computedFor = page.getByTestId("planner-computed-for");
+    await expect(computedFor).toContainText("Computed for:");
+    await expect(computedFor).toContainText("52.4°N");
+    await expect(computedFor).toContainText("≥30°");
+    await expect(computedFor.getByRole("link", { name: "change" })).toBeVisible();
   });
 
   /**
@@ -442,5 +459,81 @@ test.describe("Honest empty-state disclosure (no fabricated data)", () => {
       page.getByText("No favourites yet. Star a target (☆) to add it here."),
     ).toBeVisible();
     await expect(targetRow(page, "M 31")).toHaveCount(0);
+  });
+});
+
+test.describe("Planner observability iteration (spec 044 Phase 10, 2026-07-15)", () => {
+  /**
+   * #817 (FR-029/FR-030/FR-034, SC-015): a night with NO qualifying dark
+   * window must state WHY imaging time is zero everywhere the number appears,
+   * and the detail graph must agree with the stat instead of contradicting it.
+   * At 52.37°N the Sun never reaches astronomical darkness around the June
+   * solstice (minimum depression ≈ 14°), so planning for June 21 reproduces
+   * the #817 condition date-stably every year.
+   */
+  test("9.5a · #817: a no-dark-window night states its reason — table glyph, detail sentence, non-dark graph", async ({
+    page,
+  }) => {
+    seedSetupComplete(page);
+    seedObservingSite(page);
+    await page.goto("/#/targets");
+    await disableGuidedTourOverlay(page);
+
+    const m31 = targetRow(page, "M 31");
+    await expect(m31).toBeVisible({ timeout: 8_000 });
+
+    // Plan for the NEXT June solstice (always in the future so the date
+    // picker round-trip mirrors 9.4a's arbitrary-future-night flow).
+    const now = new Date();
+    const year =
+      now.getMonth() >= 5 ? now.getFullYear() + 1 : now.getFullYear();
+    await page.getByLabel("Plan for").fill(`${year}-06-21`);
+
+    // Table: zero imaging time carries the darkness reason glyph (FR-030) —
+    // never a bare 0 or an unexplained "—" (SC-015).
+    const imgTime = m31.locator("td").nth(COL.imagingTime);
+    await expect(imgTime).toContainText("☀");
+    await expect(imgTime.locator(".alm-imgtime-glyph--warn")).toBeVisible();
+
+    // Detail: the same zero is stated as a sentence (FR-029)…
+    await m31.click();
+    await expect(
+      page.getByText(/never gets dark enough/).first(),
+    ).toBeVisible();
+    // …and the altitude graph AGREES (FR-034): with no dark window the whole
+    // plot is shaded non-dark (exactly one full-width twilight rect —
+    // pre-iteration the shading was omitted entirely and a green usable fill
+    // contradicted the 0-hour stat, which was the #817 report).
+    await expect(page.locator(".alm-planner__graph-twilight")).toHaveCount(1);
+  });
+
+  /**
+   * #792 (FR-032/SC-016): the surviving planner columns are sized to their
+   * real content — the widest real values ("14 Apr · in 9 months"-style
+   * opposition, "2h10m"+glyph imaging time) render unclipped in a 1100×720
+   * window (the stub-width Opposition column used to clip).
+   */
+  test("9.5b · #792: opposition and imaging-time cells render unclipped at 1100×720", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1100, height: 720 });
+    seedSetupComplete(page);
+    seedObservingSite(page);
+    await page.goto("/#/targets");
+    await disableGuidedTourOverlay(page);
+
+    const m31 = targetRow(page, "M 31");
+    await expect(m31).toBeVisible({ timeout: 8_000 });
+
+    const opposition = m31.locator("td").nth(COL.opposition);
+    await expect(opposition).toContainText(/in \d+ (day|days|month|months)/);
+    expect(
+      await opposition.evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
+
+    const imgTime = m31.locator("td").nth(COL.imagingTime);
+    expect(
+      await imgTime.evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
   });
 });

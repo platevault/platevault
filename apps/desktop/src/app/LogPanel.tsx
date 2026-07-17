@@ -5,7 +5,9 @@
  * Bottom log panel (spec 019).
  *
  * - Full-width fold-out driven by `LogPanelContext`.
- * - Level filter chips (session-only, resets to 'all' on open).
+ * - Level filter chips (session-only, resets to 'all' on open). Selecting a
+ *   level is a severity floor — it shows that level and everything more
+ *   severe, not an exact match (#582).
  * - Follow-tail toggle (persisted via `rememberFollowLogs` setting).
  * - Diagnostics toggle (gated by `logLevel === "debug"`).
  * - Cross-link: clicking a row with `entityType` + `entityId` navigates to
@@ -52,9 +54,19 @@ const LEVEL_CHIPS: { value: LevelFilter; label: () => string }[] = [
   { value: 'debug', label: () => m.settings_advanced_log_debug() },
 ];
 
+// Severity order (ascending). A level-chip selection is a floor: choosing
+// e.g. "warn" shows warn AND error, matching conventional log-viewer
+// semantics rather than an exact-level match (#582).
+const LEVEL_SEVERITY: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
+
 function passesLevelFilter(entryLevel: LogLevel, filter: LevelFilter): boolean {
   if (filter === 'all') return true;
-  return entryLevel === filter;
+  return LEVEL_SEVERITY[entryLevel] >= LEVEL_SEVERITY[filter];
 }
 
 function passesSourceFilter(
@@ -453,6 +465,13 @@ function LogEntryRow({
 }: LogEntryRowProps) {
   const hasEntityLink = entry.entityType != null && entry.entityId != null;
   const hasAuditLink = entry.requestId != null && !hasEntityLink;
+  // Subject context (#583): the entity/request the line is about, surfaced
+  // as visible text rather than only implied by the click-to-navigate arrow.
+  const contextLabel = hasEntityLink
+    ? `${entry.entityType} · ${entry.entityId}`
+    : hasAuditLink
+      ? entry.requestId
+      : null;
 
   const handleClick = useCallback(() => {
     if (hasEntityLink && entry.entityType && entry.entityId) {
@@ -509,6 +528,11 @@ function LogEntryRow({
       >
         {entry.source}
       </span>
+      {contextLabel && (
+        <span className="alm-logpanel__event-context" title={contextLabel}>
+          {contextLabel}
+        </span>
+      )}
       <span className="alm-logpanel__event-msg">{entry.message}</span>
       {hasEntityLink && (
         <span className="alm-logpanel__event-link-indicator" aria-hidden="true">
