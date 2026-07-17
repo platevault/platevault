@@ -540,6 +540,7 @@ export function TargetsPage() {
       />
       <ListPageLayout
         topBar={topBar}
+        dockPage="targets"
         detail={
           selected ? (
             <TargetDetailV2

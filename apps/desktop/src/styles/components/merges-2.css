@@ -278,11 +278,14 @@
   overflow-x: auto;
 }
 
-/* Sticky header so column labels/sort controls stay visible while scrolling. */
+/* Sticky header so column labels/sort controls stay visible while scrolling.
+   z-index 2 (spec 054 US5): must beat the sticky-left body pin columns
+   (z-index 1, merges-3.css) but yield to the header-corner cells (star +
+   designation th, z-index 3, merges-3.css) that are sticky on both axes. */
 .alm-targets-table__scroll .alm-targets-table thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
 }
 
 /* The windowed body's height is set inline (getTotalSize) so the scrollbar

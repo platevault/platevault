@@ -90,15 +90,16 @@ function targetRow(page: Page, designation: string) {
   return page.locator(".alm-targets-table__row", { hasText: designation });
 }
 
-// Column order in TargetsTable (see COLUMNS; sparkline + visible columns
-// removed by the 2026-07-15 iteration, FR-007): 0 star · 1 designation ·
-// 2 type · 3 maxAlt · 4 opposition · 5 lunarDist · 6 filters ·
-// 7 imagingTime · 8 sessions.
+// Column order in TargetsTable (see COLUMNS; spec 054 US5 FR-006 made this
+// order PERMANENT, independent of placement — star, designation, imaging
+// time, opposition, type, filters, max alt, lunar dist, sessions):
+// 0 star · 1 designation · 2 imagingTime · 3 opposition · 4 type ·
+// 5 filters · 6 maxAlt · 7 lunarDist · 8 sessions.
 const COL = {
-  maxAlt: 3,
-  opposition: 4,
-  lunarDist: 5,
-  imagingTime: 7,
+  imagingTime: 2,
+  opposition: 3,
+  maxAlt: 6,
+  lunarDist: 7,
   sessions: 8,
 } as const;
 

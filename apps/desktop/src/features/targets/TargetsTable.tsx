@@ -477,6 +477,12 @@ function flattenGroups(groups: TargetGroup[]): FlatRow[] {
 // astro/opposition.ts); unknown coordinates render '—'.
 // Sessions: linked-session count not on TargetListItem yet (#57). Renders '—'.
 // All non-text columns are sortable on their mock value.
+//
+// FR-006 (spec 054 US5): the column order below is PERMANENT — star,
+// designation, imaging time, opposition, type, filters, max alt, lunar dist,
+// sessions — independent of placement (side dock vs bottom dock). Star +
+// designation are additionally pinned left via sticky CSS (merges-3.css)
+// when the table scrolls horizontally beside a narrowed side dock (FR-007).
 
 // `label`/`title` are render-time thunks (spec 046 #8b) so headers re-read the active locale.
 const COLUMNS: Array<{
@@ -486,46 +492,21 @@ const COLUMNS: Array<{
   className?: string;
   title?: () => string;
 }> = [
-  // task #18: star column (no label — icon-only header)
+  // task #18: star column (no label — icon-only header).
+  // FR-006 (spec 054 US5): pinned left (`alm-targets-pin-star`) so it stays
+  // visible while the non-pinned columns scroll beside a narrowed side dock.
   {
     key: 'star',
     label: () => '★',
-    className: 'alm-targets-cell--center',
+    className: 'alm-targets-cell--center alm-targets-pin-star',
     title: () => m.targets_col_favourite(),
   },
+  // FR-006: pinned left (`alm-targets-pin-designation`), same rationale as star.
   {
     key: 'designation',
     label: () => m.targets_col_designation(),
     sort: 'designation',
-  },
-  { key: 'type', label: () => m.cmp_target_search_type_label(), sort: 'type' },
-  {
-    key: 'maxAlt',
-    label: () => m.targets_col_max_alt(),
-    sort: 'maxAlt',
-    className: 'alm-targets-cell--num',
-    title: () => m.targets_table_max_alt_title(),
-  },
-  {
-    key: 'opposition',
-    label: () => m.targets_col_opposition(),
-    sort: 'opposition',
-    className: 'alm-targets-cell--opposition',
-    title: () => m.targets_table_next_opposition(),
-  },
-  // task #5: abbreviated header "Lunar" fits the widened 80px column without clipping
-  {
-    key: 'lunarDist',
-    label: () => m.targets_col_lunar(),
-    sort: 'lunarDist',
-    className: 'alm-targets-cell--num',
-    title: () => m.targets_col_lunar_title(),
-  },
-  {
-    key: 'filters',
-    label: () => m.common_filters(),
-    className: 'alm-targets-cell--filters',
-    title: () => m.targets_col_filters_title(),
+    className: 'alm-targets-pin-designation',
   },
   // task #5: abbreviated header "Img time" fits the widened 100px column without clipping
   {
@@ -534,6 +515,35 @@ const COLUMNS: Array<{
     sort: 'imagingTime',
     className: 'alm-targets-cell--num',
     title: () => m.targets_col_img_time_title(),
+  },
+  {
+    key: 'opposition',
+    label: () => m.targets_col_opposition(),
+    sort: 'opposition',
+    className: 'alm-targets-cell--opposition',
+    title: () => m.targets_table_next_opposition(),
+  },
+  { key: 'type', label: () => m.cmp_target_search_type_label(), sort: 'type' },
+  {
+    key: 'filters',
+    label: () => m.common_filters(),
+    className: 'alm-targets-cell--filters',
+    title: () => m.targets_col_filters_title(),
+  },
+  {
+    key: 'maxAlt',
+    label: () => m.targets_col_max_alt(),
+    sort: 'maxAlt',
+    className: 'alm-targets-cell--num',
+    title: () => m.targets_table_max_alt_title(),
+  },
+  // task #5: abbreviated header "Lunar" fits the widened 80px column without clipping
+  {
+    key: 'lunarDist',
+    label: () => m.targets_col_lunar(),
+    sort: 'lunarDist',
+    className: 'alm-targets-cell--num',
+    title: () => m.targets_col_lunar_title(),
   },
   {
     key: 'sessions',
@@ -1050,16 +1060,20 @@ export function TargetsTable({
               the right prevent the per-page column-shift bug.
               task #18: star col added first (28 px, wave2 CSS block). */}
           <colgroup>
+            {/* FR-006 (spec 054 US5): permanent importance-based order — star,
+                designation, imaging time, opposition, type, filters, max alt,
+                lunar dist, sessions — independent of placement. Positional:
+                must match the <td> order in <tbody> below. */}
             <col className="alm-targets-col--star" />
             <col className="alm-targets-col--designation" />
-            <col className="alm-targets-col--type" />
-            <col className="alm-targets-col--maxalt" />
-            <col className="alm-targets-col--opposition" />
-            {/* task #5: lunardist widened to 80px (wave2 CSS block). */}
-            <col className="alm-targets-col--lunardist" />
-            <col className="alm-targets-col--filters" />
             {/* task #5: imagingtime widened to 100px (wave2 CSS block). */}
             <col className="alm-targets-col--imagingtime" />
+            <col className="alm-targets-col--opposition" />
+            <col className="alm-targets-col--type" />
+            <col className="alm-targets-col--filters" />
+            <col className="alm-targets-col--maxalt" />
+            {/* task #5: lunardist widened to 80px (wave2 CSS block). */}
+            <col className="alm-targets-col--lunardist" />
             <col className="alm-targets-col--sessions" />
           </colgroup>
           <thead>
@@ -1191,7 +1205,7 @@ export function TargetsTable({
                   {/* task #18: favourite star toggle.
                       STUB: stored in localStorage only until task #54 (backend linkage) lands.
                       stopPropagation prevents the row-select click from firing. */}
-                  <td className="alm-targets-cell--center">
+                  <td className="alm-targets-cell--center alm-targets-pin-star">
                     <button
                       type="button"
                       className={
@@ -1221,7 +1235,7 @@ export function TargetsTable({
                       {isFav ? '★' : '☆'}
                     </button>
                   </td>
-                  <td>
+                  <td className="alm-targets-pin-designation">
                     <span className="alm-targets-cell__desig">
                       <span className="alm-targets-cell__label">
                         {t.effectiveLabel}
@@ -1233,22 +1247,16 @@ export function TargetsTable({
                       )}
                     </span>
                   </td>
-                  <td>
-                    <Pill variant="ghost">{formatType(t.objectType)}</Pill>
-                  </td>
-                  {/* Real peak altitude tonight (spec 044 Track B ephemeris).
-                      #757: no catalogued coordinates → the shared unresolved
-                      chip, never a fabricated 0°. */}
+                  {/* Imaging time (dark ∩ uptime) + why-glyph (iteration
+                      2026-07-15). Zero values carry a ☀/▲/☾ warning glyph
+                      with the FR-029 reason (FR-030, SC-015); non-zero values
+                      carry a muted ☾ only when the Moon actionably shortens
+                      some band's window (FR-031). Reason facts come from
+                      `altMoon` — the per-rendered-row pass that includes Moon
+                      geometry — so 'moon' is never inferred from the cheap
+                      geometry-free catalogue pass. */}
                   <td className="alm-targets-cell--num">
-                    {alt.needsCoordinates ? (
-                      <span title={m.targets_table_needs_coordinates_title()}>
-                        <UnresolvedChip />
-                      </span>
-                    ) : (
-                      <span title={m.targets_table_max_alt_title()}>
-                        {Math.round(alt.maxAltDeg)}°
-                      </span>
-                    )}
+                    <ImagingTimeCell alt={altMoon} threshold={usableAltDeg} />
                   </td>
                   {/* Real next-opposition date (spec 047 US4). Unknown
                       coordinates / no site → explicit "—", never a date. */}
@@ -1282,6 +1290,38 @@ export function TargetsTable({
                       })()
                     )}
                   </td>
+                  <td>
+                    <Pill variant="ghost">{formatType(t.objectType)}</Pill>
+                  </td>
+                  {/* Real per-band filter guidance from the Moon-avoidance rule
+                      (spec 047 US3): pills + explanation popover. */}
+                  <td className="alm-targets-cell--filters">
+                    <GuidanceCell
+                      night={night}
+                      moon={moon}
+                      params={guidanceParams}
+                      targetLabel={t.effectiveLabel}
+                      moonFreeMinutesByBand={
+                        altMoon.needsCoordinates || altMoon.needsSite
+                          ? null
+                          : altMoon.moonFreeMinutesByBand
+                      }
+                    />
+                  </td>
+                  {/* Real peak altitude tonight (spec 044 Track B ephemeris).
+                      #757: no catalogued coordinates → the shared unresolved
+                      chip, never a fabricated 0°. */}
+                  <td className="alm-targets-cell--num">
+                    {alt.needsCoordinates ? (
+                      <span title={m.targets_table_needs_coordinates_title()}>
+                        <UnresolvedChip />
+                      </span>
+                    ) : (
+                      <span title={m.targets_table_max_alt_title()}>
+                        {Math.round(alt.maxAltDeg)}°
+                      </span>
+                    )}
+                  </td>
                   {/* Real lunar angular separation (spec 047 US2). Unknown
                       coordinates / no site → explicit "—", never a number. */}
                   <td className="alm-targets-cell--num">
@@ -1302,32 +1342,6 @@ export function TargetsTable({
                         {Math.round(moon.lunarSeparationDeg)}°
                       </span>
                     )}
-                  </td>
-                  {/* Real per-band filter guidance from the Moon-avoidance rule
-                      (spec 047 US3): pills + explanation popover. */}
-                  <td className="alm-targets-cell--filters">
-                    <GuidanceCell
-                      night={night}
-                      moon={moon}
-                      params={guidanceParams}
-                      targetLabel={t.effectiveLabel}
-                      moonFreeMinutesByBand={
-                        altMoon.needsCoordinates || altMoon.needsSite
-                          ? null
-                          : altMoon.moonFreeMinutesByBand
-                      }
-                    />
-                  </td>
-                  {/* Imaging time (dark ∩ uptime) + why-glyph (iteration
-                      2026-07-15). Zero values carry a ☀/▲/☾ warning glyph
-                      with the FR-029 reason (FR-030, SC-015); non-zero values
-                      carry a muted ☾ only when the Moon actionably shortens
-                      some band's window (FR-031). Reason facts come from
-                      `altMoon` — the per-rendered-row pass that includes Moon
-                      geometry — so 'moon' is never inferred from the cheap
-                      geometry-free catalogue pass. */}
-                  <td className="alm-targets-cell--num">
-                    <ImagingTimeCell alt={altMoon} threshold={usableAltDeg} />
                   </td>
                   {/* MOCK (#57): linked-session count not on TargetListItem yet. */}
                   <td className="alm-targets-cell--num">

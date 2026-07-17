@@ -52,6 +52,7 @@ import { __setObservingStateForTest } from './observing-sites/site-store';
 import type { ObserverSite } from './observing-sites/observer-site';
 import type { ObservingNight } from './astro/moon-state';
 import { DEFAULT_MOON_AVOIDANCE } from './astro/moon-avoidance';
+import { m } from '@/lib/i18n';
 
 function item(
   primaryDesignation: string,
@@ -669,5 +670,59 @@ describe('TargetsTable — no-dark-window summer night (#579, glyph model)', () 
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// spec 054 US5 (FR-006/FR-007): permanent column order + pinned identity columns.
+describe('TargetsTable column order + pinned identity columns (spec 054 US5)', () => {
+  it('renders header + first body row columns in the FR-006 permanent order', () => {
+    renderTable();
+    const table = screen.getByRole('table');
+
+    const headerCells = within(
+      table.querySelector('thead tr') as HTMLTableRowElement,
+    ).getAllByRole('columnheader');
+    // Star header is icon-only (no text label) — identify it via its title
+    // attribute instead; every other column asserts on its visible label text.
+    expect(headerCells[0].title).toBe(m.targets_col_favourite());
+    // Designation is the default active sort column, so its header carries
+    // the shared SortHeader direction-arrow glyph appended to the label.
+    expect(headerCells.slice(1).map((c) => c.textContent?.trim())).toEqual([
+      'Designation▲',
+      'Img time',
+      'Opposition',
+      'Type',
+      'Filters',
+      'Max alt',
+      'Lunar',
+      'Sessions',
+    ]);
+
+    // First body row (sorted by designation asc: "M 31" before "NGC 7000").
+    const bodyRow = within(table)
+      .getByText('M 31')
+      .closest('tr') as HTMLTableRowElement;
+    const cells = within(bodyRow).getAllByRole('cell');
+    expect(cells).toHaveLength(9);
+  });
+
+  it('marks the star and designation cells as pinned (sticky-left)', () => {
+    renderTable();
+    const table = screen.getByRole('table');
+
+    // Header corner cells.
+    const headerCells = within(
+      table.querySelector('thead tr') as HTMLTableRowElement,
+    ).getAllByRole('columnheader');
+    expect(headerCells[0].className).toContain('alm-targets-pin-star');
+    expect(headerCells[1].className).toContain('alm-targets-pin-designation');
+
+    // Body cells for a data row.
+    const bodyRow = within(table)
+      .getByText('M 31')
+      .closest('tr') as HTMLTableRowElement;
+    const bodyCells = within(bodyRow).getAllByRole('cell');
+    expect(bodyCells[0].className).toContain('alm-targets-pin-star');
+    expect(bodyCells[1].className).toContain('alm-targets-pin-designation');
   });
 });

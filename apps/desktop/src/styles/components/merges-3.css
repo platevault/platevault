@@ -189,6 +189,9 @@
 .alm-targets-table {
   table-layout: fixed;
   width: 100%;
+  /* spec 054 US5 FR-006/FR-007: fixed px width for the pinned star column so
+     the designation column's sticky `left` offset (below) is deterministic. */
+  --alm-targets-star-col-w: 44px;
   /* Floor so every column stays at least as wide as its content. Below this the
      scroll container (.alm-targets-table__scroll, overflow-x:auto) scrolls
      horizontally instead of squeezing/clipping the last columns. The column
@@ -671,8 +674,12 @@
  * STUB until task #54 (FITS OBJECT → target_id linkage) lands — stored
  * client-side in localStorage only. See useFavourites.ts. */
 
-/* Extra column for the star (sits leftmost, before Designation). */
-.alm-targets-col--star { width: 4.5%; }
+/* Extra column for the star (sits leftmost, before Designation). Fixed px
+   (not %, spec 054 US5 FR-006/FR-007): the pinned-left designation column
+   below anchors its `left` offset to this exact width, which only stays
+   correct if the star column's rendered width is deterministic rather than
+   a percentage of the table's (variable, side-dock-narrowed) width. */
+.alm-targets-col--star { width: var(--alm-targets-star-col-w); }
 
 /* Star toggle button: tiny, borderless, centred in its cell. */
 .alm-targets-star {
@@ -702,6 +709,45 @@
 /* Favourited state: filled star in accent colour. */
 .alm-targets-star--active {
   color: var(--alm-accent);
+}
+
+/* === spec 054 US5 (FR-006/FR-007): pin star + designation left ===========
+ * When the table narrows below its min-width floor beside a side dock, the
+ * favourite-star + designation columns must stay visible as the non-pinned
+ * columns scroll horizontally (the user's orientation anchors). Sticky cells
+ * are transparent by default, so an explicit OPAQUE background is required
+ * in every row state (normal/hover/selected) or scrolled column content shows
+ * through underneath. Z-index order (spec): header-corner > header-row
+ * (.alm-targets-table__scroll ... thead th, merges-2.css) > sticky-body-col
+ * > normal cells.
+ * ========================================================================= */
+.alm-targets-pin-star,
+.alm-targets-pin-designation {
+  position: sticky;
+  z-index: 1;
+  background: var(--alm-bg);
+}
+.alm-targets-pin-star { left: 0; }
+.alm-targets-pin-designation { left: var(--alm-targets-star-col-w); }
+
+.alm-targets-table__row:hover .alm-targets-pin-star,
+.alm-targets-table__row:hover .alm-targets-pin-designation {
+  background: var(--alm-surface);
+}
+.alm-targets-table__row--selected .alm-targets-pin-star,
+.alm-targets-table__row--selected .alm-targets-pin-designation {
+  background: var(--alm-accent-bg);
+}
+
+/* Header corner cells: both top- and left-sticky, so they must win over the
+   plain top-sticky header row (merges-2.css, z-index: 2) at the corner. */
+.alm-targets-table__scroll .alm-targets-table thead th.alm-targets-pin-star,
+.alm-targets-table__scroll
+  .alm-targets-table
+  thead
+  th.alm-targets-pin-designation {
+  z-index: 3;
+  background: var(--alm-surface);
 }
 
 /* task 18: "My Targets" empty-state nudge when no favourites are starred. */
