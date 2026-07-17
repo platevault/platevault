@@ -47,6 +47,15 @@ One stable key per adopting page (not per route instance):
 | `mode` | `'adaptive' \| 'side' \| 'bottom'` | Default `'adaptive'`. **Inbox is fixed** — its key, if present, is ignored for `mode` (always the permanent split); only `width` applies. `'side'`/`'bottom'` are explicit pins (FR-003). |
 | `width` | number (logical px) | Side-panel width (list-dominant pages) or split position (Inbox). Default = the page's design default (Inbox list ~360px; list-dominant side panel ~420px). Bounded ~320px min to ~50% of window max (FR-005); **clamped to the current window on restore** — never restore an unusable layout (spec edge case). |
 
+### Page-level override (not persisted)
+
+`ListPageLayout` accepts `forcedPlacement?: 'bottom' | 'side' | 'split'` — a
+page capability, not user state. It wins over the persisted `mode` and the
+adaptive heuristic (research.md D6). Inbox expresses its permanent split as
+`forcedPlacement='split'`; a bottom-only page passes `forcedPlacement='bottom'`.
+When set, the page's persisted `detailDock[page].mode` is ignored for placement
+(the `width` may still apply where the forced shape is resizable).
+
 ### Derived (not persisted) runtime state
 
 Computed each render from the width hook (research.md D2) + the persisted

@@ -93,9 +93,14 @@ owns bespoke panel markup.
 - [ ] T009 [US1] Drive placement adaptively in `components/ListPageLayout.tsx`
   from `useDetailDock` + the per-page override: render `'side'` (full-height
   bounded side panel), `'bottom'` (dock), or `'split'` (Inbox detail-dominant).
-  **Delete the dead `'side-and-bottom'` dual path** (`--dual`/`__panel-*` in
-  `merges-3.css` + the component branch) — no page uses it and Projects unifies
-  away from it (FR-004, D5, plan.md risk note).
+  Add an optional page-level **`forcedPlacement?: 'bottom'|'side'|'split'`**
+  prop; precedence = **page forcedPlacement > user pin > adaptive**; the hook is
+  `useDetailDock(page, pageRef, forcedPlacement?)` and returns `forcedPlacement`
+  directly when set (research D6). Inbox expresses its split via
+  `forcedPlacement='split'` — NOT a hook special-case; a bottom-only page passes
+  `forcedPlacement='bottom'`. **Delete the dead `'side-and-bottom'` dual path**
+  (`--dual`/`__panel-*` in `merges-3.css` + the component branch) — no page uses
+  it and Projects unifies away from it (FR-004, D5, D6, plan.md risk note).
 - [ ] T010 [US1] Drag-resize handle for the side panel / split in
   `ListPageLayout` + `styles/components/merges-2.css`: pointer-drag within
   `[320px, 50% window]`; persist width via `setDetailDockWidth` on release;

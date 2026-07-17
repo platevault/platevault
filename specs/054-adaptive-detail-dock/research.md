@@ -141,6 +141,29 @@ fixing containment in the container while leaving Archive/Targets on their own
 wrappers — would leave two consumers outside the guarantee and violate the
 consistency mandate.
 
+### D6 — Page-level placement override (hard-set)
+
+**Decision (owner amplification 2026-07-17).** `ListPageLayout` accepts an
+optional page-level **`forcedPlacement?: 'bottom' | 'side' | 'split'`**. When a
+page sets it, that placement wins over both the user config pin and the adaptive
+heuristic. **Precedence: page `forcedPlacement` > user pin (config) > adaptive.**
+When a page forces a placement, the user's Auto/Bottom/Right toggle is not
+applicable for that page (hidden/disabled in the Settings surface).
+
+**Rationale.** The owner asked that "some pages may only want the bottom
+component hard set." Rather than special-casing individual pages inside the
+width hook, this is a single general prop on the shared layout — which also
+**subsumes the Inbox permanent split**: Inbox is not a hook special-case
+(`page === 'inbox'`), it is simply the page that passes
+`forcedPlacement='split'` (FR-014). This keeps the mechanism fully shared and
+consistent (D5) and makes "this page is bottom-only" a one-line, declarative
+page capability. `useDetailDock(page, pageRef, forcedPlacement?)`: if
+`forcedPlacement` is set it is returned directly; otherwise the user-pin/
+adaptive resolution of D1–D3 applies. **Alternative rejected:** enumerating
+per-page placement rules inside the hook — non-general, and every new page or
+rule change edits the hook; the declarative prop keeps pages in control of their
+own placement policy.
+
 ## No new contracts
 
 This feature changes no UI↔core transport. It adds no Tauri command, no DTO, no
