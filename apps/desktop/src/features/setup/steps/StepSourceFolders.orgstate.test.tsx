@@ -134,7 +134,7 @@ describe('StepSourceFolders — organization state selector', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('shows both org-state and scan-depth selectors for non-inbox, only scan-depth for inbox', () => {
+  it('shows an org-state selector only for the non-inbox row', () => {
     const entries: SourceEntry[] = [
       makeEntry('light_frames', 'organized'),
       makeEntry('inbox', 'unorganized'),
@@ -156,12 +156,28 @@ describe('StepSourceFolders — organization state selector', () => {
       name: /organization state/i,
     });
     expect(orgSelects).toHaveLength(1);
+  });
 
-    // Both rows have a scan-depth selector.
-    const depthSelects = screen.getAllByRole('combobox', {
-      name: /scan depth/i,
-    });
-    expect(depthSelects).toHaveLength(2);
+  // Scan-depth is a no-op dropped from the UI (#509) — 'single' is never
+  // implemented, so every source is scanned recursively regardless of the
+  // stored (now unreachable-from-the-UI) scanDepth field.
+  it('does not render a scan-depth selector', () => {
+    const entries: SourceEntry[] = [makeEntry('light_frames', 'organized')];
+    render(
+      <StepSourceFolders
+        entries={entries}
+        onAdd={noop}
+        onRemove={noop}
+        onKindChange={noop}
+        onScanDepthChange={noop}
+        onOrganizationStateChange={noop}
+        errors={{}}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('combobox', { name: /scan depth/i }),
+    ).not.toBeInTheDocument();
   });
 });
 

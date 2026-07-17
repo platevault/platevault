@@ -111,7 +111,7 @@ pub async fn inbox_classify(
 #[specta::specta]
 pub async fn inbox_confirm(
     req: InboxConfirmRequest,
-    pool: tauri::State<'_, SqlitePool>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<InboxConfirmResponse, ContractError> {
     let use_case_req = ConfirmRequest {
         inbox_item_id: req.inbox_item_id,
@@ -120,6 +120,8 @@ pub async fn inbox_confirm(
         root_absolute_path: PathBuf::from(&req.root_absolute_path),
         // Spec 041 US8/US9: caller-selected destination root (optional).
         root_id: req.root_id,
+        // Spec 008 Q27 F-Framing-10 (FR-022) attribution apply-path.
+        chosen_attribution: req.chosen_attribution,
     };
 
     // Spec 041 US8/US9: confirm can block on a destination-root choice
@@ -127,7 +129,7 @@ pub async fn inbox_confirm(
     // `inbox.invalid_destination_root`) or a missing path attribute
     // (`inbox.missing_path_attributes`). The ContractError carries code +
     // details so the UI can branch on the error code.
-    let resp = confirm(&pool, use_case_req).await?;
+    let resp = confirm(state.repo.pool(), &state.bus, use_case_req).await?;
 
     let organization_state = match resp.organization_state {
         contracts_core::first_run::OrganizationState::Organized => "organized",
@@ -158,6 +160,8 @@ pub async fn inbox_confirm(
         }),
         organization_state: Some(organization_state.to_owned()),
         destinations,
+        attribution_candidates: resp.attribution_candidates,
+        attribution_applied: resp.attribution_applied,
     })
 }
 

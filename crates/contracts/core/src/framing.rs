@@ -194,6 +194,97 @@ pub struct FramingReassignResult {
     pub audit_id: String,
 }
 
+// ── Inbox-confirm attribution (F-Framing-5/6/10, FR-019/FR-020/FR-022) ────────
+
+/// One ranked suggestion from the Inbox-confirm attribution pass
+/// (data-model.md `IngestionAttributionCandidate`). A **suggestion surface**
+/// only — it never writes a merge (FR-019/FR-020); the user picks via
+/// [`ChosenAttributionDto`] on the confirm request (FR-022).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum IngestionAttributionKind {
+    AddToFraming,
+    NewFraming,
+    FlagOpticDifference,
+    NewProject,
+}
+
+/// A ranked attribution candidate (data-model.md §`IngestionAttributionCandidate`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct IngestionAttributionCandidateDto {
+    pub kind: IngestionAttributionKind,
+    /// Present for every kind except a match-less pass (the caller always
+    /// receives at least one candidate — a trailing zero-score `new_project`
+    /// candidate with no `projectId` when nothing else matched).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    /// Present for `add_to_framing`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub framing_id: Option<String>,
+    /// The matched target, when one resolved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_id: Option<String>,
+    /// Ranking key: framing-match strength (target+optic-train+pointing+rotation).
+    /// Higher is a closer match; candidates are returned in descending order.
+    pub match_score: f32,
+    /// `true` when `projectId` is a `completed` project — selecting this
+    /// candidate offers add + reopen (Q25 revoke/warn, F-Framing-6).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reopen: Option<bool>,
+    /// `true` for `flag_optic_difference`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optic_mismatch: Option<bool>,
+}
+
+/// The user's attribution pick (data-model.md §Apply-path, FR-022) — an
+/// additive field on the Inbox confirm request. `Unassigned` (or omitting
+/// this field entirely) leaves the confirmed session's framing membership
+/// unset, attributable later via `framing.reassign`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ChosenAttributionKind {
+    AddToFraming,
+    NewFraming,
+    FlagOpticDifference,
+    NewProject,
+    Unassigned,
+}
+
+/// Request payload for the attribution apply-path (data-model.md `chosenAttribution?`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChosenAttributionDto {
+    pub kind: ChosenAttributionKind,
+    /// Required for `new_framing` / `flag_optic_difference` (the existing
+    /// project to create the new framing under). Ignored for `new_project`
+    /// (a project is created) and `unassigned`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    /// Required for `add_to_framing`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub framing_id: Option<String>,
+}
+
+/// Outcome of applying a [`ChosenAttributionDto`] at confirm time
+/// (F-Framing-10/6). Returned alongside the confirm response so the UI can
+/// surface the reopen/warning without a follow-up read.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AttributionAppliedDto {
+    pub project_id: String,
+    /// `None` for `unassigned`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub framing_id: Option<String>,
+    /// `true` when this pick triggered a `completed -> processing` reopen
+    /// (F-Framing-6, spec-009's existing edge).
+    pub reopened: bool,
+    /// `true` when `reopened` and the project's raw subs have already been
+    /// archived via a cleanup plan (Q25 raw-subs-archived reopen warning) —
+    /// a degraded reopen the user should be aware of.
+    pub raw_subs_archived_warning: bool,
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -219,5 +310,61 @@ mod tests {
             serde_json::to_string(&FramingClustering::UserAdjusted).unwrap(),
             r#""user_adjusted""#
         );
+    }
+
+    // ── Attribution DTOs (F-Framing-5/10) ──────────────────────────────────
+
+    #[test]
+    fn ingestion_attribution_kind_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&IngestionAttributionKind::AddToFraming).unwrap(),
+            r#""add_to_framing""#
+        );
+        assert_eq!(
+            serde_json::to_string(&IngestionAttributionKind::FlagOpticDifference).unwrap(),
+            r#""flag_optic_difference""#
+        );
+    }
+
+    #[test]
+    fn chosen_attribution_kind_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&ChosenAttributionKind::Unassigned).unwrap(),
+            r#""unassigned""#
+        );
+    }
+
+    #[test]
+    fn chosen_attribution_dto_round_trips_camel_case() {
+        let dto = ChosenAttributionDto {
+            kind: ChosenAttributionKind::AddToFraming,
+            project_id: Some("proj-1".to_owned()),
+            framing_id: Some("framing-1".to_owned()),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["kind"], "add_to_framing");
+        assert_eq!(json["projectId"], "proj-1");
+        assert_eq!(json["framingId"], "framing-1");
+        let back: ChosenAttributionDto = serde_json::from_value(json).unwrap();
+        assert_eq!(back, dto);
+    }
+
+    #[test]
+    fn ingestion_attribution_candidate_omits_absent_optionals() {
+        let dto = IngestionAttributionCandidateDto {
+            kind: IngestionAttributionKind::NewProject,
+            project_id: None,
+            framing_id: None,
+            target_id: None,
+            match_score: 0.0,
+            reopen: None,
+            optic_mismatch: None,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        let obj = json.as_object().unwrap();
+        assert!(!obj.contains_key("projectId"));
+        assert!(!obj.contains_key("framingId"));
+        assert!(!obj.contains_key("reopen"));
+        assert!(!obj.contains_key("opticMismatch"));
     }
 }

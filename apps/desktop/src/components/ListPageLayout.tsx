@@ -52,7 +52,7 @@
  * it must be the page's outermost element (do not nest it inside PageShell).
  */
 
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { PageTopBar, type PageTopBarProps } from './PageTopBar';
 import { m } from '@/lib/i18n';
 
@@ -96,6 +96,28 @@ export interface ListPageLayoutProps {
   bottomDetailLabel?: string;
 }
 
+/**
+ * True when a Base UI overlay (Dialog, Select, Combobox, Menu, …) is open
+ * anywhere in the document. Base UI stamps the OPEN popup's outer node
+ * (Positioner/Popup) with `data-open` (its documented styling-state hook),
+ * but the ARIA overlay role doesn't always land on that same node: Dialog and
+ * Menu put `role` and `data-open` together on Popup, while Select/Combobox
+ * split them — `role="listbox"`/`"grid"` sits on an inner List that has no
+ * `data-open` of its own, only a `data-open` ANCESTOR (Positioner/Popup).
+ * Walking up from every overlay-role element to the nearest `data-open`
+ * ancestor (`closest`, which also matches the element itself) covers both
+ * shapes without hardcoding which library variant is in use (#906).
+ */
+function hasOpenOverlay(): boolean {
+  const overlayRoles = document.querySelectorAll(
+    '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="grid"], [role="menu"]',
+  );
+  for (const el of overlayRoles) {
+    if (el.closest('[data-open]')) return true;
+  }
+  return false;
+}
+
 export function ListPageLayout({
   topBar,
   topBarProps,
@@ -110,6 +132,38 @@ export function ListPageLayout({
 }: ListPageLayoutProps) {
   const hasDetail = detail != null;
   const hasBottom = bottomDetail != null;
+
+  // Escape closes the open detail panel(s), matching the ✕ affordance (#771).
+  // A `document`-level listener also catches the common case where nothing
+  // inside the panel has focus (e.g. focus stayed on the row that opened it,
+  // or on <body>). `stopPropagation()` does NOT stop a sibling listener
+  // registered on the SAME target — Base UI's own Escape dismissal
+  // (`useDismiss`) is also a `document`-level `keydown` listener, and by
+  // default (`escapeKeyBubbles: false`) it calls `stopPropagation()` but
+  // never `preventDefault()`, so neither mechanism reaches across to block
+  // this listener. We therefore check explicitly for an open Base UI overlay
+  // (Dialog/Select/Combobox/Menu — anything carrying Base UI's `data-open`
+  // styling-hook attribute plus an overlay ARIA role) and skip closing the
+  // panel while one is open, deferring to its own dismissal.
+  useEffect(() => {
+    if (!hasDetail && !hasBottom) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (hasOpenOverlay()) return;
+      if (hasDetail) onCloseDetail?.();
+      if (detailPlacement === 'side-and-bottom' && hasBottom) {
+        onCloseBottomDetail?.();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    hasDetail,
+    hasBottom,
+    detailPlacement,
+    onCloseDetail,
+    onCloseBottomDetail,
+  ]);
 
   // ── Dual side-and-bottom layout (task #104) ──────────────────────────────
   //
