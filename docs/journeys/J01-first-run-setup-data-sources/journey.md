@@ -1,13 +1,13 @@
 ---
 id: J01
 title: Register data source folders and keep them current
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [setup, data-sources]
 interfaces: [desktop-ui]
-trace: [docs/product/journeys/J01-first-run-setup-data-sources/journey.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-jval-docdrift.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t123.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t125.md, docs/development/journey-run-2026-07-14.md, PR-440, PR-686, PR-404, PR-405, PR-826, issue-647, spec-030 FR-130-FR-134, PR #872, PR #893, PR #894, PR #908, PR #907, PR #903, PR #901, PR #904, PR #911]
+trace: [docs/product/journeys/J01-first-run-setup-data-sources/journey.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-jval-docdrift.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t123.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t125.md, docs/development/journey-run-2026-07-14.md, PR-440, PR-686, PR-404, PR-405, PR-826, issue-647, spec-030 FR-130-FR-134, PR #872, PR #893, PR #894, PR #908, PR #907, PR #903, PR #901, PR #904, PR #911, PR #925]
 ---
 
 ## Goal
@@ -182,21 +182,30 @@ produces both a visible answer-back and a durable audit record.
 - **Do:** Wait for every registered folder to scan.
 - **Expect:** Each source that was actually registered by this flush reaches
   a terminal state, including "0 items" for an empty folder. A folder that
-  was already registered before this run (S6's benign-no-op case) is skipped
-  here rather than scanned again under a synthetic root id — it was already
-  ingested under its real, existing root. Per-source "Detected types" and
-  the file-count chip account for unclassified (no/unmapped IMAGETYP) files
+  was **genuinely already registered before this wizard run** (S6's
+  benign-no-op case, from a prior wizard session) is skipped here rather
+  than scanned again under a synthetic root id — it was already ingested
+  under its real, existing root. A source that registered on an *earlier
+  attempt within this same wizard session* but was never actually scanned
+  (e.g. because an unrelated source in that same batch failed and the user
+  retried) is rescanned here rather than silently dropped from the Scan step
+  with no items and no error. Per-source "Detected types" and the
+  file-count chip account for unclassified (no/unmapped IMAGETYP) files
   and calibration masters, so the shown breakdown always reconciles with the
   folder's total file count instead of silently under-counting. An expanded
   folder table's root row shows "(root)" in the Folder/File cell, never a
   blank cell.
 - **Expect (negative):** Finish never enables while any source is still
-  scanning.
+  scanning. No source registered earlier in this wizard session
+  disappears from the Scan step with neither a scan result nor an error,
+  merely because it carries the `alreadyRegistered` flag.
 - **Trace:** `apps/desktop/src/features/setup/steps/StepScan.tsx` (PR #893
   fixes #704 — scanning an already-registered row via the path-as-rootId
   fallback previously failed the `registered_sources` join and orphaned
   inbox items). PR #904 fixes #513 (unreconciled counts, hidden
-  unclassified/masters, blank root row).
+  unclassified/masters, blank root row). PR #925 fixes #916 (a
+  same-session-retry `alreadyRegistered` source that was never actually
+  scanned is now rescanned instead of vanishing).
 
 ### S8 — Finish setup {#S8}
 - **Do:** Click Finish.
@@ -357,3 +366,13 @@ produces both a visible answer-back and a durable audit record.
   #511, #510), PR #903 (fixes #516), PR #901 (fixes #515), PR #904 (fixes
   #513), PR #911 (carried nJ01a review nits, no matching issues) · by:
   journey-scribe (intent-gated)
+
+- **Δ6** 2026-07-17 · S7 · behavior-change
+  Scan now distinguishes a source that is *genuinely* already registered
+  from a prior wizard session (still skipped, unchanged) from one that
+  registered on an earlier attempt within the *same* session but was never
+  actually scanned — e.g. because an unrelated source in that batch failed
+  and the user retried. The latter case previously vanished from the Scan
+  step silently (no items, no error); it is now correctly rescanned.
+  Evidence: PR #925 (fixes #916, carried nJ01a review nit deferred out of
+  PR #911's Rust-only file boundary) · by: journey-scribe (intent-gated)
