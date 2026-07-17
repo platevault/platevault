@@ -18,6 +18,13 @@ import {
 import type { FontSizeChoice, ZoomPercent } from '@/data/theme';
 import type { Density } from '@/bindings/types';
 import { m } from '@/lib/i18n';
+import { SettingsSection, RestoreDefaultsBtn } from './SettingsKit';
+
+/** In-code defaults (data/theme.ts + preferences.ts) — none of these are
+ *  settings-DB-backed panes, so restore is a local reset, not a backend call
+ *  (#802: Appearance was one of 3 default-backed panes missing the shared
+ *  RestoreDefaultsBtn control). */
+const DEFAULT_DENSITY: Density = 'comfortable';
 
 // `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
 // THEMES carry static brand names (not translatable) — wrap them as thunks so
@@ -38,12 +45,19 @@ export function General() {
   const [density, setDensity] = usePreference('density');
   const resolved = resolveTheme(choice);
 
+  const handleRestoreDefaults = async () => {
+    setChoice('system');
+    setFontSize('default');
+    setZoom(100);
+    setDensity(DEFAULT_DENSITY);
+  };
+
   return (
     <>
-      <div className="alm-settings__group">
-        <div className="alm-settings__group-title">
-          {m.settings_general_theme()}
-        </div>
+      <SettingsSection
+        title={m.settings_general_theme()}
+        action={<RestoreDefaultsBtn onRestore={handleRestoreDefaults} />}
+      >
         <div className="alm-theme-swatches">
           {CHOICES.map((t) => {
             const isActive = choice === t.id;
@@ -82,7 +96,7 @@ export function General() {
             );
           })}
         </div>
-      </div>
+      </SettingsSection>
 
       <div className="alm-settings__group">
         <div className="alm-settings__group-title">
