@@ -641,5 +641,28 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
         "expected the site-setup prompt to disappear now that a site exists"
     );
 
+    // FR-009 amendment (iteration 2026-07-17): the detail pane's "Best date"
+    // stat is Moon-aware and self-explaining. Open a real target's detail and
+    // assert the stat's explanation via its aria-label mirror (the same text
+    // the hover tooltip shows) — the popup itself is NOT hover-opened here:
+    // real-pointer hover is not a primitive this bridge harness exercises
+    // reliably, and the aria-label mirror is the accessible contract.
+    add_target_via_ui(&app, "M 1").await?;
+    let row = app
+        .find_waiting(By::Css(".alm-targets-table__row"), "a targets-table row to open")
+        .await?;
+    row.click().await?;
+    let best_date = app.wait_testid("proptable-tooltip-bestdate", UI_TIMEOUT).await.map_err(|e| {
+        anyhow::anyhow!("expected the detail Best-date stat with its Moon explanation: {e}")
+    })?;
+    let label = best_date.attr("aria-label").await?.unwrap_or_default();
+    anyhow::ensure!(
+        label.contains("Matches opposition")
+            || label.contains("falls near full Moon")
+            || label.contains("No Moon-favourable night"),
+        "expected the Best-date aria-label to carry one of the three real Moon-state \
+         explanations (coincides / diverged / none found), got {label:?}"
+    );
+
     app.shutdown().await
 }

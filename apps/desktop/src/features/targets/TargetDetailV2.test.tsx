@@ -43,7 +43,7 @@ import {
   fireEvent,
   waitFor,
 } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Windows-CI headroom (same flake class as PR #412's settings hydration races):
 // every test in this file waits on content that only renders after mocked async
@@ -123,6 +123,28 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn().mockRejectedValue(new Error('no tauri in tests')),
 }));
+
+// FR-009 amendment (2026-07-17): switchable override for the Moon-aware best
+// date so each tooltip state renders deterministically; `null` = the real
+// (deterministic-ephemeris) computation for every other test.
+const bestMoonMock = vi.hoisted(() => ({
+  override: null as
+    | null
+    | (() => import('./astro/best-moon-date').BestMoonDate | null),
+}));
+vi.mock('./astro/best-moon-date', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('./astro/best-moon-date')>();
+  return {
+    ...actual,
+    bestMoonDate: (
+      ...args: Parameters<typeof actual.bestMoonDate>
+    ): ReturnType<typeof actual.bestMoonDate> =>
+      bestMoonMock.override
+        ? bestMoonMock.override()
+        : actual.bestMoonDate(...args),
+  };
+});
 
 // ── Import under test (after mocks) ──────────────────────────────────────────
 
@@ -803,6 +825,10 @@ describe('TargetDetailV2 — needs-coordinates degrade + Moon-separation trio (#
     });
   });
 
+  afterEach(() => {
+    bestMoonMock.override = null;
+  });
+
   it('33. (#757) renders a distinct "needs coordinates" banner instead of crashing when a site is active and the target has no RA/Dec', async () => {
     mockGetTargetDetail.mockResolvedValue(
       ok(makeDetail({ raDeg: null, decDeg: null })),
@@ -821,6 +847,71 @@ describe('TargetDetailV2 — needs-coordinates degrade + Moon-separation trio (#
       screen.queryByText(/Add an observing site.*see tonight's real altitude/i),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/^Max alt/)).not.toBeInTheDocument();
+  });
+
+  it('35. (FR-009 2026-07-17) diverged best date renders the moon-adjusted date with the both-nights explanation', async () => {
+    bestMoonMock.override = () => ({
+      dateMs: Date.UTC(2026, 0, 26),
+      inDays: 25,
+      state: 'diverged',
+      oppositionDateMs: Date.UTC(2026, 1, 2),
+      moonAtBest: { illumPct: 48, sepDeg: 98.4 },
+      moonAtOpposition: { illumPct: 100, sepDeg: 2.2 },
+    });
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+
+    await waitFor(() => expect(screen.getByText('Best date')).toBeInTheDocument());
+    // The shown date is the moon-adjusted night, not the opposition…
+    const row = screen.getByText('Best date').closest('[role="row"]');
+    expect(row?.textContent).toContain('Jan 26 · in 25 days');
+    // …and the tooltip/aria-label explains both nights (InfoTip mirror).
+    expect(
+      screen.getByLabelText(
+        /Opposition Feb 2 falls near full Moon \(100% lit, 2° away\)\. Best night within ±2 weeks: Jan 26 — Moon 48% lit, 98° from target\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('36. (FR-009 2026-07-17) coinciding best date explains the favourable Moon on the opposition night', async () => {
+    bestMoonMock.override = () => ({
+      dateMs: Date.UTC(2026, 0, 18),
+      inDays: 17,
+      state: 'coincides',
+      oppositionDateMs: Date.UTC(2026, 0, 18),
+      moonAtBest: { illumPct: 1, sepDeg: 169.1 },
+      moonAtOpposition: { illumPct: 1, sepDeg: 169.1 },
+    });
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+
+    await waitFor(() => expect(screen.getByText('Best date')).toBeInTheDocument());
+    const row = screen.getByText('Best date').closest('[role="row"]');
+    expect(row?.textContent).toContain('Jan 18 · in 17 days');
+    expect(
+      screen.getByLabelText(
+        /Matches opposition — the Moon is favourable that night \(1% lit, 169° away\)\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('37. (FR-009 2026-07-17) no viable night falls back to the opposition date with an explicit disclosure', async () => {
+    bestMoonMock.override = () => ({
+      dateMs: Date.UTC(2026, 1, 2),
+      inDays: 32,
+      state: 'none-viable',
+      oppositionDateMs: Date.UTC(2026, 1, 2),
+      moonAtBest: { illumPct: 99, sepDeg: 10 },
+      moonAtOpposition: { illumPct: 99, sepDeg: 10 },
+    });
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+
+    await waitFor(() => expect(screen.getByText('Best date')).toBeInTheDocument());
+    const row = screen.getByText('Best date').closest('[role="row"]');
+    expect(row?.textContent).toContain('Feb 2 · in 32 days');
+    expect(
+      screen.getByLabelText(
+        /No Moon-favourable night within ±2 weeks of opposition; showing the opposition date\./,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('34. (#758) renders the Moon-separation trio (at transit / min over dark / dark midpoint) once tonight is available', async () => {

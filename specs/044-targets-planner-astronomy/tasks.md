@@ -561,24 +561,31 @@ T025's note on why the value surfaces in the detail pane instead of duplicating 
 > carries the matching clarification); scoring band v1 = broadband L, parameterized for a later
 > passband-aware upgrade (T045/T046 equipment input).
 
-- [ ] T050 [P] Search module (`features/targets/astro/best-moon-date.ts`): nearest Moon-viable night
+- [x] T050 [P] Search module (`features/targets/astro/best-moon-date.ts`): nearest Moon-viable night
       to `nextOpposition` within ±15 nights (31 candidates; ties prefer the earlier night; past
       nights skipped; no-viable falls back to opposition with a distinct state). Reuses `moonStateAt`,
       `lunarSeparationDeg`, and `minSeparationDeg` verbatim; single-entry memoized 31-night Moon
       table (the `sunRaTable` pattern, keyed on the window start). Unit tests
       (`best-moon-date.test.ts`): viable-at-opposition → no divergence; full-Moon opposition diverges;
       earlier tie-break; no-viable fallback; band-param sensitivity.
-- [ ] T051 Detail wiring (`TargetDetailV2.tsx`, depends T050): compute from the detail's own RA/Dec +
-      the planner date + live `useGuidanceParams()` (a tuning edit recomputes it); the "Best date"
-      stat value wraps in the shared `ui/Tooltip` with the three-state explanation
-      (diverged / coincides / none found), mirrored into `aria-label` (the InfoTip pattern).
-      `PropertyTable` gains an optional per-row `tooltip`. List path untouched.
-- [ ] T052 i18n (depends T051): `targets_best_date_tooltip_{diverged,coincides,none}` messages +
+- [x] T051 Detail wiring (`TargetDetailV2.tsx`, depends T050): compute from the detail's own RA/Dec +
+      the shared night anchor (`night.midnight`, matching the list column's opposition instant) +
+      live `useGuidanceParams()` (a tuning edit recomputes it); the "Best date" stat value wraps in
+      the shared `ui/Tooltip` with the three-state explanation (diverged / coincides / none found),
+      mirrored into `aria-label` (the InfoTip pattern). `PropertyTable` gains an optional per-row
+      `tooltip`. List path untouched.
+- [x] T052 i18n (depends T051): `targets_best_date_tooltip_{diverged,coincides,none}` messages +
       rewrite the now-false `targets_col_best_date_title`; `alm/no-user-string` + `alm/no-js-plural`
       clean.
-- [ ] T053 Regression + E2E (depends T051): TargetDetailV2 component tests for the three tooltip
-      states; list-vs-detail assertion in `tests/e2e/targets_planner.spec.ts` (list column stays the
-      pure opposition format while the detail Best date carries the Moon explanation).
+- [x] T053 Regression + E2E in CI (depends T051): TargetDetailV2 component tests for the three
+      tooltip states; list-vs-detail assertion in `tests/e2e/targets_planner.spec.ts` 9.5c — runs in
+      the GitHub CI mock-Playwright job (`ci.yml` "Mock-mode UI tests" runs the whole `tests/e2e`
+      dir); minimal real-UI assertion (Best-date stat + aria-label explanation, hover-free) appended
+      to `crates/e2e-tests/tests/targets_journeys.rs`'s site-creation journey.
+- [x] T054 Journey tie (owner amendment 2026-07-17, depends T051): Δ4 delta + S4 amendment in
+      `docs/journeys/J09-targets-planning/journey.md`; Test 9 (Best-date tooltip check) + Test 7
+      step-4 correction + E2E-sync bookkeeping in
+      `docs/development/windows-journeys/journey-09-targets-planning.md`.
 
 ---
 
@@ -598,7 +605,7 @@ Setup T001,T002,T003
    Polish (Phase 9) T035[P],T036[P] after their consumer stories; T037 ─> T038 ─> T039 last
    Iterate (Phase 10, 2026-07-15) T040 ─> T041 ─> T042 ; T043[P] ; T040 ─> T044 ; T045 ─> T046 (T046 also
    needs T040) ; T047 after T041/T043/T044/T046 ; T048 after all ; T049 last
-   Iterate (Phase 11, 2026-07-17) T050 ─> T051 ─> T052 ; T053 after T051
+   Iterate (Phase 11, 2026-07-17) T050 ─> T051 ─> T052 ; T053 after T051 ; T054 after T051
 ```
 
 **Critical path (MVP)**: T001/T002 → T004→T008 → T009→T012b → (seed one site or T016) → usable planner.
