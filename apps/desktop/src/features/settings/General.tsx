@@ -10,10 +10,12 @@ import { usePreference } from '@/data/preferences';
 import {
   useThemeChoice,
   useFontSizeChoice,
+  useZoomChoice,
   resolveTheme,
   THEMES,
+  ZOOM_STEPS,
 } from '@/data/theme';
-import type { FontSizeChoice } from '@/data/theme';
+import type { FontSizeChoice, ZoomPercent } from '@/data/theme';
 import type { Density } from '@/bindings/types';
 import { m } from '@/lib/i18n';
 
@@ -32,6 +34,7 @@ const CHOICES = [
 export function General() {
   const [choice, setChoice] = useThemeChoice();
   const [fontSize, setFontSize] = useFontSizeChoice();
+  const [zoom, setZoom] = useZoomChoice();
   const [density, setDensity] = usePreference('density');
   const resolved = resolveTheme(choice);
 
@@ -107,6 +110,34 @@ export function General() {
             </select>
           </div>
         </div>
+      </div>
+
+      <div className="alm-settings__group">
+        <div className="alm-settings__group-title">
+          {m.settings_general_zoom_title()}
+        </div>
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">
+            {m.settings_general_zoom_label()}
+          </div>
+          <div className="alm-settings__row-content">
+            <select
+              className="alm-select"
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value) as ZoomPercent)}
+            >
+              {ZOOM_STEPS.map((step) => (
+                <option key={step} value={step}>
+                  {step}%
+                  {step === 100
+                    ? ` (${m.settings_general_zoom_default_suffix()})`
+                    : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <p className="alm-calmatch__help">{m.settings_general_zoom_hint()}</p>
       </div>
 
       <div className="alm-settings__group">
