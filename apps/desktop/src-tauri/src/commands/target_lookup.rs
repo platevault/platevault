@@ -23,6 +23,8 @@
 //!   background task (FR-002; issue #695).
 //! - `target.resolution.settings` / `target.resolution.settings.update` — resolver settings.
 //! - `target.astro_format.batch` — batched sexagesimal RA/Dec formatting (adopt target-match).
+//! - `target.moon_opposition.batch` — batched Moon-separation + next-opposition
+//!   for N targets in one call, replacing per-row TS ephemeris math (#634).
 //!
 //! Spec-013 commands `target.lookup` and `target.resolve.fits` have been
 //! removed by spec 036 (superseded by spec-035 `target.search`/`target.resolve`).
@@ -328,4 +330,222 @@ pub async fn target_cone_search_confirm(
     );
     let cache = state.resolve_cache.read().await.clone();
     app_core::inbox::cone_search::confirm(state.repo.pool(), &cache.cache(), &req).await
+}
+
+// ── target.moon_opposition.batch (#634) ──────────────────────────────────────
+//
+// Replaces the per-row TS ephemeris math (`astro/lunar-separation.ts`,
+// `astro/opposition.ts`) with a single batched Rust call, same geocentric
+// simplification and ±2°/±7-day tolerance those modules documented (no
+// observer coordinates; catalogued RA/Dec + a shared instant only —
+// Track A). `skymath::sun_position`/`moon_position` (Meeus low-accuracy
+// solar + truncated ELP-2000/82 lunar theory) replace the hand-rolled
+// `astronomy-engine` calls; `skymath::separation`/`circular_distance` replace
+// the hand-rolled vector/RA-diff helpers.
+
+/// One target's catalogued J2000 coordinates for a moon-separation/opposition
+/// batch request.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MoonOppositionTargetInput {
+    /// Caller-defined id, echoed back on the matching result (never re-derived).
+    pub id: String,
+    pub ra_deg: f64,
+    pub dec_deg: f64,
+}
+
+/// `target.moon_opposition.batch` request.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetMoonOppositionBatchRequest {
+    pub targets: Vec<MoonOppositionTargetInput>,
+    /// RFC3339 instant shared by every target in the batch: the Moon's
+    /// geocentric position, and the opposition search's start day, are the
+    /// same for every row on one observing night (same memoization rationale
+    /// as the TS `sunRaTable` this replaces) — pass the SAME instant for a
+    /// whole table render, not a per-row `now()`.
+    pub at: String,
+}
+
+/// Opposition search result for one target.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct OppositionResult {
+    /// RFC3339 date (whole-day resolution) of the next opposition-like
+    /// midnight culmination.
+    pub date: String,
+    pub days_until: u32,
+}
+
+/// Moon-separation + opposition result for one target.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MoonOppositionResult {
+    pub id: String,
+    /// Angular separation from the Moon in degrees (0..=180), or `None` for
+    /// out-of-domain RA/Dec (never a fabricated value).
+    pub moon_separation_deg: Option<f64>,
+    /// `None` for out-of-domain RA/Dec.
+    pub opposition: Option<OppositionResult>,
+}
+
+/// `target.moon_opposition.batch` response.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetMoonOppositionBatchResponse {
+    pub results: Vec<MoonOppositionResult>,
+}
+
+/// Search window: matches the TS `nextOpposition` scan (a touch over one
+/// synodic year of solar RA drift).
+const OPPOSITION_SCAN_DAYS: u32 = 366;
+
+/// Build a J2000 `Equatorial` from decimal-degree RA/Dec, wrapping RA into
+/// `[0, 360)` and clamping Dec into `[-90, 90]` (same domain-safety treatment
+/// as `targeting::coords::to_equatorial`). Returns `None` for non-finite input.
+fn target_equatorial(ra_deg: f64, dec_deg: f64) -> Option<targeting::Equatorial> {
+    if !ra_deg.is_finite() || !dec_deg.is_finite() {
+        return None;
+    }
+    let ra = targeting::Angle::from_degrees(ra_deg).normalized_0_360();
+    let dec = targeting::Angle::from_degrees(dec_deg.clamp(-90.0, 90.0));
+    targeting::Equatorial::j2000(ra, dec).ok()
+}
+
+/// The Sun's geocentric RA (degrees) for each day offset `0..=OPPOSITION_SCAN_DAYS`
+/// from `at` — computed once per batch (see [`TargetMoonOppositionBatchRequest::at`]),
+/// never per target.
+fn sun_ra_table(at: time::OffsetDateTime) -> Vec<f64> {
+    (0..=OPPOSITION_SCAN_DAYS)
+        .map(|day| skymath::sun_position(at + time::Duration::days(i64::from(day))).ra().degrees())
+        .collect()
+}
+
+/// Next opposition-like (midnight-culmination) date for a target at `ra_deg`,
+/// searching forward from `at` using the memoized `table` (mirrors the TS
+/// `nextOpposition` coarse daily scan, FR-014/SC-003).
+fn next_opposition(ra_deg: f64, at: time::OffsetDateTime, table: &[f64]) -> OppositionResult {
+    let target_opposition_ra = targeting::Angle::from_degrees(ra_deg - 180.0).normalized_0_360();
+    let (best_day, _) = table
+        .iter()
+        .enumerate()
+        .map(|(day, &sun_ra)| {
+            let diff = skymath::circular_distance(
+                targeting::Angle::from_degrees(sun_ra),
+                target_opposition_ra,
+            )
+            .degrees()
+            .abs();
+            (u32::try_from(day).unwrap_or(u32::MAX), diff)
+        })
+        .min_by(|(_, a), (_, b)| a.total_cmp(b))
+        .unwrap_or((0, 0.0));
+
+    let date = at + time::Duration::days(i64::from(best_day));
+    OppositionResult {
+        date: date.format(&time::format_description::well_known::Rfc3339).unwrap_or_default(),
+        days_until: best_day,
+    }
+}
+
+/// `target.moon_opposition.batch` — batched Moon-separation + next-opposition
+/// computation for N targets in one call (never per-row round trips, #634).
+/// Pure geometry/ephemeris — no database access, so this never fails on a
+/// well-formed request; a malformed `at` is the only error case.
+///
+/// # Errors
+///
+/// Returns `Err(ContractError)` with code `"value.invalid"` when `at` is not
+/// a valid RFC3339 instant.
+#[tauri::command]
+#[specta::specta]
+pub async fn target_moon_opposition_batch(
+    req: TargetMoonOppositionBatchRequest,
+) -> Result<TargetMoonOppositionBatchResponse, ContractError> {
+    tracing::debug!("target.moon_opposition.batch count={}", req.targets.len());
+    let at = time::OffsetDateTime::parse(&req.at, &time::format_description::well_known::Rfc3339)
+        .map_err(|e| {
+        ContractError::new(
+            contracts_core::error_code::ErrorCode::ValueInvalid,
+            format!("at: invalid RFC3339 instant: {e}"),
+            contracts_core::ErrorSeverity::Warning,
+            false,
+        )
+    })?;
+
+    // Computed once per batch, not per target (moon position + the Sun's
+    // daily RA table are the same for every row on one observing night).
+    let moon = skymath::moon_position(at);
+    let table = sun_ra_table(at);
+
+    let results = req
+        .targets
+        .into_iter()
+        .map(|t| {
+            let eq = target_equatorial(t.ra_deg, t.dec_deg);
+            MoonOppositionResult {
+                id: t.id,
+                moon_separation_deg: eq.map(|e| skymath::separation(moon, e).degrees()),
+                opposition: eq.map(|_| next_opposition(t.ra_deg, at, &table)),
+            }
+        })
+        .collect();
+
+    Ok(TargetMoonOppositionBatchResponse { results })
+}
+
+#[cfg(test)]
+mod moon_opposition_tests {
+    use super::{
+        target_moon_opposition_batch, MoonOppositionTargetInput, TargetMoonOppositionBatchRequest,
+    };
+
+    /// #634 SUCCESS: one batched call returns both moon-separation and
+    /// opposition for N targets, keyed by the caller's `id`.
+    #[tokio::test]
+    async fn batched_moon_opposition_for_multiple_targets() {
+        let req = TargetMoonOppositionBatchRequest {
+            targets: vec![
+                MoonOppositionTargetInput { id: "m31".to_owned(), ra_deg: 10.68, dec_deg: 41.27 },
+                MoonOppositionTargetInput { id: "m42".to_owned(), ra_deg: 83.82, dec_deg: -5.39 },
+            ],
+            at: "2026-01-15T00:00:00Z".to_owned(),
+        };
+        let resp = target_moon_opposition_batch(req).await.unwrap();
+        assert_eq!(resp.results.len(), 2);
+        for r in &resp.results {
+            let sep = r.moon_separation_deg.expect("finite RA/Dec must produce a separation");
+            assert!((0.0..=180.0).contains(&sep), "separation out of range: {sep}");
+            let opp = r.opposition.as_ref().expect("finite RA/Dec must produce an opposition");
+            assert!(opp.days_until <= 366);
+            assert!(!opp.date.is_empty());
+        }
+        assert_eq!(resp.results[0].id, "m31");
+        assert_eq!(resp.results[1].id, "m42");
+    }
+
+    /// Non-finite RA/Dec returns `None` rather than a fabricated value.
+    #[tokio::test]
+    async fn non_finite_coordinates_return_none() {
+        let req = TargetMoonOppositionBatchRequest {
+            targets: vec![MoonOppositionTargetInput {
+                id: "bad".to_owned(),
+                ra_deg: f64::NAN,
+                dec_deg: 0.0,
+            }],
+            at: "2026-01-15T00:00:00Z".to_owned(),
+        };
+        let resp = target_moon_opposition_batch(req).await.unwrap();
+        assert_eq!(resp.results.len(), 1);
+        assert!(resp.results[0].moon_separation_deg.is_none());
+        assert!(resp.results[0].opposition.is_none());
+    }
+
+    /// A malformed `at` is rejected, not silently defaulted.
+    #[tokio::test]
+    async fn invalid_at_is_rejected() {
+        let req = TargetMoonOppositionBatchRequest { targets: vec![], at: "not-a-date".to_owned() };
+        let err = target_moon_opposition_batch(req).await.unwrap_err();
+        assert_eq!(err.code, contracts_core::error_code::ErrorCode::ValueInvalid);
+    }
 }

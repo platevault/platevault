@@ -30,6 +30,7 @@
 //! - `"framing"` → `framingPointingFractionOfFov`, `framingPointingFallbackDeg`,
 //!   `framingRotationToleranceDeg`, `framingMosaicEnvelopeFractionOfFov`
 //!   (spec 008 Q27 F-Framing-11, R11a clustering tolerance tunables)
+//! - `"catalogues"` → `enabled` (#645, default-enabled Planner catalogues)
 //! - `""` (empty) → reads the full settings bag (all known keys).
 //!
 //! Unknown `values` keys from the frontend that are not valid settings keys are
@@ -87,6 +88,10 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "usableAltitudeDeg",
         ],
         "planner" => &["plannerMoonAvoidance"],
+        // Default-enabled planner catalogues (#645); key name `enabled` is
+        // dictated by the frontend contract (`catalogue-settings.ts`), which
+        // reads `settingsGet('catalogues').values.enabled` directly.
+        "catalogues" => &["enabled"],
         "framing" => &[
             "framingPointingFractionOfFov",
             "framingPointingFallbackDeg",
@@ -125,6 +130,7 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "observingActiveSiteId",
             "usableAltitudeDeg",
             "plannerMoonAvoidance",
+            "enabled",
             "theme",
             "framingPointingFractionOfFov",
             "framingPointingFallbackDeg",

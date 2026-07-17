@@ -67,6 +67,10 @@ pub(crate) enum ValidationRule {
     /// (stringified `1`-`20`, the frontend `CLEANUP_TYPES` fixture ids) to
     /// exactly one of `"Keep"`, `"Archive"`, or `"Delete"`.
     CleanupTypeOverrides,
+    /// Default-enabled planner catalogue ids (#645): JSON array of strings,
+    /// each a known `PLANNER_CATALOGS` id (`NGC`, `Sh2`, `LBN`, `LDN`, `IC`,
+    /// `M`, `C`, `B` — `apps/desktop/src/features/targets/planner-catalog.ts`).
+    CatalogueIds,
 }
 
 /// A stable settings key plus its audit/override flags, validation rule, and
@@ -792,6 +796,16 @@ pub(crate) fn check_rule(
             ));
         }
         ValidationRule::CleanupTypeOverrides => check_cleanup_type_overrides(value, invalid)?,
+        ValidationRule::CatalogueIds => {
+            const KNOWN_IDS: [&str; 8] = ["NGC", "Sh2", "LBN", "LDN", "IC", "M", "C", "B"];
+            let arr = value.as_array().ok_or_else(|| invalid("must be an array"))?;
+            for entry in arr {
+                let id = entry.as_str().ok_or_else(|| invalid("catalogue id must be a string"))?;
+                if !KNOWN_IDS.contains(&id) {
+                    return Err(invalid(&format!("unknown catalogue id: {id}")));
+                }
+            }
+        }
     }
     Ok(())
 }

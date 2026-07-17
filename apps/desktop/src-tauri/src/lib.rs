@@ -119,8 +119,8 @@ use crate::commands::target_favourites::{
 };
 use crate::commands::target_lookup::{
     target_adopt, target_astro_format_batch, target_cache_clear, target_cone_search_confirm,
-    target_cone_search_suggest, target_resolution_settings, target_resolution_settings_update,
-    target_resolve, target_resolve_explicit, target_search,
+    target_cone_search_suggest, target_moon_opposition_batch, target_resolution_settings,
+    target_resolution_settings_update, target_resolve, target_resolve_explicit, target_search,
 };
 use crate::commands::target_management as target_mgmt_cmds;
 use crate::commands::targets::{targets_get, targets_list};
@@ -237,6 +237,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_resolution_settings_update,
         // sexagesimal RA/Dec formatting (adopt target-match)
         target_astro_format_batch,
+        // moon separation + opposition batch (#634)
+        target_moon_opposition_batch,
         // projects (spec 008)
         projects_list,
         projects_get,
@@ -480,6 +482,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         target_resolution_settings_update,
         // sexagesimal RA/Dec formatting (adopt target-match)
         target_astro_format_batch,
+        // moon separation + opposition batch (#634)
+        target_moon_opposition_batch,
         // projects (spec 008)
         projects_list,
         projects_get,

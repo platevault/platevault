@@ -154,6 +154,18 @@ pub fn is_valid_key(key: &str) -> bool {
         || is_tools_auto_detected_key(key)
         || is_workflow_profile_watch_extensions_key(key)
         || is_workflow_profile_attribution_window_key(key)
+        || is_catalogues_enabled_key(key)
+}
+
+/// `enabled` (#645, scope `"catalogues"`): default-enabled Planner catalogue
+/// ids. Not in the descriptor table on purpose — there is no dedicated
+/// `SettingsState` field for it (`SettingsState` lives in `domain_core`,
+/// outside this crate). Same treatment as the `tools.*`/`workflow_profile.*`
+/// structured-path keys: read/write through the DB row + `default_value_for_key`
+/// only, never through the in-memory `SettingsState` bag returned by
+/// `get_settings` (unused by the Planner/Settings pane for this key).
+fn is_catalogues_enabled_key(key: &str) -> bool {
+    key == "enabled"
 }
 
 /// Return the names of all stable settings keys that can be overridden per source root.
@@ -305,6 +317,9 @@ pub fn validate_value(key: &str, value: &Value) -> Result<(), ContractError> {
                 return Err(invalid("must be a number"));
             }
         }
+        _ if is_catalogues_enabled_key(key) => {
+            descriptors::check_rule(descriptors::ValidationRule::CatalogueIds, value, &invalid)?;
+        }
         _ => {
             // No additional validation for other keys.
         }
@@ -414,6 +429,9 @@ fn default_value_for_key(key: &str) -> Value {
             }
         }
         return Value::Null;
+    }
+    if is_catalogues_enabled_key(key) {
+        return serde_json::json!(["M", "NGC", "IC", "Sh2"]);
     }
     Value::Null
 }
@@ -1383,6 +1401,45 @@ mod tests {
         let (db, _bus) = setup().await;
         let resolved = resolve_setting(db.pool(), "hashOnScan", None).await.unwrap();
         assert_eq!(resolved, serde_json::json!("lazy")); // default
+    }
+
+    /// #645: the `catalogues` scope's `enabled` key is a known, persistable
+    /// key (previously silently skipped as unknown), and the persisted value
+    /// survives a fresh `resolve_setting` read (the reload path).
+    #[tokio::test]
+    async fn update_setting_enabled_catalogues_persists_across_reload() {
+        let (db, bus) = setup().await;
+
+        // Default (nothing stored yet) is the in-code default subset.
+        let default = resolve_setting(db.pool(), "enabled", None).await.unwrap();
+        assert_eq!(default, serde_json::json!(["M", "NGC", "IC", "Sh2"]));
+
+        let req = SettingsUpdateRequest {
+            key: "enabled".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!([
+                "M", "NGC", "IC", "Sh2", "LBN"
+            ])),
+        };
+        let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+        assert_eq!(resp.status, SettingsUpdateStatus::Success);
+
+        // Simulates "leave the pane and return": a fresh resolve reads the
+        // persisted row, not the in-code default.
+        let reloaded = resolve_setting(db.pool(), "enabled", None).await.unwrap();
+        assert_eq!(reloaded, serde_json::json!(["M", "NGC", "IC", "Sh2", "LBN"]));
+    }
+
+    /// #645: an unknown catalogue id is rejected as `value.invalid`, not
+    /// silently accepted.
+    #[tokio::test]
+    async fn update_setting_enabled_catalogues_rejects_unknown_id() {
+        let (db, bus) = setup().await;
+        let req = SettingsUpdateRequest {
+            key: "enabled".to_owned(),
+            value: contracts_core::JsonAny::from(serde_json::json!(["NotACatalogue"])),
+        };
+        let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
     }
 
     // ── T026: restore_defaults contract tests ──────────────────────────

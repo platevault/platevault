@@ -425,6 +425,18 @@ export const commands = {
 	 */
 	targetAstroFormatBatch: (req: TargetAstroFormatBatchRequest) => typedError<TargetAstroFormatBatchResponse, ContractError_Serialize>(__TAURI_INVOKE("target_astro_format_batch", { req })),
 	/**
+	 *  `target.moon_opposition.batch` — batched Moon-separation + next-opposition
+	 *  computation for N targets in one call (never per-row round trips, #634).
+	 *  Pure geometry/ephemeris — no database access, so this never fails on a
+	 *  well-formed request; a malformed `at` is the only error case.
+	 * 
+	 *  # Errors
+	 * 
+	 *  Returns `Err(ContractError)` with code `"value.invalid"` when `at` is not
+	 *  a valid RFC3339 instant.
+	 */
+	targetMoonOppositionBatch: (req: TargetMoonOppositionBatchRequest) => typedError<TargetMoonOppositionBatchResponse, ContractError_Serialize>(__TAURI_INVOKE("target_moon_opposition_batch", { req })),
+	/**
 	 *  `projects.list` — list all projects from the database.
 	 * 
 	 *  # Errors
@@ -6367,6 +6379,29 @@ export type MismatchedDimDto_Serialize = {
 	delta?: number | null,
 };
 
+/**  Moon-separation + opposition result for one target. */
+export type MoonOppositionResult = {
+	id: string,
+	/**
+	 *  Angular separation from the Moon in degrees (0..=180), or `None` for
+	 *  out-of-domain RA/Dec (never a fabricated value).
+	 */
+	moonSeparationDeg: number | null,
+	/**  `None` for out-of-domain RA/Dec. */
+	opposition: OppositionResult | null,
+};
+
+/**
+ *  One target's catalogued J2000 coordinates for a moon-separation/opposition
+ *  batch request.
+ */
+export type MoonOppositionTargetInput = {
+	/**  Caller-defined id, echoed back on the matching result (never re-derived). */
+	id: string,
+	raDeg: number | null,
+	decDeg: number | null,
+};
+
 /**  Summary of items that do NOT require acknowledgement (R-CheckScope, FR-008). */
 export type NonBlockingSummary = {
 	normalCount: number,
@@ -6384,6 +6419,16 @@ export type OperationEvent = {
 export type OperationEventType = "progress" | "discovered_item_batch" | "extracted_metadata_batch" | "failed_file_batch" | "candidate_batch" | "observed_artifact_batch" | "item_started" | "item_applied" | "item_failed" | "warning" | "completed" | "failed" | "custom";
 
 export type OperationId = string;
+
+/**  Opposition search result for one target. */
+export type OppositionResult = {
+	/**
+	 *  RFC3339 date (whole-day resolution) of the next opposition-like
+	 *  midnight culmination.
+	 */
+	date: string,
+	daysUntil: number,
+};
 
 export type OpticalTrain = {
 	id: string,
@@ -9080,6 +9125,24 @@ export type TargetListItem_Serialize = {
 	 *  that ignore unknown keys are unaffected.
 	 */
 	aliases: string[],
+};
+
+/**  `target.moon_opposition.batch` request. */
+export type TargetMoonOppositionBatchRequest = {
+	targets: MoonOppositionTargetInput[],
+	/**
+	 *  RFC3339 instant shared by every target in the batch: the Moon's
+	 *  geocentric position, and the opposition search's start day, are the
+	 *  same for every row on one observing night (same memoization rationale
+	 *  as the TS `sunRaTable` this replaces) — pass the SAME instant for a
+	 *  whole table render, not a per-row `now()`.
+	 */
+	at: string,
+};
+
+/**  `target.moon_opposition.batch` response. */
+export type TargetMoonOppositionBatchResponse = {
+	results: MoonOppositionResult[],
 };
 
 /**  Request for `target.note.get` (spec 023 US4). */

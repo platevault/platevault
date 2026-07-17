@@ -1431,6 +1431,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simbad-resolver",
+ "skymath 0.4.0",
  "specta",
  "specta-typescript",
  "sqlx",
