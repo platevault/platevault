@@ -57,6 +57,7 @@ import { deriveRowMoonPlanning } from './astro/row-planning';
 import type { ObservingNight } from './astro/moon-state';
 import { useGuidanceParams } from './guidance-settings';
 import { formatOppositionDate, oppositionRelative } from './astro/opposition';
+import { bestMoonDate } from './astro/best-moon-date';
 import type { SeparationFigure } from './planner-derive';
 import { Group } from '@visx/group';
 import { LinePath } from '@visx/shape';
@@ -747,18 +748,49 @@ export function TargetDetailV2({
   // Max alt / imaging time are real (spec 044 Track B); lunar distance is the
   // real spec 047 value (unknown → "—"), never a fabricated number.
   const tonightAvailable = !rowAlt.needsCoordinates && !rowAlt.needsSite;
-  // US2/T025: best-imaging date (FR-009) — same anti-solar-RA computation as
-  // the Targets table's "Opposition" column (spec 047), formatted the same way.
-  const bestDateValue = ((): string | null => {
-    const bestDate = rowAlt.bestDate;
-    if (bestDate === null) return null;
-    const rel = oppositionRelative(bestDate.inDays);
-    const relText =
-      rel.unit === 'days'
-        ? m.targets_opposition_in_days({ count: rel.count })
-        : m.targets_opposition_in_months({ count: rel.count });
-    return `${formatOppositionDate(new Date(bestDate.dateMs))} · ${relText}`;
-  })();
+  // US2/T025 + FR-009 amendment (iteration 2026-07-17): the DETAIL "Best
+  // date" is the nearest Moon-viable night to the opposition date (scored
+  // with the live Lorentzian guidance params, broadband L in v1) — the list's
+  // "Opposition" column stays the pure anti-solar-RA date. Anchored on the
+  // same instant as the list column (`night.midnight`, see
+  // `deriveRowMoonPlanning`) so `oppositionDateMs` matches the list value
+  // to the day; falls back to the planner date when the night isn't supplied.
+  const bestMoon = tonightAvailable
+    ? bestMoonDate(
+        detail.raDeg,
+        detail.decDeg,
+        night?.midnight ?? new Date(dateMs),
+        guidanceParams,
+      )
+    : null;
+  const relativeText = (inDays: number): string => {
+    const rel = oppositionRelative(inDays);
+    return rel.unit === 'days'
+      ? m.targets_opposition_in_days({ count: rel.count })
+      : m.targets_opposition_in_months({ count: rel.count });
+  };
+  const bestDateValue = bestMoon
+    ? `${formatOppositionDate(new Date(bestMoon.dateMs))} · ${relativeText(bestMoon.inDays)}`
+    : null;
+  // The stat explains itself (three states, FR-009 amendment): diverged from
+  // opposition / coincides with a favourable Moon / no viable night found.
+  const bestDateTooltip = bestMoon
+    ? bestMoon.state === 'diverged'
+      ? m.targets_best_date_tooltip_diverged({
+          oppDate: formatOppositionDate(new Date(bestMoon.oppositionDateMs)),
+          oppIllum: bestMoon.moonAtOpposition.illumPct,
+          oppSep: Math.round(bestMoon.moonAtOpposition.sepDeg),
+          bestDate: formatOppositionDate(new Date(bestMoon.dateMs)),
+          bestIllum: bestMoon.moonAtBest.illumPct,
+          bestSep: Math.round(bestMoon.moonAtBest.sepDeg),
+        })
+      : bestMoon.state === 'coincides'
+        ? m.targets_best_date_tooltip_coincides({
+            illum: bestMoon.moonAtBest.illumPct,
+            sep: Math.round(bestMoon.moonAtBest.sepDeg),
+          })
+        : m.targets_best_date_tooltip_none()
+    : undefined;
   // Three-quantity breakdown (iteration 2026-07-15, FR-005): dark window,
   // uptime (above threshold across the WHOLE night), and imaging time
   // (dark ∩ uptime) presented as three distinguishable stats.
@@ -828,6 +860,7 @@ export function TargetDetailV2({
           key: 'bestdate',
           label: m.targets_col_best_date(),
           value: bestDateValue,
+          tooltip: bestDateTooltip,
         },
       ]
     : [];
