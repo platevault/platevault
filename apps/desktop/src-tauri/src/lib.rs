@@ -793,28 +793,49 @@ pub fn build_app() -> tauri::App {
         // therefore before `main()` ever reaches `Database::connect`/
         // `db.migrate()` (FR-003: the second launch performs no database
         // migration, seed, or write of its own).
-        .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
-            tracing::info!(
-                ?argv,
-                %cwd,
-                "second launch attempt redirected to existing instance"
-            );
-            // FR-002: focus/foreground the existing main window, restoring it
-            // if minimized, instead of opening a new window or connection.
-            if let Some(window) = app.get_webview_window("main") {
-                if let Err(e) = window.unminimize() {
-                    tracing::warn!("failed to unminimize main window: {e:?}");
-                }
-                if let Err(e) = window.show() {
-                    tracing::warn!("failed to show main window: {e:?}");
-                }
-                if let Err(e) = window.set_focus() {
-                    tracing::warn!("failed to focus main window: {e:?}");
-                }
-            } else {
-                tracing::warn!("single-instance redirect: no `main` window found to focus");
+        .plugin({
+            let mut single_instance =
+                tauri_plugin_single_instance::Builder::new().callback(|app, argv, cwd| {
+                    tracing::info!(
+                        ?argv,
+                        %cwd,
+                        "second launch attempt redirected to existing instance"
+                    );
+                    // FR-002: focus/foreground the existing main window,
+                    // restoring it if minimized, instead of opening a new
+                    // window or connection.
+                    if let Some(window) = app.get_webview_window("main") {
+                        if let Err(e) = window.unminimize() {
+                            tracing::warn!("failed to unminimize main window: {e:?}");
+                        }
+                        if let Err(e) = window.show() {
+                            tracing::warn!("failed to show main window: {e:?}");
+                        }
+                        if let Err(e) = window.set_focus() {
+                            tracing::warn!("failed to focus main window: {e:?}");
+                        }
+                    } else {
+                        tracing::warn!("single-instance redirect: no `main` window found to focus");
+                    }
+                });
+            // E2E-only escape hatch (crates/e2e-tests): on Linux, the plugin
+            // registers a single well-known D-Bus name derived from the app
+            // identifier, so two concurrently-launched `desktop_shell`
+            // processes collide and the loser is silently redirected/exited
+            // without ever opening a window — breaking `test-threads > 1`.
+            // The harness sets `ALM_E2E_INSTANCE_ID` to a value unique per
+            // test process (see `spawn_tauri_webdriver`); when present, give
+            // each instance its own D-Bus name so they no longer contend.
+            // Unset (the default for real users and non-e2e builds), this is
+            // a no-op — `dbus_id` stays `None` and the plugin falls back to
+            // its normal `app.config().identifier`-derived name, preserving
+            // single-instance enforcement byte-for-byte.
+            if let Ok(instance_id) = std::env::var("ALM_E2E_INSTANCE_ID") {
+                single_instance = single_instance
+                    .dbus_id(format!("dev.astro-plan.astro-library-manager.e2e{instance_id}"));
             }
-        }))
+            single_instance.build()
+        })
         // Spec 051 US4 (T027): window-state persistence. Registered right
         // after single-instance so a redirected second launch (which never
         // creates a window of its own) never touches this plugin's store

@@ -77,6 +77,11 @@ D10 and `quickstart.md`).
   (`tests/common/mod.rs::InstanceEnv`), lazily allocated once per process and
   reused across `launch()`/`relaunch()` calls within that test. `ALM_DB_URL`
   is set internally per instance and no longer read from the ambient
-  environment — nothing to configure. This lets `test-threads` in the `e2e`
-  nextest profile exceed 1 without journeys racing each other; see
-  `.config/nextest.toml` for the current value and its rationale.
+  environment — nothing to configure. Each instance also gets its own
+  `ALM_E2E_INSTANCE_ID`, which `apps/desktop/src-tauri/src/lib.rs` threads
+  into the single-instance plugin's Linux D-Bus name so concurrently-launched
+  `desktop_shell` processes no longer collide on Tauri's default
+  identifier-derived name (a no-op outside e2e — real users never set this
+  env var). Together this lets `test-threads` in the `e2e` nextest profile
+  exceed 1 without journeys racing each other; see `.config/nextest.toml`
+  for the current value and its rationale.

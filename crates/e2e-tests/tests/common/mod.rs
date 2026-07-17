@@ -1616,6 +1616,14 @@ fn spawn_tauri_webdriver(env: &InstanceEnv) -> Result<(Child, ProcLog)> {
         .arg(env.native_port.to_string())
         .env("TAURI_WEBDRIVER_PORT", env.native_port.to_string())
         .env("ALM_DB_URL", format!("sqlite://{}?mode=rwc", env.db_path.display()))
+        // `env.native_port` is already unique per test process (see
+        // `pick_port_pair`), so it doubles as a cheap per-instance ID here —
+        // read by `apps/desktop/src-tauri/src/lib.rs` to give each
+        // concurrently-launched `desktop_shell` its own D-Bus well-known
+        // name (see that file's single-instance plugin registration).
+        // Without this, two instances collide on the same fixed name and
+        // the loser is silently redirected/exited without opening a window.
+        .env("ALM_E2E_INSTANCE_ID", env.native_port.to_string())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     for (key, value) in &env.vars {

@@ -17,25 +17,35 @@
 # journeys no longer race each other over shared :4444/:4445 ports or a
 # shared DB file.
 #
-# `test-threads` stays at 1 DESPITE that isolation, pending a product-code
-# fix outside this crate: `tauri_plugin_single_instance::init()`
-# (`apps/desktop/src-tauri/src/lib.rs`) registers a Linux D-Bus well-known
+# `test-threads` was pinned at 1 despite that isolation because of a second,
+# product-code collision: `tauri_plugin_single_instance::init()`
+# (`apps/desktop/src-tauri/src/lib.rs`) registered a Linux D-Bus well-known
 # name derived only from the app identifier + version — no per-process
-# override. Two concurrent `desktop_shell` instances collide on that name;
-# the loser is silently redirected to the winner and never opens its own
-# window, so its WebDriver plugin server never comes up (observed
+# override. Two concurrent `desktop_shell` instances collided on that name;
+# the loser was silently redirected to the winner and never opened its own
+# window, so its WebDriver plugin server never came up (observed
 # deterministically on ubuntu, CI runs 29593925067/29592400990 — the SAME
 # journey slot failed `WebDriver session not created` on both nextest
 # retries, at both a 120s and a 240s `LAUNCH_TIMEOUT`, while sibling
 # journeys booted normally in the same run). Windows did not reproduce this
 # in the same runs, but the harness makes no OS-specific claim either way.
-# Raising `test-threads` above 1 again requires parameterizing the
-# single-instance dbus id (e.g. `Builder::new(..).dbus_id(..)` with an
-# env-derived per-instance id under the `e2e` feature) in
-# `apps/desktop/src-tauri/src/lib.rs` first.
+#
+# Fixed by parameterizing the single-instance D-Bus id: the harness sets
+# `ALM_E2E_INSTANCE_ID` per test process (`crates/e2e-tests/tests/common/
+# mod.rs::spawn_tauri_webdriver`), and `apps/desktop/src-tauri/src/lib.rs`
+# threads it into `tauri_plugin_single_instance::Builder::dbus_id` when
+# present — a no-op for real users/non-e2e builds, where the env var is
+# never set and the plugin keeps its normal identifier-derived name.
+#
+# `test-threads = 2` (not higher): CI runners are 4-core, and each journey
+# boots a debug-build WebKitGTK/WebView2 app + SQLite migrate + ~13k-row
+# target-seed load (see `LAUNCH_TIMEOUT`'s docs) — 2 concurrent boots is the
+# contention CI was already tuned for (the 240s `LAUNCH_TIMEOUT` bump in
+# PR #951 assumed exactly this), and this fix's own verification run is the
+# first real evidence for going further.
 
 [profile.e2e]
-test-threads = 1
+test-threads = 2
 
 # Warn every 60 s; terminate after 5 periods (300 s). Must exceed the
 # harness's LAUNCH_TIMEOUT (240 s — slow/contended debug-build app boot on CI
