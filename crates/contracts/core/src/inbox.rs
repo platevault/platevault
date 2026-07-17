@@ -125,6 +125,13 @@ pub struct InboxConfirmRequest {
     /// item's category is rejected with `inbox.invalid_destination_root`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_id: Option<String>,
+    /// Attribution apply-path (spec 008 Q27, F-Framing-10, FR-022) — additive.
+    /// The user's pick from a prior `attributionCandidates` list. Only
+    /// meaningful for light-frame items (`attribution.not_light_frame` on any
+    /// other frame type); omitting it leaves the confirmed session's framing
+    /// membership unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chosen_attribution: Option<crate::framing::ChosenAttributionDto>,
 }
 
 /// A candidate destination library root for an inbox item's frame-type
@@ -198,6 +205,16 @@ pub struct InboxConfirmResponse {
     /// Empty for master-registration responses.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub destinations: Vec<InboxConfirmDestination>,
+    /// Inbox-confirm attribution pass (spec 008 Q27, F-Framing-5, FR-019).
+    /// Ranked suggestions for where this item's light session belongs — a
+    /// suggestion surface only, never auto-applied. Empty for non-light items
+    /// or when no candidate matched.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attribution_candidates: Vec<crate::framing::IngestionAttributionCandidateDto>,
+    /// Present when the request carried a `chosenAttribution` that was
+    /// successfully applied (F-Framing-10).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribution_applied: Option<crate::framing::AttributionAppliedDto>,
 }
 
 // ── inbox.reclassify ──────────────────────────────────────────────────────────

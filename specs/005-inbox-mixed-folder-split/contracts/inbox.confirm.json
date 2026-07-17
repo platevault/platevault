@@ -4,27 +4,36 @@
   "title": "inbox.confirm",
   "description": "Confirm the next action for a classified Inbox item. For single_type items, action must be 'confirm' (direct Inventory promotion). For mixed items, action must be 'split' (generate a reviewable plan). Always creates a Plan in state ready_for_review with destination paths targeting Inventory directly. Requires the contentSignature from the most recent inbox.classify response to guard against TOCTOU drift.",
   "type": "object",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "operation": "inbox.confirm",
+  "_note": "This schema predates spec 041's single-type confirm path and several already-shipped Rust-side fields (root_absolute_path, root_id, actions_summary, organization_state, destinations) it does not yet describe; the Rust DTOs (crates/contracts/core/src/inbox.rs) and generated TS bindings are the operative contract (same posture as crates/contracts/core/src/framing.rs's Q27 DTOs, which have no JSON Schema at all). This 1.2.0 bump adds only the additive Q27 attribution fields (chosen_attribution / attribution_candidates / attribution_applied, F-Framing-10 FR-022) without reconciling the pre-existing drift, which is out of this task's scope.",
   "request": {
     "type": "object",
-    "required": ["inbox_item_id", "action", "content_signature"],
+    "required": ["inbox_item_id", "content_signature"],
     "additionalProperties": false,
     "properties": {
       "inbox_item_id": { "type": "string" },
-      "action": {
-        "type": "string",
-        "enum": ["split", "confirm"],
-        "description": "'split' for mixed Inbox items; 'confirm' for single_type Inbox items."
-      },
       "content_signature": {
         "type": "string",
         "description": "The contentSignature returned by the most recent inbox.classify call. If this does not match the current folder state, the operation returns classification.stale. (Ref: A8, R-Sig-1)"
       },
       "destructive_destination": {
         "type": "string",
-        "enum": ["archive", "os_trash"],
-        "description": "Required when the resulting plan includes destructive items (e.g. archiving the original mixed folder after split). 'archive' uses the app-managed archive location; 'os_trash' uses the OS-native recycle bin. (Ref: R-DestChoice)"
+        "enum": ["archive", "trash"],
+        "description": "Required when the resulting plan includes destructive items. 'archive' uses the app-managed archive location; 'trash' uses the OS-native recycle bin. (Ref: R-DestChoice)"
+      },
+      "chosen_attribution": {
+        "type": "object",
+        "description": "Spec 008 Q27 F-Framing-10 (FR-022) attribution apply-path — additive. The user's pick from a prior attributionCandidates list. Only meaningful for light-frame items.",
+        "required": ["kind"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["add_to_framing", "new_framing", "flag_optic_difference", "new_project", "unassigned"]
+          },
+          "project_id": { "type": "string" },
+          "framing_id": { "type": "string" }
+        }
       }
     }
   },
@@ -43,6 +52,37 @@
         "type": "integer",
         "minimum": 0,
         "description": "Number of plan items created. Equals the number of files enumerated from InboxClassificationEvidence rows (not derived from fileCount). (Ref: A9)"
+      },
+      "attribution_candidates": {
+        "type": "array",
+        "description": "Spec 008 Q27 F-Framing-5 (FR-019) ranked attribution suggestions. Empty for non-light items or when nothing matched.",
+        "items": {
+          "type": "object",
+          "required": ["kind", "match_score"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["add_to_framing", "new_framing", "flag_optic_difference", "new_project"]
+            },
+            "project_id": { "type": "string" },
+            "framing_id": { "type": "string" },
+            "target_id": { "type": "string" },
+            "match_score": { "type": "number" },
+            "reopen": { "type": "boolean" },
+            "optic_mismatch": { "type": "boolean" }
+          }
+        }
+      },
+      "attribution_applied": {
+        "type": "object",
+        "description": "Present when the request carried a chosen_attribution that was applied (F-Framing-10/6).",
+        "required": ["project_id", "reopened", "raw_subs_archived_warning"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "framing_id": { "type": "string" },
+          "reopened": { "type": "boolean" },
+          "raw_subs_archived_warning": { "type": "boolean" }
+        }
       }
     }
   },
@@ -115,6 +155,16 @@
           "first_failing_file": { "type": "string" }
         }
       }
+    },
+    {
+      "code": "attribution.not_light_frame",
+      "description": "chosen_attribution was supplied but this item's frames are not light frames (spec 008 Q27 F-Framing-5/10).",
+      "http_status_hint": 422
+    },
+    {
+      "code": "attribution.geometry_unavailable",
+      "description": "chosen_attribution requires creating a new framing, but this item has no pointing/rotation/optic-train data staged from its FITS/XISF headers.",
+      "http_status_hint": 422
     }
   ]
 }

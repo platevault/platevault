@@ -271,6 +271,12 @@ pub enum ErrorCode {
     #[serde(rename = "framing.reassign.empty_selection")]
     FramingReassignEmptySelection,
 
+    // ── Attribution (spec 008 Q27, F-Framing-5/10) ──────────────────────────
+    #[serde(rename = "attribution.not_light_frame")]
+    AttributionNotLightFrame,
+    #[serde(rename = "attribution.geometry_unavailable")]
+    AttributionGeometryUnavailable,
+
     // ── View ────────────────────────────────────────────────────────────────
     #[serde(rename = "view.mixed_kind")]
     ViewMixedKind,
