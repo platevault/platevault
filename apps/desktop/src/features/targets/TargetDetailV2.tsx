@@ -941,7 +941,10 @@ export function TargetDetailV2({
                 variant="primary"
                 onClick={() => {
                   setNewProjectOpen(true);
-                  void navigate({ to: '/projects/new' });
+                  void navigate({
+                    to: '/projects/new',
+                    search: { targetId: detail.id },
+                  });
                 }}
               >
                 {m.targets_detail_new_project()}
@@ -954,7 +957,14 @@ export function TargetDetailV2({
             </Pill>
             {catalogPills.map((a) => (
               <Pill key={a.id} variant="ghost">
-                {a.alias}
+                <span
+                  title={m.targets_detail_alias_kind_title({ kind: a.kind })}
+                >
+                  <span className="alm-target-detail__alias-kind">
+                    [{kindLabel(a.kind)}]
+                  </span>
+                  {a.alias}
+                </span>
               </Pill>
             ))}
           </div>
@@ -964,169 +974,337 @@ export function TargetDetailV2({
       {/* Suppress unused-state warning; newProjectOpen drives the navigate above */}
       {newProjectOpen && null}
 
-      {/* ── Identity + Tonight — left-packed: [facts A][facts B][tonight] ── */}
-      <div className="alm-planner__cols">
-        <div className="alm-planner__col">
-          <PropertyTable mode="view" properties={identityA} />
-        </div>
-        <div className="alm-planner__col">
-          <PropertyTable mode="view" properties={identityB} />
-        </div>
-
-        {/* Tonight column: a small transit graph + the planner stats. */}
-        <div className="alm-planner__tonight">
-          <div className="alm-planner__graph-title">
-            {site
-              ? m.targets_detail_tonight_title({
-                  lat: Math.round(site.latitudeDeg),
-                })
-              : m.targets_detail_tonight_title_no_site()}
+      {/* #816: DetailPane fill-mode contract (primitives.css .alm-detail--fill)
+          requires ONE descendant establishing overflow-y:auto — the header
+          above stays pinned, everything else (identity/tonight, coverage,
+          links, display label, aliases, projects, notes, back button) lives
+          in this single scrollable region so it isn't silently clipped by
+          the pane's own overflow:hidden. */}
+      <div className="alm-planner__scroll">
+        {/* ── Identity + Tonight — left-packed: [facts A][facts B][tonight] ── */}
+        <div className="alm-planner__cols">
+          <div className="alm-planner__col">
+            <PropertyTable mode="view" properties={identityA} />
           </div>
-          {rowAlt.needsSite ? (
-            <Banner variant="info">
-              {m.targets_planner_no_site_banner()}{' '}
-              <Link
-                to="/settings/$pane"
-                params={{ pane: 'planner' }}
-                className="alm-banner__action-link"
-              >
-                {m.targets_planner_no_site_banner_action()}
-              </Link>
-            </Banner>
-          ) : rowAlt.needsCoordinates ? (
-            // #757: a site is active but this target has no catalogued
-            // coordinates (unresolved manual target) — `rowAlt.points` is
-            // `[]` here (DEGRADE_ROW), so the altitude graph MUST NOT render
-            // (its transit-marker peak computation assumes a non-empty
-            // curve). Render the same "un-plannable" degrade state as the
-            // no-site case, distinctly worded, instead of crashing.
-            <Banner variant="info">
-              {m.targets_detail_needs_coordinates_banner()}
-            </Banner>
-          ) : (
-            <>
-              <AltitudeGraph
-                points={tonightPoints}
-                usableAltDeg={usableAltDeg}
-                darkWindowHours={rowAlt.darkWindowHours}
-                moonSpans={moonSpans}
-              />
-              {/* FR-029/SC-015: zero imaging time is always explained with a
+          <div className="alm-planner__col">
+            <PropertyTable mode="view" properties={identityB} />
+          </div>
+
+          {/* Tonight column: a small transit graph + the planner stats. */}
+          <div className="alm-planner__tonight">
+            <div className="alm-planner__graph-title">
+              {site
+                ? m.targets_detail_tonight_title({
+                    lat: Math.round(site.latitudeDeg),
+                  })
+                : m.targets_detail_tonight_title_no_site()}
+            </div>
+            {rowAlt.needsSite ? (
+              <Banner variant="info">
+                {m.targets_planner_no_site_banner()}{' '}
+                <Link
+                  to="/settings/$pane"
+                  params={{ pane: 'planner' }}
+                  className="alm-banner__action-link"
+                >
+                  {m.targets_planner_no_site_banner_action()}
+                </Link>
+              </Banner>
+            ) : rowAlt.needsCoordinates ? (
+              // #757: a site is active but this target has no catalogued
+              // coordinates (unresolved manual target) — `rowAlt.points` is
+              // `[]` here (DEGRADE_ROW), so the altitude graph MUST NOT render
+              // (its transit-marker peak computation assumes a non-empty
+              // curve). Render the same "un-plannable" degrade state as the
+              // no-site case, distinctly worded, instead of crashing.
+              <Banner variant="info">
+                {m.targets_detail_needs_coordinates_banner()}
+              </Banner>
+            ) : (
+              <>
+                <AltitudeGraph
+                  points={tonightPoints}
+                  usableAltDeg={usableAltDeg}
+                  darkWindowHours={rowAlt.darkWindowHours}
+                  moonSpans={moonSpans}
+                />
+                {/* FR-029/SC-015: zero imaging time is always explained with a
                   stated sentence — darkness (FR-017's no-dark-window case),
                   altitude, or moon, same precedence as the table glyph. */}
-              {tonightAvailable && rowAlt.zeroImagingReason !== null && (
-                <Banner variant="info">
-                  {rowAlt.zeroImagingReason === 'darkness'
-                    ? m.targets_imgtime_zero_darkness_title()
-                    : rowAlt.zeroImagingReason === 'altitude'
-                      ? m.targets_imgtime_zero_altitude_title({
-                          threshold: usableAltDeg,
-                        })
-                      : m.targets_imgtime_zero_moon_title()}
-                </Banner>
-              )}
-              {tonightAvailable && (
-                <>
-                  <PropertyTable mode="view" properties={tonightStats} />
-                  {/* #758/FR-020: the transit/min-over-dark/dark-midpoint
+                {tonightAvailable && rowAlt.zeroImagingReason !== null && (
+                  <Banner variant="info">
+                    {rowAlt.zeroImagingReason === 'darkness'
+                      ? m.targets_imgtime_zero_darkness_title()
+                      : rowAlt.zeroImagingReason === 'altitude'
+                        ? m.targets_imgtime_zero_altitude_title({
+                            threshold: usableAltDeg,
+                          })
+                        : m.targets_imgtime_zero_moon_title()}
+                  </Banner>
+                )}
+                {tonightAvailable && (
+                  <>
+                    <PropertyTable mode="view" properties={tonightStats} />
+                    {/* #758/FR-020: the transit/min-over-dark/dark-midpoint
                       Moon-separation trio — computed since spec 044 T028 but
                       never rendered anywhere in the app until now. */}
-                  <div className="alm-planner__tonight-filters">
-                    <span className="alm-planner__tonight-filters-label">
-                      {m.targets_detail_moon_trio_title()}
-                    </span>
-                    <PropertyTable mode="view" properties={moonTrio} />
-                  </div>
-                  <div className="alm-planner__tonight-filters">
-                    <span className="alm-planner__tonight-filters-label">
-                      {m.common_filters()}
-                    </span>
-                    <GuidanceCell
-                      night={night}
-                      moon={moon}
-                      params={guidanceParams}
-                      targetLabel={detail.effectiveLabel}
-                      moonFreeMinutesByBand={rowAlt.moonFreeMinutesByBand}
-                    />
-                  </div>
-                </>
-              )}
-            </>
-          )}
+                    <div className="alm-planner__tonight-filters">
+                      <span className="alm-planner__tonight-filters-label">
+                        {m.targets_detail_moon_trio_title()}
+                      </span>
+                      <PropertyTable mode="view" properties={moonTrio} />
+                    </div>
+                    <div className="alm-planner__tonight-filters">
+                      <span className="alm-planner__tonight-filters-label">
+                        {m.common_filters()}
+                      </span>
+                      <GuidanceCell
+                        night={night}
+                        moon={moon}
+                        params={guidanceParams}
+                        targetLabel={detail.effectiveLabel}
+                        moonFreeMinutesByBand={rowAlt.moonFreeMinutesByBand}
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* ── Coverage bars ────────────────────────────────────────────────── */}
-      {/* STUB: target coverage — gen-3 TargetDetailV3 does not yet expose
+        {/* ── Coverage bars ────────────────────────────────────────────────── */}
+        {/* STUB: target coverage — gen-3 TargetDetailV3 does not yet expose
           per-filter coverage. Render the section header with a stub note. */}
-      <div className="alm-planner__coverage">
-        <p className="alm-planner__section-title">{m.common_coverage()}</p>
-        <div className="alm-planner__coverage-list">
-          <span className="alm-planner__coverage-stub">
-            {m.targets_detail_no_coverage()}
-          </span>
-        </div>
-      </div>
-
-      {/* ── Linked sessions + projects ───────────────────────────────────── */}
-      <div className="alm-planner__links">
-        <div>
-          <p className="alm-planner__link-col-title">{m.common_sessions()}</p>
-          {sessionsLoading ? (
-            <Skeleton count={3} width="80%" label={m.common_loading()} />
-          ) : sessions.length === 0 ? (
-            <span className="alm-planner__link-empty">
-              {m.targets_detail_no_sessions()}
+        <div className="alm-planner__coverage">
+          <p className="alm-planner__section-title">{m.common_coverage()}</p>
+          <div className="alm-planner__coverage-list">
+            <span className="alm-planner__coverage-stub">
+              {m.targets_detail_no_coverage()}
             </span>
-          ) : (
-            <ul className="alm-planner__link-list">
-              {sessions.map((s) => {
-                const dateStr = new Date(s.createdAt).toLocaleDateString(
-                  undefined,
-                  {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                  },
-                );
-                return (
-                  <li key={s.id} className="alm-planner__link-item">
+          </div>
+        </div>
+
+        {/* ── Linked sessions + projects ───────────────────────────────────── */}
+        <div className="alm-planner__links">
+          <div>
+            <p className="alm-planner__link-col-title">{m.common_sessions()}</p>
+            {sessionsLoading ? (
+              <Skeleton count={3} width="80%" label={m.common_loading()} />
+            ) : sessions.length === 0 ? (
+              <span className="alm-planner__link-empty">
+                {m.targets_detail_no_sessions()}
+              </span>
+            ) : (
+              <ul className="alm-planner__link-list">
+                {sessions.map((s) => {
+                  const dateStr = new Date(s.createdAt).toLocaleDateString(
+                    undefined,
+                    {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    },
+                  );
+                  return (
+                    <li key={s.id} className="alm-planner__link-item">
+                      <button
+                        className="alm-planner__link-btn"
+                        onClick={() =>
+                          void navigate({
+                            to: '/sessions',
+                            search: { selected: s.id },
+                          })
+                        }
+                      >
+                        <span className="alm-planner__link-date">
+                          {dateStr}
+                        </span>
+                        <span className="alm-planner__link-meta">
+                          {m.targets_detail_session_frames({
+                            count: s.frameCount,
+                          })}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+          <div>
+            <p className="alm-planner__link-col-title">{m.common_projects()}</p>
+            {projectsLoading ? (
+              <Skeleton count={3} width="80%" label={m.common_loading()} />
+            ) : projects.length === 0 ? (
+              <span className="alm-planner__link-empty">
+                {m.targets_detail_no_projects_linked()}
+              </span>
+            ) : (
+              <ul className="alm-planner__link-list">
+                {projects.map((p) => (
+                  <li key={p.id} className="alm-planner__link-item">
                     <button
                       className="alm-planner__link-btn"
                       onClick={() =>
                         void navigate({
-                          to: '/sessions',
-                          search: { selected: s.id },
+                          to: '/projects',
+                          search: { selected: p.id },
                         })
                       }
                     >
-                      <span className="alm-planner__link-date">{dateStr}</span>
-                      <span className="alm-planner__link-meta">
-                        {m.targets_detail_session_frames({
-                          count: s.frameCount,
-                        })}
+                      <span className="alm-planner__link-name">{p.name}</span>
+                      <span className="alm-planner__link-state">
+                        {p.lifecycle}
                       </span>
                     </button>
                   </li>
-                );
-              })}
-            </ul>
-          )}
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
-        <div>
-          <p className="alm-planner__link-col-title">{m.common_projects()}</p>
-          {projectsLoading ? (
-            <Skeleton count={3} width="80%" label={m.common_loading()} />
-          ) : projects.length === 0 ? (
-            <span className="alm-planner__link-empty">
-              {m.targets_detail_no_projects_linked()}
-            </span>
+
+        {/* ── Display label ────────────────────────────────────────────────── */}
+        <Section title={m.targets_detail_display_label_title()}>
+          {displayAliasEditing ? (
+            <div className="alm-target-detail__display-alias-edit">
+              <input
+                aria-label={m.targets_detail_display_label_title()}
+                placeholder={detail.primaryDesignation}
+                value={displayAliasInput}
+                onChange={(e) => setDisplayAliasInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleDisplayAliasSet();
+                  if (e.key === 'Escape') setDisplayAliasEditing(false);
+                }}
+                className="alm-target-detail__text-input"
+                // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: the inline display-label editor mounts on demand and must receive focus so the user can type immediately
+                autoFocus
+              />
+              <button
+                onClick={handleDisplayAliasSet}
+                className="alm-target-detail__action-btn"
+              >
+                {m.common_save()}
+              </button>
+              {detail.displayAlias != null && (
+                <button
+                  onClick={handleDisplayAliasClear}
+                  className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
+                >
+                  {m.common_clear()}
+                </button>
+              )}
+              <button
+                onClick={() => setDisplayAliasEditing(false)}
+                className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
+              >
+                {m.common_cancel()}
+              </button>
+            </div>
           ) : (
-            <ul className="alm-planner__link-list">
-              {projects.map((p) => (
-                <li key={p.id} className="alm-planner__link-item">
+            <div className="alm-target-detail__display-alias-view">
+              <span className="alm-target-detail__display-alias-value">
+                {detail.displayAlias ?? (
+                  <em className="alm-target-detail__display-alias-placeholder">
+                    {m.targets_detail_display_label_unset()}
+                  </em>
+                )}
+              </span>
+              <button
+                onClick={() => setDisplayAliasEditing(true)}
+                className="alm-target-detail__edit-btn"
+              >
+                {detail.displayAlias != null
+                  ? m.projects_detail_edit_btn()
+                  : m.targets_detail_set_alias()}
+              </button>
+            </div>
+          )}
+        </Section>
+
+        {/* ── Aliases ──────────────────────────────────────────────────────── */}
+        <Section title={m.common_aliases()} count={detail.aliases.length}>
+          <div className="alm-target-detail__alias-list">
+            {detail.aliases.map((a) => (
+              <Pill key={a.id} variant={a.kind === 'user' ? 'accent' : 'ghost'}>
+                <span
+                  title={m.targets_detail_alias_kind_title({ kind: a.kind })}
+                >
+                  <span className="alm-target-detail__alias-kind">
+                    [{kindLabel(a.kind)}]
+                  </span>
+                  {a.alias}
+                </span>
+                {a.kind === 'user' && (
                   <button
-                    className="alm-planner__link-btn"
+                    aria-label={m.targets_detail_alias_remove_aria({
+                      alias: a.alias,
+                    })}
+                    className="alm-target-detail__alias-remove"
+                    onClick={() => handleAliasRemove(a.id)}
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                )}
+              </Pill>
+            ))}
+            {detail.aliases.length === 0 && (
+              <span className="alm-target-detail__alias-empty">
+                {m.targets_detail_no_aliases()}
+              </span>
+            )}
+          </div>
+
+          {/* Add user alias form */}
+          <div className="alm-target-detail__alias-add-row">
+            <input
+              aria-label={m.targets_detail_alias_input_aria()}
+              placeholder={m.targets_detail_alias_placeholder()}
+              value={aliasInput}
+              onChange={(e) => setAliasInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleAliasAdd();
+              }}
+              className="alm-target-detail__text-input"
+            />
+            <button
+              onClick={handleAliasAdd}
+              className="alm-target-detail__action-btn"
+            >
+              {m.common_add()}
+            </button>
+          </div>
+          {aliasError && (
+            <Banner variant="danger" className="alm-target-detail__banner">
+              {aliasError}
+            </Banner>
+          )}
+          {actionError && (
+            <Banner variant="danger" className="alm-target-detail__banner">
+              {actionError}
+            </Banner>
+          )}
+        </Section>
+
+        {/* Sessions surface lives in the mid-page SESSIONS/PROJECTS link row
+          above (single source of truth) — the duplicate bottom Sessions
+          section was removed to avoid two Sessions surfaces. */}
+
+        {/* ── Projects (spec 023 US3) ──────────────────────────────────────── */}
+        <Section title={m.common_projects()} count={projects.length}>
+          {projects.length === 0 ? (
+            <EmptyState
+              title={m.targets_detail_no_projects_linked_title()}
+              desc={m.targets_detail_no_projects_linked()}
+            />
+          ) : (
+            <ul className="alm-target-detail__project-list">
+              {projects.map((p) => (
+                <li key={p.id} className="alm-target-detail__project-item">
+                  <button
+                    className="alm-target-detail__project-btn"
                     onClick={() =>
                       void navigate({
                         to: '/projects',
@@ -1134,8 +1312,10 @@ export function TargetDetailV2({
                       })
                     }
                   >
-                    <span className="alm-planner__link-name">{p.name}</span>
-                    <span className="alm-planner__link-state">
+                    <span className="alm-target-detail__project-name">
+                      {p.name}
+                    </span>
+                    <span className="alm-target-detail__project-lifecycle">
                       {p.lifecycle}
                     </span>
                   </button>
@@ -1143,256 +1323,98 @@ export function TargetDetailV2({
               ))}
             </ul>
           )}
-        </div>
-      </div>
+        </Section>
 
-      {/* ── Display label ────────────────────────────────────────────────── */}
-      <Section title={m.targets_detail_display_label_title()}>
-        {displayAliasEditing ? (
-          <div className="alm-target-detail__display-alias-edit">
-            <input
-              aria-label={m.targets_detail_display_label_title()}
-              placeholder={detail.primaryDesignation}
-              value={displayAliasInput}
-              onChange={(e) => setDisplayAliasInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleDisplayAliasSet();
-                if (e.key === 'Escape') setDisplayAliasEditing(false);
-              }}
-              className="alm-target-detail__text-input"
-              // eslint-disable-next-line jsx-a11y/no-autofocus -- focus management: the inline display-label editor mounts on demand and must receive focus so the user can type immediately
-              autoFocus
-            />
-            <button
-              onClick={handleDisplayAliasSet}
-              className="alm-target-detail__action-btn"
-            >
-              {m.common_save()}
-            </button>
-            {detail.displayAlias != null && (
-              <button
-                onClick={handleDisplayAliasClear}
-                className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
-              >
-                {m.common_clear()}
-              </button>
-            )}
-            <button
-              onClick={() => setDisplayAliasEditing(false)}
-              className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
-            >
-              {m.common_cancel()}
-            </button>
-          </div>
-        ) : (
-          <div className="alm-target-detail__display-alias-view">
-            <span className="alm-target-detail__display-alias-value">
-              {detail.displayAlias ?? (
-                <em className="alm-target-detail__display-alias-placeholder">
-                  {m.targets_detail_display_label_unset()}
-                </em>
-              )}
-            </span>
-            <button
-              onClick={() => setDisplayAliasEditing(true)}
-              className="alm-target-detail__edit-btn"
-            >
-              {detail.displayAlias != null
-                ? m.projects_detail_edit_btn()
-                : m.targets_detail_set_alias()}
-            </button>
-          </div>
-        )}
-      </Section>
-
-      {/* ── Aliases ──────────────────────────────────────────────────────── */}
-      <Section title={m.common_aliases()} count={detail.aliases.length}>
-        <div className="alm-target-detail__alias-list">
-          {detail.aliases.map((a) => (
-            <Pill key={a.id} variant={a.kind === 'user' ? 'accent' : 'ghost'}>
-              <span title={m.targets_detail_alias_kind_title({ kind: a.kind })}>
-                <span className="alm-target-detail__alias-kind">
-                  [{kindLabel(a.kind)}]
-                </span>
-                {a.alias}
-              </span>
-              {a.kind === 'user' && (
-                <button
-                  aria-label={m.targets_detail_alias_remove_aria({
-                    alias: a.alias,
-                  })}
-                  className="alm-target-detail__alias-remove"
-                  onClick={() => handleAliasRemove(a.id)}
-                >
-                  <X size={14} aria-hidden="true" />
-                </button>
-              )}
-            </Pill>
-          ))}
-          {detail.aliases.length === 0 && (
-            <span className="alm-target-detail__alias-empty">
-              {m.targets_detail_no_aliases()}
-            </span>
-          )}
-        </div>
-
-        {/* Add user alias form */}
-        <div className="alm-target-detail__alias-add-row">
-          <input
-            aria-label={m.targets_detail_alias_input_aria()}
-            placeholder={m.targets_detail_alias_placeholder()}
-            value={aliasInput}
-            onChange={(e) => setAliasInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleAliasAdd();
-            }}
-            className="alm-target-detail__text-input"
-          />
-          <button
-            onClick={handleAliasAdd}
-            className="alm-target-detail__action-btn"
-          >
-            {m.common_add()}
-          </button>
-        </div>
-        {aliasError && (
-          <Banner variant="danger" className="alm-target-detail__banner">
-            {aliasError}
-          </Banner>
-        )}
-        {actionError && (
-          <Banner variant="danger" className="alm-target-detail__banner">
-            {actionError}
-          </Banner>
-        )}
-      </Section>
-
-      {/* Sessions surface lives in the mid-page SESSIONS/PROJECTS link row
-          above (single source of truth) — the duplicate bottom Sessions
-          section was removed to avoid two Sessions surfaces. */}
-
-      {/* ── Projects (spec 023 US3) ──────────────────────────────────────── */}
-      <Section title={m.common_projects()} count={projects.length}>
-        {projects.length === 0 ? (
-          <EmptyState
-            title={m.targets_detail_no_projects_linked_title()}
-            desc={m.targets_detail_no_projects_linked()}
-          />
-        ) : (
-          <ul className="alm-target-detail__project-list">
-            {projects.map((p) => (
-              <li key={p.id} className="alm-target-detail__project-item">
-                <button
-                  className="alm-target-detail__project-btn"
-                  onClick={() =>
-                    void navigate({
-                      to: '/projects',
-                      search: { selected: p.id },
-                    })
-                  }
-                >
-                  <span className="alm-target-detail__project-name">
-                    {p.name}
-                  </span>
-                  <span className="alm-target-detail__project-lifecycle">
-                    {p.lifecycle}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {/* ── Observing notes (spec 023 US4) ──────────────────────────────── */}
-      <Section title={m.targets_detail_notes_title()}>
-        {notesEditing ? (
-          <div className="alm-target-detail__notes-edit">
-            <textarea
-              data-testid="target-notes-textarea"
-              aria-label={m.targets_detail_notes_title()}
-              className="alm-target-detail__notes-textarea"
-              placeholder={m.targets_detail_notes_placeholder()}
-              value={notesDraft}
-              rows={5}
-              maxLength={16384}
-              disabled={notesSaving}
-              onChange={(e) => {
-                setNotesDraft(e.target.value);
-                setNotesError(null);
-              }}
-            />
-            <div className="alm-target-detail__notes-actions">
-              <button
-                className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
+        {/* ── Observing notes (spec 023 US4) ──────────────────────────────── */}
+        <Section title={m.targets_detail_notes_title()}>
+          {notesEditing ? (
+            <div className="alm-target-detail__notes-edit">
+              <textarea
+                data-testid="target-notes-textarea"
+                aria-label={m.targets_detail_notes_title()}
+                className="alm-target-detail__notes-textarea"
+                placeholder={m.targets_detail_notes_placeholder()}
+                value={notesDraft}
+                rows={5}
+                maxLength={16384}
                 disabled={notesSaving}
-                onClick={() => {
-                  setNotesDraft(notes ?? '');
-                  setNotesEditing(false);
+                onChange={(e) => {
+                  setNotesDraft(e.target.value);
                   setNotesError(null);
                 }}
-              >
-                {m.common_cancel()}
-              </button>
-              <button
-                className="alm-target-detail__action-btn"
-                disabled={notesSaving}
-                onClick={() => void handleNotesSave()}
-              >
-                {notesSaving ? m.common_saving() : m.common_save()}
-              </button>
-            </div>
-            {notesError && (
-              <Banner variant="danger" className="alm-target-detail__banner">
-                {notesError}
-              </Banner>
-            )}
-          </div>
-        ) : (
-          <div className="alm-target-detail__notes-view">
-            {notes ? (
-              <div
-                data-testid="target-notes-body"
-                className="alm-target-detail__notes-body"
-              >
-                {notes}
+              />
+              <div className="alm-target-detail__notes-actions">
+                <button
+                  className="alm-target-detail__action-btn alm-target-detail__action-btn--muted"
+                  disabled={notesSaving}
+                  onClick={() => {
+                    setNotesDraft(notes ?? '');
+                    setNotesEditing(false);
+                    setNotesError(null);
+                  }}
+                >
+                  {m.common_cancel()}
+                </button>
+                <button
+                  className="alm-target-detail__action-btn"
+                  disabled={notesSaving}
+                  onClick={() => void handleNotesSave()}
+                >
+                  {notesSaving ? m.common_saving() : m.common_save()}
+                </button>
               </div>
-            ) : (
-              <span
-                data-testid="target-notes-empty"
-                className="alm-target-detail__notes-empty"
-              >
-                {m.targets_detail_notes_empty()}
-              </span>
-            )}
-            <div className="alm-target-detail__notes-footer">
-              <button
-                className="alm-target-detail__edit-btn"
-                onClick={() => {
-                  setNotesDraft(notes ?? '');
-                  setNotesEditing(true);
-                  setNotesSaved(false);
-                }}
-              >
-                {m.projects_detail_edit_btn()}
-              </button>
-              {notesSaved && (
-                <span className="alm-target-detail__notes-saved">
-                  {m.targets_detail_notes_saved()}
-                </span>
+              {notesError && (
+                <Banner variant="danger" className="alm-target-detail__banner">
+                  {notesError}
+                </Banner>
               )}
             </div>
-          </div>
-        )}
-      </Section>
+          ) : (
+            <div className="alm-target-detail__notes-view">
+              {notes ? (
+                <div
+                  data-testid="target-notes-body"
+                  className="alm-target-detail__notes-body"
+                >
+                  {notes}
+                </div>
+              ) : (
+                <span
+                  data-testid="target-notes-empty"
+                  className="alm-target-detail__notes-empty"
+                >
+                  {m.targets_detail_notes_empty()}
+                </span>
+              )}
+              <div className="alm-target-detail__notes-footer">
+                <button
+                  className="alm-target-detail__edit-btn"
+                  onClick={() => {
+                    setNotesDraft(notes ?? '');
+                    setNotesEditing(true);
+                    setNotesSaved(false);
+                  }}
+                >
+                  {m.projects_detail_edit_btn()}
+                </button>
+                {notesSaved && (
+                  <span className="alm-target-detail__notes-saved">
+                    {m.targets_detail_notes_saved()}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </Section>
 
-      {/* Back button */}
-      <button
-        className="alm-target-detail__back-btn"
-        onClick={() => navigate({ to: '/targets' })}
-      >
-        {m.targets_detail_back()}
-      </button>
+        {/* Back button */}
+        <button
+          className="alm-target-detail__back-btn"
+          onClick={() => navigate({ to: '/targets' })}
+        >
+          {m.targets_detail_back()}
+        </button>
+      </div>
     </DetailPane>
   );
 }

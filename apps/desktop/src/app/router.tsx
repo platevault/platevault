@@ -170,6 +170,10 @@ const projectDetailRoute = createRoute({
 const projectNewRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: '/projects/new',
+  // #612: carries the originating target's id from "+ New project here" so
+  // the wizard can prefill a real target reference instead of fabricating a
+  // "From target context" label from typed text.
+  validateSearch: makeValidateSearch({ targetId: parseString }),
   component: lazyRouteComponent(
     () => import('@/features/projects/wizard/WizardPage'),
     'WizardPage',

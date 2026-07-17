@@ -689,6 +689,55 @@ describe('TargetDetailV2', () => {
     );
   });
 
+  // ── #612: "+ New project here" carries the target id ──────────────────────
+
+  it('25c. (#612) "+ New project here" navigates to /projects/new with the target id', async () => {
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() => screen.getByText('+ New project here'));
+
+    fireEvent.click(screen.getByText('+ New project here'));
+
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/projects/new',
+      search: { targetId: TARGET_ID },
+    });
+  });
+
+  // ── #796: header pill row labels non-primary designation aliases ──────────
+
+  it('25d. (#796) header catalog pills show a kind badge, matching the Aliases section', async () => {
+    mockGetTargetDetail.mockResolvedValue(
+      ok(
+        makeDetail({
+          aliases: [
+            {
+              id: 'alias-desig-primary',
+              alias: 'NGC 7000',
+              kind: 'designation',
+            },
+            {
+              id: 'alias-desig-cross',
+              alias: '2MASX J13295269+4711429',
+              kind: 'designation',
+            },
+          ],
+        }),
+      ),
+    );
+    render(<TargetDetailV2 targetId={TARGET_ID} />);
+    await waitFor(() =>
+      expect(
+        screen.getAllByText('2MASX J13295269+4711429', { exact: false })
+          .length,
+      ).toBeGreaterThanOrEqual(1),
+    );
+
+    // The header pill and the Aliases-section pill for the same alias both
+    // carry the "[desig]" kind badge — no more unlabeled raw strings.
+    const badges = screen.getAllByText('desig', { exact: false });
+    expect(badges.length).toBeGreaterThanOrEqual(2);
+  });
+
   // ── US4: Observing notes ───────────────────────────────────────────────────
 
   it('26. (US4) notes empty placeholder renders when no notes', async () => {
