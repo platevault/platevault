@@ -1507,6 +1507,7 @@ mod tests {
     /// even a force-rescan that rebuilds evidence from raw headers after the
     /// evidence-row override was destroyed.
     #[tokio::test]
+    #[allow(clippy::too_many_lines)] // real-pipeline regression test: scan/classify/reclassify/rescan
     async fn classify_converges_to_durable_frame_type_after_manual_override_lost() {
         let root = tempfile::tempdir().unwrap();
         // Unmapped IMAGETYP + no EXPTIME — the real E2E fixture shape.
