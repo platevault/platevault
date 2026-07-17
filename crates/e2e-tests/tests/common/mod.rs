@@ -159,9 +159,19 @@ pub const APP_URL: &str = "http://localhost:5173";
 ///
 /// Must comfortably cover a debug-build app boot on a cold CI runner: DB
 /// connect + migrations + the ~13k-row bundled target-seed load all happen
-/// BEFORE the window exists (observed ~30 s on ubuntu-latest, CI run
+/// BEFORE the window exists (observed ~30 s serial on ubuntu-latest, CI run
 /// 28694907445), and the plugin's own per-attempt window-wait is only 10 s.
-pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(120);
+///
+/// Raised from 120 s to 240 s (CI run 29592400990, PR #951): with the `e2e`
+/// nextest profile's `test-threads` raised above 1, two of these CPU-heavy
+/// boots (WebKitGTK/WebView2 init + SQLite migrate + seed load, all on a
+/// 4-vCPU runner) can now genuinely run concurrently, and one of two
+/// concurrent boots measurably exceeded 120 s on both attempts while sibling
+/// tests booted normally — real contention, not a hang. 240 s keeps meaningful
+/// headroom under `.config/nextest.toml`'s `slow-timeout` hard-kill ceiling
+/// (`period = 60s, terminate-after = 5` => 300 s per attempt) for in-journey
+/// polling after a slow-but-successful launch.
+pub const LAUNCH_TIMEOUT: Duration = Duration::from_secs(240);
 
 /// Default deadline for the convenience "find an element by aria-label /
 /// button text, then act on it" helpers ([`E2eApp::click_by_aria_label`] and
