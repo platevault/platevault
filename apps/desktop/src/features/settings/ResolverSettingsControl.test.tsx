@@ -134,9 +134,11 @@ describe('ResolverSettingsControl', () => {
 
   it('hides endpoint/debounce/timeout fields in compact mode', async () => {
     render(<ResolverSettingsControl compact />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
+    // findBy: the control renders a label-less skeleton row until the
+    // persisted settings actually LAND (#909) — waiting only for the fetch
+    // to have been CALLED races that state update (flaked on macOS CI).
     expect(
-      screen.getByLabelText('Enable online SIMBAD resolution'),
+      await screen.findByLabelText('Enable online SIMBAD resolution'),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText('SIMBAD endpoint')).toBeNull();
     expect(screen.queryByLabelText('Typeahead debounce (ms)')).toBeNull();
@@ -145,8 +147,8 @@ describe('ResolverSettingsControl', () => {
 
   it('shows endpoint/debounce/timeout fields in full mode', async () => {
     render(<ResolverSettingsControl />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalled());
-    expect(screen.getByLabelText('SIMBAD endpoint')).toBeInTheDocument();
+    // findBy: same settings-landed wait as the compact-mode test above.
+    expect(await screen.findByLabelText('SIMBAD endpoint')).toBeInTheDocument();
     expect(
       screen.getByLabelText('Typeahead debounce (ms)'),
     ).toBeInTheDocument();
