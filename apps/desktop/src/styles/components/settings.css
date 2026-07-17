@@ -112,6 +112,13 @@ font-weight: var(--alm-weight-medium);
   padding-top: 5px; /* align with control vertical centre */
 }
 .alm-settings__row-content { grid-column: 2; grid-row: 1; min-width: 0; }
+/* Explanatory text standing in for a control on a row that has none — e.g.
+ * Inbox's forced-split placement note (spec 054 T021: it isn't user-
+ * adjustable, so it gets prose instead of the Auto/Bottom/Right control). */
+.alm-settings__row-content--muted {
+  color: var(--alm-text-muted);
+  font-size: var(--alm-text-sm);
+}
 .alm-settings__row-desc {
   grid-column: 2; grid-row: 2;
   font-size: var(--alm-text-xs); color: var(--alm-text-muted);

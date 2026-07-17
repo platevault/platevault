@@ -23,6 +23,8 @@ export type {
 } from './FilterToolbar';
 export { ListPageLayout } from './ListPageLayout';
 export type { ListPageLayoutProps } from './ListPageLayout';
+export { DetailDockPlacementControl } from './DetailDockPlacementControl';
+export type { DetailDockPlacementControlProps } from './DetailDockPlacementControl';
 export { SortHeader, ariaSortFor } from './SortHeader';
 export type { SortHeaderProps } from './SortHeader';
 export { ListSidebar } from './ListSidebar';

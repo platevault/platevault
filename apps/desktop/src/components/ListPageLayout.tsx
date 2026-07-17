@@ -67,6 +67,7 @@ import {
   useState,
 } from 'react';
 import { PageTopBar, type PageTopBarProps } from './PageTopBar';
+import { DetailDockPlacementControl } from './DetailDockPlacementControl';
 import { m } from '@/lib/i18n';
 import {
   useDetailDock,
@@ -269,6 +270,34 @@ export function ListPageLayout({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [hasDetail, onCloseDetail]);
 
+  // The in-page Auto/Bottom/Right control (spec 054 T021, US4) surfaces only
+  // for pages that adopted the adaptive mechanism (`dockPage`) AND whose shape
+  // isn't hard-forced (Inbox's permanent split has no user-adjustable
+  // placement — FR-014). Built once and reused by both placement branches
+  // below so there is a single render site, not per-branch duplicates.
+  const showPlacementControl = dockPage != null && forcedPlacement == null;
+  const detailBar =
+    showPlacementControl || onCloseDetail ? (
+      <div className="alm-listpage__detail-bar">
+        {showPlacementControl && (
+          <DetailDockPlacementControl
+            page={dockPage as DetailDockPageKey}
+            className="alm-listpage__detail-placement"
+          />
+        )}
+        {onCloseDetail && (
+          <button
+            type="button"
+            className="alm-listpage__detail-close"
+            onClick={onCloseDetail}
+            aria-label={m.inbox_close_details_aria()}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+    ) : null;
+
   if (placement === 'side' || placement === 'split') {
     const isSplit = placement === 'split';
     const bodyClass = `alm-listpage__body ${isSplit ? 'alm-listpage__body--split' : 'alm-listpage__body--side'}`;
@@ -310,18 +339,7 @@ export function ListPageLayout({
               role="complementary"
               aria-label={detailLabel}
             >
-              {onCloseDetail && (
-                <div className="alm-listpage__detail-bar">
-                  <button
-                    type="button"
-                    className="alm-listpage__detail-close"
-                    onClick={onCloseDetail}
-                    aria-label={m.inbox_close_details_aria()}
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
+              {detailBar}
               <div className="alm-listpage__detail-body">{detail}</div>
             </section>
           )}
@@ -344,18 +362,7 @@ export function ListPageLayout({
             role="complementary"
             aria-label={detailLabel}
           >
-            {onCloseDetail && (
-              <div className="alm-listpage__detail-bar">
-                <button
-                  type="button"
-                  className="alm-listpage__detail-close"
-                  onClick={onCloseDetail}
-                  aria-label={m.inbox_close_details_aria()}
-                >
-                  ✕
-                </button>
-              </div>
-            )}
+            {detailBar}
             <div className="alm-listpage__detail-body">{detail}</div>
           </section>
         )}

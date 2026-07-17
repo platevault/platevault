@@ -7,6 +7,7 @@
 // own palette without any element-level color injection.
 import { clsx } from 'clsx';
 import { usePreference } from '@/data/preferences';
+import type { DetailDockPageKey } from '@/data/preferences';
 import {
   useThemeChoice,
   useFontSizeChoice,
@@ -16,6 +17,21 @@ import {
 import type { FontSizeChoice } from '@/data/theme';
 import type { Density } from '@/bindings/types';
 import { m } from '@/lib/i18n';
+import { DetailDockPlacementControl } from '@/components';
+
+// The adopting pages, in nav order — Inbox is intentionally excluded from the
+// loop (its placement is a forced permanent split, spec 054 FR-014) and gets
+// its own explanatory row instead (owner mandate: Auto/Bottom/Right toggle).
+const DOCK_PAGES: { page: DetailDockPageKey; label: () => string }[] = [
+  { page: 'sessions', label: () => m.common_sessions() },
+  {
+    page: 'calibration',
+    label: () => m.settings_datasources_category_calibration(),
+  },
+  { page: 'archive', label: () => m.verb_archive() },
+  { page: 'projects', label: () => m.common_projects() },
+  { page: 'targets', label: () => m.nav_targets() },
+];
 
 // `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
 // THEMES carry static brand names (not translatable) — wrap them as thunks so
@@ -133,6 +149,28 @@ export function General() {
                 {m.settings_general_density_spacious()}
               </option>
             </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="alm-settings__group">
+        <div className="alm-settings__group-title">
+          {m.settings_detail_dock_title()}
+        </div>
+        {DOCK_PAGES.map(({ page, label }) => (
+          <div className="alm-settings__row" key={page}>
+            <div className="alm-settings__row-label">{label()}</div>
+            <div className="alm-settings__row-content">
+              <DetailDockPlacementControl page={page} />
+            </div>
+          </div>
+        ))}
+        <div className="alm-settings__row">
+          <div className="alm-settings__row-label">
+            {m.settings_datasources_category_inbox()}
+          </div>
+          <div className="alm-settings__row-content alm-settings__row-content--muted">
+            {m.settings_detail_dock_row_inbox_note()}
           </div>
         </div>
       </div>

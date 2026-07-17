@@ -257,6 +257,13 @@
   padding: var(--alm-sp-1) var(--alm-sp-2);
   border-bottom: 1px solid var(--alm-border-subtle);
 }
+/* Pushes the Auto/Bottom/Right control (spec 054 T021) to the bar's start,
+ * leaving the close ✕ right-aligned via the row's own flex-end — avoids a
+ * `justify-content: space-between` that would misalign the ✕ when the
+ * control is absent (forcedPlacement pages, or dockPage omitted). */
+.alm-listpage__detail-placement {
+  margin-right: auto;
+}
 .alm-listpage__detail-close {
   background: none;
   border: none;

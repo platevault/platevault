@@ -12,7 +12,7 @@
  * `useDetailDock.test.ts`'s forcedPlacement-precedence coverage.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getDetailDock,
   setDetailDockMode,
@@ -87,5 +87,37 @@ describe('preferences.detailDock', () => {
     expect(getDetailDock('inbox').mode).toBe('bottom');
     setDetailDockWidth('inbox', 380);
     expect(getDetailDock('inbox')).toEqual({ mode: 'bottom', width: 380 });
+  });
+
+  // ── T023: persistence survives a simulated app restart (SC-002) ───────────
+  // `resetModules` + a fresh dynamic import discards the module-level
+  // `cachedPreferences` in-memory cache, forcing the reloaded module to read
+  // straight from `localStorage` — the only way to distinguish "still cached
+  // in this process" from "actually persisted", which a plain second call
+  // through the SAME module instance cannot prove.
+  it("restores two pages' pins + a dragged width exactly after a simulated restart", async () => {
+    setDetailDockMode('sessions', 'bottom');
+    setDetailDockMode('targets', 'side');
+    setDetailDockWidth('targets', 500);
+
+    vi.resetModules();
+    const reloaded = await import('./preferences');
+    expect(reloaded.getDetailDock('sessions')).toEqual({
+      mode: 'bottom',
+      width: 420,
+    });
+    expect(reloaded.getDetailDock('targets')).toEqual({
+      mode: 'side',
+      width: 500,
+    });
+  });
+
+  it('clamps the restored width only if the window shrank since it was persisted', async () => {
+    setDetailDockWidth('targets', 700); // fits under 1600 * 0.5 = 800, no clamp
+
+    setWindowWidth(1000); // 50% = 500 — now too narrow for the persisted 700
+    vi.resetModules();
+    const reloaded = await import('./preferences');
+    expect(reloaded.getDetailDock('targets').width).toBe(500);
   });
 });
