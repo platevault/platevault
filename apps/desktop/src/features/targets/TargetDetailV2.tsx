@@ -719,7 +719,12 @@ export function TargetDetailV2({
       label: m.targets_prop_constellation(),
       value: item?.constellation ?? null,
     },
-    { key: 'radec', label: m.targets_prop_ra_dec(), value: raDecStr },
+    {
+      key: 'radec',
+      label: m.targets_prop_ra_dec(),
+      value: raDecStr,
+      mono: true, // spec 055 FR-005: RA/Dec coordinate values render mono.
+    },
   ];
   const identityB: PropertyDef[] = [
     {

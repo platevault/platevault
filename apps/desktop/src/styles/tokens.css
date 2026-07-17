@@ -64,7 +64,9 @@
 
   /* Typography */
   --alm-font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --alm-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
+  /* JetBrains Mono is no longer bundled/loaded (spec 055 Phase 1) — the
+     system mono stack is natively hinted on every OS at zero bytes. */
+  --alm-font-mono: ui-monospace, 'Cascadia Code', monospace;
 
   /* Type scale */
   --alm-text-2xs: 10px;

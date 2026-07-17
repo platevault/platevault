@@ -16,16 +16,27 @@ body {
   font-feature-settings: 'tnum' 1, 'calt' 1;
 }
 
-/* Global font enforcement (product decision): the UI font family is defined
-   ONCE here and may NOT be overridden by any page, component, utility class, or
-   inline object. This neutralizes ad-hoc `font-family` overrides (e.g. monospace
-   on date/timestamp cells) that rendered inconsistently. Digit alignment is
-   preserved via the inherited `tnum` feature above — use `font-variant-numeric:
-   tabular-nums` where needed, NOT a different font family. Only weight/size/
-   variant may vary per element. */
-*, *::before, *::after {
-  font-family: var(--alm-font-sans) !important;
+/* Font enforcement (product decision), spec 055 Phase 3: the UI font family is
+   set ONCE on `body` above and reaches every element through ordinary CSS
+   inheritance — NOT a `*` !important blanket. The blanket forcibly overrode
+   even deliberate monospace surfaces (paths, IDs, coordinates), which is why
+   those declarations had to be stripped from component stylesheets; it is
+   replaced by this semantic base layer plus each component's own explicit
+   mono rule. `font: inherit` below carries the family onto form controls;
+   SVG `<text>` does not reliably inherit `font-family` the same way, so
+   surfaces like the planner axis labels declare it explicitly. */
+
+/* Semantic element base layer: nothing falls through to a browser default. */
+strong, b {
+  /* Never 700/synthetic — the bundled Inter statics load 400/500/600 only. */
+  font-weight: var(--alm-weight-semibold);
 }
+code, pre, kbd {
+  font-family: var(--alm-font-mono);
+}
+/* `em`/`i` intentionally has no rule: the real italic faces bundled in Phase 1
+   (FR-001) register for `font-style: italic`, so the browser default resolves
+   to a loaded face instead of a synthetic oblique — no override needed. */
 
 img, picture, video, canvas, svg { display: block; max-width: 100%; }
 input, button, textarea, select { font: inherit; }

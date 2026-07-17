@@ -468,7 +468,7 @@
 
 /* Train ID cell — mono + truncate */
 .alm-source-picker__train-id {
-
+  font-family: var(--alm-font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
 }

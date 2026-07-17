@@ -336,7 +336,7 @@
   text-align: right;
 }
 .alm-calib-cell--mono {
-
+  font-family: var(--alm-font-mono);
   font-size: var(--alm-text-xs);
   color: var(--alm-text-secondary);
 }
@@ -416,7 +416,7 @@
   text-align: right;
 }
 .alm-projects-table__cell--mono {
-
+  font-family: var(--alm-font-mono);
   font-size: var(--alm-text-xs);
   color: var(--alm-text-secondary);
 }
@@ -627,7 +627,7 @@
 /* Acquisition summary line — prose, not a path. Override the default
  * mono/break-all subtitle treatment with readable body text that truncates. */
 .alm-session-detail__summary.alm-detail__subtitle {
-
+  font-family: var(--alm-font-sans);
   font-size: var(--alm-text-sm);
   word-break: normal;
   overflow: hidden;

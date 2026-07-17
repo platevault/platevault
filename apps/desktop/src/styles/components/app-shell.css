@@ -310,7 +310,10 @@
   display: flex; align-items: center; gap: var(--alm-sp-2);
   line-height: var(--alm-leading-tight);
 }
+/* Default subtitle content is a filesystem path (e.g. archive original path,
+   spec 055 T022) — break-all + mono, see merges-1.css for the prose override. */
 .alm-detail__subtitle {
+  font-family: var(--alm-font-mono);
   font-size: var(--alm-text-xs); color: var(--alm-text-muted);
 margin-top: var(--alm-sp-1);
   word-break: break-all;
