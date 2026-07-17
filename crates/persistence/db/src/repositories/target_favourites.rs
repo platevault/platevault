@@ -50,6 +50,20 @@ pub async fn list_favourites(pool: &SqlitePool) -> DbResult<Vec<String>> {
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
+/// Count every currently-favourited canonical target. Used by
+/// `status.summary` (issue #574): the sidebar's "my targets" badge must equal
+/// what the Targets page's "My Targets" filter shows, which is wired to this
+/// same table, so count and visible list can never diverge.
+///
+/// # Errors
+///
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn count_favourites(pool: &SqlitePool) -> DbResult<i64> {
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM target_favourite").fetch_one(pool).await?;
+    Ok(count)
+}
+
 /// Favourite `target_id`. Upsert-safe: favouriting an already-favourited
 /// target is a no-op (the original `favourited_at` is preserved, not bumped).
 ///
@@ -175,6 +189,26 @@ mod tests {
         let db = setup().await;
         let ids = list_favourites(db.pool()).await.unwrap();
         assert!(ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn count_favourites_is_zero_when_nothing_favourited() {
+        let db = setup().await;
+        assert_eq!(count_favourites(db.pool()).await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn count_favourites_reflects_add_and_remove() {
+        let db = setup().await;
+        insert_target(db.pool(), "t-009").await;
+        insert_target(db.pool(), "t-010").await;
+
+        add_favourite(db.pool(), "t-009", "2026-07-05T00:00:00Z").await.unwrap();
+        add_favourite(db.pool(), "t-010", "2026-07-05T00:00:00Z").await.unwrap();
+        assert_eq!(count_favourites(db.pool()).await.unwrap(), 2);
+
+        remove_favourite(db.pool(), "t-009").await.unwrap();
+        assert_eq!(count_favourites(db.pool()).await.unwrap(), 1);
     }
 
     #[tokio::test]
