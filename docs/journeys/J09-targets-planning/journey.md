@@ -1,7 +1,7 @@
 ---
 id: J09
 title: Find, add, and plan around an astrophotography target
-version: 5
+version: 6
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -114,7 +114,11 @@ configured) real per-site astronomy for tonight.
   a display label, write an observing note.
 - **Expect:** The detail panel shows real identity data (designation, type,
   coordinates, source, and an optional catalog id — shown as an explicit
-  unresolved value, not omitted, when the target has no SIMBAD OID).
+  unresolved value, not omitted, when the target has no SIMBAD OID). The
+  RA/Dec coordinate value renders in a monospace face, with RA on its own
+  line and Dec on the line below (not joined on one line) so the digits
+  align; the "Unresolved" catalog-id chip stays sans-serif even though it
+  sits in the same value cell.
   Adding a user alias attaches it to the target with a visible "Remove"
   control; catalog-provided aliases have none. Setting or clearing a
   display label updates the detail heading immediately. Notes save and
@@ -246,6 +250,16 @@ configured) real per-site astronomy for tonight.
   altitude/Moon data for every row instead of showing stale values.
   Evidence: PR #912 (fixes #574), PR #905 (fixes #815), PR #914 (carried
   nJ09c/nJ10a review nits, no matching issues) · by: journey-scribe
+  (intent-gated)
+
+- **Δ6** 2026-07-17 · S3 · behavior-change
+  The identity table's RA/Dec value now renders in a monospace font (was
+  proportional sans) so the digits align, and RA/Dec now appear on two
+  separate lines instead of joined by " / " on one line — the mono face
+  was wider and wrapped mid-coordinate at the old single-line width.
+  Status pills like the "Unresolved" catalog-id chip stay sans-serif
+  inside the same mono value cells.
+  Evidence: spec 055 Phase 3 (PR #956); PR #963 · by: journey-scribe
   (intent-gated)
 
 Note (not a Δ entry — provenance for why two deltas were not folded into the
