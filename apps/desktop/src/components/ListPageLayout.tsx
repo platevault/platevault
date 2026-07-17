@@ -52,7 +52,7 @@
  * it must be the page's outermost element (do not nest it inside PageShell).
  */
 
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { PageTopBar, type PageTopBarProps } from './PageTopBar';
 import { m } from '@/lib/i18n';
 
@@ -110,6 +110,33 @@ export function ListPageLayout({
 }: ListPageLayoutProps) {
   const hasDetail = detail != null;
   const hasBottom = bottomDetail != null;
+
+  // Escape closes the open detail panel(s), matching the ✕ affordance (#771).
+  // A bubble-phase `document` listener also catches the common case where
+  // nothing inside the panel has focus (e.g. focus stayed on the row that
+  // opened it, or on <body>). It does NOT steal Escape from a nested Modal or
+  // any other consumer that stops propagation on its own Escape handling —
+  // that in-tree `stopPropagation()` (Base UI dialogs do this by default)
+  // prevents the native event from ever reaching this document listener, so
+  // the innermost open dialog/input closes first, as intended.
+  useEffect(() => {
+    if (!hasDetail && !hasBottom) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (hasDetail) onCloseDetail?.();
+      if (detailPlacement === 'side-and-bottom' && hasBottom) {
+        onCloseBottomDetail?.();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [
+    hasDetail,
+    hasBottom,
+    detailPlacement,
+    onCloseDetail,
+    onCloseBottomDetail,
+  ]);
 
   // ── Dual side-and-bottom layout (task #104) ──────────────────────────────
   //

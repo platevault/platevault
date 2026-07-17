@@ -191,4 +191,87 @@ describe('ListPageLayout', () => {
       container.querySelector('.alm-listpage__detail'),
     ).toBeInTheDocument();
   });
+
+  // ── Escape-to-close (#771) ────────────────────────────────────────────────
+
+  it('closes the bottom-dock detail on Escape, even with focus on <body>', () => {
+    const onClose = vi.fn();
+    render(
+      <ListPageLayout
+        topBar={<div>bar</div>}
+        detail={<div>detail</div>}
+        onCloseDetail={onClose}
+      >
+        <div>main</div>
+      </ListPageLayout>,
+    );
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the side-dock detail on Escape when focus is inside the panel', () => {
+    const onClose = vi.fn();
+    render(
+      <ListPageLayout
+        topBar={<div>bar</div>}
+        detail={<button type="button">focus me</button>}
+        detailPlacement="side"
+        onCloseDetail={onClose}
+      >
+        <div>main</div>
+      </ListPageLayout>,
+    );
+    screen.getByText('focus me').focus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onCloseDetail on Escape when no detail is open', () => {
+    const onClose = vi.fn();
+    render(
+      <ListPageLayout topBar={<div>bar</div>} onCloseDetail={onClose}>
+        <div>main</div>
+      </ListPageLayout>,
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('does not close on Escape when an inner handler already consumed it', () => {
+    const onClose = vi.fn();
+    render(
+      <ListPageLayout
+        topBar={<div>bar</div>}
+        detail={
+          <input
+            aria-label="inner"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') e.preventDefault();
+            }}
+          />
+        }
+        onCloseDetail={onClose}
+      >
+        <div>main</div>
+      </ListPageLayout>,
+    );
+    fireEvent.keyDown(screen.getByLabelText('inner'), { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('ignores non-Escape keys', () => {
+    const onClose = vi.fn();
+    render(
+      <ListPageLayout
+        topBar={<div>bar</div>}
+        detail={<div>detail</div>}
+        onCloseDetail={onClose}
+      >
+        <div>main</div>
+      </ListPageLayout>,
+    );
+    fireEvent.keyDown(document, { key: 'Enter' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });
