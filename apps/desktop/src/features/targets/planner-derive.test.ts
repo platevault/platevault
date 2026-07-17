@@ -14,6 +14,7 @@ import {
   clearObservabilityCache,
   deriveObservability,
   getNightObservability,
+  moonExcludedSpans,
 } from './planner-derive';
 import type { ObserverSite } from './observing-sites/observer-site';
 import { BANDS, DEFAULT_MOON_AVOIDANCE } from './astro/moon-avoidance';
@@ -382,6 +383,220 @@ describe('deriveObservability — US2 bestDate (T025, FR-009)', () => {
     expect(fromLater.bestDate?.dateMs).toBe(fromWinter.bestDate?.dateMs);
     expect(fromLater.bestDate?.inDays).toBeLessThan(
       fromWinter.bestDate?.inDays ?? -Infinity,
+    );
+  });
+});
+
+// ── Iteration 2026-07-15: three quantities, reason-for-zero, moon limiter, OSC ──
+
+const HOME_BACKYARD: ObserverSite = {
+  // The #817 repro site: 52.09°N on 2026-07-14 the Sun bottoms at −16.4°, so
+  // astronomical darkness (−18°) is never reached — no dark window.
+  id: 'site-817',
+  name: 'Home Backyard',
+  latitudeDeg: 52.09,
+  longitudeDeg: 5.1,
+  elevationM: 0,
+  timezone: 'Europe/Amsterdam',
+  twilight: 'astronomical',
+  minHorizonAltDeg: 0,
+};
+
+const JULY_817_NIGHT_MS = Date.UTC(2026, 6, 14, 12, 0, 0);
+/** M31 J2000 (the #817 repro target — transits at 73° from 52°N). */
+const M31 = { raDeg: 10.684, decDeg: 41.269 };
+
+describe('deriveObservability — reason-for-zero (FR-029) + uptime (FR-005/D1)', () => {
+  it('#817 repro: no dark window → reason "darkness", zero imaging, NON-zero uptime', () => {
+    const night = getNightObservability(
+      'm31',
+      M31.raDeg,
+      M31.decDeg,
+      HOME_BACKYARD,
+      JULY_817_NIGHT_MS,
+    );
+    const d = deriveObservability(night, 30);
+    expect(night.darkWindow).toBeNull();
+    expect(d.totalImagingMinutes).toBe(0);
+    expect(d.zeroImagingReason).toBe('darkness');
+    // The three-quantity distinction: the target is well up (73° transit) even
+    // though imaging time is zero — uptime must NOT read zero (D1).
+    expect(d.uptimeMinutes).toBeGreaterThan(0);
+    expect(d.maxAltDeg).toBeGreaterThan(60);
+  });
+
+  it('dark window exists but target never clears the threshold → reason "altitude"', () => {
+    // Winter Amsterdam night has real astronomical darkness; a far-southern
+    // target (dec −60°) never rises from 52°N.
+    const night = getNightObservability(
+      'far-south',
+      180,
+      -60,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+    );
+    const d = deriveObservability(night, 30);
+    expect(night.darkWindow).not.toBeNull();
+    expect(d.totalImagingMinutes).toBe(0);
+    expect(d.uptimeMinutes).toBe(0);
+    expect(d.zeroImagingReason).toBe('altitude');
+  });
+
+  it('simultaneous blockers: no dark window AND never-above → darkness wins (precedence)', () => {
+    const night = getNightObservability(
+      'far-south-summer',
+      180,
+      -60,
+      HOME_BACKYARD,
+      JULY_817_NIGHT_MS,
+    );
+    const d = deriveObservability(night, 30);
+    expect(night.darkWindow).toBeNull();
+    expect(d.zeroImagingReason).toBe('darkness');
+  });
+
+  it('non-zero imaging with some band viable → no reason (null)', () => {
+    const night = getNightObservability(
+      't-mid',
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+    );
+    const d = deriveObservability(night, 5);
+    expect(d.totalImagingMinutes).toBeGreaterThan(0);
+    const someBandViable = BANDS.some((b) => d.moonFreeMinutesByBand[b] > 0);
+    if (someBandViable) expect(d.zeroImagingReason).toBeNull();
+    else expect(d.zeroImagingReason).toBe('moon');
+  });
+});
+
+describe('deriveObservability — moon-limited bands (FR-031)', () => {
+  it('moonLimitedBands is exactly the bands whose moon-free time is below the band-free total', () => {
+    const night = getNightObservability(
+      't-mid',
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+    );
+    const d = deriveObservability(night, 5);
+    const expected = BANDS.filter(
+      (b) => d.moonFreeMinutesByBand[b] < d.totalImagingMinutes,
+    );
+    expect(d.moonLimitedBands).toEqual(expected);
+  });
+
+  it('not-computed Moon geometry never reads as "limited" or reason "moon"', () => {
+    const night = getNightObservability(
+      't-nomoon',
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+      false,
+    );
+    const d = deriveObservability(night, 5);
+    expect(d.moonLimitedBands).toEqual([]);
+    expect(d.zeroImagingReason).not.toBe('moon');
+    expect(d.oscSinglePassMinutes).toBeNull();
+  });
+});
+
+describe('deriveObservability — OSC single-pass (FR-036/FR-037/FR-038)', () => {
+  const night = () =>
+    getNightObservability('t-osc', 180, 0, AMSTERDAM, WINTER_NIGHT_MS);
+
+  it("mono / unknown sensors keep today's model: oscSinglePassMinutes is null (SC-017 regression)", () => {
+    const base = deriveObservability(night(), 30);
+    const mono = deriveObservability(night(), 30, {
+      sensorConfig: { sensorType: 'mono' },
+    });
+    expect(base.oscSinglePassMinutes).toBeNull();
+    expect(mono.oscSinglePassMinutes).toBeNull();
+    // Every pre-iteration output is unchanged by passing a mono config.
+    expect(mono.totalImagingMinutes).toBe(base.totalImagingMinutes);
+    expect(mono.moonFreeMinutesByBand).toEqual(base.moonFreeMinutesByBand);
+  });
+
+  it('OSC narrowband passband: single-pass equals the strictest band (min of the per-line windows)', () => {
+    const d = deriveObservability(night(), 30, {
+      sensorConfig: { sensorType: 'osc', passband: ['Ha', 'OIII'] },
+      moonAvoidanceParams: DEFAULT_MOON_AVOIDANCE,
+    });
+    expect(d.oscSinglePassMinutes).not.toBeNull();
+    // Interference thresholds nest (larger required sep ⊆ smaller), so the
+    // strictest-band aggregation equals the minimum per-line window.
+    const expected = Math.min(
+      d.moonFreeMinutesByBand.Ha,
+      d.moonFreeMinutesByBand.OIII,
+    );
+    expect(d.oscSinglePassMinutes).toBe(expected);
+    // Per-line windows (FR-037) stay available alongside the headline.
+    expect(d.moonFreeMinutesByBand.Ha).toBeGreaterThanOrEqual(
+      d.oscSinglePassMinutes!,
+    );
+  });
+
+  it("OSC without a passband defaults to 'rgb' (broadband)", () => {
+    const d = deriveObservability(night(), 30, {
+      sensorConfig: { sensorType: 'osc' },
+    });
+    // LRGB share params, so the rgb single-pass equals any broadband band's window.
+    expect(d.oscSinglePassMinutes).toBe(d.moonFreeMinutesByBand.R);
+  });
+});
+
+describe('moonExcludedSpans — detail-graph overlay (FR-007, iteration 2026-07-15)', () => {
+  it('spans are ordered, non-overlapping, and stay within the night', () => {
+    const night = getNightObservability(
+      't-spans',
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+    );
+    const spans = moonExcludedSpans(night, 'L', 0, DEFAULT_MOON_AVOIDANCE);
+    for (const s of spans) {
+      expect(s.startMs).toBeGreaterThanOrEqual(night.nightStartMs);
+      expect(s.endMs).toBeLessThanOrEqual(night.nightEndMs);
+      expect(s.endMs).toBeGreaterThanOrEqual(s.startMs);
+    }
+    for (let i = 1; i < spans.length; i++) {
+      expect(spans[i].startMs).toBeGreaterThan(spans[i - 1].endMs);
+    }
+  });
+
+  it('not-computed Moon geometry yields NO spans (never a fabricated exclusion)', () => {
+    const night = getNightObservability(
+      't-spans-nomoon',
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+      false,
+    );
+    expect(moonExcludedSpans(night, 'L', 0, DEFAULT_MOON_AVOIDANCE)).toEqual(
+      [],
+    );
+  });
+
+  it('a stricter broadband band excludes at least as much time as a narrowband line', () => {
+    const night = getNightObservability(
+      't-spans',
+      180,
+      0,
+      AMSTERDAM,
+      WINTER_NIGHT_MS,
+    );
+    const totalMs = (spans: Array<{ startMs: number; endMs: number }>) =>
+      spans.reduce((acc, s) => acc + (s.endMs - s.startMs), 0);
+    // Broadband L needs a LARGER Moon separation than Ha at every Moon age,
+    // so its excluded time can never be smaller.
+    expect(
+      totalMs(moonExcludedSpans(night, 'L', 0, DEFAULT_MOON_AVOIDANCE)),
+    ).toBeGreaterThanOrEqual(
+      totalMs(moonExcludedSpans(night, 'Ha', 0, DEFAULT_MOON_AVOIDANCE)),
     );
   });
 });

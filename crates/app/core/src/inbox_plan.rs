@@ -580,6 +580,7 @@ mod tests {
             destructive_destination: None,
             root_absolute_path: root_path.to_path_buf(),
             root_id: None,
+            chosen_attribution: None,
         };
         let bus = EventBus::with_pool(db.pool().clone());
         let resp = confirm(db.pool(), &bus, req).await.unwrap();

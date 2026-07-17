@@ -16,7 +16,7 @@
 // with the endpoint / debounce / timeout fields deferred to full Settings.
 
 import { useCallback, useEffect, useId, useState } from 'react';
-import { Btn, Toggle } from '@/ui';
+import { Btn, Skeleton, Toggle } from '@/ui';
 import {
   clearResolveCache,
   getResolverSettings,
@@ -121,32 +121,55 @@ export function ResolverSettingsControl({
             <span className="alm-resolver-settings__compact-label">
               {m.settings_resolver_online_label()}
             </span>
-            <Toggle
-              checked={settings.onlineEnabled}
-              aria-label={m.settings_resolver_online_aria()}
-              onChange={(v) => void persist({ onlineEnabled: v })}
-            />
+            {loaded ? (
+              <Toggle
+                checked={settings.onlineEnabled}
+                aria-label={m.settings_resolver_online_aria()}
+                onChange={(v) => void persist({ onlineEnabled: v })}
+              />
+            ) : (
+              <Skeleton
+                variant="block"
+                width={36}
+                height={20}
+                radius="10px"
+                label={m.common_loading()}
+              />
+            )}
           </div>
           <div className="alm-settings__row-desc">
-            {settings.onlineEnabled
-              ? m.settings_resolver_online_desc()
-              : m.settings_resolver_offline_desc()}
+            {loaded &&
+              (settings.onlineEnabled
+                ? m.settings_resolver_online_desc()
+                : m.settings_resolver_offline_desc())}
           </div>
         </div>
       ) : (
         <SettingsRow
           label={m.settings_resolver_online_label()}
           info={
-            settings.onlineEnabled
-              ? m.settings_resolver_online_on_info()
-              : m.settings_resolver_online_off_info()
+            loaded
+              ? settings.onlineEnabled
+                ? m.settings_resolver_online_on_info()
+                : m.settings_resolver_online_off_info()
+              : undefined
           }
         >
-          <Toggle
-            checked={settings.onlineEnabled}
-            aria-label={m.settings_resolver_online_aria()}
-            onChange={(v) => void persist({ onlineEnabled: v })}
-          />
+          {loaded ? (
+            <Toggle
+              checked={settings.onlineEnabled}
+              aria-label={m.settings_resolver_online_aria()}
+              onChange={(v) => void persist({ onlineEnabled: v })}
+            />
+          ) : (
+            <Skeleton
+              variant="block"
+              width={36}
+              height={20}
+              radius="10px"
+              label={m.common_loading()}
+            />
+          )}
         </SettingsRow>
       )}
 

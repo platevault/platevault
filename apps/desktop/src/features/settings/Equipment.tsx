@@ -47,6 +47,7 @@ import {
   equipmentFilterUpdate,
   equipmentFilterDelete,
   type Camera,
+  type SensorType,
   type Telescope,
   type OpticalTrain,
   type Filter,
@@ -83,6 +84,50 @@ function parseFocalLength(text: string): number | null {
   if (trimmed === '') return null;
   const n = Number(trimmed);
   return Number.isFinite(n) ? Math.round(n) : null;
+}
+
+// ── Camera sensor type (spec 044 iteration 2026-07-15, FR-035/T045) ──────────
+
+/** The OSC passband presets exposed in the form; stored as a band array. */
+type PassbandChoice = 'rgb' | 'ha_oiii' | 'ha_sii_oiii';
+
+const PASSBAND_BANDS: Record<Exclude<PassbandChoice, 'rgb'>, string[]> = {
+  ha_oiii: ['Ha', 'OIII'],
+  ha_sii_oiii: ['Ha', 'SII', 'OIII'],
+};
+
+/** Contract passband (`null` = plain color/rgb) → form preset. */
+function passbandChoiceFrom(passband: string[] | null): PassbandChoice {
+  if (!passband || passband.length === 0) return 'rgb';
+  return passband.includes('SII') ? 'ha_sii_oiii' : 'ha_oiii';
+}
+
+/** Form preset → contract passband (`null` = plain color/rgb default). */
+function passbandBandsFrom(choice: PassbandChoice): string[] | null {
+  return choice === 'rgb' ? null : PASSBAND_BANDS[choice];
+}
+
+/** Render-time factory (spec 046 #8b) so labels re-read the active locale. */
+function passbandLabel(choice: PassbandChoice): string {
+  switch (choice) {
+    case 'rgb':
+      return m.settings_equipment_passband_rgb();
+    case 'ha_oiii':
+      return m.settings_equipment_passband_ha_oiii();
+    case 'ha_sii_oiii':
+      return m.settings_equipment_passband_ha_sii_oiii();
+  }
+}
+
+/** Table-cell summary of a camera's sensor configuration; unknown → '—'. */
+function sensorSummary(camera: Camera): string {
+  if (camera.sensorType === 'mono') return m.settings_equipment_sensor_mono();
+  if (camera.sensorType === 'osc') {
+    return `${m.settings_equipment_sensor_osc()} · ${passbandLabel(
+      passbandChoiceFrom(camera.passband),
+    )}`;
+  }
+  return '—';
 }
 
 const FILTER_CATEGORIES: FilterCategory[] = [
@@ -135,6 +180,9 @@ export function Equipment({ save: _save }: EquipmentProps) {
     id: string | null;
     name: string;
     aliasesText: string;
+    /** FR-035: '' = unknown (behaves as mono, FR-038). */
+    sensorType: '' | SensorType;
+    passband: PassbandChoice;
   } | null>(null);
   const [cameraFormError, setCameraFormError] = useState<string | null>(null);
   const [cameraSaving, setCameraSaving] = useState(false);
@@ -259,10 +307,21 @@ export function Equipment({ save: _save }: EquipmentProps) {
     setCameraFormError(null);
     try {
       const aliases = parseAliases(cameraForm.aliasesText);
+      // FR-035: '' (unknown) persists as null; passband only matters for OSC.
+      const sensorType =
+        cameraForm.sensorType === '' ? null : cameraForm.sensorType;
+      const passband =
+        sensorType === 'osc' ? passbandBandsFrom(cameraForm.passband) : null;
       if (cameraForm.id) {
-        await equipmentCameraUpdate({ id: cameraForm.id, name, aliases });
+        await equipmentCameraUpdate({
+          id: cameraForm.id,
+          name,
+          aliases,
+          sensorType,
+          passband,
+        });
       } else {
-        await equipmentCameraCreate({ name, aliases });
+        await equipmentCameraCreate({ name, aliases, sensorType, passband });
       }
       setCameraForm(null);
       loadCameras();
@@ -658,7 +717,13 @@ export function Equipment({ save: _save }: EquipmentProps) {
           <Btn
             size="sm"
             onClick={() =>
-              setCameraForm({ id: null, name: '', aliasesText: '' })
+              setCameraForm({
+                id: null,
+                name: '',
+                aliasesText: '',
+                sensorType: '',
+                passband: 'rgb',
+              })
             }
           >
             {m.settings_equipment_cameras_add()}
@@ -677,6 +742,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
             columns={[
               { key: 'name', label: m.settings_equipment_col_name() },
               { key: 'aliases', label: m.settings_equipment_col_aliases() },
+              { key: 'sensor', label: m.settings_equipment_col_sensor() },
               { key: 'source', label: m.settings_equipment_col_source() },
               { key: 'actions', label: '', style: { width: 140 } },
             ]}
@@ -684,6 +750,7 @@ export function Equipment({ save: _save }: EquipmentProps) {
               (c): TableRow => ({
                 name: c.name,
                 aliases: formatAliases(c.aliases),
+                sensor: sensorSummary(c),
                 source: autoDetectedBadge(c.autoDetected),
                 actions: (
                   <span className="alm-equipment__row-actions">
@@ -695,6 +762,8 @@ export function Equipment({ save: _save }: EquipmentProps) {
                           id: c.id,
                           name: c.name,
                           aliasesText: c.aliases.join(', '),
+                          sensorType: c.sensorType ?? '',
+                          passband: passbandChoiceFrom(c.passband),
                         })
                       }
                     >
@@ -770,6 +839,65 @@ export function Equipment({ save: _save }: EquipmentProps) {
                 }
               />
             </div>
+            {/* FR-035: sensor-type dimension. Unknown stays selectable and
+                behaves as mono downstream (FR-038) — additive, never a
+                required migration step for existing cameras. */}
+            <div className="alm-stack-1">
+              <label
+                className="alm-field-label"
+                htmlFor="equipment-camera-sensor"
+              >
+                {m.settings_equipment_field_sensor()}
+              </label>
+              <select
+                id="equipment-camera-sensor"
+                className="alm-input"
+                aria-label={m.settings_equipment_field_sensor()}
+                value={cameraForm.sensorType}
+                onChange={(e) =>
+                  setCameraForm({
+                    ...cameraForm,
+                    sensorType: e.target.value as '' | SensorType,
+                  })
+                }
+              >
+                <option value="">
+                  {m.settings_equipment_sensor_unknown_option()}
+                </option>
+                <option value="mono">
+                  {m.settings_equipment_sensor_mono()}
+                </option>
+                <option value="osc">{m.settings_equipment_sensor_osc()}</option>
+              </select>
+            </div>
+            {cameraForm.sensorType === 'osc' && (
+              <div className="alm-stack-1">
+                <label
+                  className="alm-field-label"
+                  htmlFor="equipment-camera-passband"
+                >
+                  {m.settings_equipment_field_passband()}
+                </label>
+                <select
+                  id="equipment-camera-passband"
+                  className="alm-input"
+                  aria-label={m.settings_equipment_field_passband()}
+                  value={cameraForm.passband}
+                  onChange={(e) =>
+                    setCameraForm({
+                      ...cameraForm,
+                      passband: e.target.value as PassbandChoice,
+                    })
+                  }
+                >
+                  <option value="rgb">{passbandLabel('rgb')}</option>
+                  <option value="ha_oiii">{passbandLabel('ha_oiii')}</option>
+                  <option value="ha_sii_oiii">
+                    {passbandLabel('ha_sii_oiii')}
+                  </option>
+                </select>
+              </div>
+            )}
           </SettingsFormShell>
         )}
       </SettingsSection>

@@ -89,6 +89,13 @@ pub struct ToleranceParams {
     pub pointing_fallback_deg: f64,
     /// Rotation tolerance in degrees (R11a default 3.0).
     pub rotation_tolerance_deg: f32,
+    /// Mosaic candidate envelope (F-Framing-5, FR-019 relaxation): fraction of
+    /// FOV diagonal used as the pointing envelope around any existing framing's
+    /// representative for `isMosaic` projects, replacing target equality
+    /// (R11a default 1.0 — adjacent panels at 10-20% overlap land at
+    /// ~0.8-0.9x FOV spacing, inside the envelope; unrelated targets fall far
+    /// outside it).
+    pub mosaic_envelope_fraction_of_fov: f64,
 }
 
 impl ToleranceParams {
@@ -99,8 +106,37 @@ impl ToleranceParams {
             pointing_fraction_of_fov: 0.10,
             pointing_fallback_deg: 0.2,
             rotation_tolerance_deg: 3.0,
+            mosaic_envelope_fraction_of_fov: 1.0,
         }
     }
+}
+
+/// FOV diagonal in degrees from optic-train focal length + sensor dimensions
+/// (R11a "FOV source"). `None` when any input is non-positive/absent — callers
+/// fall back to [`ToleranceParams::pointing_fallback_deg`] per R11a.
+///
+/// Standard small-angle-free optics formula: `2 * atan(sensor_diagonal_mm /
+/// (2 * focal_length_mm))`, converted to degrees. `pixel_size_um` is the same
+/// value on both axes (square pixels, the overwhelming common case for
+/// astro cameras); `naxis1`/`naxis2` are the sensor dimensions in pixels.
+// Sensor dimensions in pixels never approach f64's exact-integer limit
+// (2^53) at any real camera resolution; this narrows an i64 pixel count into
+// FOV geometry math, not a precision-sensitive accumulation.
+#[allow(clippy::cast_precision_loss)]
+#[must_use]
+pub fn fov_diagonal_deg(
+    focal_length_mm: f64,
+    pixel_size_um: f64,
+    naxis1: i64,
+    naxis2: i64,
+) -> Option<f64> {
+    if focal_length_mm <= 0.0 || pixel_size_um <= 0.0 || naxis1 <= 0 || naxis2 <= 0 {
+        return None;
+    }
+    let sensor_width_mm = (naxis1 as f64) * pixel_size_um / 1000.0;
+    let sensor_height_mm = (naxis2 as f64) * pixel_size_um / 1000.0;
+    let sensor_diagonal_mm = sensor_width_mm.hypot(sensor_height_mm);
+    Some(2.0 * (sensor_diagonal_mm / (2.0 * focal_length_mm)).atan().to_degrees())
 }
 
 /// Why a session was excluded from clustering.
@@ -522,18 +558,38 @@ fn normalize_deg_0_360(deg: f64) -> f64 {
 }
 
 /// Great-circle angular separation between two ICRS pointings, in degrees
-/// (haversine — accurate at the sub-degree scale framing tolerances operate
-/// at; avoids the RA/Dec Euclidean-distance bug that overstates separation
-/// near the poles).
+/// (delegates to `skymath::separation` — accurate at the sub-degree scale
+/// framing tolerances operate at; avoids the RA/Dec Euclidean-distance bug
+/// that overstates separation near the poles).
+///
+/// A non-finite input on either pointing yields `NaN` (matching the previous
+/// haversine's permissive behaviour), rather than the domain-validation error
+/// `skymath::Equatorial` would otherwise raise.
 #[must_use]
 pub fn angular_separation_deg(a: Pointing, b: Pointing) -> f64 {
-    let (lat1, lat2) = (a.dec_deg.to_radians(), b.dec_deg.to_radians());
-    let dlat = lat2 - lat1;
-    let dlon = (b.ra_deg - a.ra_deg).to_radians();
-    let sin_dlat_2 = (dlat / 2.0).sin();
-    let sin_dlon_2 = (dlon / 2.0).sin();
-    let h = sin_dlat_2.mul_add(sin_dlat_2, lat1.cos() * lat2.cos() * sin_dlon_2 * sin_dlon_2);
-    2.0 * h.clamp(0.0, 1.0).sqrt().asin().to_degrees()
+    if !a.ra_deg.is_finite()
+        || !a.dec_deg.is_finite()
+        || !b.ra_deg.is_finite()
+        || !b.dec_deg.is_finite()
+    {
+        return f64::NAN;
+    }
+    skymath::separation(to_equatorial(a), to_equatorial(b)).degrees()
+}
+
+/// Build a `skymath::Equatorial` from a [`Pointing`], wrapping RA into
+/// `[0, 360)` and clamping Dec into `[-90, 90]` so out-of-domain-but-finite
+/// inputs still produce a position rather than an error (the previous
+/// haversine was equally permissive).
+///
+/// # Panics
+/// Panics if `p.ra_deg` or `p.dec_deg` is non-finite; [`angular_separation_deg`]
+/// filters those before calling.
+fn to_equatorial(p: Pointing) -> skymath::Equatorial {
+    let ra = skymath::Angle::from_degrees(p.ra_deg).normalized_0_360();
+    let dec = skymath::Angle::from_degrees(p.dec_deg.clamp(-90.0, 90.0));
+    skymath::Equatorial::j2000(ra, dec)
+        .expect("ra normalized to [0, 360), dec clamped to [-90, 90]")
 }
 
 /// Shortest circular distance between two rotation angles, in degrees,

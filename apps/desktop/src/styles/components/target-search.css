@@ -41,9 +41,18 @@
   border: 0;
 }
 /* base-ui Combobox.Positioner owns placement; keep it above page chrome and
-   let the popup match the trigger width (T161). */
+   let the popup match the trigger width (T161). #815: Combobox.Portal
+   appends directly to <body> (base-ui default), landing the popup as a
+   SIBLING of the Modal's own portaled card, not a descendant of
+   `.alm-modal__body` — so ordinary DOM-overflow clipping does not apply, but
+   plain z-index stacking does. TargetSearch is used inside Modals
+   (AddTargetDialog, CreateProjectDialog), so it needs to out-rank
+   `.alm-modal`'s z-index (501, see merges-3.css) — the same reason the
+   command palette below is scoped to 600/601 — otherwise the modal card
+   paints over the dropdown/no-match message: present and functional in the
+   DOM, but never visible or hit-testable to a real (mouse-driven) user. */
 .alm-target-search__positioner {
-  z-index: 20;
+  z-index: 510;
   width: var(--anchor-width, auto);
 }
 .alm-target-search__popup {

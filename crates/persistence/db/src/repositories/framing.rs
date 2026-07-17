@@ -141,6 +141,30 @@ pub async fn list_framings_by_project(
     Ok(rows)
 }
 
+/// List every framing sharing an exact `optic_train_key`, across all projects
+/// (F-Framing-5's attribution optic-train prefilter, migration 0067's index).
+/// Callers apply pointing/rotation tolerance math and the project-level
+/// target/mosaic checks in Rust — this is the coarse, cheap SQL-level cut.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn list_framings_by_optic_train_key(
+    pool: &SqlitePool,
+    optic_train_key: &str,
+) -> DbResult<Vec<FramingRow>> {
+    let rows = sqlx::query_as::<_, FramingRow>(
+        "SELECT id, project_id, target_id, optic_train_key,
+                pointing_ra_deg, pointing_dec_deg, rotation_deg,
+                tolerance_pointing, tolerance_rotation_deg,
+                clustering, created_at, updated_at
+         FROM framing WHERE optic_train_key = ? ORDER BY created_at ASC",
+    )
+    .bind(optic_train_key)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// Update a framing's `clustering` provenance. F-Framing-3's merge/split/
 /// reassign use cases call this to flip a touched framing to
 /// `"user_adjusted"` (FR-015) — never called with `"suggested"` by any
@@ -420,6 +444,29 @@ mod tests {
         let rows = list_framings_by_project(db.pool(), "proj-a").await.unwrap();
         let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids, vec!["framing-a1", "framing-a2"]);
+    }
+
+    #[tokio::test]
+    async fn list_framings_by_optic_train_key_returns_only_matching_rows_across_projects() {
+        let db = setup().await;
+        insert_project(db.pool(), "proj-a").await;
+        insert_project(db.pool(), "proj-b").await;
+
+        let mut same_a = insert_data("framing-a1", "proj-a");
+        same_a.optic_train_key = "scope-a|cam-a";
+        insert_framing(db.pool(), &same_a).await.unwrap();
+
+        let mut same_b = insert_data("framing-b1", "proj-b");
+        same_b.optic_train_key = "scope-a|cam-a";
+        insert_framing(db.pool(), &same_b).await.unwrap();
+
+        let mut other = insert_data("framing-a2", "proj-a");
+        other.optic_train_key = "scope-b|cam-b";
+        insert_framing(db.pool(), &other).await.unwrap();
+
+        let rows = list_framings_by_optic_train_key(db.pool(), "scope-a|cam-a").await.unwrap();
+        let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, vec!["framing-a1", "framing-b1"]);
     }
 
     // ── framing_session membership ──────────────────────────────────────────────
