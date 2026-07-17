@@ -431,6 +431,23 @@ describe('TargetDetailV2', () => {
     );
   });
 
+  it('15b. (#658) calls onMutated after a successful alias add, so the host list can refresh', async () => {
+    const onMutated = vi.fn();
+    // Relies on the beforeEach persistent default for both the initial mount
+    // fetch and the post-add reload — avoids polluting the mockResolvedValueOnce
+    // queue for later tests (clearAllMocks doesn't drain unconsumed once-values).
+
+    render(<TargetDetailV2 targetId={TARGET_ID} onMutated={onMutated} />);
+    await waitFor(() => screen.getByRole('textbox', { name: /new alias/i }));
+
+    fireEvent.change(screen.getByRole('textbox', { name: /new alias/i }), {
+      target: { value: 'Sweep C Alias' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^add$/i }));
+
+    await waitFor(() => expect(onMutated).toHaveBeenCalledTimes(1));
+  });
+
   it('16. reloads detail after successful alias remove', async () => {
     const updated = makeDetail({
       aliases: [
@@ -467,9 +484,11 @@ describe('TargetDetailV2', () => {
   });
 
   it('18. setting display alias updates effectiveLabel', async () => {
-    mockGetTargetDetail
-      .mockResolvedValueOnce(ok(makeDetail()))
-      .mockResolvedValueOnce(ok(makeDetail({ displayAlias: 'My NGC 7000' })));
+    // handleDisplayAliasSet applies mockSetDisplayAlias's response directly
+    // (no second getTargetDetail fetch) — only the mount fetch needs mocking;
+    // an unused second mockResolvedValueOnce here would leak into later tests
+    // (clearAllMocks doesn't drain the once-queue).
+    mockGetTargetDetail.mockResolvedValueOnce(ok(makeDetail()));
 
     render(<TargetDetailV2 targetId={TARGET_ID} />);
     await waitFor(() => screen.getByRole('button', { name: /^set$/i }));
@@ -490,6 +509,26 @@ describe('TargetDetailV2', () => {
         displayAlias: 'My NGC 7000',
       }),
     );
+  });
+
+  it('18b. (#658) calls onMutated after setting a display alias, so the host list can refresh', async () => {
+    const onMutated = vi.fn();
+    // Relies on the beforeEach persistent defaults (mockGetTargetDetail for the
+    // mount fetch, mockSetDisplayAlias for the save) — avoids polluting the
+    // mockResolvedValueOnce queue for later tests.
+
+    render(<TargetDetailV2 targetId={TARGET_ID} onMutated={onMutated} />);
+    await waitFor(() => screen.getByRole('button', { name: /^set$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^set$/i }));
+    await waitFor(() =>
+      screen.getByRole('textbox', { name: /display label/i }),
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: /display label/i }), {
+      target: { value: 'Sweep C Label' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => expect(onMutated).toHaveBeenCalledTimes(1));
   });
 
   it('19. clearing display alias reverts effectiveLabel to primaryDesignation', async () => {

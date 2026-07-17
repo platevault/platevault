@@ -108,6 +108,7 @@ import type { ObserverSite } from './observing-sites/observer-site';
 import { usePlannerDateMs } from './planner-date-store';
 import { usePreference } from '@/data/preferences';
 import { ROW_HEIGHT_PX } from '@/data/theme';
+import { MoonSummary } from './MoonSummary';
 import {
   groupByDimensions,
   flattenVisibleGroups,
@@ -1015,20 +1016,48 @@ export function TargetsTable({
 
   const count = targets.length;
 
+  // #618: the Moon-phase widget (and its no-site fallback prompt) moved here
+  // from the Targets page's pinned top bar (which was wrapping to a 3rd
+  // stacked band before any table data appeared) — this is the "table header
+  // zone" alternative from the design-review recommendation, chosen over the
+  // detail rail because the #450 dead-gate regression guard requires the
+  // prompt/summary to be visible without selecting any row.
+  const moonHeader = night ? (
+    <MoonSummary night={night} />
+  ) : (
+    <div className="alm-planner-site-prompt" data-testid="planner-site-prompt">
+      <span className="alm-planner-site-prompt__title">
+        {m.targets_planner_site_prompt_title()}
+      </span>
+      <span className="alm-planner-site-prompt__desc">
+        {m.targets_planner_site_prompt_desc()}
+      </span>
+    </div>
+  );
+
   if (count === 0 && loading) {
     return (
-      <div className="alm-targets-table__empty">
-        <Skeleton variant="block" count={8} label={m.common_loading()} />
+      <div className="alm-targets-table__wrap">
+        {moonHeader}
+        <div className="alm-targets-table__empty">
+          <Skeleton variant="block" count={8} label={m.common_loading()} />
+        </div>
       </div>
     );
   }
 
   if (count === 0 && !loading) {
-    return <div className="alm-targets-table__empty">{emptyMessage}</div>;
+    return (
+      <div className="alm-targets-table__wrap">
+        {moonHeader}
+        <div className="alm-targets-table__empty">{emptyMessage}</div>
+      </div>
+    );
   }
 
   return (
     <div className="alm-targets-table__wrap">
+      {moonHeader}
       {!site && (
         <Banner variant="info" className="alm-targets-table__no-site-banner">
           {m.targets_planner_no_site_banner()}{' '}
@@ -1270,14 +1299,14 @@ export function TargetsTable({
                             : m.targets_opposition_in_months({
                                 count: rel.count,
                               });
+                        const oppositionText = `${formatOppositionDate(
+                          new Date(`${moon.nextOppositionDate}T00:00:00Z`),
+                        )} · ${relText}`;
+                        // #792: the cell can clip at narrow widths; the title
+                        // must carry the actual (recoverable) value, not the
+                        // static generic column label.
                         return (
-                          <span title={m.targets_table_next_opposition()}>
-                            {formatOppositionDate(
-                              new Date(`${moon.nextOppositionDate}T00:00:00Z`),
-                            )}
-                            {' · '}
-                            {relText}
-                          </span>
+                          <span title={oppositionText}>{oppositionText}</span>
                         );
                       })()
                     )}

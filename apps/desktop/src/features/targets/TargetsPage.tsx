@@ -72,7 +72,6 @@ import { useFavourites } from './useFavourites';
 import { useObservingNight } from './astro/observing-night';
 import { computeObservingNight, type ObservingNight } from './astro/moon-state';
 import { useObserverSiteExists } from './site-gate';
-import { MoonSummary } from './MoonSummary';
 import { PlannerDatePicker } from './PlannerDatePicker';
 import { PlannerComputedFor } from './PlannerComputedFor';
 import { useGuidanceParams, loadGuidanceParams } from './guidance-settings';
@@ -408,7 +407,17 @@ export function TargetsPage() {
 
   const visibleTargets = useMemo(() => {
     const q = search.trim();
-    let result = q ? tabTargets.filter((t) => matchesSearch(t, q)) : tabTargets;
+    // #919: search must find any matching target immediately, even one not
+    // yet revealed by the progressive-reveal loader (#573) — same carve-out
+    // "My Targets" already gets. On "My Targets", tabTargets is already the
+    // full (unclipped) favourite set, so search stays scoped to favourites;
+    // elsewhere search bypasses the reveal cap and matches the full catalogue.
+    const searchBase = q
+      ? myTargetsFilter === MY_TARGETS_VALUE
+        ? tabTargets
+        : plannerTargets
+      : tabTargets;
+    let result = q ? searchBase.filter((t) => matchesSearch(t, q)) : tabTargets;
 
     // Filter-by-recommendation (spec 047 US3, FR-011): keep only targets whose
     // REAL derived recommendation is one of the selected categories.
@@ -428,7 +437,15 @@ export function TargetsPage() {
     }
 
     return result;
-  }, [tabTargets, search, filterRecommendations, night, guidanceParams]);
+  }, [
+    tabTargets,
+    plannerTargets,
+    myTargetsFilter,
+    search,
+    filterRecommendations,
+    night,
+    guidanceParams,
+  ]);
 
   // Per the top-bar convention (task #80/#91): no title/summary in the bar —
   // the left nav names the page and per-page counts move to the status bar.
@@ -494,9 +511,12 @@ export function TargetsPage() {
         // Per-item actions ("+ New project here") live in TargetDetailV2's
         // detail body, not the top bar.
         //
-        // Planner astronomy (spec 047): tonight's Moon summary sits left of the
-        // action, gated behind a default observing site (D7). Until a site
-        // exists the slot shows the set-up-your-site prompt.
+        // #618: the Moon-phase widget (and its no-site fallback prompt) moved
+        // out of this pinned bar and into TargetDetailV2's header — folding
+        // it into the detail rail per the design-review recommendation so the
+        // Targets page's top-bar stack is a single ~44px band like the other
+        // list pages, instead of wrapping to a third stacked row before any
+        // table data is visible.
         <>
           {/* FR-033/T043: always-visible computation-context label — the one
               place disclosing site/twilight/threshold behind every number. */}
@@ -504,22 +524,8 @@ export function TargetsPage() {
           {/* US2/T024: plan an arbitrary future night — every table/detail
               computation reads this chosen date (SC-004). */}
           <PlannerDatePicker />
-          {night ? (
-            <MoonSummary night={night} />
-          ) : (
-            <div
-              className="alm-planner-site-prompt"
-              data-testid="planner-site-prompt"
-            >
-              <span className="alm-planner-site-prompt__title">
-                {m.targets_planner_site_prompt_title()}
-              </span>
-              <span className="alm-planner-site-prompt__desc">
-                {m.targets_planner_site_prompt_desc()}
-              </span>
-            </div>
-          )}
-          <Btn size="sm" onClick={() => setAddOpen(true)}>
+          {/* #618: primary CTA — the page's one primary action. */}
+          <Btn size="sm" variant="primary" onClick={() => setAddOpen(true)}>
             {m.targets_add_target()}
           </Btn>
         </>
@@ -548,6 +554,11 @@ export function TargetsPage() {
               usableAltDeg={usableAltDeg}
               night={night}
               sensorConfig={sensorConfig}
+              // #658: an alias add/remove or display-alias set/clear in the
+              // detail pane must refresh the list payload search/rows read
+              // from, or a fresh alias stays unsearchable and a new display
+              // label never reaches the list row.
+              onMutated={load}
             />
           ) : undefined
         }

@@ -436,6 +436,11 @@ describe('TargetsPage', () => {
 
   // ── Site gate (spec 047 D7) ───────────────────────────────────────────────
 
+  // #618: the Moon summary / site prompt moved from the pinned top bar into
+  // TargetsTable's own header zone (still unconditionally visible — required
+  // by the #450 dead-gate regression guard, which asserts the prompt/summary
+  // WITHOUT selecting any row).
+
   it('SG1. shows the observing-site prompt when no site exists (gated off)', async () => {
     __setSiteExistsForTest(false);
     render(<TargetsPage />);
@@ -553,6 +558,32 @@ describe('TargetsPage — progressive reveal (#573)', () => {
       // Draining the reveal timers grows the visible set to the full catalogue.
       await drainRevealTimers();
       expect(screen.getByText('350 targets')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #919: search must find a target that exists in the full catalogue but
+  // hasn't been revealed yet by the progressive-reveal loader — bypassing the
+  // reveal cap for search, the same carve-out "My Targets" already gets.
+  it('#919 search finds a target beyond the revealed prefix during the reveal window', async () => {
+    vi.useFakeTimers();
+    try {
+      mockListTargets.mockResolvedValue(ok(ngcItems(350)));
+      render(<TargetsPage />);
+      await flushLoad();
+
+      // Confirm the reveal cap is still in effect (row 349 not yet revealed).
+      expect(screen.getByText('300 targets')).toBeInTheDocument();
+      expect(screen.queryByText('NGC 7349')).not.toBeInTheDocument();
+
+      // NGC 7349 is index 349 — past REVEAL_CHUNK (300) — but search must
+      // still find it immediately, not wait for reveal to catch up.
+      const search = screen.getByPlaceholderText('Search targets...');
+      fireEvent.change(search, { target: { value: 'NGC 7349' } });
+      await flushLoad();
+
+      expect(screen.getByText('NGC 7349')).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
