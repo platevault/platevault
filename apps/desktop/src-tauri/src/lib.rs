@@ -785,17 +785,29 @@ fn build_native_menu(app: &tauri::App<tauri::Wry>) -> tauri::Result<tauri::menu:
 pub fn build_app() -> tauri::App {
     let builder = specta_builder();
 
-    #[allow(unused_mut)]
-    let mut tb = tauri::Builder::default()
-        // Spec 051 US1: single-instance guard MUST be the first plugin
-        // registered so a redirected second launch is intercepted during
-        // `.build()` below — before any other plugin/state/window setup, and
-        // therefore before `main()` ever reaches `Database::connect`/
-        // `db.migrate()` (FR-003: the second launch performs no database
-        // migration, seed, or write of its own).
-        .plugin({
-            let mut single_instance =
-                tauri_plugin_single_instance::Builder::new().callback(|app, argv, cwd| {
+    let mut tb = tauri::Builder::default();
+
+    // Spec 051 US1: the single-instance guard MUST be the first plugin
+    // registered so a redirected second launch is intercepted during
+    // `.build()` — before any other plugin/state/window setup, and therefore
+    // before `main()` ever reaches `Database::connect` / `db.migrate()`
+    // (FR-003: the second launch performs no migration, seed, or write).
+    //
+    // E2E escape hatch (crates/e2e-tests): the harness sets
+    // `ALM_E2E_INSTANCE_ID` (unique per test process) and launches several
+    // `desktop_shell` instances concurrently (`test-threads > 1`). The plugin
+    // enforces ONE well-known identity derived from the app identifier, and a
+    // per-instance override exists only on Linux (`dbus_id`) — NOT on Windows
+    // (named mutex) or macOS. So concurrent instances collide and the loser is
+    // silently redirected/exited without ever opening a window, timing out the
+    // WebDriver session (observed on the Windows shard). No journey exercises
+    // single-instance behaviour, so when the var is set we skip the plugin
+    // entirely on every platform. Unset (real users, non-e2e builds), the
+    // guard is registered unchanged.
+    if std::env::var_os("ALM_E2E_INSTANCE_ID").is_none() {
+        tb = tb.plugin(
+            tauri_plugin_single_instance::Builder::new()
+                .callback(|app, argv, cwd| {
                     tracing::info!(
                         ?argv,
                         %cwd,
@@ -817,25 +829,12 @@ pub fn build_app() -> tauri::App {
                     } else {
                         tracing::warn!("single-instance redirect: no `main` window found to focus");
                     }
-                });
-            // E2E-only escape hatch (crates/e2e-tests): on Linux, the plugin
-            // registers a single well-known D-Bus name derived from the app
-            // identifier, so two concurrently-launched `desktop_shell`
-            // processes collide and the loser is silently redirected/exited
-            // without ever opening a window — breaking `test-threads > 1`.
-            // The harness sets `ALM_E2E_INSTANCE_ID` to a value unique per
-            // test process (see `spawn_tauri_webdriver`); when present, give
-            // each instance its own D-Bus name so they no longer contend.
-            // Unset (the default for real users and non-e2e builds), this is
-            // a no-op — `dbus_id` stays `None` and the plugin falls back to
-            // its normal `app.config().identifier`-derived name, preserving
-            // single-instance enforcement byte-for-byte.
-            if let Ok(instance_id) = std::env::var("ALM_E2E_INSTANCE_ID") {
-                single_instance = single_instance
-                    .dbus_id(format!("dev.astro-plan.astro-library-manager.e2e{instance_id}"));
-            }
-            single_instance.build()
-        })
+                })
+                .build(),
+        );
+    }
+
+    tb = tb
         // Spec 051 US4 (T027): window-state persistence. Registered right
         // after single-instance so a redirected second launch (which never
         // creates a window of its own) never touches this plugin's store

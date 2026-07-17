@@ -1617,12 +1617,15 @@ fn spawn_tauri_webdriver(env: &InstanceEnv) -> Result<(Child, ProcLog)> {
         .env("TAURI_WEBDRIVER_PORT", env.native_port.to_string())
         .env("ALM_DB_URL", format!("sqlite://{}?mode=rwc", env.db_path.display()))
         // `env.native_port` is already unique per test process (see
-        // `pick_port_pair`), so it doubles as a cheap per-instance ID here —
-        // read by `apps/desktop/src-tauri/src/lib.rs` to give each
-        // concurrently-launched `desktop_shell` its own D-Bus well-known
-        // name (see that file's single-instance plugin registration).
-        // Without this, two instances collide on the same fixed name and
-        // the loser is silently redirected/exited without opening a window.
+        // `pick_port_pair`), so it doubles as a cheap per-instance marker.
+        // Its mere presence tells `apps/desktop/src-tauri/src/lib.rs` to skip
+        // the single-instance plugin entirely (see that file's plugin
+        // registration): the plugin enforces one identifier-derived identity
+        // with a per-instance override only on Linux, so concurrently-launched
+        // `desktop_shell` instances otherwise collide and the loser is
+        // silently redirected/exited without opening a window (WebDriver then
+        // times out). Real users/non-e2e builds never set this, so the guard
+        // stays active for them.
         .env("ALM_E2E_INSTANCE_ID", env.native_port.to_string())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
