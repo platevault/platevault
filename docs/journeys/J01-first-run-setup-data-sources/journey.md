@@ -1,13 +1,13 @@
 ---
 id: J01
 title: Register data source folders and keep them current
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
 surfaces: [setup, data-sources]
 interfaces: [desktop-ui]
-trace: [docs/product/journeys/J01-first-run-setup-data-sources/journey.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-jval-docdrift.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t123.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t125.md, docs/development/journey-run-2026-07-14.md, PR-440, PR-686, PR-404, PR-405, PR-826, issue-647, spec-030 FR-130-FR-134, PR #872, PR #893, PR #894]
+trace: [docs/product/journeys/J01-first-run-setup-data-sources/journey.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-jval-docdrift.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t123.md, docs/product/journeys/J01-first-run-setup-data-sources/deltas/2026-07-14-q15-t125.md, docs/development/journey-run-2026-07-14.md, PR-440, PR-686, PR-404, PR-405, PR-826, issue-647, spec-030 FR-130-FR-134, PR #872, PR #893, PR #894, PR #908, PR #907, PR #903, PR #901, PR #904, PR #911]
 ---
 
 ## Goal
@@ -53,21 +53,31 @@ produces both a visible answer-back and a durable audit record.
   outputs, Inbox — add zero or more folders via the native OS picker,
   choosing **organized** or **unorganized** for each (Inbox has no such
   choice; it is unorganized by definition).
+- **Expect:** Required categories (Light frames, Project outputs) are listed
+  before optional ones (Calibration, Inbox), grouped under explicit
+  "Required"/"Optional" headings. Every category carries a keyboard- and
+  screen-reader-accessible tooltip explaining what it is for, including that
+  Project folders are created later in a guided step. There is no
+  scan-depth (Recursive/Single level) control on a source row — every scan
+  is recursive; the Confirm summary (S6) always reads "Recursive" for scan
+  depth accordingly.
 - **Expect:** Light frames AND Project outputs are required categories — the
   wizard blocks progress past this step while either is empty; Calibration
   and Inbox stay optional. At add time, an empty path, a path already
-  registered under the same category, and a path already registered under a
-  different category are each rejected inline with a distinct reason.
+  registered under the same category, a path already registered under a
+  different category, and a path that is a parent or subfolder of an
+  already-added path (in the working buffer, not yet the backend) are each
+  rejected inline with a distinct, accessible error.
 - **Expect:** A path that doesn't exist, isn't a directory, or isn't
   readable is accepted into the working buffer at add time (there is no
   client-side check for these) and is only rejected when actually
   registered — batched at S6 (Confirm), where a failing entry surfaces as
   part of a batch-failure message rather than an inline per-row error at add
-  time. The same applies to a path that overlaps an already-registered root
-  — is its parent or a subfolder of it, across categories, or of another
-  candidate in the same batch: accepted into the buffer at add time, then
-  rejected at S6 registration with a distinct `path.overlaps_existing`
-  reason, never silently allowed to register both.
+  time. A path that overlaps a root already registered from a *previous*
+  session/restart (not visible in this buffer) follows the same deferred
+  path: accepted into the buffer at add time, then rejected at S6
+  registration with a distinct `path.overlaps_existing` reason, never
+  silently allowed to register both.
 - **Expect (negative):** Nothing is registered with the backend at this
   point — this is a working buffer the user can still edit; no source
   registration call fires until S6 (Confirm). An exact-duplicate path is
@@ -78,12 +88,28 @@ produces both a visible answer-back and a durable audit record.
   `crates/app/core/src/first_run.rs` `check_path`/`check_duplicate`
   (existence, directory, permission, duplicate checks — backend-only);
   `check_overlap` (PR #893, fixes #501 — parent/nested-root rejection,
-  exact-duplicate escalated from a bypassable `Warning` to `Blocking`).
+  exact-duplicate escalated from a bypassable `Warning` to `Blocking`; PR
+  #911 case-folds this comparison on Windows so a case-variant of an
+  already-registered root, e.g. `C:\Foo` vs `c:\foo`, is caught too — Unix
+  stays case-sensitive). PR #908 fixes #496/#497/#502/#714 (required-first
+  ordering, category tooltips, add-time buffer overlap/duplicate
+  validation).
 
 ### S3 — Point at a processing tool (Step: Processing Tools) {#S3}
-- **Do:** Select PixInsight/WBPP (or another supported tool), or skip.
+- **Do:** Select PixInsight/WBPP (or another supported tool), browse to its
+  executable, or skip.
 - **Expect:** The step accepts skip or default with no error and carries the
-  choice (or its absence) into S6's summary.
+  choice (or its absence) into S6's summary. The executable picker offers
+  only executable-typed files (no "All files" filter). A picked path that
+  isn't a plausible executable is rejected inline with an error (a
+  best-effort extension check; a no-extension path is treated as plausibly
+  valid, matching Linux-style binaries); status shows as one of Not
+  detected / Detected / Invalid.
+- **Expect (negative):** An invalid tool-path pick does not itself block
+  Continue at the wizard level — only the in-step status/error changes.
+- **Trace:** `apps/desktop/src/features/setup/steps/StepTools.tsx`. PR #907
+  fixes #511 (reject a non-executable pick, e.g. `.zip`) and #510
+  (consolidated status pill, icon-only redetect control).
 
 ### S4 — Configure basic settings (Step: Configuration) {#S4}
 - **Do:** Confirm or adjust basic configuration — including the default
@@ -110,9 +136,14 @@ produces both a visible answer-back and a durable audit record.
 - **Do:** Use the map picker or manual entry to set Name / Latitude /
   Longitude / Elevation / Timezone.
 - **Expect:** The step can be left entirely blank; Continue is not blocked
-  while any of Name, Latitude, or Longitude is empty. Once all three are
+  while Latitude and Longitude are both empty. As soon as coordinates are
+  entered, Name becomes required — Continue blocks on a blank Name the same
+  way it blocks on an out-of-range coordinate, matching the equivalent
+  Settings → Target Planner site editor. Once Name and both coordinates are
   filled, Continue blocks until Latitude is in [-90, 90], Longitude is in
   [-180, 180], and Elevation (if given) parses as a number.
+- **Expect (negative):** Valid coordinates are never silently dropped on
+  Finish for lack of a Name — Continue itself refuses to advance instead.
 - **Expect:** Values entered here carry into S6's summary and, on Finish
   (S8), are saved as both the default and the active observing site with a
   fixed astronomical-twilight/0°-horizon default (changeable later in
@@ -122,15 +153,17 @@ produces both a visible answer-back and a durable audit record.
   `apps/desktop/src/features/setup/steps/StepSite.tsx`
   (`siteStepHasSite`, `siteStepError`);
   `apps/desktop/src/features/setup/SetupWizard.tsx` (`canProceed` for the
-  Site step).
+  Site step). PR #903 fixes #516 (Name required once coordinates are
+  entered).
 
 ### S6 — Confirm sources (Step: Confirm) {#S6}
 - **Do:** Review the summary of every category added across S2–S5, then
   proceed.
-- **Expect:** The summary states, per folder, category, organization state,
-  and scan depth; it also lists enabled processing tools with their
-  configured path and a "what happens next" note. Proceeding here is what
-  actually registers every source with the backend and starts scanning.
+- **Expect:** The summary states, per folder, category, **organized or
+  unorganized** state, and scan depth (always "Recursive" — see S2); it
+  also lists enabled processing tools with their configured path and a
+  "what happens next" note. Proceeding here is what actually registers
+  every source with the backend and starts scanning.
 - **Expect:** If any folder fails to register for a genuine reason (invalid
   path, overlap, permission), the wizard shows a batch-failure message and
   does not advance to Scan. A row that "fails" only because it is an
@@ -142,7 +175,8 @@ produces both a visible answer-back and a durable audit record.
 - **Trace:** `apps/desktop/src/features/setup/steps/StepConfirm.tsx`;
   `apps/desktop/src/features/setup/SetupWizard.tsx` `handleEnterScan`;
   `apps/desktop/src/features/setup/sources-store.ts` `flushToDB`
-  (`alreadyRegistered` flag, PR #893 fixes #704).
+  (`alreadyRegistered` flag, PR #893 fixes #704). PR #901 fixes #515
+  (organization state was previously omitted from the summary).
 
 ### S7 — Scan registered folders (Step: Scan) {#S7}
 - **Do:** Wait for every registered folder to scan.
@@ -150,13 +184,19 @@ produces both a visible answer-back and a durable audit record.
   a terminal state, including "0 items" for an empty folder. A folder that
   was already registered before this run (S6's benign-no-op case) is skipped
   here rather than scanned again under a synthetic root id — it was already
-  ingested under its real, existing root.
+  ingested under its real, existing root. Per-source "Detected types" and
+  the file-count chip account for unclassified (no/unmapped IMAGETYP) files
+  and calibration masters, so the shown breakdown always reconciles with the
+  folder's total file count instead of silently under-counting. An expanded
+  folder table's root row shows "(root)" in the Folder/File cell, never a
+  blank cell.
 - **Expect (negative):** Finish never enables while any source is still
   scanning.
 - **Trace:** `apps/desktop/src/features/setup/steps/StepScan.tsx` (PR #893
   fixes #704 — scanning an already-registered row via the path-as-rootId
   fallback previously failed the `registered_sources` join and orphaned
-  inbox items).
+  inbox items). PR #904 fixes #513 (unreconciled counts, hidden
+  unclassified/masters, blank root row).
 
 ### S8 — Finish setup {#S8}
 - **Do:** Click Finish.
@@ -197,13 +237,18 @@ produces both a visible answer-back and a durable audit record.
   no file on disk moves at any point, regardless of outcome. Applying an
   unverified remap is refused server-side (not merely UI-disabled) with a
   `remap.not_verified` error and a `refused` audit row — a scripted or
-  replayed Apply call cannot bypass the gate through the UI alone.
+  replayed Apply call cannot bypass the gate through the UI alone. The
+  server independently recomputes the verification result rather than
+  trusting a caller-supplied `verified` flag, so a stale preview or a
+  direct IPC call also cannot bypass the gate.
 - **Trace:** issue-647, spec-030 FR-130-FR-134, PR-826;
   `apps/desktop/src/features/settings/RemapRootDialog.tsx`. PR #893 fixes
   #560 (`relative_paths_for_root` replaces the old 5-row
   `sample_relative_paths`) and #707 (`apply_root_remap` now enforces the
   verified flag at the IPC boundary,
-  `crates/app/core/src/first_run.rs`).
+  `crates/app/core/src/first_run.rs`); PR #911 closes the remaining gap by
+  having `apply_root_remap` recompute verification itself
+  (`compute_remap_verification`) instead of trusting the caller's claim.
 
 ### S11 — Disable / re-enable a data source {#S11}
 - **Do:** Click Disable on a source card, confirm; click Enable on the same
@@ -291,3 +336,24 @@ produces both a visible answer-back and a durable audit record.
   for online sources too (previously withheld from a card entirely while
   its source was online).
   Evidence: PR #894 (fixes #559, #562) · by: journey-scribe (intent-gated)
+
+- **Δ5** 2026-07-17 · S2, S3, S5, S6, S7, S10 · behavior-change
+  Source Folders: required categories now list before optional ones under
+  explicit headings, every category has a help tooltip, adding a folder
+  checks it against everything already in the working buffer (not just
+  against previously-registered roots) and rejects duplicates/overlaps
+  inline, and the scan-depth control is gone (every scan was already
+  recursive). Processing Tools: the executable picker rejects a
+  non-executable pick inline instead of showing a false "OK". Observing
+  Site: Name is now required as soon as coordinates are entered — previously
+  valid coordinates could be silently dropped on Finish. Confirm: the
+  summary now states each folder's organized/unorganized state, not just
+  scan depth. Scan: per-source detected-type counts reconcile with the total
+  file count (unclassified files and masters no longer disappear from the
+  breakdown) and an expanded root row reads "(root)" instead of blank.
+  Remap: the overlap check case-folds on Windows, and Apply independently
+  re-verifies server-side instead of trusting a caller-supplied flag.
+  Evidence: PR #908 (fixes #496, #497, #502, #509, #714), PR #907 (fixes
+  #511, #510), PR #903 (fixes #516), PR #901 (fixes #515), PR #904 (fixes
+  #513), PR #911 (carried nJ01a review nits, no matching issues) · by:
+  journey-scribe (intent-gated)
