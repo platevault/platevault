@@ -1519,10 +1519,33 @@
   gap: var(--alm-sp-2);
 }
 
+/* Redetect icon button — compact square, no text label */
+.alm-step-tools__redetect-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--alm-sp-1);
+}
+
+/* Spin the retry glyph while a redetect request is in flight */
+.alm-step-tools__redetect-icon--spinning {
+  animation: alm-spin 1s linear infinite;
+}
+
 /* "No installation found" feedback text */
 .alm-step-tools__not-found {
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
+}
+
+/* Executable path picker block (row + optional inline validation error) */
+.alm-step-tools__path-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--alm-sp-1);
+  padding: var(--alm-sp-2) var(--alm-sp-3);
+  border-top: 1px solid var(--alm-border-subtle);
+  background: var(--alm-surface-raised);
 }
 
 /* Executable path picker row (shown when tool is enabled) */
@@ -1530,9 +1553,6 @@
   display: flex;
   align-items: center;
   gap: var(--alm-sp-2);
-  padding: var(--alm-sp-2) var(--alm-sp-3);
-  border-top: 1px solid var(--alm-border-subtle);
-  background: var(--alm-surface-raised);
 }
 
 /* "EXECUTABLE" label */

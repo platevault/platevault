@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { useEffect, useState } from 'react';
+import { RotateCw } from 'lucide-react';
 import { Btn } from '@/ui/Btn';
 import { Pill } from '@/ui/Pill';
 import { Toggle } from '@/ui/Toggle';
@@ -47,6 +48,25 @@ const TOOL_DEFS: ToolDef[] = [
     description: () => m.setup_tools_siril_desc(),
   },
 ];
+
+/** Extensions recognized as executables across Windows/macOS/Linux (#511). */
+const EXECUTABLE_EXTENSIONS = new Set(['exe', 'app', 'bin', 'sh', 'appimage']);
+
+/**
+ * Best-effort, no-exec heuristic for "is this path an executable" (#511
+ * decision: detect/require an executable only, never spawn to verify
+ * identity). A path with no extension is treated as plausibly valid --
+ * that's the common case for Linux binaries (e.g. `siril`), which native
+ * pickers can't filter by executable bit. Anything with a recognized
+ * non-executable extension (e.g. the reported `.zip`) is rejected.
+ */
+function looksExecutable(path: string): boolean {
+  const base = path.split(/[\\/]/).pop() ?? path;
+  const dot = base.lastIndexOf('.');
+  if (dot <= 0) return true; // no extension, or a dotfile -- Linux-typical
+  const ext = base.slice(dot + 1).toLowerCase();
+  return EXECUTABLE_EXTENSIONS.has(ext);
+}
 
 /**
  * Step 2 -- Processing Tools.
@@ -164,7 +184,10 @@ function ToolCard({
   onPathChange: (path: string | null) => void;
   onRedetect: () => Promise<boolean>;
 }) {
-  const detected = Boolean(config.path);
+  // One status pill per tool (#510): "Detected" only when a path is set AND
+  // passes the executable heuristic; a set-but-invalid path (#511) reads as
+  // "Invalid" rather than a false-positive "Detected"/"OK".
+  const pathValid = config.path !== null && looksExecutable(config.path);
   const [redetecting, setRedetecting] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
@@ -178,15 +201,17 @@ function ToolCard({
 
   return (
     <div className="alm-step-tools__card" data-testid={`tool-card-${def.key}`}>
-      {/* Header row: name + detected pill + description + enable toggle */}
+      {/* Header row: name + status pill + description + enable toggle */}
       <div className="alm-step-tools__header">
         <div className="alm-step-tools__tool-info">
           <div className="alm-step-tools__name-row">
             <span className="alm-step-tools__tool-name">{def.name()}</span>
-            {detected ? (
+            {config.path === null ? (
+              <Pill variant="neutral">{m.setup_tools_not_detected()}</Pill>
+            ) : pathValid ? (
               <Pill variant="ok">{m.setup_tools_detected()}</Pill>
             ) : (
-              <Pill variant="neutral">{m.setup_tools_not_detected()}</Pill>
+              <Pill variant="danger">{m.setup_tools_invalid()}</Pill>
             )}
           </div>
           <span className="alm-step-tools__tool-desc">{def.description()}</span>
@@ -195,13 +220,24 @@ function ToolCard({
           <div className="alm-step-tools__actions">
             <Btn
               variant="ghost"
+              size="sm"
               onClick={handleRedetect}
               disabled={redetecting}
               aria-label={m.setup_tools_redetect_binary_aria({
                 name: def.name(),
               })}
+              title={m.setup_tools_redetect()}
+              className="alm-step-tools__redetect-btn"
             >
-              {redetecting ? m.common_detecting() : m.setup_tools_redetect()}
+              <RotateCw
+                size={14}
+                aria-hidden="true"
+                className={
+                  redetecting
+                    ? 'alm-step-tools__redetect-icon--spinning'
+                    : undefined
+                }
+              />
             </Btn>
             <Toggle
               checked={config.enabled}
@@ -219,12 +255,19 @@ function ToolCard({
 
       {/* Executable path picker, only when enabled */}
       {config.enabled && (
-        <div className="alm-step-tools__path-row">
-          <ToolPathPicker
-            toolName={def.name()}
-            path={config.path}
-            onPathChange={onPathChange}
-          />
+        <div className="alm-step-tools__path-block">
+          <div className="alm-step-tools__path-row">
+            <ToolPathPicker
+              toolName={def.name()}
+              path={config.path}
+              onPathChange={onPathChange}
+            />
+          </div>
+          {config.path !== null && !pathValid && (
+            <span className="alm-field-error">
+              {m.setup_tools_invalid_executable()}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -245,12 +288,15 @@ function ToolPathPicker({
   const handleChoose = async () => {
     // The processing tool's executable is a file (e.g. PixInsight.exe /
     // pixinsight / Siril), not a directory — pick the binary, not a folder.
+    // No "All files" filter (#511): the native dialog enforces the
+    // executable-only filter on Windows/macOS. Linux binaries are usually
+    // extension-less and native dialogs there can't filter by executable
+    // bit, so `looksExecutable` is the real safety net for that platform.
     const result = await pick([
       {
         name: m.setup_tools_executable_label(),
         extensions: ['exe', 'app', 'bin'],
       },
-      { name: m.setup_tools_filter_all_files(), extensions: ['*'] },
     ]);
     if (result.path) {
       onPathChange(result.path);
@@ -271,7 +317,6 @@ function ToolPathPicker({
       >
         {path ?? m.setup_tools_no_path()}
       </span>
-      {path && <Pill variant="ok">{m.setup_tools_ok()}</Pill>}
       <Btn
         size="sm"
         onClick={handleChoose}
