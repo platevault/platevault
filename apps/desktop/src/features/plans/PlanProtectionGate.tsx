@@ -108,7 +108,7 @@ export function PlanProtectionGate({
     );
   }
 
-  if (!checkResult || !checkResult.hasProtectedItems) {
+  if (!checkResult?.hasProtectedItems) {
     const { normalCount, unprotectedCount } =
       checkResult?.nonBlockingSummary ?? {
         normalCount: 0,

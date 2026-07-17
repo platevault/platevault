@@ -67,7 +67,7 @@ export function SortHeader({
   return (
     <button
       type="button"
-      className={'alm-sorth' + (active ? ' alm-sorth--active' : '')}
+      className={`alm-sorth${active ? ' alm-sorth--active' : ''}`}
       onClick={onClick}
       aria-label={ariaLabel}
       title={title}

@@ -1309,6 +1309,20 @@
   flex: 1;
 }
 
+/* ── Required/Optional section heading above a run of group cards (#496) ── */
+.alm-step-sources__section-heading {
+  font-size: var(--alm-text-2xs);
+  font-weight: var(--alm-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--alm-text-muted);
+  margin-top: var(--alm-sp-1);
+}
+
+.alm-step-sources__section-heading:first-child {
+  margin-top: 0;
+}
+
 /* ── Source row ── */
 .alm-step-sources__row {
   padding: var(--alm-sp-1) var(--alm-sp-2);
@@ -1338,9 +1352,8 @@
   white-space: nowrap;
 }
 
-/* ── Selects (org-state + scan-depth) ── */
-.alm-step-sources__org-select,
-.alm-step-sources__depth-select {
+/* ── Org-state select ── */
+.alm-step-sources__org-select {
   font-size: var(--alm-text-2xs);
   background: var(--alm-surface);
   color: var(--alm-text);
@@ -1350,8 +1363,7 @@
   transition: border-color var(--alm-transition-fast);
 }
 
-.alm-step-sources__org-select:focus,
-.alm-step-sources__depth-select:focus {
+.alm-step-sources__org-select:focus {
   outline: none;
   border-color: var(--alm-accent);
 }

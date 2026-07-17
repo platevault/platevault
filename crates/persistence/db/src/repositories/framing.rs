@@ -142,7 +142,7 @@ pub async fn list_framings_by_project(
 }
 
 /// List every framing sharing an exact `optic_train_key`, across all projects
-/// (F-Framing-5's attribution optic-train prefilter, migration 0067's index).
+/// (F-Framing-5's attribution optic-train prefilter, migration 0068's index).
 /// Callers apply pointing/rotation tolerance math and the project-level
 /// target/mosaic checks in Rust — this is the coarse, cheap SQL-level cut.
 ///

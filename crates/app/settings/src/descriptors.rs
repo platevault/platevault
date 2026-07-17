@@ -571,6 +571,81 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
         },
         default: |s| Value::String(s.theme),
     },
+    // ── Framing clustering tunables (spec 008 Q27 F-Framing-11, R11a) ────
+    // Not overridable (a single project-wide clustering algorithm, no
+    // per-source concept) and not noisy (a rare, deliberate tuning change
+    // worth its own audit entry, same treatment as `usableAltitudeDeg`).
+    // Bounds below are generous sanity limits (not R11a-specified) that
+    // keep the tolerance math from degenerating (e.g. zero/negative
+    // tolerance, an absurdly large envelope).
+    Descriptor {
+        key: "framingPointingFractionOfFov",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::NumberRangeInclusive {
+            lo: 0.01,
+            hi: 2.0,
+            msg: "must be a number",
+            want_msg: "must be in [0.01, 2.0]",
+        },
+        apply: |v, s| {
+            if let Some(n) = v.as_f64() {
+                s.framing_pointing_fraction_of_fov = n;
+            }
+        },
+        default: |s| serde_json::json!(s.framing_pointing_fraction_of_fov),
+    },
+    Descriptor {
+        key: "framingPointingFallbackDeg",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::NumberRangeInclusive {
+            lo: 0.01,
+            hi: 10.0,
+            msg: "must be a number",
+            want_msg: "must be in [0.01, 10.0]",
+        },
+        apply: |v, s| {
+            if let Some(n) = v.as_f64() {
+                s.framing_pointing_fallback_deg = n;
+            }
+        },
+        default: |s| serde_json::json!(s.framing_pointing_fallback_deg),
+    },
+    Descriptor {
+        key: "framingRotationToleranceDeg",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::NumberRangeInclusive {
+            lo: 0.1,
+            hi: 45.0,
+            msg: "must be a number",
+            want_msg: "must be in [0.1, 45.0]",
+        },
+        apply: |v, s| {
+            if let Some(n) = v.as_f64() {
+                s.framing_rotation_tolerance_deg = n;
+            }
+        },
+        default: |s| serde_json::json!(s.framing_rotation_tolerance_deg),
+    },
+    Descriptor {
+        key: "framingMosaicEnvelopeFractionOfFov",
+        noisy: false,
+        overridable: false,
+        validation: ValidationRule::NumberRangeInclusive {
+            lo: 0.1,
+            hi: 5.0,
+            msg: "must be a number",
+            want_msg: "must be in [0.1, 5.0]",
+        },
+        apply: |v, s| {
+            if let Some(n) = v.as_f64() {
+                s.framing_mosaic_envelope_fraction_of_fov = n;
+            }
+        },
+        default: |s| serde_json::json!(s.framing_mosaic_envelope_fraction_of_fov),
+    },
 ];
 
 /// Look up the descriptor for a stable key, if any.

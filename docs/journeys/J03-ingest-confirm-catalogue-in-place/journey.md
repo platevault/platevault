@@ -1,7 +1,7 @@
 ---
 id: J03
 title: Catalogue an already-organized folder without moving files
-version: 1
+version: 2
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -10,6 +10,12 @@ interfaces: [desktop-ui]
 trace:
   - pre-migration journey.md @ git 42c596d68b621a46e54e647fdb7c48716fdb68c1
   - docs/product/journeys/J03-ingest-confirm-catalogue-in-place/deltas/2026-07-14-jval-docdrift.md
+  - PR #898 (framing-attribution backend applies identically on
+    catalogue-in-place confirms)
+  - docs/product/journeys/J03-ingest-confirm-catalogue-in-place/deltas/2026-07-14-q27-f5.md,
+    2026-07-14-q27-f10.md (legacy pre-merge drafts; superseded by S2 below
+    — no Inbox UI surface shipped)
+  - docs/development/windows-journeys/journey-11-framing-clustering-attribution.md
 ---
 
 ## Goal
@@ -63,6 +69,18 @@ hashes on disk are byte-for-byte unchanged from before confirm.
   nothing to pick, since the files are staying where they are.
 - **Trace:** crates/app/inbox/src/confirm.rs:293-303 (OrganizationState::
   Organized routes every file to the `catalogue` action).
+- **Expect (negative — backend-only capability):** For a light-frame item,
+  the same server-side attribution pass described in J02/S5 runs here too
+  — ranked framing/project candidates are computed identically regardless
+  of organized-vs-unorganized routing (the pass runs before the
+  catalogue/move branch decides the plan action), and a `chosenAttribution`
+  pick persists membership at confirm time with zero filesystem I/O. No
+  Inbox UI surfaces this for catalogue-mode confirms any more than it does
+  for move-mode ones. Tracked as issue #943.
+- **Trace:** crates/app/inbox/src/confirm.rs (attribution pass runs before
+  the `is_light_item`-gated catalogue/move dispatch, so it is
+  organization-state-agnostic); see J02/S5's trace for the UI-absence
+  evidence. Issue: #943.
 
 ### S3 — Review the plan {#S3}
 - **Do:** The user opens the plan review overlay ("Review plans (N)"), the
@@ -126,4 +144,9 @@ provably closed — dropped rather than carried forward.
 
 ## Delta log
 
-(none — consolidated at last_reviewed)
+- **Δ2** 2026-07-17 · S2 · behavior-change
+  Confirm's backend attribution pass (framing/project matching,
+  `chosenAttribution` apply-path) now runs identically on organized-root
+  (catalogue-mode) confirms as on move-mode confirms — but no Inbox UI
+  surfaces it either way yet.
+  Evidence: PR #898 · by: journey-scribe (intent-gated)

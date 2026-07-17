@@ -412,7 +412,7 @@ pub async fn set_approved(
 }
 
 /// Set the attribution pick's target framing on a plan (spec 008 Q27,
-/// F-Framing-10, migration 0067). Read back at plan-apply completion
+/// F-Framing-10, migration 0068). Read back at plan-apply completion
 /// (`app_core_targets::ingest_sessions`) once the plan's light frames are
 /// folded into a real `acquisition_session` — that is the earliest point a
 /// session id exists to add as a framing member.

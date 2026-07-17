@@ -219,157 +219,153 @@ export function AuditLog() {
   const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 
   return (
-    <>
-      <SettingsSection
-        title={m.settings_auditlog_title()}
-        action={
+    <SettingsSection
+      title={m.settings_auditlog_title()}
+      action={
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={() => void handleExport()}
+          disabled={exporting || loading}
+          aria-label={m.settings_auditlog_export_aria()}
+        >
+          {m.settings_auditlog_export()}
+        </Btn>
+      }
+    >
+      <div className="alm-audit-log__filters">
+        <input
+          type="text"
+          className="alm-input alm-audit-log__search"
+          placeholder={m.settings_auditlog_search_placeholder()}
+          value={searchInput}
+          onChange={(e) => {
+            setSearchInput(e.target.value);
+            applySearch(e.target.value);
+          }}
+          aria-label={m.settings_auditlog_search_aria()}
+        />
+        <label className="alm-audit-log__date-label" htmlFor={dateFromId}>
+          {m.settings_auditlog_date_from()}
+          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
+          <input
+            id={dateFromId}
+            type="date"
+            className="alm-input alm-audit-log__date-input"
+            value={dateFrom}
+            onChange={(e) => {
+              setDateFrom(e.target.value);
+              setPage(0);
+            }}
+          />
+        </label>
+        <label className="alm-audit-log__date-label" htmlFor={dateToId}>
+          {m.settings_auditlog_date_to()}
+          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
+          <input
+            id={dateToId}
+            type="date"
+            className="alm-input alm-audit-log__date-input"
+            value={dateTo}
+            onChange={(e) => {
+              setDateTo(e.target.value);
+              setPage(0);
+            }}
+          />
+        </label>
+      </div>
+
+      {exportError && (
+        <div className="alm-audit-log__export-error" role="alert">
+          {m.settings_auditlog_export_failed({ error: exportError })}
+        </div>
+      )}
+
+      {loading && (
+        <div className="alm-audit-log__status">{m.common_loading()}</div>
+      )}
+
+      {loadError && (
+        <div className="alm-audit-log__load-error">
+          {m.settings_auditlog_load_error({ error: loadError })}
+        </div>
+      )}
+
+      {!loading && !loadError && (
+        <Table
+          columns={[
+            {
+              key: 'timestamp',
+              label: m.settings_auditlog_col_timestamp(),
+              style: { width: 150 },
+            },
+            { key: 'event', label: m.settings_auditlog_col_event() },
+            { key: 'entity', label: m.settings_auditlog_col_entity() },
+            {
+              key: 'outcome',
+              label: m.settings_auditlog_col_outcome(),
+              style: { width: 90 },
+            },
+            {
+              key: 'actor',
+              label: m.settings_auditlog_col_actor(),
+              style: { width: 72 },
+            },
+          ]}
+          rows={entries.map((e) => ({
+            timestamp: (
+              <code className="alm-mono alm-audit-log__ts">
+                {formatDateTime(e.timestamp)}
+              </code>
+            ),
+            event: <span className="alm-audit-log__event">{e.eventType}</span>,
+            entity: (
+              <span className="alm-audit-log__entity" title={detailText(e)}>
+                {e.entityType} · {e.entityId}
+              </span>
+            ),
+            outcome: (
+              <Pill variant={outcomeVariant(e.outcome)}>
+                {outcomeLabel(e.outcome)}
+              </Pill>
+            ),
+            actor: <span className="alm-audit-log__actor">{e.actor}</span>,
+          }))}
+        />
+      )}
+
+      {!loading && !loadError && entries.length === 0 && (
+        <p className="alm-audit-log__empty">{m.settings_auditlog_empty()}</p>
+      )}
+
+      {/* Pagination */}
+      <div className="alm-audit-log__pagination">
+        <span className="alm-audit-log__page-count">
+          {m.settings_auditlog_event_count({ count: total })} &middot;{' '}
+          {m.settings_auditlog_page_of({
+            current: page + 1,
+            total: totalPages,
+          })}
+        </span>
+        <div className="alm-audit-log__page-btns">
           <Btn
             size="sm"
             variant="ghost"
-            onClick={() => void handleExport()}
-            disabled={exporting || loading}
-            aria-label={m.settings_auditlog_export_aria()}
+            onClick={() => setPage(Math.max(0, page - 1))}
+            disabled={page === 0}
           >
-            {m.settings_auditlog_export()}
+            {m.settings_auditlog_previous()}
           </Btn>
-        }
-      >
-        <div className="alm-audit-log__filters">
-          <input
-            type="text"
-            className="alm-input alm-audit-log__search"
-            placeholder={m.settings_auditlog_search_placeholder()}
-            value={searchInput}
-            onChange={(e) => {
-              setSearchInput(e.target.value);
-              applySearch(e.target.value);
-            }}
-            aria-label={m.settings_auditlog_search_aria()}
-          />
-          <label className="alm-audit-log__date-label" htmlFor={dateFromId}>
-            {m.settings_auditlog_date_from()}
-            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
-            <input
-              id={dateFromId}
-              type="date"
-              className="alm-input alm-audit-log__date-input"
-              value={dateFrom}
-              onChange={(e) => {
-                setDateFrom(e.target.value);
-                setPage(0);
-              }}
-            />
-          </label>
-          <label className="alm-audit-log__date-label" htmlFor={dateToId}>
-            {m.settings_auditlog_date_to()}
-            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- labelled by the wrapping <label> (htmlFor + id + visible text); rule misses the wrapping-label association */}
-            <input
-              id={dateToId}
-              type="date"
-              className="alm-input alm-audit-log__date-input"
-              value={dateTo}
-              onChange={(e) => {
-                setDateTo(e.target.value);
-                setPage(0);
-              }}
-            />
-          </label>
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+            disabled={page >= totalPages - 1}
+          >
+            {m.settings_auditlog_next()}
+          </Btn>
         </div>
-
-        {exportError && (
-          <div className="alm-audit-log__export-error" role="alert">
-            {m.settings_auditlog_export_failed({ error: exportError })}
-          </div>
-        )}
-
-        {loading && (
-          <div className="alm-audit-log__status">{m.common_loading()}</div>
-        )}
-
-        {loadError && (
-          <div className="alm-audit-log__load-error">
-            {m.settings_auditlog_load_error({ error: loadError })}
-          </div>
-        )}
-
-        {!loading && !loadError && (
-          <Table
-            columns={[
-              {
-                key: 'timestamp',
-                label: m.settings_auditlog_col_timestamp(),
-                style: { width: 150 },
-              },
-              { key: 'event', label: m.settings_auditlog_col_event() },
-              { key: 'entity', label: m.settings_auditlog_col_entity() },
-              {
-                key: 'outcome',
-                label: m.settings_auditlog_col_outcome(),
-                style: { width: 90 },
-              },
-              {
-                key: 'actor',
-                label: m.settings_auditlog_col_actor(),
-                style: { width: 72 },
-              },
-            ]}
-            rows={entries.map((e) => ({
-              timestamp: (
-                <code className="alm-mono alm-audit-log__ts">
-                  {formatDateTime(e.timestamp)}
-                </code>
-              ),
-              event: (
-                <span className="alm-audit-log__event">{e.eventType}</span>
-              ),
-              entity: (
-                <span className="alm-audit-log__entity" title={detailText(e)}>
-                  {e.entityType} · {e.entityId}
-                </span>
-              ),
-              outcome: (
-                <Pill variant={outcomeVariant(e.outcome)}>
-                  {outcomeLabel(e.outcome)}
-                </Pill>
-              ),
-              actor: <span className="alm-audit-log__actor">{e.actor}</span>,
-            }))}
-          />
-        )}
-
-        {!loading && !loadError && entries.length === 0 && (
-          <p className="alm-audit-log__empty">{m.settings_auditlog_empty()}</p>
-        )}
-
-        {/* Pagination */}
-        <div className="alm-audit-log__pagination">
-          <span className="alm-audit-log__page-count">
-            {m.settings_auditlog_event_count({ count: total })} &middot;{' '}
-            {m.settings_auditlog_page_of({
-              current: page + 1,
-              total: totalPages,
-            })}
-          </span>
-          <div className="alm-audit-log__page-btns">
-            <Btn
-              size="sm"
-              variant="ghost"
-              onClick={() => setPage(Math.max(0, page - 1))}
-              disabled={page === 0}
-            >
-              {m.settings_auditlog_previous()}
-            </Btn>
-            <Btn
-              size="sm"
-              variant="ghost"
-              onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
-              disabled={page >= totalPages - 1}
-            >
-              {m.settings_auditlog_next()}
-            </Btn>
-          </div>
-        </div>
-      </SettingsSection>
-    </>
+      </div>
+    </SettingsSection>
   );
 }

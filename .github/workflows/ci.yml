@@ -182,12 +182,15 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # --- Fast checks first (FR-012) ---
-      # Frontend ESLint gate. Includes the spec-046 `alm/no-user-string` rule,
-      # which fails the build on any hardcoded user-facing string (SC-001/SC-002).
-      # Without this step the i18n catalog gate has no teeth in CI.
-      - name: Frontend ESLint (i18n catalog gate)
+      # Frontend lint gate: Biome (format check + syntactic rules) first, then
+      # the slimmed ESLint layer Biome cannot replicate — the spec-046
+      # `alm/no-user-string` i18n rule (fails the build on any hardcoded
+      # user-facing string, SC-001/SC-002), type-aware typescript-eslint,
+      # react-hooks, jsx-a11y, and the inline-style ban — then the design-token
+      # guard (check-tokens.sh).
+      - name: Frontend lint (Biome + ESLint gates + tokens)
         if: needs.changes.outputs.frontend == 'true'
-        run: pnpm --filter @astro-plan/desktop run lint:eslint
+        run: pnpm --filter @astro-plan/desktop run lint
 
       # Formatting is OS-agnostic; running it on all 3 legs is pure redundancy.
       - name: Rust format

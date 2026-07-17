@@ -1440,6 +1440,10 @@ mod tests {
     #[case("calibrationFlatOverridePenalty", true)]
     #[case("calibrationBiasOverridePenalty", true)]
     #[case("theme", true)]
+    #[case("framingPointingFractionOfFov", true)]
+    #[case("framingPointingFallbackDeg", true)]
+    #[case("framingRotationToleranceDeg", true)]
+    #[case("framingMosaicEnvelopeFractionOfFov", true)]
     #[case("tools.pixinsight.bundle_id", true)]
     #[case("tools.pixinsight.executable_path", true)]
     #[case("tools.siril.enabled", true)]
@@ -1521,6 +1525,12 @@ mod tests {
     #[case("theme", serde_json::json!("observatory-dark"))]
     #[case("theme", serde_json::json!("espresso-dark"))]
     #[case("theme", serde_json::json!("system"))]
+    #[case("framingPointingFractionOfFov", serde_json::json!(0.10))]
+    #[case("framingPointingFractionOfFov", serde_json::json!(0.01))]
+    #[case("framingPointingFractionOfFov", serde_json::json!(2.0))]
+    #[case("framingPointingFallbackDeg", serde_json::json!(0.2))]
+    #[case("framingRotationToleranceDeg", serde_json::json!(3.0))]
+    #[case("framingMosaicEnvelopeFractionOfFov", serde_json::json!(1.0))]
     fn validate_value_accepts(#[case] key: &str, #[case] value: Value) {
         assert!(validate_value(key, &value).is_ok(), "expected {key}={value} to be accepted");
     }
@@ -1573,6 +1583,12 @@ mod tests {
     #[case("cleanupTypeOverrides", serde_json::json!({"1": 5}))] // action not a string
     #[case("theme", serde_json::json!("neon"))] // not an allowed variant
     #[case("theme", serde_json::json!(5))] // not a string
+    #[case("framingPointingFractionOfFov", serde_json::json!(0.0))] // below [0.01, 2.0]
+    #[case("framingPointingFractionOfFov", serde_json::json!(2.1))] // above range
+    #[case("framingPointingFractionOfFov", serde_json::json!("x"))] // not a number
+    #[case("framingPointingFallbackDeg", serde_json::json!(0.0))] // below [0.01, 10.0]
+    #[case("framingRotationToleranceDeg", serde_json::json!(0.0))] // below [0.1, 45.0]
+    #[case("framingMosaicEnvelopeFractionOfFov", serde_json::json!(0.0))] // below [0.1, 5.0]
     fn validate_value_rejects(#[case] key: &str, #[case] value: Value) {
         let err = validate_value(key, &value).expect_err("expected rejection");
         assert_eq!(err.code, ErrorCode::ValueInvalid, "key {key} value {value}");
@@ -1706,6 +1722,68 @@ mod tests {
         )
         .await
         .expect_err("out-of-range threshold rejected");
+        assert_eq!(err.code, ErrorCode::ValueInvalid);
+    }
+
+    // ── Framing clustering tunables (spec 008 Q27 F-Framing-11, R11a) ──────
+
+    #[tokio::test]
+    async fn framing_tolerances_round_trip_through_db() {
+        let (db, bus) = setup().await;
+
+        // R11a shipped defaults.
+        assert_eq!(
+            resolve_setting(db.pool(), "framingPointingFractionOfFov", None).await.unwrap(),
+            json!(0.10)
+        );
+        assert_eq!(
+            resolve_setting(db.pool(), "framingPointingFallbackDeg", None).await.unwrap(),
+            json!(0.2)
+        );
+        assert_eq!(
+            resolve_setting(db.pool(), "framingRotationToleranceDeg", None).await.unwrap(),
+            json!(3.0)
+        );
+        assert_eq!(
+            resolve_setting(db.pool(), "framingMosaicEnvelopeFractionOfFov", None).await.unwrap(),
+            json!(1.0)
+        );
+
+        for (key, value) in [
+            ("framingPointingFractionOfFov", json!(0.25)),
+            ("framingPointingFallbackDeg", json!(0.5)),
+            ("framingRotationToleranceDeg", json!(5.0)),
+            ("framingMosaicEnvelopeFractionOfFov", json!(1.5)),
+        ] {
+            update_setting(
+                db.pool(),
+                &bus,
+                &SettingsUpdateRequest { key: key.to_owned(), value: value.into() },
+            )
+            .await
+            .expect("update ok");
+        }
+
+        let resp = get_settings(db.pool(), &bus).await.unwrap();
+        assert!((resp.settings.framing_pointing_fraction_of_fov - 0.25).abs() < f64::EPSILON);
+        assert!((resp.settings.framing_pointing_fallback_deg - 0.5).abs() < f64::EPSILON);
+        assert!((resp.settings.framing_rotation_tolerance_deg - 5.0).abs() < f64::EPSILON);
+        assert!((resp.settings.framing_mosaic_envelope_fraction_of_fov - 1.5).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn framing_tolerances_reject_out_of_range_values() {
+        let (db, bus) = setup().await;
+        let err = update_setting(
+            db.pool(),
+            &bus,
+            &SettingsUpdateRequest {
+                key: "framingRotationToleranceDeg".to_owned(),
+                value: json!(90).into(),
+            },
+        )
+        .await
+        .expect_err("out-of-range rotation tolerance rejected");
         assert_eq!(err.code, ErrorCode::ValueInvalid);
     }
 
