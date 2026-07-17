@@ -377,25 +377,101 @@ async fn inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm() -> anyhow
     // The generic bulk-property editor (issue #755/R-13, `genericBulkFields`
     // in `InboxDetail.tsx`) is exactly how a real user fills this gap.
     //
-    // Both controls are CONTROLLED React inputs on a pane that re-renders as
-    // its classification/metadata queries land, and `handleBulkApply`
-    // silently no-ops when the selection set is empty or no frame type is
-    // chosen (`InboxDetail.tsx`) — so verify each interaction actually
-    // committed to the DOM before clicking Apply, retrying through render
-    // churn until it does.
-    app.click_testid("reclassify-select-all").await?;
-    app.select_testid("bulk-frame-type", "light").await?;
-    app.fill_testid("bulk-exposure-s", "300").await?;
-    app.click_testid("bulk-apply-btn").await?;
+    // Both controls are CONTROLLED React inputs on a pane that InboxPage
+    // REMOUNTS whenever the selected item's id changes (`key={inboxItemId}`)
+    // — and the id DOES change right after the first classify (the
+    // placeholder row is purged and replaced by the materialized needs-review
+    // sub-item, `materialize_sub_items`). A remount mid-sequence resets the
+    // pane's selection + bulk state and unmounts the fieldset, so any single
+    // step can 404 or silently lose its committed value. Run the WHOLE
+    // select-all → frame-type → exposure sequence, re-verify every value is
+    // still committed, and only then click Apply — retrying the whole block
+    // through render churn until it sticks.
+    let bulk_deadline = tokio::time::Instant::now() + UI_TIMEOUT;
+    loop {
+        let attempt = async {
+            // A remount resets the checkbox to unchecked; only click when it
+            // is actually unchecked so a retry never toggles the selection off.
+            if !app.find_testid("reclassify-select-all").await?.is_selected().await? {
+                app.click_testid("reclassify-select-all").await?;
+            }
+            app.select_testid("bulk-frame-type", "light").await?;
+            app.fill_testid("bulk-exposure-s", "300").await?;
+
+            // Re-verify all three inputs still hold their values — proof no
+            // remount wiped the pane's state between the steps above.
+            anyhow::ensure!(
+                app.find_testid("reclassify-select-all").await?.is_selected().await?,
+                "select-all checkbox lost its checked state (pane remounted mid-sequence)"
+            );
+            let ft = app.find_testid("bulk-frame-type").await?.prop("value").await?;
+            anyhow::ensure!(
+                ft.as_deref() == Some("light"),
+                "bulk-frame-type lost its value (got {ft:?}; pane remounted mid-sequence)"
+            );
+            let exp = app.find_testid("bulk-exposure-s").await?.prop("value").await?;
+            anyhow::ensure!(
+                exp.as_deref() == Some("300"),
+                "bulk-exposure-s lost its value (got {exp:?}; pane remounted mid-sequence)"
+            );
+
+            app.click_testid("bulk-apply-btn").await
+        };
+        match attempt.await {
+            Ok(()) => break,
+            Err(e) if tokio::time::Instant::now() >= bulk_deadline => {
+                return Err(e.context(
+                    "bulk-reclassify sequence never committed within UI_TIMEOUT \
+                     (select-all → frame-type → exposure → apply)",
+                ));
+            }
+            Err(_) => tokio::time::sleep(Duration::from_millis(300)).await,
+        }
+    }
 
     // The store invalidates the classify query cache on success (`store.ts`);
     // Confirm re-enabling is the real, observable proof the override landed
     // and reclassified the file to `single_type`.
-    app.wait_testid_enabled("inbox-confirm-btn", UI_TIMEOUT).await.map_err(|e| {
-        anyhow::anyhow!(
+    if let Err(e) = app.wait_testid_enabled("inbox-confirm-btn", UI_TIMEOUT).await {
+        // Diagnosability: a still-disabled Confirm has several distinct causes
+        // (stale-id apply error in a banner, selection lost, alert still up,
+        // handoff never navigated) — dump the observable page state so a CI
+        // log alone identifies which gate stayed closed.
+        let dump: serde_json::Value = app
+            .driver
+            .execute(
+                r#"
+                var items = Array.from(document.querySelectorAll('[data-testid^="inbox-item-"]'))
+                    .map(function(el){ return el.getAttribute('data-testid'); });
+                var banners = Array.from(document.querySelectorAll('.alm-banner, [class*="banner"], [role="alert"]'))
+                    .map(function(el){ return el.textContent.slice(0, 300); });
+                var fieldset = document.querySelector('.alm-inbox-detail__bulk-controls');
+                var sel = document.querySelector('[data-testid="bulk-frame-type"]');
+                var exp = document.querySelector('[data-testid="bulk-exposure-s"]');
+                var alert = document.querySelector('[data-testid="inbox-unclassified-alert"]');
+                var confirmBtn = document.querySelector('[data-testid="inbox-confirm-btn"]');
+                return JSON.stringify({
+                    items: items,
+                    banners: banners,
+                    bulkFieldsetPresent: !!fieldset,
+                    frameTypeValue: sel ? sel.value : null,
+                    exposureValue: exp ? exp.value : null,
+                    unclassifiedAlertPresent: !!alert,
+                    confirmDisabled: confirmBtn ? confirmBtn.disabled : null,
+                });
+                "#,
+                vec![],
+            )
+            .await
+            .ok()
+            .and_then(|r| r.convert::<String>().ok())
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or(serde_json::Value::Null);
+        eprintln!("DEBUG DUMP on confirm-never-enabled: {dump:#}");
+        return Err(anyhow::anyhow!(
             "expected bulk reclassify to unblock Confirm (single_type, no missing attrs): {e}"
-        )
-    })?;
+        ));
+    }
     anyhow::ensure!(
         !app.testid_exists("inbox-unclassified-alert").await?,
         "expected the 'frame types required' banner to clear after reclassify"

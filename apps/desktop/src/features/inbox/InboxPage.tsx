@@ -1030,6 +1030,10 @@ export function InboxPage() {
               selectedRootId={selectedDestRootId}
               onSelectRoot={setSelectedDestRootId}
               onReclassified={handleReclassified}
+              // Stable reclassify scope: sub-item ids are purged/recreated by
+              // re-splits; the source-group id survives them (see
+              // useInboxReclassifyV2 in InboxDetail).
+              sourceGroupId={selectedItem.sourceGroupId}
             />
           ) : undefined
         }

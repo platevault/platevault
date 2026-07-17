@@ -232,6 +232,41 @@ describe('InboxDetail — T027/T028/#755: multi-select bulk reclassify (v2)', ()
     expect(byProperty.binning).toBeUndefined();
   });
 
+  // ── Test 1b: sourceGroupId prop scopes the request to the source group ────
+  //
+  // Sub-item ids are purged/recreated across re-splits (the first classify
+  // replaces the placeholder row), so a request scoped to the mounted item id
+  // can hit `inbox.item.not_found` mid-churn. When the caller provides the
+  // stable sourceGroupId, the request must be scoped to IT and the volatile
+  // item id must be withheld (Layer-2 journey regression:
+  // `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`).
+
+  it('scopes reclassifyV2 to sourceGroupId (not the volatile item id) when provided', async () => {
+    render(
+      <InboxDetail
+        item={sampleItem as unknown as ItemProp}
+        rootAbsolutePath="/astro/inbox"
+        classification={twoFileClassification as unknown as ClassProp}
+        sourceGroupId="sg-stable-001"
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('reclassify-select-0'));
+    fireEvent.change(screen.getByTestId('bulk-frame-type'), {
+      target: { value: 'dark' },
+    });
+    fireEvent.click(screen.getByTestId('bulk-apply-btn'));
+
+    await waitFor(() => expect(mockInboxReclassifyV2).toHaveBeenCalledTimes(1));
+
+    const callArg = mockInboxReclassifyV2.mock.calls[0][0] as {
+      sourceGroupId?: string;
+      inboxItemId?: string;
+    };
+    expect(callArg.sourceGroupId).toBe('sg-stable-001');
+    expect(callArg.inboxItemId).toBeUndefined();
+  });
+
   // ── Test 2: no selection → bulk apply button absent ──────────────────────
 
   it('does not render the bulk apply button when no files are selected', () => {

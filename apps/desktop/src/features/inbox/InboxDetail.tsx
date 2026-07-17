@@ -59,8 +59,23 @@ interface ReclassifyV2Args {
   bulk?: Array<{ property: string; value: unknown; filePaths?: string[] }>;
 }
 
-/** Returns a `reclassify_v2` callback + loading state, scoped to one inbox item. */
-function useInboxReclassifyV2(inboxItemId: string) {
+/**
+ * Returns a `reclassify_v2` callback + loading state, scoped to one inbox item.
+ *
+ * Scoped to the STABLE `sourceGroupId` when the item carries one: sub-item ids
+ * are volatile across re-splits — the first `inbox.classify` of a folder
+ * materializes single-type sub-items and PURGES the superseded placeholder row
+ * (`materialize_sub_items`), so the id the pane mounted with can already be
+ * deleted by the time the user clicks Apply. Sending that stale id fails the
+ * whole apply with `inbox.item.not_found` (observed as the CI-red Layer-2
+ * journey `inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm`); the
+ * source-group id survives every re-split. `inboxItemId` remains the fallback
+ * for legacy rows that predate source groups.
+ */
+function useInboxReclassifyV2(
+  inboxItemId: string,
+  sourceGroupId?: string | null,
+) {
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
 
@@ -71,7 +86,9 @@ function useInboxReclassifyV2(inboxItemId: string) {
         const result = unwrap(
           await commands.inboxReclassifyV2(
             ipcArgs<typeof commands.inboxReclassifyV2>({
-              inboxItemId,
+              // Exactly ONE scope key: the stable source group when known,
+              // else the item id (legacy rows predating source groups).
+              ...(sourceGroupId ? { sourceGroupId } : { inboxItemId }),
               overrides: args.overrides ?? [],
               bulk: args.bulk ?? [],
             }),
@@ -93,7 +110,7 @@ function useInboxReclassifyV2(inboxItemId: string) {
         setLoading(false);
       }
     },
-    [inboxItemId, queryClient],
+    [inboxItemId, sourceGroupId, queryClient],
   );
 
   return { reclassifyV2, loading };
@@ -290,6 +307,13 @@ export interface InboxDetailProps {
    * refetched list contains it; this component does not track selection.
    */
   onReclassified?: (response: InboxReclassifyV2Response) => void;
+  /**
+   * Stable `inbox_source_groups` id for this item's folder, when known.
+   * Preferred over `item.inboxItemId` for `inbox.reclassify_v2` because
+   * sub-item ids are purged/recreated across re-splits (see
+   * `useInboxReclassifyV2`); `null`/absent falls back to the item id.
+   */
+  sourceGroupId?: string | null;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -306,9 +330,11 @@ export function InboxDetail({
   selectedRootId,
   onSelectRoot,
   onReclassified,
+  sourceGroupId,
 }: InboxDetailProps) {
   const { reclassifyV2, loading: reclassifyLoading } = useInboxReclassifyV2(
     item.inboxItemId,
+    sourceGroupId,
   );
 
   // Per-file overrides pending submission (single-file flow).
