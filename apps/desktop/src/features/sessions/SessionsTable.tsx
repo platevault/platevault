@@ -40,6 +40,9 @@ import {
   type DimensionAccessor,
 } from '@/lib/grouping';
 import { useCollapsibleGroups } from '@/lib/use-grouping';
+import { sessionDisplayName } from './displayName';
+import { integrationSeconds, integrationLabel } from './integration';
+import { connectivityLabel, connectivityVariant } from './connectivity';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
@@ -110,7 +113,10 @@ function compareSessions(
       cmp = a.frames - b.frames;
       break;
     case 'exposure':
-      cmp = compareStr(a.exposure, b.exposure);
+      // Sorts the "Integration" column by TOTAL integration time (#798),
+      // matching what the column now displays — not the raw per-frame
+      // exposure string.
+      cmp = (integrationSeconds(a) ?? 0) - (integrationSeconds(b) ?? 0);
       break;
     case 'night':
       cmp = compareStr(a.capturedOn, b.capturedOn);
@@ -202,6 +208,13 @@ export function SessionsTable({
 }: Props) {
   const { collapsed, toggle } = useCollapsibleGroups();
 
+  // Backing-source connectivity per session (#889) — a session's row-level
+  // health is its owning source's state, looked up by `sourceId`.
+  const sourceStateById = useMemo(
+    () => new Map(sources.map((src) => [src.id, src.state])),
+    [sources],
+  );
+
   // Flatten all sessions across sources, then sort.
   const allSessions = useMemo<InventorySession[]>(() => {
     const flat: InventorySession[] = [];
@@ -285,6 +298,8 @@ export function SessionsTable({
         const s = row.item;
         const indentPx = grouped ? tableIndent(row.depth) : 0;
         const projects = s.linked?.projects ?? [];
+        const sourceState = sourceStateById.get(s.sourceId);
+        const connLabel = sourceState ? connectivityLabel(sourceState) : null;
         return {
           _testid: `sessions-row-${s.id}`,
           _rowClassName:
@@ -295,12 +310,20 @@ export function SessionsTable({
           _indent: indentPx || undefined,
           target: (
             <span className="alm-sessions-cell--target">
-              {s.target ?? s.name}
+              {sessionDisplayName(s)}
+              {connLabel && sourceState && (
+                <Pill
+                  variant={connectivityVariant(sourceState)}
+                  data-testid={`sessions-row-connectivity-${s.id}`}
+                >
+                  {connLabel}
+                </Pill>
+              )}
             </span>
           ),
           filter: s.filter ?? '—',
           frames: s.frames,
-          integration: s.exposure ?? '—',
+          integration: integrationLabel(s) ?? '—',
           night: s.capturedOn ?? '—',
           camera: s.camera ?? '—',
           projects:
@@ -317,7 +340,7 @@ export function SessionsTable({
             ),
         };
       }),
-    [visualRows, selected, onSelect, toggle, grouped],
+    [visualRows, grouped, sourceStateById, selected, toggle, onSelect],
   );
 
   // Inbox-parity: grouping-state hint footer under the table when grouped.

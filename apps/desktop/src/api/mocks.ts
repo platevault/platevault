@@ -2073,13 +2073,37 @@ export async function mockInvoke(
       const { INVENTORY_LIST_RESPONSE } = await import(
         '@/data/fixtures/inventory'
       );
-      const req = (_args as { req?: { filters?: unknown } } | undefined)?.req;
-      return {
-        ...INVENTORY_LIST_RESPONSE,
-        requestId: req?.filters
-          ? INVENTORY_LIST_RESPONSE.requestId
-          : INVENTORY_LIST_RESPONSE.requestId,
-      };
+      const req = (
+        _args as
+          | {
+              req?: {
+                filters?: {
+                  sourceFilter?: string;
+                  frameFilter?: 'light' | 'dark' | 'flat' | 'bias';
+                };
+              };
+            }
+          | undefined
+      )?.req;
+      const filters = req?.filters;
+      // #652: mirror the real backend's `filters_to_db` scoping (source_id +
+      // frame_type) so mock-mode e2e coverage of the Sessions Type filter
+      // (defaults to Light) matches production behavior instead of always
+      // returning the unfiltered fixture.
+      const sources = filters
+        ? INVENTORY_LIST_RESPONSE.sources
+            .filter(
+              (src) => !filters.sourceFilter || src.id === filters.sourceFilter,
+            )
+            .map((src) => ({
+              ...src,
+              sessions: filters.frameFilter
+                ? src.sessions.filter((s) => s.type === filters.frameFilter)
+                : src.sessions,
+            }))
+            .filter((src) => src.sessions.length > 0)
+        : INVENTORY_LIST_RESPONSE.sources;
+      return { ...INVENTORY_LIST_RESPONSE, sources };
     }
 
     // ── Developer diagnostics (spec 021) ─────────────────────────────────────

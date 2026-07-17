@@ -13,8 +13,15 @@
  *
  * Toolbar (spec 043 §4): search + Group-by control (Target / Filter / Night /
  * Camera / Month). Consistent with every list page, the table is FLAT by
- * default (a single sorted list) and grouping is opt-in. The legacy
- * frame-type filter was removed — sessions are light frames.
+ * default (a single sorted list) and grouping is opt-in.
+ *
+ * #652: the ledger also carries calibration (dark/flat/bias) frame groups
+ * alongside light (acquisition) sessions, but the sidebar/status-bar "N
+ * sessions" chrome counts acquisition-only (`d.library.sessions`,
+ * `count_acquisition_sessions`). The Type field defaults to Light so the
+ * table's row count matches that chrome by default; switching it surfaces
+ * calibration sessions too, with the mismatch then self-explained by the
+ * selected Type.
  *
  * Spec 041 FR-051 (T076, Phase 13): sessions are derived, already-confirmed
  * inventory. The review-state filter (`reviewFilter`) and the contextual
@@ -44,7 +51,8 @@ import { useInventorySources, type InventoryFilters } from './store';
 import { addToast } from '@/shared/toast';
 import { m } from '@/lib/i18n';
 import { revealInventoryPath, resolveRevealPath } from './revealInventory';
-import type { InventorySource } from '@/bindings/index';
+import { isSourceActionable } from './connectivity';
+import type { InventoryFrameType, InventorySource } from '@/bindings/index';
 
 /**
  * Client-side text search + field filters across the visible session fields
@@ -106,6 +114,11 @@ export function SessionsPage() {
   // Inbox-parity field filters ('' = all): optical filter + camera.
   const [filterName, setFilterName] = useState('');
   const [cameraFilter, setCameraFilter] = useState('');
+  // Type field ('' = all); defaults to 'light' (acquisition) so the table's
+  // row count matches the acquisition-only sidebar/status-bar count (#652).
+  const [kindFilter, setKindFilter] = useState<InventoryFrameType | ''>(
+    'light',
+  );
 
   const { dims, setSlot } = useGrouping({
     storageKey: 'sessions.grouping.dims.v1',
@@ -122,6 +135,7 @@ export function SessionsPage() {
   const filters: InventoryFilters = {};
   if (sourceFilter && sourceFilter !== 'all')
     filters.sourceFilter = sourceFilter;
+  if (kindFilter) filters.frameFilter = kindFilter;
 
   const { data: response, loading, error } = useInventorySources(filters);
 
@@ -151,20 +165,26 @@ export function SessionsPage() {
   const selectedSession =
     selected != null ? allSessions.find((s) => s.id === selected) : undefined;
 
-  // Resolve the selected session's owning source root for the Reveal action
-  // (FR-007) — sessions carry only `sourceId`; the root path lives on the
-  // source. The reveal target then joins the root with the session's own frame
-  // folder (`relativePath`, #567) so it opens that session's folder rather than
-  // the shared library root; it falls back to the root when relativePath is null.
-  const selectedSourceRoot =
-    selectedSession != null
-      ? response?.sources.find((src) => src.id === selectedSession.sourceId)
-          ?.path
-      : undefined;
-  const revealTarget =
-    selectedSession != null && selectedSourceRoot != null
-      ? resolveRevealPath(selectedSourceRoot, selectedSession.relativePath)
-      : undefined;
+  // Resolve the selected session's owning source for the Reveal action
+  // (FR-007) and connectivity chip (#889) — sessions carry only `sourceId`;
+  // the root path + connectivity state live on the source. The reveal target
+  // then joins the root with the session's own frame folder (`relativePath`,
+  // #567) so it opens that session's folder rather than the shared library
+  // root; it falls back to the root when relativePath is null.
+  const selectedSource = useMemo(
+    () =>
+      selectedSession != null
+        ? response?.sources.find((src) => src.id === selectedSession.sourceId)
+        : undefined,
+    [selectedSession, response?.sources],
+  );
+  const revealTarget = useMemo(
+    () =>
+      selectedSession != null && selectedSource != null
+        ? resolveRevealPath(selectedSource.path, selectedSession.relativePath)
+        : undefined,
+    [selectedSession, selectedSource],
+  );
 
   // Clear stale selection when the session disappears after a filter change.
   const clearSelection = useCallback(
@@ -205,7 +225,13 @@ export function SessionsPage() {
     }
   }, [selected, revealTarget]);
 
-  const revealVisible = revealTarget != null;
+  // #889: file-touching actions are gated on the backing source being
+  // actively connected — a session on a missing/disabled/reconnect-required
+  // root no longer offers Reveal (the connectivity chip in the header
+  // explains why).
+  const revealVisible =
+    revealTarget != null &&
+    (selectedSource == null || isSourceActionable(selectedSource.state));
 
   // Top-bar convention (task #80): NO title + NO summary (the left nav names
   // the page; the count/metadata lives in the bottom status bar) and NO sort
@@ -224,6 +250,19 @@ export function SessionsPage() {
             ariaLabel: m.sessions_search_aria(),
           }}
           fields={[
+            {
+              key: 'kind',
+              label: m.sessions_kind_filter_label(),
+              value: kindFilter,
+              options: [
+                { value: 'light', label: m.sessions_kind_light_label() },
+                { value: 'dark', label: m.inbox_kind_dark() },
+                { value: 'flat', label: m.inbox_kind_flat() },
+                { value: 'bias', label: m.inbox_kind_bias() },
+              ],
+              allLabel: m.common_all(),
+              onChange: (v) => setKindFilter(v as InventoryFrameType | ''),
+            },
             {
               key: 'filter',
               label: m.common_filter(),
@@ -260,7 +299,10 @@ export function SessionsPage() {
             session={selectedSession}
             onReveal={() => void handleReveal()}
             revealVisible={revealVisible}
-            onOpenProject={() => navigate({ to: '/projects' })}
+            sourceState={selectedSource?.state}
+            onOpenProject={(id) =>
+              navigate({ to: '/projects', search: { selected: id } })
+            }
           />
         ) : undefined
       }

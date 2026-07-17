@@ -21,6 +21,7 @@
 
 import type {
   InventorySession,
+  InventorySourceState,
   SessionCalibrationMatch,
 } from '@/bindings/index';
 import {
@@ -30,11 +31,15 @@ import {
   type PropertyDef,
 } from '@/components';
 import { EmptyState, Btn, Section, Pill } from '@/ui';
+import { TwoColDetailLayout } from '@/components';
 import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
 import { SessionFrameInventory } from './SessionFrameInventory';
 import { SessionNotesSection } from './SessionNotesSection';
 import { RawFrameCleanupSection } from './RawFrameCleanupSection';
+import { sessionDisplayName } from './displayName';
+import { integrationLabel } from './integration';
+import { connectivityLabel, connectivityVariant } from './connectivity';
 
 /** Read-only calibration-linkage list (#772). Renders an explicit
  * "no calibration match" state when a light session has no assignment yet
@@ -91,6 +96,10 @@ interface Props {
   revealVisible?: boolean;
   /** Open a linked project — wired by the page to navigation. */
   onOpenProject?: (projectId: string) => void;
+  /** The session's owning source connectivity state (#889); `undefined` when
+   * unknown (e.g. loading). A non-`active` state renders a chip explaining
+   * why file-touching actions (Reveal) are unavailable. */
+  sourceState?: InventorySourceState;
 }
 
 /** Equipment context subtitle: camera · gain · sensor temp · binning. */
@@ -103,23 +112,6 @@ function equipmentSubtitle(session: InventorySession): string {
   return parts.join(' · ');
 }
 
-/** Derive total integration seconds from frames × per-frame exposure. */
-function integrationSeconds(session: InventorySession): number | null {
-  if (!session.exposure) return null;
-  const raw = session.exposure.replace(/s$/i, '');
-  const secs = parseFloat(raw);
-  if (!Number.isFinite(secs) || secs <= 0) return null;
-  return secs * session.frames;
-}
-
-function fmtSeconds(totalSec: number): string {
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function SessionDetail({
@@ -127,6 +119,7 @@ export function SessionDetail({
   onReveal,
   revealVisible = false,
   onOpenProject,
+  sourceState,
 }: Props) {
   if (!session) {
     return (
@@ -141,8 +134,8 @@ export function SessionDetail({
 
   const isLinked = (session.linked?.projects?.length ?? 0) > 0;
   const prov = session.provenance;
-  const totalSec = integrationSeconds(session);
-  const integrationLabel = totalSec != null ? fmtSeconds(totalSec) : null;
+  const integration = integrationLabel(session);
+  const connLabel = sourceState ? connectivityLabel(sourceState) : null;
 
   // Session facts as a clean tabular PropertyTable, spread across two columns.
   const factProps: PropertyDef[] = [
@@ -169,12 +162,12 @@ export function SessionDetail({
       value: session.exposure ?? null,
       source: 'fits',
     },
-    ...(integrationLabel != null
+    ...(integration != null
       ? [
           {
             key: 'integration',
             label: m.sessions_col_total_integration(),
-            value: integrationLabel,
+            value: integration,
           } as PropertyDef,
         ]
       : []),
@@ -233,6 +226,17 @@ export function SessionDetail({
   // share this row (Confirm/Re-open/Reject/Ignore) are removed.
   const actionButtons = (
     <span className="alm-session-detail2__actions">
+      {/* Backing-source connectivity (#889): a session on a missing/disabled/
+          reconnect-required root is not "healthy" — surface the reason
+          file-touching actions like Reveal are unavailable. */}
+      {connLabel && sourceState && (
+        <Pill
+          variant={connectivityVariant(sourceState)}
+          data-testid="session-detail-connectivity"
+        >
+          {connLabel}
+        </Pill>
+      )}
       {/* Platform-native label via the shared revealLabel() helper;
           the title keeps the descriptive what-it-does tooltip. */}
       {revealVisible && (
@@ -246,42 +250,41 @@ export function SessionDetail({
   return (
     <DetailPanel
       variant="sessions"
-      title={<strong>{session.target ?? session.name}</strong>}
+      title={<strong>{sessionDisplayName(session)}</strong>}
       titleExtra={actionButtons}
       subtitle={equipmentSubtitle(session) || undefined}
     >
-      {/* Left-packed columns: [props A] [props B] [linked projects]. */}
-      <div className="alm-session-detail2">
-        <div className="alm-session-detail2__col">
-          <PropertyTable mode="view" showSource properties={colA} />
-        </div>
-        <div className="alm-session-detail2__col">
-          <PropertyTable mode="view" showSource properties={colB} />
-        </div>
-        <div className="alm-session-detail2__linked">
-          <div className="alm-session-detail2__head">
-            {m.sessions_linked_projects_heading()}
-          </div>
-          {isLinked ? (
-            <div className="alm-session-detail2__linked-list">
-              {session.linked?.projects?.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="alm-session-detail2__link"
-                  onClick={() => onOpenProject?.(p.id)}
-                >
-                  {p.name}
-                </button>
-              ))}
+      {/* Left-packed columns: [props A] [props B] [linked projects] (#813:
+          shared TwoColDetailLayout instead of hand-copied divs). */}
+      <TwoColDetailLayout
+        colA={<PropertyTable mode="view" showSource properties={colA} />}
+        colB={<PropertyTable mode="view" showSource properties={colB} />}
+        linked={
+          <>
+            <div className="alm-session-detail2__head">
+              {m.sessions_linked_projects_heading()}
             </div>
-          ) : (
-            <span className="alm-session-detail2__muted">
-              {m.common_none()}
-            </span>
-          )}
-        </div>
-      </div>
+            {isLinked ? (
+              <div className="alm-session-detail2__linked-list">
+                {session.linked?.projects?.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="alm-session-detail2__link"
+                    onClick={() => onOpenProject?.(p.id)}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="alm-session-detail2__muted">
+                {m.common_none()}
+              </span>
+            )}
+          </>
+        }
+      />
 
       {/* Calibration linkage (#772): the session's assigned calibration
           masters, or an explicit "no calibration match" state. */}
