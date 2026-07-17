@@ -1,7 +1,7 @@
 ---
 id: J04
 title: Review acquisition sessions as a derived, always-current inventory
-version: 4
+version: 5
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -20,6 +20,8 @@ trace:
   - PR #415 (merged) · PR #849 (merged, Q16 missing-value rendering)
   - PR #891 (merged, fixes #772, #773, #568) · PR #899 (merged, fixes #564, #567)
   - PR #906 (merged, fixes #771)
+  - spec-054-adaptive-detail-dock (FR-001, FR-004, FR-005 — adaptive
+    side/bottom dock, resizable+persistent width, per-page pin)
 ---
 
 ## Goal
@@ -99,8 +101,13 @@ the view carries no leftover review-state controls.
   aspiration.
 
 ### S4 — Open a session's detail {#S4}
-- **Do:** Select a session row.
-- **Expect:** A detail panel opens showing the session's attribute set —
+- **Do:** Select a session row. Resize the window across the wide-window
+  threshold; separately, use the panel's per-page pin.
+- **Expect:** The session detail uses the adaptive dock: a full-height,
+  drag-resizable side panel on a wide window, a bottom dock when narrow.
+  The chosen side-dock width persists across an app restart, and a per-page
+  pin overrides the automatic width-based placement when set. A detail
+  panel opens showing the session's attribute set —
   target, filter, frame count, exposure, total integration time (when
   derivable), night, camera, gain, binning, sensor temperature, and
   confirmed-by — each carrying a source badge (FITS/User/Inferred/Default)
@@ -142,7 +149,8 @@ the view carries no leftover review-state controls.
   open detail on a document-level Escape keydown, deferring to any nested
   dialog's own Escape handling first. This fix is shared across every
   `ListPageLayout` consumer (Sessions/Calibration/Inbox/Projects), not
-  Sessions-specific.
+  Sessions-specific. spec-054/FR-001, FR-004, FR-005 (adaptive side/bottom
+  placement, resizable+persistent width, per-page pin).
 
 ### S5 — Follow a linked project from session detail {#S5}
 - **Do:** Click a linked project chip in session detail.
@@ -252,3 +260,10 @@ the view carries no leftover review-state controls.
   previously only the ✕ button worked; a nested dialog's own Escape
   handling still takes precedence.
   Evidence: PR #906 (fixes #771) · by: journey-scribe (intent-gated)
+
+- **Δ5** 2026-07-17 · S4 · behavior-change
+  Session detail now uses the adaptive dock: a full-height, drag-resizable
+  side panel on a wide window (width and a per-page pin both persist across
+  restarts), a bottom dock when narrow.
+  Evidence: spec-054-adaptive-detail-dock (FR-001, FR-004, FR-005) · by:
+  journey-scribe (intent-gated)

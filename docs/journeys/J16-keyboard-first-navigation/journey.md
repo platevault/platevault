@@ -1,7 +1,7 @@
 ---
 id: J16
 title: Drive PlateVault end to end without a pointer
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -28,6 +28,8 @@ trace:
   - e2e-agentic-test/043-ui-redesign-platevault/global-search-command-palette/scenario.md
   - e2e-agentic-test/043-ui-redesign-platevault/a11y-keyboard-and-aria-sort/scenario.md
   - PR #884 (merged, fixes #581)
+  - spec-054-adaptive-detail-dock (FR-012, FR-013 — placement-neutral
+    keyboard contract)
 ---
 
 ## Goal
@@ -98,20 +100,41 @@ operable, and observable using only the keyboard, from any page.
 - **Expect (negative):** Moving focus with the arrow keys alone does not
   perform the row's action — only Enter/Space activates it, so keyboard
   users can browse without triggering navigation by accident.
-- **Trace:** `apps/desktop/src/ui/Table.tsx`; Known gaps G2, G7.
+- **Expect:** This traversal model is identical regardless of the adopting
+  page's current detail-panel placement — side dock, bottom dock, or (Inbox
+  only) the permanent split — since row focus/traversal is owned by the
+  table, not by the detail panel (S4 covers what happens once a detail is
+  open).
+- **Trace:** `apps/desktop/src/ui/Table.tsx`; Known gaps G2, G7; spec-054/
+  FR-012, FR-013.
 
 ### S4 — Close a list page's detail panel by keyboard {#S4}
-- **Do:** With a row's detail panel open, press Escape.
-- **Expect:** By design, the detail panel closes and focus returns to the
-  list. Today Escape does nothing on any `ListPageLayout`-based list page
-  (Sessions, Calibration, Targets, Projects, Inbox, Archive) — the shared
-  layout wires its close handler only to the panel's ✕ button `onClick`,
-  with no keydown listener; only the ✕ closes the panel. Carried as Known
-  gap G3, not claimed as working.
+- **Do:** With a row's detail panel open, use ArrowUp/ArrowDown to change the
+  selected row, then press Escape.
+- **Expect:** Moving the arrow-key selection while a detail panel is open
+  moves the open detail to follow the new selection (it re-targets rather
+  than closing). Pressing Escape closes the panel and returns focus to the
+  list — `ListPageLayout` registers a document-level Escape keydown handler
+  shared by every consumer (Sessions, Calibration, Targets, Projects,
+  Archive; corrected from the earlier claim that only the ✕ button worked,
+  fixed by PR #906/#771 — see J04/S4, Δ4). This holds identically whether
+  the detail currently renders as a side dock or a bottom dock (spec-054
+  adaptive placement) — placement never changes the keyboard contract. In
+  the Inbox the split *shell* (the narrow list column) is permanent, but the
+  detail is shown only for a selected item, so Escape there clears the
+  current selection through the same shared handler (`onCloseDetail` →
+  `clearSelection`), emptying the detail pane back to its no-selection state
+  while the list column remains — the same "dismiss the open detail"
+  contract, expressed as clearing the selection rather than removing a dock.
 - **Expect (negative):** Escape never mutates the selected record or
   triggers any state transition — it only dismisses the panel (when
-  dismissal is available).
-- **Trace:** `apps/desktop/src/components/ListPageLayout.tsx`; Known gap G3.
+  dismissal is available). An open nested dialog (e.g. a Base UI `Dialog`)
+  that stops propagation on its own Escape handling closes first — the
+  page-level listener only fires once no such dialog consumes the key
+  first, so Escape dismisses an open overlay and leaves the underlying
+  detail panel open, never both at once.
+- **Trace:** `apps/desktop/src/components/ListPageLayout.tsx`; PR #906
+  (fixes #771); spec-054/FR-012, FR-013.
 
 ### S5 — Layout choices persist across restart {#S5}
 - **Do:** Collapse the sidebar and expand the Activity log panel, then
@@ -135,8 +158,12 @@ operable, and observable using only the keyboard, from any page.
   that opened the overlay after it closes — carried as Known gap G5, not
   claimed as working. Not every overlay in the app is built on the shared
   Modal; the exceptions in Known gap G8 do not reliably trap focus or
-  close on Escape.
-- **Trace:** `apps/desktop/src/components/Modal.tsx`; Known gaps G5, G8.
+  close on Escape. A list page's detail dock (side or bottom placement) and
+  the Inbox's permanent split are NOT built on Modal and carry no
+  overlay/modal semantics — they never trap Tab and Escape on them
+  dismisses whichever overlay is topmost (per S4), not the page behind it.
+- **Trace:** `apps/desktop/src/components/Modal.tsx`; Known gaps G5, G8;
+  spec-054/FR-012, FR-013.
 
 ## Success criteria
 
@@ -159,7 +186,8 @@ operable, and observable using only the keyboard, from any page.
 
 - G1: (dissolved 2026-07-15) — tracked as issue #747; Inbox has no keyboard shortcuts.
 - G2: (dissolved 2026-07-15) — tracked as issue #797; Sidebar nav links lack focus-visible.
-- G3: (dissolved 2026-07-15) — tracked as issue #771; list-page detail panels don't close on Escape.
+- G3: (dissolved 2026-07-15, resolved via PR #906) — tracked as issue #771;
+  list-page detail panels now close on Escape (see S4).
 - G4: (dissolved 2026-07-15) — tracked as issue #842; Activity log expand/collapse doesn't persist.
 - G5: (dissolved 2026-07-15) — tracked as issue #844; Modal doesn't return focus on close.
 - G6: (dissolved 2026-07-15; #581 resolved 2026-07-15 via PR #884, see S1)
@@ -177,3 +205,17 @@ operable, and observable using only the keyboard, from any page.
   previously left cmdk's keyboard/click handling unreachable. The 3 dead
   Pages-group routes are unaffected by this fix and remain open (#617).
   Evidence: PR #884 (fixes #581) · by: journey-scribe (intent-gated)
+
+- **Δ3** 2026-07-17 · S3, S4, S6 · behavior-change
+  The list-page detail panel now has adaptive placement (side dock on wide
+  windows, bottom dock when narrow) plus the Inbox's permanent split. Row
+  traversal, arrow-key-follow into an already-open detail, and Escape-close
+  are placement-neutral — identical behavior in side, bottom, and (traversal
+  only) the Inbox split. The side dock and Inbox split carry no overlay/
+  modal semantics (no focus trap); an open overlay's own Escape handling
+  takes precedence, leaving the panel open. Also folded a stale correction:
+  S4 previously described Escape as not closing the panel at all — G3 had
+  already dissolved (PR #906/#771, see J04/S4 Δ4) but S4's body text was
+  never updated to match.
+  Evidence: spec-054-adaptive-detail-dock (FR-012, FR-013) · by:
+  journey-scribe (intent-gated)

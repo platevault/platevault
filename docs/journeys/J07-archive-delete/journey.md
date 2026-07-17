@@ -1,7 +1,7 @@
 ---
 id: J07
 title: Archive a completed project, then trash or permanently delete it
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -18,6 +18,7 @@ trace:
   - docs/development/journey-run-2026-07-14.md (Journey 7 section — live-app validation, build 7e522c16)
   - PR #401, PR #415, PR #826, PR #849
   - issue #732 (send-to-trash / permanently-delete are audit-only stubs, open)
+  - spec-054-adaptive-detail-dock (FR-004 — shared adaptive dock)
 ---
 
 ## Goal
@@ -93,8 +94,12 @@ user typing the literal word `DELETE`.
   FR-135–FR-138.
 
 ### S5 — View archived project detail and its audit history {#S5}
-- **Do:** Select the archived row.
-- **Expect:** The detail pane header shows the project name (title), its
+- **Do:** Select the archived row. Resize the window across the
+  wide-window threshold.
+- **Expect:** The archive detail uses the same shared adaptive dock as
+  Sessions/Calibration/Projects/Targets: a full-height, drag-resizable side
+  panel on a wide window (width + per-page pin persist), a bottom dock when
+  narrow. The detail pane header shows the project name (title), its
   entity type (pill), and its original path (subtitle, or a stated
   fallback when there is no path), plus a dated, human-readable
   audit-history table (timestamp + detail text) for this project (durable
@@ -109,7 +114,7 @@ user typing the literal word `DELETE`.
   audit"); specs/030-ui-audit-revision/spec.md FR-139–FR-140. Corrects the
   prior migrated claim that archived-at/reason/size/entity-type/path all
   appear in the detail pane — that table was removed by #849 (merged
-  2026-07-14T20:01Z).
+  2026-07-14T20:01Z). spec-054/FR-004 (shared adaptive dock).
 
 ### S6 — Send archived files to the OS trash {#S6}
 - **Do:** With the archived project selected, choose "Send to trash".
@@ -195,3 +200,10 @@ user typing the literal word `DELETE`.
   Evidence: PR #849 (merged 2026-07-14T20:01Z),
   specs/030-ui-audit-revision/spec.md FR-135–FR-140 (Wave-0 Q16, decision
   T133) · by: journey-scribe (intent-gated)
+
+- **Δ3** 2026-07-17 · S5 · behavior-change
+  Archive detail now uses the shared adaptive dock (side when wide,
+  bottom when narrow, resizable, pin persists) — same mechanism as
+  Sessions/Calibration/Projects/Targets.
+  Evidence: spec-054-adaptive-detail-dock (FR-004) · by: journey-scribe
+  (intent-gated)

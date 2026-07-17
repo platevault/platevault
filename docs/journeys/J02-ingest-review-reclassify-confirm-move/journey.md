@@ -1,7 +1,7 @@
 ---
 id: J02
 title: Move newly-arrived frames from an inbox drop folder into the library
-version: 3
+version: 4
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -27,6 +27,7 @@ trace:
   - e2e-agentic-test/041-inbox-plan-surface/plan-overlay-apply-audit/scenario.md
   - e2e-agentic-test/025-filesystem-plan-application/plan-overlap-guard/scenario.md
   - e2e-agentic-test/journeys/grand-inbox-journey/scenario.md
+  - spec-054-adaptive-detail-dock (FR-014, FR-015 — permanent Inbox split)
 ---
 
 ## Goal
@@ -69,39 +70,54 @@ explicit, reviewed plan, and the action is visible in the audit history.
 
 ### S2 — Inspect an item's per-file detail {#S2}
 - **Do:** Select a queue item and open its detail.
-- **Expect:** The detail shows the same per-file metadata (frame type,
-  filter, exposure, binning, gain, temperature, target, date) that the
-  needs-review gate (S3) computes over; the file count shown on the list
-  row and the file count shown in the detail agree. Each field is
-  distinguishable as real data (with a source pill), an unresolved
-  missing-but-applicable value (chip, no source pill), or a not-applicable
-  value (blank/"—", no chip) — never a bare `0`/blank standing in for a
-  missing value (`apps/desktop/src/components/RenderValue.tsx`,
-  `InboxDetail.tsx` field wiring). The detail continues to track the item
-  the user selected even if the user changes the search text or an active
-  filter afterward. The detail body (property tables, mixed-summary line,
-  Files popover trigger, needs-review controls) is its own scroll region,
-  so content taller than the docked detail panel scrolls into view rather
-  than being clipped by the panel's outer overflow. On the residual "mixed"
-  parent-folder row still visible after its files are auto-split into
-  single-type sub-items (S1's known `#549` case), the advisory banner reads
-  "This folder is automatically split into separate single-type items —
-  find and confirm each one individually in the list," not the retired
-  claim that Confirm on the parent row itself produces a split.
+- **Expect:** The Inbox is a permanent, non-collapsing split at every window
+  width: a narrow item list (~360px default) on the LEFT showing only
+  essential status columns, with a long item name truncated and its full
+  name available via a tooltip on hover/focus; the full-height detail
+  (per-file metadata, inspector, and the plan surface) fills the RIGHT side.
+  This is a fixed left/right split, never a bottom dock, and does not change
+  with window width (unlike the adaptive side/bottom dock on other list
+  pages — see J09/S3). The divider between list and detail is
+  drag-resizable, and the chosen width persists across an app restart. The
+  detail body (property tables, mixed-summary line, Files popover trigger,
+  needs-review controls) is its own scroll region within that full-height
+  right pane, so content taller than the pane scrolls into view rather than
+  being clipped by the pane's outer overflow. The detail shows the same
+  per-file metadata (frame type, filter, exposure, binning, gain,
+  temperature, target, date) that the needs-review gate (S3) computes over;
+  the file count shown on the list row and the file count shown in the
+  detail agree. Each field is distinguishable as real data (with a source
+  pill), an unresolved missing-but-applicable value (chip, no source pill),
+  or a not-applicable value (blank/"—", no chip) — never a bare `0`/blank
+  standing in for a missing value
+  (`apps/desktop/src/components/RenderValue.tsx`, `InboxDetail.tsx` field
+  wiring). On the residual "mixed" parent-folder row still visible after
+  its files are auto-split into single-type sub-items (S1's known `#549`
+  case), the advisory banner reads "This folder is automatically split
+  into separate single-type items — find and confirm each one individually
+  in the list," not the retired claim that Confirm on the parent row
+  itself produces a split. The detail continues to track the item the user
+  selected even if the user changes the search text or an active filter
+  afterward.
 - **Expect (negative):** Changing search or filter text never silently
   re-targets the open detail panel to a different item. If per-file
   metadata fails to load, the detail shows an explicit error state rather
   than an empty or stale one, and Confirm stays disabled. The source
   folder is NOT revealable from this detail today — `nativeReveal` is
   wired only into the Sessions feature, not Inbox; corrected from the
-  legacy doc's unconditional reveal claim.
+  legacy doc's unconditional reveal claim. The Inbox detail never renders
+  as a short bottom strip, and its per-file list is never cut off below the
+  window — this was a real, previously-observed defect (the file list
+  overflowed past the viewport and its bottom rows were unreachable)
+  that the full-height right-pane layout with internal scrolling fixes.
 - **Trace:** `apps/desktop/src/components/RenderValue.tsx`,
   `apps/desktop/src/features/inbox/InboxDetail.tsx` (renderer wiring,
   `.alm-inbox-detail__scroll` sole scroll region per PR #939 fixes #553;
   mixed-folder banner copy per PR #939 fixes #552, #569);
   `apps/desktop/src/features/sessions/revealInventory.ts` (reveal is
   Sessions-only — no `nativeReveal` call anywhere under
-  `features/inbox/`).
+  `features/inbox/`); spec-054/FR-014, FR-015 (permanent Inbox split,
+  resizable/persistent divider, full-height file-list scrolling).
 
 ### S3 — Resolve missing metadata via bulk reclassify {#S3}
 - **Do:** For an item flagged as needing review (missing a mandatory
@@ -287,3 +303,12 @@ explicit, reviewed plan, and the action is visible in the audit history.
   #939 fixes #554).
   Evidence: PR #938 (fixes #557), PR #939 (fixes #552, #553, #554, #569) ·
   by: journey-scribe (intent-gated)
+
+- **Δ4** 2026-07-17 · S2 · behavior-change
+  The Inbox is now a permanent, non-adaptive left/right split at every
+  window width (narrow item list, full-height detail on the right) —
+  never a bottom dock. The divider is drag-resizable and its width
+  persists across restarts; the detail's own file list now scrolls within
+  the full-height right pane instead of overflowing past the viewport.
+  Evidence: spec-054-adaptive-detail-dock (FR-014, FR-015) · by:
+  journey-scribe (intent-gated)
