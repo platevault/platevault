@@ -43,9 +43,12 @@ import { Pill, Section, EmptyState, Banner, Btn, Skeleton } from '@/ui';
 import { m } from '@/lib/i18n';
 import {
   altitudeFor,
+  moonExcludedSpanHours,
   rowAltitudeFor,
   USABLE_ALT_DEG,
 } from './planner-altitude';
+import { BANDS } from './astro/moon-avoidance';
+import type { SensorConfig } from './planner-derive';
 import { errorMessage } from './target-error-message';
 import { useActiveSite } from './observing-sites/site-store';
 import { usePlannerDateMs } from './planner-date-store';
@@ -74,6 +77,13 @@ interface Props {
    * shown alongside the real (spec 044 Track B) tonight altitude graph.
    */
   night?: ObservingNight | null;
+  /**
+   * Camera sensor configuration (FR-035/FR-036, T046): when OSC the
+   * imaging-time stat collapses to the strictest-band single-pass window and
+   * a per-line breakdown appears for narrowband passbands (FR-037).
+   * `null`/absent keeps the per-filter model unchanged (FR-038).
+   */
+  sensorConfig?: SensorConfig | null;
 }
 
 type LoadState =
@@ -138,6 +148,12 @@ interface AltitudeGraphProps {
   usableAltDeg: number;
   /** The dark window's `[startHour, endHour]` on the same axis as `points`; `null` = no dark window (US4). */
   darkWindowHours: { startHour: number; endHour: number } | null;
+  /**
+   * Moon-excluded spans for the displayed band on the same axis as `points`
+   * (iteration 2026-07-15, FR-007 overlay); empty when the Moon never
+   * interferes or its geometry wasn't computed.
+   */
+  moonSpans?: Array<{ startHour: number; endHour: number }>;
 }
 
 const SVG_W = 400;
@@ -153,6 +169,7 @@ function AltitudeGraph({
   points,
   usableAltDeg,
   darkWindowHours,
+  moonSpans = [],
 }: AltitudeGraphProps) {
   // #757 defense-in-depth: the caller (TargetDetailV2) already gates this
   // component out of the render tree for the degrade states where `points`
@@ -165,6 +182,13 @@ function AltitudeGraph({
   const xScale = hourScale(0, PLOT_W);
 
   const usableYPx = yScale(usableAltDeg);
+
+  // FR-034 (#817): with no dark window the graph must AGREE with the 0-hour
+  // imaging stat — the whole plot is shaded non-dark and the above-threshold
+  // fill renders grey instead of the usable green.
+  const noDark = darkWindowHours === null;
+
+  const clampHour = (h: number) => Math.min(12, Math.max(0, h));
 
   // Transit marker: find point closest to peak altitude.
   const peak = points.reduce(
@@ -194,8 +218,18 @@ function AltitudeGraph({
       >
         <Group left={PAD_L} top={PAD_T}>
           {/* US4/T031: twilight (not-dark) shading either side of the real
-              dark window — omitted entirely when there is no dark window
-              tonight (a separate banner discloses that, T033). */}
+              dark window. FR-034: with NO dark window the ENTIRE plot is
+              shaded non-dark (it used to be omitted, which read as an
+              all-dark night and contradicted the 0-hour stat — #817). */}
+          {noDark && (
+            <rect
+              x={0}
+              y={0}
+              width={PLOT_W}
+              height={PLOT_H}
+              className="alm-planner__graph-twilight"
+            />
+          )}
           {darkWindowHours && darkWindowHours.startHour > 0 && (
             <rect
               x={0}
@@ -225,9 +259,33 @@ function AltitudeGraph({
             y1={(p) => yScale(p.altDeg)}
             clipAboveTo={0}
             clipBelowTo={PLOT_H}
-            aboveAreaProps={{ fill: 'var(--alm-ok-bg)', opacity: 0.6 }}
+            // FR-034: no dark window → grey the fill; green would claim
+            // usable imaging time the stats correctly report as zero.
+            aboveAreaProps={
+              noDark
+                ? { fill: 'var(--alm-text-faint)', opacity: 0.25 }
+                : { fill: 'var(--alm-ok-bg)', opacity: 0.6 }
+            }
             belowAreaProps={{ fill: 'none' }}
           />
+
+          {/* Moon-excluded spans for the displayed band (FR-007 overlay):
+              bottom-anchored band so it reads as a time-range exclusion
+              without hiding the curve. */}
+          {moonSpans.map((s) => {
+            const x0 = xScale(clampHour(s.startHour));
+            const x1 = xScale(clampHour(s.endHour));
+            return (
+              <rect
+                key={`moon-${s.startHour}`}
+                x={x0}
+                y={PLOT_H - 6}
+                width={Math.max(1, x1 - x0)}
+                height={6}
+                className="alm-planner__graph-moon"
+              />
+            );
+          })}
 
           {/* Usable-altitude guide line. */}
           <line
@@ -345,6 +403,7 @@ export function TargetDetailV2({
   item = null,
   usableAltDeg = USABLE_ALT_DEG,
   night = null,
+  sensorConfig = null,
 }: Props) {
   const guidanceParams = useGuidanceParams();
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
@@ -592,15 +651,46 @@ export function TargetDetailV2({
   // imaging-time model is real (spec 044 Track B); lunar distance + filter
   // guidance below are the real spec 047 Track A values from `moon`.
   const rowAlt = item
-    ? rowAltitudeFor(item, usableAltDeg, site, dateMs, guidanceParams)
+    ? rowAltitudeFor(
+        item,
+        usableAltDeg,
+        site,
+        dateMs,
+        guidanceParams,
+        true,
+        sensorConfig,
+      )
     : altitudeFor(
         { id: detail.id, raDeg: detail.raDeg, decDeg: detail.decDeg },
         usableAltDeg,
         site,
         dateMs,
         guidanceParams,
+        true,
+        sensorConfig,
       );
   const tonightPoints: AltPoint[] = rowAlt.points;
+
+  // FR-007 overlay: Moon-excluded spans for the DISPLAYED band — default
+  // unchanged: the band with the most moon-free time (ties break in BANDS
+  // order; the global band picker stays deferred). Same cached night as
+  // rowAlt — no second astronomy pass.
+  const displayBand = BANDS.reduce((best, b) =>
+    rowAlt.moonFreeMinutesByBand[b] > rowAlt.moonFreeMinutesByBand[best]
+      ? b
+      : best,
+  );
+  const moonSpans =
+    !rowAlt.needsCoordinates && !rowAlt.needsSite
+      ? moonExcludedSpanHours(
+          { id: detail.id, raDeg: detail.raDeg, decDeg: detail.decDeg },
+          displayBand,
+          site,
+          dateMs,
+          guidanceParams,
+        )
+      : [];
+
   const moon = deriveRowMoonPlanning(
     { raDeg: detail.raDeg, decDeg: detail.decDeg },
     night,
@@ -669,6 +759,32 @@ export function TargetDetailV2({
         : m.targets_opposition_in_months({ count: rel.count });
     return `${formatOppositionDate(new Date(bestDate.dateMs))} · ${relText}`;
   })();
+  // Three-quantity breakdown (iteration 2026-07-15, FR-005): dark window,
+  // uptime (above threshold across the WHOLE night), and imaging time
+  // (dark ∩ uptime) presented as three distinguishable stats.
+  const darkWindowValue = rowAlt.darkWindowHours
+    ? `${(rowAlt.darkWindowHours.endHour - rowAlt.darkWindowHours.startHour).toFixed(1)} h`
+    : m.targets_detail_dark_window_none();
+  // FR-036/SC-017: OSC cameras collapse the imaging-time headline to the
+  // strictest-band single-pass window; mono/unknown keeps the geometric
+  // dark ∩ uptime value byte-identical.
+  const imagingHeadlineHours =
+    rowAlt.oscSinglePassHours ?? rowAlt.hoursAboveUsable;
+  // FR-037: for an OSC narrowband passband, each captured line's own
+  // moon-viable window ("Ha 4h · OIII 1h") — the tolerant line may still be
+  // usable on a moonlit night even when the single-pass headline is small.
+  const oscPassband = sensorConfig?.passband;
+  const oscLineValue =
+    sensorConfig?.sensorType === 'osc' &&
+    Array.isArray(oscPassband) &&
+    oscPassband.length > 0 &&
+    rowAlt.oscSinglePassHours !== null
+      ? oscPassband
+          .map(
+            (b) => `${b} ${(rowAlt.moonFreeMinutesByBand[b] / 60).toFixed(1)}h`,
+          )
+          .join(' · ')
+      : null;
   const tonightStats: PropertyDef[] = tonightAvailable
     ? [
         {
@@ -677,10 +793,29 @@ export function TargetDetailV2({
           value: `${Math.round(rowAlt.maxAltDeg)}°`,
         },
         {
+          key: 'darkwindow',
+          label: m.targets_detail_dark_window(),
+          value: darkWindowValue,
+        },
+        {
+          key: 'uptime',
+          label: m.targets_detail_uptime({ threshold: usableAltDeg }),
+          value: `${rowAlt.uptimeHours.toFixed(1)} h`,
+        },
+        {
           key: 'imgtime',
           label: m.targets_col_img_time(),
-          value: `${rowAlt.hoursAboveUsable.toFixed(1)} h`,
+          value: `${imagingHeadlineHours.toFixed(1)} h`,
         },
+        ...(oscLineValue !== null
+          ? [
+              {
+                key: 'osclines',
+                label: m.targets_detail_osc_lines(),
+                value: oscLineValue,
+              },
+            ]
+          : []),
         {
           key: 'lunar',
           label: m.targets_col_lunar(),
@@ -818,14 +953,20 @@ export function TargetDetailV2({
                 points={tonightPoints}
                 usableAltDeg={usableAltDeg}
                 darkWindowHours={rowAlt.darkWindowHours}
+                moonSpans={moonSpans}
               />
-              {/* US4/T033: no qualifying dark window (e.g. high-latitude
-                  summer) — disclose it explicitly (FR-017); the altitude
-                  graph above is still real, only the imaging-time concept
-                  doesn't apply tonight. */}
-              {tonightAvailable && rowAlt.noDarkWindow && (
+              {/* FR-029/SC-015: zero imaging time is always explained with a
+                  stated sentence — darkness (FR-017's no-dark-window case),
+                  altitude, or moon, same precedence as the table glyph. */}
+              {tonightAvailable && rowAlt.zeroImagingReason !== null && (
                 <Banner variant="info">
-                  {m.targets_table_no_dark_window_title()}
+                  {rowAlt.zeroImagingReason === 'darkness'
+                    ? m.targets_imgtime_zero_darkness_title()
+                    : rowAlt.zeroImagingReason === 'altitude'
+                      ? m.targets_imgtime_zero_altitude_title({
+                          threshold: usableAltDeg,
+                        })
+                      : m.targets_imgtime_zero_moon_title()}
                 </Banner>
               )}
               {tonightAvailable && (

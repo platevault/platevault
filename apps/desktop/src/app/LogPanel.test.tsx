@@ -146,6 +146,52 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
     expect(screen.queryByText('All good')).not.toBeInTheDocument();
   });
 
+  it('treats a level chip as a severity floor, not an exact match (#582)', async () => {
+    seedEntries();
+    renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('Something failed')).toBeInTheDocument();
+    });
+
+    // Click the "Warn" chip — warn is less severe than error, so both the
+    // warn and error entries should remain visible; info should not.
+    const warnChip = screen.getByRole('button', { name: 'Warn' });
+    fireEvent.click(warnChip);
+
+    await waitFor(() => {
+      expect(warnChip).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    expect(screen.getByText('Something failed')).toBeInTheDocument();
+    expect(screen.getByText('Watch out')).toBeInTheDocument();
+    expect(screen.queryByText('All good')).not.toBeInTheDocument();
+  });
+
+  it('renders entity subject context next to the message (#583)', async () => {
+    appendLog([
+      {
+        id: 'aud:4',
+        contractVersion: '1',
+        time: '2026-01-01T00:00:03Z',
+        level: 'info',
+        source: 'target',
+        message: 'Target metadata resolved',
+        entityType: 'target',
+        entityId: 'm31',
+      },
+    ]);
+    renderPanel();
+
+    fireEvent.click(getTrigger());
+    await waitFor(() => {
+      expect(screen.getByText('Target metadata resolved')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('target · m31')).toBeInTheDocument();
+  });
+
   it('interpolates the source into the event-source modifier className', async () => {
     seedEntries();
     renderPanel();

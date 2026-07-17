@@ -199,10 +199,11 @@ Steps:
    morning twilight before/after full darkness — a faint muted shading at
    the very start/end of the graph.
 7. If your site/date has a genuine no-dark-window night (try a far-north
-   site like 65-70°N latitude in June/July), check that the Visible column
-   shows an explicit "No dark window" state (not "peaks below threshold"),
-   and the detail page shows an info banner saying so above the (still-real)
-   altitude curve.
+   site like 65-70°N latitude in June/July), check that the Img time cell
+   shows "—" with a ☀ glyph (the iteration 2026-07-15 reason model — there
+   is no Visible column any more, see Test 8), and the detail page shows an
+   info banner stating the night never gets dark enough above the
+   (still-real) altitude curve.
 Expected:
 - Step 2: the values change to genuinely different numbers for the new date
   (not the same as tonight's).
@@ -231,6 +232,64 @@ FAIL if:
   time or "peaks below threshold" instead of an explicit no-dark-window
   disclosure.
 
+### Test 8 — Iteration 2026-07-15: why-glyphs, computation context, no-dark graph, OSC equipment (specs 044/047 Phase 10, requires Test 6b's site to exist)
+Steps:
+1. In the Targets table, confirm there is NO altitude-sparkline column and
+   NO Visible column (hard removal, FR-007): the columns are Designation ·
+   Type · Max alt · Opposition · Lunar · Filters · Img time · Sessions
+   (plus the ★ star column).
+2. In the planner top bar, find the always-visible one-line context label:
+   "Computed for: `<site name>` `<lat>`°N · `<twilight>` · ≥`<N>`° · change"
+   (FR-033). Click "change" — it must open Settings → Target Planner.
+3. Find a target whose Img time is "—". Hover the glyph next to it: ☀ means
+   the night never gets dark enough, ▲ means the target never clears the
+   threshold during darkness, ☾ means the Moon blocks every band (FR-030).
+   Every zero MUST carry a glyph + tooltip — no bare "—" for a target with
+   coordinates while a site is active (SC-015).
+4. Find a target with a non-zero Img time rendered "2h10m"-style (FR-032).
+   If a muted ☾ follows the value, hover it: the tooltip must NAME the
+   affected bands (FR-031). Confirm the value and the Opposition cell
+   ("14 Apr · in 9 months"-style) render unclipped in a ~1100×720 window
+   (FR-032/SC-016, the #792 fix).
+5. Set the date picker to June 21 (any site ≥ ~49°N): the detail page's
+   altitude graph must shade the ENTIRE plot as non-dark and the
+   above-threshold fill must render grey, not green (FR-034 — the #817
+   graph/stat agreement), alongside the darkness banner from Test 7 step 7.
+6. In the detail Tonight panel, confirm the three-quantity breakdown
+   (FR-005): "Dark window", "Above `<N>`° (night)" (uptime), and "Img time"
+   as three separate stat rows; also a small bottom-anchored Moon-exclusion
+   band on the graph for the displayed band where the Moon interferes
+   (FR-007 overlay).
+7. In Settings → Equipment, edit (or add) a camera: a "Sensor type" select
+   (Unknown / Mono / OSC) must exist; choosing OSC reveals an "OSC passband"
+   select (Color (RGB) / Dual-band (Ha + OIII) / Tri-band (Ha + SII + OIII))
+   (FR-035). Save an OSC + Dual-band camera and make sure NO mono camera
+   remains configured.
+8. Back in Targets: the Img time headline must now be the strictest-band
+   single-pass window (FR-036) — generally ≤ the value seen in step 4 —
+   and the detail panel must add a "Per line (OSC)" row like
+   "Ha 4.0h · OIII 1.0h" (FR-037).
+9. Set the camera back to Mono (or Unknown): all planner values must return
+   to their step-4 readings exactly (FR-038/SC-017 — unknown behaves as
+   mono; the iteration never regresses mono users).
+Expected:
+- Steps 1-2: columns as listed; context label present in one line with a
+  working "change" link.
+- Step 3: every zero Img time carries a reason glyph with a tooltip; the
+  glyph is also its accessible name (screen-reader text).
+- Step 4: no clipping; the muted ☾ names bands.
+- Step 5: whole-plot non-dark shading + grey (not green) fill.
+- Steps 7-9: OSC round-trip changes the headline + adds the per-line row,
+  and reverting restores the original numbers exactly.
+FAIL if:
+- Any bare zero/"—" without a reason glyph for a coordinate-bearing target
+  while a site is active.
+- The context label is missing, wraps to two lines at 1100×720, or "change"
+  goes nowhere.
+- A no-dark night still renders a green usable fill (the #817 regression).
+- Setting OSC changes nothing, or reverting to Mono/Unknown does NOT
+  restore the pre-OSC values byte-identically.
+
 ## Troubleshooting
 - Blank window: restart the dev server; if still blank, `pnpm install` with
   `$env:CI="true"`, relaunch.
@@ -254,6 +313,12 @@ what it should.
   verification lane for Test 7's specific behaviors — date picker,
   best-imaging date, per-band moon-free hours, dark-window disclosure, the
   visx altitude graph).
+- **Test 8 partial mock coverage** — `tests/e2e/targets_planner.spec.ts`
+  9.5a/9.5b (added with the 2026-07-15 iteration) cover the #817
+  no-dark-window reason/graph agreement and the #792 no-clipping assertions;
+  9.1b covers the removed columns + the FR-033 context label. The OSC
+  equipment round-trip (steps 7-9) and glyph tooltip *contents* are only
+  verified through this document.
 - The stub-disclosure requirement (Test 6a) remains safety-critical:
   assert that every astronomy column and the altitude graph carry a
   disclosure affordance in the no-site state, regardless of what real

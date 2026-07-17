@@ -13,9 +13,10 @@ use tauri::State;
 use crate::commands::lifecycle::AppState;
 use contracts_core::ContractError;
 use persistence_db::repositories::q_desktop::{
-    count_acquisition_sessions, count_calibration_masters, count_canonical_targets, count_projects,
+    count_acquisition_sessions, count_calibration_masters, count_projects,
     count_unacknowledged_inbox_items,
 };
+use persistence_db::repositories::target_favourites::count_favourites;
 
 /// `status.summary` — returns current library status overview.
 ///
@@ -67,7 +68,9 @@ pub async fn status_summary(state: State<'_, AppState>) -> Result<StatusSummary,
         .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
-    let targets: u32 = count_canonical_targets(pool)
+    // "My targets" (issue #574): the count of favourited targets, matching
+    // the Targets page's "My Targets" filter — not the bundled seed catalog.
+    let targets: u32 = count_favourites(pool)
         .await
         .map(|n| u32::try_from(n.max(0)).unwrap_or(u32::MAX))
         .map_err(|e| ContractError::internal(e.to_string()))?;

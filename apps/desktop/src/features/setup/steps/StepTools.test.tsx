@@ -1,0 +1,129 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/// <reference types="@testing-library/jest-dom" />
+/**
+ * StepTools tests — first-run wizard "Processing Tools" step.
+ *
+ * Covers #511 (executable-only picker filter + post-pick validation) and
+ * #510 (single status pill, icon-only Redetect button).
+ */
+
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const { mockPick, mockToolsDiscover } = vi.hoisted(() => ({
+  mockPick: vi.fn(),
+  mockToolsDiscover: vi.fn(),
+}));
+
+vi.mock('@/shared/native/picker', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/shared/native/picker')>();
+  return {
+    ...actual,
+    useFilePicker: () => ({
+      pick: mockPick,
+      loading: false,
+      error: null,
+      clearError: vi.fn(),
+    }),
+  };
+});
+
+vi.mock('@/bindings/index', () => ({
+  commands: {
+    toolsDiscover: mockToolsDiscover,
+  },
+}));
+
+import { StepTools, DEFAULT_TOOLS_STATE, type ToolsState } from './StepTools';
+import type { FileFilter } from '@/shared/native/picker';
+
+beforeEach(() => {
+  mockPick.mockReset();
+  mockToolsDiscover.mockReset();
+  mockToolsDiscover.mockResolvedValue({ status: 'ok', data: { entries: [] } });
+});
+
+function renderStep(tools: ToolsState, onToolsChange = vi.fn()) {
+  return {
+    onToolsChange,
+    ...render(<StepTools tools={tools} onToolsChange={onToolsChange} />),
+  };
+}
+
+describe('StepTools', () => {
+  it('filters the picker to executables only, without an "all files" fallback (#511)', async () => {
+    mockPick.mockResolvedValue({
+      path: null,
+      selectedFilter: null,
+      cancelled: true,
+    });
+    const tools: ToolsState = {
+      ...DEFAULT_TOOLS_STATE,
+      pixinsight: { enabled: true, path: null },
+    };
+    renderStep(tools);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Select PixInsight binary' }),
+    );
+
+    await waitFor(() => expect(mockPick).toHaveBeenCalled());
+    const filters = mockPick.mock.calls[0][0] as FileFilter[];
+    expect(filters).toHaveLength(1);
+    expect(filters[0].extensions).not.toContain('*');
+  });
+
+  it('rejects a picked non-executable with an inline error instead of "OK" (#511)', async () => {
+    mockPick.mockResolvedValue({
+      path: 'D:\\Tools\\setiastrosuite_windows.zip',
+      selectedFilter: null,
+      cancelled: false,
+    });
+    const tools: ToolsState = {
+      ...DEFAULT_TOOLS_STATE,
+      pixinsight: { enabled: true, path: null },
+    };
+    const { onToolsChange, rerender } = renderStep(tools);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Select PixInsight binary' }),
+    );
+    await waitFor(() => expect(onToolsChange).toHaveBeenCalled());
+
+    const next = onToolsChange.mock.calls[0][0] as ToolsState;
+    rerender(<StepTools tools={next} onToolsChange={onToolsChange} />);
+
+    expect(screen.getByText('Invalid')).toBeInTheDocument();
+    expect(
+      screen.getByText(/doesn't look like an executable/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('OK')).toBeNull();
+  });
+
+  it('shows a single "Detected" pill (no duplicate OK pill) for a valid path (#510)', () => {
+    const tools: ToolsState = {
+      ...DEFAULT_TOOLS_STATE,
+      pixinsight: {
+        enabled: true,
+        path: 'C:\\Program Files\\PixInsight\\bin\\PixInsight.exe',
+      },
+    };
+    renderStep(tools);
+
+    expect(screen.getByText('Detected')).toBeInTheDocument();
+    expect(screen.queryByText('OK')).toBeNull();
+  });
+
+  it('renders Redetect as an icon-only button with an accessible label (#510)', () => {
+    renderStep(DEFAULT_TOOLS_STATE);
+
+    const btn = screen.getByRole('button', {
+      name: 'Redetect PixInsight binary',
+    });
+    expect(btn).toBeInTheDocument();
+    expect(btn).not.toHaveTextContent('Redetect');
+  });
+});

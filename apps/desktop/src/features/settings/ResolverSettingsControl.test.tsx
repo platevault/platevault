@@ -78,6 +78,43 @@ describe('ResolverSettingsControl', () => {
     expect(checkbox).toBeChecked();
   });
 
+  // issue #584: don't paint the toggle as ON (in-code default) before the
+  // persisted (OFF) value has loaded — regression test for the render-
+  // before-lookup flash.
+  it('does not render the toggle checked before persisted settings load', async () => {
+    let resolveGet!: (v: unknown) => void;
+    mockGet.mockReset();
+    mockGet.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGet = resolve;
+      }),
+    );
+
+    render(<ResolverSettingsControl />);
+
+    expect(
+      screen.queryByLabelText('Enable online SIMBAD resolution'),
+    ).toBeNull();
+    expect(screen.getByTestId('skeleton')).toBeInTheDocument();
+
+    await act(async () => {
+      resolveGet({
+        status: 'ok',
+        data: {
+          contractVersion: '1.0',
+          requestId: 'r',
+          settings: { ...SETTINGS, onlineEnabled: false },
+        },
+      });
+      await Promise.resolve();
+    });
+
+    const checkbox = (await screen.findByLabelText(
+      'Enable online SIMBAD resolution',
+    )) as HTMLInputElement;
+    expect(checkbox).not.toBeChecked();
+  });
+
   it('persists the online toggle via updateResolverSettings', async () => {
     render(<ResolverSettingsControl />);
     await waitFor(() => expect(mockGet).toHaveBeenCalled());

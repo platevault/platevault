@@ -302,8 +302,15 @@ pub async fn find_or_create_camera_by_alias(
         return Ok(camera);
     }
 
-    // Create as auto-detected — the alias becomes both the name and the sole alias.
-    let req = CreateCamera { name: alias.to_owned(), aliases: vec![alias.to_owned()] };
+    // Create as auto-detected — the alias becomes both the name and the sole
+    // alias. Sensor type stays unknown (= mono behavior, FR-038) until the
+    // user sets it in Settings → Equipment.
+    let req = CreateCamera {
+        name: alias.to_owned(),
+        aliases: vec![alias.to_owned()],
+        sensor_type: None,
+        passband: None,
+    };
     let mut camera = match repo::create_camera(pool, &req).await {
         Ok(camera) => camera,
         Err(e) => {
@@ -772,7 +779,12 @@ mod tests {
     #[tokio::test]
     async fn create_camera_writes_durable_applied_audit_row() {
         let (db, bus) = setup().await;
-        let req = CreateCamera { name: "ZWO ASI2600MM".to_owned(), aliases: vec![] };
+        let req = CreateCamera {
+            name: "ZWO ASI2600MM".to_owned(),
+            aliases: vec![],
+            sensor_type: None,
+            passband: None,
+        };
         let camera = create_camera(db.pool(), &bus, &req).await.unwrap();
 
         let row: (String, String) = sqlx::query_as(

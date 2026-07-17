@@ -2255,6 +2255,57 @@ export type AssignedDto_Serialize = {
 	assignedAt: string,
 };
 
+/**
+ *  Outcome of applying a [`ChosenAttributionDto`] at confirm time
+ *  (F-Framing-10/6). Returned alongside the confirm response so the UI can
+ *  surface the reopen/warning without a follow-up read.
+ */
+export type AttributionAppliedDto = AttributionAppliedDto_Serialize | AttributionAppliedDto_Deserialize;
+
+/**
+ *  Outcome of applying a [`ChosenAttributionDto`] at confirm time
+ *  (F-Framing-10/6). Returned alongside the confirm response so the UI can
+ *  surface the reopen/warning without a follow-up read.
+ */
+export type AttributionAppliedDto_Deserialize = {
+	projectId: string,
+	/**  `None` for `unassigned`. */
+	framingId: string | null,
+	/**
+	 *  `true` when this pick triggered a `completed -> processing` reopen
+	 *  (F-Framing-6, spec-009's existing edge).
+	 */
+	reopened: boolean,
+	/**
+	 *  `true` when `reopened` and the project's raw subs have already been
+	 *  archived via a cleanup plan (Q25 raw-subs-archived reopen warning) —
+	 *  a degraded reopen the user should be aware of.
+	 */
+	rawSubsArchivedWarning: boolean,
+};
+
+/**
+ *  Outcome of applying a [`ChosenAttributionDto`] at confirm time
+ *  (F-Framing-10/6). Returned alongside the confirm response so the UI can
+ *  surface the reopen/warning without a follow-up read.
+ */
+export type AttributionAppliedDto_Serialize = {
+	projectId: string,
+	/**  `None` for `unassigned`. */
+	framingId?: string | null,
+	/**
+	 *  `true` when this pick triggered a `completed -> processing` reopen
+	 *  (F-Framing-6, spec-009's existing edge).
+	 */
+	reopened: boolean,
+	/**
+	 *  `true` when `reopened` and the project's raw subs have already been
+	 *  archived via a cleanup plan (Q25 raw-subs-archived reopen warning) —
+	 *  a degraded reopen the user should be aware of.
+	 */
+	rawSubsArchivedWarning: boolean,
+};
+
 /**  Actor that triggered the audited action. */
 export type AuditActor = "user" | "system";
 
@@ -2790,6 +2841,14 @@ export type Camera = {
 	name: string,
 	aliases: string[],
 	autoDetected: boolean,
+	/**  FR-035: `None` = unknown (behaves as mono, FR-038). */
+	sensorType: SensorType | null,
+	/**
+	 *  FR-035: narrowband set for an OSC dual/tri-band filter (e.g.
+	 *  `["Ha","OIII"]`); `None` = plain color camera (`rgb` default). Only
+	 *  meaningful when `sensor_type` is `Osc`.
+	 */
+	passband: string[] | null,
 };
 
 /**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
@@ -2815,6 +2874,43 @@ export type ChannelDriftDto = {
 	/**  `"re_infer"` or `"dismiss"` — only meaningful when `has_new_sources == true`. */
 	suggestedAction: string,
 };
+
+/**  Request payload for the attribution apply-path (data-model.md `chosenAttribution?`). */
+export type ChosenAttributionDto = ChosenAttributionDto_Serialize | ChosenAttributionDto_Deserialize;
+
+/**  Request payload for the attribution apply-path (data-model.md `chosenAttribution?`). */
+export type ChosenAttributionDto_Deserialize = {
+	kind: ChosenAttributionKind,
+	/**
+	 *  Required for `new_framing` / `flag_optic_difference` (the existing
+	 *  project to create the new framing under). Ignored for `new_project`
+	 *  (a project is created) and `unassigned`.
+	 */
+	projectId: string | null,
+	/**  Required for `add_to_framing`. */
+	framingId: string | null,
+};
+
+/**  Request payload for the attribution apply-path (data-model.md `chosenAttribution?`). */
+export type ChosenAttributionDto_Serialize = {
+	kind: ChosenAttributionKind,
+	/**
+	 *  Required for `new_framing` / `flag_optic_difference` (the existing
+	 *  project to create the new framing under). Ignored for `new_project`
+	 *  (a project is created) and `unassigned`.
+	 */
+	projectId?: string | null,
+	/**  Required for `add_to_framing`. */
+	framingId?: string | null,
+};
+
+/**
+ *  The user's attribution pick (data-model.md §Apply-path, FR-022) — an
+ *  additive field on the Inbox confirm request. `Unassigned` (or omitting
+ *  this field entirely) leaves the confirmed session's framing membership
+ *  unset, attributable later via `framing.reassign`.
+ */
+export type ChosenAttributionKind = "add_to_framing" | "new_framing" | "flag_optic_difference" | "new_project" | "unassigned";
 
 export type CleanupAction = "keep" | "archive" | "delete";
 
@@ -3180,6 +3276,9 @@ export type Coordinates_Serialize = {
 export type CreateCamera = {
 	name: string,
 	aliases: string[],
+	/**  FR-035; `#[serde(default)]` keeps pre-iteration payloads valid. */
+	sensorType?: SensorType | null,
+	passband?: string[] | null,
 };
 
 export type CreateFilter = {
@@ -3484,7 +3583,7 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  *  item in an `archive.permanently_delete` run. Permission failures use
  *  the more specific `path.permission_denied`.
  */
-"archive.delete_failed" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "framing.not_found" | "framing.project_mismatch" | "framing.merge.requires_two" | "framing.merge.duplicate_id" | "framing.split.empty_selection" | "framing.split.invalid_session" | "framing.split.would_empty_source" | "framing.reassign.empty_selection" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
+"archive.delete_failed" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "framing.not_found" | "framing.project_mismatch" | "framing.merge.requires_two" | "framing.merge.duplicate_id" | "framing.split.empty_selection" | "framing.split.invalid_session" | "framing.split.would_empty_source" | "framing.reassign.empty_selection" | "attribution.not_light_frame" | "attribution.geometry_unavailable" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
 /**
  *  Returned by `roots.delete` (P6b, decision D8) when dependent records
  *  (inbox items, plan items, file records, sessions) still reference the
@@ -4167,6 +4266,14 @@ export type InboxConfirmRequest_Deserialize = {
 	 *  item's category is rejected with `inbox.invalid_destination_root`.
 	 */
 	rootId?: string | null,
+	/**
+	 *  Attribution apply-path (spec 008 Q27, F-Framing-10, FR-022) — additive.
+	 *  The user's pick from a prior `attributionCandidates` list. Only
+	 *  meaningful for light-frame items (`attribution.not_light_frame` on any
+	 *  other frame type); omitting it leaves the confirmed session's framing
+	 *  membership unset.
+	 */
+	chosenAttribution?: ChosenAttributionDto_Deserialize | null,
 };
 
 /**  Request for `inbox.confirm`. */
@@ -4190,6 +4297,14 @@ export type InboxConfirmRequest_Serialize = {
 	 *  item's category is rejected with `inbox.invalid_destination_root`.
 	 */
 	rootId?: string | null,
+	/**
+	 *  Attribution apply-path (spec 008 Q27, F-Framing-10, FR-022) — additive.
+	 *  The user's pick from a prior `attributionCandidates` list. Only
+	 *  meaningful for light-frame items (`attribution.not_light_frame` on any
+	 *  other frame type); omitting it leaves the confirmed session's framing
+	 *  membership unset.
+	 */
+	chosenAttribution?: ChosenAttributionDto_Serialize | null,
 };
 
 /**  Response from `inbox.confirm`. */
@@ -4225,6 +4340,18 @@ export type InboxConfirmResponse_Deserialize = {
 	 *  Empty for master-registration responses.
 	 */
 	destinations?: InboxConfirmDestination[],
+	/**
+	 *  Inbox-confirm attribution pass (spec 008 Q27, F-Framing-5, FR-019).
+	 *  Ranked suggestions for where this item's light session belongs — a
+	 *  suggestion surface only, never auto-applied. Empty for non-light items
+	 *  or when no candidate matched.
+	 */
+	attributionCandidates?: IngestionAttributionCandidateDto_Deserialize[],
+	/**
+	 *  Present when the request carried a `chosenAttribution` that was
+	 *  successfully applied (F-Framing-10).
+	 */
+	attributionApplied: AttributionAppliedDto_Deserialize | null,
 };
 
 /**  Response from `inbox.confirm`. */
@@ -4257,6 +4384,18 @@ export type InboxConfirmResponse_Serialize = {
 	 *  Empty for master-registration responses.
 	 */
 	destinations?: InboxConfirmDestination[],
+	/**
+	 *  Inbox-confirm attribution pass (spec 008 Q27, F-Framing-5, FR-019).
+	 *  Ranked suggestions for where this item's light session belongs — a
+	 *  suggestion surface only, never auto-applied. Empty for non-light items
+	 *  or when no candidate matched.
+	 */
+	attributionCandidates?: IngestionAttributionCandidateDto_Serialize[],
+	/**
+	 *  Present when the request carried a `chosenAttribution` that was
+	 *  successfully applied (F-Framing-10).
+	 */
+	attributionApplied?: AttributionAppliedDto_Serialize | null,
 };
 
 /**  A file entry discovered during an inbox scan. */
@@ -5232,6 +5371,71 @@ export type InboxTargetRecommendationsResponse_Serialize = {
 	pointing?: InboxPointing | null,
 	objectHint?: string | null,
 };
+
+/**  A ranked attribution candidate (data-model.md §`IngestionAttributionCandidate`). */
+export type IngestionAttributionCandidateDto = IngestionAttributionCandidateDto_Serialize | IngestionAttributionCandidateDto_Deserialize;
+
+/**  A ranked attribution candidate (data-model.md §`IngestionAttributionCandidate`). */
+export type IngestionAttributionCandidateDto_Deserialize = {
+	kind: IngestionAttributionKind,
+	/**
+	 *  Present for every kind except a match-less pass (the caller always
+	 *  receives at least one candidate — a trailing zero-score `new_project`
+	 *  candidate with no `projectId` when nothing else matched).
+	 */
+	projectId: string | null,
+	/**  Present for `add_to_framing`. */
+	framingId: string | null,
+	/**  The matched target, when one resolved. */
+	targetId: string | null,
+	/**
+	 *  Ranking key: framing-match strength (target+optic-train+pointing+rotation).
+	 *  Higher is a closer match; candidates are returned in descending order.
+	 */
+	matchScore: number | null,
+	/**
+	 *  `true` when `projectId` is a `completed` project — selecting this
+	 *  candidate offers add + reopen (Q25 revoke/warn, F-Framing-6).
+	 */
+	reopen: boolean | null,
+	/**  `true` for `flag_optic_difference`. */
+	opticMismatch: boolean | null,
+};
+
+/**  A ranked attribution candidate (data-model.md §`IngestionAttributionCandidate`). */
+export type IngestionAttributionCandidateDto_Serialize = {
+	kind: IngestionAttributionKind,
+	/**
+	 *  Present for every kind except a match-less pass (the caller always
+	 *  receives at least one candidate — a trailing zero-score `new_project`
+	 *  candidate with no `projectId` when nothing else matched).
+	 */
+	projectId?: string | null,
+	/**  Present for `add_to_framing`. */
+	framingId?: string | null,
+	/**  The matched target, when one resolved. */
+	targetId?: string | null,
+	/**
+	 *  Ranking key: framing-match strength (target+optic-train+pointing+rotation).
+	 *  Higher is a closer match; candidates are returned in descending order.
+	 */
+	matchScore: number | null,
+	/**
+	 *  `true` when `projectId` is a `completed` project — selecting this
+	 *  candidate offers add + reopen (Q25 revoke/warn, F-Framing-6).
+	 */
+	reopen?: boolean | null,
+	/**  `true` for `flag_optic_difference`. */
+	opticMismatch?: boolean | null,
+};
+
+/**
+ *  One ranked suggestion from the Inbox-confirm attribution pass
+ *  (data-model.md `IngestionAttributionCandidate`). A **suggestion surface**
+ *  only — it never writes a merge (FR-019/FR-020); the user picks via
+ *  [`ChosenAttributionDto`] on the confirm request (FR-022).
+ */
+export type IngestionAttributionKind = "add_to_framing" | "new_framing" | "flag_optic_difference" | "new_project";
 
 export type IngestionSettings = {
 	watcherEnabled: boolean,
@@ -8167,6 +8371,14 @@ export type SearchResult_Serialize = {
 /**  How a candidate was selected (observing-night provenance). */
 export type SelectionReason = "same_session" | "same_night" | "compatible_fallback";
 
+/**
+ *  Camera sensor type (spec 044 iteration 2026-07-15, FR-035): `mono`
+ *  per-filter imaging vs `osc` (one-shot color) single-pass imaging.
+ *  Absence (`None` on [`Camera::sensor_type`]) means unknown, which MUST
+ *  behave as mono downstream (FR-038).
+ */
+export type SensorType = "mono" | "osc";
+
 /**  A calibration match entry for a session detail view. */
 export type SessionCalibrationMatch = {
 	masterId: string,
@@ -9423,6 +9635,9 @@ export type UpdateCamera = {
 	id: string,
 	name: string,
 	aliases: string[],
+	/**  FR-035; `#[serde(default)]` keeps pre-iteration payloads valid. */
+	sensorType?: SensorType | null,
+	passband?: string[] | null,
 };
 
 export type UpdateCleanupPolicy = {
