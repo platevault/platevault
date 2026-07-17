@@ -1,7 +1,7 @@
 ---
 id: J09
 title: Find, add, and plan around an astrophotography target
-version: 3
+version: 5
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -21,6 +21,9 @@ trace:
   - PR #890 (merged, fixes #573) · PR #896 (merged, fixes #579, #580)
   - PR #940 (Moon-aware detail "Best date"; list Opposition unchanged —
     addresses the naming half of #792)
+  - PR #912 (merged, fixes #574) · PR #905 (merged, fixes #815)
+  - PR #914 (merged, carried nJ09c/nJ10a review nits: row density,
+    site-edit cache refresh, palette caching)
 ---
 
 ## Goal
@@ -69,7 +72,16 @@ configured) real per-site astronomy for tonight.
   progressive reveal), `TargetsTable.tsx` (per-target-id astronomy row
   cache) — PR #890 fixes #573 (opening previously froze the app: astronomy
   altitude sampling ran synchronously over the entire catalogue on every
-  render).
+  render). PR #914 fixes a carried nJ09c-review nit: virtualized row height
+  now tracks the active density setting instead of a fixed height, so
+  scrolling stays visually aligned when density changes.
+
+  The app shell's Targets sidebar badge shows the count of the user's own
+  favourited targets (the same set "My Targets" filters to, see S5) — PR
+  #912 fixes #574, where it previously showed the size of the entire
+  ~13073-entry bundled/resolved catalog.
+  Trace: `apps/desktop/src/app/Sidebar.tsx`,
+  `apps/desktop/src/features/targets/TargetList.tsx`.
 
 ### S2 — Add a target {#S2}
 - **Do:** Open Add target and type a name or designation.
@@ -88,13 +100,14 @@ configured) real per-site astronomy for tonight.
   the highlighted one instead. A resolved lookup (any phase) is cached so the
   same name resolves instantly next time.
 - **Expect (negative):** An unresolvable name never fabricates a row; the
-  dialog states the outcome inline instead. As of this audit, however, the
-  results dropdown and the "no matches" message are laid out correctly in
-  the DOM but are clipped invisible by the modal body's overflow box for a
-  real mouse-driven user (the underlying data/logic is correct; only the
-  popover's layout is broken) — open defect, issue #815, P1.
+  dialog states the outcome inline instead. The results dropdown and the
+  "no matches" message now paint above the Add-target/Create-project dialog
+  (raised stacking order) and are visible/clickable for a real mouse-driven
+  user — previously correct in the DOM but clipped invisible beneath the
+  dialog.
 - **Trace:** commits 6b263a1e, 94dfa492, 1efdc0c5, fd87e99c, 6a51dfd5,
-  ba68bf27; issue #815 (open); journey-run-2026-07-14.md Journey 9 section
+  ba68bf27; journey-run-2026-07-14.md Journey 9 section. PR #905 fixes #815
+  (`apps/desktop/src/features/targets/AddTargetDialog.tsx`).
 
 ### S3 — Review and edit target identity {#S3}
 - **Do:** Open a target's detail panel. Add or remove an alias, set or clear
@@ -158,7 +171,12 @@ configured) real per-site astronomy for tonight.
   `apps/desktop/src/features/targets/planner-derive.ts`,
   `AltitudeSparkline.tsx` — PR #896 fixes #579 (visibility rating no longer
   uniform on a no-dark-window night) and #580 (larger sparkline with
-  twilight shading + transit marker).
+  twilight shading + transit marker). PR #914 fixes a carried nJ09c-review
+  nit: editing the configured observing site's coordinates now correctly
+  invalidates the cached per-target altitude/Moon data, so these columns
+  refresh immediately instead of showing stale values until an unrelated
+  setting changes (`TargetsTable.tsx` cache key now derives from site
+  geometry).
 
 ### S5 — Toggle a favourite / "My Targets" {#S5}
 - **Do:** Star a target from the row or detail panel; switch the list to "My
@@ -216,6 +234,18 @@ configured) real per-site astronomy for tonight.
   journey-09 Test 9.
   Evidence: PR #940 (addresses the naming half of #792; spec 044 FR-009
   amendment, iteration 2026-07-17) · by: best-moon-date lane
+  (intent-gated)
+
+- **Δ5** 2026-07-17 · S1, S2, S4 · behavior-change
+  The Targets sidebar badge now shows the count of the user's own
+  favourited targets instead of the whole bundled catalog. The Add-target
+  search dropdown (matches and "no match" message) is now visible above the
+  Add-target/Create-project dialogs instead of clipped invisible beneath
+  them. Virtualized row height now tracks the density setting, and editing
+  the observing site's coordinates now correctly refreshes cached
+  altitude/Moon data for every row instead of showing stale values.
+  Evidence: PR #912 (fixes #574), PR #905 (fixes #815), PR #914 (carried
+  nJ09c/nJ10a review nits, no matching issues) · by: journey-scribe
   (intent-gated)
 
 Note (not a Δ entry — provenance for why two deltas were not folded into the
