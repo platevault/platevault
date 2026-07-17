@@ -33,6 +33,8 @@
 # single-instance dbus id (e.g. `Builder::new(..).dbus_id(..)` with an
 # env-derived per-instance id under the `e2e` feature) in
 # `apps/desktop/src-tauri/src/lib.rs` first.
+
+[profile.e2e]
 test-threads = 1
 
 # Warn every 60 s; terminate after 5 periods (300 s). Must exceed the
