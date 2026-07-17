@@ -240,8 +240,8 @@ export function wrap(
     state.seq += 1;
     const id = `call:${state.seq}`;
 
-    let response: unknown = undefined;
-    let error: ContractCall['error'] = undefined;
+    let response: unknown;
+    let error: ContractCall['error'];
     let resTruncated = false;
 
     try {

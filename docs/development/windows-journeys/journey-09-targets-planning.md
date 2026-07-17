@@ -209,10 +209,11 @@ Expected:
   (not the same as tonight's).
 - Step 3: values return to matching today's from step 1.
 - Step 4: a real date + "in N days"/"in N months" appears, in the same
-  format as the Targets table's existing "Opposition" column (this is
-  intentional — they're the same underlying anti-solar-transit
-  calculation for a fixed deep-sky target, just surfaced in two different
-  places; NOT a bug if they show the same date for the same target).
+  format as the Targets table's existing "Opposition" column. Since the
+  iteration 2026-07-17 (spec 044 FR-009 amendment) the detail date is
+  Moon-aware and MAY legitimately differ from the list's Opposition date
+  by up to 15 days — see Test 9 for the exact contract; identical dates
+  are also fine (it means the opposition night itself is Moon-viable).
 - Step 5: every band shows a distinct, plausible hour figure (0 to roughly
   the target's total imaging hours for the night); a narrowband figure
   (Ha/SII/OIII) should generally be ≥ a broadband one (L/R/G/B) for the same
@@ -290,6 +291,44 @@ FAIL if:
 - Setting OSC changes nothing, or reverting to Mono/Unknown does NOT
   restore the pre-OSC values byte-identically.
 
+### Test 9 — Iteration 2026-07-17: Moon-aware detail "Best date" (spec 044 FR-009 amendment, requires Test 6b's site to exist)
+Steps:
+1. Open a target's detail page and find the "Best date" stat row in the
+   Tonight panel.
+2. Hover (or keyboard-focus, Tab) the stat's VALUE. A styled app tooltip
+   (dark token-styled popup, not a browser-default title bubble) must open
+   with exactly ONE of these three explanations:
+   - diverged: "Opposition `<date>` falls near full Moon (`<X>`% lit,
+     `<Y>`° away). Best night within ±2 weeks: `<date>` — Moon `<X>`% lit,
+     `<Y>`° from target."
+   - coincides: "Matches opposition — the Moon is favourable that night
+     (`<X>`% lit, `<Y>`° away)."
+   - none found: "No Moon-favourable night within ±2 weeks of opposition;
+     showing the opposition date."
+3. Compare with the SAME target's row in the Targets table: the list
+   "Opposition" cell. With the diverged tooltip the two dates must differ
+   (detail moved to a Moon-viable night at most 15 days either side of the
+   list's date, which the tooltip names as "Opposition <date>"); with the
+   other two tooltips the dates must match.
+4. Open Settings → Target Planner and drop the L band's Moon-avoidance
+   distance to a small value (e.g. 10°); return to the detail page: the
+   Best date should now generally coincide with the opposition (the search
+   recomputes live from the edited parameters). Restore the defaults.
+Expected:
+- Step 2: the tooltip always states one of the three explanations with real
+  percentages/degrees — never an empty or generic tooltip.
+- Step 3: list-vs-detail relationship matches the tooltip's claim; the LIST
+  Opposition cell is byte-identical to pre-iteration behavior (pure
+  anti-solar date, unchanged sort).
+- Step 4: parameter edits change the outcome without a restart.
+FAIL if:
+- The Best date value has no tooltip, or it renders as an unstyled
+  browser-default title bubble.
+- A diverged detail date is more than 15 days from the list Opposition date,
+  or the tooltip's "Opposition <date>" does not equal the list cell's date.
+- The LIST Opposition column changed (different date/format/sort than
+  before the iteration).
+
 ## Troubleshooting
 - Blank window: restart the dev server; if still blank, `pnpm install` with
   `$env:CI="true"`, relaunch.
@@ -319,6 +358,15 @@ what it should.
   9.1b covers the removed columns + the FR-033 context label. The OSC
   equipment round-trip (steps 7-9) and glyph tooltip *contents* are only
   verified through this document.
+- **Test 9 automated coverage** — `tests/e2e/targets_planner.spec.ts` 9.5c
+  (added with the 2026-07-17 iteration) asserts the list-vs-detail
+  relationship and the three-state explanation (via the aria-label mirror)
+  in CI's mock-Playwright job; the Layer-2 real-UI journey
+  (`crates/e2e-tests/tests/targets_journeys.rs`,
+  `targets_planner_real_astronomy_after_site_creation`) asserts the
+  Best-date stat + explanation against the real backend. The hover-OPENED
+  popup (styling, positioning) is only verified through this document —
+  neither automated harness exercises real pointer hover.
 - The stub-disclosure requirement (Test 6a) remains safety-critical:
   assert that every astronomy column and the altitude graph carry a
   disclosure affordance in the no-site state, regardless of what real

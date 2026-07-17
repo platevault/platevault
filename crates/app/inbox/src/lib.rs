@@ -18,6 +18,7 @@
 //! stays byte-identical.
 #![allow(clippy::doc_markdown)] // spec/domain terminology not appropriate for backticks
 
+pub mod attribution;
 pub mod classify;
 pub mod cone_search;
 pub mod confirm;

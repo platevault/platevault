@@ -411,6 +411,42 @@ pub async fn set_approved(
     Ok(())
 }
 
+/// Set the attribution pick's target framing on a plan (spec 008 Q27,
+/// F-Framing-10, migration 0068). Read back at plan-apply completion
+/// (`app_core_targets::ingest_sessions`) once the plan's light frames are
+/// folded into a real `acquisition_session` — that is the earliest point a
+/// session id exists to add as a framing member.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn set_chosen_framing_id(
+    pool: &SqlitePool,
+    plan_id: &str,
+    framing_id: &str,
+) -> DbResult<()> {
+    sqlx::query("UPDATE plans SET chosen_framing_id = ? WHERE id = ?")
+        .bind(framing_id)
+        .bind(plan_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Read the attribution pick's target framing for a plan, if any (F-Framing-10).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn get_chosen_framing_id(pool: &SqlitePool, plan_id: &str) -> DbResult<Option<String>> {
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT chosen_framing_id FROM plans WHERE id = ?")
+            .bind(plan_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.and_then(|(v,)| v))
+}
+
 /// Set `discarded_at` and transition state to `discarded` (soft-delete, A5).
 ///
 /// Row is retained; `parent_plan_id` references remain resolvable.
@@ -507,6 +543,38 @@ mod tests {
         assert_eq!(row.id, "plan-1");
         assert_eq!(row.state, "draft");
         assert_eq!(row.origin, "cleanup");
+    }
+
+    // ── chosen_framing_id (F-Framing-10) ────────────────────────────────────
+
+    #[tokio::test]
+    async fn chosen_framing_id_defaults_to_none_and_round_trips() {
+        let db = setup().await;
+        insert_plan(db.pool(), &sample_plan("plan-attr")).await.unwrap();
+        assert_eq!(get_chosen_framing_id(db.pool(), "plan-attr").await.unwrap(), None);
+
+        sqlx::query(
+            "INSERT INTO projects (id, name, tool, lifecycle, path, notes, channel_drift, is_mosaic, created_at, updated_at) \
+             VALUES ('proj-attr', 'P', 'PixInsight', 'ready', 'projects/proj-attr', NULL, 0, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO framing (id, project_id, optic_train_key, pointing_ra_deg, pointing_dec_deg, \
+             rotation_deg, tolerance_pointing, tolerance_rotation_deg, clustering, created_at, updated_at) \
+             VALUES ('framing-attr', 'proj-attr', 'scope-a|cam-a', 10.0, 20.0, 0.0, 0.1, 3.0, 'suggested', \
+             '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        set_chosen_framing_id(db.pool(), "plan-attr", "framing-attr").await.unwrap();
+        assert_eq!(
+            get_chosen_framing_id(db.pool(), "plan-attr").await.unwrap().as_deref(),
+            Some("framing-attr")
+        );
     }
 
     #[tokio::test]

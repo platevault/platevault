@@ -106,6 +106,8 @@ import { useFavourites } from './useFavourites';
 import { useActiveSite } from './observing-sites/site-store';
 import type { ObserverSite } from './observing-sites/observer-site';
 import { usePlannerDateMs } from './planner-date-store';
+import { usePreference } from '@/data/preferences';
+import { ROW_HEIGHT_PX } from '@/data/theme';
 import {
   groupByDimensions,
   flattenVisibleGroups,
@@ -266,6 +268,18 @@ interface RowCacheEntry {
   moon: RowMoonPlanning;
 }
 
+/**
+ * Site geometry component of the gen key. `rowAltitudeFor` reads
+ * lat/lon/elevation off the `ObserverSite` object directly (not just its id),
+ * so editing an existing site's coordinates (same id) must still invalidate
+ * `rowCache` — keying on `site.id` alone let a geometry edit serve stale
+ * altitude/moon values for every already-cached target.
+ */
+function siteGeometryKey(site: ObserverSite | null): string {
+  if (!site) return '';
+  return `${site.latitudeDeg}|${site.longitudeDeg}|${site.elevationM ?? ''}`;
+}
+
 /** Generation key gating `rowCache`: changes whenever any astronomy input does. */
 function rowCacheGenKey(
   usableAltDeg: number,
@@ -274,7 +288,7 @@ function rowCacheGenKey(
   night: ObservingNight | null,
   guidanceParams: MoonAvoidanceParams,
 ): string {
-  return `${usableAltDeg}|${site?.id ?? ''}|${dateMs}|${night?.nightKey ?? ''}|${JSON.stringify(guidanceParams)}`;
+  return `${usableAltDeg}|${site?.id ?? ''}|${siteGeometryKey(site)}|${dateMs}|${night?.nightKey ?? ''}|${JSON.stringify(guidanceParams)}`;
 }
 
 /**
@@ -671,8 +685,6 @@ function ImagingTimeCell({
   );
 }
 
-/** Estimated row height (px) for the virtualizer's first measurement pass. */
-const ROW_ESTIMATE = 36;
 /** Extra rows rendered above/below the viewport to avoid blank flashes on scroll. */
 const OVERSCAN = 12;
 
@@ -764,6 +776,12 @@ export function TargetsTable({
   const resolvedFavouriteIds = favouriteIds ?? internalFavourites.favouriteIds;
   const resolvedToggle = onToggleFavourite ?? internalFavourites.toggle;
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Row height follows the GLOBAL density setting (task #82, `--alm-row-height`
+  // in tokens.css); the virtualizer has no measureElement (see file docstring
+  // — rows are uniform so estimateSize must be exact), so this must track the
+  // active density rather than a fixed guess.
+  const [density] = usePreference('density');
+  const rowEstimate = ROW_HEIGHT_PX[density] ?? ROW_HEIGHT_PX.comfortable;
   const { collapsed, toggle: toggleCollapsed } = useCollapsibleGroups();
 
   // US6/T015: the active observing site drives every row's real astronomy.
@@ -946,7 +964,7 @@ export function TargetsTable({
   const virtualizer = useVirtualizer({
     count: flatRows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_ESTIMATE,
+    estimateSize: () => rowEstimate,
     overscan: OVERSCAN,
   });
 

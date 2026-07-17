@@ -27,6 +27,9 @@
 //!   (spec 049 US2 T029 — read-only display in the generation dialog; the
 //!   editable Settings pane for these two keys is spec 049 T030,
 //!   `apps/desktop/src/features/settings/SourceViews.tsx`)
+//! - `"framing"` → `framingPointingFractionOfFov`, `framingPointingFallbackDeg`,
+//!   `framingRotationToleranceDeg`, `framingMosaicEnvelopeFractionOfFov`
+//!   (spec 008 Q27 F-Framing-11, R11a clustering tolerance tunables)
 //! - `""` (empty) → reads the full settings bag (all known keys).
 //!
 //! Unknown `values` keys from the frontend that are not valid settings keys are
@@ -84,6 +87,12 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "usableAltitudeDeg",
         ],
         "planner" => &["plannerMoonAvoidance"],
+        "framing" => &[
+            "framingPointingFractionOfFov",
+            "framingPointingFallbackDeg",
+            "framingRotationToleranceDeg",
+            "framingMosaicEnvelopeFractionOfFov",
+        ],
         // Empty scope or "global" returns every stable key.
         _ => &[
             "logLevel",
@@ -117,6 +126,10 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "usableAltitudeDeg",
             "plannerMoonAvoidance",
             "theme",
+            "framingPointingFractionOfFov",
+            "framingPointingFallbackDeg",
+            "framingRotationToleranceDeg",
+            "framingMosaicEnvelopeFractionOfFov",
         ],
     }
 }
