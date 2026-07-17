@@ -3478,7 +3478,24 @@ export type ErrorCode = "validation.request_envelope_invalid" | "dev_mode.disabl
  */
 "volume.still.unavailable" | 
 /**  `plan.resume` re-validated and the destination volume is still full. */
-"disk.still.full" | "archive.empty" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "framing.not_found" | "framing.project_mismatch" | "framing.merge.requires_two" | "framing.merge.duplicate_id" | "framing.split.empty_selection" | "framing.split.invalid_session" | "framing.split.would_empty_source" | "framing.reassign.empty_selection" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
+"disk.still.full" | "archive.empty" | 
+/**
+ *  OS trash unavailable or failed for every item in an
+ *  `archive.send_to_trash` run (spec 017 US6, spec 025 `FailureCode::OsTrashUnavailable`).
+ */
+"os_trash.unavailable" | 
+/**
+ *  OS trash denied permission for every item in an
+ *  `archive.send_to_trash` run.
+ */
+"os_trash.permission.denied" | 
+/**
+ *  Non-permission delete failure (e.g. the file vanished mid-run, its
+ *  volume went unavailable, or the destination disk filled) for every
+ *  item in an `archive.permanently_delete` run. Permission failures use
+ *  the more specific `path.permission_denied`.
+ */
+"archive.delete_failed" | "confirm.text.mismatch" | "no.items.to.retry" | "no_op" | "parent.not_found" | "parent.not_terminal" | "lifecycle.read_only" | "lifecycle.last_confirmed_source" | "project.not_found" | "project.read_only" | "framing.not_found" | "framing.project_mismatch" | "framing.merge.requires_two" | "framing.merge.duplicate_id" | "framing.split.empty_selection" | "framing.split.invalid_session" | "framing.split.would_empty_source" | "framing.reassign.empty_selection" | "view.mixed_kind" | "view.not_found" | "view.unsupported_kind" | "no_selection" | "no_link_kind" | "destination.collision" | "destination.exists" | "profile.not_found" | "canonical_target.not_found" | "name.duplicate" | "name.empty" | "name.too_long" | "source.already.linked" | "source.not_found" | "source.invalid_organization_state" | 
 /**
  *  Returned by `roots.delete` (P6b, decision D8) when dependent records
  *  (inbox items, plan items, file records, sessions) still reference the

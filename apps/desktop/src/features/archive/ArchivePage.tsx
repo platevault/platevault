@@ -23,7 +23,7 @@
  * "DELETE" confirmation modal gating `archive.permanently_delete`.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ListPageLayout, PageTopBar, FilterToolbar, Modal } from '@/components';
 import { Btn, EmptyState, Skeleton } from '@/ui';
@@ -69,6 +69,10 @@ export function ArchivePage() {
   const permanentlyDelete = usePermanentlyDelete();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
+  // #841: point the destructive confirm modal's initial focus directly at the
+  // confirm input instead of racing Base UI's own default (first tabbable =
+  // the ✕ close button) with a bare `autoFocus`.
+  const confirmInputRef = useRef<HTMLInputElement>(null);
 
   useStaleSelectionCleanup(selected, item !== null, () => {
     void navigate({
@@ -200,6 +204,7 @@ export function ArchivePage() {
           title={m.archive_delete_permanently_confirm_title()}
           size="sm"
           ariaLabel={m.archive_delete_permanently_confirm_title()}
+          initialFocus={confirmInputRef}
           footer={
             <>
               <Btn
@@ -226,14 +231,13 @@ export function ArchivePage() {
             {m.archive_delete_permanently_confirm_desc({ name: item.name })}
           </p>
           <input
+            ref={confirmInputRef}
             className="alm-input"
             type="text"
             value={confirmInput}
             onChange={(e) => setConfirmInput(e.target.value)}
             placeholder={DELETE_CONFIRM_TEXT}
             aria-label={m.archive_delete_permanently_confirm_aria()}
-            // eslint-disable-next-line jsx-a11y/no-autofocus -- focus moves to the confirm input when the destructive delete-permanently modal opens (expected modal behaviour)
-            autoFocus
           />
         </Modal>
       )}
