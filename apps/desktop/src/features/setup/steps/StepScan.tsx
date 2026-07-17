@@ -368,26 +368,14 @@ export function StepScan({
   flushResult,
   onAllDoneChange,
 }: StepScanProps) {
-  const [sourceStates, setSourceStates] = useState<SourceScanState[]>(() =>
-    sources
-      // Issue #704: only scan folders this flush actually registered. An
-      // already-registered folder (restart flow) has no fresh rootId here;
-      // scanning it with the path-as-rootId fallback fails the
-      // registered_sources JOIN and would insert orphaned inbox_items, so it
-      // is skipped — its content is already ingested under its real root.
-      .filter((s) => {
-        if (!s.path) return false;
-        const row = flushResult.results.find((r) => r.path === s.path);
-        return row?.success ?? false;
-      })
-      .map((s) => ({
-        source: s,
-        rootId: getRootId(flushResult, s.path),
-        phase: 'pending',
-        items: [],
-        classifications: new Map(),
-      })),
-  );
+  const [sourceStates, setSourceStates] = useState<SourceScanState[]>([]);
+  // The alreadyRegistered resolution (roots.list) below is async, so
+  // sourceStates starts empty even when there is work to do — an empty array
+  // vacuously satisfies `.every()`, which would otherwise make `allDone`
+  // (below) briefly report true before scanning has even been set up. Gate
+  // on this instead of sourceStates.length so the transient empty state
+  // isn't mistaken for "nothing to scan".
+  const [resolved, setResolved] = useState(false);
 
   // Guard: track whether scanning has already been initiated to prevent
   // re-entry double-scans when the user navigates Back and then Next again.
@@ -397,72 +385,149 @@ export function StepScan({
     if (scanStartedRef.current) return;
     scanStartedRef.current = true;
 
-    // Scan each source independently; one failure doesn't abort others.
-    for (let i = 0; i < sourceStates.length; i++) {
-      const idx = i;
-      const entry = sourceStates[idx];
+    void (async () => {
+      // Issue #916: a wizard retry after a partial batch-registration
+      // failure resubmits *every* source, not just the ones that failed. A
+      // source that registered successfully on an earlier attempt in this
+      // same session therefore comes back from flushToDB as
+      // `alreadyRegistered` (duplicate) on the retry — the exact same shape
+      // a genuinely-already-scanned restart-flow source has (issue #704).
+      // flushResult alone can't tell the two apart: one has already been
+      // scanned and is safe to skip, the other has never been scanned and
+      // must not be dropped. Resolve the real root via roots.list and use
+      // its `lastScanned` (only set once inbox.scan_folder has actually run
+      // for that root — see roots.rs) as the ground truth.
+      const needsResolution = sources.filter((s) => {
+        if (!s.path) return false;
+        const row = flushResult.results.find((r) => r.path === s.path);
+        return row?.alreadyRegistered ?? false;
+      });
 
-      void (async () => {
-        // Mark as scanning
-        setSourceStates((prev) => {
-          const next = [...prev];
-          next[idx] = { ...next[idx], phase: 'scanning' };
-          return next;
+      const resolvedRoots = new Map<
+        string,
+        { id: string; lastScanned: string | null }
+      >();
+      if (needsResolution.length > 0) {
+        try {
+          const roots = unwrap(await commands.rootsList());
+          for (const root of roots) {
+            resolvedRoots.set(root.path, {
+              id: root.id,
+              lastScanned: root.lastScanned ?? null,
+            });
+          }
+        } catch {
+          // Best-effort: an unresolved lookup falls through to the
+          // conservative default below (skip — matches prior behaviour).
+        }
+      }
+
+      const initialStates: SourceScanState[] = sources
+        // Issue #704 / #916: only scan folders this flush actually
+        // registered, or that a prior same-session attempt registered but
+        // never scanned. A root whose registration failed for a genuine
+        // reason (no rootId, not `alreadyRegistered`) is skipped — scanning
+        // it with the path-as-rootId fallback fails the registered_sources
+        // JOIN and would insert orphaned inbox_items.
+        .filter((s) => {
+          if (!s.path) return false;
+          const row = flushResult.results.find((r) => r.path === s.path);
+          if (row?.success) return true;
+          if (!row?.alreadyRegistered) return false;
+          const resolvedRoot = resolvedRoots.get(s.path);
+          // Only a root that has genuinely completed a scan before may be
+          // skipped here; a registered-but-never-scanned root must rescan.
+          return resolvedRoot != null && resolvedRoot.lastScanned == null;
+        })
+        .map((s) => {
+          const row = flushResult.results.find((r) => r.path === s.path);
+          const rootId = row?.success
+            ? getRootId(flushResult, s.path)
+            : (resolvedRoots.get(s.path)?.id ?? s.path);
+          return {
+            source: s,
+            rootId,
+            phase: 'pending',
+            items: [],
+            classifications: new Map(),
+          };
         });
 
-        try {
-          // 1. Scan the folder
-          const scanResponse = unwrap(
-            await commands.inboxScanFolder({
-              rootId: entry.rootId,
-              rootAbsolutePath: entry.source.path,
-            }),
-          );
+      setSourceStates(initialStates);
+      setResolved(true);
 
-          const items = scanResponse.items ?? [];
+      // Scan each source independently; one failure doesn't abort others.
+      for (let i = 0; i < initialStates.length; i++) {
+        const idx = i;
+        const entry = initialStates[idx];
 
-          // 2. Classify each discovered item
-          const classifications = new Map<string, InboxClassifyResponse>();
-          await Promise.allSettled(
-            items.map(async (item) => {
-              try {
-                const cls = unwrap(
-                  await commands.inboxClassify({
-                    inboxItemId: item.inboxItemId,
-                    rootAbsolutePath: entry.source.path,
-                  }),
-                );
-                classifications.set(item.inboxItemId, cls);
-              } catch {
-                // Classification failure for one item: skip but don't abort
-              }
-            }),
-          );
-
+        void (async () => {
+          // Mark as scanning
           setSourceStates((prev) => {
             const next = [...prev];
-            next[idx] = { ...next[idx], phase: 'done', items, classifications };
+            next[idx] = { ...next[idx], phase: 'scanning' };
             return next;
           });
-        } catch (err: unknown) {
-          setSourceStates((prev) => {
-            const next = [...prev];
-            next[idx] = {
-              ...next[idx],
-              phase: 'error',
-              error: errMessage(err),
-            };
-            return next;
-          });
-        }
-      })();
-    }
+
+          try {
+            // 1. Scan the folder
+            const scanResponse = unwrap(
+              await commands.inboxScanFolder({
+                rootId: entry.rootId,
+                rootAbsolutePath: entry.source.path,
+              }),
+            );
+
+            const items = scanResponse.items ?? [];
+
+            // 2. Classify each discovered item
+            const classifications = new Map<string, InboxClassifyResponse>();
+            await Promise.allSettled(
+              items.map(async (item) => {
+                try {
+                  const cls = unwrap(
+                    await commands.inboxClassify({
+                      inboxItemId: item.inboxItemId,
+                      rootAbsolutePath: entry.source.path,
+                    }),
+                  );
+                  classifications.set(item.inboxItemId, cls);
+                } catch {
+                  // Classification failure for one item: skip but don't abort
+                }
+              }),
+            );
+
+            setSourceStates((prev) => {
+              const next = [...prev];
+              next[idx] = {
+                ...next[idx],
+                phase: 'done',
+                items,
+                classifications,
+              };
+              return next;
+            });
+          } catch (err: unknown) {
+            setSourceStates((prev) => {
+              const next = [...prev];
+              next[idx] = {
+                ...next[idx],
+                phase: 'error',
+                error: errMessage(err),
+              };
+              return next;
+            });
+          }
+        })();
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally empty: run once on mount
 
-  const allDone = sourceStates.every(
-    (s) => s.phase === 'done' || s.phase === 'error',
-  );
+  const allDone =
+    resolved &&
+    sourceStates.every((s) => s.phase === 'done' || s.phase === 'error');
   const totalDetected = sourceStates.reduce(
     (acc, s) => acc + s.items.length,
     0,
