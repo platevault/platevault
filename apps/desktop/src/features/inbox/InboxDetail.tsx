@@ -10,14 +10,15 @@
  *             inline action buttons (left-packed, alm-session-detail2__actions).
  *             Confirm lives HERE; disabled for "mixed" rows (spec 041 FR-050 —
  *             the backend "split" action is removed, T071/T072).
- *   BODY   — left-packed .alm-session-detail2 flex row:
+ *   BODY   — scrollable (#553) left-packed .alm-session-detail2 flex row:
  *     col A (PropertyTable) — classification + file-count + FITS metadata
  *     mixed-summary line   — compact "N light · M dark" muted text (mixed only)
  *     "Files (N) ▾" popover trigger — opens a portaled popup containing:
  *       • scrollable per-file metadata table
  *       • FileInspector detail for the clicked row
+ *       • FR-032/#554 missing-required-attribute banner, inline right below
+ *         the trigger it explains (not a separate full-width alert column)
  *     "Needs review" col  — unclassified-file type-override editing (if any)
- *     FR-032 banner col   — missing-attr gate (if any)
  *
  * No facts/aux props on DetailPanel — body is fully self-contained.
  * No breakdown-filter interaction — the breakdown table is gone from the detail.
@@ -266,7 +267,10 @@ function FileInspector({ file }: { file: InboxFileMetadata | null }) {
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface InboxDetailProps {
-  item: InboxItemSummary;
+  // #768: `organizationState` isn't on the base `InboxItemSummary` (it's an
+  // `InboxListItem` extension) — widened here so the picker-gate below can
+  // read it without every other InboxDetail caller needing a full InboxListItem.
+  item: InboxItemSummary & { organizationState?: string };
   rootAbsolutePath: string;
   classification: InboxClassifyResponse | null;
   /**
@@ -450,6 +454,12 @@ export function InboxDetail({
   // can receive this item's frame type. Only meaningful for a single-type item
   // (or a master); mixed/unknown → show all roots. The picker is shown only when
   // MORE THAN ONE applicable root exists (otherwise there's nothing to choose).
+  //
+  // #768: an item sourced from an ORGANIZED root is always catalogued in
+  // place — confirm ignores any chosen destination and reuses the source
+  // root server-side — so there is never a real destination choice to make.
+  // No applicable roots means no picker, regardless of how many other
+  // library roots are registered.
   const itemFrameType =
     classType === 'single_type'
       ? (classification?.frameType ?? null)
@@ -458,9 +468,11 @@ export function InboxDetail({
         : null;
   const applicableCategory = applicableRootCategory(itemFrameType);
   const applicableRoots =
-    applicableCategory && destinationRoots
-      ? destinationRoots.filter((r) => r.category === applicableCategory)
-      : (destinationRoots ?? []);
+    item.organizationState === 'organized'
+      ? []
+      : applicableCategory && destinationRoots
+        ? destinationRoots.filter((r) => r.category === applicableCategory)
+        : (destinationRoots ?? []);
 
   // Generic bulk-editable properties (FR-044/US11, issue #755): every
   // overridable registry entry other than frameType (which keeps its own
@@ -805,322 +817,346 @@ export function InboxDetail({
       title={<strong>{title}</strong>}
       titleExtra={titleActions}
     >
-      {/* Mixed: advisory banner */}
-      {classType === 'mixed' && (
-        <Banner
-          variant="warn"
-          className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
-          data-testid="inbox-mixed-alert"
-        >
-          <div className="alm-inbox-alert__msg">
-            <span className="alm-inbox-alert__title">
-              {m.inbox_mixed_folder_title()}
-            </span>
-            <span className="alm-inbox-alert__body">
-              {m.inbox_mixed_folder_body()}
-            </span>
-          </div>
-        </Banner>
-      )}
-
-      {/* Unclassified: blocking banner */}
-      {classType === 'unclassified' && (
-        <Banner
-          variant="danger"
-          className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
-          data-testid="inbox-unclassified-alert"
-        >
-          <div className="alm-inbox-alert__msg">
-            <span className="alm-inbox-alert__title">
-              {m.inbox_frame_types_required_title()}
-            </span>
-            <span className="alm-inbox-alert__body">
-              {m.inbox_frame_types_required_body()}
-            </span>
-          </div>
-        </Banner>
-      )}
-
-      {!classification && (
-        <div className="alm-inbox-detail__empty">
-          {m.inbox_select_item_prompt()}
-        </div>
-      )}
-
-      {/* Left-packed .alm-session-detail2 row */}
-      <div className="alm-session-detail2">
-        {/* Col A: detection facts (first half) */}
-        <div className="alm-session-detail2__col">
-          <PropertyTable mode="view" showSource properties={detColA} />
-        </div>
-
-        {/* Col B: detection facts (second half) — only when there are enough */}
-        {detColB.length > 0 && (
-          <div className="alm-session-detail2__col">
-            <PropertyTable mode="view" showSource properties={detColB} />
-          </div>
-        )}
-
-        {/* Col C: Files — mixed-composition summary + the metadata popover */}
-        <div className="alm-session-detail2__col">
-          <div className="alm-session-detail2__head">{m.inbox_col_files()}</div>
-
-          {/* FR-011: compact mixed-composition summary */}
-          {mixedSummary && (
-            <section
-              aria-label={m.inbox_mixed_composition_summary_aria()}
-              className="alm-inbox-detail__mixed-summary"
-            >
-              {mixedSummary}
-            </section>
-          )}
-
-          {/* Files popover — trigger + portaled popup with metadata table + inspector */}
-          {hasMetadata ? (
-            <Popover.Root
-              onOpenChange={() => {
-                // Reset inspector selection whenever the popover is closed.
-                setInspectedIdx(null);
-              }}
-            >
-              <Popover.Trigger
-                className="alm-inbox-detail__files-trigger"
-                aria-label={m.inbox_file_metadata_count({
-                  count: metadataRows.length,
-                })}
-                data-testid="inbox-files-popover-trigger"
-              >
-                {m.inbox_file_metadata_count({ count: metadataRows.length })} ▾
-              </Popover.Trigger>
-              <Popover.Portal>
-                <Popover.Positioner side="bottom" align="start" sideOffset={4}>
-                  <Popover.Popup
-                    className="alm-inbox-detail__files-popup"
-                    data-testid="inbox-files-popup"
-                    aria-label={m.inbox_file_metadata_aria()}
-                  >
-                    {/* Scrollable metadata table */}
-                    <div className="alm-inbox-detail__files-popup-table">
-                      <Table columns={metadataColumns} rows={metadataRows} />
-                    </div>
-                    {/* Inspector — updates on row click */}
-                    {inspectedIdx != null && (
-                      <div className="alm-inbox-detail__files-popup-inspector">
-                        <FileInspector
-                          file={fileMetadata?.[inspectedIdx] ?? null}
-                        />
-                      </div>
-                    )}
-                  </Popover.Popup>
-                </Popover.Positioner>
-              </Popover.Portal>
-            </Popover.Root>
-          ) : (
-            !mixedSummary && (
-              <span className="alm-session-detail2__muted">
-                {m.inbox_no_file_metadata()}
+      {/* #553: the body (this whole subtree) is the sole scroll region — the
+          header above stays pinned via the `:has()` rule in detail-panes.css.
+          DetailPanel's "content-only" mode (no facts/aux slots) renders
+          children with no scroll wrapper of its own, so a tall FILES/Needs-
+          review body previously overflowed the docked panel's max-height and
+          was clipped by `.alm-listpage__detail-body`'s `overflow: hidden`
+          (unreachable, not just unscrolled). */}
+      <div className="alm-inbox-detail__scroll">
+        {/* Mixed: advisory banner */}
+        {classType === 'mixed' && (
+          <Banner
+            variant="warn"
+            className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
+            data-testid="inbox-mixed-alert"
+          >
+            <div className="alm-inbox-alert__msg">
+              <span className="alm-inbox-alert__title">
+                {m.inbox_mixed_folder_title()}
               </span>
-            )
-          )}
-        </div>
+              <span className="alm-inbox-alert__body">
+                {m.inbox_mixed_folder_body()}
+              </span>
+            </div>
+          </Banner>
+        )}
 
-        {/* Needs review — rendered when unclassified files exist */}
-        {unclassifiedRows.length > 0 && (
-          <div className="alm-session-detail2__col">
-            <Section
-              title={m.inbox_needs_review_title({
-                count: unclassifiedRows.length,
-              })}
-            >
-              <div className="alm-inbox-detail__select-all-row">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = someSelected;
-                  }}
-                  onChange={handleSelectAll}
-                  aria-label={m.inbox_select_all_unclassified_aria()}
-                  data-testid="reclassify-select-all"
-                />
-                <span className="alm-inbox-detail__select-all-label">
-                  {selectedFiles.size === 0
-                    ? m.common_select_all()
-                    : m.inbox_n_selected({ count: selectedFiles.size })}
-                </span>
-              </div>
-              <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
+        {/* Unclassified: blocking banner */}
+        {classType === 'unclassified' && (
+          <Banner
+            variant="danger"
+            className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
+            data-testid="inbox-unclassified-alert"
+          >
+            <div className="alm-inbox-alert__msg">
+              <span className="alm-inbox-alert__title">
+                {m.inbox_frame_types_required_title()}
+              </span>
+              <span className="alm-inbox-alert__body">
+                {m.inbox_frame_types_required_body()}
+              </span>
+            </div>
+          </Banner>
+        )}
 
-              {selectedFiles.size > 0 && (
-                <fieldset className="alm-inbox-detail__bulk-controls">
-                  <legend className="alm-visually-hidden">
-                    {m.inbox_bulk_override_controls_aria()}
-                  </legend>
-                  <div className="alm-inbox-detail__bulk-field">
-                    {}
-                    <label
-                      htmlFor="bulk-frame-type"
-                      className="alm-inbox-detail__bulk-label"
-                    >
-                      {m.inbox_frame_type_label()}
-                    </label>
-                    <select
-                      id="bulk-frame-type"
-                      value={bulkFrameType}
-                      onChange={(e) => setBulkFrameType(e.target.value)}
-                      aria-label={m.inbox_bulk_frame_type_aria()}
-                      data-testid="bulk-frame-type"
-                      className="alm-select alm-select--sm"
-                    >
-                      <option value="">
-                        {m.inbox_unchanged_placeholder()}
-                      </option>
-                      {FRAME_TYPE_OPTIONS.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Field-agnostic bulk properties (FR-044/US11, issue #755):
-                      every OTHER overridable registry property applicable to
-                      this item's frame type — filter/exposureS/binning/gain/
-                      temperatureC/etc, whichever the registry returns. Known
-                      keys reuse their existing translated label; unrecognised
-                      future registry keys fall back to a humanized label so
-                      new properties are reachable without a UI change. */}
-                  {genericBulkFields.map((field) => {
-                    const known = KNOWN_BULK_FIELD_LABELS[field.key];
-                    const label =
-                      known?.label ??
-                      humanizeKey(field.key) +
-                        (field.unit ? ` (${field.unit})` : '');
-                    const testid = known?.testid ?? `bulk-prop-${field.key}`;
-                    const inputType =
-                      field.kind === 'number' || field.kind === 'integer'
-                        ? 'number'
-                        : 'text';
-                    return (
-                      <div
-                        className="alm-inbox-detail__bulk-field"
-                        key={field.key}
-                      >
-                        {}
-                        <label
-                          htmlFor={testid}
-                          className="alm-inbox-detail__bulk-label"
-                          title={field.validation ?? undefined}
-                        >
-                          {label}
-                        </label>
-                        <input
-                          id={testid}
-                          type={inputType}
-                          value={bulkPropValues[field.key] ?? ''}
-                          onChange={(e) =>
-                            handleBulkPropChange(field.key, e.target.value)
-                          }
-                          placeholder={
-                            known?.placeholder ??
-                            m.inbox_unchanged_placeholder()
-                          }
-                          aria-label={label}
-                          data-testid={testid}
-                          className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
-                        />
-                      </div>
-                    );
-                  })}
-
-                  <button
-                    type="button"
-                    className="alm-btn alm-btn--sm alm-btn--accent"
-                    onClick={handleBulkApply}
-                    disabled={reclassifyLoading}
-                    aria-label={m.inbox_bulk_override_apply_aria({
-                      count: selectedFiles.size,
-                    })}
-                    data-testid="bulk-apply-btn"
-                  >
-                    {reclassifyLoading
-                      ? m.common_applying()
-                      : m.inbox_apply_to_selected({
-                          count: selectedFiles.size,
-                        })}
-                  </button>
-                </fieldset>
-              )}
-
-              {bulkError && (
-                <Banner
-                  variant="danger"
-                  className="alm-inbox-detail__banner-mt2"
-                >
-                  {bulkError}
-                </Banner>
-              )}
-
-              {Object.keys(pendingOverrides).length > 0 && (
-                <div className="alm-inbox-detail__apply-row">
-                  <button
-                    type="button"
-                    className="alm-btn alm-btn--sm alm-btn--accent"
-                    onClick={handleApplyOverrides}
-                    disabled={
-                      Object.keys(pendingOverrides).length === 0 ||
-                      reclassifyLoading
-                    }
-                    aria-label={m.inbox_apply_manual_overrides_aria()}
-                  >
-                    {reclassifyLoading
-                      ? m.common_applying()
-                      : m.inbox_apply_n_overrides({
-                          count: Object.keys(pendingOverrides).length,
-                        })}
-                  </button>
-                </div>
-              )}
-
-              {applyError && (
-                <Banner
-                  variant="danger"
-                  className="alm-inbox-detail__banner-mt2"
-                >
-                  {applyError}
-                </Banner>
-              )}
-            </Section>
+        {!classification && (
+          <div className="alm-inbox-detail__empty">
+            {m.inbox_select_item_prompt()}
           </div>
         )}
 
-        {/* FR-032 (US9): blocking banner for missing path attributes */}
-        {filesMissingAttrs.length > 0 && (
+        {/* Left-packed .alm-session-detail2 row */}
+        <div className="alm-session-detail2">
+          {/* Col A: detection facts (first half) */}
           <div className="alm-session-detail2__col">
-            <Banner
-              variant="danger"
-              className="alm-inbox-detail__banner-mt3 alm-inbox-alert"
-              data-testid="inbox-missing-attr-banner"
-            >
-              <div className="alm-inbox-alert__msg">
-                <span className="alm-inbox-alert__title">
-                  {m.inbox_required_metadata_missing_title()}
-                </span>
-                <span className="alm-inbox-alert__body">
-                  {m.inbox_required_metadata_body({
-                    count: filesMissingAttrs.length,
-                  })}
-                </span>
-              </div>
-            </Banner>
+            <PropertyTable mode="view" showSource properties={detColA} />
           </div>
+
+          {/* Col B: detection facts (second half) — only when there are enough */}
+          {detColB.length > 0 && (
+            <div className="alm-session-detail2__col">
+              <PropertyTable mode="view" showSource properties={detColB} />
+            </div>
+          )}
+
+          {/* Col C: Files — mixed-composition summary + the metadata popover */}
+          <div className="alm-session-detail2__col">
+            <div className="alm-session-detail2__head">
+              {m.inbox_col_files()}
+            </div>
+
+            {/* FR-011: compact mixed-composition summary */}
+            {mixedSummary && (
+              <section
+                aria-label={m.inbox_mixed_composition_summary_aria()}
+                className="alm-inbox-detail__mixed-summary"
+              >
+                {mixedSummary}
+              </section>
+            )}
+
+            {/* Files popover — trigger + portaled popup with metadata table + inspector */}
+            {hasMetadata ? (
+              <Popover.Root
+                onOpenChange={() => {
+                  // Reset inspector selection whenever the popover is closed.
+                  setInspectedIdx(null);
+                }}
+              >
+                <Popover.Trigger
+                  className="alm-inbox-detail__files-trigger"
+                  aria-label={m.inbox_file_metadata_count({
+                    count: metadataRows.length,
+                  })}
+                  data-testid="inbox-files-popover-trigger"
+                >
+                  {m.inbox_file_metadata_count({ count: metadataRows.length })}{' '}
+                  ▾
+                </Popover.Trigger>
+                <Popover.Portal>
+                  <Popover.Positioner
+                    side="bottom"
+                    align="start"
+                    sideOffset={4}
+                  >
+                    <Popover.Popup
+                      className="alm-inbox-detail__files-popup"
+                      data-testid="inbox-files-popup"
+                      aria-label={m.inbox_file_metadata_aria()}
+                    >
+                      {/* Scrollable metadata table */}
+                      <div className="alm-inbox-detail__files-popup-table">
+                        <Table columns={metadataColumns} rows={metadataRows} />
+                      </div>
+                      {/* Inspector — updates on row click */}
+                      {inspectedIdx != null && (
+                        <div className="alm-inbox-detail__files-popup-inspector">
+                          <FileInspector
+                            file={fileMetadata?.[inspectedIdx] ?? null}
+                          />
+                        </div>
+                      )}
+                    </Popover.Popup>
+                  </Popover.Positioner>
+                </Popover.Portal>
+              </Popover.Root>
+            ) : (
+              !mixedSummary && (
+                <span className="alm-session-detail2__muted">
+                  {m.inbox_no_file_metadata()}
+                  {/* #551: no per-file metadata means the required-destination-
+                    attribute gate has no data to evaluate here — say so
+                    explicitly instead of silently reading as "nothing to
+                    worry about" (confirm can still be rejected server-side
+                    for these files; see inbox.missing_path_attributes). */}
+                  {' — '}
+                  {m.inbox_no_file_metadata_caveat()}
+                </span>
+              )
+            )}
+
+            {/* FR-032 (US9) / #554: missing-required-attribute warning lives
+              INLINE in the Files column (the field it explains) rather than
+              as its own full-width alert column competing with the property
+              tables (#554 — "stands out horribly"). */}
+            {filesMissingAttrs.length > 0 && (
+              <Banner
+                variant="danger"
+                className="alm-inbox-detail__banner-mt2 alm-inbox-alert"
+                data-testid="inbox-missing-attr-banner"
+              >
+                <div className="alm-inbox-alert__msg">
+                  <span className="alm-inbox-alert__title">
+                    {m.inbox_required_metadata_missing_title()}
+                  </span>
+                  <span className="alm-inbox-alert__body">
+                    {m.inbox_required_metadata_body({
+                      count: filesMissingAttrs.length,
+                    })}
+                  </span>
+                </div>
+              </Banner>
+            )}
+          </div>
+
+          {/* Needs review — rendered when unclassified files exist */}
+          {unclassifiedRows.length > 0 && (
+            <div className="alm-session-detail2__col">
+              <Section
+                title={m.inbox_needs_review_title({
+                  count: unclassifiedRows.length,
+                })}
+              >
+                <div className="alm-inbox-detail__select-all-row">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected;
+                    }}
+                    onChange={handleSelectAll}
+                    aria-label={m.inbox_select_all_unclassified_aria()}
+                    data-testid="reclassify-select-all"
+                  />
+                  <span className="alm-inbox-detail__select-all-label">
+                    {selectedFiles.size === 0
+                      ? m.common_select_all()
+                      : m.inbox_n_selected({ count: selectedFiles.size })}
+                  </span>
+                </div>
+                <Table columns={unclassifiedColumns} rows={unclassifiedRows} />
+
+                {selectedFiles.size > 0 && (
+                  <fieldset className="alm-inbox-detail__bulk-controls">
+                    <legend className="alm-visually-hidden">
+                      {m.inbox_bulk_override_controls_aria()}
+                    </legend>
+                    <div className="alm-inbox-detail__bulk-field">
+                      {}
+                      <label
+                        htmlFor="bulk-frame-type"
+                        className="alm-inbox-detail__bulk-label"
+                      >
+                        {m.inbox_frame_type_label()}
+                      </label>
+                      <select
+                        id="bulk-frame-type"
+                        value={bulkFrameType}
+                        onChange={(e) => setBulkFrameType(e.target.value)}
+                        aria-label={m.inbox_bulk_frame_type_aria()}
+                        data-testid="bulk-frame-type"
+                        className="alm-select alm-select--sm"
+                      >
+                        <option value="">
+                          {m.inbox_unchanged_placeholder()}
+                        </option>
+                        {FRAME_TYPE_OPTIONS.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Field-agnostic bulk properties (FR-044/US11, issue #755):
+                        every OTHER overridable registry property applicable to
+                        this item's frame type — filter/exposureS/binning/gain/
+                        temperatureC/etc, whichever the registry returns. Known
+                        keys reuse their existing translated label; unrecognised
+                        future registry keys fall back to a humanized label so
+                        new properties are reachable without a UI change. */}
+                    {genericBulkFields.map((field) => {
+                      const known = KNOWN_BULK_FIELD_LABELS[field.key];
+                      const label =
+                        known?.label ??
+                        humanizeKey(field.key) +
+                          (field.unit ? ` (${field.unit})` : '');
+                      const testid = known?.testid ?? `bulk-prop-${field.key}`;
+                      const inputType =
+                        field.kind === 'number' || field.kind === 'integer'
+                          ? 'number'
+                          : 'text';
+                      return (
+                        <div
+                          className="alm-inbox-detail__bulk-field"
+                          key={field.key}
+                        >
+                          {}
+                          <label
+                            htmlFor={testid}
+                            className="alm-inbox-detail__bulk-label"
+                            title={field.validation ?? undefined}
+                          >
+                            {label}
+                          </label>
+                          <input
+                            id={testid}
+                            type={inputType}
+                            value={bulkPropValues[field.key] ?? ''}
+                            onChange={(e) =>
+                              handleBulkPropChange(field.key, e.target.value)
+                            }
+                            placeholder={
+                              known?.placeholder ??
+                              m.inbox_unchanged_placeholder()
+                            }
+                            aria-label={label}
+                            data-testid={testid}
+                            className="alm-input alm-input--sm alm-inbox-detail__bulk-input-w80"
+                          />
+                        </div>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      className="alm-btn alm-btn--sm alm-btn--accent"
+                      onClick={handleBulkApply}
+                      disabled={reclassifyLoading}
+                      aria-label={m.inbox_bulk_override_apply_aria({
+                        count: selectedFiles.size,
+                      })}
+                      data-testid="bulk-apply-btn"
+                    >
+                      {reclassifyLoading
+                        ? m.common_applying()
+                        : m.inbox_apply_to_selected({
+                            count: selectedFiles.size,
+                          })}
+                    </button>
+                  </fieldset>
+                )}
+
+                {bulkError && (
+                  <Banner
+                    variant="danger"
+                    className="alm-inbox-detail__banner-mt2"
+                  >
+                    {bulkError}
+                  </Banner>
+                )}
+
+                {Object.keys(pendingOverrides).length > 0 && (
+                  <div className="alm-inbox-detail__apply-row">
+                    <button
+                      type="button"
+                      className="alm-btn alm-btn--sm alm-btn--accent"
+                      onClick={handleApplyOverrides}
+                      disabled={
+                        Object.keys(pendingOverrides).length === 0 ||
+                        reclassifyLoading
+                      }
+                      aria-label={m.inbox_apply_manual_overrides_aria()}
+                    >
+                      {reclassifyLoading
+                        ? m.common_applying()
+                        : m.inbox_apply_n_overrides({
+                            count: Object.keys(pendingOverrides).length,
+                          })}
+                    </button>
+                  </div>
+                )}
+
+                {applyError && (
+                  <Banner
+                    variant="danger"
+                    className="alm-inbox-detail__banner-mt2"
+                  >
+                    {applyError}
+                  </Banner>
+                )}
+              </Section>
+            </div>
+          )}
+        </div>
+
+        {/* Cone-search target suggestion (spec 052 P3) — light framesets only. */}
+        {itemFrameType === 'light' && (
+          <ConeSearchSuggestions framesetId={item.inboxItemId} />
         )}
       </div>
-
-      {/* Cone-search target suggestion (spec 052 P3) — light framesets only. */}
-      {itemFrameType === 'light' && (
-        <ConeSearchSuggestions framesetId={item.inboxItemId} />
-      )}
     </DetailPanel>
   );
 }

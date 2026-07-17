@@ -10,7 +10,7 @@
  * hidden because the explicit Cancel button already provides dismissal.
  */
 
-import { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Modal } from './Modal';
 import { Btn } from '@/ui';
 import { m } from '@/lib/i18n';

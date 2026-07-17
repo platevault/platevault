@@ -27,7 +27,7 @@
  * is the canonical replacement for the ad-hoc per-feature dialog wrappers.
  */
 
-import { type ReactNode, type RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { Dialog } from '@base-ui-components/react/dialog';
 import { m } from '@/lib/i18n';
 

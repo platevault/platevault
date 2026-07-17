@@ -13,7 +13,7 @@ body {
   color: var(--alm-text);
   background: var(--alm-bg);
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: 'tnum' 1;
+  font-feature-settings: 'tnum' 1, 'calt' 1;
 }
 
 /* Global font enforcement (product decision): the UI font family is defined

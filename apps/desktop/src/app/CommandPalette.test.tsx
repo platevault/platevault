@@ -38,10 +38,19 @@
  * here, not just at `/targets`.
  */
 
-import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import { render, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { CommandPalette, PAGES, buildTargetResults } from './CommandPalette';
 import { matchesSearch, normalizeDesig } from '@/features/targets/TargetsPage';
+import { commands } from '@/bindings/index';
 import type { TargetListItem } from '@/bindings/index';
 
 // ── Mocks (rendered smoke tests) ──────────────────────────────────────────────
@@ -430,6 +439,52 @@ describe('CommandPalette rendered smoke (#581)', () => {
     fireEvent.click(item);
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalled();
+    });
+  });
+});
+
+// ── targetList cache TTL (nJ09c/nJ10a carry-over) ──────────────────────────────
+//
+// The palette previously called `commands.targetList()` on every open. These
+// assert the cached-fetch fix: a re-open inside TARGET_CACHE_TTL_MS reuses the
+// cached catalog; a re-open after the TTL elapses refetches.
+
+describe('CommandPalette targetList cache TTL', () => {
+  beforeEach(() => {
+    // Prior describe blocks in this file also mount + open the palette, so
+    // the mock's call count carries over — reset before each TTL assertion.
+    vi.mocked(commands.targetList).mockClear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reopening within the TTL does not refetch targetList', async () => {
+    await openPalette();
+    await waitFor(() => {
+      expect(commands.targetList).toHaveBeenCalledTimes(1);
+    });
+    // Close and reopen — the toggle hotkey flips `open` back to false, then true.
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true });
+    await waitFor(() => {
+      expect(document.querySelector('.alm-palette')).not.toBeNull();
+    });
+    expect(commands.targetList).toHaveBeenCalledTimes(1);
+  });
+
+  it('reopening after the TTL elapses refetches targetList', async () => {
+    await openPalette();
+    await waitFor(() => {
+      expect(commands.targetList).toHaveBeenCalledTimes(1);
+    });
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + 61_000);
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true });
+    await waitFor(() => {
+      expect(commands.targetList).toHaveBeenCalledTimes(2);
     });
   });
 });

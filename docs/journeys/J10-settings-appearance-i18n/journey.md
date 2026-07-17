@@ -1,19 +1,21 @@
 ---
 id: J10
 title: Configure appearance, per-library defaults, and trust the app is fully localized
-version: 3
+version: 5
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
-surfaces: [settings, shell, audit]
+surfaces: [settings, shell, audit, framing]
 interfaces: [desktop-ui]
 trace:
   - pre-migration journey.md @ git 66026463
   - deltas/2026-07-14-q15-t122.md (folded — PR #826 / commit 0cdc81cc)
   - deltas/2026-07-14-q15-t126.md (not folded — still blocked, see Known gaps)
-  - deltas/2026-07-14-q27-f11.md (not folded — R11a clustering tunables exist
-    in the backend, crates/sessions/src/clustering.rs, but are not yet
-    surfaced in any Settings pane; flagged in report for user confirmation)
+  - deltas/2026-07-14-q27-f11.md (folded 2026-07-17 — the R11a clustering
+    tunables now ship in a real Settings → Framing pane, PR #927; see S10)
+  - PR #927 (Settings → Framing pane: pointing/rotation/mosaic-envelope
+    tunables)
+  - docs/development/windows-journeys/journey-11-framing-clustering-attribution.md
   - spec 018 (settings configuration model)
   - spec 019 (bottom log viewer)
   - spec 021 (developer contract diagnostics)
@@ -24,6 +26,9 @@ trace:
     PR #415 (aria-sort), PR #826 (durable audit rows for settings/protection/
     equipment/source changes), commit 1f4ba13f (accessibility/theming pass)
   - PR #882 (merged, fixes #587) · PR #884 (merged, fixes #581)
+  - PR #902 (merged, fixes #582, #583) · PR #909 (merged, fixes #584)
+  - PR #914 (merged, carried nJ09c/nJ10a review nit: palette catalog
+    caching)
 ---
 
 ## Goal
@@ -46,17 +51,23 @@ Note: Release builds lack the /dev/contracts palette entry by design
 
 ### S1 — Open Settings and find a pane {#S1}
 - **Do:** Navigate to Settings from the pinned sidebar entry.
-- **Expect:** 13 panes are grouped into three sections — Library (Data
+- **Expect:** 14 panes are grouped into three sections — Library (Data
   Sources, Equipment, Ingestion, Naming & Structure, Target Resolution,
-  Target Planner), Processing (Processing Tools, Calibration Matching,
-  Cleanup, Source Views), and Application (Appearance, Advanced, Audit Log).
+  Target Planner, Framing), Processing (Processing Tools, Calibration
+  Matching, Cleanup, Source Views), and Application (Appearance, Advanced,
+  Audit Log).
   ("Target Resolution" and "Appearance" are the displayed pane titles for
   the `catalogs` and `general` pane ids respectively — not "Catalogs"/
   "General".)
 - **Expect:** Every pane auto-saves; no pane anywhere has a global "Save"
-  button.
+  button. In Target Resolution, the SIMBAD-resolution online toggle (both
+  the compact and full render sites) shows a loading placeholder until its
+  persisted value is fetched, rather than flashing its in-code default
+  (previously ON) then snapping to the real value.
 - **Trace:** apps/desktop/src/features/settings/SettingsPage.tsx (pane ids
-  and nav groups), apps/desktop/messages/en.json:59,67 (displayed titles)
+  and nav groups), apps/desktop/messages/en.json:59,67 (displayed titles).
+  PR #909 fixes #584
+  (apps/desktop/src/features/settings/ResolverSettingsControl.tsx).
 
 ### S2 — Change an appearance setting {#S2}
 - **Do:** In Appearance, pick a different theme, change density, and change
@@ -79,9 +90,12 @@ Note: Release builds lack the /dev/contracts palette entry by design
   wizard-step rows, and the Tonight sparkline's row minimum: Sessions,
   Inbox, and Calibration list rows do not get taller or shorter with
   density, even though their internal spacing now does. No first-paint
-  flash of the previous theme on reload (flash-of-default is a documented
-  issue for at least one other auto-saved toggle, issue #584, open — not
-  verified either way for theme/density specifically by this audit).
+  flash of the previous theme on reload; not verified either way for
+  theme/density specifically by this audit, but the same flash-of-default
+  defect on another auto-saved toggle (the SIMBAD-resolution toggle in
+  Target Resolution) is now fixed — see S1's Target Resolution pane, PR
+  #909 fixes #584 (the toggle now shows a loading skeleton, never its
+  in-code default, before the persisted value resolves).
 - **Trace:** apps/desktop/src/data/theme.ts (`applyTokenScale`,
   `applyDensity`, `applyFontSize`/`FontSizeChoice`),
   apps/desktop/src/features/settings/General.tsx,
@@ -141,13 +155,20 @@ Note: Release builds lack the /dev/contracts palette entry by design
 - **Do:** Expand the collapsible bottom log strip; filter by severity
   (Error/Warn/Info/Debug chips); lower the log level to Debug.
 - **Expect:** Expanding shrinks the main content area rather than covering
-  it. Deep diagnostics only appear once the log level is Debug. Sources are
-  restricted to a fixed, known set. Exporting produces the visible log
-  window as JSON via a native save dialog.
+  it. The severity filter is a floor, not an exact match — selecting Warn
+  also shows Error rows (more severe), not just rows tagged exactly Warn.
+  Deep diagnostics only appear once the log level is Debug. Sources are
+  restricted to a fixed, known set. Each row shows the entity or request it
+  relates to as visible text rather than requiring the reader to infer it.
+  Exporting produces the visible log window as JSON via a native save
+  dialog.
 - **Expect (negative):** The panel does not read from the durable audit
   table (it is bus-backed only, see Known gaps G3) and does not durably
   persist reads or navigation.
-- **Trace:** apps/desktop/src/app/LogPanel.tsx
+- **Trace:** apps/desktop/src/app/LogPanel.tsx,
+  apps/desktop/src/app/LogPanelContext.tsx. PR #902 fixes #582 (level
+  filter was exact-match) and #583 (rows lacked visible entity/request
+  context).
 
 ### S7 — Use the shell: sidebar, command palette, layout {#S7}
 - **Do:** Collapse/expand the left sidebar; reload the app; open the command
@@ -162,8 +183,9 @@ Note: Release builds lack the /dev/contracts palette entry by design
   spaced designation like "M 31"); arrow-key navigation and clicking a
   result both navigate reliably (a focus-ownership race between the
   input's autofocus and the dialog's own focus management previously could
-  leave keyboard/click handling dead); the entity-search catalog is fetched
-  fresh each time the palette opens rather than eagerly at app boot.
+  leave keyboard/click handling dead); the entity-search catalog is cached
+  briefly across opens and only auto-refreshes after a short interval,
+  rather than re-fetching in full on every open.
 - **Expect (negative):** 3 of the palette's 8 listed routes (`/review`,
   `/plans`, `/audit`) still do not exist in the route tree and silently
   redirect when selected (issue #617, still open — not addressed by the
@@ -171,7 +193,9 @@ Note: Release builds lack the /dev/contracts palette entry by design
 - **Trace:** apps/desktop/src/app/Sidebar.tsx,
   apps/desktop/src/app/CommandPalette.tsx, issue #617. PR #884 fixes #581
   (unstyled palette, broken alias matching, dead keyboard nav and clicks —
-  all four were one focus-race + CSS-class + matcher defect, now fixed).
+  all four were one focus-race + CSS-class + matcher defect, now fixed). PR
+  #914 fixes a carried nJ10a-review nit: the palette no longer re-fetches
+  the full target catalog on every open.
 
 ### S8 — Confirm no raw strings leak anywhere in the sweep {#S8}
 - **Do:** Walk every pane and the log panel/audit log, including error and
@@ -193,10 +217,10 @@ Note: Release builds lack the /dev/contracts palette entry by design
   defaults", use it.
 - **Expect:** "Restart first-run setup" is confirm-gated (inline
   confirm/cancel) before it reopens the source-registration wizard.
-  "Restore defaults" (7 adopting panes: Data Sources, Ingestion, Naming &
-  Structure, Calibration Matching, Target Planner, Cleanup, Advanced)
-  actually calls `settings.restore-defaults` or the pane's own reset and
-  refetches, so the visible fields do change.
+  "Restore defaults" (8 adopting panes: Data Sources, Ingestion, Naming &
+  Structure, Calibration Matching, Target Planner, Framing, Cleanup,
+  Advanced) actually calls `settings.restore-defaults` or the pane's own
+  reset and refetches, so the visible fields do change.
 - **Expect (negative):** As of this audit, "Export database" and "Reset
   preferences" are `console.log` no-ops — no backend call, no file, no
   confirmation (issue #601, open,
@@ -211,9 +235,38 @@ Note: Release builds lack the /dev/contracts palette entry by design
   apps/desktop/src/features/settings/SettingsKit.tsx, issue #601,
   issue #802, issue #827, issue #837
 
+### S10 — Tune framing clustering tolerances in the Framing pane {#S10}
+- **Do:** In Library → Framing, change the pointing tolerance fraction, the
+  no-equipment pointing fallback, the rotation tolerance, and the mosaic
+  panel-matching envelope; commit each with blur or Enter; use its Restore
+  Defaults control.
+- **Expect:** On a fresh install the four fields read the R11a shipped
+  defaults (0.1 fraction-of-FOV pointing tolerance, 0.2° no-equipment
+  fallback, 3° rotation tolerance, 1.0 fraction-of-FOV mosaic envelope) with
+  no global Save button, matching every other auto-save pane. Each committed
+  value is clamped to its documented range (pointing fraction 0.01–2.0,
+  fallback 0.01–10°, rotation 0.1–45°, mosaic envelope 0.1–5.0) and survives
+  a pane switch and an app restart through the real settings store. Restore
+  Defaults resets all four fields and re-fetches. These tunables drive the
+  framing clustering used by a project's light-session grouping (J05) and
+  the Inbox-confirm attribution ranking (J02/S5, J03/S2) — changing them
+  here changes clustering/ranking outcomes on the next derivation, not
+  retroactively for framings already marked `user_adjusted`.
+- **Expect (negative):** This pane is the *only* real frontend UI this
+  framing feature has — the framing list/merge/split/reassign surface and
+  the Inbox-confirm attribution-candidate picker referenced by J02/S5 and
+  J03/S2 do not exist in any page; editing these tunables has no visible
+  effect anywhere else in the app within this same session. Tracked as
+  issue #943.
+- **Trace:** apps/desktop/src/features/settings/Framing.tsx,
+  crates/app/settings/src/descriptors.rs (bounds),
+  crates/sessions/src/clustering.rs, crates/app/inbox/src/attribution.rs
+  (`tolerance_params`), tests/e2e/settings_framing.spec.ts,
+  docs/development/windows-journeys/journey-11-framing-clustering-attribution.md.
+
 ## Success criteria
-- SC1: Every control across all 13 panes does something observable,
-  persists, and round-trips a pane switch (S1–S5, S9).
+- SC1: Every control across all 14 panes does something observable,
+  persists, and round-trips a pane switch (S1–S5, S9, S10).
 - SC2: Durable-data settings/protection/equipment/source mutations each
   produce exactly one audit row per committed change, with none for
   UI-state-only keys (S3).
@@ -246,3 +299,21 @@ Note: Release builds lack the /dev/contracts palette entry by design
   focus-ownership race previously could leave it dead). The 3 dead
   Pages-group routes remain unfixed.
   Evidence: PR #884 (fixes #581) · by: journey-scribe (intent-gated)
+
+- **Δ4** 2026-07-17 · S1, S9, +S10 · behavior-change
+  A new Library → Framing pane (14th pane) surfaces the four R11a
+  clustering-tolerance tunables (pointing fraction, no-equipment fallback,
+  rotation tolerance, mosaic envelope) with auto-save and Restore Defaults —
+  the only real UI the framing feature has today.
+  Evidence: PR #927 · by: journey-scribe (intent-gated)
+
+- **Δ5** 2026-07-17 · S1, S6, S7 · behavior-change
+  Target Resolution's SIMBAD toggle now shows a loading placeholder instead
+  of flashing its wrong in-code default before the persisted value loads.
+  The log panel's severity filter is now a floor (Warn also shows Error)
+  instead of an exact match, and rows show their related entity/request as
+  visible text. The command palette now caches its target catalog briefly
+  across opens instead of re-fetching in full every time.
+  Evidence: PR #909 (fixes #584), PR #902 (fixes #582, #583), PR #914
+  (carried nJ10a review nit, no matching issue) · by: journey-scribe
+  (intent-gated)

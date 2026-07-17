@@ -547,3 +547,29 @@
 
 /* Metadata table horizontal scroll wrapper */
 .alm-inbox-detail__metadata-scroll { overflow-x: auto; }
+
+/* #553: InboxDetail renders in DetailPanel's "content-only" mode (no facts/
+ * aux slots), which intentionally skips the `.alm-detailpanel__content`
+ * scroll wrapper — that mode assumes children establish their own scroll
+ * (e.g. a virtualized Table), which InboxDetail's multi-column body does not.
+ * Without a scroll region the FILES/Needs-review content simply overflowed
+ * the docked panel's max-height and was clipped by the ancestor
+ * `.alm-listpage__detail-body`'s `overflow: hidden` (unreachable, not just
+ * unscrolled — see tables-lists.css). Scoped to inbox only via `:has()` (the
+ * same pattern already used in wizard-steps.css) so Sessions/Calibration/
+ * Projects detail panes are unaffected. */
+.alm-listpage__detail-body:has(.alm-inbox-detail__scroll) .alm-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.alm-listpage__detail-body:has(.alm-inbox-detail__scroll) .alm-detail__header {
+  flex-shrink: 0;
+}
+.alm-inbox-detail__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}

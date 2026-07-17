@@ -45,6 +45,40 @@
 # so a future upstream fix is discoverable, instead of never re-checking.
 # Layer-1 `cargo test --workspace` (ci.yml) stays required on macOS; only this
 # real-UI WebDriver leg is affected.
+#
+# Job DAG (build-once, test-sharded, one independent chain per OS):
+#
+#   changes ── build-frontend (ubuntu, once) ──┐          (per OS:)
+#          └── build-app-<os> ─────────────────┴─ shard 1/2 ┐
+#                                                 shard 2/2 ┴─ gate (<os>)
+#
+# - The frontend is built ONCE (VITE_E2E dist is OS-independent) and shared
+#   as an artifact; previously every matrix leg rebuilt it.
+# - The app binary + nextest test archive are built once per OS on dedicated
+#   builder runners, content-keyed-cached (Rust sources + lockfile) so a
+#   docs/frontend-only change skips the Rust build entirely, and consumed by
+#   the shards via artifacts (`ALM_E2E_APP_BIN` + `--archive-file`).
+# - Every journey still runs on every OS (no OS-splitting of tests); sharding
+#   is `--partition count:N/M` WITHIN each OS. M is per-OS: Ubuntu runs 4
+#   shards, Windows/macOS run 2. Ubuntu was the critical path (~11.3m on 2
+#   shards, run 29587590762) with NO single dominating test — shard 1/2 ran
+#   16 journeys at 24-58s each (594s total) vs shard 2/2's 7 journeys (229s);
+#   nextest's `count:N/M` partitions the compiled test list round-robin by
+#   binary, not by measured duration, so 2-way landed uneven. This is a
+#   many-medium-tests profile (sharding scales it down), not a one-or-two-
+#   slow-test profile (where sharding caps out) — 4-way is expected to roughly
+#   halve Ubuntu's shard time again. Windows was already ~5.5m on 2 shards and
+#   macOS is best-effort (issue #489); raising either would just burn extra
+#   runners for no critical-path benefit.
+# - Builder/shard/gate are written out PER OS instead of as one os-matrix:
+#   GitHub `needs` can only target a whole job (never a single matrix leg),
+#   so a matrixed builder would let one OS's build failure skip the other
+#   OS's shards too. Per-OS jobs restore the pre-DAG per-OS failure
+#   isolation. YAML anchors are unsupported by Actions, hence the
+#   duplication; keep the three chains textually in sync when editing.
+# - The per-OS gate jobs preserve the pre-DAG check names
+#   ("Real-UI E2E — <os>") and each gate depends only on its own OS's
+#   shards, so the names behave exactly like the old per-OS jobs.
 
 name: Real-UI E2E (thirtyfour + nextest + tauri-plugin-webdriver)
 
@@ -87,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       run: ${{ steps.decide.outputs.run }}
-      os_matrix: ${{ steps.matrix.outputs.os_matrix }}
+      run_macos: ${{ steps.macos.outputs.run_macos }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v4
@@ -126,58 +160,337 @@ jobs:
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "e2e changes: run=$run"
-      # macOS only joins the matrix on an explicit workflow_dispatch with
+      # The macOS chain only runs on an explicit workflow_dispatch with
       # run_macos=true (see header comment, issue #489) — never on
       # pull_request/push.
-      - id: matrix
+      - id: macos
         shell: bash
         env:
           RUN_MACOS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_macos == true }}
-        run: |
-          if [ "$RUN_MACOS" = "true" ]; then
-            echo 'os_matrix=["ubuntu-latest","windows-latest","macos-latest"]' >> "$GITHUB_OUTPUT"
-          else
-            echo 'os_matrix=["ubuntu-latest","windows-latest"]' >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "run_macos=$RUN_MACOS" >> "$GITHUB_OUTPUT"
 
-  real-ui-e2e:
-    name: Real-UI E2E — ${{ matrix.os }}
+  # Build the VITE_E2E frontend dist ONCE (it is OS-independent) and share it
+  # with every test shard as an artifact. Content-keyed cache: a run whose
+  # frontend inputs are unchanged restores the dist instead of rebuilding.
+  build-frontend:
+    name: Build frontend (once)
     needs: changes
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJson(needs.changes.outputs.os_matrix) }}
-    runs-on: ${{ matrix.os }}
-    # Backstop beyond nextest's own slow-timeout + the 120s app-launch
-    # deadline: observed full-job durations are ~13-20min on ubuntu/windows
-    # (CI runs 29031373925, 29033234950) and highly variable on macOS
-    # (30-60+min, including the 120s-per-attempt launch-failure loop, issue
-    # #489) when it does run via workflow_dispatch — pick a ceiling with
-    # headroom over the worst observed case rather than the typical one.
-    timeout-minutes: ${{ matrix.os == 'macos-latest' && 60 || 45 }}
-
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore dist by content key
+        if: needs.changes.outputs.run == 'true'
+        id: dist-cache
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/dist
+          key: e2e-dist-${{ hashFiles('pnpm-lock.yaml', 'apps/desktop/package.json', 'apps/desktop/index.html', 'apps/desktop/vite.config.*', 'apps/desktop/tsconfig*.json', 'apps/desktop/src/**', 'apps/desktop/public/**', 'packages/**') }}
+
+      - uses: pnpm/action-setup@v4
+        if: needs.changes.outputs.run == 'true' && steps.dist-cache.outputs.cache-hit != 'true'
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        if: needs.changes.outputs.run == 'true' && steps.dist-cache.outputs.cache-hit != 'true'
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS deps
+        if: needs.changes.outputs.run == 'true' && steps.dist-cache.outputs.cache-hit != 'true'
+        run: pnpm install --frozen-lockfile
+
+      # VITE_E2E=1 enables CI-only typeable path inputs (the native folder
+      # picker cannot be driven by WebDriver).
+      - name: Build frontend (VITE_E2E)
+        if: needs.changes.outputs.run == 'true' && steps.dist-cache.outputs.cache-hit != 'true'
+        env:
+          VITE_E2E: "1"
+        run: pnpm --filter @astro-plan/desktop build
+
+      - uses: actions/upload-artifact@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Per-OS builder: e2e-feature app binary + nextest test archive on a
+  # dedicated runner. Content-keyed cache on the Rust inputs: a frontend/
+  # docs-only change restores both outputs and skips the whole Rust toolchain
+  # + build. The `e2e` feature MUST be absent from release builds.
+  #
+  # build-app-windows / build-app-macos are line-for-line copies of this job
+  # with only os-name/APP_BIN/Linux-deps differences (see header: why per-OS
+  # jobs instead of a matrix).
+  # ---------------------------------------------------------------------------
+  build-app-ubuntu:
+    name: Build app — ubuntu-latest
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore app + test archive by content key
+        if: needs.changes.outputs.run == 'true'
+        id: app-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.APP_BIN }}
+            e2e-archive.tar.zst
+          key: e2e-app-ubuntu-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/capabilities/**', 'crates/**/migrations/**') }}
+
+      # A reported cache-hit is not proof the binary is actually there: run
+      # 29591042499 hit a corrupted/partial e2e-app-ubuntu-latest cache entry
+      # (restore claimed success, but the archive step's own upload later
+      # showed only 1 of 2 cached paths existed) and every downstream shard
+      # failed at `chmod`. Treat cache-hit as provisional and re-verify both
+      # paths on disk before trusting it, so a bad cache entry self-heals into
+      # a rebuild instead of a wall of red shards.
+      - name: Verify cached binary is usable
+        if: needs.changes.outputs.run == 'true'
+        id: verify-app-cache
+        shell: bash
+        run: |
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -x "${{ env.APP_BIN }}" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # Tauri needs system webview/GTK libs to build on Linux.
       # No webkit2gtk-driver — the plugin replaces the external driver.
       - name: Install Tauri Linux system deps
-        if: runner.os == 'Linux' && needs.changes.outputs.run == 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+
+      - uses: Swatinem/rust-cache@v2
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        with:
+          shared-key: "rust-e2e-ubuntu-latest"
+          cache-on-failure: true
+
+      - uses: taiki-e/install-action@nextest
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+
+      # Debug builds load the frontend from the Tauri devUrl at runtime, but
+      # tauri-build still wants the configured frontendDist directory present.
+      - name: Stub frontend dist for tauri-build
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        shell: bash
+        run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
+
+      - name: Build desktop_shell with e2e feature
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        run: cargo build -p desktop_shell --features e2e
+
+      # Package the compiled e2e_tests binaries so shards run them without a
+      # Rust rebuild (`cargo nextest run --archive-file`).
+      - name: Archive e2e test binaries
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
+
+      - uses: actions/upload-artifact@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          name: e2e-build-ubuntu-latest
+          path: |
+            ${{ env.APP_BIN }}
+            e2e-archive.tar.zst
+          retention-days: 1
+
+  # Copy of build-app-ubuntu for Windows (no Linux system deps; .exe binary).
+  build-app-windows:
+    name: Build app — windows-latest
+    needs: changes
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      APP_BIN: target/debug/desktop_shell.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore app + test archive by content key
+        if: needs.changes.outputs.run == 'true'
+        id: app-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.APP_BIN }}
+            e2e-archive.tar.zst
+          key: e2e-app-windows-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/capabilities/**', 'crates/**/migrations/**') }}
+
+      # See the ubuntu chain's "Verify cached binary is usable" comment for
+      # why a reported cache-hit alone is not trusted.
+      - name: Verify cached binary is usable
+        if: needs.changes.outputs.run == 'true'
+        id: verify-app-cache
+        shell: bash
+        run: |
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -f "${{ env.APP_BIN }}" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+
+      - uses: Swatinem/rust-cache@v2
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        with:
+          shared-key: "rust-e2e-windows-latest"
+          cache-on-failure: true
+
+      - uses: taiki-e/install-action@nextest
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+
+      - name: Stub frontend dist for tauri-build
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        shell: bash
+        run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
+
+      - name: Build desktop_shell with e2e feature
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        run: cargo build -p desktop_shell --features e2e
+
+      - name: Archive e2e test binaries
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
+
+      - uses: actions/upload-artifact@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          name: e2e-build-windows-latest
+          path: |
+            ${{ env.APP_BIN }}
+            e2e-archive.tar.zst
+          retention-days: 1
+
+  # Copy of build-app-ubuntu for the dispatch-only macOS chain (issue #489).
+  build-app-macos:
+    name: Build app — macos-latest
+    needs: changes
+    if: needs.changes.outputs.run_macos == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore app + test archive by content key
+        if: needs.changes.outputs.run == 'true'
+        id: app-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.APP_BIN }}
+            e2e-archive.tar.zst
+          key: e2e-app-macos-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/capabilities/**', 'crates/**/migrations/**') }}
+
+      # See the ubuntu chain's "Verify cached binary is usable" comment for
+      # why a reported cache-hit alone is not trusted.
+      - name: Verify cached binary is usable
+        if: needs.changes.outputs.run == 'true'
+        id: verify-app-cache
+        shell: bash
+        run: |
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -f "${{ env.APP_BIN }}" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+
+      - uses: Swatinem/rust-cache@v2
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        with:
+          shared-key: "rust-e2e-macos-latest"
+          cache-on-failure: true
+
+      - uses: taiki-e/install-action@nextest
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+
+      - name: Stub frontend dist for tauri-build
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        shell: bash
+        run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
+
+      - name: Build desktop_shell with e2e feature
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        run: cargo build -p desktop_shell --features e2e
+
+      - name: Archive e2e test binaries
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
+        run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
+
+      - uses: actions/upload-artifact@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          name: e2e-build-macos-latest
+          path: |
+            ${{ env.APP_BIN }}
+            e2e-archive.tar.zst
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Per-OS test shards: download the prebuilt frontend + app/test-archive
+  # artifacts and run each shard's fraction of the journeys
+  # (`--partition count:N/M`, M per-OS — see header) — no Rust compilation in
+  # these jobs. Depending only on their OWN OS's builder keeps a build failure
+  # on one OS from skipping the other OS's tests.
+  #
+  # real-ui-e2e-windows / -macos are copies of this job (see header) except
+  # for the shard COUNT (2, not 4) and OS-specific steps.
+  # ---------------------------------------------------------------------------
+  real-ui-e2e-ubuntu:
+    name: Real-UI E2E shard — ubuntu-latest ${{ matrix.shard }}/4
+    needs: [changes, build-frontend, build-app-ubuntu]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: ubuntu-latest
+    # Backstop beyond nextest's own slow-timeout + the 120s app-launch
+    # deadline. Pre-DAG full-job durations were ~13-20min on ubuntu/windows
+    # including the build (CI runs 29031373925, 29033234950); a 4-way shard
+    # runs roughly a quarter of the journeys with no build, so 30min stays
+    # generous headroom.
+    timeout-minutes: 30
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+
+      # Runtime (not -dev) libs are enough to RUN the prebuilt binary, but the
+      # dev metapackages are what the runner image resolves fastest and the
+      # difference is seconds; keep the known-good set plus xvfb.
+      - name: Install Tauri Linux system deps
+        if: needs.changes.outputs.run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
             libayatana-appindicator3-dev \
             xvfb
-
-      - uses: dtolnay/rust-toolchain@stable
-        if: needs.changes.outputs.run == 'true'
-
-      - uses: Swatinem/rust-cache@v2
-        if: needs.changes.outputs.run == 'true'
-        with:
-          shared-key: "rust-e2e-${{ matrix.os }}"
-          cache-on-failure: true
 
       - uses: taiki-e/install-action@nextest
         if: needs.changes.outputs.run == 'true'
@@ -206,17 +519,28 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      # Only needed for `vite preview` (SPA fallback for deep links); the
+      # frontend itself arrives prebuilt from build-frontend.
       - name: Install JS deps
         if: needs.changes.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
-      # Build the frontend with VITE_E2E=1 so CI-only typeable path inputs are
-      # enabled (the native folder picker cannot be driven by WebDriver).
-      - name: Build frontend (VITE_E2E)
+      - uses: actions/download-artifact@v4
         if: needs.changes.outputs.run == 'true'
-        env:
-          VITE_E2E: "1"
-        run: pnpm --filter @astro-plan/desktop build
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+
+      - uses: actions/download-artifact@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          name: e2e-build-ubuntu-latest
+
+      # Artifact download drops the execute bit on POSIX.
+      - name: Make app binary executable
+        if: needs.changes.outputs.run == 'true'
+        shell: bash
+        run: chmod +x "$APP_BIN"
 
       # Serve built dist on :5173 in the background. The app binary reads the
       # Tauri devUrl (:5173) and loads its frontend from there — real IPC.
@@ -225,20 +549,202 @@ jobs:
         shell: bash
         run: pnpm --filter @astro-plan/desktop preview --port 5173 &
 
-      # Build the app binary WITH the embedded plugin so tauri-webdriver can
-      # connect. The `e2e` feature MUST be absent from release builds.
-      - name: Build desktop_shell with e2e feature
+      # Run the Layer-2 harness (real journeys, serial per .config/nextest.toml)
+      # from the prebuilt archive, wrapped in xvfb-run for a headless display.
+      #
+      # WEBKIT_DISABLE_DMABUF_RENDERER / WEBKIT_DISABLE_COMPOSITING_MODE:
+      # experiment (PR #928) — Ubuntu's WebKitGTK under Xvfb has no GPU, so
+      # its default DMA-BUF/compositing render paths were suspected of adding
+      # ~25-30s of per-test overhead vs Windows. Linux-only; harmless no-op if
+      # the hypothesis is wrong.
+      - name: Run E2E (xvfb)
         if: needs.changes.outputs.run == 'true'
-        run: cargo build -p desktop_shell --features e2e
+        env:
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        run: xvfb-run -a cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition count:${{ matrix.shard }}/4
 
-      # Run the Layer-2 harness (real journeys, serial per .config/nextest.toml).
-      # Linux wraps in xvfb-run for a headless display; Windows/macOS run natively.
-      - name: Run E2E (Linux — xvfb)
-        if: runner.os == 'Linux' && needs.changes.outputs.run == 'true'
-        run: xvfb-run -a cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
+  # Copy of real-ui-e2e-ubuntu for Windows (no Linux deps/xvfb/chmod).
+  real-ui-e2e-windows:
+    name: Real-UI E2E shard — windows-latest ${{ matrix.shard }}/2
+    needs: [changes, build-frontend, build-app-windows]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      APP_BIN: target/debug/desktop_shell.exe
+    steps:
+      - uses: actions/checkout@v4
 
-      # Also covers macOS when it joins the matrix via workflow_dispatch
-      # run_macos (header comment) — a dedicated step would be identical.
-      - name: Run E2E (Windows / macOS)
-        if: runner.os != 'Linux' && needs.changes.outputs.run == 'true'
-        run: cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn
+      - uses: taiki-e/install-action@nextest
+        if: needs.changes.outputs.run == 'true'
+
+      - uses: taiki-e/install-action@cargo-binstall
+        if: needs.changes.outputs.run == 'true'
+
+      - name: Install tauri-webdriver CLI
+        if: needs.changes.outputs.run == 'true'
+        run: cargo binstall tauri-webdriver --locked --no-confirm
+
+      - uses: pnpm/action-setup@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS deps
+        if: needs.changes.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+
+      - uses: actions/download-artifact@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          name: e2e-build-windows-latest
+
+      - name: Serve frontend dist on :5173
+        if: needs.changes.outputs.run == 'true'
+        shell: bash
+        run: pnpm --filter @astro-plan/desktop preview --port 5173 &
+
+      - name: Run E2E
+        if: needs.changes.outputs.run == 'true'
+        shell: bash
+        env:
+          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition count:${{ matrix.shard }}/2
+
+  # Copy of real-ui-e2e-ubuntu for the dispatch-only macOS chain (issue #489):
+  # no xvfb (native display), longer timeout for the 120s-per-attempt
+  # launch-failure loop.
+  real-ui-e2e-macos:
+    name: Real-UI E2E shard — macos-latest ${{ matrix.shard }}/2
+    needs: [changes, build-frontend, build-app-macos]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      APP_BIN: target/debug/desktop_shell
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@nextest
+        if: needs.changes.outputs.run == 'true'
+
+      - uses: taiki-e/install-action@cargo-binstall
+        if: needs.changes.outputs.run == 'true'
+
+      - name: Install tauri-webdriver CLI
+        if: needs.changes.outputs.run == 'true'
+        run: cargo binstall tauri-webdriver --locked --no-confirm
+
+      - uses: pnpm/action-setup@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install JS deps
+        if: needs.changes.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          name: e2e-frontend-dist
+          path: apps/desktop/dist
+
+      - uses: actions/download-artifact@v4
+        if: needs.changes.outputs.run == 'true'
+        with:
+          name: e2e-build-macos-latest
+
+      - name: Make app binary executable
+        if: needs.changes.outputs.run == 'true'
+        shell: bash
+        run: chmod +x "$APP_BIN"
+
+      - name: Serve frontend dist on :5173
+        if: needs.changes.outputs.run == 'true'
+        shell: bash
+        run: pnpm --filter @astro-plan/desktop preview --port 5173 &
+
+      - name: Run E2E
+        if: needs.changes.outputs.run == 'true'
+        shell: bash
+        env:
+          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+        run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition count:${{ matrix.shard }}/2
+
+  # ---------------------------------------------------------------------------
+  # Per-OS gates preserving the pre-DAG check names ("Real-UI E2E — <os>").
+  # Each gate depends ONLY on its own OS's shards, so a failure on one OS
+  # reds only that OS's gate — identical semantics to the old per-OS jobs.
+  # `always()` keeps the gate reporting (red) instead of skipping when a
+  # shard or upstream builder fails; the run=false no-op path stays green
+  # because skipped-step shards still conclude success.
+  # ---------------------------------------------------------------------------
+  e2e-gate-ubuntu:
+    name: Real-UI E2E — ubuntu-latest
+    needs: [changes, real-ui-e2e-ubuntu]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check shard results
+        env:
+          RESULT: ${{ needs.real-ui-e2e-ubuntu.result }}
+        run: |
+          echo "real-ui-e2e-ubuntu result: $RESULT"
+          [ "$RESULT" = "success" ] || exit 1
+
+  e2e-gate-windows:
+    name: Real-UI E2E — windows-latest
+    needs: [changes, real-ui-e2e-windows]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check shard results
+        env:
+          RESULT: ${{ needs.real-ui-e2e-windows.result }}
+        run: |
+          echo "real-ui-e2e-windows result: $RESULT"
+          [ "$RESULT" = "success" ] || exit 1
+
+  # Skipped entirely unless the dispatch-only macOS chain was requested.
+  e2e-gate-macos:
+    name: Real-UI E2E — macos-latest
+    needs: [changes, real-ui-e2e-macos]
+    if: always() && needs.changes.outputs.run_macos == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check shard results
+        env:
+          RESULT: ${{ needs.real-ui-e2e-macos.result }}
+        run: |
+          echo "real-ui-e2e-macos result: $RESULT"
+          [ "$RESULT" = "success" ] || exit 1

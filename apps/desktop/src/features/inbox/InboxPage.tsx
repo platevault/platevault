@@ -63,7 +63,7 @@ import { deriveInboxStats } from './inboxStatsFromItems';
 import { PlanApprovalOverlay } from './PlanApprovalOverlay';
 import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
 import { buildBreakdownFromActions } from './PlanPanel';
-import type { InboxBreakdownTarget } from './store';
+import type { InboxBreakdownTarget, InboxListItem } from './store';
 import {
   mergeRescanRoots,
   normalizeConfirmError,
@@ -162,6 +162,13 @@ function asRootRequiredDetails(
   return null;
 }
 
+// #557: a shared, stable empty-array fallback. `listData?.items ?? []`
+// allocates a NEW array every render while the query is unresolved, which
+// cascades through every `useMemo` keyed on `items` (derivedStats, roots,
+// etc.) and recomputed their outputs every render too — feeding an unstable
+// value into `useSetPageStatus` and re-triggering its effect indefinitely.
+const EMPTY_ITEMS: InboxListItem[] = [];
+
 export function InboxPage() {
   const { selected, type } = useSearch({ from: '/shell/inbox' });
   const navigate = useNavigate({ from: '/inbox' });
@@ -172,7 +179,7 @@ export function InboxPage() {
     loading: listLoading,
     refresh: refreshList,
   } = useInboxList();
-  const items = listData?.items ?? [];
+  const items = listData?.items ?? EMPTY_ITEMS;
 
   // Search + grouping / sort / frame-type controls now live in the top bar
   // (spec 043 #73/#31). `useGrouping` owns the persisted ordered grouping
@@ -877,12 +884,23 @@ export function InboxPage() {
   // breakdown into the global status bar's page-contextual slot. The top bar
   // reverts to filters + actions only (matching all other pages). The slot is
   // automatically cleared when this page unmounts (route change). ──
-  useSetPageStatus(
-    <span className="alm-inbox-summary" data-testid="statusbar-inbox-summary">
-      <span className="alm-inbox-summary__count">{summary}</span>
-      {!listLoading && <InboxStatsSummary stats={derivedStats} />}
-    </span>,
+  //
+  // #557: this JSX MUST be memoised. `useSetPageStatus` re-runs its effect
+  // whenever the node's identity changes; a bare JSX literal gets a fresh
+  // identity on every render, so the effect fired every render, called
+  // `setNode` on the shell-level `PageStatusProvider`, which re-rendered this
+  // page and created another new-identity node — an infinite render loop
+  // ("Maximum update depth exceeded") for as long as the Inbox was open.
+  const pageStatusNode = useMemo(
+    () => (
+      <span className="alm-inbox-summary" data-testid="statusbar-inbox-summary">
+        <span className="alm-inbox-summary__count">{summary}</span>
+        {!listLoading && <InboxStatsSummary stats={derivedStats} />}
+      </span>
+    ),
+    [summary, listLoading, derivedStats],
   );
+  useSetPageStatus(pageStatusNode);
 
   // Shown when ≥1 open plan exists OR a destination-root pick is pending (the
   // latter can occur with zero open plans — the plan wasn't generated yet).

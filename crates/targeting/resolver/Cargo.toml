@@ -53,7 +53,7 @@ persistence_db = { path = "../../persistence/db" }
 simbad-resolver = "0.3.0"
 # IAU constellation-from-coordinates, for `canonical_target.constellation`
 # enrichment at the in-use write (spec 052 P1 D8).
-skymath = "0.3"
+skymath = "0.4"
 
 [dev-dependencies]
 # `#[tokio::test]` only — no production `tokio` usage in this crate (the
