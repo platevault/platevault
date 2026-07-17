@@ -222,7 +222,7 @@ export async function hydrateThemeFromSettings(): Promise<void> {
 }
 
 function prefersDark(): boolean {
-  return typeof window !== 'undefined' && !!window.matchMedia
+  return typeof window !== 'undefined' && window.matchMedia
     ? window.matchMedia('(prefers-color-scheme: dark)').matches
     : false;
 }

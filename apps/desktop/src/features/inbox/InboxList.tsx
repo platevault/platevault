@@ -308,7 +308,9 @@ export function InboxList({
 
   const originalIndexById = useMemo(() => {
     const m = new Map<string, number>();
-    items.forEach((it, i) => m.set(it.inboxItemId, i));
+    items.forEach((it, i) => {
+      m.set(it.inboxItemId, i);
+    });
     return m;
   }, [items]);
 

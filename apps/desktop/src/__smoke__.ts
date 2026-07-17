@@ -35,7 +35,7 @@ import type {
   CoverageBarProps,
 } from '@/ui';
 
-import {
+import type {
   Pill,
   Lock,
   KV,
@@ -56,50 +56,50 @@ import {
 // ─── App Shell & Utilities ───────────────────────────────────────────────────
 
 import { router } from '@/app/router';
-import { Shell } from '@/app/Shell';
-import { Sidebar } from '@/app/Sidebar';
-import { StatusBar } from '@/app/StatusBar';
-import { CommandPalette } from '@/app/CommandPalette';
-import { LogPanel } from '@/app/LogPanel';
-import { LogPanelProvider, useLogPanel } from '@/app/LogPanelContext';
-import { useFocusOnMount } from '@/app/useFocusOnMount';
+import type { Shell } from '@/app/Shell';
+import type { Sidebar } from '@/app/Sidebar';
+import type { StatusBar } from '@/app/StatusBar';
+import type { CommandPalette } from '@/app/CommandPalette';
+import type { LogPanel } from '@/app/LogPanel';
+import type { LogPanelProvider, useLogPanel } from '@/app/LogPanelContext';
+import type { useFocusOnMount } from '@/app/useFocusOnMount';
 
 // ─── Page Components ─────────────────────────────────────────────────────────
 
-import { SessionsPage } from '@/features/sessions/SessionsPage';
-import { SessionDetail } from '@/features/sessions/SessionDetail';
-import { CalendarView } from '@/features/sessions/CalendarView';
-import { GroupByBar } from '@/features/sessions/GroupByBar';
+import type { SessionsPage } from '@/features/sessions/SessionsPage';
+import type { SessionDetail } from '@/features/sessions/SessionDetail';
+import type { CalendarView } from '@/features/sessions/CalendarView';
+import type { GroupByBar } from '@/features/sessions/GroupByBar';
 
-import { InboxPage } from '@/features/inbox/InboxPage';
-import { InboxList } from '@/features/inbox/InboxList';
-import { InboxDetail } from '@/features/inbox/InboxDetail';
+import type { InboxPage } from '@/features/inbox/InboxPage';
+import type { InboxList } from '@/features/inbox/InboxList';
+import type { InboxDetail } from '@/features/inbox/InboxDetail';
 
-import { CalibrationPage } from '@/features/calibration/CalibrationPage';
-import { CalibrationDetail } from '@/features/calibration/CalibrationDetail';
-import { MasterDetail } from '@/features/calibration/MasterDetail';
+import type { CalibrationPage } from '@/features/calibration/CalibrationPage';
+import type { CalibrationDetail } from '@/features/calibration/CalibrationDetail';
+import type { MasterDetail } from '@/features/calibration/MasterDetail';
 
-import { TargetsPage } from '@/features/targets/TargetsPage';
-import { TargetList } from '@/features/targets/TargetList';
+import type { TargetsPage } from '@/features/targets/TargetsPage';
+import type { TargetList } from '@/features/targets/TargetList';
 
-import { ProjectsPage } from '@/features/projects/ProjectsPage';
-import { ProjectDetail } from '@/features/projects/ProjectDetail';
-import { WizardPage } from '@/features/projects/wizard/WizardPage';
+import type { ProjectsPage } from '@/features/projects/ProjectsPage';
+import type { ProjectDetail } from '@/features/projects/ProjectDetail';
+import type { WizardPage } from '@/features/projects/wizard/WizardPage';
 
-import { SettingsPage } from '@/features/settings/SettingsPage';
+import type { SettingsPage } from '@/features/settings/SettingsPage';
 
-import { SetupPage } from '@/features/setup/SetupPage';
-import { SetupWizard } from '@/features/setup/SetupWizard';
+import type { SetupPage } from '@/features/setup/SetupPage';
+import type { SetupWizard } from '@/features/setup/SetupWizard';
 
 // ─── Data Layer ──────────────────────────────────────────────────────────────
 
-import {
+import type {
   usePreference,
   usePreferences,
   getPreferences,
   setPreference,
 } from '@/data/preferences';
-import { queryKeys } from '@/data/queryKeys';
+import type { queryKeys } from '@/data/queryKeys';
 
 // ─── API Types ───────────────────────────────────────────────────────────────
 
