@@ -6,6 +6,13 @@ html, body, #root { height: 100%; overflow: hidden; }
    action bars) is clipped by the overflow:hidden above. Action bars must stay
    visible regardless of content. */
 #root { display: flex; flex-direction: column; }
+/* Root font-size (spec 055 T010/T011): the single source every `--alm-text-*`
+   rem token resolves against. The font-size setting (theme.ts applyFontSize)
+   overrides this with an explicit integer px (12/14/16) on <html>; this
+   default covers pre-JS paint and the "default" stop, which the setting
+   clears back to. Do NOT express this in rem (it would be self-referential —
+   rem is always relative to this value). */
+html { font-size: 14px; }
 body {
   font-family: var(--alm-font-sans);
   font-size: var(--alm-text-base);

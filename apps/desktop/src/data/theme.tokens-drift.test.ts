@@ -45,6 +45,27 @@ function parseRootTokenPx(varPrefix: string): Record<string, number> {
   return result;
 }
 
+/**
+ * Parses the `--alm-text-*` rem declarations out of the base `:root` block
+ * and converts back to px-at-the-14px-default-root, rounded to the nearest
+ * integer — the same numbers `TEXT_SCALE_BASE_PX` (theme.ts) hardcodes for
+ * the per-dial-stop rounding guard (spec 055 T010/T011). tokens.css declares
+ * these as rem (not px) so the type scale resolves against whatever root
+ * font-size the font-size setting writes; parsing rem here (rather than px)
+ * is this test's spec-055 update.
+ */
+function parseRootTextTokenRemAsPx(): Record<string, number> {
+  const css = readFileSync(tokensCssPath, 'utf-8');
+  const rootBlock = /:root\s*\{([^}]*)\}/.exec(css)?.[1];
+  if (rootBlock === undefined) throw new Error('no :root block in tokens.css');
+  const pattern = /(--alm-text-[\w-]+):\s*(\d+(?:\.\d+)?)rem;/g;
+  const result: Record<string, number> = {};
+  for (const match of rootBlock.matchAll(pattern)) {
+    result[match[1]] = Math.round(Number(match[2]) * 14);
+  }
+  return result;
+}
+
 /** Parses the `--alm-row-height: <n>px;` declaration out of a CSS block's body. */
 function parseRowHeightPx(block: string, blockLabel: string): number {
   const match = /--alm-row-height:\s*(\d+(?:\.\d+)?)px;/.exec(block);
@@ -69,8 +90,8 @@ describe('theme.ts token-scale base tables match tokens.css :root', () => {
     expect(SPACING_BASE_PX).toEqual(fromCss);
   });
 
-  it('TEXT_SCALE_BASE_PX matches --alm-text-* base px values', () => {
-    const fromCss = parseRootTokenPx('--alm-text-');
+  it('TEXT_SCALE_BASE_PX matches --alm-text-* rem values (converted @ 14px root)', () => {
+    const fromCss = parseRootTextTokenRemAsPx();
     expect(Object.keys(fromCss).length).toBeGreaterThan(0);
     expect(TEXT_SCALE_BASE_PX).toEqual(fromCss);
   });
