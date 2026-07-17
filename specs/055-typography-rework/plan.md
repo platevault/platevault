@@ -61,10 +61,10 @@ existing `font-style: italic` sites — no CSS edits needed there.
 1. Capability `core:webview:allow-set-webview-zoom`; `setZoom` wired to
    app-owned Ctrl+= / Ctrl+− / Ctrl+0; persistence mirrors the fontSize
    setting.
-2. One-line clarification PR into spec 054: thresholds are CSS-px viewport
-   measurements.
-3. CI pin: minimum window (1100×720) × maximum zoom — layout intact (with 054:
-   dock in bottom mode).
+2. Zoom steps 90/100/110/125/150; Ctrl+0 resets to 100.
+3. CI pins (two): layout intact at minimum window (1100×720) × 125%, and at
+   1320×864 × 150%. Beyond that envelope (min window × 150% → 733px viewport)
+   layout degradation is documented and accepted, not guarded.
 4. J10 journey delta amendment for zoom; `verify-on-windows` scenario.
 
 ## Risks
