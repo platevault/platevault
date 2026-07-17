@@ -6219,8 +6219,9 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "target-match"
-version = "0.4.0"
-source = "git+https://github.com/nightwatch-astro/target-match#8dbc0758cd51fd08f0aab67871a87f585fcf1029"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1c777eb96e32abd00fb956baf8d243b6f93006f0ea52faa8440b81114c2fc7f"
 dependencies = [
  "skymath 0.4.0",
  "thiserror 2.0.18",
