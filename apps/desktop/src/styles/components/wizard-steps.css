@@ -53,7 +53,7 @@
 
 /* Step heading */
 .alm-wizard-page__step-title {
-  font-size: 18px;
+  font-size: var(--alm-text-lg);
   font-weight: var(--alm-weight-semibold);
   margin: 0;
 }
@@ -72,7 +72,7 @@
 .alm-wizard-page__summary-heading {
   color: var(--alm-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   font-weight: var(--alm-weight-semibold);
 }
 
@@ -134,14 +134,14 @@
 
 /* Large number inside footprint box */
 .alm-wizard-page__footprint-value {
-  font-size: 16px;
+  font-size: var(--alm-text-md);
   font-weight: var(--alm-weight-semibold);
   margin-top: var(--alm-sp-0);
 }
 
 /* Fine-print note inside footprint box */
 .alm-wizard-page__footprint-note {
-  font-size: 10.5px;
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
 }
 
@@ -468,7 +468,7 @@
 
 /* Train ID cell — mono + truncate */
 .alm-source-picker__train-id {
-
+  font-family: var(--alm-font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -710,9 +710,9 @@
   font-size: var(--alm-text-xs);
 }
 
-/* Table cell — items / size columns (11px is component-intrinsic) */
+/* Table cell — items / size columns (11px is component-intrinsic, matches the floor token) */
 .alm-wizard-views__td-small {
-  font-size: 11px;
+  font-size: var(--alm-text-xs);
 }
 
 /* Add-view button spacing */
@@ -793,7 +793,7 @@
   background: var(--alm-surface);
   border: 1px solid var(--alm-border);
   border-radius: 4px;
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
 
   color: var(--alm-text-muted);
   cursor: help;
@@ -900,7 +900,7 @@
 
 /* Disk tree pre */
 .alm-wizard-review__disk-tree {
-  font-size: 10.5px;
+  font-size: var(--alm-text-xs);
   margin: 0;
   line-height: var(--alm-leading-normal);
   color: var(--alm-text-secondary);
@@ -1123,9 +1123,9 @@
 
 /* Kind category label (e.g. "LIGHTS", "DARKS") */
 .alm-setup-confirm__kind-label {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-semibold);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   text-transform: uppercase;
   color: var(--alm-text-muted);
 }
@@ -1294,13 +1294,13 @@
 
 /* ── Header count badge ── */
 .alm-step-sources__group-header-count {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
 }
 
 /* ── "optional" label ── */
 .alm-step-sources__group-header-optional {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-faint);
 }
 
@@ -1311,10 +1311,10 @@
 
 /* ── Required/Optional section heading above a run of group cards (#496) ── */
 .alm-step-sources__section-heading {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-muted);
   margin-top: var(--alm-sp-1);
 }
@@ -1354,7 +1354,7 @@
 
 /* ── Org-state select ── */
 .alm-step-sources__org-select {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   background: var(--alm-surface);
   color: var(--alm-text);
   border: 1px solid var(--alm-border);
@@ -1371,13 +1371,13 @@
 /* ── Inline validation error ── */
 .alm-step-sources__row-error {
   margin-top: var(--alm-sp-0);
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-danger);
 }
 
 /* ── Picker error (below Add button) ── */
 .alm-step-sources__picker-error {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-danger);
 }
 
@@ -1569,10 +1569,10 @@
 
 /* "EXECUTABLE" label */
 .alm-step-tools__path-label {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-muted);
 }
 

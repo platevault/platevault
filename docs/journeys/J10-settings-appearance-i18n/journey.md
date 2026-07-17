@@ -1,7 +1,7 @@
 ---
 id: J10
 title: Configure appearance, per-library defaults, and trust the app is fully localized
-version: 6
+version: 7
 status: draft
 last_reviewed: 2026-07-17
 actors: [astrophotographer]
@@ -30,6 +30,7 @@ trace:
   - PR #902 (merged, fixes #582, #583) · PR #909 (merged, fixes #584)
   - PR #914 (merged, carried nJ09c/nJ10a review nit: palette catalog
     caching)
+  - spec 055 (typography rework) Phase 2, T010–T015
 ---
 
 ## Goal
@@ -78,15 +79,17 @@ Note: Release builds lack the /dev/contracts palette entry by design
   Espresso) or "System" (follows OS) applies live with no reload; the choice
   survives a full app restart (confirmed by a live Windows kill+relaunch
   test, docs/development/journey-run-2026-07-14.md). Density
-  (compact/comfortable/spacious) and font size both rescale the shared
-  design-token layer live — density rescales the `--alm-sp-*` spacing tokens
-  (plus `--alm-row-height`), font size rescales the `--alm-text-*` type-scale
-  tokens — consumed by component stylesheets app-wide, so both now have a
-  visible effect across surfaces (paddings, gaps, and text size on Sessions,
-  Inbox, Calibration, etc.), not just the Targets table and wizard rows.
-  Font size persists through the settings DB (with a localStorage boot
-  cache) and survives a restart; it previously reset to default on every
-  remount. Zoom is a separate, VS Code-style whole-app engine zoom that
+  (compact/comfortable/spacious) rescales the `--alm-sp-*` spacing tokens
+  (plus `--alm-row-height`); font size is a three-stop dial — Small/Default/
+  Large writes a single integer `<html>` font-size of 12/14/16px (bumped
+  from a 13px default) that the `--alm-text-*` type-scale tokens (rem,
+  re-derived from the 14px default) resolve against app-wide, so every
+  consuming surface (Sessions, Inbox, Calibration, sidebar/settings group
+  labels, wizard fine print, the Planner SVG axis labels, the toast dismiss
+  glyph — previously-hardcoded sizes included) scales together, not just the
+  Targets table and wizard rows. Font size persists through the settings DB
+  (with a localStorage boot cache) and survives a restart; it previously
+  reset to default on every remount. Zoom is a separate, VS Code-style whole-app engine zoom that
   stacks with font size rather than replacing it: five steps (90/100/110/
   125/150%), default 100%. The Zoom select in Appearance and the Ctrl+=
   (also Ctrl+Shift+= and the numpad +) / Ctrl+- / Ctrl+0 shortcuts drive the
@@ -97,13 +100,16 @@ Note: Release builds lack the /dev/contracts palette entry by design
   row *height* — is still consumed only by the Targets table, the
   wizard-step rows, and the Tonight sparkline's row minimum: Sessions,
   Inbox, and Calibration list rows do not get taller or shorter with
-  density, even though their internal spacing now does. No first-paint
-  flash of the previous theme on reload; not verified either way for
-  theme/density specifically by this audit, but the same flash-of-default
-  defect on another auto-saved toggle (the SIMBAD-resolution toggle in
-  Target Resolution) is now fixed — see S1's Target Resolution pane, PR
-  #909 fixes #584 (the toggle now shows a loading skeleton, never its
-  in-code default, before the persisted value resolves). Zoom's engine call
+  density, even though their internal spacing now does. No computed text
+  size is ever fractional or below the dial stop's documented floor (11px
+  at Default; the previous fractional multiplier — e.g. `11.70px` at Small —
+  and the 10px micro-size token are both gone). No first-paint flash of the
+  previous theme on reload; not verified either way for theme/density
+  specifically by this audit, but the same flash-of-default defect on
+  another auto-saved toggle (the SIMBAD-resolution toggle in Target
+  Resolution) is now fixed — see S1's Target Resolution pane, PR #909 fixes
+  #584 (the toggle now shows a loading skeleton, never its in-code default,
+  before the persisted value resolves). Zoom's engine call
   (`getCurrentWebview().setZoom`) is a Tauri-only API: in the browser dev
   server, vitest, and Playwright mock mode the call is a guarded no-op — the
   Zoom setting still persists and the control still reflects the chosen
@@ -114,17 +120,20 @@ Note: Release builds lack the /dev/contracts palette entry by design
   degradation, not guarded — spec 054 (adaptive detail dock) remains
   orphaned and was not required for this phase.
 - **Trace:** apps/desktop/src/data/theme.ts (`applyTokenScale`,
-  `applyDensity`, `applyFontSize`/`FontSizeChoice`, `ZOOM_STEPS`/
-  `useZoomChoice`/`setZoomChoice`/`applyZoom`/`stepZoomIn`/`stepZoomOut`/
-  `resetZoom`), apps/desktop/src/app/Shell.tsx (Ctrl+=/-/0 `useHotkeys`
-  bindings), apps/desktop/src/features/settings/General.tsx,
+  `applyDensity`, `applyFontSize`/`FontSizeChoice`/`FONT_SIZE_ROOT_PX`/
+  `roundedTextScalePx`, `ZOOM_STEPS`/`useZoomChoice`/`setZoomChoice`/
+  `applyZoom`/`stepZoomIn`/`stepZoomOut`/`resetZoom`),
+  apps/desktop/src/app/Shell.tsx (Ctrl+=/-/0 `useHotkeys` bindings),
+  apps/desktop/src/features/settings/General.tsx,
   apps/desktop/src-tauri/capabilities/default.json
   (`core:webview:allow-set-webview-zoom`),
-  apps/desktop/src/styles/tokens.css:157-158,
+  apps/desktop/src/styles/tokens.css (`--alm-text-*` rem scale),
+  apps/desktop/src/styles/reset.css (`html { font-size: 14px }`),
   apps/desktop/src/styles/components/merges-1.css:556. PR #882 fixes #587:
   density previously only ever touched `--alm-row-height`; font size was
-  fully inert local state with no layout effect at all. Spec 055 Phase 4
-  (T030) adds Zoom.
+  fully inert local state with no layout effect at all. Spec 055 Phase 2
+  (T010–T012) replaced the 0.9/1.0/1.15 fractional-px multiplier with the
+  integer dial described above; Phase 4 (T030) adds Zoom.
 
 ### S3 — Change a durable-data setting and find it in the Audit Log {#S3}
 - **Do:** Change a durable-data setting (e.g. add/remove an Equipment item),
@@ -345,7 +354,16 @@ Note: Release builds lack the /dev/contracts palette entry by design
   (carried nJ10a review nit, no matching issue) · by: journey-scribe
   (intent-gated)
 
-- **Δ6** 2026-07-17 · S2, +SC5 · behavior-change
+- **Δ6** 2026-07-17 · S2 · behavior-change
+  Font size is now a three-integer-stop dial (12/14/16px root, default
+  bumped from 13px) instead of a 0.9/1.0/1.15 fractional-px multiplier; the
+  `--alm-text-*` scale is rem-derived so every stop's computed size is
+  integer, never fractional, with an 11px floor guaranteed at Default. The
+  11 previously-hardcoded px sizes (sidebar/settings group labels, wizard
+  titles/fine print, Planner SVG axis text, toast glyph) now scale with the
+  dial too.
+  Evidence: spec 055 Phase 2 (T010–T012) · by: journey-scribe (intent-gated)
+- **Δ7** 2026-07-17 · S2, +SC5 · behavior-change
   Appearance gains a whole-app engine Zoom control (VS Code-style, stacks
   with Font Size rather than replacing it): five steps (90/100/110/125/
   150%), default 100%, driven by a new Zoom select and by app-owned

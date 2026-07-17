@@ -12,7 +12,7 @@
 .alm-pill {
   display: inline-flex; align-items: center;
   padding: 1px var(--alm-sp-2); border-radius: 99px;
-  font-size: var(--alm-text-2xs); font-weight: var(--alm-weight-medium);
+  font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
   line-height: 1.6; white-space: nowrap;
   border: 1px solid transparent;
 }
@@ -49,7 +49,7 @@
 .alm-btn--accent:hover { background: var(--alm-accent-hover); border-color: var(--alm-accent-hover); }
 .alm-btn--danger { background: var(--alm-danger-bg); color: var(--alm-danger); border-color: var(--alm-danger-border); }
 .alm-btn--danger:hover { background: var(--alm-danger-bg-hover); }
-.alm-btn--sm { height: 24px; padding: 0 var(--alm-sp-2); font-size: var(--alm-text-2xs); }
+.alm-btn--sm { height: 24px; padding: 0 var(--alm-sp-2); font-size: var(--alm-text-xs); }
 
 /* === SECTION === */
 .alm-section { margin-bottom: var(--alm-sp-4); }
@@ -61,14 +61,14 @@
   cursor: pointer; user-select: none;
 }
 .alm-section__toggle {
-  font-size: var(--alm-text-2xs); color: var(--alm-text-faint);
+  font-size: var(--alm-text-xs); color: var(--alm-text-faint);
   width: 14px; text-align: center; flex-shrink: 0;
 }
 .alm-section__title {
   font-size: var(--alm-text-sm); font-weight: var(--alm-weight-semibold);
   color: var(--alm-text);
 }
-.alm-section__count { font-size: var(--alm-text-2xs); color: var(--alm-text-muted); }
+.alm-section__count { font-size: var(--alm-text-xs); color: var(--alm-text-muted); }
 .alm-section__right { margin-left: auto; }
 
 /* === DETAIL v4: METRIC LINE + DASHBOARD GRID + UNIFIED RAIL === */
@@ -138,9 +138,9 @@
 .alm-rail__card { padding: var(--alm-sp-3) var(--alm-sp-4); }
 .alm-rail__card + .alm-rail__card { border-top: 1px solid var(--alm-border-subtle); }
 .alm-rail__card-h {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-faint);
   font-weight: var(--alm-weight-semibold);
   margin-bottom: var(--alm-sp-2);
@@ -158,7 +158,7 @@
   background: var(--alm-surface);
   border-bottom: 1px solid var(--alm-border-subtle);
   font-size: var(--alm-text-xs); font-weight: var(--alm-weight-semibold);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  text-transform: uppercase; letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-muted);
 }
 .alm-box__body { padding: var(--alm-sp-3); }
@@ -166,10 +166,10 @@
 /* === TABLE === */
 .alm-table { width: 100%; border-collapse: collapse; }
 .alm-table th {
-  text-align: left; font-size: var(--alm-text-2xs);
+  text-align: left; font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-medium);
   color: var(--alm-text-muted); text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   padding: var(--alm-sp-2) var(--alm-sp-3);
   border-bottom: 1px solid var(--alm-border);
   background: var(--alm-surface);
@@ -193,7 +193,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.alm-table td.mono {font-size: var(--alm-text-xs); }
+.alm-table td.mono { font-family: var(--alm-font-mono); font-size: var(--alm-text-xs); }
 .alm-table td.num { font-variant-numeric: tabular-nums; text-align: right; }
 .alm-table td.muted { color: var(--alm-text-muted); }
 
@@ -222,7 +222,7 @@
   font: inherit;
   font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   font-weight: var(--alm-weight-semibold);
   color: var(--alm-text-muted);
 }
@@ -267,7 +267,7 @@
 .alm-kv__label {
   width: 120px; flex-shrink: 0;
   font-size: var(--alm-text-xs); color: var(--alm-text-muted);
-  text-transform: uppercase; letter-spacing: 0.03em;
+  text-transform: uppercase; letter-spacing: var(--alm-tracking-tight);
   font-weight: var(--alm-weight-medium);
 }
 .alm-kv__value { font-size: var(--alm-text-sm); }
@@ -294,7 +294,7 @@
 .alm-coverage__fill--low { background: var(--alm-warn); }
 .alm-coverage__fill--ok { background: var(--alm-ok); }
 .alm-coverage__value {
-  width: 36px; font-size: var(--alm-text-2xs); color: var(--alm-text-muted);
+  width: 36px; font-size: var(--alm-text-xs); color: var(--alm-text-muted);
   text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums;
 }
 
@@ -327,7 +327,7 @@
   display: flex; align-items: center; gap: var(--alm-sp-2);
 }
 .alm-prop-table__source {
-  font-size: var(--alm-text-2xs); color: var(--alm-text-faint);
+  font-size: var(--alm-text-xs); color: var(--alm-text-faint);
   margin-left: auto;
 }
 .alm-prop-table__row--conflict { background: var(--alm-warn-bg); }
@@ -354,3 +354,9 @@
 .alm-text-sm { font-size: var(--alm-text-sm); }
 .alm-text-xs { font-size: var(--alm-text-xs); }
 .alm-text-muted { color: var(--alm-text-muted); }
+
+/* Shared monospace surface (spec 055 T022): filesystem paths, source-view
+ * IDs, manifest paths, dev-tools contract names, RA/Dec coordinate values.
+ * Referenced by ~40 call sites across features/*; was a no-op while the
+ * blanket `* { font-family !important }` reset overrode it (reset.css). */
+.alm-mono { font-family: var(--alm-font-mono); }

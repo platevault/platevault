@@ -181,7 +181,7 @@
 .alm-filterbar__multi-summary::marker { content: ''; }
 .alm-filterbar__multi-summary::after {
   content: '\25BE';
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
 }
 .alm-filterbar__multi[open] > .alm-filterbar__multi-summary {
@@ -324,7 +324,7 @@
 .alm-sorth:hover { color: var(--alm-text); }
 .alm-sorth--active { color: var(--alm-text); }
 .alm-sorth__arrow {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
 }
 
@@ -338,7 +338,7 @@
   font-weight: var(--alm-weight-semibold);
   font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-muted);
   border-bottom: 1px solid var(--alm-border-subtle);
   padding: var(--alm-sp-2) var(--alm-sp-3);
@@ -392,7 +392,7 @@
  * minting per-feature `*-cell--num/--mono/--muted` clones. */
 .alm-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
 .alm-cell--mono {
-
+  font-family: var(--alm-font-mono);
   font-size: var(--alm-text-xs);
   color: var(--alm-text-secondary);
 }
@@ -438,7 +438,7 @@
   flex-shrink: 0;
   padding: var(--alm-sp-1) var(--alm-sp-3);
   border-top: 1px solid var(--alm-border);
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
 }
 .alm-listtable__empty {

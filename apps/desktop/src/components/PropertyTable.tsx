@@ -52,6 +52,11 @@ export interface PropertyDef {
    * screen readers get it without a hover.
    */
   tooltip?: string;
+  /**
+   * Render the value in the monospace stack (spec 055 FR-005) — e.g. RA/Dec
+   * coordinate values, where fixed digit width matters for scanability.
+   */
+  mono?: boolean;
   confirmed?: boolean;
   onConfirmToggle?: () => void;
   onChange?: (newValue: string) => void;
@@ -189,7 +194,10 @@ export function PropertyTable({
             </span>
 
             <span
-              className="alm-property-table__cell alm-property-table__cell--value"
+              className={
+                'alm-property-table__cell alm-property-table__cell--value' +
+                (prop.mono ? ' alm-mono' : '')
+              }
               role="cell"
             >
               {isEditing ? (

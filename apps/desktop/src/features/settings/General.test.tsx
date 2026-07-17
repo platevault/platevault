@@ -54,7 +54,10 @@ describe('General — font size', () => {
 
     expect(
       document.documentElement.style.getPropertyValue('--alm-text-base'),
-    ).toBe('14.95px');
+    ).toBe('16px');
+    expect(document.documentElement.style.getPropertyValue('font-size')).toBe(
+      '16px',
+    );
   });
 
   it('persists the choice so it does not reset on a revisit', () => {
