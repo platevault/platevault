@@ -223,6 +223,22 @@ fn apply_key_to_state(key: &str, value: Value, state: &mut SettingsState) -> DbR
             state.source_view_link_kind_cross_drive =
                 serde_json::from_value(value).map_err(DbError::Serialise)?;
         }
+        "framingPointingFractionOfFov" => {
+            state.framing_pointing_fraction_of_fov =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
+        "framingPointingFallbackDeg" => {
+            state.framing_pointing_fallback_deg =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
+        "framingRotationToleranceDeg" => {
+            state.framing_rotation_tolerance_deg =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
+        "framingMosaicEnvelopeFractionOfFov" => {
+            state.framing_mosaic_envelope_fraction_of_fov =
+                serde_json::from_value(value).map_err(DbError::Serialise)?;
+        }
         _ => {
             // Structured-path keys (tools.*, workflow_profile.*) are not in the
             // static SettingsState bag; they are readable via resolve_setting.
@@ -518,6 +534,34 @@ mod tests {
         let state = load_settings(db.pool()).await.unwrap();
         assert_eq!(state.log_level, "debug");
         assert!(state.follow_symlinks);
+    }
+
+    /// F-Framing-11 (R11a): `load_settings` (the path `attribution.rs`'s
+    /// `tolerance_params` reads through directly) must honour a stored
+    /// override for the clustering tunables, not silently drop it via the
+    /// `apply_key_to_state` catch-all.
+    #[tokio::test]
+    async fn load_settings_applies_stored_framing_tolerance_overrides() {
+        let db = setup().await;
+        let defaults = SettingsState::default();
+        let state = load_settings(db.pool()).await.unwrap();
+        assert_eq!(
+            state.framing_pointing_fraction_of_fov,
+            defaults.framing_pointing_fraction_of_fov
+        );
+
+        set_raw(db.pool(), "framingPointingFractionOfFov", &serde_json::json!(0.33)).await.unwrap();
+        set_raw(db.pool(), "framingPointingFallbackDeg", &serde_json::json!(0.4)).await.unwrap();
+        set_raw(db.pool(), "framingRotationToleranceDeg", &serde_json::json!(6.0)).await.unwrap();
+        set_raw(db.pool(), "framingMosaicEnvelopeFractionOfFov", &serde_json::json!(1.25))
+            .await
+            .unwrap();
+
+        let state = load_settings(db.pool()).await.unwrap();
+        assert!((state.framing_pointing_fraction_of_fov - 0.33).abs() < f64::EPSILON);
+        assert!((state.framing_pointing_fallback_deg - 0.4).abs() < f64::EPSILON);
+        assert!((state.framing_rotation_tolerance_deg - 6.0).abs() < f64::EPSILON);
+        assert!((state.framing_mosaic_envelope_fraction_of_fov - 1.25).abs() < f64::EPSILON);
     }
 
     // ── Per-frame-type patterns ───────────────────────────────────────────

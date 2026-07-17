@@ -72,6 +72,22 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
 }
 
+/// Load the clustering tolerance tunables from Settings (F-Framing-11, R11a).
+/// `SettingsState::default()` reproduces `ToleranceParams::defaults()`
+/// bit-for-bit, so an empty settings table behaves exactly as before this
+/// wiring landed.
+#[allow(clippy::cast_possible_truncation)]
+async fn tolerance_params(pool: &SqlitePool) -> Result<ToleranceParams, ContractError> {
+    let settings =
+        persistence_db::repositories::settings::load_settings(pool).await.map_err(db_err)?;
+    Ok(ToleranceParams {
+        pointing_fraction_of_fov: settings.framing_pointing_fraction_of_fov,
+        pointing_fallback_deg: settings.framing_pointing_fallback_deg,
+        rotation_tolerance_deg: settings.framing_rotation_tolerance_deg as f32,
+        mosaic_envelope_fraction_of_fov: settings.framing_mosaic_envelope_fraction_of_fov,
+    })
+}
+
 // ── Item geometry (staged, non-durable) ─────────────────────────────────────
 
 /// Representative geometry for an Inbox item, computed from its staged
@@ -267,7 +283,7 @@ async fn same_optic_train_candidates(
         by_project.entry(f.project_id.clone()).or_default().push(f);
     }
 
-    let params = ToleranceParams::defaults();
+    let params = tolerance_params(pool).await?;
     for (project_id, framings) in &by_project {
         let Ok(project) = projects_repo::get_project(pool, project_id).await else {
             continue; // dangling reference — skip rather than fail the whole pass
@@ -550,7 +566,7 @@ async fn create_framing_for_project(
         geometry.resolved_target_id.clone()
     };
 
-    let params = ToleranceParams::defaults();
+    let params = tolerance_params(pool).await?;
     let (tolerance_pointing, _is_fallback) =
         geometry.fov_diagonal_deg.map_or((params.pointing_fallback_deg, true), |fov| {
             (params.pointing_fraction_of_fov * fov, false)
@@ -957,6 +973,101 @@ mod tests {
         assert_eq!(top.kind, IngestionAttributionKind::NewFraming);
     }
 
+    // ── tolerance_params (F-Framing-11: settings wiring, R11a) ─────────────────
+
+    #[tokio::test]
+    async fn tolerance_params_reads_r11a_defaults_when_unset() {
+        let db = test_db().await;
+        let params = tolerance_params(db.pool()).await.unwrap();
+        assert_eq!(params, ToleranceParams::defaults());
+    }
+
+    #[tokio::test]
+    async fn tolerance_params_honours_stored_settings_overrides() {
+        let db = test_db().await;
+        persistence_db::repositories::settings::set_raw(
+            db.pool(),
+            "framingPointingFractionOfFov",
+            &serde_json::json!(0.25),
+        )
+        .await
+        .unwrap();
+        persistence_db::repositories::settings::set_raw(
+            db.pool(),
+            "framingRotationToleranceDeg",
+            &serde_json::json!(7.5),
+        )
+        .await
+        .unwrap();
+
+        let params = tolerance_params(db.pool()).await.unwrap();
+        assert!((params.pointing_fraction_of_fov - 0.25).abs() < f64::EPSILON);
+        assert!((params.rotation_tolerance_deg - 7.5).abs() < f32::EPSILON);
+        // Untouched keys keep the R11a defaults.
+        let defaults = ToleranceParams::defaults();
+        assert!(
+            (params.pointing_fallback_deg - defaults.pointing_fallback_deg).abs() < f64::EPSILON
+        );
+        assert!(
+            (params.mosaic_envelope_fraction_of_fov - defaults.mosaic_envelope_fraction_of_fov)
+                .abs()
+                < f64::EPSILON
+        );
+    }
+
+    /// End-to-end proof that a stored `framingPointingFractionOfFov` override
+    /// actually changes `compute_candidates`' ranking outcome, not just the
+    /// parameter struct (F-Framing-11).
+    #[tokio::test]
+    async fn compute_candidates_honours_widened_pointing_tolerance_setting() {
+        let db = test_db().await;
+        seed_project(db.pool(), "proj-tol", "ready", false).await;
+        seed_canonical_target(db.pool(), "target-tol", "M 99").await;
+        projects_repo::set_project_canonical_target_id(db.pool(), "proj-tol", "target-tol")
+            .await
+            .unwrap();
+        seed_framing(
+            db.pool(),
+            "framing-tol",
+            "proj-tol",
+            Some("target-tol"),
+            83.633,
+            22.0145,
+            0.0,
+        )
+        .await;
+
+        let geometry = ItemGeometry {
+            optic_train_key: Some("rasa 8|asi2600mm|400".to_owned()),
+            // ~0.5deg north of the framing's representative — outside the
+            // R11a default 10%-of-FOV (0.2deg @ 2.0deg FOV) tolerance.
+            pointing: Some(Pointing { ra_deg: 83.633, dec_deg: 22.5145 }),
+            rotation_deg: Some(0.0),
+            fov_diagonal_deg: Some(2.0),
+            resolved_target_id: Some("target-tol".to_owned()),
+        };
+
+        // Default tolerance: too far, suggests a new framing instead.
+        let candidates = compute_candidates(db.pool(), &geometry).await.unwrap();
+        let top = candidates.iter().find(|c| c.project_id.as_deref() == Some("proj-tol")).unwrap();
+        assert_eq!(top.kind, IngestionAttributionKind::NewFraming);
+
+        // Widen the pointing tolerance via Settings — 0.5 * 2.0deg FOV =
+        // 1.0deg envelope, now comfortably covers the 0.5deg offset.
+        persistence_db::repositories::settings::set_raw(
+            db.pool(),
+            "framingPointingFractionOfFov",
+            &serde_json::json!(0.5),
+        )
+        .await
+        .unwrap();
+
+        let candidates = compute_candidates(db.pool(), &geometry).await.unwrap();
+        let top = candidates.iter().find(|c| c.project_id.as_deref() == Some("proj-tol")).unwrap();
+        assert_eq!(top.kind, IngestionAttributionKind::AddToFraming);
+        assert_eq!(top.framing_id.as_deref(), Some("framing-tol"));
+    }
+
     #[tokio::test]
     async fn compute_candidates_flags_optic_difference_for_same_target_different_optic_train() {
         let db = test_db().await;
@@ -1135,6 +1246,47 @@ mod tests {
             plans_repo::get_chosen_framing_id(db.pool(), "plan-2").await.unwrap().as_deref(),
             Some("framing-existing")
         );
+    }
+
+    /// F-Framing-4/F-Framing-8: a mosaic project's new framing inherits the
+    /// project's *declared* canonical target (FR-017) — it never adopts the
+    /// item's OBJECT-resolved target, even when one was staged (no per-frame
+    /// OBJECT/coordinate resolution for mosaic projects).
+    #[tokio::test]
+    async fn apply_new_framing_for_mosaic_project_inherits_declared_target_ignoring_resolved_object(
+    ) {
+        let db = test_db().await;
+        let bus = test_bus(&db);
+        seed_plan(db.pool(), "plan-mosaic").await;
+        seed_canonical_target(db.pool(), "target-declared", "NGC 7000").await;
+        seed_canonical_target(db.pool(), "target-object-decoy", "M 45").await;
+        seed_project(db.pool(), "proj-mosaic", "ready", true).await;
+        projects_repo::set_project_canonical_target_id(db.pool(), "proj-mosaic", "target-declared")
+            .await
+            .unwrap();
+
+        let geometry = ItemGeometry {
+            optic_train_key: Some("rasa 8|asi2600mm|400".to_owned()),
+            pointing: Some(Pointing { ra_deg: 10.0, dec_deg: 20.0 }),
+            rotation_deg: Some(0.0),
+            fov_diagonal_deg: Some(2.0),
+            // A misleading per-frame OBJECT resolution — must be ignored.
+            resolved_target_id: Some("target-object-decoy".to_owned()),
+        };
+        let chosen = ChosenAttributionDto {
+            kind: ChosenAttributionKind::NewFraming,
+            project_id: Some("proj-mosaic".to_owned()),
+            framing_id: None,
+        };
+
+        let applied = apply_chosen_attribution(db.pool(), &bus, "plan-mosaic", &geometry, &chosen)
+            .await
+            .unwrap()
+            .expect("new_framing must apply");
+
+        let framing_id = applied.framing_id.expect("new_framing creates a framing");
+        let framing = framing_repo::get_framing(db.pool(), &framing_id).await.unwrap();
+        assert_eq!(framing.target_id.as_deref(), Some("target-declared"));
     }
 
     #[tokio::test]
