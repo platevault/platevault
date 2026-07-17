@@ -104,6 +104,12 @@ pub struct InboxEvidenceRow {
     pub override_filter: Option<String>,
     pub override_exposure_s: Option<f64>,
     pub override_binning: Option<String>,
+    /// Durable frame-type override (property_key = 'frameType') from the same
+    /// JOIN. Unlike `manual_override` (an evidence-row column that classify's
+    /// wipe-and-reinsert can lose to a concurrent reclassify — the #854 CI
+    /// race), this survives every evidence rebuild. Effective frame type
+    /// resolves `manual_override` → `override_frame_type` → `frame_type`.
+    pub override_frame_type: Option<String>,
     /// 1 when any override recorded for this file is stale (file size/mtime
     /// changed since it was set — spec 041 R-4).
     pub override_stale: i64,
@@ -716,6 +722,7 @@ pub async fn list_evidence(
              ov_filter.value   AS override_filter,
              CAST(ov_exp.value AS REAL) AS override_exposure_s,
              ov_bin.value      AS override_binning,
+             ov_ft.value       AS override_frame_type,
              ice.override_stale
          FROM inbox_classification_evidence ice
          LEFT JOIN inbox_items ii
@@ -732,6 +739,10 @@ pub async fn list_evidence(
              ON ov_bin.source_group_id = ii.source_group_id
             AND ov_bin.relative_file_path = ice.relative_file_path
             AND ov_bin.property_key = 'binning'
+         LEFT JOIN inbox_file_overrides ov_ft
+             ON ov_ft.source_group_id = ii.source_group_id
+            AND ov_ft.relative_file_path = ice.relative_file_path
+            AND ov_ft.property_key = 'frameType'
          WHERE ice.inbox_item_id = ?
          ORDER BY ice.relative_file_path",
     )

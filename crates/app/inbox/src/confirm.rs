@@ -684,11 +684,14 @@ async fn select_destination_root(
     }
 }
 
-/// Return the effective frame type for a file: `manual_override` if set, else `frame_type`.
+/// Return the effective frame type for a file: `manual_override` if set, else
+/// the durable group-keyed `frameType` override, else the extracted
+/// `frame_type` (same priority chain as classify's split and the metadata
+/// DTO — the durable middle layer survives evidence rebuilds, #854).
 fn effective_frame_type(
     ev: &persistence_db::repositories::inbox::InboxEvidenceRow,
 ) -> Option<&str> {
-    ev.manual_override.as_deref().or(ev.frame_type.as_deref())
+    ev.manual_override.as_deref().or(ev.override_frame_type.as_deref()).or(ev.frame_type.as_deref())
 }
 
 /// Load the active `pattern` from the settings table, or fall back to the

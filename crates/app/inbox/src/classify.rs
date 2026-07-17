@@ -243,12 +243,9 @@ pub async fn classify(
         // (gain stays a string — some cameras report scaled/non-integer gain).
         persist_file_metadata(pool, &req.inbox_item_id, &rel, abs_path, raw_meta.as_ref()).await;
 
-        if is_unclassified {
-            unclassified_files.push(rel.clone());
-        } else if let Some(ft) = frame_type {
-            frame_type_files.entry(ft.as_str().to_owned()).or_default().push(rel.clone());
-        }
-        // T066: collect for sub-item grouping (done after the loop).
+        // T066: collect for sub-item grouping and the folder tallies — both
+        // computed AFTER the loop, once user overrides are layered on top of
+        // this extraction-only record.
         file_records.push((rel, frame_type, raw_meta));
     }
 
@@ -270,6 +267,88 @@ pub async fn classify(
             repo::mark_override_stale(pool, &req.inbox_item_id, &entry.relative_file_path)
                 .await
                 .ok();
+        }
+    }
+
+    // Layer the user's overrides onto the extraction-only records BEFORE the
+    // folder tallies and the T066 split consume them (#854 CI race + the
+    // rescan-reverts-overrides bug): without this, every classify run silently
+    // reverted a reclassified file to its raw-header state — a file whose
+    // frameType/exposureS only exist as overrides bounced back to the
+    // needs-review sentinel on the very next classify. Priority per field
+    // mirrors `reclassify_v2`'s own re-split layering:
+    //   frame type — evidence `manual_override` (snapshot) → durable
+    //                group-keyed 'frameType' override → extracted header;
+    //   values     — group-keyed override → extracted header.
+    let group_overrides = match item.source_group_id.as_deref() {
+        Some(sg_id) => repo::list_file_overrides_for_group(pool, sg_id).await.unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let overrides_index: HashMap<(&str, &str), &str> = group_overrides
+        .iter()
+        .map(|o| ((o.relative_file_path.as_str(), o.property_key.as_str()), o.value.as_str()))
+        .collect();
+    let manual_by_path: HashMap<&str, &str> = override_snapshot
+        .iter()
+        .filter_map(|e| e.manual_override.as_deref().map(|m| (e.relative_file_path.as_str(), m)))
+        .collect();
+
+    for (rel, ft_opt, raw_opt) in &mut file_records {
+        let fp = rel.clone();
+        let fp = fp.as_str();
+
+        let eff_ft_str = manual_by_path
+            .get(fp)
+            .copied()
+            .or_else(|| overrides_index.get(&(fp, "frameType")).copied());
+        if let Some(ft) = eff_ft_str.and_then(FrameType::from_str_ci) {
+            *ft_opt = Some(ft);
+        }
+
+        // Value overrides feed the T070 mandatory gate and the grouping dims.
+        if overrides_index.contains_key(&(fp, "exposureS"))
+            || overrides_index.contains_key(&(fp, "filter"))
+            || overrides_index.contains_key(&(fp, "gain"))
+            || overrides_index.contains_key(&(fp, "target"))
+            || overrides_index.contains_key(&(fp, "binning"))
+            || overrides_index.contains_key(&(fp, "temperatureC"))
+            || overrides_index.contains_key(&(fp, "offset"))
+        {
+            let raw = raw_opt.get_or_insert_with(Default::default);
+            if let Some(v) = overrides_index.get(&(fp, "exposureS")) {
+                raw.exposure = Some((*v).to_owned());
+            }
+            if let Some(v) = overrides_index.get(&(fp, "filter")) {
+                raw.filter = Some((*v).to_owned());
+            }
+            if let Some(v) = overrides_index.get(&(fp, "gain")) {
+                raw.gain = Some((*v).to_owned());
+            }
+            if let Some(v) = overrides_index.get(&(fp, "target")) {
+                raw.object = Some((*v).to_owned());
+            }
+            if let Some(v) = overrides_index.get(&(fp, "binning")) {
+                if let Some((bx, by)) = v.split_once('x') {
+                    raw.x_binning = Some(bx.trim().to_owned());
+                    raw.y_binning = Some(by.trim().to_owned());
+                }
+            }
+            if let Some(v) = overrides_index.get(&(fp, "temperatureC")) {
+                raw.set_temp_c = v.trim().parse::<f64>().ok().or(raw.set_temp_c);
+            }
+            if let Some(v) = overrides_index.get(&(fp, "offset")) {
+                raw.offset = v.trim().parse::<i64>().ok().or(raw.offset);
+            }
+        }
+    }
+
+    // Folder tallies from the layered (effective) records.
+    for (rel, ft_opt, _) in &file_records {
+        match ft_opt {
+            Some(ft) => {
+                frame_type_files.entry(ft.as_str().to_owned()).or_default().push(rel.clone());
+            }
+            None => unclassified_files.push(rel.clone()),
         }
     }
 

@@ -509,6 +509,25 @@ pub async fn reclassify_v2(
             )
             .await
             .map_err(|e| db_internal_ctx(e, "write frameType manual_override"))?;
+            // ALSO persist to the group-keyed overrides table: the evidence
+            // row above is wiped and re-inserted by every classify run, and a
+            // classify racing this write loses the manual_override entirely
+            // (observed as the #854 CI red — the group-keyed exposureS
+            // survived while frameType vanished). The group-keyed row
+            // survives every evidence rebuild; classify/materialize layer it
+            // back on (priority: manual_override → frameType override →
+            // extracted header).
+            inbox_repo::set_file_override(
+                pool,
+                &source_group_id,
+                file_path,
+                "frameType",
+                frame_type_str,
+                None, // size: caller doesn't stat files
+                None, // mtime: same
+            )
+            .await
+            .map_err(|e| db_internal_ctx(e, "write durable frameType override"))?;
         } else {
             // Generic property: write to inbox_file_overrides (index-only).
             let value_str = match json_val {
@@ -1490,6 +1509,136 @@ mod tests {
              unclassified by silently re-deriving from the raw on-disk header"
         );
         assert_eq!(second.frame_type, Some("light".to_owned()));
+    }
+
+    /// #854 CI race: a concurrent `classify` wipes and re-inserts evidence
+    /// rows, losing the `manual_override` a racing `reclassify_v2` just wrote
+    /// (the group-keyed exposureS survived while frameType vanished in the
+    /// CI failure dump). The durable group-keyed 'frameType' override must
+    /// make ANY later classify converge back to the user's reclassify state —
+    /// even a force-rescan that rebuilds evidence from raw headers after the
+    /// evidence-row override was destroyed.
+    #[tokio::test]
+    async fn classify_converges_to_durable_frame_type_after_manual_override_lost() {
+        let root = tempfile::tempdir().unwrap();
+        // Unmapped IMAGETYP + no EXPTIME — the real E2E fixture shape.
+        let fits_path = root.path().join("ambiguous_001.fits");
+        {
+            let mut data = vec![b' '; 2880];
+            let cards = ["IMAGETYP= 'Frame Unknown'", "OBJECT  = 'M42'", "FILTER  = 'Ha'"];
+            for (i, c) in cards.iter().enumerate() {
+                let card = format!("{c:<80}");
+                data[i * 80..i * 80 + 80].copy_from_slice(card.as_bytes());
+            }
+            data[cards.len() * 80..cards.len() * 80 + 3].copy_from_slice(b"END");
+            std::fs::write(&fits_path, &data).unwrap();
+        }
+
+        let db = test_db().await;
+        let sg_id = "sg-durable-ft";
+        let placeholder_id = "item-durable-ft";
+
+        upsert_inbox_source_group(
+            db.pool(),
+            &UpsertSourceGroup {
+                id: sg_id,
+                root_id: "root-1",
+                relative_path: "",
+                content_signature: Some("sig"),
+                format: Some("fits"),
+                lane: Some("fits"),
+            },
+        )
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO inbox_items \
+             (id, root_id, relative_path, source_group_id, group_key, group_label, \
+              frame_type, file_count, discovered_at, last_scanned_at, \
+              content_signature, state, lane) \
+             VALUES (?, 'root-1', '', ?, '', NULL, NULL, 1, \
+                     datetime('now'), datetime('now'), 'sig', 'pending_classification', 'fits')",
+        )
+        .bind(placeholder_id)
+        .bind(sg_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let first = crate::classify::classify(
+            db.pool(),
+            crate::classify::ClassifyRequest {
+                inbox_item_id: placeholder_id.to_owned(),
+                root_absolute_path: root.path().to_owned(),
+                force_rescan: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(first.classification_type, "unclassified");
+
+        // User bulk-reclassifies: frameType light + exposureS 300.
+        let resp = reclassify_v2(
+            db.pool(),
+            InboxReclassifyV2Request {
+                source_group_id: Some(sg_id.to_owned()),
+                inbox_item_id: None,
+                overrides: vec![],
+                bulk: vec![
+                    InboxReclassifyBulk {
+                        property: "frameType".to_owned(),
+                        value: serde_json::json!("light").into(),
+                        file_paths: None,
+                    },
+                    InboxReclassifyBulk {
+                        property: "exposureS".to_owned(),
+                        value: serde_json::json!(300.0).into(),
+                        file_paths: None,
+                    },
+                ],
+            },
+        )
+        .await
+        .unwrap();
+        let light = resp
+            .sub_items
+            .iter()
+            .find(|s| s.frame_type.as_deref() == Some("light"))
+            .expect("re-split must produce a light sub-item")
+            .clone();
+
+        // Simulate the racing classify's damage: the evidence-row
+        // manual_override is destroyed (wipe + re-insert with the raw header
+        // values re-applied from an EMPTY pre-write snapshot).
+        sqlx::query("UPDATE inbox_classification_evidence SET manual_override = NULL")
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        // A full force-rescan re-derives from the raw on-disk header (still
+        // the unmapped 'Frame Unknown'); the durable group-keyed frameType
+        // override must bring the file back to a resolved light state.
+        let after = crate::classify::classify(
+            db.pool(),
+            crate::classify::ClassifyRequest {
+                inbox_item_id: light.inbox_item_id.clone(),
+                root_absolute_path: root.path().to_owned(),
+                force_rescan: true,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            after.classification_type, "single_type",
+            "classify must converge to the durable frameType override, not revert to \
+             unclassified after the evidence-row manual_override is lost"
+        );
+        assert_eq!(after.frame_type, Some("light".to_owned()));
+        assert!(
+            after.unclassified_files.is_empty(),
+            "no needs-review files once the durable overrides are layered: {:?}",
+            after.unclassified_files
+        );
     }
 
     /// T081 (spec 041 FR-035–FR-040): `offset` and `temperatureC` overrides
