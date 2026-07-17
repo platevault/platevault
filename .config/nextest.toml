@@ -38,8 +38,8 @@
 test-threads = 1
 
 # Warn every 60 s; terminate after 5 periods (300 s). Must exceed the
-# harness's LAUNCH_TIMEOUT (120 s — slow debug-build app boot on CI runners,
-# see crates/e2e-tests/tests/common/mod.rs) plus in-journey polling.
+# harness's LAUNCH_TIMEOUT (240 s — slow/contended debug-build app boot on CI
+# runners, see crates/e2e-tests/tests/common/mod.rs) plus in-journey polling.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 # Retry once to guard against transient driver/startup flakes.
