@@ -860,7 +860,9 @@ describe('TargetDetailV2 — needs-coordinates degrade + Moon-separation trio (#
     });
     render(<TargetDetailV2 targetId={TARGET_ID} />);
 
-    await waitFor(() => expect(screen.getByText('Best date')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('Best date')).toBeInTheDocument(),
+    );
     // The shown date is the moon-adjusted night, not the opposition…
     const row = screen.getByText('Best date').closest('[role="row"]');
     expect(row?.textContent).toContain('Jan 26 · in 25 days');
@@ -883,7 +885,9 @@ describe('TargetDetailV2 — needs-coordinates degrade + Moon-separation trio (#
     });
     render(<TargetDetailV2 targetId={TARGET_ID} />);
 
-    await waitFor(() => expect(screen.getByText('Best date')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('Best date')).toBeInTheDocument(),
+    );
     const row = screen.getByText('Best date').closest('[role="row"]');
     expect(row?.textContent).toContain('Jan 18 · in 17 days');
     expect(
@@ -904,7 +908,9 @@ describe('TargetDetailV2 — needs-coordinates degrade + Moon-separation trio (#
     });
     render(<TargetDetailV2 targetId={TARGET_ID} />);
 
-    await waitFor(() => expect(screen.getByText('Best date')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('Best date')).toBeInTheDocument(),
+    );
     const row = screen.getByText('Best date').closest('[role="row"]');
     expect(row?.textContent).toContain('Feb 2 · in 32 days');
     expect(

@@ -37,7 +37,11 @@
 
 import { moonStateAt, type Vec3 } from './moon-state';
 import { lunarSeparationDeg } from './lunar-separation';
-import { minSeparationDeg, type Band, type MoonAvoidanceParams } from './moon-avoidance';
+import {
+  minSeparationDeg,
+  type Band,
+  type MoonAvoidanceParams,
+} from './moon-avoidance';
 import { nextOpposition } from './opposition';
 
 const MS_PER_DAY = 86_400_000;
@@ -154,7 +158,8 @@ export function bestMoonDate(
     (entry) => lunarSeparationDeg(raDeg, decDeg, entry.moonVec) as number,
   );
   const viable = table.map(
-    (entry, i) => sepDeg[i] >= minSeparationDeg(scoringBand, entry.ageDays, params),
+    (entry, i) =>
+      sepDeg[i] >= minSeparationDeg(scoringBand, entry.ageDays, params),
   );
   /** A night before the search start is never a recommendation. */
   const inPast = (i: number) => windowStartMs + i * MS_PER_DAY < fromMs;
