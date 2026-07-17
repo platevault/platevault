@@ -34,6 +34,12 @@ vi.mock('@/features/archive/store', () => ({
 vi.mock('@/features/plans/PlanReviewOverlay', () => ({
   PlanReviewOverlay: () => null,
 }));
+// spec 054 T017: ProjectDetailContent now mounts ProjectBottomDetail
+// (CalibrationMatchPanel, CleanupSection, …), which calls useQuery/useMutation
+// directly — stub it out for the same reason as the mocks above.
+vi.mock('./ProjectBottomDetail', () => ({
+  ProjectBottomDetail: () => null,
+}));
 
 import { ProjectDetailContent } from './ProjectDetail';
 import * as store from './store';

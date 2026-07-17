@@ -63,6 +63,15 @@ vi.mock('@/features/plans/PlanReviewOverlay', () => ({
     open ? <div data-testid="archive-plan-review-stub">{planId}</div> : null,
 }));
 
+// spec 054 T017: ProjectDetailContent now mounts ProjectBottomDetail as
+// trailing DetailPanel children. Its sections (CalibrationMatchPanel,
+// CleanupSection, …) call useQuery/useMutation directly, which this file's
+// unrelated archive-plan assertions have no QueryClientProvider for — stub
+// it out, same as the archive/store and PlanReviewOverlay mocks above.
+vi.mock('./ProjectBottomDetail', () => ({
+  ProjectBottomDetail: () => null,
+}));
+
 import { ProjectDetailContent } from './ProjectDetail';
 import * as store from './store';
 import { addToast } from '@/shared/toast';

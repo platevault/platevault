@@ -388,9 +388,10 @@
 /* ── ListPageLayout split variant (spec 054, Inbox detail-dominant shape) ─────
  * Mirrors `--side` but with the width pin on the OPPOSITE region: the LIST
  * (main) is the narrow, fixed-width column and the DETAIL is the wide flex
- * region. Full per-page geometry (list ~360px, name truncation, etc.) is
- * Inbox's own adoption in a later phase (US3) — this is the generic shape the
- * shared mechanism needs to be able to render today. */
+ * region. Inbox (spec 054 US3/T018) is the only adopter, via
+ * `forcedPlacement="split"` — its list (`InboxList`, T019) carries only the
+ * essential Path/Type/Files columns and truncates the Path cell with a
+ * tooltip so it stays usable at the ~360px default width. */
 .alm-listpage__body--split {
   flex-direction: row;
   --alm-split-list-w: 360px;

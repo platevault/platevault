@@ -8,12 +8,21 @@
  * opt-in padding-spacer windowing (the inbox is capped at 500 rows but can
  * still be large), so it stays windowed without a bespoke list.
  *
- * Columns: Path (relative path, primary) · Type (frame type / state) · Files ·
- * Format. When grouping is active, the chosen ordered dimensions render
- * collapsible group sub-header rows (shared `groupByDimensions` engine); leaf
- * rows indent under their group. Selection + grouping controls are owned by the
- * page / top-bar (FilterToolbar + useGrouping); this is a controlled
- * presentational list.
+ * Columns: Path (relative path, primary) · Type (frame type / state, master
+ * label folded in) · Files. Spec 054 T019: Inbox is now a PERMANENT narrow
+ * (~360px) split-list column (`InboxPage` forces `'split'` placement), so
+ * this list carries only the two essential status columns rather than the
+ * four-column table a full-width dock could afford — the Format column
+ * (fits/xisf/mixed/video) was dropped as non-essential at this width, and its
+ * one load-bearing bit (the master flag) folded into the Type cell instead so
+ * master items stay distinguishable. The Path cell truncates with an ellipsis
+ * (`table-layout:fixed` + `text-overflow:ellipsis`, tables-lists.css) and
+ * carries a `title` attribute with the full, untruncated label as a tooltip.
+ * When grouping is active, the chosen ordered dimensions render collapsible
+ * group sub-header rows (shared `groupByDimensions` engine); leaf rows indent
+ * under their group. Selection + grouping controls are owned by the page /
+ * top-bar (FilterToolbar + useGrouping); this is a controlled presentational
+ * list.
  *
  * Sort: column headers are <button> elements that call onSort (SessionsTable
  * convention). The page owns sort state and passes sortCol + sortDir.
@@ -37,7 +46,7 @@ import { m } from '@/lib/i18n';
 
 // ── Sort model ────────────────────────────────────────────────────────────────
 
-export type InboxSortCol = 'detection' | 'type' | 'count' | 'format';
+export type InboxSortCol = 'detection' | 'type' | 'count';
 export type SortDir = 'asc' | 'desc';
 
 export interface InboxSort {
@@ -83,8 +92,14 @@ function isNeedsReview(item: InboxListItem): boolean {
  * that mislabel.
  */
 function classificationLabel(item: InboxListItem): string {
+  // Master items fold their "master" flag into this label (spec 054 T019 —
+  // the dedicated Format column that used to carry `inbox_master_row_label`
+  // was dropped for the narrow split-list width); a bare frame-type label
+  // here would otherwise be indistinguishable from a regular light/dark row.
   if (item.isMaster)
-    return item.masterFrameType ?? m.inbox_state_master_fallback();
+    return m.inbox_master_row_label({
+      type: item.masterFrameType ?? m.inbox_state_master_fallback(),
+    });
   if (item.frameType) return item.frameType;
   if (item.groupFrameType) return item.groupFrameType;
   if (isNeedsReview(item)) return m.inbox_state_needs_review();
@@ -117,14 +132,6 @@ function classificationMod(item: InboxListItem): string {
     default:
       return 'classified';
   }
-}
-
-/** Short, uppercase format tag shown in the Format column. */
-function formatTag(item: InboxListItem): string {
-  if (item.lane === 'video') return 'VIDEO';
-  if (item.format === 'xisf') return 'XISF';
-  if (item.format === 'mixed') return 'MIXED';
-  return 'FITS';
 }
 
 /**
@@ -173,9 +180,6 @@ function compareItems(
       break;
     case 'count':
       cmp = a.fileCount - b.fileCount;
-      break;
-    case 'format':
-      cmp = formatTag(a).localeCompare(formatTag(b));
       break;
   }
   return sort.dir === 'asc' ? cmp : -cmp;
@@ -385,17 +389,6 @@ export function InboxList({
       className: 'num',
       style: { width: '5rem' },
     },
-    {
-      key: 'format',
-      label: makeSortHeader(
-        'format',
-        m.inbox_dim_format(),
-        m.inbox_sort_format_aria(),
-      ),
-      ariaSort: thSort('format'),
-      className: 'alm-inbox-cell--right',
-      style: { width: '7rem' },
-    },
   ];
 
   // Map the visual rows onto shared-Table rows (group sub-headers + item rows).
@@ -434,7 +427,6 @@ export function InboxList({
             ),
             type: '',
             count: '',
-            format: '',
           };
         }
         const { item, originalIdx, indent } = row;
@@ -465,11 +457,6 @@ export function InboxList({
             </span>
           ),
           count: m.inbox_list_file_count({ count: item.fileCount }),
-          format: item.isMaster
-            ? m.inbox_master_row_label({
-                type: item.masterFrameType ?? m.inbox_state_master_fallback(),
-              })
-            : formatTag(item),
         };
       }),
     [visualRows, selectedIdx, onSelect, toggle],

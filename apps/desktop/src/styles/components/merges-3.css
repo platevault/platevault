@@ -64,9 +64,14 @@
 /* The old "104 ListPageLayout dual side+bottom variant" (`detailPlacement=
  * "side-and-bottom"`, `.alm-listpage__body--dual`/`__main-col`/`__side`/
  * `__bottom`/`__panel-*`) lived here. Spec 054 T009 deleted it: no page ever
- * adopted it (Projects unified onto the single bottom dock instead — see
- * `.alm-project-detail-stack` below), and the adaptive mechanism's `'split'`
- * shape (merges-2.css) supersedes what it was reaching for. */
+ * adopted it, and the adaptive mechanism's `'split'` shape (merges-2.css)
+ * supersedes what it was reaching for. Spec 054 T017 then unified Projects
+ * onto the single shared `DetailPanel` (`dockPage="projects"`) — the interim
+ * `.alm-project-detail-stack` wrapper this comment used to point to is gone
+ * too; `ProjectBottomDetail` now mounts as trailing `DetailPanel` children
+ * (ProjectDetail.tsx) with no extra divider wrapper, matching every other
+ * migrated detail (SessionDetail, MasterDetail, …), whose stacked `Section`s
+ * already carry their own visual framing. */
 
 /* ── ProjectBottomDetail — horizontal section grid ───────────────────────────
  * Renders the secondary/operational sections (Notes, Manifests, Calibration,
@@ -76,16 +81,6 @@
  * Grid: auto-fill columns, min 280px each, so the layout adapts from 2 columns
  * at ~1100px total width (after the 420px side panel) to 3+ columns on wider
  * displays. The notes cell spans 2 columns to give editable prose room. */
-
-/* Standardised bottom detail: project identity stacked above the operational
-   sections in one full-width bottom panel (no right side panel). */
-.alm-project-detail-stack {
-  display: flex;
-  flex-direction: column;
-}
-.alm-project-detail-stack > * + * {
-  border-top: 1px solid var(--alm-border-subtle);
-}
 
 .alm-project-bottom {
   padding: var(--alm-sp-3);

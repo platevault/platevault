@@ -19,11 +19,6 @@
  * `data-shared-detail` marker lives in `DetailPanel.test.tsx` and
  * `ListPageLayout.containment.test.tsx` (which render real `DetailPanel`
  * instances and assert the attribute is present in the DOM).
- *
- * TODO(spec-054 US2, T017): `features/projects/ProjectDetail.tsx` still
- * renders raw `DetailPane`+`DetailHeader` (`alm-project-detail-stack`) — NOT
- * covered by this guard yet. Add it to `MIGRATED_DETAIL_FILES` when T017
- * unifies Projects onto `DetailPanel`.
  */
 
 import { readFileSync } from 'node:fs';
@@ -36,6 +31,7 @@ const MIGRATED_DETAIL_FILES = [
   'src/features/inbox/InboxDetail.tsx',
   'src/features/archive/ArchiveDetail.tsx',
   'src/features/targets/TargetDetailV2.tsx',
+  'src/features/projects/ProjectDetail.tsx',
 ];
 
 describe('shared DetailPanel guard (spec 054 T012a)', () => {
@@ -45,17 +41,5 @@ describe('shared DetailPanel guard (spec 054 T012a)', () => {
     const source = readFileSync(resolve(process.cwd(), relPath), 'utf8');
     expect(source).toMatch(/<DetailPanel\b/);
     expect(source).not.toMatch(/<DetailHeader\b/);
-  });
-
-  it('flags the known not-yet-migrated page so this guard is not silently stale', () => {
-    // Projects is deliberately NOT in MIGRATED_DETAIL_FILES yet (US2 T017).
-    // This assertion fails loudly (forcing an update to this test) the day
-    // ProjectDetail stops using a raw DetailHeader — the prompt to also add
-    // it to the guard list above instead of leaving it unchecked.
-    const source = readFileSync(
-      resolve(process.cwd(), 'src/features/projects/ProjectDetail.tsx'),
-      'utf8',
-    );
-    expect(source).toMatch(/<DetailHeader\b/);
   });
 });

@@ -254,6 +254,7 @@ export function SessionsPage() {
   return (
     <ListPageLayout
       topBar={topBar}
+      dockPage="sessions"
       detail={
         selectedSession != null ? (
           <SessionDetail

@@ -2,34 +2,35 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * InboxPage — classify / confirm workflow on the Inbox's OWN 3-zone layout.
+ * InboxPage — classify / confirm workflow on a PERMANENT detail-dominant split.
  *
- * spec 043 (#83 inbox redesign): the Inbox is a special page that does NOT use
- * the shared `ListPageLayout` bottom-split. It shares only the pinned
- * `PageTopBar` convention (search + group/sort/frame-type filter + Confirm /
- * Rescan actions, no page title) and then composes its OWN body with three
- * zones:
+ * spec 043 (#83 inbox redesign) put Inbox on the shared `ListPageLayout`, with
+ * `InboxDetail` docked BELOW the detection list (Sessions/Calibration
+ * convention). Spec 054 US3 (FR-014/T018) changes the PLACEMENT only: Inbox
+ * now opts into the shared adaptive dock (`dockPage="inbox"`) but pins it hard
+ * with `forcedPlacement="split"` — list-narrow (left, ~360px, resizable) /
+ * detail-wide (right) — at EVERY window width, never the adaptive side/bottom
+ * resolution and never a user-togglable pin. Rationale: unlike Sessions/
+ * Calibration/Archive/Projects, the Inbox detail (classification + breakdown +
+ * per-file metadata + inline gate banner, reworked in #939) is the page's
+ * primary work surface, not a secondary lookup — it reads better wide than
+ * squeezed under a full-width list.
  *
- *   ┌──────────────── PageTopBar (pinned) ─────────────────┐
- *   ├───────────────────────────────┬──────────────────────┤
- *   │ detection LIST (primary,       │ file-details SIDE    │
- *   │ full height of the top region) │ panel (selected      │
- *   │                                │ detection: class +   │
- *   │                                │ breakdown + metadata)│
- *   ├═════════ planned-actions BOTTOM panel (docked) ═══════┤
- *   │ full width · own scroll · shown only when a plan/root │
- *   │ pick exists · never steals the list or side panel     │
- *   └───────────────────────────────────────────────────────┘
+ *   ┌──────────────── PageTopBar (pinned) ──────────────────┐
+ *   ├───────────────────────────┬─────────────────────────────┤
+ *   │ detection LIST (narrow,   │ InboxDetail (wide, detail-  │
+ *   │ ~360px, resizable)        │ dominant, own scroll)       │
+ *   └───────────────────────────┴─────────────────────────────┘
  *
  *   - #83: ONE search only (top-bar FilterToolbar). The list no longer wraps in
  *     ListSidebar (which carried a 2nd search box + a 3rd folder/master count).
  *     The triplicate counts collapse to a single compact per-frame-type
  *     breakdown in the top-bar summary; global totals live in the status bar.
- *   - The SIDE panel holds the selected detection's detail (`InboxDetail`):
- *     classification + breakdown + per-file metadata, at a sensible fixed width.
- *   - The BOTTOM panel holds the aggregate `PlanPanel` (every open plan), docked
- *     full-width with its own scroll. #75: per-group summaries collapse per-file
- *     rows and aggregate by ACTUAL frame type from the item's breakdown.
+ *   - The narrow list column (`InboxList`, spec 054 T019) shows only the
+ *     essential columns at that width; the detection name truncates with a
+ *     full-name tooltip rather than wrapping or overflowing.
+ *   - Plan review remains the focused `PlanApprovalOverlay` (opened via the
+ *     top-bar trigger), not a third docked zone.
  *
  * spec 039: the left list is a cross-root aggregate of all unacknowledged
  * items (inbox.list), grouped/labelled by their registered root.
@@ -900,15 +901,18 @@ export function InboxPage() {
     />
   );
 
-  // ── Standardised list-page layout (Sessions/Calibration reference) ──
-  //   primary: detection LIST (full width)
-  //   detail:  InboxDetail docked in the BOTTOM panel (auto-size, own scroll)
-  //            with the per-detection "Confirm to inventory" inline in its
-  //            header. Plan review remains the focused PlanApprovalOverlay.
+  // ── Shared ListPageLayout, permanent detail-dominant split (spec 054 T018) ──
+  //   primary: detection LIST (narrow, left)
+  //   detail:  InboxDetail (wide, right, own scroll) with the per-detection
+  //            "Confirm to inventory" inline in its header. `forcedPlacement=
+  //            "split"` pins this shape at every width. Plan review remains
+  //            the focused PlanApprovalOverlay.
   return (
     <>
       <ListPageLayout
         topBar={topBar}
+        dockPage="inbox"
+        forcedPlacement="split"
         detailLabel={m.inbox_detection_details()}
         detail={
           selectedItem != null ? (

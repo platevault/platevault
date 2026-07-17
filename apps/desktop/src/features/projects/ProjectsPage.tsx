@@ -21,13 +21,16 @@
  * project is selected — so they are, by construction, shown only on selection
  * and carry the canonical `transition-btn-*` / `lifecycle-actions` testids.
  *
- * Dual-panel layout (task #104): the Projects page uses `detailPlacement=
- * "side-and-bottom"`. The SIDE panel (ProjectDetailContent) shows the primary
- * project identity — header, actions, metrics, stepper, target, Sources table,
- * and Channels palette. The BOTTOM panel (ProjectBottomDetail) shows the
- * secondary/operational sections that benefit from full-width horizontal room:
- * Notes, Manifests, Calibration, Source views, Outputs, and Cleanup preview.
- * Both panels mount when a project is selected and close together.
+ * Adaptive dock (spec 054 T017, supersedes the old task #104 dual-panel
+ * split): `dockPage="projects"` opts into the shared adaptive mechanism
+ * (side / bottom / split by measured width + persisted pin, drag-resize,
+ * width persistence — see `ListPageLayout`). The single `ProjectDetailContent`
+ * detail — primary project identity (header, actions, metrics, stepper,
+ * target, Sources table, Channels palette) followed by the operational
+ * sections (Notes, Manifests, Calibration, Source views, Outputs, Cleanup
+ * preview) from `ProjectBottomDetail` — renders through the shared
+ * `DetailPanel`, so Projects finally gets the narrow-viewport bottom-dock
+ * fallback the old side-only panel never had (SC-006).
  *
  * URL state:
  *   - `selected`: project UUID string (spec 023 caveat fix — was numeric index).
@@ -50,7 +53,6 @@ import {
   type ProjectSortCol,
 } from './ProjectsTable';
 import { ProjectDetailContent } from './ProjectDetail';
-import { ProjectBottomDetail } from './ProjectBottomDetail';
 import { useProjects } from './store';
 import type { ProjectSummaryDto } from '@/bindings/index';
 
@@ -211,17 +213,16 @@ export function ProjectsPage() {
   return (
     <ListPageLayout
       topBar={topBar}
-      // Standardised bottom-docked detail (Sessions/Calibration convention): the
-      // project identity (ProjectDetailContent) stacks above the operational
-      // sections (ProjectBottomDetail) in ONE full-width bottom panel — no right
-      // side panel. Keeps the projects table full-width and column layout stable.
+      dockPage="projects"
+      // ProjectDetailContent renders through the shared DetailPanel (spec 054
+      // T017 unification) and mounts ProjectBottomDetail's operational
+      // sections itself, as trailing DetailPanel children — no bespoke
+      // wrapper stack here anymore. `dockPage` opts Projects into the
+      // adaptive placement (side/bottom/split) + resize + width persistence,
+      // giving it the narrow-viewport bottom-dock fallback it previously
+      // lacked (SC-006).
       detail={
-        project ? (
-          <div className="alm-project-detail-stack">
-            <ProjectDetailContent projectId={project.id} />
-            <ProjectBottomDetail projectId={project.id} />
-          </div>
-        ) : undefined
+        project ? <ProjectDetailContent projectId={project.id} /> : undefined
       }
       onCloseDetail={project ? clearSelection : undefined}
       detailLabel={m.projects_detail_label()}

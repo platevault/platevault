@@ -13,10 +13,12 @@
  *   Sections (side column): Sources table · Channels palette
  *
  * Secondary/operational sections (Notes · Manifests · Calibration · Source
- * views · Outputs · Cleanup) live in ProjectBottomDetail, which renders in
- * the full-width bottom panel of the dual side+bottom layout (task #104).
- * They benefit from the horizontal room the bottom strip provides and were
- * collapsed by default in the narrow 420px side column.
+ * views · Outputs · Cleanup) live in ProjectBottomDetail, mounted here as
+ * trailing `DetailPanel` children (spec 054 T017 — Projects unified onto the
+ * shared `DetailPanel`/`dockPage="projects"` adaptive dock; previously a
+ * separate sibling block stacked outside DetailPanel via a bespoke
+ * `alm-project-detail-stack` wrapper in ProjectsPage). They read best with
+ * the horizontal room the bottom-docked/wide placements give them.
  *
  * Per-project actions (Reveal · Open in {tool} · lifecycle
  * transitions) live ONLY in the detail action bar (data-testid="lifecycle-actions").
@@ -37,8 +39,8 @@ import { revealInOs } from '@/shared/native/reveal';
 import { queryKeys } from '@/data/queryKeys';
 import { queryClient as sharedQueryClient } from '@/data/queryClient';
 import {
-  DetailHeader,
   DetailPane,
+  DetailPanel,
   MetricLine,
   TopActionBar,
   renderValue,
@@ -81,7 +83,10 @@ import type {
   ProjectSourceDto_Deserialize,
 } from '@/bindings/index';
 // Secondary sections (Notes, Manifests, Calibration, Source views, Outputs,
-// Cleanup) have moved to ProjectBottomDetail (task #104 — bottom panel).
+// Cleanup) render via ProjectBottomDetail, mounted as trailing DetailPanel
+// children below (spec 054 T017 unification — previously a sibling block in
+// a bespoke `alm-project-detail-stack` wrapper in ProjectsPage).
+import { ProjectBottomDetail } from './ProjectBottomDetail';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -460,30 +465,27 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   }));
 
   return (
-    <DetailPane fill>
-      {/* ── Identity header ────────────────────────────────────────────── */}
-      <DetailHeader
-        title={project.name}
-        titleExtra={
-          <ProjectStatusTag variant={projectStateVariant(lifecycle)}>
-            {projectStateLabel(lifecycle)}
-          </ProjectStatusTag>
-        }
-        subtitle={undefined}
-        actions={
-          lifecycle !== 'archived' && (
-            <Btn
-              size="sm"
-              variant="ghost"
-              onClick={() => setEditOpen(true)}
-              data-testid="edit-project-btn"
-            >
-              {m.projects_detail_edit_btn()}
-            </Btn>
-          )
-        }
-      />
-
+    <DetailPanel
+      fill
+      title={project.name}
+      titleExtra={
+        <ProjectStatusTag variant={projectStateVariant(lifecycle)}>
+          {projectStateLabel(lifecycle)}
+        </ProjectStatusTag>
+      }
+      actions={
+        lifecycle !== 'archived' && (
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={() => setEditOpen(true)}
+            data-testid="edit-project-btn"
+          >
+            {m.projects_detail_edit_btn()}
+          </Btn>
+        )
+      }
+    >
       {/* ── Top action bar: tool · path · Reveal · Open in tool · CTA ───
           Wrapped in a project-detail scope so the breadcrumb (tool + path)
           and the action cluster lay out on their OWN rows and never overlap
@@ -713,12 +715,14 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
             </div>
           </Section>
         )}
-
-        {/* Secondary sections (Notes · Manifests · Calibration · Source views ·
-            Outputs · Cleanup) have moved to the bottom panel (ProjectBottomDetail,
-            task #104). They benefit from the full-width horizontal room there and
-            were collapsed by default in this narrow 420px column anyway. */}
       </div>
+
+      {/* Secondary/operational sections (Notes · Manifests · Calibration ·
+          Tool Launches · Source views · Outputs · Cleanup): rendered as
+          trailing DetailPanel children so they scroll within the single
+          shared content column at every dock placement (spec 054 T017),
+          instead of a separate block outside DetailPanel. */}
+      <ProjectBottomDetail projectId={projectId} />
 
       {/* Lifecycle transition buttons now live in the detail action bar above
           (single source of truth) — the duplicate bottom footer was removed. */}
@@ -800,6 +804,6 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
         onApplied={handleArchivePlanApplied}
         onRetryCreated={setArchiveReviewPlanId}
       />
-    </DetailPane>
+    </DetailPanel>
   );
 }
