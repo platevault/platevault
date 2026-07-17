@@ -95,10 +95,12 @@ impl Database {
     ///
     /// Returns [`DbError::Migration`] if any migration script fails, or a
     /// database error if the reconciliation scan fails.
-    // Touched for #773 (migration 0066) and again for spec 008 Q27's
-    // migration 0067 (renumbered from a 0066 collision with #773's own
-    // 0066_session_notes.sql) to force `sqlx::migrate!` re-embed (project
-    // memory: stale-embed guard).
+    // Touched for #773 (migration 0066), again for spec 008 Q27's migration
+    // 0067 (renumbered from a 0066 collision with #773's own
+    // 0066_session_notes.sql), and again for its renumber to 0068 (a second
+    // collision: 0067 vs #895's 0067_camera_sensor_type.sql, both merged to
+    // main independently) — to force `sqlx::migrate!` re-embed each time
+    // (project memory: stale-embed guard).
     pub async fn migrate(&self) -> DbResult<()> {
         sqlx::migrate!("./migrations").run(&self.pool).await?;
         crate::repositories::prepared_source_views::reconcile_kind_diverged_views(&self.pool)
