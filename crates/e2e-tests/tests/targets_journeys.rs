@@ -648,13 +648,13 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
     // real-pointer hover is not a primitive this bridge harness exercises
     // reliably, and the aria-label mirror is the accessible contract.
     add_target_via_ui(&app, "M 1").await?;
-    let row = app
-        .find_waiting(By::Css(".alm-targets-table__row"), "a targets-table row to open")
-        .await?;
+    let row =
+        app.find_waiting(By::Css(".alm-targets-table__row"), "a targets-table row to open").await?;
     row.click().await?;
-    let best_date = app.wait_testid("proptable-tooltip-bestdate", UI_TIMEOUT).await.map_err(|e| {
-        anyhow::anyhow!("expected the detail Best-date stat with its Moon explanation: {e}")
-    })?;
+    let best_date =
+        app.wait_testid("proptable-tooltip-bestdate", UI_TIMEOUT).await.map_err(|e| {
+            anyhow::anyhow!("expected the detail Best-date stat with its Moon explanation: {e}")
+        })?;
     let label = best_date.attr("aria-label").await?.unwrap_or_default();
     anyhow::ensure!(
         label.contains("Matches opposition")
