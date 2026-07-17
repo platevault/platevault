@@ -31,7 +31,7 @@
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
 }
 
 .alm-project-detail__source-link {
@@ -170,7 +170,7 @@
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
 }
 
 /* ── Outputs section ──────────────────────────────────────────────────────── */
@@ -386,13 +386,13 @@
   gap: var(--alm-sp-1);
   width: 100%;
   min-width: 0;
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
 .alm-target-row--rich .alm-target-row__type-label {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-secondary);
   text-transform: capitalize;
   white-space: nowrap;
@@ -502,7 +502,7 @@
 .alm-planner__graph-title {
   font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-faint);
   font-weight: var(--alm-weight-medium);
 }
@@ -519,12 +519,12 @@
 /* SVG uses var() tokens for fill/stroke — injected via currentColor or class */
 .alm-planner__graph-axis-text {
 
-  font-size: 9px;
+  font-size: var(--alm-text-xs);
   fill: var(--alm-text-faint);
 }
 .alm-planner__graph-label-text {
 
-  font-size: 9px;
+  font-size: var(--alm-text-xs);
   fill: var(--alm-text-muted);
 }
 /* spec 044 Track B, T035: evening/morning twilight (not-dark) shading either
@@ -551,9 +551,9 @@
   border-top: 1px solid var(--alm-border-subtle);
 }
 .alm-planner__section-title {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-faint);
   font-weight: var(--alm-weight-medium);
   margin: var(--alm-sp-3) 0 var(--alm-sp-2);
@@ -581,9 +581,9 @@
   .alm-planner__links { grid-template-columns: 1fr; }
 }
 .alm-planner__link-col-title {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--alm-tracking-normal);
   color: var(--alm-text-faint);
   font-weight: var(--alm-weight-medium);
   margin-bottom: var(--alm-sp-2);
@@ -646,7 +646,7 @@
   font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-semibold);
   color: var(--alm-text-muted);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   text-transform: uppercase;
 }
 
@@ -720,7 +720,7 @@
   font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-semibold);
   color: var(--alm-text-muted);
-  letter-spacing: 0.03em;
+  letter-spacing: var(--alm-tracking-tight);
   text-transform: uppercase;
   display: flex;
   align-items: center;
@@ -738,7 +738,7 @@
   font-size: var(--alm-text-xs);
   font-weight: var(--alm-weight-semibold);
   color: var(--alm-text-muted);
-  letter-spacing: 0.03em;
+  letter-spacing: var(--alm-tracking-tight);
   text-transform: uppercase;
   padding: var(--alm-sp-1) 0 var(--alm-sp-0);
 }

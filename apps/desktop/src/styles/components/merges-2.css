@@ -68,7 +68,7 @@
 }
 .alm-inbox-stats__label {
   color: var(--alm-text-muted);
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
 }
 
 /* ── List viewport: moved to the SHARED `.alm-listtable` block (tables-lists.css)
@@ -132,7 +132,7 @@
 
   font-size: var(--alm-text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--alm-tracking-normal);
   font-weight: var(--alm-weight-semibold);
   color: var(--alm-text-muted);
 }
@@ -702,7 +702,7 @@
   gap: var(--alm-sp-0);
 }
 .alm-detailpanel__kv-prov {
-  font-size: var(--alm-text-2xs);
+  font-size: var(--alm-text-xs);
   color: var(--alm-text-faint);
   font-style: italic;
   font-weight: var(--alm-weight-normal);

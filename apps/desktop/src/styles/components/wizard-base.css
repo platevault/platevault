@@ -75,7 +75,7 @@ color: var(--alm-text-muted);
   min-width: 64px; flex-shrink: 0;
 }
 .alm-logpanel__event-level {
-  font-size: var(--alm-text-2xs); font-weight: var(--alm-weight-medium);
+  font-size: var(--alm-text-xs); font-weight: var(--alm-weight-medium);
   text-transform: uppercase; min-width: 40px; flex-shrink: 0;
 }
 .alm-logpanel__event-level--info  { color: var(--alm-info); }
