@@ -567,6 +567,38 @@ pub async fn update_source_group_child_count(
     Ok(())
 }
 
+/// Clear the `__needs_review__` sentinel on an item's `group_key` in place,
+/// promoting it to a resolved single-type group (issue #724).
+///
+/// `reclassify` (v1) determines the item is fully resolved (single frame type,
+/// no remaining missing-mandatory files) but — unlike `reclassify_v2` /
+/// `materialize_sub_items` — never re-splits into fresh sub-item rows. Without
+/// this, `inbox_items.group_key` stays `__needs_review__` forever and
+/// `inbox_confirm`'s sentinel gate rejects the item permanently even after
+/// every file has been corrected. The new key embeds the item id to guarantee
+/// it cannot collide with the `(root_id, relative_path, group_key)` UNIQUE
+/// constraint against a sibling group already materialised for this folder.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn clear_needs_review_sentinel(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+    frame_type: &str,
+) -> DbResult<()> {
+    let resolved_key = format!("type={frame_type}·resolved={inbox_item_id}");
+    sqlx::query(
+        "UPDATE inbox_items SET group_key = ?, frame_type = ?, state = 'classified'
+         WHERE id = ? AND group_key = '__needs_review__'",
+    )
+    .bind(&resolved_key)
+    .bind(frame_type)
+    .bind(inbox_item_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Delete a sub-item row by id, but ONLY when it is not linked to a plan.
 ///
 /// Used by classify re-materialization to purge stale single-type groups that no
