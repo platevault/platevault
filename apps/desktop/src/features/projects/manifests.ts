@@ -110,7 +110,7 @@ export function manifestReasonLabel(reason: string): string {
 /** Format an ISO-8601 UTC timestamp for display (e.g. "2026-04-12 18:01"). */
 export function formatManifestTimestamp(iso: string): string {
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
+  if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }

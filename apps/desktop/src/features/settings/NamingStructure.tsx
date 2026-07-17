@@ -202,8 +202,7 @@ function validatePatternString(value: string): string | null {
   if (value.trim() === '') return null; // empty = use default
   const unknown: string[] = [];
   const re = /\{([^}]*)\}/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(value)) !== null) {
+  for (const match of value.matchAll(re)) {
     const token = match[1];
     if (!VALID_PATTERN_TOKENS.has(token as (typeof AVAILABLE_TOKENS)[number])) {
       unknown.push(token);

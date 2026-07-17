@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { Channel } from '@tauri-apps/api/core';
+import type { Channel } from '@tauri-apps/api/core';
 import type { OperationEvent } from '@/bindings/types';
 import { setInvokeOverride } from '@/api/ipc';
 import { usePlanApplyProgress } from './usePlanApplyProgress';

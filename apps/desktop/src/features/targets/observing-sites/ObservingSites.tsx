@@ -31,7 +31,7 @@ import {
   SettingsFormShell,
 } from '@/features/settings/SettingsKit';
 import { useObservingState, saveSites } from './site-store';
-import { type ObserverSite, type Twilight } from './observer-site';
+import type { ObserverSite, Twilight } from './observer-site';
 import { ianaTimezones, localTimezone } from './iana-timezones';
 
 interface SiteForm {

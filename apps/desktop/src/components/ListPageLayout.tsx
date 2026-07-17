@@ -52,7 +52,7 @@
  * it must be the page's outermost element (do not nest it inside PageShell).
  */
 
-import { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { PageTopBar, type PageTopBarProps } from './PageTopBar';
 import { m } from '@/lib/i18n';
 
