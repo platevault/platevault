@@ -12,14 +12,17 @@
 //! Mechanism (mirrors `.github/workflows/e2e.yml`, research D10):
 //! - `desktop_shell` is built with `cargo build -p desktop_shell --features
 //!   e2e`, which compiles in `tauri-plugin-webdriver` (Choochmeque) — an
-//!   embedded W3C WebDriver server listening on `127.0.0.1:4445`. Release
-//!   builds omit the `e2e` feature so the automation surface is never present
-//!   (Constitution Principle V).
+//!   embedded W3C WebDriver server on loopback. Release builds omit the
+//!   `e2e` feature so the automation surface is never present (Constitution
+//!   Principle V).
 //! - The `tauri-webdriver` CLI (`cargo install tauri-webdriver --locked`)
-//!   proxies `127.0.0.1:4444` -> the embedded plugin server on `:4445`, and
+//!   proxies a loopback port -> the embedded plugin server on another, and
 //!   manages the target app's process lifecycle via the `tauri:options`
 //!   capability — it does **not** take the app binary as a CLI argument.
-//! - thirtyfour (this crate's W3C client) connects to the CLI on `:4444` and
+//!   Both ports are allocated per test PROCESS (each nextest test is its own
+//!   process) rather than fixed at `:4444`/`:4445`, so concurrent journeys
+//!   (`test-threads > 1`) never collide — see [`InstanceEnv`].
+//! - thirtyfour (this crate's W3C client) connects to the CLI's proxy port and
 //!   sends `tauri:options.application` = the built `desktop_shell` binary
 //!   path in the New Session capabilities. No `browserName` is set (see
 //!   `quickstart.md`).
@@ -38,7 +41,7 @@ use std::collections::VecDeque;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
@@ -47,12 +50,95 @@ use serde_json::{json, Value};
 use thirtyfour::components::escape_string;
 use thirtyfour::prelude::*;
 
-/// URL where the `tauri-webdriver` CLI proxy listens for W3C WebDriver
-/// sessions (`--port`, default `4444`). It forwards to the
-/// `tauri-plugin-webdriver` server embedded in the `desktop_shell` binary on
-/// `127.0.0.1:4445` (`--native-port`, matching `tauri_plugin_webdriver::init()`'s
-/// default in `apps/desktop/src-tauri/src/lib.rs`).
-pub const TAURI_WEBDRIVER_URL: &str = "http://127.0.0.1:4444";
+/// Per-process isolated E2E instance environment: an ephemeral proxy/native
+/// port pair for `tauri-webdriver`/`tauri-plugin-webdriver`, plus an isolated
+/// app-data/app-config/DB root — so concurrent `cargo-nextest` PROCESSES
+/// (`test-threads > 1`; nextest gives each `#[test]` its own OS process, so
+/// there is no in-process races to guard, only cross-process port/file
+/// collisions) never share a WebDriver port, SQLite file, or webview profile.
+///
+/// Lazily allocated once per process and reused for every
+/// [`E2eApp::launch`]/[`E2eApp::relaunch`] call in that test: `relaunch()`
+/// (`ResetScope::PreserveWebviewStorage`) depends on the SAME app-data root
+/// surviving across a launch -> shutdown -> relaunch sequence within one
+/// journey (that's the whole point of the webview-storage-preserving
+/// restart), so this must NOT be re-picked per `launch_with` call.
+struct InstanceEnv {
+    /// Kept alive for the process lifetime so the paths derived from it stay
+    /// valid; never read directly.
+    _root: tempfile::TempDir,
+    /// Env vars to set (and transitively propagate through the
+    /// `tauri-webdriver` CLI, which does not `env_clear()` its spawned
+    /// `desktop_shell` child) so the app resolves its `app_data_dir`/
+    /// `app_config_dir` (and, on Windows, `app_local_data_dir`) under this
+    /// instance's isolated root instead of the shared real OS profile.
+    vars: Vec<(&'static str, String)>,
+    /// Isolated SQLite file this instance's app connects to (`ALM_DB_URL`).
+    db_path: PathBuf,
+    /// Port the `tauri-webdriver` CLI proxy listens on (`--port`); thirtyfour
+    /// connects here.
+    proxy_port: u16,
+    /// Port `tauri-plugin-webdriver` binds inside the app (`--native-port`,
+    /// `TAURI_WEBDRIVER_PORT`).
+    native_port: u16,
+}
+
+impl InstanceEnv {
+    fn new() -> Result<Self> {
+        let root = tempfile::tempdir().context("failed to create isolated E2E instance dir")?;
+        let db_path = root.path().join("e2e-test.db");
+        let vars: Vec<(&'static str, String)> = if cfg!(target_os = "windows") {
+            vec![
+                ("APPDATA", root.path().join("appdata").display().to_string()),
+                ("LOCALAPPDATA", root.path().join("localappdata").display().to_string()),
+            ]
+        } else if cfg!(target_os = "macos") {
+            // app_data_dir/app_config_dir both resolve under $HOME on macOS
+            // (see `app_data_dir`/`app_config_dir` below).
+            vec![("HOME", root.path().display().to_string())]
+        } else {
+            vec![
+                ("XDG_DATA_HOME", root.path().join("xdg-data").display().to_string()),
+                ("XDG_CONFIG_HOME", root.path().join("xdg-config").display().to_string()),
+            ]
+        };
+        let (proxy_port, native_port) = pick_port_pair()?;
+        Ok(Self { _root: root, vars, db_path, proxy_port, native_port })
+    }
+}
+
+/// The process-wide [`InstanceEnv`] singleton — see its docs for why this
+/// must be lazily-allocated-once rather than per-launch.
+fn instance_env() -> &'static InstanceEnv {
+    static ENV: OnceLock<InstanceEnv> = OnceLock::new();
+    ENV.get_or_init(|| {
+        InstanceEnv::new().expect(
+            "failed to allocate an isolated E2E instance environment \
+             (temp dir creation or ephemeral port binding failed)",
+        )
+    })
+}
+
+/// Bind two ephemeral (`:0`) TCP ports on loopback and return them, dropping
+/// the listeners immediately so `tauri-webdriver` can bind them itself.
+///
+/// This has an inherent, accepted bind-race window between the listener drop
+/// here and `tauri-webdriver`'s own bind a moment later (the standard
+/// "ask the OS for a free port, then let someone else use it" pattern used by
+/// e.g. the `portpicker` crate) — acceptable for a CI test harness where a
+/// concurrently-running desktop_shell can be relied on not to be racing for
+/// literally the same ephemeral port in the same instant.
+fn pick_port_pair() -> Result<(u16, u16)> {
+    let a = std::net::TcpListener::bind("127.0.0.1:0")
+        .context("failed to bind an ephemeral port for the tauri-webdriver proxy")?;
+    let b = std::net::TcpListener::bind("127.0.0.1:0")
+        .context("failed to bind an ephemeral port for the tauri-plugin-webdriver native server")?;
+    let proxy_port = a.local_addr().context("failed to read proxy port local_addr")?.port();
+    let native_port = b.local_addr().context("failed to read native port local_addr")?.port();
+    drop(a);
+    drop(b);
+    Ok((proxy_port, native_port))
+}
 
 /// Vite dev-server / `vite preview` URL the app's Tauri `devUrl` points at
 /// (`apps/desktop/src-tauri/tauri.conf.json`). The app loads this URL on its
@@ -203,14 +289,17 @@ impl E2eApp {
 
     async fn launch_with(scope: ResetScope) -> Result<Self> {
         preflight()?;
-        reset_database()?;
+        let env = instance_env();
+        reset_database(&env.db_path)?;
         if matches!(scope, ResetScope::Full) {
-            reset_webview_storage();
+            reset_webview_storage(&env.vars);
         }
-        reset_window_state();
+        reset_window_state(&env.vars);
 
-        let (mut driver_proc, proc_log) = spawn_tauri_webdriver()
-            .context("failed to spawn the tauri-webdriver CLI on port 4444")?;
+        let (mut driver_proc, proc_log) = spawn_tauri_webdriver(env).with_context(|| {
+            format!("failed to spawn the tauri-webdriver CLI on port {}", env.proxy_port)
+        })?;
+        let webdriver_url = format!("http://127.0.0.1:{}", env.proxy_port);
 
         let app_binary = app_binary_path()?;
         let deadline = Instant::now() + LAUNCH_TIMEOUT;
@@ -232,7 +321,7 @@ impl E2eApp {
                 }
             }
 
-            match WebDriver::new(TAURI_WEBDRIVER_URL, caps).await {
+            match WebDriver::new(&webdriver_url, caps).await {
                 Ok(driver) => break driver,
                 Err(e) => {
                     // Any typed WebDriver response means the CLI handled the
@@ -245,16 +334,17 @@ impl E2eApp {
                     if Instant::now() >= deadline {
                         // Ask the CLI to kill the app it launched (any
                         // DELETE /session/{id} triggers that), then kill the
-                        // CLI itself — otherwise the leaked pair holds ports
-                        // 4444/4445 and poisons every subsequent test in the
-                        // serial run (exactly what CI's TRY-2 "can not
-                        // listen to address" failure was).
-                        blocking_session_delete();
+                        // CLI itself — otherwise the leaked pair holds this
+                        // instance's ports and poisons every later launch
+                        // sharing this process (exactly what CI's TRY-2 "can
+                        // not listen to address" failure was, back when ports
+                        // were fixed at 4444/4445).
+                        blocking_session_delete(env.proxy_port);
                         kill_driver_proc(&mut driver_proc);
                         return Err(e).with_context(|| {
                             format!(
                                 "WebDriver session not created within {LAUNCH_TIMEOUT:?} \
-                                 against {TAURI_WEBDRIVER_URL} — is `tauri-webdriver` \
+                                 against {webdriver_url} — is `tauri-webdriver` \
                                  running, and was {} built with `--features e2e`?\n{}",
                                 app_binary.display(),
                                 proc_log.dump()
@@ -1237,7 +1327,7 @@ impl E2eApp {
     /// resolved before the OS finished reaping the process, then hands off
     /// to [`Self::shutdown`] — by then the app is normally already gone, so
     /// that call is just cleaning up the (already-dead) CLI session and
-    /// freeing port 4444, not the thing that kills the app.
+    /// freeing its proxy port, not the thing that kills the app.
     ///
     /// Falls back to [`Self::shutdown`]'s abrupt kill if the graceful close
     /// doesn't complete within the deadline (e.g. the dynamic import fails
@@ -1282,7 +1372,7 @@ impl E2eApp {
     /// Quit the WebDriver session and kill the `tauri-webdriver` CLI process
     /// if present. Quitting the session (a `DELETE /session/{id}` through the
     /// CLI) makes the CLI terminate the app process it launched on our
-    /// behalf; killing the CLI afterwards frees port 4444.
+    /// behalf; killing the CLI afterwards frees its proxy port.
     pub async fn shutdown(mut self) -> Result<()> {
         // `quit()` consumes the WebDriver, which can't be moved out of a
         // Drop-implementing type; WebDriver is a cheap Arc-backed handle, so
@@ -1298,10 +1388,12 @@ impl E2eApp {
 impl Drop for E2eApp {
     /// Best-effort teardown for journeys that bail mid-way with `?` and never
     /// reach [`E2eApp::shutdown`]. Without this, the failed test leaks the
-    /// `tauri-webdriver` CLI (port 4444) AND the app it launched (port 4445),
-    /// which poisons every subsequent test in the serial run — this is
-    /// exactly what CI run 28694907445's TRY-2 `can not listen to address:
-    /// 127.0.0.1:4444` / `Plugin server not ready after timeout` cascade was.
+    /// `tauri-webdriver` CLI AND the app it launched, which would poison every
+    /// later launch sharing this process — this is exactly what CI run
+    /// 28694907445's TRY-2 `can not listen to address: 127.0.0.1:4444` /
+    /// `Plugin server not ready after timeout` cascade was, back when ports
+    /// were fixed at 4444/4445 instead of allocated per process
+    /// ([`InstanceEnv`]).
     ///
     /// `driver.quit()` is async and cannot be awaited here, so the app-kill
     /// is requested with a synchronous raw-HTTP `DELETE /session/…` instead:
@@ -1309,7 +1401,7 @@ impl Drop for E2eApp {
     /// regardless of the session id being real.
     fn drop(&mut self) {
         if let Some(mut child) = self.driver_proc.take() {
-            blocking_session_delete();
+            blocking_session_delete(instance_env().proxy_port);
             kill_driver_proc(&mut child);
         }
     }
@@ -1322,32 +1414,36 @@ impl Drop for E2eApp {
 /// Kill and reap the `tauri-webdriver` CLI child process (best-effort).
 ///
 /// `std::process::Child` does NOT kill on drop — letting it fall out of scope
-/// leaves the CLI alive and port 4444 occupied (the CI TRY-2 leak).
+/// leaves the CLI alive and its port occupied (the CI TRY-2 leak).
 fn kill_driver_proc(child: &mut Child) {
     let _ = child.kill();
     let _ = child.wait();
 }
 
 /// Synchronously send `DELETE /session/e2e-cleanup` to the `tauri-webdriver`
-/// CLI over a raw std TCP socket (best-effort, short timeouts, no async and
-/// no extra HTTP-client dependency — this must be callable from `Drop`).
+/// CLI (on `proxy_port`) over a raw std TCP socket (best-effort, short
+/// timeouts, no async and no extra HTTP-client dependency — this must be
+/// callable from `Drop`).
 ///
 /// The CLI kills the app process it launched after ANY `/session/{id}` DELETE
 /// round trip (it does not validate the id) — this is the only handle we have
 /// on the app's lifetime, since the CLI spawned it, not the harness.
-fn blocking_session_delete() {
+fn blocking_session_delete(proxy_port: u16) {
     let attempt = || -> std::io::Result<()> {
-        let addr = "127.0.0.1:4444";
+        let addr = format!("127.0.0.1:{proxy_port}");
         let timeout = Duration::from_secs(5);
         let mut stream = std::net::TcpStream::connect_timeout(&addr.parse().unwrap(), timeout)?;
         stream.set_read_timeout(Some(timeout))?;
         stream.set_write_timeout(Some(timeout))?;
         use std::io::{Read, Write};
         stream.write_all(
-            b"DELETE /session/e2e-cleanup HTTP/1.1\r\n\
-              Host: 127.0.0.1:4444\r\n\
-              Content-Length: 0\r\n\
-              Connection: close\r\n\r\n",
+            format!(
+                "DELETE /session/e2e-cleanup HTTP/1.1\r\n\
+                 Host: 127.0.0.1:{proxy_port}\r\n\
+                 Content-Length: 0\r\n\
+                 Connection: close\r\n\r\n"
+            )
+            .as_bytes(),
         )?;
         // Wait for the response (the CLI kills the app only AFTER the
         // forwarded round trip completes); the body content is irrelevant.
@@ -1484,32 +1580,43 @@ fn drain_into<R: std::io::Read + Send + 'static>(reader: R, buf: Arc<Mutex<VecDe
     });
 }
 
-/// Spawn the `tauri-webdriver` CLI proxy as a background child process.
+/// Spawn the `tauri-webdriver` CLI proxy as a background child process,
+/// bound to this instance's isolated ports/DB/app-data root ([`InstanceEnv`]).
 ///
 /// Mirrors `.github/workflows/e2e.yml`: the CLI is installed once
 /// (`cargo install tauri-webdriver --locked`) and this harness starts it per
-/// session. `--port`/`--native-port` are passed explicitly even though they
-/// match the CLI's and plugin's defaults, so a future default change upstream
-/// doesn't silently break the pairing.
+/// session. `--port`/`--native-port` select this instance's ephemeral ports.
+///
+/// `tauri-webdriver`'s own `Command::new(&app_path)` (spawning
+/// `desktop_shell`) does not `env_clear()`, so every env var set here —
+/// `TAURI_WEBDRIVER_PORT` (read by `tauri_plugin_webdriver::init()`,
+/// `apps/desktop/src-tauri/src/lib.rs`) matching `--native-port`,
+/// `ALM_DB_URL`, and the app-data/config dir overrides — propagates
+/// transitively into the app process, isolating it without touching
+/// `.github/workflows/e2e.yml`.
 ///
 /// stdout/stderr are piped (not inherited) and drained into a [`ProcLog`] so
 /// a launch failure can print what the CLI (and transitively, the app it
 /// launched) actually did — see [`ProcLog`]'s docs.
-fn spawn_tauri_webdriver() -> Result<(Child, ProcLog)> {
-    let mut child = Command::new("tauri-webdriver")
-        .arg("--port")
-        .arg("4444")
+fn spawn_tauri_webdriver(env: &InstanceEnv) -> Result<(Child, ProcLog)> {
+    let mut cmd = Command::new("tauri-webdriver");
+    cmd.arg("--port")
+        .arg(env.proxy_port.to_string())
         .arg("--native-port")
-        .arg("4445")
+        .arg(env.native_port.to_string())
+        .env("TAURI_WEBDRIVER_PORT", env.native_port.to_string())
+        .env("ALM_DB_URL", format!("sqlite://{}?mode=rwc", env.db_path.display()))
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            anyhow!(
-                "failed to spawn tauri-webdriver: {e} \
-                 (install with `cargo install tauri-webdriver --locked`)"
-            )
-        })?;
+        .stderr(Stdio::piped());
+    for (key, value) in &env.vars {
+        cmd.env(key, value);
+    }
+    let mut child = cmd.spawn().map_err(|e| {
+        anyhow!(
+            "failed to spawn tauri-webdriver: {e} \
+             (install with `cargo install tauri-webdriver --locked`)"
+        )
+    })?;
 
     let stdout_buf = Arc::new(Mutex::new(VecDeque::new()));
     let stderr_buf = Arc::new(Mutex::new(VecDeque::new()));
@@ -1529,28 +1636,23 @@ fn spawn_tauri_webdriver() -> Result<(Child, ProcLog)> {
 /// the `sqlite://` prefix and everything from `?` onward, then remove that
 /// file (errors are ignored so a missing file doesn't fail startup).
 ///
-/// When `ALM_DB_URL` is unset (the e2e.yml CI configuration), the app stores
-/// its DB at `<app_data_dir>/alm.db` (`apps/desktop/src-tauri/src/main.rs`,
-/// identifier `dev.astro-plan.astro-library-manager`). Without removing it
-/// there, state accumulates ACROSS the serial journeys — a journey that
-/// completes first-run leaves `firstrun.complete` + its registered roots +
-/// unacknowledged inbox items behind for every later journey, breaking both
-/// the fresh-DB startup-redirect expectation and every "only item in the
-/// list" selection. The `-wal`/`-shm` sidecars are removed too so SQLite
-/// can't replay a stale WAL into the fresh DB.
-fn reset_database() -> Result<()> {
-    let db_path: Option<PathBuf> = if let Ok(url) = std::env::var("ALM_DB_URL") {
-        url.strip_prefix("sqlite://").map(|p| PathBuf::from(p.split('?').next().unwrap_or(p)))
-    } else {
-        app_data_dir().map(|dir| dir.join("alm.db"))
-    };
-    if let Some(path) = db_path {
-        let _ = std::fs::remove_file(&path);
-        for sidecar in ["-wal", "-shm"] {
-            let mut os = path.clone().into_os_string();
-            os.push(sidecar);
-            let _ = std::fs::remove_file(PathBuf::from(os));
-        }
+/// The app connects to exactly this instance's isolated `db_path`
+/// ([`InstanceEnv`], passed through as `ALM_DB_URL` by
+/// [`spawn_tauri_webdriver`]), so no other process/journey can share or race
+/// this file. Without removing it here, state would accumulate ACROSS
+/// sequential launches within the SAME process (`relaunch()`, or a journey
+/// that calls `launch()` more than once) — a journey that completes
+/// first-run leaves `firstrun.complete` + its registered roots +
+/// unacknowledged inbox items behind for the next launch, breaking both the
+/// fresh-DB startup-redirect expectation and every "only item in the list"
+/// selection. The `-wal`/`-shm` sidecars are removed too so SQLite can't
+/// replay a stale WAL into the fresh DB.
+fn reset_database(db_path: &Path) -> Result<()> {
+    let _ = std::fs::remove_file(db_path);
+    for sidecar in ["-wal", "-shm"] {
+        let mut os = db_path.as_os_str().to_owned();
+        os.push(sidecar);
+        let _ = std::fs::remove_file(PathBuf::from(os));
     }
     Ok(())
 }
@@ -1563,25 +1665,29 @@ fn reset_database() -> Result<()> {
 /// (`SetupPage.tsx`), breaking the fresh-DB startup-redirect expectation the
 /// journeys share. Called before the app process is spawned, so nothing
 /// holds these files open. Failures are ignored (first run has no storage).
-fn reset_webview_storage() {
+///
+/// `vars` is this instance's [`InstanceEnv::vars`] — the SAME env overrides
+/// passed to the spawned app, so paths resolved here always match where the
+/// app actually writes, never the real (unisolated) OS profile.
+fn reset_webview_storage(vars: &[(&'static str, String)]) {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if cfg!(target_os = "windows") {
         // WebView2 keeps ALL web storage under the user-data folder tauri
         // points at `<app_local_data_dir>/EBWebView`.
-        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        if let Some(local) = lookup(vars, "LOCALAPPDATA") {
             candidates
                 .push(PathBuf::from(local).join("dev.astro-plan.astro-library-manager/EBWebView"));
         }
     } else if cfg!(target_os = "macos") {
         // WKWebView website data (incl. localStorage) lives under
         // ~/Library/WebKit/<identifier>/WebsiteData.
-        if let Some(home) = std::env::var_os("HOME") {
+        if let Some(home) = lookup(vars, "HOME") {
             candidates.push(
                 PathBuf::from(home)
                     .join("Library/WebKit/dev.astro-plan.astro-library-manager/WebsiteData"),
             );
         }
-    } else if let Some(dir) = app_data_dir() {
+    } else if let Some(dir) = app_data_dir(vars) {
         // WebKitGTK stores localStorage / IndexedDB inside the app data dir.
         candidates.push(dir.join("localstorage"));
         candidates.push(dir.join("storage"));
@@ -1614,50 +1720,58 @@ fn reset_webview_storage() {
 /// the SAME directory on Windows (`%APPDATA%`) and macOS
 /// (`~/Library/Application Support`).
 /// Failures are ignored (first run has no window-state file yet).
-fn reset_window_state() {
-    if let Some(dir) = app_config_dir() {
+///
+/// `vars` — see [`reset_webview_storage`]'s doc on why this takes the
+/// instance's env overrides instead of reading the real OS env.
+fn reset_window_state(vars: &[(&'static str, String)]) {
+    if let Some(dir) = app_config_dir(vars) {
         let _ = std::fs::remove_file(dir.join(".window-state.json"));
     }
 }
 
+/// Look up `key` in an [`InstanceEnv::vars`]-shaped override list.
+fn lookup<'a>(vars: &'a [(&'static str, String)], key: &str) -> Option<&'a str> {
+    vars.iter().find(|(k, _)| *k == key).map(|(_, v)| v.as_str())
+}
+
 /// Resolve the per-OS Tauri `app_config_dir` for the app identifier
-/// `dev.astro-plan.astro-library-manager` (`tauri.conf.json`). Mirrors
-/// `tauri::path::PathResolver::app_config_dir` (`dirs::config_dir()/<identifier>`)
-/// without needing a Tauri runtime in the test harness:
-/// - Linux:   `$XDG_CONFIG_HOME` or `~/.config`
+/// `dev.astro-plan.astro-library-manager` (`tauri.conf.json`) under this
+/// instance's isolated env overrides (`vars`, [`InstanceEnv::vars`]) instead
+/// of the real OS env. Mirrors `tauri::path::PathResolver::app_config_dir`
+/// (`dirs::config_dir()/<identifier>`) without needing a Tauri runtime in the
+/// test harness:
+/// - Linux:   `$XDG_CONFIG_HOME`
 /// - macOS:   `~/Library/Application Support` (same as `app_data_dir`)
 /// - Windows: `%APPDATA%` (roaming, same as `app_data_dir`)
-fn app_config_dir() -> Option<PathBuf> {
+fn app_config_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
     const APP_IDENTIFIER: &str = "dev.astro-plan.astro-library-manager";
     let base = if cfg!(target_os = "windows") {
-        std::env::var_os("APPDATA").map(PathBuf::from)
+        lookup(vars, "APPDATA").map(PathBuf::from)
     } else if cfg!(target_os = "macos") {
-        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
+        lookup(vars, "HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
     } else {
-        std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+        lookup(vars, "XDG_CONFIG_HOME").map(PathBuf::from)
     };
     base.map(|b| b.join(APP_IDENTIFIER))
 }
 
 /// Resolve the per-OS Tauri `app_data_dir` for the app identifier
-/// `dev.astro-plan.astro-library-manager` (`tauri.conf.json`). Mirrors
-/// `tauri::path::PathResolver::app_data_dir` (`dirs::data_dir()/<identifier>`)
-/// without needing a Tauri runtime in the test harness:
-/// - Linux:   `$XDG_DATA_HOME` or `~/.local/share`
+/// `dev.astro-plan.astro-library-manager` (`tauri.conf.json`) under this
+/// instance's isolated env overrides (`vars`, [`InstanceEnv::vars`]) instead
+/// of the real OS env. Mirrors `tauri::path::PathResolver::app_data_dir`
+/// (`dirs::data_dir()/<identifier>`) without needing a Tauri runtime in the
+/// test harness:
+/// - Linux:   `$XDG_DATA_HOME`
 /// - macOS:   `~/Library/Application Support`
 /// - Windows: `%APPDATA%` (roaming)
-fn app_data_dir() -> Option<PathBuf> {
+fn app_data_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
     const APP_IDENTIFIER: &str = "dev.astro-plan.astro-library-manager";
     let base = if cfg!(target_os = "windows") {
-        std::env::var_os("APPDATA").map(PathBuf::from)
+        lookup(vars, "APPDATA").map(PathBuf::from)
     } else if cfg!(target_os = "macos") {
-        std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
+        lookup(vars, "HOME").map(|h| PathBuf::from(h).join("Library/Application Support"))
     } else {
-        std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+        lookup(vars, "XDG_DATA_HOME").map(PathBuf::from)
     };
     base.map(|b| b.join(APP_IDENTIFIER))
 }
