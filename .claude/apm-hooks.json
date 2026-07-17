@@ -1,132 +1,4 @@
 {
-  "PostToolUse": [
-    {
-      "matcher": "apply_patch|Edit|Write|MultiEdit",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/hooks-quality/scripts/quality-edit-advisory.sh",
-          "timeout": 3
-        }
-      ],
-      "_apm_source": "hooks-quality"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-          "async": true,
-          "timeout": 30,
-          "if": "Bash(git switch -c*)"
-        }
-      ],
-      "_apm_source": "mcp-repomix"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-          "async": true,
-          "timeout": 30,
-          "if": "Bash(git switch --create*)"
-        }
-      ],
-      "_apm_source": "mcp-repomix"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-          "async": true,
-          "timeout": 30,
-          "if": "Bash(git checkout -b*)"
-        }
-      ],
-      "_apm_source": "mcp-repomix"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-          "async": true,
-          "timeout": 30,
-          "if": "Bash(git checkout -B*)"
-        }
-      ],
-      "_apm_source": "mcp-repomix"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-          "async": true,
-          "timeout": 30,
-          "if": "Bash(git worktree add*)"
-        }
-      ],
-      "_apm_source": "mcp-repomix"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-          "async": true,
-          "timeout": 30,
-          "if": "Bash(git merge*)"
-        }
-      ],
-      "_apm_source": "mcp-repomix"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-          "async": true,
-          "timeout": 30,
-          "if": "Bash(git pull*)"
-        }
-      ],
-      "_apm_source": "mcp-repomix"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-          "async": true,
-          "timeout": 30,
-          "if": "Bash(git rebase*)"
-        }
-      ],
-      "_apm_source": "mcp-repomix"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-task-commit-check.sh",
-          "if": "Bash(git commit*)"
-        }
-      ],
-      "_apm_source": "speckit"
-    }
-  ],
   "PreToolUse": [
     {
       "matcher": "Bash",
@@ -134,11 +6,31 @@
         {
           "type": "command",
           "command": ".claude/hooks/hooks-quality/scripts/quality-before-commit.sh",
-          "if": "Bash(git commit*)",
           "timeout": 10
         }
       ],
       "_apm_source": "hooks-quality"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/release-please/scripts/release-please-guard.sh",
+          "timeout": 10
+        }
+      ],
+      "_apm_source": "release-please"
+    },
+    {
+      "matcher": "Skill",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-context7-reminder.sh"
+        }
+      ],
+      "_apm_source": "speckit"
     },
     {
       "matcher": "Bash",
@@ -159,27 +51,7 @@
       "_apm_source": "speckit"
     },
     {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/release-please/scripts/release-please-guard.sh"
-        }
-      ],
-      "_apm_source": "release-please"
-    },
-    {
-      "matcher": "Skill",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-context7-reminder.sh"
-        }
-      ],
-      "_apm_source": "speckit"
-    },
-    {
-      "matcher": "apply_patch|Edit|Write|MultiEdit",
+      "matcher": "Edit|Write|MultiEdit",
       "hooks": [
         {
           "type": "command",
@@ -190,8 +62,56 @@
       "_apm_source": "agent-coder"
     }
   ],
+  "PostToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+          "timeout": 30
+        }
+      ],
+      "_apm_source": "mcp-repomix"
+    },
+    {
+      "matcher": "apply_patch|Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/hooks-quality/scripts/quality-edit-advisory.sh",
+          "timeout": 3
+        }
+      ],
+      "_apm_source": "hooks-quality"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "if": "Bash(git commit*)",
+          "command": ".claude/hooks/speckit/scripts/speckit-task-commit-check.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-deferred-issues.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    }
+  ],
   "Stop": [
     {
+      "matcher": "*",
       "hooks": [
         {
           "type": "command",
@@ -203,16 +123,7 @@
   ],
   "SubagentStart": [
     {
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/code-intelligence/scripts/subagent-context-inject.sh",
-          "timeout": 5
-        }
-      ],
-      "_apm_source": "code-intelligence"
-    },
-    {
+      "matcher": "*",
       "hooks": [
         {
           "type": "command",
@@ -221,17 +132,17 @@
         }
       ],
       "_apm_source": "steering-pragmatic"
-    }
-  ],
-  "UserPromptSubmit": [
+    },
     {
+      "matcher": "*",
       "hooks": [
         {
           "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-deferred-issues.sh"
+          "command": ".claude/hooks/code-intelligence/scripts/subagent-context-inject.sh",
+          "timeout": 5
         }
       ],
-      "_apm_source": "speckit"
+      "_apm_source": "code-intelligence"
     }
   ]
 }
