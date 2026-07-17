@@ -183,7 +183,9 @@ describe('StepSourceFolders — add-time validation', () => {
       screen.getByRole('button', { name: /add light frames folder/i }),
     );
 
-    await waitFor(() => expect(onAdd).toHaveBeenCalledWith('/astro/lights2', 'light_frames'));
+    await waitFor(() =>
+      expect(onAdd).toHaveBeenCalledWith('/astro/lights2', 'light_frames'),
+    );
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

@@ -54,7 +54,8 @@ const SOURCE_KIND_HELP: Record<SourceKind, () => string> = {
 // Array.prototype.sort is stable per spec, so this always yields
 // [light_frames, project, calibration, inbox].
 const ORDERED_SOURCE_KINDS: SourceKind[] = [...ALL_SOURCE_KINDS].sort(
-  (a, b) => Number(!REQUIRED_KINDS.includes(a)) - Number(!REQUIRED_KINDS.includes(b)),
+  (a, b) =>
+    Number(!REQUIRED_KINDS.includes(a)) - Number(!REQUIRED_KINDS.includes(b)),
 );
 
 /** Normalize a path for cross-platform prefix/equality comparison. */
