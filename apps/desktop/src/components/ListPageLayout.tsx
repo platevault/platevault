@@ -96,6 +96,21 @@ export interface ListPageLayoutProps {
   bottomDetailLabel?: string;
 }
 
+/**
+ * True when a Base UI overlay (Dialog, Select, Combobox, Menu, …) is open
+ * anywhere in the document. Base UI stamps its open popup DOM node with
+ * `data-open` (its documented styling-state hook) alongside an ARIA overlay
+ * role; used to defer Escape-to-close to that overlay instead of also
+ * closing the detail panel underneath it (#906).
+ */
+function hasOpenOverlay(): boolean {
+  return (
+    document.querySelector(
+      '[data-open][role="dialog"], [data-open][role="alertdialog"], [data-open][role="listbox"], [data-open][role="menu"]',
+    ) != null
+  );
+}
+
 export function ListPageLayout({
   topBar,
   topBarProps,
@@ -112,17 +127,22 @@ export function ListPageLayout({
   const hasBottom = bottomDetail != null;
 
   // Escape closes the open detail panel(s), matching the ✕ affordance (#771).
-  // A bubble-phase `document` listener also catches the common case where
-  // nothing inside the panel has focus (e.g. focus stayed on the row that
-  // opened it, or on <body>). It does NOT steal Escape from a nested Modal or
-  // any other consumer that stops propagation on its own Escape handling —
-  // that in-tree `stopPropagation()` (Base UI dialogs do this by default)
-  // prevents the native event from ever reaching this document listener, so
-  // the innermost open dialog/input closes first, as intended.
+  // A `document`-level listener also catches the common case where nothing
+  // inside the panel has focus (e.g. focus stayed on the row that opened it,
+  // or on <body>). `stopPropagation()` does NOT stop a sibling listener
+  // registered on the SAME target — Base UI's own Escape dismissal
+  // (`useDismiss`) is also a `document`-level `keydown` listener, and by
+  // default (`escapeKeyBubbles: false`) it calls `stopPropagation()` but
+  // never `preventDefault()`, so neither mechanism reaches across to block
+  // this listener. We therefore check explicitly for an open Base UI overlay
+  // (Dialog/Select/Combobox/Menu — anything carrying Base UI's `data-open`
+  // styling-hook attribute plus an overlay ARIA role) and skip closing the
+  // panel while one is open, deferring to its own dismissal.
   useEffect(() => {
     if (!hasDetail && !hasBottom) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (hasOpenOverlay()) return;
       if (hasDetail) onCloseDetail?.();
       if (detailPlacement === 'side-and-bottom' && hasBottom) {
         onCloseBottomDetail?.();

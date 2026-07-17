@@ -18,6 +18,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ListPageLayout } from './ListPageLayout';
+import { Modal } from './Modal';
 
 describe('ListPageLayout', () => {
   it('defaults to the bottom dock (no side variant classes)', () => {
@@ -225,6 +226,36 @@ describe('ListPageLayout', () => {
     screen.getByText('focus me').focus();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not close the panel on Escape while a Base UI Modal is open above it (#906)', () => {
+    const onCloseDetail = vi.fn();
+    const onCloseModal = vi.fn();
+    render(
+      <>
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          onCloseDetail={onCloseDetail}
+        >
+          <div>main</div>
+        </ListPageLayout>
+        <Modal open onClose={onCloseModal} title="Overlay">
+          <div>modal body</div>
+        </Modal>
+      </>,
+    );
+    // Base UI stamps the open popup with `data-open` + role="dialog" — the
+    // same signal our overlay guard checks for.
+    expect(
+      document.querySelector('[data-open][role="dialog"]'),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    // The panel must NOT also close — only the modal's own dismissal should
+    // react to this Escape (asserted separately from Base UI's own listener,
+    // which isn't under test here; the regression is that our listener used
+    // to co-fire regardless).
+    expect(onCloseDetail).not.toHaveBeenCalled();
   });
 
   it('does not call onCloseDetail on Escape when no detail is open', () => {
