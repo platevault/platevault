@@ -392,7 +392,7 @@
  * minting per-feature `*-cell--num/--mono/--muted` clones. */
 .alm-cell--num { font-variant-numeric: tabular-nums; text-align: right; }
 .alm-cell--mono {
-
+  font-family: var(--alm-font-mono);
   font-size: var(--alm-text-xs);
   color: var(--alm-text-secondary);
 }

@@ -879,7 +879,7 @@
 
 /* Mono path placeholder when individual frame paths are not yet loaded. */
 .alm-session-frames__path-placeholder {
-
+  font-family: var(--alm-font-mono);
   font-size: var(--alm-text-xs);
   color: var(--alm-text-muted);
   word-break: break-all;

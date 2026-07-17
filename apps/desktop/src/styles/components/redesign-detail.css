@@ -484,7 +484,7 @@
   word-break: break-word;
 }
 .alm-planner__identity-value--mono {
-
+  font-family: var(--alm-font-mono);
   font-size: var(--alm-text-xs);
 }
 .alm-planner__identity-value--stub {
@@ -516,14 +516,18 @@
   height: auto;
   overflow: visible;
 }
-/* SVG uses var() tokens for fill/stroke — injected via currentColor or class */
+/* SVG uses var() tokens for fill/stroke — injected via currentColor or class.
+   font-family declared explicitly (spec 055 T021): inline SVG <text> does not
+   reliably inherit it the way HTML text does, so this escaped the removed
+   `* { font-family !important }` blanket and would otherwise fall back to the
+   UA default rather than Inter. */
 .alm-planner__graph-axis-text {
-
+  font-family: var(--alm-font-sans);
   font-size: var(--alm-text-xs);
   fill: var(--alm-text-faint);
 }
 .alm-planner__graph-label-text {
-
+  font-family: var(--alm-font-sans);
   font-size: var(--alm-text-xs);
   fill: var(--alm-text-muted);
 }

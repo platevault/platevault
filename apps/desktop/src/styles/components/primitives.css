@@ -193,7 +193,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.alm-table td.mono {font-size: var(--alm-text-xs); }
+.alm-table td.mono { font-family: var(--alm-font-mono); font-size: var(--alm-text-xs); }
 .alm-table td.num { font-variant-numeric: tabular-nums; text-align: right; }
 .alm-table td.muted { color: var(--alm-text-muted); }
 
@@ -354,3 +354,9 @@
 .alm-text-sm { font-size: var(--alm-text-sm); }
 .alm-text-xs { font-size: var(--alm-text-xs); }
 .alm-text-muted { color: var(--alm-text-muted); }
+
+/* Shared monospace surface (spec 055 T022): filesystem paths, source-view
+ * IDs, manifest paths, dev-tools contract names, RA/Dec coordinate values.
+ * Referenced by ~40 call sites across features/*; was a no-op while the
+ * blanket `* { font-family !important }` reset overrode it (reset.css). */
+.alm-mono { font-family: var(--alm-font-mono); }

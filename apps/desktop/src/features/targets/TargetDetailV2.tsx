@@ -698,8 +698,10 @@ export function TargetDetailV2({
     guidanceParams,
   );
 
+  // RA and Dec on separate lines (user decision 2026-07-17): the mono face is
+  // wider than the old sans, so the joined form wrapped mid-coordinate.
   const raDecStr = astroFormat
-    ? `${astroFormat.raSexagesimal} / ${astroFormat.decSexagesimal}`
+    ? `${astroFormat.raSexagesimal}\n${astroFormat.decSexagesimal}`
     : null;
 
   // Identity facts split across two tabular columns (left-packed).
@@ -719,7 +721,12 @@ export function TargetDetailV2({
       label: m.targets_prop_constellation(),
       value: item?.constellation ?? null,
     },
-    { key: 'radec', label: m.targets_prop_ra_dec(), value: raDecStr },
+    {
+      key: 'radec',
+      label: m.targets_prop_ra_dec(),
+      value: raDecStr,
+      mono: true, // spec 055 FR-005: RA/Dec coordinate values render mono.
+    },
   ];
   const identityB: PropertyDef[] = [
     {

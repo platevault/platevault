@@ -350,6 +350,8 @@
 .alm-property-table__cell--value {
   color: var(--alm-text); font-size: var(--alm-text-sm);
   font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere;
+  /* Multi-line values (e.g. RA/Dec split across lines) keep their \n breaks. */
+  white-space: pre-line;
 }
 .alm-property-table__cell--source,
 .alm-property-table__cell--confirm { justify-self: start; }
