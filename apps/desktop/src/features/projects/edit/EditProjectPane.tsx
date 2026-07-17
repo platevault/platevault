@@ -33,6 +33,7 @@ import {
   callDismissChannelDrift,
   callAddProjectSource,
   callRemoveProjectSource,
+  useSessionNames,
 } from '@/features/projects/store';
 import { SessionSourcePicker } from '@/features/projects/SessionSourcePicker';
 import type { ProjectDetailDto, ProjectChannelDto } from '@/bindings/index';
@@ -85,6 +86,8 @@ export interface EditProjectPaneProps {
 export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
   const readOnly = isReadOnly(project.lifecycle);
   const toolLocked = isToolLocked(project.lifecycle);
+  // #663: resolve raw session UUIDs to the same human names Sessions shows.
+  const sessionNames = useSessionNames();
 
   type ToolValue = 'PixInsight' | 'Siril';
   const toToolValue = (t: string | undefined): ToolValue =>
@@ -149,6 +152,12 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
 
       setServerError(null);
       try {
+        // #790: `notes` is intentionally never submitted here — it is a
+        // second, orphaned notes concept (ProjectDetailDto.notes) that no
+        // surface displays. The one real project-notes UI is
+        // ProjectNotesSection (project.note.get/update, spec 024), rendered
+        // in ProjectBottomDetail. Sending it would silently discard input
+        // into a field nothing shows.
         await callUpdateProject({
           requestId: crypto.randomUUID(),
           projectId: project.id,
@@ -158,8 +167,6 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
             (typeof project.tool === 'string' ? project.tool : 'PixInsight')
               ? values.tool
               : undefined,
-          notes:
-            values.notes !== (project.notes ?? '') ? values.notes : undefined,
         });
         onClose();
       } catch (err: unknown) {
@@ -336,7 +343,9 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
                   className="alm-edit-project__source-row"
                 >
                   <span className="alm-edit-project__source-name">
-                    {src.name || src.inventoryId}
+                    {src.name ||
+                      sessionNames.get(src.inventoryId) ||
+                      src.inventoryId}
                   </span>
                   {confirmRemoveId === src.inventoryId ? (
                     <span className="alm-edit-project__source-confirm">
@@ -504,21 +513,10 @@ export function EditProjectPane({ project, onClose }: EditProjectPaneProps) {
           )}
         </div>
 
-        {/* Notes */}
-        <div>
-          {}
-          <label className="alm-field-label" htmlFor="ep-notes">
-            {m.projects_notes_label()}
-          </label>
-          <textarea
-            id="ep-notes"
-            className="alm-input"
-            rows={4}
-            maxLength={4106}
-            disabled={readOnly}
-            {...register('notes')}
-          />
-        </div>
+        {/* #790: the second, orphaned Notes field (bound to the unused
+            ProjectDetailDto.notes) was removed. Project notes are edited via
+            ProjectNotesSection (ProjectBottomDetail), the one surface that
+            actually displays saved notes (project.note.get/update, spec 024). */}
 
         {/* Channels preview (US4) */}
         <div>

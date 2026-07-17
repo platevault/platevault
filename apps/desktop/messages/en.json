@@ -524,7 +524,7 @@
   "projects_stepper_created": "Created",
   "projects_stepper_history_title": "History",
   "projects_stepper_updated": "Updated",
-  "projects_table_blocked_aria": "Blocked",
+  "projects_table_blocked_aria": "Blocked: {reason}",
   "projects_table_channel_drift_label": "channels",
   "projects_table_channel_drift_title": "Channel drift detected",
   "projects_table_empty": "No projects found.",
@@ -1755,8 +1755,26 @@
   "projects_col_format": "FORMAT",
   "projects_col_verification": "VERIFICATION",
   "projects_metric_integration": "integration",
-  "projects_metric_sources": "sources",
-  "projects_metric_channels": "channels",
+  "projects_metric_sources": [
+    {
+      "declarations": ["input count", "local pp = count: plural"],
+      "selectors": ["pp"],
+      "match": {
+        "pp=one": "source",
+        "pp=other": "sources"
+      }
+    }
+  ],
+  "projects_metric_channels": [
+    {
+      "declarations": ["input count", "local pp = count: plural"],
+      "selectors": ["pp"],
+      "match": {
+        "pp=one": "channel",
+        "pp=other": "channels"
+      }
+    }
+  ],
   "projects_metric_tool": "tool",
   "projects_search_placeholder": "Search name, tool…",
   "projects_search_aria": "Search projects",

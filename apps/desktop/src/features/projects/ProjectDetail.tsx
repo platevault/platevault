@@ -50,6 +50,7 @@ import { projectStateLabel, projectStateVariant } from '@/lib/lifecycle';
 import { ProjectStatusTag } from './ProjectStatusTag';
 import {
   useProjectDetail,
+  useSessionNames,
   callDismissChannelDrift,
   callReinferChannels,
   callTransitionLifecycle,
@@ -57,7 +58,7 @@ import {
 import type { ProjectLifecycleState } from './store';
 import { EditProjectPane } from './edit/EditProjectPane';
 import { addToast } from '@/shared/toast';
-import { BlockedBanner } from './BlockedBanner';
+import { BlockedBanner, deriveBlockedReason } from './BlockedBanner';
 import type { BlockedReason, RecoveryEdge } from './BlockedBanner';
 import {
   lifecycleFooterActions,
@@ -105,6 +106,20 @@ function fmtIntegS(s: number | null | undefined): string {
 /** Format a frame count; returns "—" for zero. */
 function fmtFrames(n: number): string {
   return n > 0 ? String(n) : '—';
+}
+
+/**
+ * Parse a source's `exposure` snapshot string (e.g. "300s", "1.5s") into
+ * seconds. Mirrors the backend's `parse_exposure_seconds`
+ * (crates/app/projects/src/project_setup.rs) — unparseable/empty values
+ * degrade to 0 rather than throwing.
+ */
+function parseExposureSeconds(exposure: string): number {
+  const trimmed = exposure.trim();
+  if (!trimmed) return 0;
+  const numeric = trimmed.endsWith('s') ? trimmed.slice(0, -1) : trimmed;
+  const v = Number.parseFloat(numeric);
+  return Number.isFinite(v) && v >= 0 ? v : 0;
 }
 
 // ── Channels palette ─────────────────────────────────────────────────────────
@@ -158,6 +173,8 @@ export { ProjectDetailContent as ProjectDetail };
 
 export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   const { data: project, loading, error } = useProjectDetail(projectId);
+  // #663: resolve raw session UUIDs to the same human names Sessions shows.
+  const sessionNames = useSessionNames();
   const [editOpen, setEditOpen] = useState(false);
   const [channelWorking, setChannelWorking] = useState(false);
   const [transitionWorking, setTransitionWorking] = useState(false);
@@ -364,37 +381,13 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
   );
 
   // Derive typed blocked reason from project DTO (FR-020 / spec 033 US5 T053).
-  const blockedReason: BlockedReason | undefined = (() => {
-    if (lifecycle !== 'blocked') return undefined;
-    const kind = project.blockedReasonKind;
-    const note = project.blockedReasonNote ?? undefined;
-    if (kind === 'source_missing') {
-      const inventoryId =
-        note?.replace(/^Source missing:\s*/i, '') ?? 'unknown';
-      return { kind: 'source_missing', inventoryId } satisfies BlockedReason;
-    }
-    if (kind === 'tool_unconfigured') {
-      const tool =
-        note?.replace(/^Tool path not configured:\s*/i, '') ?? 'unknown';
-      return { kind: 'tool_unconfigured', tool } satisfies BlockedReason;
-    }
-    if (kind === 'calibration_unmatched') {
-      return {
-        kind: 'calibration_unmatched',
-        calibrationSetId: note ?? 'unknown',
-      } satisfies BlockedReason;
-    }
-    if (kind === 'prepared_source_stale') {
-      return {
-        kind: 'prepared_source_stale',
-        preparedId: note ?? 'unknown',
-      } satisfies BlockedReason;
-    }
-    return {
-      kind: 'user',
-      note: note ?? m.projects_blocked_note_fallback(),
-    } satisfies BlockedReason;
-  })();
+  const blockedReason: BlockedReason | undefined =
+    lifecycle === 'blocked'
+      ? deriveBlockedReason(
+          project.blockedReasonKind,
+          project.blockedReasonNote,
+        )
+      : undefined;
 
   // ── Derived channel palette data (server totals + client `inSync`) ────────
   const derivedChannels = deriveChannels(
@@ -428,36 +421,49 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
     },
   ];
 
-  const sourceRows = project.sources.map((src) => ({
-    role: (
-      <span className="alm-project-detail__role-cell">
-        {renderValue(src.role ?? null, { applicability: 'applicable' })}
-      </span>
-    ),
-    source: (
-      <span className="alm-project-detail__source-name">
-        {src.name || src.inventoryId}
-      </span>
-    ),
-    // Project sources are light sessions (filter is applicable, data-model.md
-    // matrix) — a missing filter is unresolved, not the same blank marker a
-    // not-applicable field would use (spec-030 Q16 / FR-135).
-    filter: src.filter ? (
-      <Pill variant={sourceTypeVariant(src.filter)}>{src.filter}</Pill>
-    ) : (
-      renderValue(null, { applicability: 'applicable' })
-    ),
-    subs: (
-      <span className="alm-project-detail__num-cell">
-        {fmtFrames(src.frames)}
-      </span>
-    ),
-    integ: (
-      <span className="alm-project-detail__integ-cell alm-project-detail__dash">
-        —
-      </span>
-    ),
-  }));
+  const sourceRows = project.sources.map((src) => {
+    // #663: prefer the DTO name, then the Sessions-derived human name; raw
+    // UUID is the last resort (matches Sessions page fallback ordering).
+    const displayName =
+      src.name || sessionNames.get(src.inventoryId) || src.inventoryId;
+    const integS = src.frames * parseExposureSeconds(src.exposure);
+    return {
+      role: (
+        <span className="alm-project-detail__role-cell">
+          {renderValue(src.role ?? null, { applicability: 'applicable' })}
+        </span>
+      ),
+      source: (
+        // #720 FR-006/SC-002: click through to the source's Inventory
+        // (Sessions) entry instead of rendering inert text.
+        <a
+          className="alm-project-detail__source-name"
+          href={`#/sessions?selected=${encodeURIComponent(src.inventoryId)}`}
+          data-testid={`project-source-link-${src.inventoryId}`}
+        >
+          {displayName}
+        </a>
+      ),
+      // Project sources are light sessions (filter is applicable, data-model.md
+      // matrix) — a missing filter is unresolved, not the same blank marker a
+      // not-applicable field would use (spec-030 Q16 / FR-135).
+      filter: src.filter ? (
+        <Pill variant={sourceTypeVariant(src.filter)}>{src.filter}</Pill>
+      ) : (
+        renderValue(null, { applicability: 'applicable' })
+      ),
+      subs: (
+        <span className="alm-project-detail__num-cell">
+          {fmtFrames(src.frames)}
+        </span>
+      ),
+      integ: (
+        <span className="alm-project-detail__integ-cell">
+          {fmtIntegS(integS)}
+        </span>
+      ),
+    };
+  });
 
   return (
     <DetailPane fill>
@@ -607,10 +613,15 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                 : '—',
             label: m.projects_metric_integration(),
           },
-          { value: project.sources.length, label: m.projects_metric_sources() },
+          {
+            value: project.sources.length,
+            label: m.projects_metric_sources({ count: project.sources.length }),
+          },
           {
             value: project.channels?.length ?? 0,
-            label: m.projects_metric_channels(),
+            label: m.projects_metric_channels({
+              count: project.channels?.length ?? 0,
+            }),
           },
           { value: toolLabel, label: m.projects_metric_tool() },
         ]}
@@ -693,6 +704,7 @@ export function ProjectDetailContent({ projectId }: ProjectDetailContentProps) {
                       label=""
                       value={ch.totalFrames}
                       max={maxFrames}
+                      unit=""
                     />
                   </div>
                   <span className="alm-project-detail__ch-subs">

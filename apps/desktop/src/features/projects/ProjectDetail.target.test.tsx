@@ -24,6 +24,7 @@ vi.mock('./store', async (importOriginal) => {
   return {
     ...original,
     useProjectDetail: vi.fn(),
+    useSessionNames: vi.fn(() => new Map()),
     useTransitionLifecycle: vi.fn(),
     useReinferChannels: vi.fn(),
     useDismissChannelDrift: vi.fn(),
