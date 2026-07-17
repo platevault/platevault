@@ -5628,7 +5628,8 @@ dependencies = [
 [[package]]
 name = "skymath"
 version = "0.4.0"
-source = "git+https://github.com/nightwatch-astro/skymath#c8e1204d34deeb88c438390a0d658b29bb1b5c42"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a10b1f9678d1f8e2aaa7f9f3af28e0c5d0bbb9c544ae563e08b5dc1d9fbc2bfb"
 dependencies = [
  "thiserror 2.0.18",
  "time",
