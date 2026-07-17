@@ -43,7 +43,8 @@ import {
 const CALIB_DIMENSIONS = (): FilterOption[] => [
   { value: 'kind', label: m.calibration_fp_kind() },
   { value: 'camera', label: m.settings_calmatch_camera() },
-  { value: 'instrument', label: m.calibration_dim_instrument() },
+  // #788: "instrument" dropped — byte-identical duplicate of "camera"
+  // (no separate instrument field exists on CalibrationFingerprint).
   { value: 'filter', label: m.common_filter() },
   { value: 'night', label: m.sessions_col_night() },
   { value: 'month', label: m.sessions_dim_month() },
@@ -67,7 +68,7 @@ export function CalibrationPage() {
 
   const { dims, setSlot } = useGrouping({
     storageKey: 'calibration.grouping.dims.v1',
-    validIds: ['kind', 'camera', 'instrument', 'filter', 'night', 'month'],
+    validIds: ['kind', 'camera', 'filter', 'night', 'month'],
     defaultDims: [],
   });
 

@@ -205,10 +205,13 @@ pub fn suggest(
         return Err("session.mixed_state".to_owned());
     }
 
-    // Guard A6: observer location + exposure_start_utc required.
-    if !session.has_observer_location || !session.has_exposure_start_utc {
-        return Err("match.observer_location_missing".to_owned());
-    }
+    // Guard A6 (issue #867): missing observer_location/exposure_start_utc no
+    // longer hard-blocks suggest. Neither field feeds scoring directly — only
+    // `observing_night_date` does, and every rule (see rules::flat) already
+    // degrades a missing night to a `metadata_missing` soft mismatch instead
+    // of excluding the candidate. A hard reject here made calibration assign
+    // end-to-end unreachable for any session without an acquisition
+    // fingerprint row yet ("degraded-but-usable" path per #867).
 
     let types_to_run: Vec<CalibrationKind> = if calibration_types.is_empty() {
         vec![CalibrationKind::Dark, CalibrationKind::Flat, CalibrationKind::Bias]
@@ -333,7 +336,9 @@ mod tests {
     }
 
     #[test]
-    fn suggest_rejects_missing_observer_location() {
+    fn suggest_no_longer_rejects_missing_observer_location() {
+        // #867: missing fingerprint fields degrade scoring (via
+        // observing_night_date metadata_missing), they no longer hard-block.
         let session = SessionInfo {
             session_type: "light".to_owned(),
             has_observer_location: false,
@@ -341,11 +346,11 @@ mod tests {
             ..Default::default()
         };
         let result = suggest(&session, &[], &[], &MatchingRuleConfig::default());
-        assert_eq!(result.unwrap_err(), "match.observer_location_missing");
+        assert!(result.is_ok(), "missing observer_location must not block suggest");
     }
 
     #[test]
-    fn suggest_rejects_missing_exposure_start_utc() {
+    fn suggest_no_longer_rejects_missing_exposure_start_utc() {
         let session = SessionInfo {
             session_type: "light".to_owned(),
             has_observer_location: true,
@@ -353,7 +358,18 @@ mod tests {
             ..Default::default()
         };
         let result = suggest(&session, &[], &[], &MatchingRuleConfig::default());
-        assert_eq!(result.unwrap_err(), "match.observer_location_missing");
+        assert!(result.is_ok(), "missing exposure_start_utc must not block suggest");
+    }
+
+    #[test]
+    fn suggest_finds_matches_without_acquisition_fingerprint() {
+        // #867 regression: a session with no fingerprint row at all (both
+        // guard fields false/default) must still surface candidate matches,
+        // not observer_location_missing for every session.
+        let session = SessionInfo { has_observer_location: false, ..default_session() };
+        let master = dark_master("m-001", 100.0, 50.0, 300.0, -10.0);
+        let matches = suggest(&session, &[master], &[], &MatchingRuleConfig::default()).unwrap();
+        assert!(!matches.is_empty(), "must still find candidate matches");
     }
 
     #[test]

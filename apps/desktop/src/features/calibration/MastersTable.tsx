@@ -243,7 +243,9 @@ export const MASTER_ACCESSORS: Readonly<
 > = {
   kind: (m) => m.kind.toLowerCase(),
   camera: (m) => m.fingerprint?.camera,
-  instrument: (m) => m.fingerprint?.camera, // instrument = camera in the fingerprint
+  // #788: no separate instrument field on the fingerprint — "instrument" was
+  // a byte-identical duplicate of "camera" and has been dropped as a Group-by
+  // dimension (see CALIB_DIMENSIONS in CalibrationPage.tsx).
   // Filter is meaningful for flats (Ha/OIII/L/…); null for bias/dark.
   filter: (m) => m.fingerprint?.filter,
   // No source-night field on the master yet → group on the master's creation

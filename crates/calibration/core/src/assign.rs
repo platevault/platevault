@@ -74,10 +74,10 @@ pub fn evaluate_assign(
         return Err(AssignError::SessionMixedState);
     }
 
-    // Guard A6.
-    if !session.has_observer_location || !session.has_exposure_start_utc {
-        return Err(AssignError::ObserverLocationMissing);
-    }
+    // Guard A6 (issue #867): no longer hard-blocks — see suggest() doc comment
+    // in lib.rs. Kept as a no-op guard site (rather than deleted) so the
+    // `AssignError::ObserverLocationMissing` variant and its contract error
+    // code stay available if a future caller needs to surface a warning.
 
     // Check hard-rule violations.
     let hard_violations = collect_hard_violations(session, master);
@@ -294,12 +294,14 @@ mod tests {
     }
 
     #[test]
-    fn missing_observer_location_returns_error() {
+    fn missing_observer_location_no_longer_blocks_assign() {
+        // #867: a session without an acquisition fingerprint yet must still
+        // be assignable (degraded-but-usable path).
         let mut s = session("light", 100.0, 50.0);
         s.has_observer_location = false;
         let r =
             evaluate_assign(&s, &dark_master(100.0, 50.0), false, &MatchingRuleConfig::default());
-        assert_eq!(r.unwrap_err().error_code(), "match.observer_location_missing");
+        assert!(r.is_ok(), "missing observer_location must not block assign");
     }
 
     #[test]
