@@ -15,18 +15,25 @@
 # tauri-webdriver ports, isolated app-data/config dirs, and its own SQLite
 # file (`crates/e2e-tests/tests/common/mod.rs::InstanceEnv`) — concurrent
 # journeys no longer race each other over shared :4444/:4445 ports or a
-# shared DB file, so `test-threads` can exceed 1.
-
-[profile.e2e]
-# CI runners in `.github/workflows/e2e.yml` are 4-vCPU. Each app instance is
-# a full debug-build Tauri app: WebKitGTK/WebView2 startup, SQLite connect +
-# migrate, and a ~13k-row bundled target-seed load, all before the window
-# (and therefore LAUNCH_TIMEOUT's clock) is satisfied — CPU/memory heavy at
-# boot. 2 keeps ~2 vCPUs per concurrent instance so that startup phase isn't
-# itself starved into timing out; 4 (one per vCPU) leaves no headroom for the
-# OS/xvfb/nextest's own overhead. Override locally with `--test-threads 1`
-# for strictly serial runs (e.g. limited-resource dev machines).
-test-threads = 2
+# shared DB file.
+#
+# `test-threads` stays at 1 DESPITE that isolation, pending a product-code
+# fix outside this crate: `tauri_plugin_single_instance::init()`
+# (`apps/desktop/src-tauri/src/lib.rs`) registers a Linux D-Bus well-known
+# name derived only from the app identifier + version — no per-process
+# override. Two concurrent `desktop_shell` instances collide on that name;
+# the loser is silently redirected to the winner and never opens its own
+# window, so its WebDriver plugin server never comes up (observed
+# deterministically on ubuntu, CI runs 29593925067/29592400990 — the SAME
+# journey slot failed `WebDriver session not created` on both nextest
+# retries, at both a 120s and a 240s `LAUNCH_TIMEOUT`, while sibling
+# journeys booted normally in the same run). Windows did not reproduce this
+# in the same runs, but the harness makes no OS-specific claim either way.
+# Raising `test-threads` above 1 again requires parameterizing the
+# single-instance dbus id (e.g. `Builder::new(..).dbus_id(..)` with an
+# env-derived per-instance id under the `e2e` feature) in
+# `apps/desktop/src-tauri/src/lib.rs` first.
+test-threads = 1
 
 # Warn every 60 s; terminate after 5 periods (300 s). Must exceed the
 # harness's LAUNCH_TIMEOUT (120 s — slow debug-build app boot on CI runners,
