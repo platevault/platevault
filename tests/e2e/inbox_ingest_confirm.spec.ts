@@ -65,7 +65,15 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 		await expect(page.getByTestId("inbox-item-item-master-dark")).toBeVisible();
 		await expect(page.getByTestId("inbox-item-item-003")).toBeVisible();
 
-		// ── No selection yet: the bottom detail dock is not mounted ───────────────
+		// ── No selection yet: the detail region is not mounted ────────────────────
+		// (spec 054 FR-014/T030 migration note: Inbox now forces the permanent
+		// detail-dominant SPLIT placement — `forcedPlacement="split"` — instead
+		// of the old bottom dock. That only changes the MOUNTED detail's modifier
+		// class (`.alm-listpage__detail--split` vs the old bare bottom class);
+		// `ListPageLayout` still gates the whole `<section class="alm-listpage__
+		// detail">` on `detail != null` (InboxPage passes `undefined` until an
+		// item is selected), so "no selection ⇒ no detail region" still holds
+		// unchanged and this assertion needs no other update.)
 		await expect(page.locator(".alm-listpage__detail")).toHaveCount(0);
 
 		// ── Richer inbox queue statistics (US6): 3 non-master folders (item-001/
@@ -132,8 +140,14 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 		await expect(page.getByTestId("inbox-list")).toBeVisible({ timeout: 8_000 });
 
 		await page.getByTestId("inbox-item-item-001").click();
+		// spec 054 FR-014/T030 migration note: this now mounts as the permanent
+		// detail-dominant SPLIT (`.alm-listpage__detail--split`), not the old
+		// bottom dock — but the base `.alm-listpage__detail` class this locator
+		// matches is emitted in every placement, so the selector itself and the
+		// content assertions below (placement-independent) are unaffected.
 		const detail = page.locator(".alm-listpage__detail");
 		await expect(detail).toBeVisible({ timeout: 5_000 });
+		await expect(detail).toHaveClass(/alm-listpage__detail--split/);
 
 		// FR-011: explicit multi-type composition, not a bare "mixed" label.
 		const mixedAlert = detail.getByTestId("inbox-mixed-alert");
@@ -180,8 +194,11 @@ test.describe("inbox ingest · classify / reclassify / confirm (spec 041)", () =
 		// lands (all fixture items are organizationState="unorganized", so this
 		// exercises the move-plan path per FR-017/FR-019).
 		await page.getByTestId("inbox-item-item-002").click();
+		// spec 054 FR-014/T030 migration note: same base-class selector as above
+		// — the mounted region is now the permanent split, not the bottom dock.
 		const detail = page.locator(".alm-listpage__detail");
 		await expect(detail).toBeVisible({ timeout: 5_000 });
+		await expect(detail).toHaveClass(/alm-listpage__detail--split/);
 		await expect(detail).toContainText("dark", { timeout: 5_000 });
 
 		const confirmBtn = detail.getByTestId("inbox-confirm-btn");
