@@ -98,17 +98,24 @@ export interface ListPageLayoutProps {
 
 /**
  * True when a Base UI overlay (Dialog, Select, Combobox, Menu, …) is open
- * anywhere in the document. Base UI stamps its open popup DOM node with
- * `data-open` (its documented styling-state hook) alongside an ARIA overlay
- * role; used to defer Escape-to-close to that overlay instead of also
- * closing the detail panel underneath it (#906).
+ * anywhere in the document. Base UI stamps the OPEN popup's outer node
+ * (Positioner/Popup) with `data-open` (its documented styling-state hook),
+ * but the ARIA overlay role doesn't always land on that same node: Dialog and
+ * Menu put `role` and `data-open` together on Popup, while Select/Combobox
+ * split them — `role="listbox"`/`"grid"` sits on an inner List that has no
+ * `data-open` of its own, only a `data-open` ANCESTOR (Positioner/Popup).
+ * Walking up from every overlay-role element to the nearest `data-open`
+ * ancestor (`closest`, which also matches the element itself) covers both
+ * shapes without hardcoding which library variant is in use (#906).
  */
 function hasOpenOverlay(): boolean {
-  return (
-    document.querySelector(
-      '[data-open][role="dialog"], [data-open][role="alertdialog"], [data-open][role="listbox"], [data-open][role="menu"]',
-    ) != null
+  const overlayRoles = document.querySelectorAll(
+    '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="grid"], [role="menu"]',
   );
+  for (const el of overlayRoles) {
+    if (el.closest('[data-open]')) return true;
+  }
+  return false;
 }
 
 export function ListPageLayout({

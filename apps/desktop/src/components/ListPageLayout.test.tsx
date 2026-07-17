@@ -19,6 +19,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ListPageLayout } from './ListPageLayout';
 import { Modal } from './Modal';
+import { Combobox } from '@base-ui-components/react/combobox';
 
 describe('ListPageLayout', () => {
   it('defaults to the bottom dock (no side variant classes)', () => {
@@ -255,6 +256,46 @@ describe('ListPageLayout', () => {
     // react to this Escape (asserted separately from Base UI's own listener,
     // which isn't under test here; the regression is that our listener used
     // to co-fire regardless).
+    expect(onCloseDetail).not.toHaveBeenCalled();
+  });
+
+  it('does not close the panel on Escape while a Base UI Combobox is open above it (#906)', () => {
+    const onCloseDetail = vi.fn();
+    render(
+      <>
+        <ListPageLayout
+          topBar={<div>bar</div>}
+          detail={<div>detail</div>}
+          onCloseDetail={onCloseDetail}
+        >
+          <div>main</div>
+        </ListPageLayout>
+        <Combobox.Root items={['Alpha', 'Beta']} open>
+          <Combobox.Input aria-label="Search" />
+          <Combobox.Portal keepMounted>
+            <Combobox.Positioner>
+              <Combobox.Popup>
+                <Combobox.List>
+                  {(item: string) => (
+                    <Combobox.Item key={item} value={item}>
+                      {item}
+                    </Combobox.Item>
+                  )}
+                </Combobox.List>
+              </Combobox.Popup>
+            </Combobox.Positioner>
+          </Combobox.Portal>
+        </Combobox.Root>
+      </>,
+    );
+    // Combobox splits the signal across two nodes: `role="listbox"` sits on
+    // the List, `data-open` on its Positioner/Popup ancestor — neither node
+    // carries both, which is exactly what our overlay guard must handle.
+    const listbox = document.querySelector('[role="listbox"]');
+    expect(listbox).toBeInTheDocument();
+    expect(listbox).not.toHaveAttribute('data-open');
+    expect(listbox?.closest('[data-open]')).not.toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onCloseDetail).not.toHaveBeenCalled();
   });
 
