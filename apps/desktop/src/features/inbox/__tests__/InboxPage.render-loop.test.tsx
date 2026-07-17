@@ -73,7 +73,7 @@ beforeEach(() => {
 import { InboxPage } from '../InboxPage';
 
 describe('InboxPage render loop (#557)', () => {
-  it('does not exceed React\'s update-depth limit when mounted under the real PageStatusProvider', async () => {
+  it("does not exceed React's update-depth limit when mounted under the real PageStatusProvider", async () => {
     // A React error boundary can't catch "Maximum update depth exceeded" from
     // inside a render-phase effect loop in jsdom the same way the browser
     // does, but the loop DOES throw synchronously out of the render() call
