@@ -285,6 +285,18 @@ function observingValues(): Record<string, unknown> {
 // real persistence the same way `mockIngestionSettings` does below.
 let mockCleanupTypeOverrides: Record<string, string> = {};
 
+// Mutable so `settings_update('framing', …)` round-trips through
+// `settings_get('framing')` in mock mode (spec 008 Q27 F-Framing-11) —
+// the Settings → Framing pane's four tunables need a real persisted bag to
+// prove auto-save actually sticks. Seeded at the R11a shipped defaults
+// (mirrors `domain_core::settings::SettingsState::default()`).
+let mockFramingSettings: Record<string, unknown> = {
+  framingPointingFractionOfFov: 0.1,
+  framingPointingFallbackDeg: 0.2,
+  framingRotationToleranceDeg: 3.0,
+  framingMosaicEnvelopeFractionOfFov: 1.0,
+};
+
 // Mutable so `ingestion_settings_update` round-trips through `_get` in mock
 // mode (spec 030, package P12) — mirrors real persistence closely enough for
 // the Ingestion settings pane's load/save flow to be exercised without a
@@ -1230,6 +1242,12 @@ export async function mockInvoke(
           values: { cleanupTypeOverrides: mockCleanupTypeOverrides },
         } satisfies SettingsData;
       }
+      if (scope === 'framing') {
+        return {
+          scope: 'framing',
+          values: mockFramingSettings,
+        } satisfies SettingsData;
+      }
       return mockSettingsData;
     }
     case 'ingestion_settings_get': {
@@ -1502,6 +1520,12 @@ export async function mockInvoke(
             ...(overrides as Record<string, string>),
           };
         }
+      }
+      if (scope === 'framing') {
+        const values = (
+          _args as { values?: Record<string, unknown> } | undefined
+        )?.values;
+        if (values) mockFramingSettings = { ...mockFramingSettings, ...values };
       }
       return null;
     }

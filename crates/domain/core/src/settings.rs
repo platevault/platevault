@@ -253,6 +253,20 @@ pub struct SettingsState {
     /// flash of the wrong theme, since WebView2 only flushes localStorage on
     /// graceful shutdown and loses it on a forced kill.
     pub theme: String,
+
+    // ── Framing clustering tunables (spec 008 Q27 F-Framing-11, R11a) ────
+    /// Fraction of the optic-train FOV diagonal used as the pointing
+    /// tolerance when grouping sessions into a framing. R11a default 0.10.
+    pub framing_pointing_fraction_of_fov: f64,
+    /// Absolute pointing tolerance in degrees used when the optic-train has
+    /// no FOV data (R11a no-equipment fallback). Default 0.2.
+    pub framing_pointing_fallback_deg: f64,
+    /// Rotation tolerance in degrees for framing membership. Default 3.0.
+    pub framing_rotation_tolerance_deg: f64,
+    /// Mosaic candidate envelope (FR-019 relaxation): fraction of the FOV
+    /// diagonal used as the pointing envelope around an existing framing's
+    /// representative for `isMosaic` projects. Default 1.0.
+    pub framing_mosaic_envelope_fraction_of_fov: f64,
 }
 
 impl Default for SettingsState {
@@ -307,6 +321,12 @@ impl Default for SettingsState {
             source_view_link_kind_cross_drive: "symlink".to_owned(),
             cleanup_type_overrides: std::collections::BTreeMap::new(),
             theme: "system".to_owned(),
+            // R11a shipped defaults — must stay bit-identical to
+            // `sessions::ToleranceParams::defaults()`.
+            framing_pointing_fraction_of_fov: 0.10,
+            framing_pointing_fallback_deg: 0.2,
+            framing_rotation_tolerance_deg: 3.0,
+            framing_mosaic_envelope_fraction_of_fov: 1.0,
         }
     }
 }
