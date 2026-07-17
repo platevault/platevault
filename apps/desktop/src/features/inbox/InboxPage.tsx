@@ -370,7 +370,6 @@ export function InboxPage() {
   );
 
   // Load per-file extracted metadata for the selected item (spec 041 US2/FR-010).
-  //
   // Issue #643: `loading`/`error` used to be discarded here, so a metadata
   // fetch that never lands (or errors) left `fileMetadata` at its `[]`
   // default — `hasMissingRequiredMeta` below then saw no files at all and

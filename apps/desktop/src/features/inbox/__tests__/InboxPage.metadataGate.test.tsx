@@ -121,7 +121,6 @@ describe('InboxPage confirm gate vs. per-file metadata load state (#643)', () =>
   it('enables Confirm once metadata resolves with no missing attributes', async () => {
     mockInboxItemMetadata.mockResolvedValue(
       ok({
-        inboxItemId: 'item-001',
         files: [
           {
             relativeFilePath: 'lights/NGC7000/frame_001.fits',
