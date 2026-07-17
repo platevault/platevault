@@ -50,7 +50,7 @@ Dependency graph: P1 → P2 → P3; P4 after spec 054 (or capped 125%).
 - [ ] T024 E2E: no synthetic bold/italic (loaded-face check, SC-005); mono
       surfaces computed-family assertion (SC-006).
 
-## Phase 4 — Engine zoom (FR-006; SC-007) — after spec 054, or capped 125%
+## Phase 4 — Engine zoom (FR-006; SC-007) — max 150% (054 orphaned; see spec FR-006 envelope)
 
 - [ ] T030 Capability `core:webview:allow-set-webview-zoom`; `setZoom` wired to
       app-owned Ctrl+=/−/0; persistence mirrors fontSize setting.

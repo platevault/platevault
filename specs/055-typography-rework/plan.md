@@ -56,7 +56,7 @@ existing `font-style: italic` sites — no CSS edits needed there.
 4. Evaluate `'zero' 1` / `'case' 1` on coordinate surfaces during the same
    Windows pass.
 
-## Phase 4 — Engine zoom (FR-006, SC-007) — after spec 054, or capped 125%
+## Phase 4 — Engine zoom (FR-006, SC-007) — max 150% (054 orphaned; see spec FR-006 envelope)
 
 1. Capability `core:webview:allow-set-webview-zoom`; `setZoom` wired to
    app-owned Ctrl+= / Ctrl+− / Ctrl+0; persistence mirrors the fontSize
