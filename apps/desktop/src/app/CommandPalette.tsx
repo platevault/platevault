@@ -43,6 +43,16 @@ async function loadTargetMatcher(): Promise<TargetMatcher> {
 const MAX_TARGET_RESULTS = 8;
 
 /**
+ * How long a cached `targetList()` fetch is considered fresh (nJ09c/nJ10a
+ * review carry-over). The palette previously refetched the full catalog on
+ * every open; there is no target-change event to invalidate on, so a short
+ * TTL is the cheapest staleness signal that still keeps the list from going
+ * stale for a whole session while cutting the IPC round-trip on rapid
+ * re-opens (e.g. Cmd+K, Esc, Cmd+K again).
+ */
+const TARGET_CACHE_TTL_MS = 60_000;
+
+/**
  * Scores a target match for ranking, mirroring the backend's exact >
  * prefix > contains heuristic (`crates/app/core/src/search.rs::score`) so
  * ordering feels consistent between the palette and `search_global`.
@@ -136,6 +146,7 @@ export function CommandPalette() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [devMode, setDevMode] = useState(false);
   const [allTargets, setAllTargets] = useState<TargetListItem[]>([]);
+  const targetsFetchedAtRef = useRef(0);
   const navigate = useNavigate();
   const currentHref = useRouterState({ select: (s) => s.location.href });
   // Owns initial focus explicitly (base-ui `initialFocus`) instead of the
@@ -167,17 +178,20 @@ export function CommandPalette() {
   // matches are ready by the time the user types. Deferred to open (not
   // mount) because CommandPalette lives in Shell — a mount-time fetch would
   // pull the whole catalog on every app boot even if the palette is never
-  // used, and would go stale for targets added mid-session. Refetching per
-  // open keeps the list fresh; it is a local SQLite read and races only the
-  // 200ms search debounce below.
+  // used, and would go stale for targets added mid-session. Cached for
+  // TARGET_CACHE_TTL_MS (nJ09c/nJ10a carry-over): re-opening the palette
+  // within the TTL reuses `allTargets` instead of re-issuing the IPC call.
   useEffect(() => {
     if (!open) return;
+    if (Date.now() - targetsFetchedAtRef.current < TARGET_CACHE_TTL_MS) return;
     let cancelled = false;
     commands
       .targetList()
       .then(unwrap)
       .then((items) => {
-        if (!cancelled) setAllTargets(items);
+        if (cancelled) return;
+        targetsFetchedAtRef.current = Date.now();
+        setAllTargets(items);
       })
       .catch(() => {
         // Backend unavailable — palette falls back to sessions/projects only.
