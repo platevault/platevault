@@ -248,10 +248,28 @@ jobs:
             e2e-archive.tar.zst
           key: e2e-app-ubuntu-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/capabilities/**', 'crates/**/migrations/**') }}
 
+      # A reported cache-hit is not proof the binary is actually there: run
+      # 29591042499 hit a corrupted/partial e2e-app-ubuntu-latest cache entry
+      # (restore claimed success, but the archive step's own upload later
+      # showed only 1 of 2 cached paths existed) and every downstream shard
+      # failed at `chmod`. Treat cache-hit as provisional and re-verify both
+      # paths on disk before trusting it, so a bad cache entry self-heals into
+      # a rebuild instead of a wall of red shards.
+      - name: Verify cached binary is usable
+        if: needs.changes.outputs.run == 'true'
+        id: verify-app-cache
+        shell: bash
+        run: |
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -x "${{ env.APP_BIN }}" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Tauri needs system webview/GTK libs to build on Linux.
       # No webkit2gtk-driver — the plugin replaces the external driver.
       - name: Install Tauri Linux system deps
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -259,32 +277,32 @@ jobs:
             libayatana-appindicator3-dev
 
       - uses: dtolnay/rust-toolchain@stable
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
 
       - uses: Swatinem/rust-cache@v2
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         with:
           shared-key: "rust-e2e-ubuntu-latest"
           cache-on-failure: true
 
       - uses: taiki-e/install-action@nextest
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
 
       # Debug builds load the frontend from the Tauri devUrl at runtime, but
       # tauri-build still wants the configured frontendDist directory present.
       - name: Stub frontend dist for tauri-build
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         shell: bash
         run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
 
       - name: Build desktop_shell with e2e feature
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         run: cargo build -p desktop_shell --features e2e
 
       # Package the compiled e2e_tests binaries so shards run them without a
       # Rust rebuild (`cargo nextest run --archive-file`).
       - name: Archive e2e test binaries
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
 
       - uses: actions/upload-artifact@v4
@@ -317,29 +335,42 @@ jobs:
             e2e-archive.tar.zst
           key: e2e-app-windows-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/capabilities/**', 'crates/**/migrations/**') }}
 
+      # See the ubuntu chain's "Verify cached binary is usable" comment for
+      # why a reported cache-hit alone is not trusted.
+      - name: Verify cached binary is usable
+        if: needs.changes.outputs.run == 'true'
+        id: verify-app-cache
+        shell: bash
+        run: |
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -f "${{ env.APP_BIN }}" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: dtolnay/rust-toolchain@stable
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
 
       - uses: Swatinem/rust-cache@v2
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         with:
           shared-key: "rust-e2e-windows-latest"
           cache-on-failure: true
 
       - uses: taiki-e/install-action@nextest
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
 
       - name: Stub frontend dist for tauri-build
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         shell: bash
         run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
 
       - name: Build desktop_shell with e2e feature
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         run: cargo build -p desktop_shell --features e2e
 
       - name: Archive e2e test binaries
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
 
       - uses: actions/upload-artifact@v4
@@ -373,29 +404,42 @@ jobs:
             e2e-archive.tar.zst
           key: e2e-app-macos-latest-${{ hashFiles('Cargo.lock', '**/Cargo.toml', '**/*.rs', '.config/nextest.toml', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/capabilities/**', 'crates/**/migrations/**') }}
 
+      # See the ubuntu chain's "Verify cached binary is usable" comment for
+      # why a reported cache-hit alone is not trusted.
+      - name: Verify cached binary is usable
+        if: needs.changes.outputs.run == 'true'
+        id: verify-app-cache
+        shell: bash
+        run: |
+          if [ "${{ steps.app-cache.outputs.cache-hit }}" = "true" ] && [ -f "${{ env.APP_BIN }}" ] && [ -f e2e-archive.tar.zst ]; then
+            echo "usable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "usable=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: dtolnay/rust-toolchain@stable
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
 
       - uses: Swatinem/rust-cache@v2
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         with:
           shared-key: "rust-e2e-macos-latest"
           cache-on-failure: true
 
       - uses: taiki-e/install-action@nextest
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
 
       - name: Stub frontend dist for tauri-build
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         shell: bash
         run: mkdir -p apps/desktop/dist && touch apps/desktop/dist/index.html
 
       - name: Build desktop_shell with e2e feature
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         run: cargo build -p desktop_shell --features e2e
 
       - name: Archive e2e test binaries
-        if: needs.changes.outputs.run == 'true' && steps.app-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.run == 'true' && steps.verify-app-cache.outputs.usable != 'true'
         run: cargo nextest archive -p e2e_tests --archive-file e2e-archive.tar.zst
 
       - uses: actions/upload-artifact@v4
