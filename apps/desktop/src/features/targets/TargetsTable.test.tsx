@@ -503,6 +503,22 @@ describe('TargetsTable row cache (#573)', () => {
       ),
     ).not.toBe(base);
   });
+
+  it('rowCacheGenKey changes when a site is edited in place (same id, new geometry)', () => {
+    // Editing an existing site (Settings → Observing sites) keeps its id but
+    // changes lat/lon/elevation; rowAltitudeFor reads geometry off the site
+    // object, so the gen key must invalidate on that edit too, not just on a
+    // different site id (nJ09c/nJ10a carry-over).
+    const SITE_A_MOVED: ObserverSite = {
+      ...SITE_A,
+      latitudeDeg: SITE_A.latitudeDeg + 1,
+      longitudeDeg: SITE_A.longitudeDeg + 1,
+      elevationM: 100,
+    };
+    expect(
+      rowCacheGenKey(30, SITE_A_MOVED, 1000, null, DEFAULT_MOON_AVOIDANCE),
+    ).not.toBe(rowCacheGenKey(30, SITE_A, 1000, null, DEFAULT_MOON_AVOIDANCE));
+  });
 });
 
 // ── #757: needs-coordinates is a distinct table state, not 0°/"low" ────────────
