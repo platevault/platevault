@@ -422,36 +422,59 @@ export function StepScan({
         }
       }
 
-      const initialStates: SourceScanState[] = sources
-        // Issue #704 / #916: only scan folders this flush actually
-        // registered, or that a prior same-session attempt registered but
-        // never scanned. A root whose registration failed for a genuine
-        // reason (no rootId, not `alreadyRegistered`) is skipped — scanning
-        // it with the path-as-rootId fallback fails the registered_sources
-        // JOIN and would insert orphaned inbox_items.
-        .filter((s) => {
-          if (!s.path) return false;
-          const row = flushResult.results.find((r) => r.path === s.path);
-          if (row?.success) return true;
-          if (!row?.alreadyRegistered) return false;
-          const resolvedRoot = resolvedRoots.get(s.path);
-          // Only a root that has genuinely completed a scan before may be
-          // skipped here; a registered-but-never-scanned root must rescan.
-          return resolvedRoot != null && resolvedRoot.lastScanned == null;
-        })
-        .map((s) => {
-          const row = flushResult.results.find((r) => r.path === s.path);
-          const rootId = row?.success
-            ? getRootId(flushResult, s.path)
-            : (resolvedRoots.get(s.path)?.id ?? s.path);
-          return {
+      // Issue #704 / #916: only scan folders this flush actually registered,
+      // or that a prior same-session attempt registered but never scanned. A
+      // root whose registration failed for a genuine reason (no rootId, not
+      // `alreadyRegistered`) is skipped — scanning it with the
+      // path-as-rootId fallback fails the registered_sources JOIN and would
+      // insert orphaned inbox_items.
+      const initialStates: SourceScanState[] = [];
+      for (const s of sources) {
+        if (!s.path) continue;
+        const row = flushResult.results.find((r) => r.path === s.path);
+        if (row?.success) {
+          initialStates.push({
             source: s,
-            rootId,
+            rootId: getRootId(flushResult, s.path),
             phase: 'pending',
             items: [],
             classifications: new Map(),
-          };
+          });
+          continue;
+        }
+        if (!row?.alreadyRegistered) continue;
+
+        const resolvedRoot = resolvedRoots.get(s.path);
+        if (resolvedRoot != null && resolvedRoot.lastScanned != null) {
+          // Genuinely already scanned in a prior session — safe to skip.
+          continue;
+        }
+        if (resolvedRoot != null) {
+          // Registered but never scanned (same-session retry) — rescan
+          // using the real resolved rootId.
+          initialStates.push({
+            source: s,
+            rootId: resolvedRoot.id,
+            phase: 'pending',
+            items: [],
+            classifications: new Map(),
+          });
+          continue;
+        }
+        // Review round 2 #1: roots.list failed or returned no match for this
+        // path — we can't tell whether this source was already scanned.
+        // Silently excluding it here would resurrect the exact #916 bug via
+        // a resolution failure instead of a misclassification, so surface it
+        // as a visible error state instead of dropping it.
+        initialStates.push({
+          source: s,
+          rootId: s.path,
+          phase: 'error',
+          items: [],
+          classifications: new Map(),
+          error: m.setup_scan_resolution_failed(),
         });
+      }
 
       setSourceStates(initialStates);
       setResolved(true);
@@ -460,6 +483,8 @@ export function StepScan({
       for (let i = 0; i < initialStates.length; i++) {
         const idx = i;
         const entry = initialStates[idx];
+        // Already flagged (resolution failure above) — nothing to scan.
+        if (entry.phase === 'error') continue;
 
         void (async () => {
           // Mark as scanning
@@ -541,7 +566,10 @@ export function StepScan({
 
   return (
     <div className="alm-setup-scan" data-testid="step-scan">
-      {sourceStates.length === 0 ? (
+      {!resolved ? null : sourceStates.length === 0 ? (
+        // Review round 2 #2: gated on `resolved` (not sourceStates.length
+        // alone) so this genuinely-empty message can't flash for real
+        // sources while the alreadyRegistered resolution above is pending.
         <p className="alm-setup-scan__empty-msg">{m.setup_scan_no_sources()}</p>
       ) : (
         <>

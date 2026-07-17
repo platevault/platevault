@@ -807,6 +807,87 @@ describe('StepScan', () => {
       });
       expect(mockRootsList).not.toHaveBeenCalled();
     });
+
+    it('surfaces (does not silently drop) an alreadyRegistered source when roots.list fails', async () => {
+      mockRootsList.mockRejectedValue(new Error('network down'));
+
+      renderStep({
+        sources: [SOURCES[0]],
+        flushResult: {
+          results: [
+            {
+              kind: 'light_frames',
+              path: '/astro/lights',
+              success: false,
+              alreadyRegistered: true,
+            },
+          ],
+          allSucceeded: true,
+        },
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('scan-source-/astro/lights'),
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.getByText(/could not verify whether this source/i),
+      ).toBeInTheDocument();
+      expect(mockInboxScanFolder).not.toHaveBeenCalled();
+    });
+
+    it('surfaces an alreadyRegistered source with no matching roots.list entry instead of dropping it', async () => {
+      mockRootsList.mockResolvedValue({ status: 'ok', data: [] });
+
+      renderStep({
+        sources: [SOURCES[0]],
+        flushResult: {
+          results: [
+            {
+              kind: 'light_frames',
+              path: '/astro/lights',
+              success: false,
+              alreadyRegistered: true,
+            },
+          ],
+          allSucceeded: true,
+        },
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/could not verify whether this source/i),
+        ).toBeInTheDocument();
+      });
+      expect(mockInboxScanFolder).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('empty-state resolution gating (review round 2 #2)', () => {
+    it('does not flash "no sources registered" while alreadyRegistered resolution is pending', () => {
+      // Never resolves — holds the component in the pre-`resolved` state.
+      mockRootsList.mockReturnValue(new Promise(() => {}));
+
+      renderStep({
+        sources: [SOURCES[0]],
+        flushResult: {
+          results: [
+            {
+              kind: 'light_frames',
+              path: '/astro/lights',
+              success: false,
+              alreadyRegistered: true,
+            },
+          ],
+          allSucceeded: true,
+        },
+      });
+
+      expect(
+        screen.queryByText(/no sources registered/i),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('re-entry guard', () => {
