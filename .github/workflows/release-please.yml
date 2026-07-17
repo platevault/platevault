@@ -145,3 +145,83 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
+
+      # Windows bundles above carry only the minisign updater signature, not an
+      # Authenticode signature — Windows SmartScreen still shows "Unknown
+      # Publisher" for the NSIS .exe and .msi. Collect them here so the
+      # (currently disabled) sign-windows job below can submit them to
+      # SignPath without needing its own build/checkout of the Tauri app.
+      # Gated on the same var as sign-windows: with ENABLE_WINDOWS_SIGNING
+      # unset, this step is skipped and the build job's effects (including
+      # the release published by tauri-action above) are unchanged.
+      - name: Collect unsigned Windows bundles
+        if: ${{ runner.os == 'Windows' && vars.ENABLE_WINDOWS_SIGNING == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unsigned-bundles
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+          retention-days: 1
+
+  # Authenticode-signs the Windows NSIS/MSI bundles via the SignPath
+  # Foundation free OSS code-signing program (see
+  # docs/development/windows-code-signing.md for the research, eligibility
+  # verdict, and application checklist). Disabled by default: SignPath
+  # Foundation approval + the SIGNPATH_* secrets/vars below are required
+  # before this can run, so it is gated on a repo Actions variable that is
+  # unset until the application is approved and wired up. With the variable
+  # unset, this job is skipped entirely and the release published by `build`
+  # above is unchanged.
+  sign-windows:
+    name: Sign Windows bundles (SignPath)
+    needs: [release-please, build]
+    if: ${{ needs.release-please.outputs.release_created == 'true' && vars.ENABLE_WINDOWS_SIGNING == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download unsigned Windows bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-unsigned-bundles
+          path: unsigned
+
+      # Re-upload as a fresh workflow artifact: the SignPath action takes a
+      # github-artifact-id from actions/upload-artifact in *this* job, it
+      # cannot reference an artifact produced by a different job/id directly.
+      - name: Re-upload bundles for SignPath submission
+        id: upload-for-signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-bundles-for-signing
+          path: unsigned/**
+          retention-days: 1
+
+      # project-slug/signing-policy-slug/artifact-configuration-slug are
+      # created in the SignPath dashboard once the Foundation application is
+      # approved (see the doc above) and are not secrets — set them as repo
+      # Actions variables alongside ENABLE_WINDOWS_SIGNING.
+      - name: Submit signing request to SignPath
+        id: signpath
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-for-signing.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      # tauri-action already uploaded unsigned copies of these files to the
+      # release in the `build` job; --clobber replaces them in place with the
+      # Authenticode-signed versions.
+      - name: Upload signed bundles to the release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.release-please.outputs.tag_name }}" \
+            signed/*.exe signed/*.msi \
+            --repo "${{ github.repository }}" \
+            --clobber
