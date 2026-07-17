@@ -17,7 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SPACING_BASE_PX, TEXT_SCALE_BASE_PX } from './theme';
+import { ROW_HEIGHT_PX, SPACING_BASE_PX, TEXT_SCALE_BASE_PX } from './theme';
 
 // vitest's `css: false` test config replaces all `.css`-suffixed imports
 // (including `?raw`) with an empty string, so this reads the file directly
@@ -45,6 +45,22 @@ function parseRootTokenPx(varPrefix: string): Record<string, number> {
   return result;
 }
 
+/** Parses the `--alm-row-height: <n>px;` declaration out of a CSS block's body. */
+function parseRowHeightPx(block: string, blockLabel: string): number {
+  const match = /--alm-row-height:\s*(\d+(?:\.\d+)?)px;/.exec(block);
+  if (!match) throw new Error(`no --alm-row-height in ${blockLabel} block`);
+  return Number(match[1]);
+}
+
+/** Parses a single `<selector> { ...--alm-row-height: <n>px...; }` block's value. */
+function parseSelectorRowHeightPx(selector: string): number {
+  const css = readFileSync(tokensCssPath, 'utf-8');
+  const escaped = selector.replace(/[.]/g, '\\.');
+  const block = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1];
+  if (block === undefined) throw new Error(`no ${selector} block in tokens.css`);
+  return parseRowHeightPx(block, selector);
+}
+
 describe('theme.ts token-scale base tables match tokens.css :root', () => {
   it('SPACING_BASE_PX matches --alm-sp-* base px values', () => {
     const fromCss = parseRootTokenPx('--alm-sp-');
@@ -56,5 +72,17 @@ describe('theme.ts token-scale base tables match tokens.css :root', () => {
     const fromCss = parseRootTokenPx('--alm-text-');
     expect(Object.keys(fromCss).length).toBeGreaterThan(0);
     expect(TEXT_SCALE_BASE_PX).toEqual(fromCss);
+  });
+
+  it('ROW_HEIGHT_PX matches --alm-row-height across density selectors', () => {
+    const css = readFileSync(tokensCssPath, 'utf-8');
+    const rootBlock = /:root\s*\{([^}]*)\}/.exec(css)?.[1];
+    if (rootBlock === undefined) throw new Error('no :root block in tokens.css');
+    const fromCss = {
+      comfortable: parseRowHeightPx(rootBlock, ':root'),
+      compact: parseSelectorRowHeightPx('.density-compact'),
+      spacious: parseSelectorRowHeightPx('.density-spacious'),
+    };
+    expect(ROW_HEIGHT_PX).toEqual(fromCss);
   });
 });
