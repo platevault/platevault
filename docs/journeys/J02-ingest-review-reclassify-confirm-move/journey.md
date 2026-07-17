@@ -1,7 +1,7 @@
 ---
 id: J02
 title: Move newly-arrived frames from an inbox drop folder into the library
-version: 2
+version: 3
 status: draft
 last_reviewed: 2026-07-14
 actors: [astrophotographer]
@@ -10,6 +10,9 @@ interfaces: [desktop-ui]
 trace:
   - pre-migration journey.md @ git 42c596d6
   - deltas/2026-07-14-jval-docdrift.md
+  - PR #938 (fixes #557 — Inbox page infinite render loop)
+  - PR #939 (fixes #552, #569, #553, #554 — mixed-folder banner copy,
+    scrollable detail body, missing-attribute banner placement)
   - PR #898 (framing-attribution backend: ranked attribution candidates +
     chosenAttribution apply-path at Inbox confirm)
   - docs/product/journeys/J02-ingest-review-reclassify-confirm-move/deltas/2026-07-14-q27-f5.md,
@@ -54,7 +57,15 @@ explicit, reviewed plan, and the action is visible in the audit history.
   correctly, and the status-bar breakdown count matches the queue's real
   contents using one normalized name per frame type.
 - **Expect (negative):** No queue item is shown as an undifferentiated
-  "mixed" type when its files can be split by detected frame type.
+  "mixed" type when its files can be split by detected frame type. Opening
+  the Inbox page and leaving it open never spins the page in a runaway
+  re-render loop (previously the page re-rendered continuously the entire
+  time it was open, driven by an unstable page-status node identity and a
+  freshly-allocated empty-items array while the item-list query was
+  unresolved).
+- **Trace (stability):** `apps/desktop/src/features/inbox/InboxPage.tsx`
+  (`useSetPageStatus` call site, `listData?.items ?? []`); PR #938 fixes
+  #557.
 
 ### S2 — Inspect an item's per-file detail {#S2}
 - **Do:** Select a queue item and open its detail.
@@ -68,7 +79,15 @@ explicit, reviewed plan, and the action is visible in the audit history.
   missing value (`apps/desktop/src/components/RenderValue.tsx`,
   `InboxDetail.tsx` field wiring). The detail continues to track the item
   the user selected even if the user changes the search text or an active
-  filter afterward.
+  filter afterward. The detail body (property tables, mixed-summary line,
+  Files popover trigger, needs-review controls) is its own scroll region,
+  so content taller than the docked detail panel scrolls into view rather
+  than being clipped by the panel's outer overflow. On the residual "mixed"
+  parent-folder row still visible after its files are auto-split into
+  single-type sub-items (S1's known `#549` case), the advisory banner reads
+  "This folder is automatically split into separate single-type items —
+  find and confirm each one individually in the list," not the retired
+  claim that Confirm on the parent row itself produces a split.
 - **Expect (negative):** Changing search or filter text never silently
   re-targets the open detail panel to a different item. If per-file
   metadata fails to load, the detail shows an explicit error state rather
@@ -77,7 +96,9 @@ explicit, reviewed plan, and the action is visible in the audit history.
   wired only into the Sessions feature, not Inbox; corrected from the
   legacy doc's unconditional reveal claim.
 - **Trace:** `apps/desktop/src/components/RenderValue.tsx`,
-  `apps/desktop/src/features/inbox/InboxDetail.tsx` (renderer wiring);
+  `apps/desktop/src/features/inbox/InboxDetail.tsx` (renderer wiring,
+  `.alm-inbox-detail__scroll` sole scroll region per PR #939 fixes #553;
+  mixed-folder banner copy per PR #939 fixes #552, #569);
   `apps/desktop/src/features/sessions/revealInventory.ts` (reveal is
   Sessions-only — no `nativeReveal` call anywhere under
   `features/inbox/`).
@@ -89,8 +110,10 @@ explicit, reviewed plan, and the action is visible in the audit history.
   files and set the missing value (frame type, filter, exposure, or
   binning) in one action.
 - **Expect:** The needs-review item shows a banner naming exactly what is
-  missing, and affected rows carry a "needs `<attribute>`" badge; Confirm
-  is disabled while unresolved. Applying a value to a selection of
+  missing, placed inline in the detail's Files column right below the
+  per-file popover trigger it explains (not as a separate trailing
+  full-width alert column), and affected rows carry a "needs `<attribute>`"
+  badge; Confirm is disabled while unresolved. Applying a value to a selection of
   affected (missing-value) files applies to the whole selection in one
   call, reported as an applied count. Once every file in the item has the
   missing value, the item re-partitions into a clean single-type item and
@@ -112,7 +135,8 @@ explicit, reviewed plan, and the action is visible in the audit history.
   "Reset path" is UNVERIFIED (not corrected): a backend primitive exists
   (`set_manual_override_reset_stale`,
   `crates/persistence/db/src/repositories/q_inbox.rs`) but no UI control
-  invoking it was located — see report.
+  invoking it was located — see report. Banner placement (Files-column,
+  inline) per PR #939 fixes #554.
 
 ### S4 — Choose a destination library root, when more than one applies {#S4}
 - **Do:** If more than one registered library root can receive the item's
@@ -249,3 +273,17 @@ explicit, reviewed plan, and the action is visible in the audit history.
   either the candidates or the pick, so nothing changes on screen for this
   step yet.
   Evidence: PR #898 · by: journey-scribe (intent-gated)
+
+- **Δ3** 2026-07-17 · S1, S2, S3 · behavior-change
+  The Inbox page no longer runs a continuous re-render loop while open
+  (PR #938 fixes #557). The stale "mixed" parent-row banner (S1's known
+  `#549` residual-row case) no longer promises a Confirm-triggered split
+  that cannot happen — it now describes the automatic single-type-item
+  split that already occurred (PR #939 fixes #552, #569). The detail body
+  is now its own scroll region instead of being clipped by the docked
+  panel's overflow (PR #939 fixes #553). The missing-required-attribute
+  banner (S3) now renders inline in the Files column, below the popover
+  trigger it explains, instead of as a separate trailing alert column (PR
+  #939 fixes #554).
+  Evidence: PR #938 (fixes #557), PR #939 (fixes #552, #553, #554, #569) ·
+  by: journey-scribe (intent-gated)
