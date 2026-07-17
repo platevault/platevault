@@ -980,6 +980,8 @@
   "setup_scan_master_kind": "Master {kind}",
   "setup_scan_no_sources": "No sources registered. Go back and add at least one folder.",
   "setup_scan_nothing_detected": "Nothing detected in this folder.",
+  "setup_scan_root_label": "(root)",
+  "setup_scan_unclassified_count": "{count} unknown",
   "setup_scan_recursive": "Recursive",
   "setup_scan_single_level": "Single level",
   "setup_scan_phase_done": "Done",
